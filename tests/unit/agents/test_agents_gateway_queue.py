@@ -16,6 +16,7 @@ import pytest
 from audiagentic.components.agents.agents_paths import gateway_timeline_path
 from audiagentic.components.agents.gateway import store as store
 from audiagentic.components.agents.gateway.queue import queue as queue_mod
+from audiagentic.components.agents.gateway.queue.recovery_control import RecoveryDeferred
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.event import get_bus, reset_bus
 from audiagentic.foundation.io import load_ndjson
@@ -64,6 +65,70 @@ def _immediate_runner(project_root: Path, record: dict) -> dict:
 
 def _failing_runner(project_root: Path, record: dict) -> dict:
     raise AudiaGenticError(code="EXT-FAKE-001", kind="providers", message="boom")
+
+
+def test_recovery_deferred_stays_running_and_retries_same_request(tmp_path: Path):
+    """An ambiguous recovery error never becomes a failed request."""
+    manager = queue_mod.GatewayQueueManager()
+    project = tmp_path / "project"
+    project.mkdir()
+    record = store.build_record(execution_profile_id="recovery", prompt_body="x")
+    store.write_record(project, record)
+    raised = threading.Event()
+    calls: list[str] = []
+
+    def runner(project_root: Path, current: dict) -> dict:
+        calls.append(current["request-id"])
+        if len(calls) == 1:
+            raised.set()
+            raise RecoveryDeferred(
+                AudiaGenticError(
+                    code="EXT-AGW-118",
+                    kind="agents",
+                    message="provider reattach unavailable",
+                )
+            )
+        return store.transition_record(
+            project_root,
+            current["request-id"],
+            "completed",
+            updates={"output": "recovered", "finished-at": now_iso_z()},
+        )
+
+    result = manager.enqueue(
+        project,
+        record,
+        {
+            "virtual-capacity": 1,
+            "provider-session-recovery-initial-delay-seconds": 0.01,
+            "provider-session-recovery-max-delay-seconds": 0.01,
+        },
+        runner,
+    )
+    assert result["request-id"] == record["request-id"]
+    assert raised.wait(timeout=2)
+
+    deadline = time.monotonic() + 2
+    while time.monotonic() < deadline:
+        current = store.read_record(project, record["request-id"])
+        if (current.get("recovery") or {}).get("phase") == "rehydrate-retry":
+            break
+        time.sleep(0.01)
+    assert current["state"] == "running"
+    assert current["recovery-required"] is True
+    assert current["recovery"]["attempt"] == 1
+    assert current["recovery"]["side-effect-state"] == "may-have-started"
+
+    terminal = manager.wait(project, record["request-id"], timeout_seconds=3)
+    assert terminal["state"] == "completed"
+    assert terminal["output"] == "recovered"
+    assert calls == [record["request-id"], record["request-id"]]
+    events = load_ndjson(gateway_timeline_path(project, record["request-id"]))
+    assert any(event.get("event") == "recovery.retry-scheduled" for event in events)
+    assert not any(
+        event.get("event") == "queue.finished" and event.get("state") == "failed"
+        for event in events
+    )
 
 
 def test_project_queue_depths_excludes_other_projects(tmp_path: Path):

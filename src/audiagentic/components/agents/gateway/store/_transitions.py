@@ -613,6 +613,91 @@ def takeover_nonterminal_owner(
         return updated
 
 
+def defer_owned_recovery(
+    project_root: Path,
+    request_id: str,
+    *,
+    owner_epoch: str,
+    worker_id: str,
+    attempt_epoch: int,
+    error: BaseException | dict[str, Any] | None,
+    phase: str,
+    side_effect_state: str,
+    retry_delay_seconds: float,
+) -> dict[str, Any]:
+    """Persist a fenced, non-terminal recovery retry.
+
+    This mutation changes recovery metadata only.  It intentionally leaves
+    the request running, its attempt identity, active-work index, and any
+    unresolved provider checkpoint intact so a replacement gateway can adopt
+    the same request and conversation.
+    """
+    _require_owned_identity(owner_epoch, worker_id, attempt_epoch)
+    if not phase or retry_delay_seconds < 0:
+        raise AudiaGenticError(
+            "VAL-AGW-087", "agents", "recovery retry metadata is invalid", {}
+        )
+    with _request_lock(project_root, request_id):
+        record = _read_record_locked(project_root, request_id)
+        _check_expected_identity(
+            record,
+            expected_revision=None,
+            expected_dispatch_owner_epoch=owner_epoch,
+            expected_worker_id=worker_id,
+            expected_attempt_epoch=attempt_epoch,
+        )
+        if record["state"] != "running":
+            raise AudiaGenticError(
+                "CON-AGW-088", "agents", "gateway request is not running", {}
+            )
+        timestamp = now_iso_z()
+        previous = record.get("recovery")
+        previous = previous if isinstance(previous, dict) else {}
+        attempt = int(previous.get("attempt") or 0) + 1
+        retry_at = add_seconds(timestamp, retry_delay_seconds)
+        error_message = getattr(error, "message", None)
+        if not isinstance(error_message, str) and isinstance(error, Mapping):
+            error_message = error.get("message")
+        if not isinstance(error_message, str):
+            error_message = str(error) if error is not None else "recovery retry deferred"
+        recovery = {
+            "reason": previous.get("reason") or "gateway-restart",
+            "outcome": "in-place",
+            "from-owner-epoch": previous.get("from-owner-epoch"),
+            "handoff-id": previous.get("handoff-id"),
+            "attempt": attempt,
+            "last-error": error_message[:256],
+            "phase": phase,
+            "side-effect-state": side_effect_state,
+            "next-retry-at": retry_at,
+            "retry-delay-seconds": retry_delay_seconds,
+        }
+        updated = dict(record)
+        updated.update({
+            "recovery": recovery,
+            "recovery-required": True,
+            "watchdog-state": "active",
+            "watchdog-reason": "recovery-retry-scheduled",
+            "updated-at": timestamp,
+            "revision": record["revision"] + 1,
+        })
+        write_record(project_root, updated)
+        record_gateway_timeline(
+            project_root,
+            request_id,
+            "recovery.retry-scheduled",
+            state="running",
+            attributes={
+                "phase": phase,
+                "attempt": attempt,
+                "next-retry-at": retry_at,
+                "retry-delay-seconds": retry_delay_seconds,
+                "side-effect-state": side_effect_state,
+            },
+        )
+        return updated
+
+
 def transition_recovered_terminal(
     project_root: Path,
     request_id: str,
