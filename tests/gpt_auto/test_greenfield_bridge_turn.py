@@ -25,6 +25,7 @@ from audiagentic.components.providers.adapters.gpt_auto.turn import (
     TurnState,
     _facts,
     _progress_activity_labels,
+    _same_response_slot_replacement,
     _scope_response_snapshot,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
@@ -850,13 +851,12 @@ async def test_stale_progress_focus_probe_is_configurable_and_disabled():
 
 
 @pytest.mark.asyncio
-async def test_stale_dom_response_conflict_refreshes_without_resubmitting() -> None:
-    """A renderer bump must recover the original turn, not fail it.
+async def test_same_response_slot_id_replacement_is_adopted_without_refresh() -> None:
+    """A renderer bump must adopt the original turn's replacement node.
 
-    The first terminal-looking snapshot exposes a provisional assistant id;
-    refreshing the same retained conversation exposes the final id.  The
-    gateway must perform that read-only recovery exactly once and complete the
-    original request with one provider submission.
+    The first terminal-looking snapshot exposes a provisional assistant ID;
+    the next snapshot exposes a different ID in the same exact prompt-owned
+    response slot. This must not consume recovery or submit the prompt again.
     """
     chat = _Chat()
     final_snapshot = snap(
@@ -909,13 +909,70 @@ async def test_stale_dom_response_conflict_refreshes_without_resubmitting() -> N
 
     assert result.final_summary == "final response"
     assert chat.runtime.bridge.submit_calls == 1
-    assert refresh_calls == 1
+    assert refresh_calls == 0
     assert turn._response_message_id == "assistant-final"
 
 
+def test_same_response_slot_replacement_requires_one_prompt_owned_assistant() -> None:
+    current = replace(
+        snap(
+            users=1,
+            assistants=1,
+            user="Review AU01",
+            assistant="final",
+            assistant_id="assistant-new",
+        ),
+        latest_user_id="prompt-1",
+        message_refs=(
+            ChatMessageRef(role="user", message_id="prompt-1", text="Review AU01", sequence=0),
+            ChatMessageRef(role="assistant", message_id="assistant-new", text="final", sequence=1),
+        ),
+    )
+
+    assert _same_response_slot_replacement(
+        current,
+        prompt_message_id="prompt-1",
+        expected_user_count=1,
+        old_assistant_id="assistant-old",
+        new_assistant_id="assistant-new",
+    )
+
+    with_later_user = replace(
+        current,
+        user_count=2,
+        latest_user_id="prompt-2",
+        message_refs=current.message_refs
+        + (
+            ChatMessageRef(role="user", message_id="prompt-2", text="Later", sequence=2),
+        ),
+    )
+    assert not _same_response_slot_replacement(
+        with_later_user,
+        prompt_message_id="prompt-1",
+        expected_user_count=1,
+        old_assistant_id="assistant-old",
+        new_assistant_id="assistant-new",
+    )
+
+    with_two_assistants = replace(
+        current,
+        message_refs=current.message_refs
+        + (
+            ChatMessageRef(role="assistant", message_id="assistant-other", text="Other", sequence=2),
+        ),
+    )
+    assert not _same_response_slot_replacement(
+        with_two_assistants,
+        prompt_message_id="prompt-1",
+        expected_user_count=1,
+        old_assistant_id="assistant-old",
+        new_assistant_id="assistant-new",
+    )
+
+
 @pytest.mark.asyncio
-async def test_terminal_verification_conflict_uses_same_refresh_path() -> None:
-    """The independent verification read must not bypass identity recovery."""
+async def test_terminal_verification_adopts_same_response_slot_replacement() -> None:
+    """Terminal verification applies the same structural replacement proof."""
     chat = _Chat()
     final_snapshot = snap(
         users=1,
@@ -946,8 +1003,8 @@ async def test_terminal_verification_conflict_uses_same_refresh_path() -> None:
                 assistant_id="assistant-candidate",
                 complete=True,
             ),
-            # The independent verification read sees a different DOM id but
-            # identical text; this must trigger the same bounded refresh.
+            # The independent verification read sees a different DOM ID but
+            # identical text in the same prompt-owned slot.
             snap(
                 users=1,
                 assistants=1,
@@ -977,14 +1034,31 @@ async def test_terminal_verification_conflict_uses_same_refresh_path() -> None:
 
     assert result.final_summary == "final response"
     assert chat.runtime.bridge.submit_calls == 1
-    assert refresh_calls == 1
+    assert refresh_calls == 0
     assert turn._response_message_id == "assistant-final"
 
 
 @pytest.mark.asyncio
-async def test_second_response_conflict_fails_without_second_refresh_or_submit() -> None:
-    """A bounded refresh cannot turn correlation ambiguity into a loop."""
+async def test_ambiguous_response_identity_recovers_without_resubmitting() -> None:
+    """Coexisting assistant nodes remain ambiguous and fail closed by recovery."""
     chat = _Chat()
+    ambiguous = replace(
+        snap(
+            users=1,
+            assistants=2,
+            user="Review AU01",
+            assistant="final",
+            assistant_id="assistant-b",
+            complete=True,
+        ),
+        latest_assistant_id="assistant-c",
+        message_refs=(
+            ChatMessageRef(role="user", message_id="prompt-1", text="Review AU01", sequence=0),
+            ChatMessageRef(role="assistant", message_id="assistant-b", text="final", sequence=1),
+            ChatMessageRef(role="assistant", message_id="assistant-c", text="final", sequence=2),
+        ),
+        terminal_witness_assistant_id="assistant-c",
+    )
     chat._snapshots = iter(
         [
             snap(),
@@ -998,32 +1072,10 @@ async def test_second_response_conflict_fails_without_second_refresh_or_submit()
                 assistant="partial",
                 assistant_id="assistant-a",
             ),
-            snap(
-                users=1,
-                assistants=1,
-                user="Review AU01",
-                assistant="final",
-                assistant_id="assistant-b",
-                complete=True,
-            ),
+            ambiguous,
         ]
         + [
-            snap(
-                users=1,
-                assistants=1,
-                user="Review AU01",
-                assistant="final",
-                assistant_id="assistant-b",
-                complete=True,
-            ),
-            snap(
-                users=1,
-                assistants=1,
-                user="Review AU01",
-                assistant="final",
-                assistant_id="assistant-c",
-                complete=True,
-            )
+            ambiguous,
         ]
         * 20
     )
@@ -1045,8 +1097,8 @@ async def test_second_response_conflict_fails_without_second_refresh_or_submit()
         await turn.run()
 
     assert captured.value.code == "EXT-GPTAUTO-004"
-    assert captured.value.details["failure-reason"] == "frozen-response-correlation-conflict"
-    assert refresh_invocations == 2  # second call is the guard check, not a second refresh
+    assert captured.value.details["failure-reason"] == "response-recovery-exhausted"
+    assert refresh_invocations == 1
     assert chat.runtime.bridge.submit_calls == 1
 
 
