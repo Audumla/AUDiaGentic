@@ -578,13 +578,15 @@ def takeover_nonterminal_owner(
             )
         if current_owner == new_owner_epoch:
             return record
+        previous = record.get("recovery")
+        previous = previous if isinstance(previous, dict) else {}
         recovery = {
-            "reason": "gateway-restart" if handoff_id else "owner-loss",
+            **previous,
+            "reason": "gateway-restart" if handoff_id else (previous.get("reason") or "owner-loss"),
             "outcome": "in-place",
             "from-owner-epoch": current_owner,
-            "handoff-id": handoff_id,
-            "attempt": int((record.get("recovery") or {}).get("attempt", 0)),
-            "last-error": None,
+            "handoff-id": handoff_id or previous.get("handoff-id"),
+            "attempt": int(previous.get("attempt", 0)),
         }
         updated = dict(record)
         updated.update({
@@ -1583,6 +1585,7 @@ def transition_owned_terminal(
     # falsely suggests the request is still being worked on.
     terminal_updates["watchdog-state"] = "not-started"
     terminal_updates["watchdog-reason"] = None
+    terminal_updates["recovery-required"] = False
     updated = transition_record(
         project_root,
         request_id,

@@ -13,11 +13,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 import threading
 import time
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -679,9 +681,31 @@ class GatewayQueueManager:
             runner=runner,
             owner_epoch=dispatch_owner_epoch,
             service_root=dispatch_service_root,
-            session_source_id=self._durable_session_source_id(project_root, record.get("session-id")),
+            session_source_id=(
+                self._durable_session_source_id(project_root, record.get("session-id"))
+                or record.get("resolved-source-id")
+            ),
         )
         pq = self._runtime_state(snapshot)
+        recovery = record.get("recovery")
+        next_retry_at = recovery.get("next-retry-at") if isinstance(recovery, dict) else None
+        if isinstance(next_retry_at, str) and next_retry_at:
+            try:
+                due_at = datetime.fromisoformat(next_retry_at.replace("Z", "+00:00"))
+                if due_at.tzinfo is None:
+                    due_at = due_at.replace(tzinfo=timezone.utc)
+                remaining = max(0.0, due_at.timestamp() - time.time())
+            except (TypeError, ValueError, OverflowError):
+                remaining = 0.0
+            if remaining > 0:
+                self._schedule_recovery_retry(
+                    pq,
+                    entry,
+                    remaining,
+                    worker_id=str(record.get("worker-id") or ""),
+                    attempt_epoch=int(record.get("attempt-epoch") or 0),
+                )
+                return
         with pq.lock:
             pq.running.add(entry.request_id)
             self._active_requests[entry.request_id] = (
@@ -882,8 +906,16 @@ class GatewayQueueManager:
             )
         except (TypeError, ValueError):
             maximum = _RECOVERY_RETRY_MAX_SECONDS
-        initial = max(0.0, initial)
-        maximum = max(initial, maximum)
+        initial = (
+            initial
+            if math.isfinite(initial) and initial > 0
+            else _RECOVERY_RETRY_INITIAL_SECONDS
+        )
+        maximum = (
+            maximum
+            if math.isfinite(maximum) and maximum >= initial
+            else _RECOVERY_RETRY_MAX_SECONDS
+        )
         return min(maximum, initial * (2 ** max(0, recovery_attempt - 1)))
 
     def _schedule_recovery_retry(
@@ -987,7 +1019,14 @@ class GatewayQueueManager:
         lane_label = f"{entry.snapshot.profile_id}/{entry.snapshot.generation}"
 
         is_session = False
+        retry_plan: tuple[float, str, int] | None = None
         try:
+            current = store.read_record(project_root, request_id)
+            recovered_running = (
+                current.get("state") == "running"
+                and current.get("recovery-required") is True
+                and current.get("dispatch-owner-epoch") == owner_epoch
+            )
             if request_id in pq.cancel_requested:
                 logger.info(
                     "gateway request cancelled before dispatch", extra={"request-id": request_id}
@@ -1008,7 +1047,7 @@ class GatewayQueueManager:
             # if the gateway profile changed while this request was pending,
             # reject it terminally with CON-AGW-101 resubmit-required.
             validator = profiles_mod.get_snapshot_validator()
-            if not validator.validate_snapshot_current(entry.snapshot):
+            if not recovered_running and not validator.validate_snapshot_current(entry.snapshot):
                 logger.info(
                     "gateway request rejected before dispatch: stale profile snapshot",
                     extra={"request-id": request_id, "profile": lane_label},
@@ -1276,11 +1315,26 @@ class GatewayQueueManager:
                         retry_delay_seconds=delay,
                     )
                 except AudiaGenticError:
-                    logger.info(
-                        "recovery retry lost its durable ownership fence",
-                        extra={"request-id": request_id},
-                        exc_info=True,
+                    latest = store.read_record(project_root, request_id)
+                    same_owner = (
+                        latest.get("state") == "running"
+                        and latest.get("dispatch-owner-epoch") == record["dispatch-owner-epoch"]
+                        and latest.get("worker-id") == record["worker-id"]
+                        and latest.get("attempt-epoch") == record["attempt-epoch"]
                     )
+                    if not same_owner:
+                        logger.info(
+                            "recovery retry lost its durable ownership fence",
+                            extra={"request-id": request_id},
+                            exc_info=True,
+                        )
+                    else:
+                        retry_plan = (delay, record["worker-id"], record["attempt-epoch"])
+                        logger.warning(
+                            "recovery retry metadata write failed; retry retained",
+                            extra={"request-id": request_id},
+                            exc_info=True,
+                        )
                 else:
                     logger.info(
                         "gateway request recovery deferred",
@@ -1290,13 +1344,7 @@ class GatewayQueueManager:
                             "recovery-attempt": (deferred_record.get("recovery") or {}).get("attempt"),
                         },
                     )
-                    self._schedule_recovery_retry(
-                        pq,
-                        entry,
-                        delay,
-                        worker_id=record["worker-id"],
-                        attempt_epoch=record["attempt-epoch"],
-                    )
+                    retry_plan = (delay, record["worker-id"], record["attempt-epoch"])
             except AudiaGenticError as exc:
                 logger.error(
                     "gateway request runner raised", extra={"request-id": request_id}, exc_info=True
@@ -1372,6 +1420,14 @@ class GatewayQueueManager:
             self._active_requests.pop(request_id, None)
             _TURNCB.clear(request_id)
             self._drain_all()
+            if retry_plan is not None:
+                self._schedule_recovery_retry(
+                    pq,
+                    entry,
+                    retry_plan[0],
+                    worker_id=retry_plan[1],
+                    attempt_epoch=retry_plan[2],
+                )
 
     def _find_profile_for_request(
         self, execution_profile_id: str, request_id: str

@@ -637,7 +637,8 @@ def _dispatch_session_request(
             # the exact provider binding before applying continuation policy.
             if not runtime.session_runtime_status(session_id).get("available"):
                 if (
-                    session_record.get("state") in {"closed", "expired"}
+                    not resume_existing
+                    and session_record.get("state") in {"closed", "expired"}
                     and session_record.get("close-reason") in _AUTO_RESUMABLE_CLOSE_REASONS
                 ):
                     # A gateway resource-policy close retains the durable
@@ -782,11 +783,14 @@ def _dispatch_session_request(
     except AudiaGenticError as exc:
         if guard_held:
             preparation_guard.release()
-        if resume_existing and not prompt_started:
+        if resume_existing:
             # Rehydrate/open failures cannot prove that the old generation
             # did not submit the turn.  The queue owns the non-terminal retry
             # and keeps the durable request/session identity unchanged.
-            raise RecoveryDeferred(exc) from exc
+            raise RecoveryDeferred(
+                exc,
+                phase="rehydrate-retry" if not prompt_started else "observe-retry",
+            ) from exc
         cancelled = store.read_record(project_root, request_id).get("cancel-requested")
         if client_defaults.proven_unsent_composer_failure(exc) and not cancelled and not _unsent_retry_used:
             store.append_owned_attempt(
@@ -843,7 +847,7 @@ def _dispatch_session_request(
     except BaseException as exc:
         if guard_held:
             preparation_guard.release()
-        if resume_existing and not prompt_started:
+        if resume_existing:
             wrapped = AudiaGenticError(
                 code="INT-AGW-098",
                 kind="agents",
