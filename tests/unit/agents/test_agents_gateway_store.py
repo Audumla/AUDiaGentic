@@ -699,6 +699,7 @@ def test_read_migrates_v1_record_under_request_lock(tmp_path: Path) -> None:
     assert migrated["contract-version"] == "v5"
     assert migrated["dispatch-owner-epoch"] is None
     assert migrated["recovery"] is None
+    assert migrated["recovery-required"] is False
     assert migrated["resolved-source-id"] is None
     assert migrated["resolved-capacity-generation"] is None
     assert migrated["activity-sequence"] == 0

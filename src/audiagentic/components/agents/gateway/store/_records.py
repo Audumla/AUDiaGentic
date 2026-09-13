@@ -578,7 +578,6 @@ def _migrate_v1_payload(payload: dict[str, Any]) -> dict[str, Any]:
         migrated.setdefault("dispatch-owner-epoch", None)
         migrated.setdefault("dispatch-claimed-at", None)
         migrated.setdefault("recovery", None)
-        migrated.setdefault("recovery-required", False)
         migrated.setdefault("replay-required", None)
         migrated.setdefault("replay-reason", None)
         migrated.setdefault("replayed-by-request-id", None)
@@ -590,6 +589,10 @@ def _migrate_v1_payload(payload: dict[str, Any]) -> dict[str, Any]:
     migrated.setdefault("activity-sequence", 0)
     migrated.setdefault("activity-source", None)
     migrated.setdefault("activity-lease-expires-at", None)
+    # Legacy requests are not in a recovery turn merely because they predate
+    # this field, so every accepted historical version gets an explicit false
+    # default before version-specific validation.
+    migrated.setdefault("recovery-required", False)
     activity = migrated.get("activity")
     if not isinstance(activity, dict):
         activity = _shared.default_activity()
