@@ -28,7 +28,7 @@ def test_archive_rejects_conflicting_historical_identity(tmp_path: Path) -> None
         json.dumps(_event("new content")) + "\n", encoding="utf-8"
     )
     (releases / "LEDGER.ndjson").write_text(
-        json.dumps(_event("old content")) + "\n", encoding="utf-8"
+        json.dumps({**_event("old content"), "status": "released", "release-id": "old"}) + "\n", encoding="utf-8"
     )
 
     with pytest.raises(AudiaGenticError, match="conflicting content"):

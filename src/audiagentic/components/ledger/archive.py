@@ -112,7 +112,7 @@ def _archive_current_ledger_locked(project_root: Path, release_id: str) -> dict[
     current_path = current_ledger_path(project_root)
     historical_path = historical_ledger_path(project_root)
 
-    events = load_persisted_events(current_path)
+    events = load_persisted_events(current_path, role="current")
     if not events:
         raise AudiaGenticError(
             code="CON-ARCHIVE-001",
@@ -125,7 +125,7 @@ def _archive_current_ledger_locked(project_root: Path, release_id: str) -> dict[
     released_events = [{**e, "status": "released", "release-id": release_id} for e in events]
     released_ids = {e["event-id"] for e in released_events}
 
-    historical = load_persisted_events(historical_path)
+    historical = load_persisted_events(historical_path, role="historical")
     merged = _merge_historical_events(historical, released_events)
 
     atomic_write_ndjson(historical_path, merged)

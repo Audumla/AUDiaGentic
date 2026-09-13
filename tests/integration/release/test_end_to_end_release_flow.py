@@ -47,7 +47,11 @@ def test_end_to_end_release_flow(tmp_path: Path) -> None:
 
         current_ledger = sandbox.repo / "docs" / "releases" / "CURRENT_RELEASE_LEDGER.ndjson"
         historical = sandbox.repo / "docs" / "releases" / "LEDGER.ndjson"
-        historical.write_text(current_ledger.read_text(encoding="utf-8"), encoding="utf-8")
+        historical_events = [
+            {**event, "status": "released", "release-id": "rel_e2e"}
+            for event in (json.loads(line) for line in current_ledger.read_text(encoding="utf-8").splitlines() if line.strip())
+        ]
+        historical.write_text("\n".join(json.dumps(event) for event in historical_events) + "\n", encoding="utf-8")
 
         checkpoint_dir = sandbox.repo / ".audiagentic" / "runtime" / "release" / "checkpoints"
         checkpoint_dir.mkdir(parents=True, exist_ok=True)
