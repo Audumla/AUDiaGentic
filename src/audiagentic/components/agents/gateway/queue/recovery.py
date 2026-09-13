@@ -139,12 +139,12 @@ def _takeover_stale_request(
     return updated["state"], (project_root, request_id)
 
 
-def recovery_runner(record: dict[str, Any]):
+def recovery_runner(record: dict[str, Any], *, project_root: Path | None = None):
     """Rebuild the immutable runner from admission-time record facts."""
     import functools
 
-    from audiagentic.components.agents.gateway import dispatch as _dispatch
     from audiagentic.components.agents.gateway.api import _resolve_provider_isolation_tier
+    from audiagentic.components.agents.gateway.queue import dispatch as _dispatch
 
     runtime = record.get("gateway-profile-runtime")
     if not isinstance(runtime, dict):
@@ -153,6 +153,25 @@ def recovery_runner(record: dict[str, Any]):
     if not isinstance(provider_id, str) or not provider_id:
         raise ValueError("recovered request has no resolved provider")
     provider_metadata = record.get("provider-metadata")
+    if (
+        not isinstance(provider_metadata, dict)
+        and project_root is not None
+        and isinstance(record.get("session-id"), str)
+    ):
+        # GPT checkpoint metadata is owned by the durable session record. The
+        # request projection may not have received the last provider update
+        # before the gateway generation ended, so never infer proven-unsent
+        # from a missing request-level copy.
+        from audiagentic.components.agents.gateway.session import sessions_store
+
+        try:
+            session_record = sessions_store.read_session_record(
+                project_root, record["session-id"]
+            )
+        except Exception:  # noqa: BLE001 - recovery will fail closed later
+            session_record = None
+        if session_record is not None:
+            provider_metadata = sessions_store.session_provider_metadata(session_record)
     unresolved_pending = (
         isinstance(provider_metadata, dict)
         and provider_metadata.get("unresolved-turn-pending") is True

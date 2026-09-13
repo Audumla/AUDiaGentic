@@ -186,6 +186,38 @@ def test_recovery_repairs_index_after_request_takeover_race(tmp_path: Path, monk
     assert entries[0].owner_epoch == "new-epoch"
 
 
+@pytest.mark.parametrize("pending, expected", [(True, True), (False, False)])
+def test_recovery_runner_reads_session_checkpoint_for_resume_mode(
+    tmp_path: Path, monkeypatch, pending: bool, expected: bool
+) -> None:
+    from audiagentic.components.agents.gateway.session import sessions_store
+
+    record = _record(tmp_path)
+    record.update(
+        {
+            "request-id": "req-recovery-mode",
+            "session-id": "ses-recovery-mode",
+            "recovery-required": True,
+            "resolved-provider-id": "gpt-auto",
+            "gateway-profile-runtime": {"provider-id": "gpt-auto", "params": {}},
+        }
+    )
+    monkeypatch.setattr(
+        sessions_store,
+        "read_session_record",
+        lambda *_args: {"session-id": "ses-recovery-mode"},
+    )
+    monkeypatch.setattr(
+        sessions_store,
+        "session_provider_metadata",
+        lambda _record: {"unresolved-turn-pending": pending},
+    )
+
+    runner = recovery.recovery_runner(record, project_root=tmp_path)
+
+    assert runner.keywords["resume_existing"] is expected
+
+
 def test_cancel_acknowledgement_is_first_writer_wins(tmp_path: Path) -> None:
     record = _record(tmp_path)
     store.mark_cancel_requested(tmp_path, record["request-id"])

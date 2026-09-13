@@ -215,7 +215,7 @@ class GatewayServiceHost:
                     project_root,
                     record,
                     dict(runtime.get("params") or {}),
-                    recovery_runner(record),
+                    recovery_runner(record, project_root=project_root),
                     dispatch_owner_epoch=self.owner_epoch,
                     dispatch_service_root=self.service_store.root,
                 )
@@ -226,7 +226,7 @@ class GatewayServiceHost:
                     project_root,
                     record,
                     dict(runtime.get("params") or {}),
-                    recovery_runner(record),
+                    recovery_runner(record, project_root=project_root),
                     dispatch_owner_epoch=self.owner_epoch,
                     dispatch_service_root=self.service_store.root,
                 )
