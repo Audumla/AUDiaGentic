@@ -411,13 +411,13 @@ Total changes: 548
 - Fixed the gateway dashboard showing wrong/blank session details and garbled queue info, and brought back visual status indicators.
 - Verify planning writes remain safe across both threads and independent MCP processes.
 - The dashboard now explains watchdog states clearly and presents requests only within sessions; legacy sessionless history was purged.
-- Enabled the Rig Tester gateway agent against the local embedded rig and verified both Rig Tester and Pi agent requests complete successfully through the gateway.
+- Enabled the Rig Tester gateway agent against the configured embedded rig and verified both Rig Tester and Pi agent requests complete successfully through the gateway.
 - The gateway dashboard now shows recent tasks and sessions by a configurable time window, while live work stays visible. Use AUDIAGENTIC_GATEWAY_DASHBOARD_RECENT_SECONDS for the gateway default or change the Recent window control in the dashboard.
-- Pi Rig Agent now runs through Brutus at 10.10.100.10 using qwen3.6-27b-0.
+- Pi Rig Agent now runs through a configured private model endpoint using a qwen3.6-27b-0-compatible model.
 - Cleaned stale agent config duplicates: agents.yaml is now the sole project authoring document, while generated provider registries remain derived runtime state.
 - Codex now has selectable Luna low/medium/high/xhigh/max ACP agents with model and effort passed explicitly; GPT-auto waits slightly longer after injection before clicking Send to reduce the typed-but-not-submitted failure.
 - Codex ACP now works through the managed gateway with selectable Luna effort levels, and GPT-auto waits briefly after prompt injection so the submit control can settle. A live gateway request completed successfully and its test session was closed.
-- Added a new Pi agent for Brutus qwen3.6-27b-0 without duplicating the existing profile or model source. A live gateway request completed successfully and the test session was closed.
+- Added a new Pi private-rig qwen3.6-27b-0 agent without duplicating the existing profile or model source. A live gateway request completed successfully and the test session was closed.
 - The gateway now uses a global profile registry and global Brutus model definitions. A live dev-high-agent request admitted under global qwen-high and completed successfully on qwen3.6-27b12.
 - Copied the complete agent metadata into a machine-global agents.yaml catalog and verified it matches the project definitions exactly. The running gateway was not restarted.
 - Removed four unused gateway profiles and their stale execution-profile definitions. All remaining profiles are bound to named agents, and the live gateway registry was reloaded successfully without restarting.

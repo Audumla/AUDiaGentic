@@ -6,7 +6,7 @@ revalidation required before current decisions)
 Planning items: `AS15..AS26` (agent sessions; AS15 and AS18 completed), `PR05..PR07` (process lifecycle), `SH07` (durable job state, consumes the AS21 projection per RV561)
 
 Declaration home (RV560): harness observability capability declarations live in
-**provider descriptors** (`config/providers/*.yaml`) following the MA20
+**provider descriptors** (`src/audiagentic/config/providers/*.yaml`) following the MA20
 declaration pattern, with probe evidence recorded as MA19 `capability_facts`
 (subject: harness observability signals). This document and the profiles under
 `harnesses/` are the evidence source used to populate those declarations; they
@@ -837,7 +837,7 @@ pre-model re-acquisition against a real controllable harness boundary.
 | **CompletionArbiter** | Determines whether sufficient evidence exists for terminal turn state | AS21 — sole arbiter; its projection feeds SH07's durable record (RV561) |
 | **SessionReusePolicy** | Determines whether the persistent session can accept another prompt | AS21 flags consumed by session runtime (AS08) |
 | **ResourceScheduler** | Releases or retains model, process, and concurrency capacity based on state | AS15 (done); SH08 for machine-wide arbitration; later O3 work requires a proven control boundary |
-| **EvidenceJournal / replay** | Ordered durable evidence, snapshots, restart reconstruction | Not implemented; foundation timelines/FileEventStore are best-effort evidence, not an O4 journal |
+| **EvidenceJournal / replay** | Ordered durable evidence, snapshots, restart reconstruction | Not implemented at the time of this snapshot; foundation timelines/FileEventStore are best-effort evidence, not an O4 journal. Revalidate before treating this as current capability status. |
 | **Reconciler** | Post-restart/orphan reconciliation | AS26 owns active-turn orphan recovery; SH07 owns durable gateway request recovery |
 
 SH07 owns durable gateway request state. Agent-jobs separately owns its workflow

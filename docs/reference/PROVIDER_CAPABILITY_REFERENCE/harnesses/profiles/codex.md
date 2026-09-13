@@ -51,7 +51,7 @@ model_provider = "local_llama"
 
 [model_providers.local_llama]
 name = "Local llama.cpp"
-base_url = "http://10.10.100.10:42001/v1"
+base_url = "https://<private-endpoint>/v1"
 wire_api = "responses"
 # optional auth:
 env_key = "LOCAL_LLM_API_KEY"
@@ -68,7 +68,7 @@ Recent llama.cpp builds provide `/v1/responses` (internally translating to Chat 
 Test your endpoint before configuring:
 
 ```bash
-curl http://10.10.100.10:42001/v1/responses \
+curl https://<private-endpoint>/v1/responses \
   -H "Content-Type: application/json" \
   -d '{
     "model": "gpt-oss-20b",
@@ -159,7 +159,7 @@ Profiles enable named configuration layers selected via `--profile profile-name`
 model = "gpt-5.5"
 model_reasoning_effort = "xhigh"
 approval_policy = "on-request"
-model_catalog_json = "/Users/me/.codex/model-catalogs/deep-review.json"
+model_catalog_json = "<user-home>/.codex/model-catalogs/deep-review.json"
 ```
 
 ### Amazon Bedrock built-in provider
@@ -235,7 +235,7 @@ Project-local `.codex/config.toml` cannot override `openai_base_url` — this is
 Custom model catalog via `model_catalog_json`. Profile files can override per-profile:
 
 ```toml
-model_catalog_json = "/Users/me/.codex/model-catalogs/deep-review.json"
+model_catalog_json = "<user-home>/.codex/model-catalogs/deep-review.json"
 ```
 
 ### Shell environment policy

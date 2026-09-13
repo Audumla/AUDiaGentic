@@ -1,8 +1,12 @@
 # ACP Capability Analysis
 
-Status: investigation — pre-work for provider capability documentation
+Status: evidence-backed investigation snapshot — not a live support matrix
 Last checked: 2026-07-16
 Sources: ACP registry v1.0.0 (2026-07-16), provider evidence documents, adapter implementations, and native provider control documentation
+
+> Revalidate registry entries, provider versions, and adapter behavior before
+> using this document to enable or promise ACP support. The current runtime
+> descriptor and test evidence remain authoritative for AUDiaGentic support.
 
 ## Scope
 
@@ -191,7 +195,7 @@ This allows Claude’s own supervisor to own a persistent session while a termin
 ### Claude Code Hooks
 * **Official docs**: <https://code.claude.com/docs/en/hooks.md> and <https://code.claude.com/docs/en/hooks-guide>
 * **Hook locations**:
-  * `~/.claude/settings.json` (all projects, local to machine)
+  * `~/.claude/settings.json` (all projects, user-scoped)
   * `.claude/settings.json` (single project, shareable/committed)
   * `.claude/settings.local.json` (single project, gitignored)
   * Managed policy settings (organization-wide)

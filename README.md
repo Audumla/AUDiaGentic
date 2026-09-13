@@ -15,7 +15,7 @@ Multi-agent workflow orchestration system for AI coding agents. Provides the inf
 |-------|------|----------|
 | Foundation | `src/audiagentic/foundation/` | Contracts, config, events, workflow primitives |
 | Runtime | `src/audiagentic/runtime/` | Lifecycle management, state |
-| Components | `src/audiagentic/components/` | Providers, coding LSP, ledger, agent jobs, release, source control, planning, and sessions |
+| Components | `src/audiagentic/components/` | Agents, providers, coding LSP, ledger, release, source control, planning, and session services |
 
 ## Installation
 
@@ -60,4 +60,5 @@ Use `tests/docker/Dockerfile.release-test` only when validating the wheel-instal
 
 ## Testing
 
-- See the repository test configuration and the focused test-suite READMEs for current test commands and architecture notes.
+- See [`tests/TESTING.md`](tests/TESTING.md) for current test commands, tiers,
+  markers, and architecture notes.

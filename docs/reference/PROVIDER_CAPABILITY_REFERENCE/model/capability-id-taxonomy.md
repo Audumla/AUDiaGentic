@@ -134,13 +134,13 @@ Can the harness observe this provider's execution over a given transport? One li
 
 ## Provider capability matrix
 
-Not hand-maintained here -- a hand-written matrix drifts the moment a provider YAML changes (this is exactly what went stale before PC07 step 4). Use `describe_provider(provider_id)` (`providers_api.py`) or read the provider's YAML under `config/providers/<id>.yaml` directly for the live, authoritative per-provider capability set.
+Not hand-maintained here -- a hand-written matrix drifts the moment a provider YAML changes (this is exactly what went stale before PC07 step 4). Use `describe_provider(provider_id)` (`providers_api.py`) or read the provider's YAML under `src/audiagentic/config/providers/<id>.yaml` directly for the live, authoritative per-provider capability set.
 
 ## Evidence source mapping
 
 | Source | Path | Use for |
 | --- | --- | --- |
-| Provider YAML | `config/providers/<id>.yaml` | Verified facts from descriptor fields |
+| Provider YAML | `src/audiagentic/config/providers/<id>.yaml` | Verified facts from descriptor fields |
 | Evidence docs | `harnesses/profiles/<id>.md` | Model-related capabilities (catalog, connectors, vendor injection) |
 | Capability matrix | `endpoints/provider-model-endpoints.md` | Cross-reference for model connector support, projection modes |
 
@@ -148,6 +148,6 @@ Not hand-maintained here -- a hand-written matrix drifts the moment a provider Y
 
 Evidence `source` values use these forms:
 
-- Descriptor field: `config/providers/<id>.yaml#<capability-kind>`
+- Descriptor field: `src/audiagentic/config/providers/<id>.yaml#<capability-kind>`
 - Evidence doc: `harnesses/profiles/<id>.md#<section>`
 - Capability matrix: `endpoints/provider-model-endpoints.md#<provider>`

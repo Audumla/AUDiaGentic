@@ -12,6 +12,10 @@ identity, validation performed, and whether the referenced implementation
 still exists. Reports with `TBD`, `Queued`, or `Running` entries describe the
 state observed by that report, not live system state.
 
+Review records must be sanitized before commit: omit resolved user/workspace
+paths, machine names, private addresses, temporary locations, credentials, and
+copied local runtime payloads. Use repository-relative paths and explicit
+placeholders when an environment detail is needed to explain the finding.
+
 See [Documentation status](../DOCUMENTATION_STATUS.md) for the repository-wide
 authority and historical-record policy.
-
