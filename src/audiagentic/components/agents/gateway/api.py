@@ -307,6 +307,7 @@ def submit_execution_request(
     workspace_name: str | None = None,
     title: str | None = None,
     component_profile: str | None = None,
+    logical_client_id: str | None = None,
     _dispatch_owner_epoch: str | None = None,
     _client_instance_id: str | None = None,
     _dispatch_service_root: str | None = None,
@@ -350,6 +351,20 @@ def submit_execution_request(
     # provider adapter after admission.
     if not isinstance(new_session, bool) or (new_session and (session_id or provider_chat_url)):
         raise AudiaGenticError("VAL-AGW-151", "agents", "new_session must be boolean and cannot be combined with session_id or provider_chat_url", {})
+    if logical_client_id is not None and (
+        not isinstance(logical_client_id, str)
+        or not logical_client_id.strip()
+        or len(logical_client_id) > 200
+        or any(ord(character) < 32 for character in logical_client_id)
+    ):
+        raise AudiaGenticError(
+            code="VAL-AGW-151",
+            kind="agents",
+            message="logical_client_id must be a non-empty single-line string of at most 200 characters",
+            details={},
+        )
+    if isinstance(logical_client_id, str):
+        logical_client_id = logical_client_id.strip()
     normalized_provider_chat_url: str | None = None
     if provider_chat_url is not None:
         if not isinstance(provider_chat_url, str) or not provider_chat_url.strip():
@@ -576,7 +591,7 @@ def submit_execution_request(
 
     from audiagentic.components.agents.gateway.session.client_defaults import select as select_default_session
     with select_default_session(
-        project_root, service_root=_dispatch_service_root, client_id=_client_instance_id,
+        project_root, service_root=_dispatch_service_root, client_id=logical_client_id,
         agent_id=agent_id, provider_id=resolved_provider_id, session_id=continuation_session_id,
         provider_chat_url=normalized_provider_chat_url, new_session=new_session,
     ) as default_selection:

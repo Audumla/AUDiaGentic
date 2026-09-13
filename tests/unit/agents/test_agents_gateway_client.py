@@ -37,6 +37,18 @@ def test_in_process_client_delegates_to_its_application(tmp_path: Path) -> None:
     assert application.calls == [("submit", (tmp_path,), {"prompt_body": "hello"})]
 
 
+def test_in_process_client_can_carry_a_logical_client_identity(tmp_path: Path) -> None:
+    application = _ApplicationStub()
+    client = EmbeddedGatewayClient(application, logical_client_id="ide-chat-a")  # type: ignore[arg-type]
+
+    client.submit_execution_request(tmp_path, prompt_body="hello")
+
+    assert application.calls[-1][2] == {
+        "prompt_body": "hello",
+        "logical_client_id": "ide-chat-a",
+    }
+
+
 def test_in_process_client_exposes_full_execution_response(tmp_path: Path) -> None:
     application = _ApplicationStub()
     client = EmbeddedGatewayClient(application)  # type: ignore[arg-type]

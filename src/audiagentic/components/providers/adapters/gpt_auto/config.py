@@ -121,6 +121,8 @@ class BrowserConfig:
     force_kill: bool
     dedicated_window: bool
     close_tabs_on_session_close: bool
+    physical_tab_idle_timeout_seconds: float = 7200.0
+    physical_tab_reaper_interval_seconds: float = 300.0
 
 
 @dataclass(frozen=True)
@@ -164,8 +166,12 @@ class TurnConfig:
     stale_progress_focus_enabled: bool
     stale_progress_focus_after_seconds: float
     response_no_activity_refresh_seconds: float = 240.0
-    response_refresh_attempts: int = 3
+    response_refresh_attempts: int = 15
     response_refresh_final_grace_seconds: float = 600.0
+    # While ChatGPT displays its non-terminal interruption banner, keep the
+    # gateway lease alive with synthetic, explicitly-labelled activity. This
+    # does not reset the real recovery clock or refresh budget.
+    response_interruption_activity_interval_seconds: float = 30.0
     # v3 removes response timers as terminal authority. Keep this explicit
     # on the resolved object so v1/v2 project overlays remain compatible
     # while the packaged v3 contract cannot accidentally re-enable them.
@@ -184,6 +190,7 @@ class DomSignalConfig:
     selectors: tuple[str, ...]
     visible: bool
     text_contains_any: tuple[str, ...] = ()
+    text_equals_any: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -198,16 +205,19 @@ class TurnWorkflowConfig:
         raise KeyError(name)
 
     def bridge_signals(self) -> list[dict[str, Any]]:
-        return [
-            {
+        result: list[dict[str, Any]] = []
+        for signal in self.dom_signals:
+            item = {
                 "name": signal.name,
                 "scope": signal.scope.value,
                 "selectors": list(signal.selectors),
                 "visible": signal.visible,
                 "textContainsAny": list(signal.text_contains_any),
             }
-            for signal in self.dom_signals
-        ]
+            if signal.text_equals_any:
+                item["textEqualsAny"] = list(signal.text_equals_any)
+            result.append(item)
+        return result
 
 
 @dataclass(frozen=True)
@@ -260,6 +270,8 @@ class GptAutoConfig:
                 "force-kill",
                 "dedicated-window",
                 "close-tabs-on-session-close",
+                "physical-tab-idle-timeout-seconds",
+                "physical-tab-reaper-interval-seconds",
             },
             "browser",
             required={
@@ -297,6 +309,12 @@ class GptAutoConfig:
             # default.  Closing them remains an opt-in destructive action.
             close_tabs_on_session_close=_optional_boolean(
                 browser_data, "close-tabs-on-session-close", default=False
+            ),
+            physical_tab_idle_timeout_seconds=_optional_non_negative(
+                browser_data, "physical-tab-idle-timeout-seconds", default=7200.0
+            ),
+            physical_tab_reaper_interval_seconds=_optional_positive(
+                browser_data, "physical-tab-reaper-interval-seconds", default=300.0
             ),
         )
 
@@ -352,6 +370,7 @@ class GptAutoConfig:
                 "response-no-activity-refresh-seconds",
                 "response-refresh-attempts",
                 "response-refresh-final-grace-seconds",
+                "response-interruption-activity-interval-seconds",
             },
             "turn",
             required={
@@ -409,10 +428,15 @@ class GptAutoConfig:
                 turn_data, "response-no-activity-refresh-seconds", default=240.0
             ),
             response_refresh_attempts=_optional_non_negative_int(
-                turn_data, "response-refresh-attempts", default=3
+                turn_data, "response-refresh-attempts", default=15
             ),
             response_refresh_final_grace_seconds=_optional_non_negative(
                 turn_data, "response-refresh-final-grace-seconds", default=600.0
+            ),
+            response_interruption_activity_interval_seconds=_optional_non_negative(
+                turn_data,
+                "response-interruption-activity-interval-seconds",
+                default=30.0,
             ),
         )
         workflow = _workflow_config(_mapping(settings, "workflow"))
@@ -670,6 +694,13 @@ def _optional_non_negative_int(data: dict[str, Any], key: str, *, default: int) 
     return value
 
 
+def _optional_positive(data: dict[str, Any], key: str, *, default: float) -> float:
+    value = data.get(key, default)
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
+        _invalid(f"{key} must be positive")
+    return float(value)
+
+
 def _positive(data: dict[str, Any], key: str) -> float:
     value = data.get(key)
     if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
@@ -691,7 +722,7 @@ def _workflow_config(data: dict[str, Any]) -> TurnWorkflowConfig:
     for name, raw in signal_data.items():
         if not isinstance(name, str) or not name or not isinstance(raw, dict):
             _invalid("workflow.dom-signals must map names to signal definitions")
-        allowed = {"scope", "selectors", "visible", "text-contains-any"}
+        allowed = {"scope", "selectors", "visible", "text-contains-any", "text-equals-any"}
         if set(raw) - allowed or {"scope", "selectors", "visible"} - set(raw):
             _invalid(f"workflow.dom-signals.{name} has unknown or missing keys")
         try:
@@ -708,6 +739,11 @@ def _workflow_config(data: dict[str, Any]) -> TurnWorkflowConfig:
             not isinstance(fragment, str) or not fragment for fragment in text_contains
         ):
             _invalid(f"workflow.dom-signals.{name}.text-contains-any must be strings")
+        text_equals = raw.get("text-equals-any", [])
+        if not isinstance(text_equals, list) or any(
+            not isinstance(fragment, str) or not fragment for fragment in text_equals
+        ):
+            _invalid(f"workflow.dom-signals.{name}.text-equals-any must be strings")
         signals.append(
             DomSignalConfig(
                 name,
@@ -715,6 +751,7 @@ def _workflow_config(data: dict[str, Any]) -> TurnWorkflowConfig:
                 tuple(selectors),
                 _boolean(raw, "visible"),
                 tuple(text_contains),
+                tuple(text_equals),
             )
         )
 

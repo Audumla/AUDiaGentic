@@ -594,6 +594,7 @@ class SessionRuntime:
         correlation_id: str | None = None,
         timeout_seconds: float | None = None,
         activity_relay: Any | None = None,
+        dispatch_claim: Callable[[], dict[str, Any]] | None = None,
     ) -> SessionTurnResult:
         """Run one turn on a live session; refreshes its idle clock."""
         return self._call(
@@ -604,6 +605,7 @@ class SessionRuntime:
                 request_id=request_id,
                 correlation_id=correlation_id,
                 activity_relay=activity_relay,
+                dispatch_claim=dispatch_claim,
             ),
             timeout=timeout_seconds,
         )
@@ -2312,6 +2314,7 @@ class SessionRuntime:
         request_id: str | None,
         correlation_id: str | None,
         activity_relay: Any | None = None,
+        dispatch_claim: Callable[[], dict[str, Any]] | None = None,
     ) -> SessionTurnResult:
         handle = self._require_handle(session_id)
         # Turns queue FIFO on the session lock (RV513) — reject only when the
@@ -2330,11 +2333,17 @@ class SessionRuntime:
                 message="session exceeded its max lifetime and is draining; open a new session",
                 details={"session-id": session_id},
             )
+        mark_turn_pending = getattr(handle.transport, "mark_turn_pending", None)
+        clear_turn_pending = getattr(handle.transport, "clear_turn_pending", None)
         handle.pending += 1
+        if callable(mark_turn_pending):
+            mark_turn_pending()
         try:
             await handle.turn_lock.acquire()
         finally:
             handle.pending -= 1
+            if callable(clear_turn_pending):
+                clear_turn_pending()
 
         # AS15: signal that the turn actually started — re-acquire profile
         # concurrency slot from idle state (was released while waiting on turn_lock).
@@ -2342,6 +2351,12 @@ class SessionRuntime:
         # cancellation while waiting cannot strand this session's turn lock.
         turn_slot_started = False
         try:
+            # A session request remains durably queued while it waits for this
+            # FIFO lock. The callback is the sole queued -> running CAS and is
+            # intentionally invoked before provider capacity acquisition or
+            # prompt submission.
+            if dispatch_claim is not None:
+                dispatch_claim()
             if request_id is not None:
                 from audiagentic.components.agents.gateway.queue.queue import notify_turn_starting
 

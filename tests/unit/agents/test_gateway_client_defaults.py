@@ -31,6 +31,33 @@ def test_scope_isolates_client_project_and_agent(tmp_path):
     assert original != defaults.scope_key("b", tmp_path, "gpt")
     assert original != defaults.scope_key("a", tmp_path / "other", "gpt")
     assert original != defaults.scope_key("a", tmp_path, "other")
+    assert original != defaults.scope_key("a", tmp_path, "gpt", "other-surface")
+
+
+def test_each_logical_client_has_an_independent_default(tmp_path):
+    with selection(tmp_path, client_id="client-a") as chosen:
+        chosen.commit({"session-id": "ses-a"})
+    with selection(tmp_path, client_id="client-b") as chosen:
+        assert chosen.session_id is None
+        chosen.commit({"session-id": "ses-b"})
+
+    with patch("audiagentic.components.agents.gateway.session.sessions_store.read_session_record", return_value={}):
+        with selection(tmp_path, client_id="client-a") as chosen:
+            assert chosen.session_id == "ses-a"
+        with selection(tmp_path, client_id="client-b") as chosen:
+            assert chosen.session_id == "ses-b"
+
+
+def test_legacy_default_binding_is_ignored_instead_of_adopted(tmp_path):
+    path = tmp_path / "service" / "client-default-sessions" / (
+        defaults.scope_key("client-a", tmp_path, "gpt-agent") + ".json"
+    )
+    path.parent.mkdir(parents=True)
+    path.write_text('{"session-id":"ses-legacy","schema-generation":1}', encoding="utf-8")
+
+    with selection(tmp_path, client_id="client-a") as chosen:
+        assert chosen.session_id is None
+        assert chosen.identity["schema-generation"] == 2
 
 
 def test_non_gpt_does_not_bind(tmp_path):

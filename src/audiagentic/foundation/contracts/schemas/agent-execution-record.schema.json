@@ -32,7 +32,13 @@
   "properties": {
     "client-default-session": {
       "type": ["object", "null"],
-      "properties": {"key": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "automatic": {"type": "boolean"}},
+      "properties": {
+        "key": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "automatic": {"type": "boolean"},
+        "schema-generation": {"type": "integer", "minimum": 1},
+        "logical-client-id": {"type": ["string", "null"], "minLength": 1},
+        "provider-surface": {"type": ["string", "null"], "minLength": 1}
+      },
       "required": ["key", "automatic"], "additionalProperties": false
     },
     "warnings": {"type": "array", "maxItems": 3, "items": {

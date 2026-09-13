@@ -89,6 +89,10 @@ class PersistentChat:
         self._page_generation = 0
         self._reconciled_binding_token: tuple[object, ...] | None = None
         self.active_turn_id: str | None = None
+        # SessionRuntime marks FIFO waiters here before they acquire the
+        # provider turn lock. The physical-tab reaper must not reclaim a
+        # quiet conversation while a successor request is waiting to use it.
+        self.pending_turns = 0
         self.state = ChatState.OPENING
         self.runtime = runtime
         self.config = config
@@ -97,11 +101,21 @@ class PersistentChat:
         self._lost_during_turn = False
         self._last_url: str | None = None
         self._last_snapshot: ChatSnapshot | None = None
+        # Physical-tab reclamation uses only validated request/session
+        # evidence. Polling, DOM mutation, focus and foreign turns never
+        # update this clock.
+        self._last_validated_activity_monotonic = time.monotonic()
+        self._validated_activity_generation = 0
         metadata = resume_provider_metadata or {}
         self.conversation_title = _metadata_text(metadata, "chat-title")
         self._pending_conversation_title: str | None = None
         self._title_publish_lock = asyncio.Lock()
         self._reconciliation_lock = asyncio.Lock()
+        # Every provider page mutation (currently refresh/reload) is
+        # serialized against the page binding.  A response watcher and an
+        # unresolved-turn reconciler must never navigate the same physical
+        # tab concurrently or allow a stale page handle to win.
+        self._page_mutation_lock = asyncio.Lock()
         self.unresolved_prompt_message_id = _metadata_text(metadata, "prompt-message-id")
         self.unresolved_assistant_message_id = _metadata_text(metadata, "assistant-message-id")
         self.unresolved_assistant_before_id = _metadata_text(
@@ -386,6 +400,13 @@ class PersistentChat:
         # ``unknown-or-closed-page`` error; recovery then rebinds by stable
         # target/provider URL and, if necessary, recreates the conversation tab.
         await self._validate_page_binding()
+        if self.provider_session_id and not self.page_handle:
+            # AS125 may have reclaimed only the physical tab. Reopen the
+            # exact retained provider conversation before admitting a turn;
+            # never fall through to a fresh ChatGPT conversation.
+            self._move(ChatState.RECOVERING)
+            pages = await self.runtime.bridge.call("list_pages")
+            await self.reconcile(pages)
         if self.state is ChatState.RECOVERING:
             if self.page_handle and self.unresolved_turn_pending:
                 if await self._await_unresolved_reconciliation():
@@ -441,6 +462,69 @@ class PersistentChat:
                     },
                 )
             raise RuntimeError(f"gpt-auto chat is not ready (state={self.state.value})")
+
+    def mark_validated_activity(self, at: float | None = None) -> None:
+        """Renew physical-tab retention from request-owned validated evidence."""
+        self._last_validated_activity_monotonic = (
+            time.monotonic() if at is None else float(at)
+        )
+        self._validated_activity_generation += 1
+
+    def mark_turn_pending(self) -> None:
+        """Expose a queued session turn to the physical-tab reaper."""
+        self.pending_turns += 1
+
+    def clear_turn_pending(self) -> None:
+        """Remove one queued session turn from the reaper's protection set."""
+        self.pending_turns = max(0, self.pending_turns - 1)
+
+    async def close_physical_page_if_idle(
+        self,
+        *,
+        now: float,
+        idle_timeout_seconds: float,
+    ) -> bool:
+        """Close only an idle physical tab, preserving logical session state."""
+        if idle_timeout_seconds <= 0:
+            return False
+        async with self._page_mutation_lock:
+            handle = self.page_handle
+            generation = self._validated_activity_generation
+            if (
+                self.state is not ChatState.READY
+                or self.active_turn_id is not None
+                or self.pending_turns > 0
+                or self.unresolved_turn_pending
+                or not handle
+                or now - self._last_validated_activity_monotonic < idle_timeout_seconds
+            ):
+                return False
+            try:
+                await self.runtime.bridge.call("close_page", {"pageHandle": handle})
+            except Exception:
+                logger.debug(
+                    "gpt-auto physical idle-tab close failed",
+                    extra={"session-id": self.ag_session_id, "page-handle": handle},
+                    exc_info=True,
+                )
+                return False
+            if (
+                handle != self.page_handle
+                or generation != self._validated_activity_generation
+                or self.active_turn_id is not None
+                or self.pending_turns > 0
+                or self.unresolved_turn_pending
+            ):
+                return False
+            self.page_handle = None
+            self.target_id = None
+            self._page_generation += 1
+            self.runtime.release_page(self, handle)
+            logger.info(
+                "gpt-auto reclaimed idle physical tab",
+                extra={"session-id": self.ag_session_id},
+            )
+            return True
 
     async def _await_unresolved_reconciliation(self) -> bool:
         """Observe one unresolved turn through the configured readiness bound.
@@ -1084,58 +1168,118 @@ class PersistentChat:
         self._unresolved_recovery_reason = None
         self._unresolved_recovery_details = {}
 
+    async def refresh_bound_conversation(
+        self,
+        *,
+        request_id: str | None = None,
+        expected_binding: tuple[object, ...] | None = None,
+        trigger: str = "response-recovery",
+    ) -> bool:
+        """Refresh only the currently bound provider conversation page.
+
+        This is deliberately a page-local recovery primitive.  It never
+        calls readiness/open/rebind, creates a page, creates a provider
+        session, or submits a prompt.  The binding and page-generation checks
+        turn a concurrent close/rebind into a failed recovery attempt rather
+        than allowing navigation of an unrelated tab.
+        """
+        async with self._page_mutation_lock:
+            handle = self.page_handle
+            bound_url = canonical_chat_url(self.chat_url)
+            if not handle or not self.provider_session_id or not bound_url:
+                self._set_unresolved_recovery(
+                    "refresh-missing-page-binding",
+                    request_id=request_id,
+                    trigger=trigger,
+                )
+                return False
+            token = expected_binding
+            if token is None and self._last_snapshot is not None:
+                token = self._binding_token(self._last_snapshot)
+            if token is not None and not await self._binding_token_is_current(token):
+                self._set_unresolved_recovery(
+                    "page-binding-changed-before-refresh",
+                    request_id=request_id,
+                    trigger=trigger,
+                )
+                return False
+            browser = self._gpt_browser()
+            try:
+                page = await browser.page_by_handle(handle)
+                current_target = str(getattr(page, "target_id", "") or "")
+                if self.target_id and current_target and current_target != self.target_id:
+                    raise RuntimeError("bound page target changed before refresh")
+                current_url = str(getattr(page, "url", "") or "")
+                if not current_url and hasattr(browser, "snapshot"):
+                    observed = ChatSnapshot.from_bridge(
+                        await browser.snapshot(
+                            page,
+                            signals=self.config.workflow.bridge_signals(),
+                        )
+                    )
+                    current_url = observed.url
+                if current_url and canonical_chat_url(current_url) != bound_url:
+                    raise RuntimeError("bound page conversation URL changed before refresh")
+                if not current_url or not url_matches_provider_session(
+                    current_url, self.provider_session_id
+                ):
+                    raise RuntimeError("bound page provider session changed before refresh")
+                await browser.navigate(page, bound_url)
+                await asyncio.sleep(self.config.turn.poll_interval_seconds)
+                if handle != self.page_handle:
+                    raise RuntimeError("bound page handle changed during refresh")
+                refreshed_page = await browser.page_by_handle(handle)
+                refreshed_target = str(getattr(refreshed_page, "target_id", "") or "")
+                refreshed_url = str(getattr(refreshed_page, "url", "") or "")
+                if not refreshed_url and hasattr(browser, "snapshot"):
+                    observed = ChatSnapshot.from_bridge(
+                        await browser.snapshot(
+                            refreshed_page,
+                            signals=self.config.workflow.bridge_signals(),
+                        )
+                    )
+                    refreshed_url = observed.url
+                if self.target_id and refreshed_target and refreshed_target != self.target_id:
+                    raise RuntimeError("bound page target changed after refresh")
+                if (
+                    not refreshed_url
+                    or canonical_chat_url(refreshed_url) != bound_url
+                    or not url_matches_provider_session(
+                        refreshed_url, self.provider_session_id
+                    )
+                ):
+                    raise RuntimeError("refresh left the bound conversation URL")
+                logger.info(
+                    "gpt-auto refreshed bound conversation trigger=%s request_id=%s",
+                    trigger,
+                    request_id,
+                )
+                return True
+            except Exception as exc:  # noqa: BLE001 - caller owns bounded retry policy
+                self._set_unresolved_recovery(
+                    "refresh-failed",
+                    request_id=request_id,
+                    trigger=trigger,
+                    exception_type=type(exc).__name__,
+                    exception=str(exc),
+                )
+                return False
+
     async def _refresh_for_reconciliation(self) -> bool:
-        """Refresh the retained conversation page at most once per turn."""
-        if self._reconciliation_refresh_attempted or not self.page_handle:
+        """Compatibility wrapper for the one-shot unresolved reconciler."""
+        if self._reconciliation_refresh_attempted:
             return False
+        self._reconciliation_refresh_attempted = True
+        expected = self._binding_token(self._last_snapshot) if self._last_snapshot else None
+        return await self.refresh_bound_conversation(
+            request_id=getattr(self, "unresolved_turn_id", None),
+            expected_binding=expected,
+            trigger="unresolved-reconciliation",
+        )
 
     async def _refresh_for_response_recovery(self) -> bool:
-        """Reload this bound conversation without submitting a new prompt.
-
-        The turn owns the episode/attempt budget; this primitive only performs
-        the provider navigation against the already-bound page. Keeping it
-        separate from unresolved admission reconciliation prevents the old
-        one-shot diagnostic guard from silently limiting live response
-        recovery.
-        """
-        if not self.page_handle:
-            return False
-        browser = getattr(self.runtime, "gpt_browser", None)
-        url = self.chat_url or self._last_url
-        if browser is None or not url:
-            return False
-        try:
-            page = await browser.page_by_handle(self.page_handle)
-            await browser.navigate(page, url)
-            await asyncio.sleep(self.config.turn.poll_interval_seconds)
-            return True
-        except Exception as exc:  # noqa: BLE001 - caller records bounded evidence
-            self._set_unresolved_recovery(
-                "response-refresh-failed",
-                exception_type=type(exc).__name__,
-                exception=str(exc),
-            )
-            return False
-        browser = getattr(self.runtime, "gpt_browser", None)
-        if browser is None:
-            return False
-        url = self.chat_url or self._last_url
-        if not url:
-            return False
-        try:
-            page = await browser.page_by_handle(self.page_handle)
-            await browser.navigate(page, url)
-            self._reconciliation_refresh_attempted = True
-            await asyncio.sleep(self.config.chat.poll_interval_seconds)
-            return True
-        except Exception as exc:  # noqa: BLE001 - bounded recovery evidence
-            self._reconciliation_refresh_attempted = True
-            self._set_unresolved_recovery(
-                "refresh-failed",
-                exception_type=type(exc).__name__,
-                exception=str(exc),
-            )
-            return False
+        """Compatibility wrapper for callers using the old recovery name."""
+        return await self.refresh_bound_conversation(trigger="response-recovery")
 
     async def find_prompt_snapshot(
         self, baseline: ChatSnapshot, expected_text: str

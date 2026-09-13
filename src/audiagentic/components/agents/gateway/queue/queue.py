@@ -218,7 +218,7 @@ def _publish_lifecycle_event(event_suffix: str, record: dict[str, Any]) -> None:
         )
 
 
-RequestRunner = Callable[[Path, dict[str, Any]], dict[str, Any]]
+RequestRunner = Callable[..., dict[str, Any]]
 """Callable that dispatches one gateway request record and returns the same
 record (or an updated copy) transitioned to a terminal state. Injected so the
 queue can be tested with a deterministic fake, independent of AG10's real
@@ -856,7 +856,24 @@ class GatewayQueueManager:
                 return
             _test_stall_claim_to_start()
             worker_id = f"worker_{uuid.uuid4().hex[:16]}"
-            if bound is not None:
+            # A provider-session worker may be admitted before it owns the
+            # session's turn lock. Keep it durably queued until the runtime
+            # performs the lock-protected start CAS. Plain requests have no
+            # second ownership boundary and retain the existing path.
+            is_session = bool(claimed.get("session-id")) or claimed.get("provider-transport-kind") == "provider-session"
+            if is_session:
+                record = store.prepare_owned_session_attempt(
+                    project_root,
+                    request_id,
+                    owner_epoch=owner_epoch,
+                    worker_id=worker_id,
+                    expected_revision=claimed["revision"],
+                    resolved_source_id=bound.source_id if bound is not None else None,
+                    resolved_model_id=(bound.model_id or bound.source_id) if bound is not None else None,
+                    resolved_model_selector=bound.source.model_selector if bound is not None else None,
+                    resolved_capacity_generation=bound.capacity_source_id if bound is not None else None,
+                )
+            elif bound is not None:
                 # A capacity reservation is not enough: persist the exact
                 # source/model under the same owner/revision fence that starts
                 # execution, before the provider runner can observe it. Plain
@@ -881,22 +898,23 @@ class GatewayQueueManager:
                     worker_id=worker_id,
                     expected_revision=claimed["revision"],
                 )
-            logger.info(
-                "gateway request running",
-                extra={"request-id": request_id, "execution-profile-id": execution_profile_id},
-            )
-            watchdog_registry().register(project_root, record)
-            store.record_gateway_timeline(
-                project_root,
-                request_id,
-                "queue.started",
-                state=record["state"],
-                attributes={
-                    "execution-profile-id": execution_profile_id,
-                    "correlation_id": (record.get("metadata") or {}).get("correlation_id"),
-                },
-            )
-            _publish_lifecycle_event("started", record)
+            if not is_session:
+                logger.info(
+                    "gateway request running",
+                    extra={"request-id": request_id, "execution-profile-id": execution_profile_id},
+                )
+                watchdog_registry().register(project_root, record)
+                store.record_gateway_timeline(
+                    project_root,
+                    request_id,
+                    "queue.started",
+                    state=record["state"],
+                    attributes={
+                        "execution-profile-id": execution_profile_id,
+                        "correlation_id": (record.get("metadata") or {}).get("correlation_id"),
+                    },
+                )
+                _publish_lifecycle_event("started", record)
 
             # AS15: two-phase concurrency for session requests.
             # Detect session request early to set up callbacks.
@@ -920,6 +938,33 @@ class GatewayQueueManager:
 
                 turn_reservation: _QueueReservation | None = None
                 turn_acquire_cancel = threading.Event()
+
+                def _start_session_attempt() -> dict[str, Any]:
+                    nonlocal record
+                    record = store.start_owned_session_attempt(
+                        project_root,
+                        request_id,
+                        owner_epoch=record["dispatch-owner-epoch"],
+                        worker_id=record["worker-id"],
+                        attempt_epoch=record["attempt-epoch"],
+                    )
+                    logger.info(
+                        "gateway session request running after turn lock",
+                        extra={"request-id": request_id, "execution-profile-id": execution_profile_id},
+                    )
+                    watchdog_registry().register(project_root, record)
+                    store.record_gateway_timeline(
+                        project_root,
+                        request_id,
+                        "queue.started",
+                        state=record["state"],
+                        attributes={
+                            "execution-profile-id": execution_profile_id,
+                            "correlation_id": (record.get("metadata") or {}).get("correlation_id"),
+                        },
+                    )
+                    _publish_lifecycle_event("started", record)
+                    return record
 
                 async def _on_turn_starting(rid: str) -> None:
                     nonlocal turn_reservation
@@ -955,7 +1000,10 @@ class GatewayQueueManager:
             # common capacity authority; there is no ungated semaphore path.
 
             try:
-                result = runner(project_root, record)
+                if is_session:
+                    result = runner(project_root, record, session_start=_start_session_attempt)
+                else:
+                    result = runner(project_root, record)
                 logger.info(
                     "gateway request finished",
                     extra={
@@ -991,7 +1039,27 @@ class GatewayQueueManager:
                     "gateway request runner raised", extra={"request-id": request_id}, exc_info=True
                 )
                 current = store.read_record(project_root, request_id)
-                if current["state"] == "running":
+                cancellation_boundary = (
+                    getattr(exc, "code", None) == "CON-AGW-CANCELLED"
+                    or current.get("cancel-requested", False)
+                )
+                if cancellation_boundary and current["state"] == "queued":
+                    # A session worker can reach this path after waiting on
+                    # the FIFO turn lock.  It has not started provider work,
+                    # so cancellation must close the queued record rather
+                    # than misclassify the cooperative cancellation as a
+                    # provider failure.  This also works when preparation or
+                    # the queued->running CAS raced with the client cancel.
+                    cancelled = store.cancel_queued_or_mark_requested(
+                        project_root,
+                        request_id,
+                        source="queue-worker",
+                        actor_type="worker",
+                        actor_id=record.get("worker-id"),
+                        reason="cancelled-before-session-start",
+                    )
+                    _publish_lifecycle_event("cancelled", cancelled)
+                elif current["state"] in {"queued", "running"}:
                     failed = store.transition_owned_terminal(
                         project_root,
                         request_id,
@@ -1009,7 +1077,17 @@ class GatewayQueueManager:
                     exc_info=True,
                 )
                 current = store.read_record(project_root, request_id)
-                if current["state"] == "running":
+                if current.get("cancel-requested", False) and current["state"] == "queued":
+                    cancelled = store.cancel_queued_or_mark_requested(
+                        project_root,
+                        request_id,
+                        source="queue-worker",
+                        actor_type="worker",
+                        actor_id=record.get("worker-id"),
+                        reason="cancelled-before-session-start",
+                    )
+                    _publish_lifecycle_event("cancelled", cancelled)
+                elif current["state"] in {"queued", "running"}:
                     failed = store.transition_owned_terminal(
                         project_root,
                         request_id,

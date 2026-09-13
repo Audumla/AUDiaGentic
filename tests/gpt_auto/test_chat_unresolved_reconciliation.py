@@ -340,7 +340,8 @@ async def test_reconcile_treats_empty_any_of_groups_as_no_completion_requirement
 @pytest.mark.asyncio
 async def test_reconcile_refreshes_stale_cdp_page_once_before_failure():
     chat = _chat(response_stability_seconds=0.001)
-    chat.chat_url = "https://chatgpt.com/c/abc"
+    chat.chat_url = "https://chatgpt.com/g/g-p-project/c/abc"
+    chat.provider_session_id = "abc"
     stale = ChatSnapshot(
         url=chat.chat_url,
         composer_present=True,
@@ -362,13 +363,18 @@ async def test_reconcile_refreshes_stale_cdp_page_once_before_failure():
     navigations: list[str] = []
 
     class FakeBrowser:
+        class Page:
+            url = chat.chat_url
+            target_id = "target-1"
+
         async def page_by_handle(self, handle: str):
-            return object()
+            return self.Page()
 
         async def navigate(self, page, url: str):
             navigations.append(url)
 
     chat.runtime = SimpleNamespace(gpt_browser=FakeBrowser())
+    chat._binding_token_is_current = lambda _token: asyncio.sleep(0, result=True)  # type: ignore[method-assign]
 
     async def fake_snapshot(*, allow_recovering: bool = False) -> ChatSnapshot:
         return next(snapshots)

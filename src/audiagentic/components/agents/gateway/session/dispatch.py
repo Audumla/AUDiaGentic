@@ -357,6 +357,7 @@ def _dispatch_session_request(
     preallocated_session_id: str | None = None,
     _default_recovery_attempt: int = 0,
     _unsent_retry_used: bool = False,
+    session_start: Any | None = None,
 ) -> dict[str, Any]:
     """Dispatch a sessionful request through the live SessionRuntime (AS04).
 
@@ -740,6 +741,14 @@ def _dispatch_session_request(
         preparation_guard.release()
         guard_held = False
         prompt_started = True
+        dispatch_claim = None
+        if session_start is not None and store.read_record(project_root, request_id)["state"] == "queued":
+            def _claim_session_turn() -> dict[str, Any]:
+                nonlocal record
+                record = session_start()
+                return record
+
+            dispatch_claim = _claim_session_turn
         result = runtime.prompt_in_session(
             project_root,
             session_id,
@@ -751,6 +760,7 @@ def _dispatch_session_request(
             # turn immediately before its terminal event reaches us.
             timeout_seconds=None,
             activity_relay=activity_relay,
+            dispatch_claim=dispatch_claim,
         )
     except _CancelledDuringDispatch:
         if guard_held:

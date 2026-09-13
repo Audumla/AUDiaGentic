@@ -152,6 +152,14 @@ class GptAutoSessionTransport:
     def turn_failure_disposition(self) -> SessionFailureDisposition:
         return self._turn_failure_disposition
 
+    def mark_turn_pending(self) -> None:
+        """Keep the physical provider tab while this session turn waits FIFO."""
+        self.chat.mark_turn_pending()
+
+    def clear_turn_pending(self) -> None:
+        """Release the physical-tab reaper guard after FIFO acquisition."""
+        self.chat.clear_turn_pending()
+
     async def reconcile_activity_gap(self) -> dict[str, Any]:
         """Revalidate and, once, bump a quiet CDP conversation without resending."""
         if self._closed:

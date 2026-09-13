@@ -79,10 +79,18 @@ class EmbeddedGatewayClient:
     from InProcessGatewayClient -- "embedded" is the component-implementation
     id; no compatibility alias kept, per this migration's no-legacy stance)."""
 
-    def __init__(self, application: GatewayApplication | None = None) -> None:
+    def __init__(
+        self,
+        application: GatewayApplication | None = None,
+        *,
+        logical_client_id: str | None = None,
+    ) -> None:
         self._application = application or get_gateway_application()
+        self._logical_client_id = logical_client_id
 
     def submit_execution_request(self, project_root: Path, **kwargs: Any) -> dict[str, Any]:
+        if self._logical_client_id is not None:
+            kwargs.setdefault("logical_client_id", self._logical_client_id)
         return self._application.submit_execution_request(project_root, **kwargs)
 
     def get_execution_request(self, project_root: Path, request_id: str) -> dict[str, Any]:

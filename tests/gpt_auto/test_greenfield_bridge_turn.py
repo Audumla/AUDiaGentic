@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections import Counter
 from dataclasses import replace
 from types import SimpleNamespace
 
@@ -14,11 +15,16 @@ from audiagentic.components.providers.adapters.gpt_auto.gpt_auto_cdp import (
 from audiagentic.components.providers.adapters.gpt_auto.session_transport import (
     GptAutoSessionTransport,
 )
-from audiagentic.components.providers.adapters.gpt_auto.snapshot import ChatMessageRef, ChatSnapshot
+from audiagentic.components.providers.adapters.gpt_auto.snapshot import (
+    ChatMessageRef,
+    ChatProgressBlock,
+    ChatSnapshot,
+)
 from audiagentic.components.providers.adapters.gpt_auto.turn import (
     GptAutoTurn,
     TurnState,
     _facts,
+    _progress_activity_labels,
     _scope_response_snapshot,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
@@ -47,6 +53,7 @@ def snap(
     extra_signals=(),
     composer_editable=True,
     tool_activity_counts=(),
+    progress_blocks=None,
     user_correlation=None,
     structural_hr_count=0,
 ):
@@ -87,6 +94,17 @@ def snap(
         message_refs.append(
             ChatMessageRef(role="assistant", message_id=resolved_assistant_id, text=assistant, sequence=1)
         )
+    if progress_blocks is None:
+        progress_blocks = tuple(
+            ChatProgressBlock(
+                owner_prompt_message_id=resolved_user_id or "prompt-1",
+                owner_assistant_message_id=resolved_assistant_id,
+                kind=kind,
+                digest=f"{index + 1:016x}",
+            )
+            for index, (kind, count) in enumerate(tool_activity_counts)
+            for _ in range(count)
+        )
     return ChatSnapshot(
         url="https://chatgpt.com/g/g-p-project/c/conversation-1",
         composer_present=True,
@@ -108,6 +126,7 @@ def snap(
         generating=generating,
         message_refs=tuple(message_refs),
         tool_activity_counts=tuple(tool_activity_counts),
+        progress_blocks=tuple(progress_blocks),
     )
 
 
@@ -166,6 +185,9 @@ class _Chat:
                     poll_interval_seconds=0,
                     submission_proof_progress_lease_seconds=0.2,
                     submission_proof_absolute_ceiling_seconds=1.0,
+                    response_no_activity_refresh_seconds=0.01,
+                    response_refresh_attempts=1,
+                    response_refresh_final_grace_seconds=0,
                 ),
                 workflow=GptAutoConfig.from_dict(valid_config()).workflow,
             ),
@@ -254,6 +276,9 @@ async def test_await_response_never_returns_a_later_foreign_turns_answer():
     toward whatever ChatSnapshot.latest_assistant_id/_text reported, which
     would have returned the foreign answer here."""
     chat = _Chat()
+    chat.runtime.config.turn.response_no_activity_refresh_seconds = 0.01
+    chat.runtime.config.turn.response_refresh_attempts = 2
+    chat.runtime.config.turn.response_refresh_final_grace_seconds = 0
 
     own_prompt_ref = ChatMessageRef(role="user", message_id="prompt-1", text="Review AU01", sequence=0)
     own_answer_ref = ChatMessageRef(role="assistant", message_id="assistant-own", text="Looks sound", sequence=1)
@@ -314,9 +339,29 @@ async def test_await_response_never_returns_a_later_foreign_turns_answer():
 
     chat._snapshots = _snapshots_gen()
     turn = GptAutoTurn(chat, SessionPrompt(turn_id="turn-1", body="Review AU01"), lambda _: None)
-    with pytest.raises(AudiaGenticError, match="response policy timed out"):
+    with pytest.raises(AudiaGenticError, match="response recovery exhausted"):
         await turn.run()
     assert turn._response_message_id == "assistant-own"
+
+
+@pytest.mark.asyncio
+async def test_submission_proof_reports_observation_failure_instead_of_unbound_local():
+    """A first-poll CDP failure must preserve its real cause at exhaustion."""
+    chat = _Chat()
+    chat.runtime.config.turn.submission_proof_progress_lease_seconds = 0.001
+    chat.runtime.config.turn.submission_proof_absolute_ceiling_seconds = 0.01
+
+    async def snapshot_fails():
+        raise RuntimeError("CDP observation unavailable")
+
+    chat.snapshot = snapshot_fails
+    turn = GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="turn-submission-observation-failure", body="Review AU01"),
+        lambda _: None,
+    )
+    with pytest.raises(AudiaGenticError, match="RuntimeError: CDP observation unavailable"):
+        await turn._await_submission_proof(snap(users=1, user="Review AU01"))
 
 
 @pytest.mark.asyncio
@@ -394,104 +439,126 @@ async def test_response_observer_materializes_virtualized_turn_once_before_compl
 
 
 @pytest.mark.asyncio
-async def test_initial_blank_page_probe_refreshes_once_when_enabled():
+async def test_initial_blank_page_settings_do_not_authorize_a_refresh():
+    """AS123: legacy initial-response probes have no recovery authority."""
     chat = _Chat()
     chat.config.turn.initial_response_refresh_enabled = True
     chat.config.turn.initial_response_refresh_attempts = 1
     chat.config.turn.initial_response_observation_grace_seconds = 0
-    chat._snapshots = iter(
-        [
-            replace(snap(users=1, user="Review AU01"), url="about:blank", composer_present=False),
-            *[
-                snap(
-                    users=1,
-                    assistants=1,
-                    user="Review AU01",
-                    assistant="Recovered after refresh",
-                    complete=True,
-                )
-                for _ in range(6)
-            ],
-        ]
-    )
+    chat.config.turn.response_no_activity_refresh_seconds = 0.005
+    chat.config.turn.response_refresh_attempts = 1
+    chat.config.turn.response_refresh_final_grace_seconds = 0
+    blank = replace(snap(users=1, user="Review AU01"), url="about:blank", composer_present=False)
+    def _blank_snapshots():
+        while True:
+            yield blank
+
+    chat._snapshots = _blank_snapshots()
     refreshes: list[bool] = []
 
     async def refresh() -> bool:
         refreshes.append(True)
-        return True
+        return False
 
-    chat._refresh_for_reconciliation = refresh
+    chat._refresh_for_response_recovery = refresh
     turn = GptAutoTurn(
         chat, SessionPrompt(turn_id="turn-initial-refresh", body="Review AU01"), lambda _: None
     )
     turn.state = TurnState.AWAITING_RESPONSE
     turn._prompt_message_id = "prompt-1"
-    result = await turn._await_response(snap(users=1, user="Review AU01"), replace(
-        snap(users=1, user="Review AU01"), url="about:blank", composer_present=False
-    ))
+    with pytest.raises(AudiaGenticError, match="response recovery exhausted"):
+        await turn._await_response(snap(users=1, user="Review AU01"), blank)
 
-    assert result == "Recovered after refresh"
     assert refreshes == [True]
-    assert turn._initial_refresh_attempted is True
-    assert turn._initial_refresh_succeeded is True
+    assert turn._initial_refresh_attempted is False
 
 
 @pytest.mark.asyncio
-async def test_initial_blank_page_probe_is_disabled_and_activity_vetoes_refresh():
+async def test_connection_interrupted_refreshes_and_can_adopt_followup_completion():
+    """AS122/AS126: interruption refreshes the same tab and can recover."""
     chat = _Chat()
-    chat.config.turn.initial_response_refresh_enabled = False
-    chat.config.turn.initial_response_observation_grace_seconds = 0
-    blank = replace(snap(users=1, user="Review AU01"), url="about:blank", composer_present=False)
-    chat._snapshots = iter([blank, blank])
+    chat.runtime.config.turn.response_refresh_attempts = 6
+    chat.runtime.config.turn.response_no_activity_refresh_seconds = 240
+    chat.runtime.config.turn.response_refresh_final_grace_seconds = 600
+    interrupted = replace(
+        snap(users=1, user="Review AU01"),
+        dom_signals=frozenset({"provider-interruption"}),
+    )
+    completed = snap(
+        users=1,
+        assistants=1,
+        user="Review AU01",
+        assistant="Recovered after refresh",
+        complete=True,
+    )
+    chat._snapshots = iter([interrupted, completed, completed, completed])
     refreshes: list[bool] = []
 
     async def refresh() -> bool:
         refreshes.append(True)
         return True
 
-    chat._refresh_for_reconciliation = refresh
+    chat._refresh_for_response_recovery = refresh
     turn = GptAutoTurn(
-        chat, SessionPrompt(turn_id="turn-refresh-disabled", body="Review AU01"), lambda _: None
+        chat, SessionPrompt(turn_id="turn-interrupted-refresh", body="Review AU01"), lambda _: None
     )
     turn.state = TurnState.AWAITING_RESPONSE
     turn._prompt_message_id = "prompt-1"
-    with pytest.raises(AudiaGenticError):
-        await turn._await_response(snap(users=1, user="Review AU01"), blank)
-    assert refreshes == []
+    result = await turn._await_response(
+        snap(users=1, user="Review AU01"), interrupted
+    )
 
-    chat = _Chat()
-    chat.config.turn.initial_response_refresh_enabled = True
-    chat.config.turn.initial_response_observation_grace_seconds = 0
-    active_blank = replace(blank, generating=True)
-    chat._snapshots = iter([active_blank, active_blank])
-    chat._refresh_for_reconciliation = refresh
-    turn = GptAutoTurn(
-        chat, SessionPrompt(turn_id="turn-refresh-veto", body="Review AU01"), lambda _: None
-    )
-    turn.state = TurnState.AWAITING_RESPONSE
-    turn._prompt_message_id = "prompt-1"
-    with pytest.raises(AudiaGenticError):
-        await turn._await_response(snap(users=1, user="Review AU01"), active_blank)
-    assert refreshes == []
+    assert result == "Recovered after refresh"
+    assert refreshes == [True]
 
-    # The veto is latched: activity that disappears must still prevent a
-    # later blank-page probe for this same turn.
+
+@pytest.mark.asyncio
+async def test_connection_interrupted_emits_synthetic_activity_until_completion():
+    """The interruption banner keeps the client lease alive without being
+    treated as real response progress or resetting the recovery budget."""
     chat = _Chat()
-    chat.config.turn.initial_response_refresh_enabled = True
-    chat.config.turn.initial_response_observation_grace_seconds = 0
-    quiet_blank = replace(blank, generating=False)
-    chat._snapshots = iter([active_blank, quiet_blank, quiet_blank])
-    refreshes = []
-    chat._refresh_for_reconciliation = refresh
+    chat.runtime.config.turn.response_refresh_attempts = 15
+    chat.runtime.config.turn.response_no_activity_refresh_seconds = 240
+    chat.runtime.config.turn.response_interruption_activity_interval_seconds = 0
+    chat.runtime.config.turn.response_refresh_final_grace_seconds = 600
+    interrupted = replace(
+        snap(users=1, user="Review AU01"),
+        dom_signals=frozenset({"provider-interruption"}),
+    )
+    completed = snap(
+        users=1,
+        assistants=1,
+        user="Review AU01",
+        assistant="Recovered after the connection banner",
+        complete=True,
+    )
+    chat._snapshots = iter([interrupted, interrupted, completed, completed, completed])
+    observations = []
+    refreshes: list[bool] = []
+
+    async def refresh() -> bool:
+        refreshes.append(True)
+        return True
+
+    chat._refresh_for_response_recovery = refresh
     turn = GptAutoTurn(
-        chat, SessionPrompt(turn_id="turn-refresh-latched-veto", body="Review AU01"), lambda _: None
+        chat,
+        SessionPrompt(turn_id="turn-interrupted-heartbeat", body="Review AU01"),
+        observations.append,
     )
     turn.state = TurnState.AWAITING_RESPONSE
     turn._prompt_message_id = "prompt-1"
-    with pytest.raises(AudiaGenticError):
-        await turn._await_response(snap(users=1, user="Review AU01"), active_blank)
-    assert refreshes == []
-    assert turn._response_activity_observed is True
+    result = await turn._await_response(snap(users=1, user="Review AU01"), interrupted)
+
+    assert result == "Recovered after the connection banner"
+    assert refreshes == [True]
+    connection_activity = [
+        observation
+        for observation in observations
+        if observation.attributes.get("model_activity") == "connection-refreshing"
+    ]
+    assert len(connection_activity) == 2
+    assert all(observation.kind is TransportObservationKind.ACTIVITY for observation in connection_activity)
 
 
 @pytest.mark.asyncio
@@ -1117,7 +1184,7 @@ async def test_tool_app_activity_emits_before_assistant_message_materializes():
 
 
 @pytest.mark.asyncio
-async def test_static_tool_activity_emits_only_one_real_count_edge():
+async def test_static_tool_activity_emits_only_one_real_progress_edge():
     """A retained tool row is DOM state, not a fresh event on every poll."""
     chat = _Chat()
     observations = []
@@ -1167,7 +1234,17 @@ async def test_static_tool_activity_emits_only_one_real_count_edge():
     ]
     labels = [obs.attributes.get("model_activity") for obs in tool_progress]
     assert labels.count("searching-web") == 1
-    assert labels.count("tool-progress") == 1  # the later removal edge
+    assert "tool-progress" not in labels
+
+
+def test_progress_digest_change_is_activity_even_when_row_count_is_constant():
+    seen: Counter[ChatProgressBlock] = Counter()
+    first = ChatProgressBlock("prompt-1", "assistant-1", "fetching", "1111111111111111")
+    changed = ChatProgressBlock("prompt-1", "assistant-1", "fetching", "2222222222222222")
+
+    assert _progress_activity_labels(snap(progress_blocks=(first,)), seen) == ("fetching",)
+    assert _progress_activity_labels(snap(progress_blocks=(changed,)), seen) == ("fetching",)
+    assert _progress_activity_labels(snap(progress_blocks=(changed,)), seen) == ()
 
 
 @pytest.mark.asyncio
@@ -1430,27 +1507,36 @@ async def test_turn_does_not_complete_while_text_is_still_changing_even_without_
     regardless of what any DOM widget claims, and must still time out
     correctly rather than falsely declare success."""
     chat = _Chat()
-    chat.runtime.config.turn.response_timeout_seconds = 0.05
-    chat.runtime.config.turn.response_start_timeout_seconds = 0.05
+    chat.runtime.config.turn.response_no_activity_refresh_seconds = 0.01
+    chat.runtime.config.turn.response_refresh_attempts = 1
+    chat.runtime.config.turn.response_refresh_final_grace_seconds = 0
+    chat.runtime.config.turn.response_stability_seconds = 0.02
 
     def _growing_text_snapshots():
         prefix = "Looks sound"
-        counter = 0
-        while True:
-            counter += 1
+        for counter in range(1, 10):
             yield snap(
                 users=1,
                 assistants=1,
                 user="Review AU01",
                 assistant=f"{prefix} {counter}",
+                assistant_id="assistant-growing",
                 complete=True,
+            )
+        while True:
+            yield snap(
+                users=1,
+                assistants=1,
+                user="Review AU01",
+                assistant=f"{prefix} 9",
+                assistant_id="assistant-growing",
             )
 
     chat._snapshots = _growing_text_snapshots()
     turn = GptAutoTurn(
         chat, SessionPrompt(turn_id="turn-still-changing", body="Review AU01"), lambda _: None
     )
-    with pytest.raises(AudiaGenticError):
+    with pytest.raises(AudiaGenticError, match="response recovery exhausted"):
         await turn.run()
     assert turn.state is not TurnState.COMPLETE
 
@@ -1465,9 +1551,9 @@ async def test_response_wait_stalls_correctly_despite_flapping_soft_liveness_wid
     only); with no real content ever arriving, this must still resolve to
     a stall/failure, not hang."""
     chat = _Chat()
-    chat.runtime.config.turn.response_start_timeout_seconds = 0.05
-    chat.runtime.config.turn.response_stall_timeout_seconds = 0.05
-    chat.runtime.config.turn.response_timeout_seconds = 0.3
+    chat.runtime.config.turn.response_no_activity_refresh_seconds = 0.01
+    chat.runtime.config.turn.response_refresh_attempts = 1
+    chat.runtime.config.turn.response_refresh_final_grace_seconds = 0
 
     def _flapping_stop_control_no_text_ever():
         toggle = False
@@ -1479,7 +1565,7 @@ async def test_response_wait_stalls_correctly_despite_flapping_soft_liveness_wid
     turn = GptAutoTurn(
         chat, SessionPrompt(turn_id="turn-flapping-widget", body="Review AU01"), lambda _: None
     )
-    with pytest.raises(AudiaGenticError):
+    with pytest.raises(AudiaGenticError, match="response recovery exhausted"):
         await turn.run()
     assert turn.state is not TurnState.COMPLETE
 
@@ -1911,7 +1997,7 @@ def test_old_assistant_text_mutation_is_not_a_fresh_response():
 
 
 @pytest.mark.asyncio
-async def test_response_start_timeout_is_a_named_policy_not_total_completion_timeout():
+async def test_legacy_response_timeouts_cannot_terminate_response_observation():
     chat = _Chat()
     waiting = snap(users=1, user="Review SH10")
 
@@ -1921,13 +2007,13 @@ async def test_response_start_timeout_is_a_named_policy_not_total_completion_tim
     chat.snapshot = waiting_snapshot
     chat.runtime.config.turn.response_start_timeout_seconds = 0.01
     chat.runtime.config.turn.response_timeout_seconds = 1
+    chat.runtime.config.turn.response_no_activity_refresh_seconds = 60
     chat.state = ChatState.BUSY
     turn = GptAutoTurn(chat, SessionPrompt(turn_id="turn-1", body="Review SH10"), lambda _: None)
     turn.state = TurnState.AWAITING_RESPONSE
-    with pytest.raises(Exception) as exc_info:
-        await turn._await_response(snap(), waiting)
-    assert exc_info.value.details["timeout-policy"] == "response-start-timeout"
-    assert turn.state is TurnState.TIMED_OUT
+    with pytest.raises(asyncio.TimeoutError):
+        await asyncio.wait_for(turn._await_response(snap(), waiting), timeout=0.03)
+    assert turn.state is TurnState.AWAITING_RESPONSE
     assert chat.state is ChatState.BUSY
 
 
@@ -2039,11 +2125,10 @@ def test_response_stall_timeout_disabled_means_unbounded_across_every_phase():
     assert policy.soft_grace_cap_seconds == float("inf")
     assert policy.candidate_max_verification_window_seconds == float("inf")
     assert policy.suspect_grace_seconds == float("inf")
-    # response_start_timeout_seconds and response_timeout_seconds are their
-    # own independent, legitimately-finite bounds -- disabling stall
-    # detection must not implicitly disable them too.
-    assert policy.start_bound_seconds == 120.0
-    assert policy.absolute_ceiling_seconds == 3600.0
+    # All legacy response timer fields are parse-compatible only. They have
+    # no authority to terminate a response watcher.
+    assert policy.start_bound_seconds == float("inf")
+    assert policy.absolute_ceiling_seconds == float("inf")
 
 
 @pytest.mark.asyncio
@@ -2058,9 +2143,9 @@ async def test_turn_does_not_complete_on_more_actions_menu_alone_without_complet
     NOT complete -- it must time out instead, never falsely report success
     on a short, unfinished answer."""
     chat = _Chat()
-    chat.runtime.config.turn.response_start_timeout_seconds = 0.05
-    chat.runtime.config.turn.response_stall_timeout_seconds = 0.05
-    chat.runtime.config.turn.response_timeout_seconds = 0.3
+    chat.runtime.config.turn.response_no_activity_refresh_seconds = 0.01
+    chat.runtime.config.turn.response_refresh_attempts = 1
+    chat.runtime.config.turn.response_refresh_final_grace_seconds = 0
 
     def _short_stuck_response_more_actions_menu_only():
         while True:
@@ -2076,7 +2161,7 @@ async def test_turn_does_not_complete_on_more_actions_menu_alone_without_complet
     turn = GptAutoTurn(
         chat, SessionPrompt(turn_id="turn-more-actions-menu-alone", body="Review AU01"), lambda _: None
     )
-    with pytest.raises(AudiaGenticError):
+    with pytest.raises(AudiaGenticError, match="response recovery exhausted"):
         await turn.run()
 
 

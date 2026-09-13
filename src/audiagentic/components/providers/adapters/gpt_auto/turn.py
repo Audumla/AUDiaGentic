@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
+from collections import Counter
 from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import Any, NoReturn
@@ -33,7 +34,7 @@ from .observation_engine import (
     ObservationTracker,
 )
 from .prompt_fingerprint import PromptFingerprint, match_prompt
-from .snapshot import ChatMessageRef, ChatSnapshot
+from .snapshot import ChatMessageRef, ChatProgressBlock, ChatSnapshot
 from .urls import canonical_project_url, parse_project_id, parse_provider_session_id
 
 logger = logging.getLogger(__name__)
@@ -197,18 +198,12 @@ class _SubmissionProofPolicy:
 
 @dataclass(frozen=True)
 class _ResponseCompletionPolicy:
-    """ObservationPolicy for the response-completion phase (GP07).
+    """Observation policy for response completion.
 
-    Re-expresses the pre-existing three-timer structure (start/stall/total,
-    already fundamentally sound) through the shared engine instead of a
-    bespoke inline loop -- and closes a real latent hole the old loop had:
-    last_activity_at could be reset by stop-control/streaming/thinking
-    widget transitions alone (response-active's any-of), so a flapping
-    widget could indefinitely renew the stall clock even after stop-control
-    was demoted to advisory for completion detection. Widget transitions
-    are SOFT_LIVENESS here -- bounded grace only, never a real reset. A
-    config value of 0 means "disabled" (matches the prior semantics);
-    mapped to effectively-infinite rather than an instant trigger.
+    Response observation is intentionally unbounded.  The refresh recovery
+    state machine owns inactivity/interruption recovery and its final
+    exhaustion decision; these legacy policy fields remain parse-compatible
+    but cannot terminate a response watcher.
     """
 
     turn_config: Any
@@ -219,22 +214,15 @@ class _ResponseCompletionPolicy:
 
     @property
     def start_bound_seconds(self) -> float:
-        if getattr(self.turn_config, "response_observation_unbounded", False):
-            return float("inf")
-        return self._or_infinite(self.turn_config.response_start_timeout_seconds)
+        return float("inf")
 
     @property
     def progress_lease_seconds(self) -> float:
-        if getattr(self.turn_config, "response_observation_unbounded", False):
-            return float("inf")
-        return self._or_infinite(self.turn_config.response_stall_timeout_seconds)
+        return float("inf")
 
     @property
     def soft_grace_cap_seconds(self) -> float:
-        if getattr(self.turn_config, "response_observation_unbounded", False):
-            return float("inf")
-        stall = self.turn_config.response_stall_timeout_seconds
-        return (stall / 5) if stall else float("inf")
+        return float("inf")
 
     @property
     def candidate_stability_window_seconds(self) -> float:
@@ -252,34 +240,15 @@ class _ResponseCompletionPolicy:
 
     @property
     def candidate_max_verification_window_seconds(self) -> float:
-        if getattr(self.turn_config, "response_observation_unbounded", False):
-            return float("inf")
-        stall = self.turn_config.response_stall_timeout_seconds
-        configured_override = getattr(
-            self.turn_config, "response_generating_override_stability_seconds", None
-        )
-        override = self.candidate_contradiction_stability_window_seconds
-        if not stall and configured_override is None:
-            # Compatibility for older test/config objects: with stall
-            # detection disabled, the legacy verification ceiling was also
-            # unbounded. Real parsed configs always carry the override.
-            return float("inf")
-        if not stall:
-            return max(self.turn_config.response_stability_seconds * 5, override)
-        return max(self.turn_config.response_stability_seconds * 5, stall, override)
+        return float("inf")
 
     @property
     def suspect_grace_seconds(self) -> float:
-        if getattr(self.turn_config, "response_observation_unbounded", False):
-            return float("inf")
-        stall = self.turn_config.response_stall_timeout_seconds
-        return (stall / 5) if stall else float("inf")
+        return float("inf")
 
     @property
     def absolute_ceiling_seconds(self) -> float:
-        if getattr(self.turn_config, "response_observation_unbounded", False):
-            return float("inf")
-        return self._or_infinite(self.turn_config.response_timeout_seconds)
+        return float("inf")
 
 
 class GptAutoTurn:
@@ -323,6 +292,13 @@ class GptAutoTurn:
         # Once provider activity is observed, never let a later stale/blank
         # page qualify for the initial refresh experiment.
         self._response_activity_observed = False
+        # All response-recovery refresh triggers share one budget.  The
+        # response loop keeps the activity clock locally, while these fields
+        # let the correlation-conflict path participate in the same serialized
+        # attempt/grace accounting.
+        self._response_recovery_refresh_attempts = 0
+        self._response_recovery_last_refresh_at: float | None = None
+        self._response_recovery_final_grace_started_at: float | None = None
 
     def _move(self, target: TurnState) -> None:
         failure = _ENGINE.check(self.state.value, target.value)
@@ -486,6 +462,9 @@ class GptAutoTurn:
             )
         self.submission_confirmed = True
         await self._emit_timing("submit-confirmed")
+        mark_activity = getattr(self.chat, "mark_validated_activity", None)
+        if callable(mark_activity):
+            mark_activity()
         if proof.latest_user_id:
             mark_prompt = getattr(self.chat, "mark_prompt_submitted", None)
             if mark_prompt is not None:
@@ -823,6 +802,11 @@ class GptAutoTurn:
         previous_dom_signals = baseline.dom_signals
         previous_assistant_id = baseline.latest_assistant_id
         previous_assistant_text = baseline.latest_assistant_text
+        # Keep the local classification variable initialized even when the
+        # first post-submit snapshot fails. Without this, the exhaustion
+        # path itself raised UnboundLocalError and discarded the real CDP
+        # observation failure (seen live in req_84bd92224f2a44b0).
+        last_observation_error: BaseException | None = None
         while True:
             if self.cancel_event.is_set():
                 self._move(TurnState.CANCELLED)
@@ -831,6 +815,7 @@ class GptAutoTurn:
                 snap = await self.chat.snapshot()
             except Exception as exc:  # noqa: BLE001 - reconcile after attempted side effect
                 self._last_observation_error = exc
+                last_observation_error = exc
                 logger.info(
                     "gpt-auto submission proof observation interrupted; awaiting same conversation",
                     extra={"turn-id": self.request.turn_id},
@@ -1018,13 +1003,26 @@ class GptAutoTurn:
         previous = current
         response_started = False
         emitted = False
-        final_outcome: ObservationOutcome | None = None
         observation_started_at = loop.time()
         last_progress_at = observation_started_at
         last_real_activity_at = observation_started_at
+        last_refresh_at: float | None = None
         recovery_refresh_attempts = 0
         final_recovery_grace_started_at: float | None = None
         interruption_was_present = False
+        last_interruption_activity_at: float | None = None
+        initial_response_ref = (
+            _response_ref_for_prompt(current, prompt_message_id)
+            if prompt_message_id
+            else None
+        )
+        request_activity_response_id = (
+            initial_response_ref.message_id if initial_response_ref is not None else None
+        )
+        request_activity_response_text = (
+            initial_response_ref.text if initial_response_ref is not None else None
+        )
+        seen_progress_blocks: Counter[ChatProgressBlock] = Counter()
         # GP47 (2026-08-19): _advance_with_trace only logs on a tracker STATE
         # TRANSITION. A turn that stalls for the full response-total-timeout
         # (observed live: completion evidence present but never promoted past
@@ -1036,6 +1034,145 @@ class GptAutoTurn:
         # A coarse heartbeat, independent of transitions, makes a future
         # stall's timeline reconstructable from the gateway process log.
         last_heartbeat_at = loop.time()
+
+        async def _attempt_response_recovery(
+            now: float,
+            *,
+            interruption_present: bool,
+            completion_candidate: bool,
+        ) -> bool:
+            """Apply one spaced recovery attempt and report whether to poll again."""
+            nonlocal interruption_was_present
+            nonlocal last_refresh_at
+            nonlocal recovery_refresh_attempts
+            nonlocal final_recovery_grace_started_at
+            nonlocal last_interruption_activity_at
+
+            # A correlation-conflict refresh can run before this normal poll
+            # helper. Pull its shared budget into the loop before deciding
+            # whether another silence/interruption attempt is eligible.
+            if self._response_recovery_refresh_attempts > recovery_refresh_attempts:
+                recovery_refresh_attempts = self._response_recovery_refresh_attempts
+            if (
+                self._response_recovery_last_refresh_at is not None
+                and (
+                    last_refresh_at is None
+                    or self._response_recovery_last_refresh_at > last_refresh_at
+                )
+            ):
+                last_refresh_at = self._response_recovery_last_refresh_at
+            if (
+                self._response_recovery_final_grace_started_at is not None
+                and (
+                    final_recovery_grace_started_at is None
+                    or self._response_recovery_final_grace_started_at
+                    > final_recovery_grace_started_at
+                )
+            ):
+                final_recovery_grace_started_at = self._response_recovery_final_grace_started_at
+
+            interruption_edge = interruption_present and not interruption_was_present
+            interruption_was_present = interruption_present
+            if not interruption_present:
+                # A later interruption is a new provider-degraded episode;
+                # its synthetic lease tick is due immediately if it returns.
+                last_interruption_activity_at = None
+            recovery_cfg = self.chat.config.turn
+            max_refreshes = int(getattr(recovery_cfg, "response_refresh_attempts", 15))
+            interruption_activity_interval = float(
+                getattr(
+                    recovery_cfg,
+                    "response_interruption_activity_interval_seconds",
+                    30.0,
+                )
+            )
+            # The banner means the provider connection is degraded, not that
+            # the provider turn failed. Keep the gateway/client liveness
+            # lease alive with a synthetic, visibly-labelled activity edge.
+            # This intentionally does NOT update last_real_activity_at or
+            # reset the refresh budget; only validated request-owned content
+            # progress can do that.
+            interruption_activity_due = interruption_present and (
+                last_interruption_activity_at is None
+                or interruption_activity_interval <= 0
+                or now - last_interruption_activity_at >= interruption_activity_interval
+            )
+            if interruption_activity_due and not completion_candidate:
+                last_interruption_activity_at = now
+                await self._emit(
+                    TransportObservationKind.ACTIVITY,
+                    {"model_activity": "connection-refreshing"},
+                )
+            silence_seconds = float(
+                getattr(recovery_cfg, "response_no_activity_refresh_seconds", 240.0)
+            )
+            if (
+                max_refreshes > 0
+                and recovery_refresh_attempts < max_refreshes
+                and not completion_candidate
+                and (
+                    interruption_edge
+                    or (
+                        silence_seconds > 0
+                        and now
+                        - max(
+                            last_real_activity_at,
+                            last_refresh_at if last_refresh_at is not None else float("-inf"),
+                        )
+                        >= silence_seconds
+                    )
+                )
+            ):
+                refresh = getattr(self.chat, "refresh_bound_conversation", None)
+                if callable(refresh):
+                    refreshed = bool(
+                        await refresh(
+                            request_id=self.request.turn_id,
+                            trigger=(
+                                "provider-interruption"
+                                if interruption_edge
+                                else "no-real-activity"
+                            ),
+                        )
+                    )
+                else:
+                    # Compatibility seam for isolated test doubles and older
+                    # runtimes while the canonical PersistentChat method is
+                    # deployed.
+                    refresh = getattr(self.chat, "_refresh_for_response_recovery", None)
+                    refreshed = bool(await refresh()) if callable(refresh) else False
+                last_refresh_at = loop.time()
+                recovery_refresh_attempts += 1
+                self._response_recovery_last_refresh_at = last_refresh_at
+                self._response_recovery_refresh_attempts = recovery_refresh_attempts
+                await self._emit_timing("response-refresh-attempted")
+                logger.info(
+                    "gpt-auto response recovery refresh attempted=%s attempt=%d trigger=%s",
+                    refreshed,
+                    recovery_refresh_attempts,
+                    "provider-interruption" if interruption_edge else "no-real-activity",
+                    extra={"turn-id": self.request.turn_id},
+                )
+                if recovery_refresh_attempts >= max_refreshes:
+                    # The final grace clock starts after the last refresh
+                    # attempt returns, never from the stale activity sample.
+                    final_recovery_grace_started_at = loop.time()
+                    self._response_recovery_final_grace_started_at = final_recovery_grace_started_at
+                if refreshed:
+                    await asyncio.sleep(recovery_cfg.poll_interval_seconds)
+                    return True
+            final_grace_seconds = float(
+                getattr(recovery_cfg, "response_refresh_final_grace_seconds", 600.0)
+            )
+            if (
+                recovery_refresh_attempts >= max_refreshes > 0
+                and final_recovery_grace_started_at is not None
+                and now - final_recovery_grace_started_at >= final_grace_seconds
+                and not completion_candidate
+            ):
+                self._raise_response_recovery_exhausted(recovery_refresh_attempts)
+            return False
+
         while True:
             if self.cancel_event.is_set():
                 if self._stop_task is None:
@@ -1059,8 +1196,16 @@ class GptAutoTurn:
                     phase="response-complete",
                 )
                 if outcome is not None:
-                    final_outcome = outcome
-                    break
+                    # The response tracker is evidence/stability machinery,
+                    # not a response deadline.  Recovery remains responsible
+                    # for deciding when an inactive turn is exhausted.
+                    tracker = ObservationTracker(policy=policy, now=loop.time())
+                if await _attempt_response_recovery(
+                    loop.time(),
+                    interruption_present=interruption_was_present,
+                    completion_candidate=False,
+                ):
+                    continue
                 await asyncio.sleep(self.chat.config.turn.poll_interval_seconds)
                 continue
             self._remember_snapshot(raw_current)
@@ -1090,7 +1235,7 @@ class GptAutoTurn:
                 current, response_ref = raw_current, None
             if (
                 current.generating
-                or bool(current.tool_activity_counts)
+                or bool(current.progress_blocks)
                 or bool(response_ref is not None and response_ref.text)
                 or response_started
             ):
@@ -1167,46 +1312,6 @@ class GptAutoTurn:
                                 extra={"turn-id": self.request.turn_id},
                                 exc_info=True,
                             )
-            refresh_cfg = self.chat.config.turn
-            refresh_enabled = bool(
-                getattr(refresh_cfg, "initial_response_refresh_enabled", False)
-            )
-            refresh_attempts = int(
-                getattr(refresh_cfg, "initial_response_refresh_attempts", 0)
-            )
-            observation_grace = float(
-                getattr(refresh_cfg, "initial_response_observation_grace_seconds", 15.0)
-            )
-            page_needs_probe = (
-                not current.url
-                or current.url.startswith("about:blank")
-                or not current.composer_present
-            )
-            credible_response = response_ref is not None or response_started or current.generating
-            if (
-                refresh_enabled
-                and refresh_attempts > 0
-                and not self._initial_refresh_attempted
-                and not self._response_activity_observed
-                and not credible_response
-                and not current.tool_activity_counts
-                and page_needs_probe
-                and loop.time() - observation_started_at
-                >= observation_grace
-            ):
-                self._initial_refresh_attempted = True
-                refresh = getattr(self.chat, "_refresh_for_reconciliation", None)
-                if callable(refresh):
-                    try:
-                        self._initial_refresh_succeeded = bool(await refresh())
-                    except Exception:  # noqa: BLE001 - probe is diagnostic-only
-                        self._initial_refresh_succeeded = False
-                else:
-                    self._initial_refresh_succeeded = False
-                await self._emit_timing("initial-refresh-attempted")
-                if self._initial_refresh_succeeded:
-                    await asyncio.sleep(getattr(refresh_cfg, "poll_interval_seconds", 1.0))
-                    continue
             now = loop.time()
             if response_ref is not None and response_ref.message_id:
                 if self._response_message_id is None:
@@ -1253,6 +1358,25 @@ class GptAutoTurn:
                     )
                 if response_ref.text:
                     await self._emit_timing("first-assistant-text")
+            # Recovery clocks are reset only by evidence correlated to this
+            # request's assistant turn.  Conversation-global counts, DOM
+            # marker changes, generating toggles, and foreign activity are
+            # intentionally excluded.
+            progress_labels = _progress_activity_labels(current, seen_progress_blocks)
+            request_owned_activity = bool(progress_labels)
+            if response_ref is not None:
+                request_owned_activity = request_owned_activity or bool(
+                    (
+                        response_ref.message_id
+                        and response_ref.message_id != request_activity_response_id
+                    )
+                    or (
+                        response_ref.text
+                        and response_ref.text != request_activity_response_text
+                    )
+                )
+                request_activity_response_id = response_ref.message_id
+                request_activity_response_text = response_ref.text
             facts = _facts(baseline, previous, current)
             # Resolve hard vetoes and terminal evidence before any provider
             # side effect.  A stale Retry control must never regenerate an
@@ -1314,8 +1438,9 @@ class GptAutoTurn:
             # a delivery-timeout/error panel in the DOM after a retry has
             # already produced a fresh, structurally complete answer.  That
             # stale marker must not pre-empt durable completion evidence.
+            provider_interruption = "provider-interruption" in current.dom_signals
             failed = self.chat.config.workflow.policy("response-failed").evaluate(facts)
-            if failed.satisfied and not completion_candidate:
+            if failed.satisfied and not completion_candidate and not provider_interruption:
                 logger.warning(
                     "gpt-auto response failure policy matched",
                     extra={"turn-id": self.request.turn_id, "evidence": sorted(failed.matched)},
@@ -1346,7 +1471,6 @@ class GptAutoTurn:
                 and not completion_candidate
                 and not failed.satisfied
                 and not current.generating
-                and not current.tool_activity_counts
             ):
                 self._stale_progress_focus_attempted = True
                 materialize = getattr(self.chat, "materialize_latest_assistant_turn", None)
@@ -1422,62 +1546,33 @@ class GptAutoTurn:
                     extra={"turn-id": self.request.turn_id},
                 )
 
-            tool_activity_edge = current.tool_activity_counts != previous.tool_activity_counts
             progress_edge = (
                 current.latest_assistant_id != previous.latest_assistant_id
                 or current.latest_assistant_text != previous.latest_assistant_text
-                or current.assistant_count != previous.assistant_count
-                or current.user_count != previous.user_count
-                or current.assistant_message_ids != previous.assistant_message_ids
-                or current.user_message_ids != previous.user_message_ids
-                or tool_activity_edge
+                or bool(progress_labels)
             )
-            # Only correlated message/count/tool changes are real activity.
-            # Widget and generating transitions remain advisory and cannot
-            # indefinitely defer recovery.
-            if progress_edge:
+            # Only request-owned assistant identity/text/tool changes reset
+            # the recovery epoch.  The broad progress edge remains useful for
+            # observation capabilities and gateway activity telemetry, but it
+            # is not a recovery lease authority.
+            if request_owned_activity:
                 last_real_activity_at = now
+                last_refresh_at = None
                 recovery_refresh_attempts = 0
                 final_recovery_grace_started_at = None
-            interruption_present = "connection-interrupted" in current.dom_signals
-            interruption_edge = interruption_present and not interruption_was_present
-            interruption_was_present = interruption_present
-            recovery_cfg = self.chat.config.turn
-            max_refreshes = int(getattr(recovery_cfg, "response_refresh_attempts", 0))
-            silence_seconds = float(
-                getattr(recovery_cfg, "response_no_activity_refresh_seconds", 0.0)
-            )
-            if (
-                max_refreshes > 0
-                and recovery_refresh_attempts < max_refreshes
-                and not completion_candidate
-                and (interruption_edge or now - last_real_activity_at >= silence_seconds)
+                self._response_recovery_last_refresh_at = None
+                self._response_recovery_refresh_attempts = 0
+                self._response_recovery_final_grace_started_at = None
+                last_interruption_activity_at = None
+                mark_activity = getattr(self.chat, "mark_validated_activity", None)
+                if callable(mark_activity):
+                    mark_activity()
+            if await _attempt_response_recovery(
+                now,
+                interruption_present=provider_interruption,
+                completion_candidate=completion_candidate,
             ):
-                refresh = getattr(self.chat, "_refresh_for_response_recovery", None)
-                refreshed = bool(await refresh()) if callable(refresh) else False
-                recovery_refresh_attempts += 1
-                await self._emit_timing("response-refresh-attempted")
-                logger.info(
-                    "gpt-auto response recovery refresh attempted=%s attempt=%d trigger=%s",
-                    refreshed,
-                    recovery_refresh_attempts,
-                    "provider-interruption" if interruption_edge else "no-real-activity",
-                    extra={"turn-id": self.request.turn_id},
-                )
-                if recovery_refresh_attempts >= max_refreshes:
-                    final_recovery_grace_started_at = now
-                if refreshed:
-                    await asyncio.sleep(recovery_cfg.poll_interval_seconds)
-                    continue
-            final_grace_seconds = float(
-                getattr(recovery_cfg, "response_refresh_final_grace_seconds", 0.0)
-            )
-            if (
-                recovery_refresh_attempts >= max_refreshes > 0
-                and final_recovery_grace_started_at is not None
-                and now - final_recovery_grace_started_at >= final_grace_seconds
-            ):
-                self._raise_response_recovery_exhausted(recovery_refresh_attempts)
+                continue
             if (
                 progress_edge
                 or current.generating != previous.generating
@@ -1490,11 +1585,6 @@ class GptAutoTurn:
             soft_present = bool(current_soft) or current.generating
             caps = EvidenceCapability.NONE
             if response_started and progress_edge:
-                caps |= EvidenceCapability.PROGRESS
-            elif tool_activity_edge:
-                # A changed current-turn tool/app affordance is strong
-                # provider progress even before assistant text begins. Static
-                # rows are retained DOM state, not repeated activity.
                 caps |= EvidenceCapability.PROGRESS
             if response_started and soft_edge and soft_present:
                 caps |= EvidenceCapability.SOFT_LIVENESS
@@ -1509,8 +1599,8 @@ class GptAutoTurn:
                 # ACTIVITY emissions arriving throughout the turn, not just
                 # at the start.
                 activity_labels = (
-                    _tool_activity_signals(current, previous)
-                    if tool_activity_edge
+                    progress_labels
+                    if progress_labels
                     else (
                         ("response-progress",)
                         if EvidenceCapability.PROGRESS in caps
@@ -1577,8 +1667,11 @@ class GptAutoTurn:
                         text_length=len(current.latest_assistant_text or ""),
                     )
                     if outcome is not None:
-                        final_outcome = outcome
-                        break
+                        # Candidate verification is observational only.  A
+                        # failed verification must return to polling so the
+                        # recovery clock, rather than a legacy timer, decides
+                        # what happens next.
+                        tracker = ObservationTracker(policy=policy, now=loop.time())
                     await asyncio.sleep(self.chat.config.turn.poll_interval_seconds)
                     continue
                 self._remember_snapshot(raw_verify)
@@ -1728,37 +1821,21 @@ class GptAutoTurn:
                     if "verified" in locals()
                     else [],
                 }
+                mark_activity = getattr(self.chat, "mark_validated_activity", None)
+                if callable(mark_activity):
+                    mark_activity()
                 return response_text
             if outcome is not None:
-                final_outcome = outcome
-                break
+                tracker = ObservationTracker(policy=policy, now=loop.time())
             previous = current
             await asyncio.sleep(self.chat.config.turn.poll_interval_seconds)
-        if not response_started:
-            self._raise_response_timeout("response-start-timeout")
-        elif final_outcome is ObservationOutcome.BUDGET_EXHAUSTED:
-            self._raise_response_timeout("response-total-timeout")
-        else:
-            self._raise_response_timeout("response-stall-timeout")
-
-    def _raise_response_timeout(self, policy: str) -> None:
-        self._move(TurnState.TIMED_OUT)
-        raise AudiaGenticError(
-            code="EXT-GPTAUTO-002",
-            kind="providers",
-            message=f"gpt-auto response policy timed out: {policy}",
-            details={
-                "turn-id": self.request.turn_id,
-                "failure-reason": "response-policy-timeout",
-                "timeout-policy": policy,
-                "submission-confirmed": True,
-                **self._diagnostics(),
-            },
-        )
 
     def _raise_response_recovery_exhausted(self, attempts: int) -> NoReturn:
         """Fail only after the configurable refresh/grace recovery budget."""
-        self._move(TurnState.TIMED_OUT)
+        # This is an explicit recovery-exhaustion failure, not a legacy
+        # response timeout.  Keep the request terminal state semantically
+        # aligned with the EXT-GPTAUTO-004 error.
+        self._move(TurnState.FAILED)
         raise AudiaGenticError(
             code="EXT-GPTAUTO-004",
             kind="providers",
@@ -1878,20 +1955,39 @@ class GptAutoTurn:
         return {key: value for key, value in details.items() if value is not None and value != ""}
 
     async def _refresh_after_response_correlation_conflict(self) -> bool:
-        """Refresh the retained conversation once after a stale DOM conflict.
-
-        The provider may have completed the turn while the mounted React DOM
-        still exposes a provisional assistant node.  Refreshing the exact
-        durable chat URL is read-only recovery: it never creates a new chat or
-        resubmits the user's prompt.  The chat object owns the one-attempt
-        guard so the same bounded allowance is shared with unresolved-turn
-        reconciliation.
-        """
-        refresh = getattr(self.chat, "_refresh_for_reconciliation", None)
-        if not callable(refresh):
-            return False
+        """Use the canonical bound-page refresh within the shared recovery budget."""
         try:
-            return bool(await refresh())
+            recovery_cfg = self.chat.config.turn
+            max_refreshes = int(getattr(recovery_cfg, "response_refresh_attempts", 15))
+            if max_refreshes <= 0 or self._response_recovery_refresh_attempts >= max_refreshes:
+                return False
+            loop = asyncio.get_running_loop()
+            now = loop.time()
+            silence_seconds = float(
+                getattr(recovery_cfg, "response_no_activity_refresh_seconds", 240.0)
+            )
+            if (
+                self._response_recovery_last_refresh_at is not None
+                and silence_seconds > 0
+                and now - self._response_recovery_last_refresh_at < silence_seconds
+            ):
+                return False
+            refresh = getattr(self.chat, "refresh_bound_conversation", None)
+            if callable(refresh):
+                refreshed = bool(
+                    await refresh(
+                        request_id=self.request.turn_id,
+                        trigger="response-correlation-conflict",
+                    )
+                )
+            else:
+                refresh = getattr(self.chat, "_refresh_for_reconciliation", None)
+                refreshed = bool(await refresh()) if callable(refresh) else False
+            self._response_recovery_refresh_attempts += 1
+            self._response_recovery_last_refresh_at = loop.time()
+            if self._response_recovery_refresh_attempts >= max_refreshes:
+                self._response_recovery_final_grace_started_at = loop.time()
+            return refreshed
         except Exception as exc:  # noqa: BLE001 - preserve original conflict diagnostics
             logger.info(
                 "gpt-auto retained-conversation refresh after correlation conflict failed",
@@ -2004,6 +2100,26 @@ def _tool_activity_signals(
     return (sorted(candidates, key=lambda item: (-item[1], item[0]))[0][0],)
 
 
+def _progress_activity_labels(
+    current: ChatSnapshot,
+    seen: Counter[ChatProgressBlock],
+) -> tuple[str, ...]:
+    """Return only newly observed request-owned progress blocks.
+
+    A block's digest changes when its visible status or state changes, even
+    when the same DOM row remains mounted with the same count. Removal and
+    reappearance of an already-seen static row do not renew activity.
+    """
+    current_counts = Counter(current.progress_blocks)
+    labels: set[str] = set()
+    for block, count in current_counts.items():
+        previous_max = seen.get(block, 0)
+        if count > previous_max:
+            labels.add(block.kind)
+            seen[block] = count
+    return tuple(sorted(labels))
+
+
 def _new_user_message(baseline: ChatSnapshot, current: ChatSnapshot) -> bool:
     """Prefer the provider message UUID; counts remain a compatibility fallback."""
     if current.latest_user_id and current.latest_user_id not in set(baseline.user_message_ids):
@@ -2049,18 +2165,29 @@ def _scope_response_snapshot(
     """Project a raw snapshot onto this request's own response, not
     whatever is conversation-global-latest.
 
-    Activity remains page-wide, but structural terminal witnesses are scoped
-    to the assistant message that owns their action bar. A later unrelated
-    turn must not complete this request merely because its controls are now
-    the document-global latest controls.
+    Response activity and structural terminal witnesses are scoped to the
+    assistant response owned by this prompt. A later unrelated turn must not
+    keep this request alive or complete it merely because its controls are
+    now the document-global latest controls.
     """
     response_ref = _response_ref_for_prompt(snapshot, prompt_message_id)
+    scoped_progress = tuple(
+        block
+        for block in snapshot.progress_blocks
+        if block.owner_prompt_message_id == prompt_message_id
+        and (
+            response_ref is None
+            or block.owner_assistant_message_id is None
+            or block.owner_assistant_message_id == response_ref.message_id
+        )
+    )
     if response_ref is None:
         return (
             replace(
                 snapshot,
                 latest_assistant_id=baseline.latest_assistant_id,
                 latest_assistant_text=baseline.latest_assistant_text,
+                progress_blocks=scoped_progress,
             ),
             None,
         )
@@ -2077,6 +2204,7 @@ def _scope_response_snapshot(
             latest_assistant_id=response_ref.message_id,
             latest_assistant_text=response_ref.text,
             dom_signals=dom_signals,
+            progress_blocks=scoped_progress,
         ),
         response_ref,
     )

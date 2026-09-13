@@ -403,6 +403,78 @@ def test_transition_record_queued_to_running(tmp_path: Path) -> None:
     assert timeline[-1]["attributes"]["to"] == "running"
 
 
+def test_session_attempt_stays_queued_until_owned_start(tmp_path: Path) -> None:
+    """AS128: queue claim/preparation is not provider-turn execution."""
+    record = store.build_record(
+        execution_profile_id="session-profile",
+        prompt_body="hello",
+        session_id="ses-1",
+        provider_transport_kind="provider-session",
+    )
+    store.write_record(tmp_path, record)
+    claimed = store.claim_dispatch(
+        tmp_path,
+        record["request-id"],
+        owner_epoch="owner-1",
+        expected_revision=record["revision"],
+        service_root=tmp_path / "service",
+    )
+    prepared = store.prepare_owned_session_attempt(
+        tmp_path,
+        record["request-id"],
+        owner_epoch="owner-1",
+        worker_id="worker-1",
+        expected_revision=claimed["revision"],
+        resolved_source_id="source-1",
+        resolved_model_id="model-1",
+    )
+
+    assert prepared["state"] == "queued"
+    assert prepared["worker-id"] == "worker-1"
+    assert prepared["attempt-epoch"] == 1
+    assert prepared["resolved-source-id"] == "source-1"
+    assert prepared["resolved-model-id"] == "model-1"
+
+    started = store.start_owned_session_attempt(
+        tmp_path,
+        record["request-id"],
+        owner_epoch="owner-1",
+        worker_id="worker-1",
+        attempt_epoch=prepared["attempt-epoch"],
+    )
+    assert started["state"] == "running"
+    assert started["started-at"]
+
+
+def test_session_attempt_start_rejects_stale_worker(tmp_path: Path) -> None:
+    record = store.build_record(
+        execution_profile_id="session-profile",
+        prompt_body="hello",
+        session_id="ses-1",
+        provider_transport_kind="provider-session",
+    )
+    store.write_record(tmp_path, record)
+    claimed = store.claim_dispatch(
+        tmp_path, record["request-id"], owner_epoch="owner-1", expected_revision=0
+    )
+    prepared = store.prepare_owned_session_attempt(
+        tmp_path,
+        record["request-id"],
+        owner_epoch="owner-1",
+        worker_id="worker-1",
+        expected_revision=claimed["revision"],
+    )
+    with pytest.raises(AudiaGenticError) as exc_info:
+        store.start_owned_session_attempt(
+            tmp_path,
+            record["request-id"],
+            owner_epoch="owner-1",
+            worker_id="worker-stale",
+            attempt_epoch=prepared["attempt-epoch"],
+        )
+    assert exc_info.value.code == "CON-AGW-072"
+
+
 def test_transition_record_illegal_transition_raises(tmp_path: Path) -> None:
     record = store.build_record(execution_profile_id="default", prompt_body="hello")
     store.write_record(tmp_path, record)

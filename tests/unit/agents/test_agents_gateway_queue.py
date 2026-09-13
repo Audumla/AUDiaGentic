@@ -269,10 +269,11 @@ def test_session_workers_share_one_profile_compute_slot(tmp_path: Path):
     max_active = 0
     active_lock = threading.Lock()
 
-    def runner(project_root: Path, record: dict) -> dict:
+    def runner(project_root: Path, record: dict, *, session_start) -> dict:
         nonlocal active, max_active
         workers_entered.release()
         allow_turn_start.wait(timeout=5)
+        started_record = session_start()
         asyncio.run(queue_mod.notify_turn_starting(record["request-id"]))
         try:
             with active_lock:
@@ -283,8 +284,11 @@ def test_session_workers_share_one_profile_compute_slot(tmp_path: Path):
             with active_lock:
                 active -= 1
             asyncio.run(queue_mod.notify_turn_done(record["request-id"]))
-        return store.transition_record(
+        return store.transition_owned_terminal(
             project_root, record["request-id"], "completed",
+            owner_epoch=started_record["dispatch-owner-epoch"],
+            worker_id=started_record["worker-id"],
+            attempt_epoch=started_record["attempt-epoch"],
             updates={"output": "done", "finished-at": now_iso_z()},
         )
 
@@ -303,12 +307,50 @@ def test_session_workers_share_one_profile_compute_slot(tmp_path: Path):
     assert workers_entered.acquire(timeout=2)
     assert workers_entered.acquire(timeout=2)
     assert manager.queue_depth("session-profile")["running"] == 2
+    assert all(
+        store.read_record(tmp_path, record["request-id"])["state"] == "queued"
+        for record in records
+    )
 
     allow_turn_start.set()
     release_compute.set()
     for record in records:
         assert manager.wait(tmp_path, record["request-id"], timeout_seconds=5)["state"] == "completed"
     assert max_active == 1
+
+
+def test_cancelled_session_waiter_is_not_misclassified_as_failed(tmp_path: Path):
+    """A cancel racing the turn-lock boundary keeps the durable state cancelled."""
+    manager = queue_mod.GatewayQueueManager()
+    entered = threading.Event()
+    allow_start = threading.Event()
+
+    def runner(project_root: Path, record: dict, *, session_start) -> dict:
+        entered.set()
+        allow_start.wait(timeout=5)
+        # The queue owns the queued -> running CAS.  A cancellation before
+        # this call makes the callback raise CON-AGW-CANCELLED.
+        session_start()
+        raise AssertionError("cancelled session waiter must not reach provider work")
+
+    record = store.build_record(
+        execution_profile_id="session-profile",
+        prompt_body="cancel me",
+        session_id="same-session",
+    )
+    store.write_record(tmp_path, record)
+    manager.enqueue(tmp_path, record, {"virtual-capacity": 1}, runner)
+
+    assert entered.wait(timeout=2)
+    cancelled = manager.cancel(tmp_path, "session-profile", record["request-id"])
+    # The durable cancellation helper wins the queued boundary atomically;
+    # the worker may still be between its preparation and lock callback.
+    assert cancelled["state"] == "cancelled"
+    assert cancelled["cancel-requested"] is True
+
+    allow_start.set()
+    result = manager.wait(tmp_path, record["request-id"], timeout_seconds=5)
+    assert result["state"] == "cancelled"
 
 
 def test_legacy_session_capacity_is_ignored_while_project_capacity_applies(tmp_path: Path):
@@ -320,10 +362,11 @@ def test_legacy_session_capacity_is_ignored_while_project_capacity_applies(tmp_p
     max_active = 0
     active_lock = threading.Lock()
 
-    def runner(project_root: Path, record: dict) -> dict:
+    def runner(project_root: Path, record: dict, *, session_start) -> dict:
         nonlocal active, max_active
         entered.release()
         allow_turn_start.wait(timeout=5)
+        started_record = session_start()
         asyncio.run(queue_mod.notify_turn_starting(record["request-id"]))
         try:
             with active_lock:
@@ -334,8 +377,11 @@ def test_legacy_session_capacity_is_ignored_while_project_capacity_applies(tmp_p
             with active_lock:
                 active -= 1
             asyncio.run(queue_mod.notify_turn_done(record["request-id"]))
-        return store.transition_record(
+        return store.transition_owned_terminal(
             project_root, record["request-id"], "completed",
+            owner_epoch=started_record["dispatch-owner-epoch"],
+            worker_id=started_record["worker-id"],
+            attempt_epoch=started_record["attempt-epoch"],
             updates={"output": "done", "finished-at": now_iso_z()},
         )
 
