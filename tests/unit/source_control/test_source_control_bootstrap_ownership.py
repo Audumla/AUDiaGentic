@@ -135,6 +135,17 @@ class TestHookInstallOwnership:
     def _setup_ledger_project(self, project_root: Path, monkeypatch) -> None:
         (project_root / ".git" / "hooks").mkdir(parents=True, exist_ok=True)
         monkeypatch.setattr(bootstrap, "ledger_integration_enabled", lambda pr: True)
+        monkeypatch.setattr(bootstrap, "post_commit_ledger_stamp_enabled", lambda pr: True)
+
+    def test_commit_stamp_is_disabled_by_default(self, tmp_path: Path, monkeypatch) -> None:
+        (tmp_path / ".git" / "hooks").mkdir(parents=True, exist_ok=True)
+        monkeypatch.setattr(bootstrap, "ledger_integration_enabled", lambda pr: True)
+
+        result = bootstrap.install_post_commit_hook(tmp_path)
+
+        assert result["installed"] is False
+        assert result["reason"] == "post-commit ledger stamping disabled by policy"
+        assert not (tmp_path / ".git" / "hooks" / "post-commit").exists()
 
     def test_fb_absent_creates_whole_owned(self, tmp_path: Path, monkeypatch) -> None:
         """FxB-S1: hook absent → create whole-owned file with shebang + block."""
@@ -221,6 +232,7 @@ class TestHookPrune:
     def _setup_ledger_project(self, project_root: Path, monkeypatch) -> None:
         (project_root / ".git" / "hooks").mkdir(parents=True, exist_ok=True)
         monkeypatch.setattr(bootstrap, "ledger_integration_enabled", lambda pr: True)
+        monkeypatch.setattr(bootstrap, "post_commit_ledger_stamp_enabled", lambda pr: True)
 
     @pytest.mark.skipif(sys.platform == "win32", reason="Windows file lock prevents immediate unlink verification")
     def test_prune_whole_owned_deletes_file(self, tmp_path: Path, monkeypatch) -> None:
