@@ -110,7 +110,11 @@ def build_release_artifacts(
 
     # Step 2: Render release docs
     logger.info("Rendering release documents")
-    docs_result = render_release_docs(project_root, release_id, released_event_ids=None)
+    docs_result = render_release_docs(
+        project_root,
+        release_id,
+        released_event_ids=archive_result.get("released-event-ids") or None,
+    )
     result["docs"] = docs_result
 
     # Step 3: Build wheel and sdist
