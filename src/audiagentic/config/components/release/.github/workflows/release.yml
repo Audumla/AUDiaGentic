@@ -100,6 +100,13 @@ jobs:
           tag_name: ${{ needs.release-please.outputs.tag_name }}
           files: dist/*
 
+      - name: Update GitHub release notes from ledger
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release edit "${{ needs.release-please.outputs.tag_name }}" \
+            --notes-file docs/releases/RELEASE_NOTES.md
+
       - name: Publish to PyPI
         if: ${{ vars.PYPI_PUBLISH == 'true' }}
         uses: pypa/gh-action-pypi-publish@release/v1
