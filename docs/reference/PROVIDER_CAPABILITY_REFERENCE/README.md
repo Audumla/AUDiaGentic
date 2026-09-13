@@ -1,9 +1,17 @@
 # AUDiaGentic Provider Capability Reference
 
 Status: canonical code-facing reference resource  
-Rebuilt: 2026-07-17
+Last registry rebuild recorded: 2026-07-17. Individual facts carry their
+own validation timestamp; treat this package as evidence with explicit
+freshness, not as a claim that every upstream capability is current today.
 
 This package describes the provider, harness, endpoint, transport, configuration, control, telemetry, and operation capabilities known to AUDiaGentic. It is **curated evidence and design reference** — not executable implementation code and not runtime configuration.
+
+The `registries/providers.yaml` keys are normalized vendor/endpoint capability
+families, not a count of the provider adapter descriptors installed in this
+checkout. The runtime descriptor inventory lives under
+`src/audiagentic/config/providers/`; differences between those sets are
+expected and must not be “fixed” by copying one registry into the other.
 
 ## Runtime authority boundary (RV560)
 
@@ -59,6 +67,21 @@ A registry fact must not be promoted to `verified` without evidence. Unknown and
 - `registries/protocols.yaml`
 - `registries/telemetry.yaml`
 - `registries/evidence.yaml`
+
+## Package map
+
+- `architecture/` — reference topology and resource-consumption guidance.
+- `model/` — capability IDs and operation contracts.
+- `protocols/` — protocol-specific capability and lifecycle semantics.
+- `execution/` — provider execution boundaries and transport mappings.
+- `endpoints/` — provider/model endpoint and configuration projections.
+- `configuration/` — managed provider-configuration projection guidance.
+- `harnesses/` — harness profiles, observability lifecycle, and capability
+  matrix.
+- `telemetry/` — telemetry capability and evidence definitions.
+- `schemas/` and `registries/` — machine-readable structure and normalized
+  evidence indexes.
+- `validation/` — package validation, migration, and freshness evidence.
 
 ## Design boundaries
 

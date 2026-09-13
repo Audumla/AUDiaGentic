@@ -1,7 +1,8 @@
 {
+  "event-id": "chg_example_ledger_append",
   "change-class": "code-fix",
   "files": [
-    "src/core/ledger.py"
+    "src/audiagentic/components/ledger/ledger_api.py"
   ],
   "technical-summary": "Added ledger append helper.",
   "user-summary-candidate": "Improved change ledger recording.",

@@ -13,7 +13,7 @@
   },
   "change-class": "code-fix",
   "files": [
-    "src/core/ledger.py"
+    "src/audiagentic/components/ledger/ledger_api.py"
   ],
   "diff-stats": {
     "files-changed": 1,

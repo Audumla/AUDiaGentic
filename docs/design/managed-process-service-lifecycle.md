@@ -1,9 +1,11 @@
 # Managed process and service lifecycle contract
 
-Status: PR05 contract, version 1. This document defines the smallest shared
-foundation seam required by the gateway, embedded rig, and detached agent
-sessions. PR06 implements durable service state and leases; PR07 implements
-process-backed start-or-attach and guarded shutdown.
+Status: PR05 contract, version 1; PR05–PR07 completed in the current baseline.
+This document defines the smallest shared foundation seam required by the
+gateway, embedded rig, and detached agent sessions. Durable service state,
+leases, process-backed start-or-attach, and guarded shutdown are implemented by
+the corresponding foundation lifecycle modules; this document remains their
+contract boundary.
 
 ## 1. Reuse doctrine
 

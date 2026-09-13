@@ -1,7 +1,7 @@
 # Provider Model Endpoint Capabilities
 
-Status: authoritative reference candidate  
-Last validated: 2026-07-16  
+Status: evidence-backed reference snapshot
+Last validated: 2026-07-16 (revalidation required before current decisions)
 Planning set: `docs/planning/active/model-endpoint-management/MO01..MO10`
 
 This document defines how AUDiaGentic declares, validates, projects, observes, and removes model access across third-party coding agents and editor agents. It covers local inference servers, self-hosted gateways, direct vendor APIs, hosted model aggregators, and native account/subscription paths.

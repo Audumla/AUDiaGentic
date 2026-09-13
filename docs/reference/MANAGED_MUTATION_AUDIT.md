@@ -1,6 +1,9 @@
 # Managed Mutation Audit
 
-Status: MA01 baseline, 2026-07-12.
+Status: **historical MA01 baseline**, 2026-07-12. This inventory is retained
+for audit provenance and is not the current mutation inventory; several rows
+refer to paths that were later moved or removed. Use current source,
+architecture tests, and the owning component documentation for live behavior.
 
 Scope is shared external configuration, generated surfaces, adapter serializers, and
 runtime materializers under `src/audiagentic`. Owning-component domain records

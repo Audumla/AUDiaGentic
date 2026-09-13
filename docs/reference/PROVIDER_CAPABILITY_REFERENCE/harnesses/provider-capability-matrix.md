@@ -1,7 +1,7 @@
 # Per-Harness Provider Capability Matrix
 
-Status: authoritative reference candidate  
-Last validated: 2026-07-17  
+Status: evidence-backed reference snapshot
+Last validated: 2026-07-17 (revalidation required before current decisions)
 Planning set: `docs/planning/active/ptm-telemetry/PT01..PT02`
 
 This document catalogs what each coding agent harness can do with providers — not just "can it connect to OpenRouter?" but "can AUDiaGentic monitor, budget, and intelligently schedule work across providers through this harness?"

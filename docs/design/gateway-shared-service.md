@@ -11,10 +11,13 @@ layer map, ownership boundaries, phase gates, compatibility/security policy,
 and non-goals for the shared-gateway program (SH02–SH11). It adds no
 implementation.
 
-Implementation status (2026-07-18): SH04 supplies the explicit, opt-in
-standalone service described here. It uses authenticated IPv4-loopback HTTP
-and the foundation managed-service lifecycle. Automatic discovery/default
-cutover remains SH05/SH11, and durable in-flight recovery remains SH07.
+Implementation status: the SH04–SH11 migration tranche is complete in the
+current checkout, including the standalone loopback service, discovery,
+isolated workers, durable request handling, arbitration, external triggers,
+leases/drain, and consumer cutover. The remaining active work is tracked in
+the shared-gateway plan (currently SH16, SH22, SH25, SH28, SH30, SH31, SH32,
+and SH33). This document remains the frozen target-architecture boundary;
+implementation details belong in the owning plan items and source modules.
 
 ## 1. Requirement
 
