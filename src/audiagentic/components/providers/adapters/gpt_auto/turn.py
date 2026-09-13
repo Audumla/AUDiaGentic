@@ -1041,8 +1041,13 @@ class GptAutoTurn:
         recovery_refresh_attempts = 0
         final_recovery_grace_started_at: float | None = None
         # A banner present in the pre-submit snapshot belongs to the prior
-        # provider state; only a post-submit edge is a new interruption.
-        interruption_was_present = "provider-interruption" in baseline.dom_signals
+        # provider state; only a post-submit edge is a new interruption. If it
+        # disappears during submission proof and reappears on the first
+        # response poll, retain that edge until the response loop consumes it.
+        baseline_interrupted = "provider-interruption" in baseline.dom_signals
+        current_interrupted = "provider-interruption" in current.dom_signals
+        interruption_was_present = current_interrupted
+        interruption_edge_pending = current_interrupted and not baseline_interrupted
         last_interruption_activity_at: float | None = None
         initial_response_ref = (
             _response_ref_for_prompt(current, prompt_message_id)
@@ -1076,6 +1081,7 @@ class GptAutoTurn:
         ) -> bool:
             """Apply one spaced recovery attempt and report whether to poll again."""
             nonlocal interruption_was_present
+            nonlocal interruption_edge_pending
             nonlocal last_refresh_at
             nonlocal recovery_refresh_attempts
             nonlocal final_recovery_grace_started_at
@@ -1104,7 +1110,10 @@ class GptAutoTurn:
             ):
                 final_recovery_grace_started_at = self._response_recovery_final_grace_started_at
 
-            interruption_edge = interruption_present and not interruption_was_present
+            interruption_edge = interruption_present and (
+                interruption_edge_pending or not interruption_was_present
+            )
+            interruption_edge_pending = False
             interruption_was_present = interruption_present
             if not interruption_present:
                 # A later interruption is a new provider-degraded episode;
