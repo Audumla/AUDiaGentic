@@ -8,6 +8,12 @@ gateway after the first accepted turn.
 
 Runtime policy lives only in `.audiagentic/config/providers/gpt-auto.yaml`.
 The contract is strict: unknown or legacy keys fail instead of being aliased.
+The CDP target is configured as `cdp.endpoint` and defaults to
+`http://127.0.0.1:9222`; set it to the private address of a remote browser
+when the gateway and browser run on different machines. Remote endpoints are
+attach-only: the gateway will not launch or terminate a local browser for
+them. Keep remote CDP behind SSH/VPN because it exposes the authenticated
+browser to anyone who can reach the endpoint.
 
 Important invariants:
 

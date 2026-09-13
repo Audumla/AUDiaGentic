@@ -6,6 +6,7 @@ import asyncio
 import logging
 from enum import StrEnum
 from typing import TYPE_CHECKING
+from urllib.parse import urlparse
 
 from audiagentic.foundation.workflow import TransitionConfig, TransitionEngine
 
@@ -109,9 +110,19 @@ class GptAutoProviderRuntime:
         self.state = target
 
     async def _cdp_available(self) -> bool:
+        endpoint = urlparse(self.config.cdp_url)
+        host = endpoint.hostname
+        if host is None:
+            return False
+        try:
+            port = endpoint.port
+        except ValueError:
+            return False
+        if port is None:
+            port = 443 if endpoint.scheme in {"https", "wss"} else 80
         try:
             _, writer = await asyncio.wait_for(
-                asyncio.open_connection("127.0.0.1", self.config.browser.remote_debugging_port), 1
+                asyncio.open_connection(host, port), 1
             )
             writer.close()
             await writer.wait_closed()
@@ -134,6 +145,10 @@ class GptAutoProviderRuntime:
                 cdp_ok = await self._cdp_available()
                 _gp31_trace(f"_cdp_available() returned {cdp_ok}")
                 if not cdp_ok:
+                    if self.config.cdp.is_remote:
+                        raise RuntimeError(
+                            f"configured remote CDP endpoint is unavailable: {self.config.cdp_url}"
+                        )
                     self._move(ProviderState.STARTING)
                     _gp31_trace("calling ensure_browser_for_cdp() -- CDP was NOT available")
                     evidence = await self._browser.ensure_browser_for_cdp()

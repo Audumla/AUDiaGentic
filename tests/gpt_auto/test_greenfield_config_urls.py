@@ -47,6 +47,7 @@ def valid_config() -> dict:
             "dedicated-window": True,
         },
         "cdp": {
+            "endpoint": "http://127.0.0.1:9222",
             "connect-timeout-seconds": 15,
             "protocol-timeout-seconds": 30,
             "recovery-timeout-seconds": 30,
@@ -131,6 +132,26 @@ def test_strict_config_is_typed_and_frozen():
     assert config.cdp_url == "http://127.0.0.1:9222"
     with pytest.raises(Exception):
         config.project_url = "changed"  # type: ignore[misc]
+
+
+def test_cdp_target_location_is_taken_from_configuration():
+    data = valid_config()
+    data["cdp"]["endpoint"] = "http://192.0.2.10:9222"
+    data["browser"]["executable"] = "C:\\remote-browser-is-not-used.exe"
+
+    config = GptAutoConfig.from_dict(data)
+
+    assert config.cdp_url == "http://192.0.2.10:9222"
+    assert config.cdp.is_remote
+
+
+def test_remote_cdp_rejects_local_devtools_active_port_fallback():
+    data = valid_config()
+    data["cdp"]["endpoint"] = "http://192.0.2.10:9222"
+    data["cdp"]["devtools-active-port-file"] = "DevToolsActivePort"
+
+    with pytest.raises(AudiaGenticError, match="only valid for a local CDP endpoint"):
+        GptAutoConfig.from_dict(data)
 
 
 def test_response_complete_policy_never_regresses_to_the_stuck_stop_control_veto():

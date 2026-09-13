@@ -15,6 +15,7 @@ import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 try:
     from websockets.asyncio.client import ClientConnection, connect
@@ -214,7 +215,12 @@ class CdpClient:
             raise CdpError("DevToolsActivePort file is missing or malformed") from exc
         if not 1 <= port <= 65535 or not socket_path.startswith("/devtools/browser/"):
             raise CdpError("DevToolsActivePort file contains unsafe endpoint data")
-        return f"ws://127.0.0.1:{port}{socket_path}"
+        host = urlparse(self.endpoint).hostname
+        if not host:
+            raise CdpError("CDP endpoint has no host for DevToolsActivePort discovery")
+        if ":" in host and not host.startswith("["):
+            host = f"[{host}]"
+        return f"ws://{host}:{port}{socket_path}"
 
     async def command(
         self,
