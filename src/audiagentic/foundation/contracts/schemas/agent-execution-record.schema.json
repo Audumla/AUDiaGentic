@@ -21,6 +21,7 @@
     ,"dispatch-claimed-at"
     ,"dispatch-service-root"
     ,"recovery"
+    ,"recovery-required"
     ,"resolved-source-id"
     ,"resolved-capacity-generation"
     ,"last-activity-at"
@@ -372,15 +373,20 @@
       "properties": {
         "reason": {
           "type": "string",
-          "enum": ["service-restart", "unproven-dispatch", "unproven-execution"]
+          "enum": ["service-restart", "gateway-restart", "owner-loss", "unproven-dispatch", "unproven-execution"]
         },
         "outcome": {
           "type": "string",
-          "enum": ["resubmit-required", "replay-required", "manual-review-required"]
-        }
+          "enum": ["resubmit-required", "replay-required", "manual-review-required", "in-place"]
+        },
+        "from-owner-epoch": {"type": ["string", "null"]},
+        "handoff-id": {"type": ["string", "null"]},
+        "attempt": {"type": "integer", "minimum": 0},
+        "last-error": {"type": ["string", "null"], "maxLength": 256}
       },
       "additionalProperties": false
     },
+    "recovery-required": {"type": "boolean"},
     "replay-required": {
       "type": ["boolean", "null"]
     },

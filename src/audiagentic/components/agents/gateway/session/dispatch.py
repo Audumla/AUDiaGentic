@@ -358,6 +358,7 @@ def _dispatch_session_request(
     _default_recovery_attempt: int = 0,
     _unsent_retry_used: bool = False,
     session_start: Any | None = None,
+    resume_existing: bool = False,
 ) -> dict[str, Any]:
     """Dispatch a sessionful request through the live SessionRuntime (AS04).
 
@@ -761,6 +762,7 @@ def _dispatch_session_request(
             timeout_seconds=None,
             activity_relay=activity_relay,
             dispatch_claim=dispatch_claim,
+            resume_existing=resume_existing,
         )
     except _CancelledDuringDispatch:
         if guard_held:

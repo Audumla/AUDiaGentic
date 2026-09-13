@@ -549,6 +549,70 @@ def release_stale_claim(project_root: Path, request_id: str, *, stale_epoch: str
         return updated
 
 
+def takeover_nonterminal_owner(
+    project_root: Path,
+    request_id: str,
+    *,
+    expected_owner_epoch: str | None,
+    new_owner_epoch: str,
+    new_worker_id: str | None = None,
+    handoff_id: str | None = None,
+) -> dict[str, Any]:
+    """Atomically transfer a queued/running request to a new gateway owner.
+
+    A gateway generation is execution ownership, not request identity.  A
+    restart therefore changes only the owner fence and recovery metadata; it
+    never changes the request state or creates a replay request.  The old
+    generation is fenced by the owner-epoch check on every later mutation.
+    """
+    if not new_owner_epoch:
+        raise AudiaGenticError("VAL-AGW-087", "agents", "new gateway owner epoch is required", {})
+    with _request_lock(project_root, request_id):
+        record = _read_record_locked(project_root, request_id)
+        if record["state"] not in {"queued", "running"}:
+            return record
+        current_owner = record.get("dispatch-owner-epoch")
+        if expected_owner_epoch is not None and current_owner != expected_owner_epoch:
+            raise AudiaGenticError(
+                "CON-AGW-083", "agents", "gateway request dispatch ownership changed", {}
+            )
+        if current_owner == new_owner_epoch:
+            return record
+        recovery = {
+            "reason": "gateway-restart" if handoff_id else "owner-loss",
+            "outcome": "in-place",
+            "from-owner-epoch": current_owner,
+            "handoff-id": handoff_id,
+            "attempt": int((record.get("recovery") or {}).get("attempt", 0)),
+            "last-error": None,
+        }
+        updated = dict(record)
+        updated.update({
+            "dispatch-owner-epoch": new_owner_epoch,
+            "dispatch-claimed-at": record.get("dispatch-claimed-at"),
+            "updated-at": now_iso_z(),
+            "recovery": recovery,
+            "recovery-required": record["state"] == "running",
+            "revision": record["revision"] + 1,
+        })
+        if new_worker_id is not None:
+            updated["worker-id"] = new_worker_id
+        write_record(project_root, updated)
+        record_gateway_timeline(
+            project_root,
+            request_id,
+            "recovery.owner-taken-over",
+            state=updated["state"],
+            attributes={
+                "from-owner-epoch": current_owner,
+                "owner-epoch": new_owner_epoch,
+                "handoff-id": handoff_id,
+                "recovery-required": updated["recovery-required"],
+            },
+        )
+        return updated
+
+
 def transition_recovered_terminal(
     project_root: Path,
     request_id: str,
@@ -694,6 +758,16 @@ def claim_dispatch(
         raise AudiaGenticError("VAL-AGW-083", "agents", "dispatch owner epoch is required", {})
     with _request_lock(project_root, request_id):
         record = _read_record_locked(project_root, request_id)
+        if (
+            record["state"] == "running"
+            and record.get("recovery-required") is True
+            and record.get("dispatch-owner-epoch") == owner_epoch
+        ):
+            # Recovery workers inherit an already-running request. Returning a
+            # private marker lets the queue skip the queued-to-running CAS;
+            # the durable request remains running throughout takeover.
+            record_active_work(service_root, project_root, request_id, owner_epoch=owner_epoch)
+            return {**record, "_recovered-dispatch": True}
         if record["revision"] != expected_revision:
             raise AudiaGenticError(
                 "CON-AGW-071",

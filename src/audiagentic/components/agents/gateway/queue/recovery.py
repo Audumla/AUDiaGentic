@@ -3,15 +3,13 @@ from __future__ import annotations
 
 import json
 import logging
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from audiagentic.components.agents.gateway import store as store
 from audiagentic.components.agents.gateway.queue import work_index as work_index
-from audiagentic.components.agents.gateway.queue.queue import (
-    _publish_lifecycle_event,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +22,8 @@ class RecoveryReport:
     cleared: int = 0
     skipped_live: int = 0
     quarantined: int = 0
+    queued: tuple[tuple[Path, str], ...] = ()
+    running: tuple[tuple[Path, str], ...] = ()
 
 
 def _quarantine_entry(path: Path, *, reason_code: str) -> None:
@@ -55,59 +55,80 @@ def _read_entry(path: Path) -> dict[str, Any] | None:
     return value
 
 
-def _terminalize_stale_request(
+def _takeover_stale_request(
     service_root: Path,
     project_root: Path,
     request_id: str,
     record_epoch: str | None = None,
-) -> tuple[int, int]:
-    """Terminalize a stale non-terminal request found by recovery.
-
-    Returns (replay_required_count, interrupted_count).  -1 means the request
-    was already terminal or otherwise handled, and no count increment occurred.
-    """
+    *,
+    live_owner_epoch: str,
+) -> tuple[str | None, tuple[Path, str] | None]:
+    """Take over stale non-terminal work without changing request identity/state."""
     try:
         record = store.read_record(project_root, request_id)
     except Exception:  # noqa: BLE001
         logger.warning("gateway entry points to unreadable request", extra={"request-id": request_id})
-        return -1, -1
+        return None, None
 
     if record["state"] in store.TERMINAL_STATES:
         store.clear_active_work(service_root, request_id)
         work_index.clear_stale_terminal_index(service_root, request_id)
-        return 0, 0
+        return None, None
 
-    if record["state"] == "queued":
-        terminal = store.transition_recovered_terminal(
-            project_root, request_id, "interrupted",
-            error={
-                "code": "CON-AGW-102",
-                "kind": "agents",
-                "message": "replay required after gateway recovery",
-            },
-            stale_epoch=record_epoch,
-            replay_required=True,
-            replay_reason="gateway-recovered-without-work-payload",
+    if record["state"] not in {"queued", "running"}:
+        return None, None
+    worker_id = f"recovery_{uuid.uuid4().hex[:16]}" if record["state"] == "running" else None
+    updated = store.takeover_nonterminal_owner(
+        project_root,
+        request_id,
+        expected_owner_epoch=record_epoch,
+        new_owner_epoch=live_owner_epoch,
+        new_worker_id=worker_id,
+        handoff_id=(record.get("recovery") or {}).get("handoff-id") if isinstance(record.get("recovery"), dict) else None,
+    )
+    if record_epoch is not None:
+        work_index.takeover_owner(
+            service_root,
+            request_id,
+            expected_owner_epoch=record_epoch,
+            new_owner_epoch=live_owner_epoch,
         )
-        store.clear_active_work(service_root, request_id)
-        work_index.clear_stale_terminal_index(service_root, request_id)
-        _publish_lifecycle_event("interrupted", terminal)
-        return 1, 0
-    elif record["state"] == "running":
-        terminal = store.transition_recovered_terminal(
-            project_root, request_id, "interrupted",
-            error={
-                "code": "CON-AGW-084",
-                "kind": "agents",
-                "message": "owning service generation is gone",
-            },
-            stale_epoch=record_epoch,
+    else:
+        # An admitted entry has no old owner. Claim its index for the new
+        # generation so a second startup cannot schedule it twice.
+        work_index.takeover_owner(
+            service_root,
+            request_id,
+            expected_owner_epoch=None,
+            new_owner_epoch=live_owner_epoch,
         )
-        store.clear_active_work(service_root, request_id)
-        work_index.clear_stale_terminal_index(service_root, request_id)
-        _publish_lifecycle_event("interrupted", terminal)
-        return 0, 1
-    return 0, 0
+    return updated["state"], (project_root, request_id)
+
+
+def recovery_runner(record: dict[str, Any]):
+    """Rebuild the immutable runner from admission-time record facts."""
+    import functools
+
+    from audiagentic.components.agents.gateway import dispatch as _dispatch
+    from audiagentic.components.agents.gateway.api import _resolve_provider_isolation_tier
+
+    runtime = record.get("gateway-profile-runtime")
+    if not isinstance(runtime, dict):
+        raise ValueError("recovered request has no gateway profile runtime snapshot")
+    provider_id = record.get("resolved-provider-id") or runtime.get("provider-id")
+    if not isinstance(provider_id, str) or not provider_id:
+        raise ValueError("recovered request has no resolved provider")
+    return functools.partial(
+        _dispatch.dispatch_request,
+        dispatch_prompt="",
+        preallocated_session_id=None,
+        manifest_id=str(record.get("manifest-id") or "recovered"),
+        context_fingerprint=str(record.get("context-fingerprint") or ""),
+        component_profile="",
+        provider_isolation_tier=_resolve_provider_isolation_tier(provider_id),
+        worker_timeout_seconds=float(record.get("timeout-seconds") or 300.0),
+        resume_existing=bool(record.get("recovery-required")),
+    )
 
 
 def recover_gateway_requests(service_root: Path, *, live_owner_epoch: str) -> RecoveryReport:
@@ -124,6 +145,8 @@ def recover_gateway_requests(service_root: Path, *, live_owner_epoch: str) -> Re
     work_index.clear_expired_quarantine_entries(service_root)
 
     examined = replay_required = interrupted = cleared = skipped_live = quarantined = 0
+    recovered_queued: list[tuple[Path, str]] = []
+    recovered_running: list[tuple[Path, str]] = []
     processed_request_ids: set[str] = set()
 
     # --- Path 1: active-work entries (existing, hashed filenames) ---------------
@@ -164,11 +187,12 @@ def recover_gateway_requests(service_root: Path, *, live_owner_epoch: str) -> Re
                 cleared += 1
                 continue
 
-            rr, it = _terminalize_stale_request(service_root, project_root, request_id, record_epoch)
-            if rr > 0:
-                replay_required += rr
-            if it > 0:
-                interrupted += it
+            state, item = _takeover_stale_request(
+                service_root, project_root, request_id, record_epoch,
+                live_owner_epoch=live_owner_epoch,
+            )
+            if item is not None:
+                (recovered_queued if state == "queued" else recovered_running).append(item)
 
     # --- Path 2: work-index entries (C7: admission-before-claim gap) -------------
     index_entries, idx_quarantined = work_index.recover_work_index_entries(
@@ -178,8 +202,9 @@ def recover_gateway_requests(service_root: Path, *, live_owner_epoch: str) -> Re
 
     for widx in index_entries:
         if widx.request_id in processed_request_ids:
-            # Already handled via active-work path; clear the index entry.
-            work_index.clear_work_index_entry(service_root, widx.request_id)
+            # Already handled via active-work path.  Keep the index entry as
+            # the durable startup marker; the live owner must still schedule
+            # the request after this discovery pass.
             continue
 
         examined += 1
@@ -213,15 +238,13 @@ def recover_gateway_requests(service_root: Path, *, live_owner_epoch: str) -> Re
             skipped_live += 1
             continue
 
-        # C7: admitted-but-unclaimed entries have no owner epoch.  They are
-        # stale (the owning service generation is gone) and must be terminalized
-        # as replay-required, not cleared silently.  Pass None for stale_epoch
-        # so transition_recovered_terminal skips ownership fencing.
-        rr, it = _terminalize_stale_request(service_root, project_root, widx.request_id, record_epoch if record_epoch else None)
-        if rr > 0:
-            replay_required += rr
-        if it > 0:
-            interrupted += it
+        state, item = _takeover_stale_request(
+            service_root, project_root, widx.request_id,
+            record_epoch if record_epoch else None,
+            live_owner_epoch=live_owner_epoch,
+        )
+        if item is not None:
+            (recovered_queued if state == "queued" else recovered_running).append(item)
 
     return RecoveryReport(
         examined=examined,
@@ -230,4 +253,6 @@ def recover_gateway_requests(service_root: Path, *, live_owner_epoch: str) -> Re
         cleared=cleared,
         skipped_live=skipped_live,
         quarantined=quarantined,
+        queued=tuple(recovered_queued),
+        running=tuple(recovered_running),
     )

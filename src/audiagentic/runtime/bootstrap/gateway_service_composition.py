@@ -24,6 +24,7 @@ config file so it never collides with the launcher root's `composition.yaml`.
 from __future__ import annotations
 
 import asyncio
+import os
 import threading
 from pathlib import Path
 from typing import Any
@@ -122,6 +123,11 @@ def _shutdown_gpt_auto_runtimes(_owner: object) -> None:
         shutdown_all_runtimes,
     )
 
+    # A managed gateway restart must leave the browser conversation alive for
+    # the replacement generation.  The replacement will reattach by durable
+    # provider ref; ordinary shutdown still performs full provider teardown.
+    if os.environ.get("AUDIAGENTIC_GATEWAY_RESTART_HANDOFF") == "1":
+        return
     failure: list[BaseException] = []
 
     def run() -> None:
@@ -154,7 +160,11 @@ def _shutdown_session_runtime(_owner: object) -> None:
             shutdown_all_runtimes,
         )
 
-        runtime.shutdown(before_loop_stop=shutdown_all_runtimes)
+        handoff = os.environ.get("AUDIAGENTIC_GATEWAY_RESTART_HANDOFF") == "1"
+        runtime.shutdown(
+            before_loop_stop=shutdown_all_runtimes,
+            handoff=handoff,
+        )
         reset_session_runtime()
 
 

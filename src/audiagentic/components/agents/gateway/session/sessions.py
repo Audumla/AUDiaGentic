@@ -595,6 +595,7 @@ class SessionRuntime:
         timeout_seconds: float | None = None,
         activity_relay: Any | None = None,
         dispatch_claim: Callable[[], dict[str, Any]] | None = None,
+        resume_existing: bool = False,
     ) -> SessionTurnResult:
         """Run one turn on a live session; refreshes its idle clock."""
         return self._call(
@@ -606,6 +607,7 @@ class SessionRuntime:
                 correlation_id=correlation_id,
                 activity_relay=activity_relay,
                 dispatch_claim=dispatch_claim,
+                resume_existing=resume_existing,
             ),
             timeout=timeout_seconds,
         )
@@ -1015,8 +1017,9 @@ class SessionRuntime:
         self,
         *,
         before_loop_stop: Callable[[], Awaitable[None]] | None = None,
+        handoff: bool = False,
     ) -> None:
-        """Close every live session and stop accepting new ones. Idempotent."""
+        """Close sessions, or detach local handles for a managed handoff."""
         with self._loop_lock:
             self._shutdown = True
             loop = self._loop
@@ -1025,11 +1028,12 @@ class SessionRuntime:
         try:
 
             async def _shutdown_loop() -> None:
-                await self._close_all(reason="shutdown")
+                if not handoff:
+                    await self._close_all(reason="shutdown")
                 if self._reaper_task is not None and not self._reaper_task.done():
                     self._reaper_task.cancel()
                     await asyncio.gather(self._reaper_task, return_exceptions=True)
-                if before_loop_stop is not None:
+                if before_loop_stop is not None and not handoff:
                     # Provider transports and their CDP sockets are bound to
                     # this loop. Finalize them after sessions are drained but
                     # before the owning event loop is stopped.
@@ -2315,6 +2319,7 @@ class SessionRuntime:
         correlation_id: str | None,
         activity_relay: Any | None = None,
         dispatch_claim: Callable[[], dict[str, Any]] | None = None,
+        resume_existing: bool = False,
     ) -> SessionTurnResult:
         handle = self._require_handle(session_id)
         # Turns queue FIFO on the session lock (RV513) — reject only when the
@@ -2520,7 +2525,19 @@ class SessionRuntime:
                 # A configured timeout is retained as a provider/profile
                 # observation setting, but never converted to a local kill.
                 # The neutral transport decides any provider-owned deadline.
-                result = await handle.transport.prompt(session_prompt, _observation_sink)
+                method = (
+                    getattr(handle.transport, "resume_existing", None)
+                    if resume_existing
+                    else handle.transport.prompt
+                )
+                if not callable(method):
+                    raise AudiaGenticError(
+                        code="CON-AGW-124",
+                        kind="agents",
+                        message="provider transport cannot recover an existing turn",
+                        details={"session-id": session_id, "request-id": request_id},
+                    )
+                result = await method(session_prompt, _observation_sink)
             except Exception as exc:
                 if request_id is not None:
                     self._console_trace.failed(

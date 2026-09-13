@@ -163,10 +163,9 @@ def test_gateway_restart_stops_then_reacquires_service(tmp_path: Path, monkeypat
             self.label = label
             self.closed = False
 
-        def service_stop(self, project_root: Path, *, force: bool = False) -> dict:
-            assert project_root == tmp_path
-            assert force is True
-            return {"stopping": True, "forced": True}
+        def dashboard_restart(self) -> dict:
+            assert self.label == "old"
+            return {"restarting": True}
 
         def service_status(self, project_root: Path) -> dict:
             assert project_root == tmp_path
@@ -184,7 +183,7 @@ def test_gateway_restart_stops_then_reacquires_service(tmp_path: Path, monkeypat
     result = gateway_restart(tmp_path, force=True)
 
     assert result == {
-        "stopping": {"stopping": True, "forced": True},
+        "restarting": {"restarting": True},
         "restarted": True,
         "status": {"state": "running", "owner-epoch": "new"},
     }

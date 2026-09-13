@@ -707,6 +707,22 @@ def test_read_migrates_v1_record_under_request_lock(tmp_path: Path) -> None:
     assert load_ndjson(gateway_timeline_path(tmp_path, legacy["request-id"]))[-1]["event"] == "record.migrated"
 
 
+def test_read_migrates_current_record_missing_restart_recovery_flag(tmp_path: Path) -> None:
+    """A cutover record missing the new required field remains readable."""
+    record = store.build_record(execution_profile_id="default", prompt_body="hello")
+    store.write_record(tmp_path, record)
+    path = gateway_request_path(tmp_path, record["request-id"])
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    raw.pop("recovery-required")
+    atomic_write_json(path, raw)
+
+    migrated = store.read_record(tmp_path, record["request-id"])
+
+    assert migrated["recovery-required"] is False
+    persisted = json.loads(path.read_text(encoding="utf-8"))
+    assert persisted["recovery-required"] is False
+
+
 def test_read_repairs_partial_v4_activity_cutover(tmp_path: Path) -> None:
     record = store.build_record(execution_profile_id="default", prompt_body="hello")
     store.write_record(tmp_path, record)

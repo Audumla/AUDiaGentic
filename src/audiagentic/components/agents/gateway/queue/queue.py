@@ -638,6 +638,120 @@ class GatewayQueueManager:
             if not started:
                 return
 
+    def enqueue_recovered_running(
+        self,
+        project_root: Path,
+        record: dict[str, Any],
+        params: dict[str, Any],
+        runner: RequestRunner,
+        *,
+        dispatch_owner_epoch: str,
+        dispatch_service_root: Path,
+    ) -> None:
+        """Schedule a taken-over running request without a fresh claim/start.
+
+        The request is already in the running state and its provider-side
+        effect may already exist.  It therefore uses the normal worker
+        lifecycle only for capacity, observation, and terminal persistence;
+        the claim path returns a private recovery marker and never replays a
+        queued dispatch transition.
+        """
+        snapshot = profiles_mod.snapshot_from_record(record)
+        if snapshot is None:
+            raise AudiaGenticError(
+                "CON-AGW-101", "agents", "recovered request has no immutable profile snapshot", {}
+            )
+        from audiagentic.components.agents.gateway.instances import resolve_instance_facts
+
+        instance_facts = resolve_instance_facts(project_root, snapshot.instances)
+        entry = QueuedDispatch(
+            request_id=record["request-id"],
+            project_root=project_root,
+            execution_profile_id=record["execution-profile-id"],
+            snapshot=snapshot,
+            instance_facts=instance_facts,
+            project_key=str(project_root.resolve()),
+            session_key=str(record.get("session-id")) if record.get("session-id") else None,
+            runner=runner,
+            owner_epoch=dispatch_owner_epoch,
+            service_root=dispatch_service_root,
+            session_source_id=self._durable_session_source_id(project_root, record.get("session-id")),
+        )
+        pq = self._runtime_state(snapshot)
+        with pq.lock:
+            pq.running.add(entry.request_id)
+            self._active_requests[entry.request_id] = (
+                project_root, record["execution-profile-id"]
+            )
+
+        def _recover() -> None:
+            bound: _QueueReservation | None = None
+            try:
+                while bound is None:
+                    with pq.lock:
+                        bound = self._try_reserve_source(entry, pq)
+                    if bound is None:
+                        time.sleep(0.1)
+                self._run_one(pq, entry, bound)
+            except Exception:  # noqa: BLE001 - recovery must not kill the service
+                logger.exception(
+                    "recovered gateway request could not be scheduled",
+                    extra={"request-id": entry.request_id},
+                )
+                with pq.lock:
+                    pq.running.discard(entry.request_id)
+                self._active_requests.pop(entry.request_id, None)
+
+        threading.Thread(
+            target=_recover,
+            daemon=True,
+            name=f"gateway-recovery-{entry.request_id}",
+        ).start()
+
+    def enqueue_recovered_queued(
+        self,
+        project_root: Path,
+        record: dict[str, Any],
+        params: dict[str, Any],
+        runner: RequestRunner,
+        *,
+        dispatch_owner_epoch: str,
+        dispatch_service_root: Path,
+    ) -> None:
+        """Reinsert an admitted queued request exactly once after startup."""
+        if record.get("state") != "queued" or record.get("dispatch-owner-epoch") != dispatch_owner_epoch:
+            return
+        snapshot = profiles_mod.snapshot_from_record(record)
+        if snapshot is None:
+            raise AudiaGenticError(
+                "CON-AGW-101", "agents", "recovered request has no immutable profile snapshot", {}
+            )
+        from audiagentic.components.agents.gateway.instances import resolve_instance_facts
+
+        entry = QueuedDispatch(
+            request_id=record["request-id"],
+            project_root=project_root,
+            execution_profile_id=record["execution-profile-id"],
+            snapshot=snapshot,
+            instance_facts=resolve_instance_facts(project_root, snapshot.instances),
+            project_key=str(project_root.resolve()),
+            session_key=str(record.get("session-id")) if record.get("session-id") else None,
+            runner=runner,
+            owner_epoch=dispatch_owner_epoch,
+            service_root=dispatch_service_root,
+            session_source_id=self._durable_session_source_id(project_root, record.get("session-id")),
+        )
+        pq = self._runtime_state(snapshot)
+        with pq.lock:
+            if self._pending_authority.get(record["request-id"]) is not None:
+                return
+            self._pending_authority.enqueue(
+                request_id=entry.request_id,
+                project_key=entry.project_key,
+                value=entry,
+            )
+        self._drain_all()
+
     def _try_reserve_source(
         self, entry: QueuedDispatch, pq: _RuntimeState,
     ) -> _QueueReservation | None:
@@ -852,16 +966,23 @@ class GatewayQueueManager:
                     _publish_lifecycle_event("cancelled", latest)
                     return
                 raise
-            if claimed["state"] != "queued":
+            recovered = claimed.get("_recovered-dispatch") is True
+            if not recovered and claimed["state"] != "queued":
                 return
             _test_stall_claim_to_start()
-            worker_id = f"worker_{uuid.uuid4().hex[:16]}"
+            worker_id = str(claimed.get("worker-id") or f"worker_{uuid.uuid4().hex[:16]}")
             # A provider-session worker may be admitted before it owns the
             # session's turn lock. Keep it durably queued until the runtime
             # performs the lock-protected start CAS. Plain requests have no
             # second ownership boundary and retain the existing path.
-            is_session = bool(claimed.get("session-id")) or claimed.get("provider-transport-kind") == "provider-session"
-            if is_session:
+            # Only provider-session transport owns the session turn boundary.
+            # Worker requests may still retain a durable session id for
+            # provenance, but dispatches through the ordinary worker path and
+            # must be durably started before the runner is invoked.
+            is_session = claimed.get("provider-transport-kind") == "provider-session"
+            if recovered:
+                record = claimed
+            elif is_session:
                 record = store.prepare_owned_session_attempt(
                     project_root,
                     request_id,
@@ -924,7 +1045,7 @@ class GatewayQueueManager:
             # treating those as ordinary one-phase work deadlocks the second
             # worker behind the profile reservation before it can register
             # its turn callback.
-            is_session = bool(record.get("session-id")) or record.get("provider-transport-kind") == "provider-session"
+            is_session = record.get("provider-transport-kind") == "provider-session"
             if is_session:
                 # Admission only proves the session can start. Capacity is
                 # held by the request-specific callbacks around actual turns,
