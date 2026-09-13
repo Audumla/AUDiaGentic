@@ -186,9 +186,9 @@ def test_recovery_repairs_index_after_request_takeover_race(tmp_path: Path, monk
     assert entries[0].owner_epoch == "new-epoch"
 
 
-@pytest.mark.parametrize("pending, expected", [(True, True), (False, False)])
+@pytest.mark.parametrize("pending", [True, False])
 def test_recovery_runner_reads_session_checkpoint_for_resume_mode(
-    tmp_path: Path, monkeypatch, pending: bool, expected: bool
+    tmp_path: Path, monkeypatch, pending: bool
 ) -> None:
     from audiagentic.components.agents.gateway.session import sessions_store
 
@@ -197,6 +197,7 @@ def test_recovery_runner_reads_session_checkpoint_for_resume_mode(
         {
             "request-id": "req-recovery-mode",
             "session-id": "ses-recovery-mode",
+            "state": "running",
             "recovery-required": True,
             "resolved-provider-id": "gpt-auto",
             "gateway-profile-runtime": {"provider-id": "gpt-auto", "params": {}},
@@ -217,7 +218,10 @@ def test_recovery_runner_reads_session_checkpoint_for_resume_mode(
 
     runner = recovery.recovery_runner(record, project_root=tmp_path)
 
-    assert runner.keywords["resume_existing"] is expected
+    # A stale provider-session is always observation-only.  The session
+    # checkpoint remains the authority for the provider's later correlation;
+    # missing/cleared checkpoint evidence must not authorize a replay.
+    assert runner.keywords["resume_existing"] is True
 
 
 def test_cancel_acknowledgement_is_first_writer_wins(tmp_path: Path) -> None:
