@@ -34,14 +34,14 @@ mcp-servers:
       GITHUB_TOKEN). build_release_artifacts is the local alternative to
       dispatch_release_workflow (GitHub CI).
     tool-descriptions:
-      install_release_please: Install release-please into the target project.
-      update_release_please_workflow: Re-render the release workflow from the current template.
-      finalize_release: Archive current ledger and render CHANGELOG.md, RELEASE_NOTES.md, VERSION_HISTORY.md.
-      build_release_artifacts: Build release artifacts locally without GitHub CI/CD — archives ledger, renders docs, builds wheel/sdist, and optionally tags/publishes.
-      dispatch_release_workflow: Trigger the Release workflow dispatch on GitHub (auto-authenticates via browser if needed).
-      github_auth: Start GitHub OAuth device flow (returns user-code + URL) or report auth status.
-      github_auth_poll: Poll once for completion of the device flow started by github_auth.
-      clear_github_auth: Remove stored GitHub token.
+      install_release_please: Install release-please and the standard managed workflow.
+      update_release_please_workflow: Re-render the managed workflow from the current template.
+      finalize_release: Archive the current ledger and render release notes.
+      build_release_artifacts: Archive, render, and optionally build/tag/publish locally.
+      dispatch_release_workflow: Dispatch the GitHub release workflow.
+      github_auth: Start or report GitHub device authentication.
+      github_auth_poll: Poll GitHub device authentication once.
+      clear_github_auth: Remove stored GitHub authentication.
 
 contributions:
   - id: release/doctrine

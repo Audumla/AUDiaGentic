@@ -78,20 +78,7 @@ def _agent_card(definition: dict[str, Any]) -> dict[str, Any]:
 @mcp.tool()
 @tool_boundary
 def agent_task_list_definitions() -> list[dict[str, Any]]:
-    """List available agents — the valid `agent_id` values for
-    `agent_task_submit` — as a slim, client-facing summary per agent
-    (agent_id, name, description, skills). Modeled on the A2A AgentCard
-    shape: what an agent IS to a caller, not how it's implemented —
-    execution profile, role, and other harness wiring are deliberately
-    left out.
-
-    The configuration MCP server (ag-agents-config) separately exposes the
-    full administrative record (via `agent_list_definitions`) for managing
-    definitions/execution-profiles/roles; a tool name must have exactly one
-    owning MCP surface, so this copy is named agent_task_list_definitions.
-    It exists so a caller using ONLY the gateway server can discover valid
-    agent_id values without also needing the configuration server
-    attached."""
+    """List valid agent_id values with concise names, descriptions, and skills."""
     from audiagentic.components.agents.configuration.global_catalog import (
         list_global_agent_definitions,
     )
@@ -103,13 +90,7 @@ def agent_task_list_definitions() -> list[dict[str, Any]]:
 @mcp.tool()
 @tool_boundary
 def agent_task_status(request_id: str) -> dict[str, Any]:
-    """Return the compact task status used for normal MCP polling.
-
-    V4 is the only public projection: lifecycle, activity, bounded latest
-    activity type, progress sequence/timestamp, and terminal outcome only. Response content,
-    diagnostics, attempts, watchdog policy, and provider internals belong to
-    their separate operations and never cross the normal status boundary.
-    """
+    """Poll compact lifecycle status; use diagnostics or response for terminal detail."""
     project_root = project_root_from_env()
     status = call_gateway_method(
         "get_execution_request",
@@ -124,12 +105,7 @@ def agent_task_status(request_id: str) -> dict[str, Any]:
 @mcp.tool()
 @tool_boundary
 def agent_task_diagnostics(request_id: str, limit: int = 25) -> dict[str, Any]:
-    """Return bounded semantic failure/activity evidence for one request.
-
-    Unlike ``agent_task_status`` this is an operator diagnostic surface.  It
-    is still bounded and redacted: no prompt, full response, DOM, CDP handle,
-    cookie, or traceback crosses the MCP boundary.
-    """
+    """Return bounded, redacted failure and activity evidence for a request."""
     project_root = project_root_from_env()
     return _sparse(
         call_gateway_method(
@@ -145,12 +121,7 @@ def agent_task_recover(
     action: str,
     expected_revision: int | None = None,
 ) -> dict[str, Any]:
-    """Request a safe diagnostic recovery action.
-
-    Supported actions are ``reconcile``, ``abandon`` and
-    ``clear-not-submitted``. Recovery never resends a provider prompt; callers
-    continue polling status/diagnostics for the resulting lifecycle evidence.
-    """
+    """Request reconcile, abandon, or clear-not-submitted; recovery never resends a prompt."""
     project_root = project_root_from_env()
     return _sparse(
         call_gateway_method(
@@ -166,12 +137,7 @@ def agent_task_recover(
 @mcp.tool()
 @tool_boundary
 def agent_task_response(request_id: str) -> dict[str, Any]:
-    """Return the exact terminal response through the server-side boundary.
-
-    The gateway resolves and verifies the request-owned artifact internally.
-    No filesystem path, URI, preview, or alternate artifact locator crosses
-    MCP; this operation is the sole full-response surface.
-    """
+    """Return the exact verified terminal response; call only after terminal status."""
     project_root = project_root_from_env()
     text = call_gateway_method("get_execution_response", project_root, request_id)
     raw_bytes = len(text.encode("utf-8"))
@@ -221,12 +187,7 @@ def agent_task_list_requests(
     state: str | None = None,
     limit: int | None = None,
 ) -> list[dict[str, Any]]:
-    """List persisted gateway requests, most recently created first.
-
-    Optionally filter by state (queued/running/completed/failed/cancelled/
-    rejected). Reads from disk, so this works even for requests from an
-    earlier process — unlike queue depths, which are in-memory only.
-    """
+    """List persisted requests, newest first; optionally filter by lifecycle state."""
     project_root = project_root_from_env()
     requests = call_gateway_method(
         "list_execution_requests", project_root, state=state, limit=limit
@@ -241,8 +202,7 @@ def agent_task_list_requests(
 @mcp.tool()
 @tool_boundary
 def agent_task_gateway_overview() -> dict[str, Any]:
-    """Operator-facing summary: persisted request counts by state, the 5 most
-    recent failures (with redacted error), and in-process per-profile queue depths."""
+    """Return request counts, recent redacted failures, and provider activity."""
     project_root = project_root_from_env()
     return _sparse(call_gateway_method("gateway_overview", project_root))
 
@@ -250,9 +210,7 @@ def agent_task_gateway_overview() -> dict[str, Any]:
 @mcp.tool()
 @tool_boundary
 def agent_task_session_list(state: str | None = None) -> list[dict[str, Any]]:
-    """List persisted gateway sessions in stable lifecycle/ID order. Each entry carries a
-    'live' flag: true when the session's agent process is held by this gateway
-    process (only live sessions can accept new turns)."""
+    """List sessions and whether each is live in this gateway process."""
     project_root = project_root_from_env()
     return _sparse(call_gateway_method("list_execution_sessions", project_root, state=state))
 
@@ -260,8 +218,7 @@ def agent_task_session_list(state: str | None = None) -> list[dict[str, Any]]:
 @mcp.tool()
 @tool_boundary
 def agent_task_session_close(session_id: str) -> dict[str, Any]:
-    """Close a live agent session (terminates its agent process). Idempotent —
-    an already-closed or orphaned session returns its final record."""
+    """Close a session and its agent process; repeated close is idempotent."""
     project_root = project_root_from_env()
     return _sparse(call_gateway_method("close_execution_session", project_root, session_id))
 
@@ -275,11 +232,7 @@ def agent_task_session_control(
     turn_id: str | None = None,
     payload: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Issue a closed generic session control and return its acknowledgement.
-
-    The acknowledgement never claims the turn/session reached a lifecycle
-    state; callers continue to observe that through request status.
-    """
+    """Send a session control acknowledgement; poll request status for lifecycle truth."""
     project_root = project_root_from_env()
     return _sparse(
         call_gateway_method(
@@ -302,7 +255,7 @@ def agent_task_session_resume(
     model_id: str | None = None,
     component_profile: str | None = None,
 ) -> dict[str, Any]:
-    """Resume a validated durable provider conversation in a new session."""
+    """Resume a validated provider conversation in a new session."""
     project_root = project_root_from_env()
     kwargs: dict[str, Any] = {
         "control_id": control_id,
@@ -330,46 +283,7 @@ def agent_task_submit(
     execution_context_fingerprint: str | None = None,
     provider_chat_url: str | None = None,
 ) -> dict[str, Any]:
-    """Submit async work as `agent_id` (AS62's Agent Definition — an Execution
-    Profile plus a Role bundled under one stable ID). Resolves the agent's
-    execution profile and dispatches.
-
-    Response fields:
-      request-id:       unique identifier for this request
-      state:            current state ("queued")
-      session-id:       session identifier — auto-generated when session_keep_alive
-                        or provider policy requires it; GPT always retains one
-      metadata:         sanitized metadata supplied on submit; omitted when empty
-      provider-metadata: adapter-owned session metadata; omitted when unavailable
-
-    Immediately — poll with `agent_task_status` using the returned request-id.
-    Raises RES-AGD-001 if `agent_id` is not a configured
-    agent definition.
-
-    `provider_chat_url` may seed a GPT-auto session from a full
-    project-scoped ChatGPT conversation URL (`/g/<project>/c/<id>`).
-
-    `title` supplies a dashboard request label (1–120 single-line characters),
-    overriding the provider label without modifying the prompt or remote chat.
-
-    GPT requests without a session reuse this client's default per project/agent.
-    Use new_session=true for a separate chat; it does not replace an established
-    default. Explicit session_id or provider_chat_url also leaves that default
-    unchanged. The first admitted session establishes the default. Recovery
-    fallback warnings are returned on submission or subsequent task status.
-
-    For GPT, session_keep_alive=false does NOT disable default-session reuse
-    or close the chat immediately. It releases the live handle after the
-    execution profile's idle timeout (30 minutes if unset/disabled), only
-    when no turn is active or queued. Results and chat references are retained;
-    a later request can auto-resume the idle-closed conversation.
-    source is optional provenance text, not a client/session identifier.
-    workspace_name identifies the caller workspace and is only used as the GPT
-    project-name fallback when project.yaml has no configured project-name. It
-    is not a session reuse key.
-
-    This is the sole submission surface over MCP (RV891). Direct
-    provider/model execution bypassing agent selection is not exposed over MCP."""
+    """Submit async work for agent_id. Return request-id, then poll status; fetch terminal text with agent_task_response. Set new_session for isolation."""
     project_root = project_root_from_env()
     submit_kwargs: dict[str, Any] = {
         "agent_id": agent_id,

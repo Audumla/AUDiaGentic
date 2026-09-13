@@ -416,6 +416,7 @@ def build_record(
         "dispatch-claimed-at": None,
         "dispatch-service-root": None,
         "recovery": None,
+        "recovery-required": False,
         "replay-required": None,
         "replay-reason": None,
         "replayed-by-request-id": None,
@@ -577,6 +578,7 @@ def _migrate_v1_payload(payload: dict[str, Any]) -> dict[str, Any]:
         migrated.setdefault("dispatch-owner-epoch", None)
         migrated.setdefault("dispatch-claimed-at", None)
         migrated.setdefault("recovery", None)
+        migrated.setdefault("recovery-required", False)
         migrated.setdefault("replay-required", None)
         migrated.setdefault("replay-reason", None)
         migrated.setdefault("replayed-by-request-id", None)
@@ -710,7 +712,7 @@ def project_public_status(
         "cancel-requested", "revision", "dispatch-owner-epoch", "dispatch-claimed-at",
         "cancel-acknowledged-at", "cancel-acknowledged-by",
         "cancel-provenance",
-        "recovery", "worker-id", "attempt-epoch", "provider-id", "model-id",
+        "recovery", "recovery-required", "worker-id", "attempt-epoch", "provider-id", "model-id",
         "session-id", "session-keep-alive", "completion", "usage", "error", "attempts", "created-at",
         "updated-at", "started-at", "finished-at",
         "replay-required", "replay-reason", "replayed-by-request-id", "resumed-from-request-id",
