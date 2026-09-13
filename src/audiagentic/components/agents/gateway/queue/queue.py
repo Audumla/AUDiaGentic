@@ -45,6 +45,7 @@ from audiagentic.components.agents.gateway.queue.capacity_policy import (
     resolve_pending_capacity,
 )
 from audiagentic.components.agents.gateway.queue.pending import PendingAuthority
+from audiagentic.components.agents.gateway.queue.recovery_control import RecoveryDeferred
 from audiagentic.components.agents.gateway.queue.watchdog_registry import watchdog_registry
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.time import now_iso_z
@@ -54,6 +55,8 @@ logger = logging.getLogger(__name__)
 
 _WAIT_INITIAL_BACKOFF_SECONDS = 0.05
 _WAIT_MAX_BACKOFF_SECONDS = 0.5
+_RECOVERY_RETRY_INITIAL_SECONDS = 0.5
+_RECOVERY_RETRY_MAX_SECONDS = 15.0
 
 # SH07 crash-matrix test-only hook: widens the claim-to-start control-plane
 # window so a real OS process kill can be observed landing inside it (the
@@ -342,6 +345,7 @@ class GatewayQueueManager:
         # session/compatibility state; they no longer own pending work.
         self._pending_authority: PendingAuthority[QueuedDispatch] = PendingAuthority()
         self._active_requests: dict[str, tuple[Path, str]] = {}
+        self._recovery_timers: dict[str, threading.Timer] = {}
 
     def _runtime_state(self, snapshot: profiles_mod.ResolvedExecutionProfile) -> _RuntimeState:
         profile_identity = ProfileGenerationIdentity(
@@ -856,6 +860,101 @@ class GatewayQueueManager:
         self._capacity.release(reservation.source)
         self._scoped_capacity.release(reservation.overlay)
 
+    @staticmethod
+    def _recovery_retry_delay(entry: QueuedDispatch, recovery_attempt: int) -> float:
+        """Resolve bounded recovery backoff from the admitted profile params."""
+        params = dict(entry.snapshot.execution_params)
+        try:
+            initial = float(
+                params.get(
+                    "provider-session-recovery-initial-delay-seconds",
+                    _RECOVERY_RETRY_INITIAL_SECONDS,
+                )
+            )
+        except (TypeError, ValueError):
+            initial = _RECOVERY_RETRY_INITIAL_SECONDS
+        try:
+            maximum = float(
+                params.get(
+                    "provider-session-recovery-max-delay-seconds",
+                    _RECOVERY_RETRY_MAX_SECONDS,
+                )
+            )
+        except (TypeError, ValueError):
+            maximum = _RECOVERY_RETRY_MAX_SECONDS
+        initial = max(0.0, initial)
+        maximum = max(initial, maximum)
+        return min(maximum, initial * (2 ** max(0, recovery_attempt - 1)))
+
+    def _schedule_recovery_retry(
+        self,
+        pq: _RuntimeState,
+        entry: QueuedDispatch,
+        delay_seconds: float,
+        *,
+        worker_id: str,
+        attempt_epoch: int,
+    ) -> None:
+        """Re-enqueue one fenced recovery attempt after a short backoff."""
+        def _launch() -> None:
+            with self._manager_lock:
+                self._recovery_timers.pop(entry.request_id, None)
+            bound: _QueueReservation | None = None
+            entered_worker = False
+            try:
+                current = store.read_record(entry.project_root, entry.request_id)
+                if (
+                    current.get("state") != "running"
+                    or current.get("dispatch-owner-epoch") != entry.owner_epoch
+                    or current.get("worker-id") != worker_id
+                    or current.get("attempt-epoch") != attempt_epoch
+                ):
+                    return
+                while bound is None:
+                    current = store.read_record(entry.project_root, entry.request_id)
+                    if (
+                        current.get("state") != "running"
+                        or current.get("dispatch-owner-epoch") != entry.owner_epoch
+                        or current.get("worker-id") != worker_id
+                        or current.get("attempt-epoch") != attempt_epoch
+                        or current.get("cancel-requested")
+                    ):
+                        return
+                    with pq.lock:
+                        bound = self._try_reserve_source(entry, pq)
+                    if bound is None:
+                        time.sleep(0.1)
+                with pq.lock:
+                    if entry.request_id in pq.running:
+                        return
+                    pq.running.add(entry.request_id)
+                    self._active_requests[entry.request_id] = (
+                        entry.project_root, entry.execution_profile_id
+                    )
+                entered_worker = True
+                self._run_one(pq, entry, bound)
+            except Exception:  # noqa: BLE001 - recovery must not kill the service
+                logger.exception(
+                    "scheduled gateway recovery retry could not be started",
+                    extra={"request-id": entry.request_id},
+                )
+                if not entered_worker:
+                    with pq.lock:
+                        pq.running.discard(entry.request_id)
+                    self._active_requests.pop(entry.request_id, None)
+            finally:
+                if not entered_worker and bound is not None:
+                    self._release_reservation(bound)
+
+        timer = threading.Timer(max(0.0, delay_seconds), _launch)
+        timer.daemon = True
+        with self._manager_lock:
+            existing = self._recovery_timers.get(entry.request_id)
+            if existing is not None:
+                return
+            self._recovery_timers[entry.request_id] = timer
+        timer.start()
+
     def _reserve_session_when_available(
         self, entry: QueuedDispatch, pq: _RuntimeState, template: _QueueReservation,
         cancelled: threading.Event | None = None,
@@ -1155,6 +1254,49 @@ class GatewayQueueManager:
                     # attempt attribution.
                     terminal_record = store.read_record(project_root, request_id)
                     _publish_lifecycle_event(terminal_record["state"], terminal_record)
+            except RecoveryDeferred as deferred:
+                # Rehydration/open failure after a possible provider-side
+                # Send is non-terminal.  Keep the same request and session
+                # in durable recovery and retry only the observation path.
+                current = store.read_record(project_root, request_id)
+                delay = self._recovery_retry_delay(
+                    entry,
+                    int((current.get("recovery") or {}).get("attempt", 0)) + 1,
+                )
+                try:
+                    deferred_record = store.defer_owned_recovery(
+                        project_root,
+                        request_id,
+                        owner_epoch=record["dispatch-owner-epoch"],
+                        worker_id=record["worker-id"],
+                        attempt_epoch=record["attempt-epoch"],
+                        error=deferred.error,
+                        phase=deferred.phase,
+                        side_effect_state=deferred.side_effect_state,
+                        retry_delay_seconds=delay,
+                    )
+                except AudiaGenticError:
+                    logger.info(
+                        "recovery retry lost its durable ownership fence",
+                        extra={"request-id": request_id},
+                        exc_info=True,
+                    )
+                else:
+                    logger.info(
+                        "gateway request recovery deferred",
+                        extra={
+                            "request-id": request_id,
+                            "retry-delay-seconds": delay,
+                            "recovery-attempt": (deferred_record.get("recovery") or {}).get("attempt"),
+                        },
+                    )
+                    self._schedule_recovery_retry(
+                        pq,
+                        entry,
+                        delay,
+                        worker_id=record["worker-id"],
+                        attempt_epoch=record["attempt-epoch"],
+                    )
             except AudiaGenticError as exc:
                 logger.error(
                     "gateway request runner raised", extra={"request-id": request_id}, exc_info=True
