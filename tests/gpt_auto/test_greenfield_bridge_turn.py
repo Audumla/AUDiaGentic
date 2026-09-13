@@ -562,6 +562,145 @@ async def test_connection_interrupted_emits_synthetic_activity_until_completion(
 
 
 @pytest.mark.asyncio
+async def test_interruption_present_at_baseline_is_not_a_new_refresh_edge():
+    """A retained interruption banner must not refresh a new request immediately."""
+    chat = _Chat()
+    chat.config.turn.response_no_activity_refresh_seconds = 240
+    chat.config.turn.response_refresh_attempts = 15
+    chat.config.turn.response_interruption_activity_interval_seconds = 30
+    chat.config.turn.response_refresh_final_grace_seconds = 600
+    interrupted = replace(
+        snap(users=1, user="Review AU01", user_id="prompt-1"),
+        dom_signals=frozenset({"provider-interruption"}),
+    )
+    completed = snap(
+        users=1,
+        assistants=1,
+        user="Review AU01",
+        user_id="prompt-1",
+        assistant="Recovered",
+        assistant_id="assistant-1",
+        complete=True,
+    )
+    chat._snapshots = iter([interrupted, completed, completed, completed])
+    refreshes = []
+
+    async def refresh():
+        refreshes.append(True)
+        return True
+
+    chat._refresh_for_response_recovery = refresh
+    turn = GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="turn-stale-interruption", body="Review AU01"),
+        lambda _: None,
+    )
+    turn.state = TurnState.AWAITING_RESPONSE
+    turn._prompt_message_id = "prompt-1"
+
+    assert await turn._await_response(interrupted, interrupted) == "Recovered"
+    assert refreshes == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("error_signal", ["error-page", "error-alert"])
+async def test_interruption_does_not_mask_terminal_provider_error(error_signal):
+    """Independent provider failure evidence must not be hidden by interruption."""
+    chat = _Chat()
+    compound = replace(
+        snap(users=1, user="Review AU01", user_id="prompt-1"),
+        dom_signals=frozenset({"provider-interruption", error_signal}),
+    )
+    chat._snapshots = iter([compound])
+    turn = GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="turn-compound-error", body="Review AU01"),
+        lambda _: None,
+    )
+    turn.state = TurnState.AWAITING_RESPONSE
+    turn._prompt_message_id = "prompt-1"
+
+    with pytest.raises(AudiaGenticError) as caught:
+        await turn._await_response(
+            snap(users=1, user="Review AU01", user_id="prompt-1"),
+            compound,
+        )
+
+    assert caught.value.details["failure-reason"] == "provider-failure-policy-matched"
+    assert error_signal in caught.value.details["evidence"]
+
+
+@pytest.mark.asyncio
+async def test_watchdog_revalidates_but_does_not_refresh_active_turn():
+    """The watchdog must not create a second active-turn refresh authority."""
+    chat = _Chat()
+    calls = []
+
+    async def validate():
+        calls.append("validate")
+
+    async def reconcile_refresh():
+        calls.append("refresh")
+        return True
+
+    chat._validate_page_binding = validate
+    chat._refresh_for_reconciliation = reconcile_refresh
+    chat.active_turn_id = "turn-1"
+
+    transport = GptAutoSessionTransport(chat)
+    result = await transport.reconcile_activity_gap()
+
+    assert result["action"] == "page-revalidated"
+    assert calls == ["validate"]
+
+
+@pytest.mark.asyncio
+async def test_terminal_checkpoint_failure_preserves_proven_success_and_fence():
+    """A proven answer remains successful while the unresolved fence is retained."""
+    chat = _Chat()
+
+    async def fail_clear():
+        raise OSError("checkpoint unavailable")
+
+    chat.persist_unresolved_clear = fail_clear
+    turn = GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="turn-checkpoint-fault", body="Review AU01"),
+        lambda _: None,
+    )
+
+    result = await turn.run()
+
+    assert result.final_summary == "Looks sound"
+    assert turn.state is TurnState.COMPLETE
+    assert chat.state is ChatState.RECOVERING
+    assert chat.unresolved_turn_pending is True
+    assert result.metadata["terminal-evidence"]["checkpoint-clear-persisted"] is False
+
+
+@pytest.mark.asyncio
+async def test_terminal_sink_failure_does_not_downgrade_proven_success():
+    """Terminal telemetry failure must not change a proven successful result."""
+    chat = _Chat()
+
+    def sink(observation):
+        if observation.kind is TransportObservationKind.TERMINAL:
+            raise RuntimeError("terminal sink unavailable")
+
+    turn = GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="turn-terminal-sink-fault", body="Review AU01"),
+        sink,
+    )
+
+    result = await turn.run()
+
+    assert result.final_summary == "Looks sound"
+    assert turn.state is TurnState.COMPLETE
+    assert result.dropped_observations == 1
+
+
+@pytest.mark.asyncio
 async def test_active_turn_does_not_click_foreign_delivery_retry_control():
     chat = _Chat()
     foreign = replace(
