@@ -1,7 +1,8 @@
 # Agent execution transports
 
-Evidence checked 2026-07-13. Transport facts describe how a provider can be
-driven; they do not define provider identity, model catalogs, or orchestration.
+Evidence checked 2026-07-13 (dated snapshot; revalidate versions and transport
+behavior before current decisions). Transport facts describe how a provider can
+be driven; they do not define provider identity, model catalogs, or orchestration.
 
 | Provider | Version | Transport | State | Manifestation | Evidence |
 |---|---:|---|---|---|---|

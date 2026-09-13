@@ -1,7 +1,8 @@
 # Harness Observability & Lifecycle Capability Model
 
-Status: architecture reference candidate  
-Last updated: 2026-07-18 (RV688 capability/validation/production split)  
+Status: evidence-backed architecture reference snapshot
+Last updated: 2026-07-18 (RV688 capability/validation/production split;
+revalidation required before current decisions)
 Planning items: `AS15..AS26` (agent sessions; AS15 and AS18 completed), `PR05..PR07` (process lifecycle), `SH07` (durable job state, consumes the AS21 projection per RV561)
 
 Declaration home (RV560): harness observability capability declarations live in

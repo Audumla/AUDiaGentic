@@ -1,7 +1,8 @@
 # Recipe upgrade inventory
 
-Status: PR09 audit baseline, 2026-07-28. This records whether the existing
-recipe mechanisms can expose the explicit `upgrade` lifecycle. `upgrade` is
+Status: **completed PR09 audit baseline**, 2026-07-28. This records whether
+the existing recipe mechanisms can expose the explicit `upgrade` lifecycle.
+It remains a bounded design/audit record, not runtime policy: `upgrade` is
 never inferred from `apply`, and no entry below authorizes launch-time updates.
 
 | Existing mechanism | Classification | Upgrade route / constraint |

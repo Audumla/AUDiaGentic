@@ -1,5 +1,10 @@
 # Reference Architecture
 
+Status: architecture reference baseline. This document defines the normalized
+capability vocabulary and evidence model; it is not runtime configuration or a
+provider-support guarantee. Runtime behavior remains owned by provider
+descriptors and their validated capability facts.
+
 ## Purpose
 
 AUDiaGentic needs a normalized resource that answers five separate questions:
