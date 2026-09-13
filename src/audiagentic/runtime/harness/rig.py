@@ -41,7 +41,8 @@ def launch_rig_if_needed(
     if os.environ.get("AUDIAGENTIC_AG_BASE_URL"):
         return RigConnection(os.environ["AUDIAGENTIC_AG_BASE_URL"], model, False)
     if not model_profile.get("model_file"):
-        return RigConnection(f"http://127.0.0.1:{rig_port}/v1", model, False)
+        from audiagentic.foundation.config.local_runtime import local_rig_host
+        return RigConnection(f"http://{local_rig_host()}:{rig_port}/v1", model, False)
 
     from audiagentic.runtime.rig.service import start_or_attach_embedded_rig
 
@@ -51,6 +52,7 @@ def launch_rig_if_needed(
         model_id=model_id,
     )
     os.environ["AUDIAGENTIC_AG_BASE_URL"] = attachment.endpoint
+    os.environ["AUDIAGENTIC_RIG_BASE_URL"] = attachment.endpoint
     os.environ.setdefault("AUDIAGENTIC_AG_MODEL", model_id)
     return RigConnection(attachment.endpoint, model_id, True, attachment)
 
