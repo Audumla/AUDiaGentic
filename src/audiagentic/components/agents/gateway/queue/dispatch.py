@@ -583,6 +583,7 @@ def dispatch_request(
     provider_isolation_tier: str,
     worker_timeout_seconds: float,
     session_start: Any | None = None,
+    resume_existing: bool = False,
 ) -> dict[str, Any]:
     """Dispatch a queued/running gateway request record to completion.
 
@@ -646,6 +647,7 @@ def dispatch_request(
             preallocated_session_id=preallocated_session_id,
             context_fingerprint=context_fingerprint,
             session_start=session_start,
+            resume_existing=resume_existing,
         )
 
     try:

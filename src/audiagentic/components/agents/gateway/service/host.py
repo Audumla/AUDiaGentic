@@ -197,7 +197,39 @@ class GatewayServiceHost:
             recover_gateway_requests,
         )
 
-        recover_gateway_requests(self.service_store.root, live_owner_epoch=self.owner_epoch)
+        recovery_report = recover_gateway_requests(
+            self.service_store.root, live_owner_epoch=self.owner_epoch
+        )
+        # Rebuild the process-local scheduler only after durable ownership has
+        # been taken over.  This keeps queued work claimable once and gives
+        # already-running work the dedicated observation/recovery path.
+        if recovery_report.queued or recovery_report.running:
+            from audiagentic.components.agents.gateway import api as gateway_api
+            from audiagentic.components.agents.gateway.queue.recovery import recovery_runner
+
+            queue_manager = gateway_api.get_queue_manager()
+            for project_root, request_id in recovery_report.queued:
+                record = gateway_api.store.read_record(project_root, request_id)
+                runtime = record.get("gateway-profile-runtime") or {}
+                queue_manager.enqueue_recovered_queued(
+                    project_root,
+                    record,
+                    dict(runtime.get("params") or {}),
+                    recovery_runner(record),
+                    dispatch_owner_epoch=self.owner_epoch,
+                    dispatch_service_root=self.service_store.root,
+                )
+            for project_root, request_id in recovery_report.running:
+                record = gateway_api.store.read_record(project_root, request_id)
+                runtime = record.get("gateway-profile-runtime") or {}
+                queue_manager.enqueue_recovered_running(
+                    project_root,
+                    record,
+                    dict(runtime.get("params") or {}),
+                    recovery_runner(record),
+                    dispatch_owner_epoch=self.owner_epoch,
+                    dispatch_service_root=self.service_store.root,
+                )
         # GP26: machine-level gpt-auto config drift detection runs after durable
         # request recovery (correctness-critical) and before readiness. An
         # invalid MACHINE-level config is fatal (it is the shared foundation);
@@ -295,10 +327,10 @@ class GatewayServiceHost:
         and an optional provider transport seam. It never resubmits a prompt;
         the ordinary activity relay must still prove that the turn resumed.
         """
-        from audiagentic.components.agents.gateway.queue.dispatch import diagnose_activity_lease
-        from audiagentic.components.agents.gateway.queue.watchdog_registry import watchdog_registry
         from audiagentic.components.agents.gateway import store
         from audiagentic.components.agents.gateway.api import recover_execution_request
+        from audiagentic.components.agents.gateway.queue.dispatch import diagnose_activity_lease
+        from audiagentic.components.agents.gateway.queue.watchdog_registry import watchdog_registry
         from audiagentic.components.agents.gateway.session.sessions import peek_session_runtime
 
         registry = watchdog_registry()

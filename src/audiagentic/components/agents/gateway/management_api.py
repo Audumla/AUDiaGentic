@@ -271,14 +271,15 @@ def gateway_restart(project_root: Path, *, force: bool = False) -> dict[str, Any
     """Restart the machine-scoped gateway service through its managed lifecycle.
 
     The caller's project root is only the admission context; the service itself
-    remains machine-scoped.  The old service is stopped before a fresh managed
-    instance is started, and no unrelated MCP stdio processes are touched.
+    remains machine-scoped. The managed lifecycle performs a durable handoff
+    before the replacement starts; no unrelated MCP stdio processes are touched.
     """
     from audiagentic.components.agents.gateway.service.bootstrap import start_or_attach_gateway
 
+    del force
     client = start_or_attach_gateway()
     try:
-        stopping = client.service_stop(project_root, force=force)
+        restarting = client.dashboard_restart()
     finally:
         client.close()
 
@@ -287,4 +288,4 @@ def gateway_restart(project_root: Path, *, force: bool = False) -> dict[str, Any
         status = replacement.service_status(project_root)
     finally:
         replacement.close()
-    return {"stopping": stopping, "restarted": True, "status": status}
+    return {"restarting": restarting, "restarted": True, "status": status}

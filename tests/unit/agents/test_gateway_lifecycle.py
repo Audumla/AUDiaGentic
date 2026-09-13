@@ -1,5 +1,4 @@
-"""SH10 — gateway lifecycle: quiescence-gated drain/stop, idle self-shutdown,
-and record-only unprovable-owner recovery."""
+"""Gateway lifecycle: managed handoff restart, drain/stop, and recovery."""
 from __future__ import annotations
 
 import subprocess
@@ -61,24 +60,18 @@ def test_status_reports_quiescence_and_policy(claimed_store, monkeypatch):
 
 
 @pytest.mark.parametrize("busy", [False, True])
-def test_dashboard_restart_is_quiescence_gated(claimed_store, monkeypatch, busy):
+def test_dashboard_restart_hands_off_busy_work(claimed_store, monkeypatch, busy):
     store, record = claimed_store
     monkeypatch.setattr(lifecycle_mod, "gateway_quiescence_facts", lambda root=None: dict(BUSY if busy else QUIET))
     controller, shutdowns = _controller(store, record)
     controller.restart_enabled = True
-    if busy:
-        with pytest.raises(AudiaGenticError, match="queued or running work"):
-            controller.request_restart()
-        assert store.read().state == "running"
-        assert not controller.restart_requested
-        assert not shutdowns
-    else:
+    if not busy:
         store.acquire_lease("connected-client", ttl_seconds=60, expected_epoch=record.owner_epoch)
-        assert controller.request_restart() == {"restarting": True}
-        assert controller.restart_requested
-        assert shutdowns == [True]
-        assert controller.request_restart() == {"restarting": True}
-        assert shutdowns == [True]
+    assert controller.request_restart() == {"restarting": True}
+    assert controller.restart_requested
+    assert shutdowns == [True]
+    assert controller.request_restart() == {"restarting": True}
+    assert shutdowns == [True]
 
 
 def test_embedded_host_refuses_restart(claimed_store):
@@ -99,14 +92,8 @@ def test_restart_distinguishes_idle_handles_from_session_work(claimed_store, mon
     monkeypatch.setattr(sessions, "peek_session_runtime", lambda: runtime)
     controller, shutdowns = _controller(store, record)
     controller.restart_enabled = True
-    if allowed:
-        assert controller.request_restart() == {"restarting":True}
-        assert shutdowns == [True]
-    else:
-        with pytest.raises(AudiaGenticError):
-            controller.request_restart()
-        assert not shutdowns
-        assert store.read().state == "running"
+    assert controller.request_restart() == {"restarting":True}
+    assert shutdowns == [True]
 
 
 def test_drain_and_resume_transitions(claimed_store, monkeypatch):

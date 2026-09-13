@@ -28,6 +28,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         host.serve_forever()
     finally:
+        if host.lifecycle.restart_requested:
+            os.environ["AUDIAGENTIC_GATEWAY_RESTART_HANDOFF"] = "1"
         host.close()
     if host.lifecycle.restart_requested:
         # Retire the old owner and release HTTP/provider resources first.
@@ -40,6 +42,10 @@ def _launch_replacement(argv: list[str]) -> None:
     """Launch without a shell or console; never inherit the retired owner epoch."""
     env = os.environ.copy()
     env.pop("AUDIAGENTIC_SERVICE_OWNER_EPOCH", None)
+    # Handoff is a one-process shutdown instruction.  The replacement must
+    # perform ordinary startup/teardown and must not suppress its own provider
+    # cleanup if it is later stopped for a non-restart reason.
+    env.pop("AUDIAGENTIC_GATEWAY_RESTART_HANDOFF", None)
     subprocess.Popen(
         [sys.executable, "-m", __package__ + ".process", *argv],
         env=env,

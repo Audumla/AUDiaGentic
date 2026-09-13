@@ -56,6 +56,7 @@ _MUTABLE_RESULT_FIELDS = {
     "terminal-classification",
     "diagnostics",
     "diagnostic-evidence",
+    "recovery-required",
     "watchdog-state",
     "watchdog-reason",
 }

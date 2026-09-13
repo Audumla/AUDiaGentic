@@ -494,7 +494,7 @@ function activityLabel(r) { if(!ACTIVE_REQUEST_STATES.has(r.state)) return Numbe
 const focusEndpoint=__FOCUS_PATH__; const purgeEndpoint=__PURGE_PATH__; const focusToken=__FOCUS_TOKEN__;
 const restartEndpoint=focusEndpoint.slice(0,focusEndpoint.lastIndexOf('/'))+'/restart';
 document.getElementById('restart-gateway').addEventListener('click',async function(){
-  if(!window.confirm('Restart the gateway? Stored sessions and history are preserved. Restart is refused while work is active.'))return;
+  if(!window.confirm('Restart the gateway? Stored sessions and history are preserved; active requests will be recovered in place.'))return;
   this.disabled=true;
   const feedback=document.getElementById('restart-feedback');
   const headers={'Content-Type':'application/json','X-AudiaGentic-Dashboard-Token':focusToken};

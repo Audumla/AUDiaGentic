@@ -96,6 +96,37 @@ class GptAutoSessionTransport:
         finally:
             self._active_turn = None
 
+    async def resume_existing(
+        self, request: SessionPrompt, sink: ObservationSink
+    ) -> SessionTurnResult:
+        """Observe the request-owned turn after a gateway generation handoff.
+
+        This path is intentionally separate from ``prompt``: the durable
+        unresolved checkpoint proves that a provider side effect may already
+        exist, so recovery must never call the composer or submit a prompt.
+        """
+        if self._closed:
+            raise RuntimeError("gpt-auto chat is not ready")
+        metadata = self.chat.unresolved_metadata()
+        if not metadata.get("unresolved-turn-pending"):
+            raise RuntimeError("gpt-auto has no durable unresolved turn to recover")
+        if not metadata.get("prompt-message-id"):
+            raise RuntimeError("gpt-auto unresolved turn has no exact prompt identity")
+        turn = GptAutoTurn(self.chat, request, sink)
+        self._active_turn = turn
+        try:
+            return await turn.resume_existing()
+        except Exception as exc:
+            retained = await self.chat.retain_after_turn_failure(exc)
+            self._turn_failure_disposition = (
+                SessionFailureDisposition.RETAIN
+                if retained
+                else SessionFailureDisposition.TERMINATE
+            )
+            raise
+        finally:
+            self._active_turn = None
+
     async def control(self, request: SessionControlRequest) -> SessionControlResult:
         if request.action is SessionControlAction.CANCEL_TURN:
             if self._active_turn is None:

@@ -355,6 +355,39 @@ def update_work_index_phase(
     return True
 
 
+def takeover_owner(
+    service_root: Path,
+    request_id: str,
+    *,
+    expected_owner_epoch: str | None,
+    new_owner_epoch: str,
+) -> bool:
+    """CAS-transfer an active index entry during gateway generation takeover."""
+    path = _entry_path(service_root, request_id)
+    if not path.exists():
+        return False
+    raw = _read_raw_entry(path, service_root=service_root)
+    if raw is None:
+        return False
+    entry = validate_work_index_entry(raw)
+    if isinstance(entry, InvalidEntry):
+        quarantine_work_index_entry(service_root, path, reason_code=entry.reason_code)
+        return False
+    if expected_owner_epoch is not None and entry.owner_epoch != expected_owner_epoch:
+        from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+        raise AudiaGenticError(
+            "CON-AGW-106",
+            "agents",
+            "work-index owner-epoch changed during takeover",
+            {"request-id": request_id},
+        )
+    updated = dict(raw)
+    updated["owner-epoch"] = new_owner_epoch
+    atomic_write_json(path, updated)
+    return True
+
+
 def clear_work_index_entry(
     service_root: Path,
     request_id: str,
