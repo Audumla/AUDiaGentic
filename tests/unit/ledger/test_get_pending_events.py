@@ -164,6 +164,7 @@ def test_released_events_excluded(tmp_path: Path):
             "plan-item-ids": ["X01"],
             "files": ["src/y.py"],
             "status": "released",
+            "release-id": "rel_existing",
         },
         sync=True,
     )

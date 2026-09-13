@@ -5,8 +5,9 @@ from pathlib import Path
 from typing import Any
 
 from audiagentic.components.ledger.ledger_api import release_events
+from audiagentic.components.ledger.validation import load_persisted_events
 from audiagentic.foundation.contracts.errors import make_error
-from audiagentic.foundation.io import atomic_write_text, load_ndjson
+from audiagentic.foundation.io import atomic_write_text
 
 _RELEASES_DIR = ("docs", "releases")
 
@@ -26,7 +27,7 @@ def render_release_docs(
             message="LEDGER.ndjson not found — ledger may not have been archived",
             details={"path": str(historical_path)},
         )
-    events = load_ndjson(historical_path)
+    events = load_persisted_events(historical_path)
     selected = release_events(events, release_id, released_event_ids)
     labels = {
         "feature": "Features", "code-fix": "Fixes", "refactor": "Improvements",
@@ -47,7 +48,9 @@ def render_release_docs(
 
     changelog_path = releases / "CHANGELOG.md"
     existing = changelog_path.read_text(encoding="utf-8") if changelog_path.exists() else "# Changelog\n"
-    already_rendered = f"## {release_id}" in existing
+    already_rendered = any(
+        line.strip() == f"## {release_id}" for line in existing.splitlines()
+    )
     if not already_rendered:
         atomic_write_text(changelog_path, existing.rstrip() + "\n\n" + change_block)
 
@@ -56,7 +59,7 @@ def render_release_docs(
 
     version_history_path = releases / "VERSION_HISTORY.md"
     existing_vh = version_history_path.read_text(encoding="utf-8") if version_history_path.exists() else "# Version History\n"
-    if f"## {release_id}" not in existing_vh:
+    if not any(line.strip() == f"## {release_id}" for line in existing_vh.splitlines()):
         atomic_write_text(version_history_path, existing_vh.rstrip() + "\n\n" + change_block)
 
     result = {

@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from audiagentic.components.ledger.archive import _archive_current_ledger_locked
+from audiagentic.components.ledger.ledger_api import archive_for_release
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 
@@ -50,3 +51,24 @@ def test_archive_is_idempotent_for_same_release(tmp_path: Path) -> None:
 
     assert first["archived-events"] == second["archived-events"] == 1
     assert len((releases / "LEDGER.ndjson").read_text(encoding="utf-8").splitlines()) == 1
+
+
+def test_release_retry_does_not_claim_next_release_events(tmp_path: Path) -> None:
+    releases = tmp_path / "docs" / "releases"
+    releases.mkdir(parents=True)
+    first = _event("first release")
+    (releases / "CURRENT_RELEASE_LEDGER.ndjson").write_text(
+        json.dumps(first) + "\n", encoding="utf-8"
+    )
+
+    archive_for_release(tmp_path, "rel_first")
+    next_event = {**_event("next release"), "event-id": "chg_next"}
+    (releases / "CURRENT_RELEASE_LEDGER.ndjson").write_text(
+        json.dumps(next_event) + "\n", encoding="utf-8"
+    )
+
+    result = archive_for_release(tmp_path, "rel_first")
+
+    assert result["idempotent-retry"] is True
+    assert result["released-event-ids"] == ["chg_same"]
+    assert json.loads((releases / "CURRENT_RELEASE_LEDGER.ndjson").read_text())["event-id"] == "chg_next"
