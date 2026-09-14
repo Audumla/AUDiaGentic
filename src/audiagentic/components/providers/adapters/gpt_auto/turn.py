@@ -2475,16 +2475,16 @@ def _scope_response_snapshot(
     now the document-global latest controls.
     """
     response_ref = _response_ref_for_prompt(snapshot, prompt_message_id)
-    scoped_progress = tuple(
-        block
-        for block in snapshot.progress_blocks
-        if block.owner_prompt_message_id == prompt_message_id
-        and (
-            response_ref is None
-            or block.owner_assistant_message_id is None
-            or block.owner_assistant_message_id == response_ref.message_id
-        )
-    )
+    def owned_progress(block: ChatProgressBlock) -> bool:
+        if block.owner_prompt_message_id != prompt_message_id:
+            return False
+        if response_ref is None:
+            # Before an assistant exists, a non-null assistant owner is
+            # uncorrelated and must fail closed.
+            return block.owner_assistant_message_id is None
+        return block.owner_assistant_message_id in {None, response_ref.message_id}
+
+    scoped_progress = tuple(block for block in snapshot.progress_blocks if owned_progress(block))
     if response_ref is None:
         return (
             replace(

@@ -1660,6 +1660,53 @@ def test_progress_digest_change_is_activity_even_when_row_count_is_constant():
     assert _progress_activity_labels(snap(progress_blocks=(changed,)), seen) == ()
 
 
+def test_progress_remove_then_same_remount_does_not_renew_activity():
+    seen: Counter[ChatProgressBlock] = Counter()
+    block = ChatProgressBlock("prompt-1", "assistant-1", "dom-tool-result", "1111111111111111")
+    changed = ChatProgressBlock("prompt-1", "assistant-1", "dom-tool-result", "2222222222222222")
+
+    assert _progress_activity_labels(snap(progress_blocks=(block,)), seen) == ("dom-tool-result",)
+    assert _progress_activity_labels(snap(progress_blocks=()), seen) == ()
+    assert _progress_activity_labels(snap(progress_blocks=(block,)), seen) == ()
+    assert _progress_activity_labels(snap(progress_blocks=(changed,)), seen) == ("dom-tool-result",)
+    assert _progress_activity_labels(snap(progress_blocks=(changed,)), seen) == ()
+
+
+def test_progress_scope_rejects_foreign_and_unproven_assistant_ownership():
+    baseline = snap(users=1, user="Request A", user_id="prompt-a")
+    pre_assistant = ChatProgressBlock("prompt-a", None, "dom-status", "1111111111111111")
+    matching = ChatProgressBlock("prompt-a", "assistant-a", "dom-tool-result", "2222222222222222")
+    wrong_assistant = ChatProgressBlock("prompt-a", "assistant-foreign", "dom-connector", "3333333333333333")
+    foreign_prompt = ChatProgressBlock("prompt-foreign", None, "dom-table", "4444444444444444")
+    raw = replace(
+        snap(users=1, assistants=1, user="Request A", user_id="prompt-a", assistant="Answer A", assistant_id="assistant-a"),
+        message_refs=(
+            ChatMessageRef("user", "prompt-a", "Request A", 0),
+            ChatMessageRef("assistant", "assistant-a", "Answer A", 1),
+        ),
+        progress_blocks=(pre_assistant, matching, wrong_assistant, foreign_prompt),
+        tool_activity_counts=(("called-tool", 99),),
+    )
+    scoped, response_ref = _scope_response_snapshot(baseline, raw, prompt_message_id="prompt-a")
+    assert response_ref is not None and response_ref.message_id == "assistant-a"
+    assert scoped.progress_blocks == (pre_assistant, matching)
+    assert scoped.tool_activity_counts == ()
+
+
+def test_pre_assistant_progress_requires_null_assistant_owner():
+    baseline = snap(users=1, user="Request A", user_id="prompt-a")
+    valid = ChatProgressBlock("prompt-a", None, "dom-status", "1111111111111111")
+    unproven = ChatProgressBlock("prompt-a", "assistant-unproven", "dom-tool-result", "2222222222222222")
+    raw = replace(
+        baseline,
+        message_refs=(ChatMessageRef("user", "prompt-a", "Request A", 0),),
+        progress_blocks=(valid, unproven),
+    )
+    scoped, response_ref = _scope_response_snapshot(baseline, raw, prompt_message_id="prompt-a")
+    assert response_ref is None
+    assert scoped.progress_blocks == (valid,)
+
+
 @pytest.mark.asyncio
 async def test_submission_proof_resolves_ambiguous_not_hung_when_text_never_exactly_matches():
     """GP07: a real bug found live -- a new user message can appear with a
