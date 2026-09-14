@@ -188,7 +188,39 @@ async def test_lexical_child_is_canonical_activity_node(
             """)
             snapshot = await _snapshot(page, monkeypatch)
             assert [item["kind"] for item in snapshot["progressBlocks"]].count("fetching") == 1
-            assert "dom-tool-result" not in [item["kind"] for item in snapshot["progressBlocks"]]
+            assert "dom-tool-result" in [item["kind"] for item in snapshot["progressBlocks"]]
+        finally:
+            await browser.close()
+
+
+@pytest.mark.asyncio
+async def test_oversized_text_region_fails_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            text_nodes = "".join(f"<span>{'X' * 10000}</span>" for _ in range(257))
+            await page.set_content(_BASE + f'<div class="agent-turn"><div data-testid="tool-result">{text_nodes}</div></div>')
+            snapshot = await _snapshot(page, monkeypatch)
+            assert snapshot["progressBlocks"] == []
+        finally:
+            await browser.close()
+
+
+@pytest.mark.asyncio
+async def test_oversized_semantic_region_fails_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            nodes = "".join(f'<span data-phase="phase-{index}"></span>' for index in range(257))
+            await page.set_content(_BASE + f'<div class="agent-turn"><div data-testid="tool-result">{nodes}</div></div>')
+            snapshot = await _snapshot(page, monkeypatch)
+            assert snapshot["progressBlocks"] == []
         finally:
             await browser.close()
 
