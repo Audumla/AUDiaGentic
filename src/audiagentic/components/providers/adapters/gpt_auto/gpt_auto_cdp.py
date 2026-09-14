@@ -137,14 +137,24 @@ _SNAPSHOT_FN = r"""
     "aria-valuenow", "aria-valuetext", "data-state", "data-status",
     "data-phase", "data-progress"
   ];
-  const attributeMaterial = node => semanticAttrs
-    .map(name => `${name}=${normalizeProgress(node.getAttribute(name))}`)
-    .join("\x1d");
-  const boundedTextMaterial = value => {
+  const boundedScalarMaterial = value => {
     const text = normalizeProgress(value);
-    return [String(text.length), text.slice(0, 1024), text.slice(-1024)].join("\x1d");
+    return [String(text.length), text.slice(0, 256), text.slice(-256)].join("\x1d");
   };
-  const semanticStateMaterial = node => {
+  const visibleText = node =>
+    typeof node?.innerText === "string" ? node.innerText : "";
+  const attributeMaterial = node => semanticAttrs
+    .map(name => `${name}=${boundedScalarMaterial(node.getAttribute(name))}`)
+    .join("\x1d");
+  const visibleChildCount = node =>
+    Array.from(node.children || []).filter(shown).length;
+  const semanticNodeDigest = node => progressDigest([
+    String(node.tagName || ""),
+    attributeMaterial(node),
+    String(visibleChildCount(node)),
+    boundedScalarMaterial(visibleText(node))
+  ].join("\x1c"));
+  const semanticStateDigest = node => {
     const semanticSelector = [
       "[role]", "[data-testid]", "[aria-busy]", "[aria-expanded]",
       "[aria-valuenow]", "[aria-valuetext]", "[data-state]", "[data-status]",
@@ -152,23 +162,17 @@ _SNAPSHOT_FN = r"""
       "canvas", "svg", "img"
     ].join(",");
     const descendants = Array.from(node.querySelectorAll(semanticSelector)).filter(shown);
-    const indexes = [];
-    const head = Math.min(32, descendants.length);
-    for (let i = 0; i < head; i++) indexes.push(i);
-    const tailStart = Math.max(head, descendants.length - 32);
-    for (let i = tailStart; i < descendants.length; i++) indexes.push(i);
-    const childMaterial = indexes.map(index => {
-      const child = descendants[index];
-      // Hash each bounded child token independently so the selected tail
-      // remains represented even when the region contains large output.
-      return progressDigest([
-        child.tagName || "",
-        attributeMaterial(child),
-        String(child.childElementCount || 0),
-        boundedTextMaterial(child.innerText || child.textContent)
-      ].join("\x1c"));
-    });
-    return [node.tagName || "", attributeMaterial(node), String(node.childElementCount || 0), String(descendants.length), boundedTextMaterial(node.innerText || node.textContent), ...childMaterial].join("\x1e");
+    const selected = descendants.slice(0, 32);
+    const tail = descendants.slice(-32);
+    const selectedNodes = [...selected, ...tail.filter(child => !selected.includes(child))];
+    // Every contribution is fixed-size; the final aggregate is therefore
+    // intrinsically below progressDigest's input bound.
+    return progressDigest([
+      "semantic-state-v2",
+      semanticNodeDigest(node),
+      String(descendants.length),
+      ...selectedNodes.map(semanticNodeDigest)
+    ].join("\x1e"));
   };
   const userEntries = messageEntries.filter(entry => entry.role === "user" && entry.messageId);
   const ownerPromptFor = node => {
@@ -180,36 +184,63 @@ _SNAPSHOT_FN = r"""
     return owner;
   };
   const progressBlocks = [];
+  const MAX_PROGRESS_TURNS = 8;
+  const MAX_PROGRESS_VISIBLE_NODES = 2048;
+  const MAX_PROGRESS_CANDIDATES = 256;
+  let inspectedVisibleNodes = 0;
+  let inspectedCandidates = 0;
   // Historical turns can contain persistent tables and tool cards. Inspect
-  // newest turns first and stop at the bounded output budget; old turns
-  // cannot renew the current request's activity.
-  for (let turnIndex = agentTurns.length - 1; turnIndex >= 0 && progressBlocks.length < 128; turnIndex--) {
+  // newest turns first and stop at fixed turn/node/candidate budgets.
+  for (let turnIndex = agentTurns.length - 1, turnsInspected = 0;
+       turnIndex >= 0 && turnsInspected < MAX_PROGRESS_TURNS && progressBlocks.length < 128;
+       turnIndex--, turnsInspected++) {
     const turn = agentTurns[turnIndex];
-    const assistantNode = Array.from(turn.querySelectorAll('[data-message-author-role="assistant"]')).find(el =>
-      !(el.getAttribute("data-message-id") || "").startsWith("request-placeholder-request-")
-    );
-    const ownerAssistantMessageId = assistantNode?.getAttribute("data-message-id") || null;
-    const candidates = new Set(Array.from(turn.querySelectorAll(structuralProgressSelector)));
-    for (const node of turn.querySelectorAll("*")) {
-      if (!shown(node) || node.closest('[data-message-author-role="user"]')) continue;
+    const ownerPromptMessageId = ownerPromptFor(turn);
+    if (!ownerPromptMessageId) continue;
+    const candidates = [];
+    let ownerAssistantMessageId = null;
+    const walker = document.createTreeWalker(turn, NodeFilter.SHOW_ELEMENT);
+    let node;
+    let turnComplete = true;
+    while ((node = walker.nextNode())) {
+      if (inspectedVisibleNodes >= MAX_PROGRESS_VISIBLE_NODES) {
+        turnComplete = false;
+        break;
+      }
+      if (!shown(node)) continue;
+      inspectedVisibleNodes += 1;
+      if (node.matches('[data-message-author-role="assistant"]')) {
+        const id = node.getAttribute("data-message-id") || null;
+        if (id && !id.startsWith("request-placeholder-request-")) {
+          if (ownerAssistantMessageId && ownerAssistantMessageId !== id) {
+            ownerAssistantMessageId = null;
+            turnComplete = false;
+            break;
+          }
+          ownerAssistantMessageId = id;
+        }
+      }
+      if (inspectedCandidates >= MAX_PROGRESS_CANDIDATES) {
+        turnComplete = false;
+        break;
+      }
       const structural = node.matches(structuralProgressSelector);
-      const kind = progressKind(node.innerText || node.textContent, structural);
+      const kind = progressKind(visibleText(node), structural) || structuralKind(node);
       if (!kind) continue;
-      if (!structural && Array.from(node.children).some(child => shown(child) && progressKind(child.innerText || child.textContent, false))) continue;
-      candidates.add(node);
+      inspectedCandidates += 1;
+      candidates.push({node, kind});
     }
-    for (const node of candidates) {
+    if (!turnComplete) break;
+    for (const {node, kind} of candidates) {
       if (progressBlocks.length >= 128) break;
       if (!shown(node) || node.closest('[data-message-author-role="user"]')) continue;
-      const structural = node.matches(structuralProgressSelector);
-      const kind = progressKind(node.innerText || node.textContent, structural) || structuralKind(node);
-      const ownerPromptMessageId = ownerPromptFor(node);
-      if (!kind || !ownerPromptMessageId) continue;
+      const digest = semanticStateDigest(node);
+      if (!digest) continue;
       progressBlocks.push({
         ownerPromptMessageId: String(ownerPromptMessageId).slice(0, 256),
         ownerAssistantMessageId: ownerAssistantMessageId ? String(ownerAssistantMessageId).slice(0, 256) : null,
         kind,
-        digest: progressDigest(semanticStateMaterial(node))
+        digest
       });
     }
   }
