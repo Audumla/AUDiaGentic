@@ -65,6 +65,31 @@ def test_snapshot_activity_anchors_to_latest_agent_turn_before_assistant_node() 
     assert "[class~=\"group/tool-message\"]" in _SNAPSHOT_FN
 
 
+def test_snapshot_has_structural_progress_fallback_and_semantic_digest() -> None:
+    for selector in (
+        '[data-testid*="citation" i]',
+        '[data-testid="writing-block-container"]',
+        "table",
+        "[aria-valuenow]",
+        "[aria-valuetext]",
+        "[data-phase]",
+        "[data-progress]",
+    ):
+        assert selector in _SNAPSHOT_FN
+    for kind in (
+        "dom-status",
+        "dom-progress",
+        "dom-tool-result",
+        "dom-connector",
+        "dom-citation",
+        "dom-table",
+        "dom-materialization",
+    ):
+        assert kind in _SNAPSHOT_FN
+    assert "const semanticStateMaterial = node =>" in _SNAPSHOT_FN
+    assert "progressDigest(semanticStateMaterial(node))" in _SNAPSHOT_FN
+
+
 def test_snapshot_resolves_sidebar_title_by_active_conversation_url() -> None:
     assert "const conversationId" in _SNAPSHOT_FN
     assert "const conversationTitle" in _SNAPSHOT_FN
@@ -612,7 +637,9 @@ async def test_gpt_provider_never_bypasses_disabled_send_with_enter():
     bridge = _GptOperationBridge(send_enabled=False)
     browser = GptAutoCdpBrowserController(bridge)  # type: ignore[arg-type]
     page = CdpPageRef("page-1", "target-1")
-    from audiagentic.components.providers.adapters.gpt_auto.gpt_auto_cdp import ComposerSubmissionTimeout
+    from audiagentic.components.providers.adapters.gpt_auto.gpt_auto_cdp import (
+        ComposerSubmissionTimeout,
+    )
     with pytest.raises(ComposerSubmissionTimeout) as raised:
         await browser.submit(page, "fallback", timeout=0.02)
     assert raised.value.send_attempted is False
@@ -640,7 +667,9 @@ class _TransientSendFailureBridge(_GptOperationBridge):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("fail_at,ambiguous", [(1, False), (2, True)])
 async def test_composer_timeout_preserves_send_boundary(monkeypatch, fail_at, ambiguous):
-    from audiagentic.components.providers.adapters.gpt_auto.gpt_auto_cdp import ComposerSubmissionTimeout
+    from audiagentic.components.providers.adapters.gpt_auto.gpt_auto_cdp import (
+        ComposerSubmissionTimeout,
+    )
 
     browser = GptAutoCdpBrowserController(_GptOperationBridge())
     calls = 0
@@ -681,7 +710,9 @@ async def test_gpt_provider_submit_gives_up_after_bounded_retries():
     bridge = _TransientSendFailureBridge(fail_attempts=999)
     browser = GptAutoCdpBrowserController(bridge)  # type: ignore[arg-type]
     page = CdpPageRef("page-1", "target-1")
-    from audiagentic.components.providers.adapters.gpt_auto.gpt_auto_cdp import ComposerSubmissionTimeout
+    from audiagentic.components.providers.adapters.gpt_auto.gpt_auto_cdp import (
+        ComposerSubmissionTimeout,
+    )
     with pytest.raises(ComposerSubmissionTimeout):
         await browser.submit(page, "never recovers", timeout=0.02)
     assert (

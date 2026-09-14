@@ -111,10 +111,58 @@ _SNAPSHOT_FN = r"""
     '[data-testid*="tool" i]',
     '[data-testid*="connector" i]',
     '[data-testid*="progress" i]',
+    '[data-testid*="citation" i]',
+    '[data-testid="writing-block-container"]',
+    'table',
     '[role="status"]',
     '[aria-live="polite"]',
-    '[aria-live="assertive"]'
+    '[aria-live="assertive"]',
+    '[aria-valuenow]',
+    '[aria-valuetext]',
+    '[data-phase]',
+    '[data-progress]'
   ].join(",");
+  const structuralKind = node => {
+    if (node.matches('[data-testid="writing-block-container"]')) return "dom-materialization";
+    if (node.matches('[data-testid*="citation" i]')) return "dom-citation";
+    if (node.matches("table")) return "dom-table";
+    if (node.matches('[data-testid*="connector" i]')) return "dom-connector";
+    if (node.matches('[class~="group/tool-message"], [data-testid*="tool" i]')) return "dom-tool-result";
+    if (node.matches('[role="status"], [aria-live="polite"], [aria-live="assertive"]')) return "dom-status";
+    if (node.matches('[data-testid*="progress" i], [aria-valuenow], [aria-valuetext], [data-phase], [data-progress]')) return "dom-progress";
+    return null;
+  };
+  const semanticAttrs = [
+    "role", "data-testid", "aria-label", "aria-busy", "aria-expanded",
+    "aria-valuenow", "aria-valuetext", "data-state", "data-status",
+    "data-phase", "data-progress"
+  ];
+  const attributeMaterial = node => semanticAttrs
+    .map(name => `${name}=${normalizeProgress(node.getAttribute(name))}`)
+    .join("\x1d");
+  const boundedTextMaterial = value => {
+    const text = normalizeProgress(value);
+    return [String(text.length), text.slice(0, 1024), text.slice(-1024)].join("\x1d");
+  };
+  const semanticStateMaterial = node => {
+    const semanticSelector = [
+      "[role]", "[data-testid]", "[aria-busy]", "[aria-expanded]",
+      "[aria-valuenow]", "[aria-valuetext]", "[data-state]", "[data-status]",
+      "[data-phase]", "[data-progress]", "tr", "td", "th", "a[href]",
+      "canvas", "svg", "img"
+    ].join(",");
+    const descendants = node.querySelectorAll(semanticSelector);
+    const indexes = [];
+    const head = Math.min(32, descendants.length);
+    for (let i = 0; i < head; i++) indexes.push(i);
+    const tailStart = Math.max(head, descendants.length - 32);
+    for (let i = tailStart; i < descendants.length; i++) indexes.push(i);
+    const childMaterial = indexes.map(index => {
+      const child = descendants[index];
+      return [child.tagName || "", attributeMaterial(child), String(child.childElementCount || 0), boundedTextMaterial(child.innerText || child.textContent)].join("\x1c");
+    });
+    return [node.tagName || "", attributeMaterial(node), String(node.childElementCount || 0), String(descendants.length), boundedTextMaterial(node.innerText || node.textContent), ...childMaterial].join("\x1e").slice(0, 8192);
+  };
   const userEntries = messageEntries.filter(entry => entry.role === "user" && entry.messageId);
   const ownerPromptFor = node => {
     let owner = null;
@@ -140,24 +188,16 @@ _SNAPSHOT_FN = r"""
       candidates.add(node);
     }
     for (const node of candidates) {
-      if (!shown(node)) continue;
+      if (!shown(node) || node.closest('[data-message-author-role="user"]')) continue;
       const structural = node.matches(structuralProgressSelector);
-      const kind = progressKind(node.innerText || node.textContent, structural);
+      const kind = progressKind(node.innerText || node.textContent, structural) || structuralKind(node);
       const ownerPromptMessageId = ownerPromptFor(node);
       if (!kind || !ownerPromptMessageId) continue;
-      const stateMaterial = [
-        node.innerText || node.textContent,
-        node.getAttribute("aria-label"),
-        node.getAttribute("aria-busy"),
-        node.getAttribute("aria-expanded"),
-        node.getAttribute("data-state"),
-        node.getAttribute("data-status")
-      ].map(normalizeProgress).join("\x1f");
       progressBlocks.push({
         ownerPromptMessageId: String(ownerPromptMessageId).slice(0, 256),
         ownerAssistantMessageId: ownerAssistantMessageId ? String(ownerAssistantMessageId).slice(0, 256) : null,
         kind,
-        digest: progressDigest(stateMaterial)
+        digest: progressDigest(semanticStateMaterial(node))
       });
     }
   }

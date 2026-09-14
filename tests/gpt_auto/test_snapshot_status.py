@@ -176,6 +176,36 @@ def test_bridge_snapshot_preserves_safe_request_scoped_progress_blocks() -> None
     assert not hasattr(snapshot.progress_blocks[0], "text")
 
 
+def test_bridge_snapshot_accepts_structural_progress_kinds_only() -> None:
+    snapshot = ChatSnapshot.from_bridge(
+        {
+            "url": "https://chatgpt.com/g/g-p-test/c/c1",
+            "progressBlocks": [
+                {
+                    "ownerPromptMessageId": "prompt-1",
+                    "kind": "dom-table",
+                    "digest": "0123456789abcdef",
+                },
+                {
+                    "ownerPromptMessageId": "prompt-1",
+                    "kind": "dom-materialization",
+                    "digest": "fedcba9876543210",
+                },
+                {
+                    "ownerPromptMessageId": "prompt-1",
+                    "kind": "not-approved",
+                    "digest": "1111111111111111",
+                },
+            ],
+        }
+    )
+
+    assert snapshot.progress_blocks == (
+        ChatProgressBlock("prompt-1", None, "dom-table", "0123456789abcdef"),
+        ChatProgressBlock("prompt-1", None, "dom-materialization", "fedcba9876543210"),
+    )
+
+
 def test_bridge_snapshot_preserves_ordered_assistant_message_sequence() -> None:
     """GP08: the full ordered assistant sequence must survive the bridge
     round-trip, not just the single 'latest' projection -- this is the raw
