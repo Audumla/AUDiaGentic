@@ -146,16 +146,19 @@ _SNAPSHOT_FN = r"""
     "data-phase", "data-progress"
   ];
   const boundedScalarMaterial = value => {
-    const text = normalizeProgress(value);
-    return [String(text.length), text.slice(0, 256), text.slice(-256)].join("\x1d");
+    const raw = String(value || "");
+    const sample = raw.length > 1024 ? raw.slice(0, 512) + " " + raw.slice(-512) : raw;
+    const text = normalizeProgress(sample);
+    return [String(raw.length), text.slice(0, 256), text.slice(-256)].join("\x1d");
   };
   const visibleText = node => {
     const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
     const parts = [];
     let visited = 0;
     let textNode;
-    while ((textNode = walker.nextNode()) && visited < 256) {
+    while ((textNode = walker.nextNode())) {
       visited += 1;
+      if (visited > 256) return null;
       if (progressShown(textNode.parentElement)) parts.push(textNode.nodeValue || "");
     }
     return parts.join(" ");
@@ -255,14 +258,17 @@ _SNAPSHOT_FN = r"""
       const structural = node.matches(structuralProgressSelector);
       const kind = progressKind(visibleText(node), structural) || structuralKind(node);
       if (!kind) continue;
-      if (!structural && Array.from(node.children || []).some(
-        child => progressShown(child) && progressKind(visibleText(child), false)
-      )) continue;
       inspectedCandidates += 1;
       candidates.push({node, kind});
     }
     if (!turnComplete) break;
-    for (const {node, kind} of candidates) {
+    const lexicalKinds = new Set(["inspected", "fetching", "analyzing", "evaluated", "thinking"]);
+    const canonicalCandidates = candidates.filter(candidate =>
+      !candidates.some(child =>
+        child !== candidate && lexicalKinds.has(child.kind) && candidate.node.contains(child.node)
+      )
+    );
+    for (const {node, kind} of canonicalCandidates) {
       if (progressBlocks.length >= 128) break;
       if (!shown(node) || node.closest('[data-message-author-role="user"]')) continue;
       const digest = semanticStateDigest(node);
