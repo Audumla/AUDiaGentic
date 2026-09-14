@@ -96,12 +96,26 @@ async def test_hidden_descendant_does_not_change_visible_region_digest(
             await page.set_content(_BASE + """
                 <div class="agent-turn">
                   <div id="tool" class="box" data-testid="tool-result">
-                    <span id="hidden" style="display:none" data-state="old"></span>
+                    <span id="hidden" style="display:none" data-state="old">hidden-old</span>
                   </div>
                 </div>
             """)
             before = await _snapshot(page, monkeypatch)
             await page.evaluate("document.querySelector('#hidden').setAttribute('data-state', 'new')")
+            after = await _snapshot(page, monkeypatch)
+            assert before["progressBlocks"][0]["digest"] == after["progressBlocks"][0]["digest"]
+            await page.evaluate("document.querySelector('#hidden').textContent = 'hidden-new'")
+            after = await _snapshot(page, monkeypatch)
+            assert before["progressBlocks"][0]["digest"] == after["progressBlocks"][0]["digest"]
+            await page.evaluate("""
+                () => {
+                  const child = document.createElement('span');
+                  child.style.display = 'none';
+                  child.dataset.phase = 'hidden-phase';
+                  child.textContent = 'hidden-inserted';
+                  document.querySelector('#tool').appendChild(child);
+                }
+            """)
             after = await _snapshot(page, monkeypatch)
             assert before["progressBlocks"][0]["digest"] == after["progressBlocks"][0]["digest"]
         finally:
@@ -120,7 +134,8 @@ async def test_late_visible_semantic_state_changes_region_digest(
                 f'<span class="box" data-phase="phase-{index}"></span>'
                 for index in range(80)
             )
-            await page.set_content(_BASE + f'<div class="agent-turn"><div id="region" data-testid="tool-result">{children}</div></div>')
+            huge = "R" * 12000
+            await page.set_content(_BASE + f'<div class="agent-turn"><div id="region" data-testid="tool-result" aria-label="{huge}">{huge}{children}</div></div>')
             before = await _snapshot(page, monkeypatch)
             await page.evaluate("document.querySelector('#region').lastElementChild.setAttribute('data-phase', 'late-change')")
             after = await _snapshot(page, monkeypatch)
@@ -152,5 +167,43 @@ async def test_structural_kinds_are_extracted_from_owned_turn(
                 "dom-tool-result", "dom-connector", "dom-citation",
                 "dom-table", "dom-materialization",
             } <= kinds
+        finally:
+            await browser.close()
+
+
+@pytest.mark.asyncio
+async def test_structural_progress_is_newest_first_and_history_bounded(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            turns = "".join(
+                f'<div data-message-author-role="user" data-message-id="p-{i}">P{i}</div>'
+                f'<div class="agent-turn"><div class="box" role="status">state-{i}</div></div>'
+                for i in range(12)
+            )
+            await page.set_content(_BASE + turns)
+            snapshot = await _snapshot(page, monkeypatch)
+            assert [item["ownerPromptMessageId"] for item in snapshot["progressBlocks"]] == [
+                "p-11", "p-10", "p-9", "p-8", "p-7", "p-6", "p-5", "p-4"
+            ]
+        finally:
+            await browser.close()
+
+
+@pytest.mark.asyncio
+async def test_excessive_visible_nodes_fail_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            filler = "".join('<div class="box"></div>' for _ in range(2050))
+            await page.set_content(_BASE + f'<div class="agent-turn">{filler}<div class="box" role="status">late</div></div>')
+            snapshot = await _snapshot(page, monkeypatch)
+            assert snapshot["progressBlocks"] == []
         finally:
             await browser.close()
