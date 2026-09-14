@@ -123,6 +123,77 @@ async def test_hidden_descendant_does_not_change_visible_region_digest(
 
 
 @pytest.mark.asyncio
+async def test_opacity_hidden_text_and_insertion_do_not_change_digest(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            await page.set_content(_BASE + """
+                <div class="agent-turn">
+                  <div id="tool" class="box" data-testid="tool-result">
+                    <span id="hidden" style="opacity:0">old</span>
+                  </div>
+                </div>
+            """)
+            before = await _snapshot(page, monkeypatch)
+            await page.evaluate("document.querySelector('#hidden').textContent = 'new'")
+            await page.evaluate("""
+                () => {
+                  const child = document.createElement('span');
+                  child.style.opacity = '0';
+                  child.textContent = 'inserted';
+                  document.querySelector('#tool').appendChild(child);
+                }
+            """)
+            after = await _snapshot(page, monkeypatch)
+            assert before["progressBlocks"][0]["digest"] == after["progressBlocks"][0]["digest"]
+        finally:
+            await browser.close()
+
+
+@pytest.mark.asyncio
+async def test_large_attributes_do_not_hide_late_semantic_change(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            huge = "X" * 12000
+            await page.set_content(_BASE + f'<div class="agent-turn"><div id="progress" class="box" data-testid="progress-meter" aria-label="{huge}" data-phase="one"></div></div>')
+            before = await _snapshot(page, monkeypatch)
+            await page.evaluate("document.querySelector('#progress').setAttribute('data-phase', 'two')")
+            after = await _snapshot(page, monkeypatch)
+            assert before["progressBlocks"][0]["digest"] != after["progressBlocks"][0]["digest"]
+        finally:
+            await browser.close()
+
+
+@pytest.mark.asyncio
+async def test_lexical_child_is_canonical_activity_node(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            await page.set_content(_BASE + """
+                <div class="agent-turn">
+                  <div class="box" data-testid="tool-result">
+                    <span class="box">Fetching source</span>
+                  </div>
+                </div>
+            """)
+            snapshot = await _snapshot(page, monkeypatch)
+            assert [item["kind"] for item in snapshot["progressBlocks"]].count("fetching") == 1
+            assert "dom-tool-result" not in [item["kind"] for item in snapshot["progressBlocks"]]
+        finally:
+            await browser.close()
+
+
+@pytest.mark.asyncio
 async def test_late_visible_semantic_state_changes_region_digest(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
