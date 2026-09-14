@@ -29,6 +29,14 @@ _SNAPSHOT_FN = r"""
     return r.width > 0 && r.height > 0 && s.display !== "none" &&
       s.visibility !== "hidden" && s.opacity !== "0";
   };
+  const progressShown = (el) => {
+    if (!shown(el)) return false;
+    for (let parent = el.parentElement; parent; parent = parent.parentElement) {
+      const style = getComputedStyle(parent);
+      if (style.display === "none" || style.visibility === "hidden" || Number.parseFloat(style.opacity || "1") === 0) return false;
+    }
+    return true;
+  };
   // GP08 slice 1: walk user+assistant DOM nodes together in ONE pass, in
   // true document order, instead of two separately-filtered
   // querySelectorAll calls. Two role-specific passes cannot tell you
@@ -141,13 +149,25 @@ _SNAPSHOT_FN = r"""
     const text = normalizeProgress(value);
     return [String(text.length), text.slice(0, 256), text.slice(-256)].join("\x1d");
   };
-  const visibleText = node =>
-    typeof node?.innerText === "string" ? node.innerText : "";
+  const visibleText = node => {
+    const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+    const parts = [];
+    let visited = 0;
+    let textNode;
+    while ((textNode = walker.nextNode()) && visited < 256) {
+      visited += 1;
+      if (progressShown(textNode.parentElement)) parts.push(textNode.nodeValue || "");
+    }
+    return parts.join(" ");
+  };
+  const attributeDigest = (node, name) => progressDigest(
+    boundedScalarMaterial(node.getAttribute(name))
+  );
   const attributeMaterial = node => semanticAttrs
-    .map(name => `${name}=${boundedScalarMaterial(node.getAttribute(name))}`)
+    .map(name => `${name}=${attributeDigest(node, name)}`)
     .join("\x1d");
   const visibleChildCount = node =>
-    Array.from(node.children || []).filter(shown).length;
+    Array.from(node.children || []).filter(progressShown).length;
   const semanticNodeDigest = node => progressDigest([
     String(node.tagName || ""),
     attributeMaterial(node),
@@ -161,7 +181,15 @@ _SNAPSHOT_FN = r"""
       "[data-phase]", "[data-progress]", "tr", "td", "th", "a[href]",
       "canvas", "svg", "img"
     ].join(",");
-    const descendants = Array.from(node.querySelectorAll(semanticSelector)).filter(shown);
+    const walker = document.createTreeWalker(node, NodeFilter.SHOW_ELEMENT);
+    const descendants = [];
+    let visited = 0;
+    let descendant;
+    while ((descendant = walker.nextNode())) {
+      visited += 1;
+      if (visited > 256) return null;
+      if (progressShown(descendant) && descendant.matches(semanticSelector)) descendants.push(descendant);
+    }
     const selected = descendants.slice(0, 32);
     const tail = descendants.slice(-32);
     const selectedNodes = [...selected, ...tail.filter(child => !selected.includes(child))];
@@ -187,7 +215,7 @@ _SNAPSHOT_FN = r"""
   const MAX_PROGRESS_TURNS = 8;
   const MAX_PROGRESS_VISIBLE_NODES = 2048;
   const MAX_PROGRESS_CANDIDATES = 256;
-  let inspectedVisibleNodes = 0;
+  let inspectedNodes = 0;
   let inspectedCandidates = 0;
   // Historical turns can contain persistent tables and tool cards. Inspect
   // newest turns first and stop at fixed turn/node/candidate budgets.
@@ -203,12 +231,12 @@ _SNAPSHOT_FN = r"""
     let node;
     let turnComplete = true;
     while ((node = walker.nextNode())) {
-      if (inspectedVisibleNodes >= MAX_PROGRESS_VISIBLE_NODES) {
+      inspectedNodes += 1;
+      if (inspectedNodes > MAX_PROGRESS_VISIBLE_NODES) {
         turnComplete = false;
         break;
       }
-      if (!shown(node)) continue;
-      inspectedVisibleNodes += 1;
+      if (!progressShown(node)) continue;
       if (node.matches('[data-message-author-role="assistant"]')) {
         const id = node.getAttribute("data-message-id") || null;
         if (id && !id.startsWith("request-placeholder-request-")) {
@@ -227,6 +255,9 @@ _SNAPSHOT_FN = r"""
       const structural = node.matches(structuralProgressSelector);
       const kind = progressKind(visibleText(node), structural) || structuralKind(node);
       if (!kind) continue;
+      if (!structural && Array.from(node.children || []).some(
+        child => progressShown(child) && progressKind(visibleText(child), false)
+      )) continue;
       inspectedCandidates += 1;
       candidates.push({node, kind});
     }
