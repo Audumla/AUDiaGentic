@@ -151,7 +151,7 @@ _SNAPSHOT_FN = r"""
       "[data-phase]", "[data-progress]", "tr", "td", "th", "a[href]",
       "canvas", "svg", "img"
     ].join(",");
-    const descendants = node.querySelectorAll(semanticSelector);
+    const descendants = Array.from(node.querySelectorAll(semanticSelector)).filter(shown);
     const indexes = [];
     const head = Math.min(32, descendants.length);
     for (let i = 0; i < head; i++) indexes.push(i);
@@ -159,9 +159,16 @@ _SNAPSHOT_FN = r"""
     for (let i = tailStart; i < descendants.length; i++) indexes.push(i);
     const childMaterial = indexes.map(index => {
       const child = descendants[index];
-      return [child.tagName || "", attributeMaterial(child), String(child.childElementCount || 0), boundedTextMaterial(child.innerText || child.textContent)].join("\x1c");
+      // Hash each bounded child token independently so the selected tail
+      // remains represented even when the region contains large output.
+      return progressDigest([
+        child.tagName || "",
+        attributeMaterial(child),
+        String(child.childElementCount || 0),
+        boundedTextMaterial(child.innerText || child.textContent)
+      ].join("\x1c"));
     });
-    return [node.tagName || "", attributeMaterial(node), String(node.childElementCount || 0), String(descendants.length), boundedTextMaterial(node.innerText || node.textContent), ...childMaterial].join("\x1e").slice(0, 8192);
+    return [node.tagName || "", attributeMaterial(node), String(node.childElementCount || 0), String(descendants.length), boundedTextMaterial(node.innerText || node.textContent), ...childMaterial].join("\x1e");
   };
   const userEntries = messageEntries.filter(entry => entry.role === "user" && entry.messageId);
   const ownerPromptFor = node => {
@@ -173,7 +180,11 @@ _SNAPSHOT_FN = r"""
     return owner;
   };
   const progressBlocks = [];
-  for (const turn of agentTurns) {
+  // Historical turns can contain persistent tables and tool cards. Inspect
+  // newest turns first and stop at the bounded output budget; old turns
+  // cannot renew the current request's activity.
+  for (let turnIndex = agentTurns.length - 1; turnIndex >= 0 && progressBlocks.length < 128; turnIndex--) {
+    const turn = agentTurns[turnIndex];
     const assistantNode = Array.from(turn.querySelectorAll('[data-message-author-role="assistant"]')).find(el =>
       !(el.getAttribute("data-message-id") || "").startsWith("request-placeholder-request-")
     );
@@ -188,6 +199,7 @@ _SNAPSHOT_FN = r"""
       candidates.add(node);
     }
     for (const node of candidates) {
+      if (progressBlocks.length >= 128) break;
       if (!shown(node) || node.closest('[data-message-author-role="user"]')) continue;
       const structural = node.matches(structuralProgressSelector);
       const kind = progressKind(node.innerText || node.textContent, structural) || structuralKind(node);
