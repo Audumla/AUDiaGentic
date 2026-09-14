@@ -83,3 +83,74 @@ async def test_semantic_and_non_text_changes_update_structural_digest(
             assert before_by_kind["dom-table"] != after_by_kind["dom-table"]
         finally:
             await browser.close()
+
+
+@pytest.mark.asyncio
+async def test_hidden_descendant_does_not_change_visible_region_digest(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            await page.set_content(_BASE + """
+                <div class="agent-turn">
+                  <div id="tool" class="box" data-testid="tool-result">
+                    <span id="hidden" style="display:none" data-state="old"></span>
+                  </div>
+                </div>
+            """)
+            before = await _snapshot(page, monkeypatch)
+            await page.evaluate("document.querySelector('#hidden').setAttribute('data-state', 'new')")
+            after = await _snapshot(page, monkeypatch)
+            assert before["progressBlocks"][0]["digest"] == after["progressBlocks"][0]["digest"]
+        finally:
+            await browser.close()
+
+
+@pytest.mark.asyncio
+async def test_late_visible_semantic_state_changes_region_digest(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            children = "".join(
+                f'<span class="box" data-phase="phase-{index}"></span>'
+                for index in range(80)
+            )
+            await page.set_content(_BASE + f'<div class="agent-turn"><div id="region" data-testid="tool-result">{children}</div></div>')
+            before = await _snapshot(page, monkeypatch)
+            await page.evaluate("document.querySelector('#region').lastElementChild.setAttribute('data-phase', 'late-change')")
+            after = await _snapshot(page, monkeypatch)
+            assert before["progressBlocks"][0]["digest"] != after["progressBlocks"][0]["digest"]
+        finally:
+            await browser.close()
+
+
+@pytest.mark.asyncio
+async def test_structural_kinds_are_extracted_from_owned_turn(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            await page.set_content(_BASE + """
+                <div class="agent-turn">
+                  <div class="box group/tool-message"></div>
+                  <div class="box" data-testid="connector-card"></div>
+                  <div class="box" data-testid="citation-pill"></div>
+                  <table><tbody><tr><td>row</td></tr></tbody></table>
+                  <div class="box" data-testid="writing-block-container"></div>
+                </div>
+            """)
+            snapshot = await _snapshot(page, monkeypatch)
+            kinds = {item["kind"] for item in snapshot["progressBlocks"]}
+            assert {
+                "dom-tool-result", "dom-connector", "dom-citation",
+                "dom-table", "dom-materialization",
+            } <= kinds
+        finally:
+            await browser.close()
