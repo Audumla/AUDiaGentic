@@ -154,12 +154,23 @@ _SNAPSHOT_FN = r"""
   const visibleText = node => {
     const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
     const parts = [];
+    const maxMaterial = 8192;
+    let materialLength = 0;
     let visited = 0;
     let textNode;
     while ((textNode = walker.nextNode())) {
       visited += 1;
       if (visited > 256) return null;
-      if (progressShown(textNode.parentElement)) parts.push(textNode.nodeValue || "");
+      if (progressShown(textNode.parentElement) && materialLength < maxMaterial) {
+        // Sample each node before joining so one large text node cannot make
+        // the aggregate unbounded. The aggregate itself is capped as well.
+        const raw = String(textNode.nodeValue || "");
+        const sampled = raw.length > 1024 ? raw.slice(0, 512) + " " + raw.slice(-512) : raw;
+        const piece = normalizeProgress(sampled);
+        const remaining = maxMaterial - materialLength;
+        parts.push(piece.slice(0, remaining));
+        materialLength += Math.min(piece.length, remaining);
+      }
     }
     return parts.join(" ");
   };
@@ -171,12 +182,16 @@ _SNAPSHOT_FN = r"""
     .join("\x1d");
   const visibleChildCount = node =>
     Array.from(node.children || []).filter(progressShown).length;
-  const semanticNodeDigest = node => progressDigest([
-    String(node.tagName || ""),
-    attributeMaterial(node),
-    String(visibleChildCount(node)),
-    boundedScalarMaterial(visibleText(node))
-  ].join("\x1c"));
+  const semanticNodeDigest = node => {
+    const textMaterial = visibleText(node);
+    if (textMaterial === null) return null;
+    return progressDigest([
+      String(node.tagName || ""),
+      attributeMaterial(node),
+      String(visibleChildCount(node)),
+      textMaterial
+    ].join("\x1c"));
+  };
   const semanticStateDigest = node => {
     const semanticSelector = [
       "[role]", "[data-testid]", "[aria-busy]", "[aria-expanded]",
@@ -198,11 +213,14 @@ _SNAPSHOT_FN = r"""
     const selectedNodes = [...selected, ...tail.filter(child => !selected.includes(child))];
     // Every contribution is fixed-size; the final aggregate is therefore
     // intrinsically below progressDigest's input bound.
+    const rootDigest = semanticNodeDigest(node);
+    const nodeDigests = selectedNodes.map(semanticNodeDigest);
+    if (rootDigest === null || nodeDigests.some(digest => digest === null)) return null;
     return progressDigest([
       "semantic-state-v2",
-      semanticNodeDigest(node),
+      rootDigest,
       String(descendants.length),
-      ...selectedNodes.map(semanticNodeDigest)
+      ...nodeDigests
     ].join("\x1e"));
   };
   const userEntries = messageEntries.filter(entry => entry.role === "user" && entry.messageId);
@@ -256,21 +274,30 @@ _SNAPSHOT_FN = r"""
         break;
       }
       const structural = node.matches(structuralProgressSelector);
-      const kind = progressKind(visibleText(node), structural) || structuralKind(node);
+      // Structural identity wins for structural nodes. Their visible text may
+      // contain a lexical child, but the parent must remain an independent
+      // candidate so changes to tool/connector/status state are observable.
+      const kind = structuralKind(node) || progressKind(visibleText(node), structural);
       if (!kind) continue;
       inspectedCandidates += 1;
       candidates.push({node, kind});
     }
     if (!turnComplete) break;
     const lexicalKinds = new Set(["inspected", "fetching", "analyzing", "evaluated", "thinking"]);
-    const canonicalCandidates = candidates.filter(candidate =>
-      !candidates.some(child =>
-        child !== candidate && lexicalKinds.has(child.kind) && candidate.node.contains(child.node)
+    // Deduplicate nested lexical labels only. Structural candidates remain
+    // independent so a changing tool/connector/status parent is observable
+    // even when it contains a lexical child such as "Fetching source".
+    const canonicalCandidates = [
+      ...candidates.filter(candidate => !lexicalKinds.has(candidate.kind)),
+      ...candidates.filter(candidate =>
+        lexicalKinds.has(candidate.kind) && !candidates.some(child =>
+          child !== candidate && lexicalKinds.has(child.kind) && candidate.node.contains(child.node)
+        )
       )
-    );
+    ];
     for (const {node, kind} of canonicalCandidates) {
       if (progressBlocks.length >= 128) break;
-      if (!shown(node) || node.closest('[data-message-author-role="user"]')) continue;
+      if (!progressShown(node) || node.closest('[data-message-author-role="user"]')) continue;
       const digest = semanticStateDigest(node);
       if (!digest) continue;
       progressBlocks.push({
