@@ -71,6 +71,13 @@ _PROGRESS_KINDS = frozenset({
     "talked-to-app",
     "searching-web",
     "read-resource",
+    "dom-status",
+    "dom-progress",
+    "dom-tool-result",
+    "dom-connector",
+    "dom-citation",
+    "dom-table",
+    "dom-materialization",
 })
 
 

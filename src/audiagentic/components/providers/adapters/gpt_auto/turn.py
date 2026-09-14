@@ -2492,6 +2492,9 @@ def _scope_response_snapshot(
                 latest_assistant_id=baseline.latest_assistant_id,
                 latest_assistant_text=baseline.latest_assistant_text,
                 progress_blocks=scoped_progress,
+                # Conversation-global counts are useful diagnostics only;
+                # they are not request-addressable recovery evidence.
+                tool_activity_counts=(),
             ),
             None,
         )
@@ -2509,6 +2512,7 @@ def _scope_response_snapshot(
             latest_assistant_text=response_ref.text,
             dom_signals=dom_signals,
             progress_blocks=scoped_progress,
+            tool_activity_counts=(),
         ),
         response_ref,
     )
