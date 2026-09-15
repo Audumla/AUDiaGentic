@@ -203,6 +203,114 @@ async def test_lexical_child_is_canonical_activity_node(
 
 
 @pytest.mark.asyncio
+async def test_hidden_insert_and_remove_are_structurally_inert(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            await page.set_content(_BASE + """
+                <div class="agent-turn">
+                  <div id="tool" class="box" data-testid="tool-result"></div>
+                </div>
+            """)
+            base_digest = (await _snapshot(page, monkeypatch))["progressBlocks"][0]["digest"]
+            await page.evaluate("""
+                () => {
+                  const child = document.createElement('span');
+                  child.id = 'hidden-transient';
+                  child.style.opacity = '0';
+                  child.textContent = 'Fetching hidden source';
+                  document.querySelector('#tool').appendChild(child);
+                }
+            """)
+            assert (await _snapshot(page, monkeypatch))["progressBlocks"][0]["digest"] == base_digest
+            await page.evaluate("document.querySelector('#hidden-transient').remove()")
+            assert (await _snapshot(page, monkeypatch))["progressBlocks"][0]["digest"] == base_digest
+        finally:
+            await browser.close()
+
+
+@pytest.mark.asyncio
+async def test_large_visible_text_tail_change_updates_digest(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            await page.set_content(_BASE + '<div class="agent-turn"><div id="tool" data-testid="tool-result"></div></div>')
+            await page.evaluate("(value) => document.querySelector('#tool').textContent = value", "A" * 12000 + "TAIL-ONE")
+            before = (await _snapshot(page, monkeypatch))["progressBlocks"][0]["digest"]
+            await page.evaluate("(value) => document.querySelector('#tool').textContent = value", "A" * 12000 + "TAIL-TWO")
+            after = (await _snapshot(page, monkeypatch))["progressBlocks"][0]["digest"]
+            assert before != after
+        finally:
+            await browser.close()
+
+
+@pytest.mark.asyncio
+async def test_structural_semantic_wrapper_survives_nested_lexical_child(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            await page.set_content(_BASE + """
+                <div class="agent-turn">
+                  <div id="tool" data-testid="tool-result">
+                    <div id="state" data-state="working">
+                      <span id="lexical" class="box">Fetching source</span>
+                    </div>
+                  </div>
+                </div>
+            """)
+            initial = {item["kind"]: item["digest"] for item in (await _snapshot(page, monkeypatch))["progressBlocks"]}
+            await page.evaluate("document.querySelector('#lexical').textContent = 'Fetching next source'")
+            lexical_changed = {item["kind"]: item["digest"] for item in (await _snapshot(page, monkeypatch))["progressBlocks"]}
+            assert lexical_changed["fetching"] != initial["fetching"]
+            assert lexical_changed["dom-tool-result"] == initial["dom-tool-result"]
+            await page.evaluate("document.querySelector('#state').dataset.state = 'complete'")
+            structural_changed = {item["kind"]: item["digest"] for item in (await _snapshot(page, monkeypatch))["progressBlocks"]}
+            assert structural_changed["fetching"] == lexical_changed["fetching"]
+            assert structural_changed["dom-tool-result"] != lexical_changed["dom-tool-result"]
+        finally:
+            await browser.close()
+
+
+@pytest.mark.asyncio
+async def test_exact_candidate_budget_allows_trailing_dom(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            candidates = "".join(f'<div class="box" role="status">state-{i}</div>' for i in range(256))
+            await page.set_content(_BASE + f'<div class="agent-turn">{candidates}<div class="box">ordinary trailing DOM</div></div>')
+            assert len((await _snapshot(page, monkeypatch))["progressBlocks"]) == 128
+        finally:
+            await browser.close()
+
+
+@pytest.mark.asyncio
+async def test_candidate_257_fails_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            candidates = "".join(f'<div class="box" role="status">state-{i}</div>' for i in range(257))
+            await page.set_content(_BASE + f'<div class="agent-turn">{candidates}</div>')
+            assert (await _snapshot(page, monkeypatch))["progressBlocks"] == []
+        finally:
+            await browser.close()
+
+
+@pytest.mark.asyncio
 async def test_oversized_text_region_fails_closed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -317,5 +425,38 @@ async def test_excessive_visible_nodes_fail_closed(
             await page.set_content(_BASE + f'<div class="agent-turn">{filler}<div class="box" role="status">late</div></div>')
             snapshot = await _snapshot(page, monkeypatch)
             assert snapshot["progressBlocks"] == []
+        finally:
+            await browser.close()
+
+
+@pytest.mark.asyncio
+async def test_owner_lookup_fails_closed_outside_bounded_user_tail(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            later_users = "".join(
+                f'<div data-message-author-role="user" data-message-id="later-{i}">later</div>'
+                for i in range(40)
+            )
+            await page.set_content(_BASE + '<div class="agent-turn"><div class="box" role="status">working</div></div>' + later_users)
+            assert (await _snapshot(page, monkeypatch))["progressBlocks"] == []
+        finally:
+            await browser.close()
+
+
+@pytest.mark.asyncio
+async def test_progress_visibility_fails_closed_above_ancestor_bound(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            nested = '<div>' * 65 + '<div class="box" role="status">working</div>' + '</div>' * 65
+            await page.set_content(_BASE + f'<div class="agent-turn">{nested}</div>')
+            assert (await _snapshot(page, monkeypatch))["progressBlocks"] == []
         finally:
             await browser.close()
