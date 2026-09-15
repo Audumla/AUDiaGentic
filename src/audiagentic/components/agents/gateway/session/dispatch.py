@@ -633,6 +633,15 @@ def _dispatch_session_request(
                             "request-fingerprint": context_fingerprint,
                         },
                     )
+            # The client-default guard protects selection/binding, not the
+            # potentially slow provider rehydration operation.  Holding it
+            # while CDP/browser recovery runs can strand a later request for
+            # the same client before it reaches the session turn lock or its
+            # activity watcher.  The durable session/turn fences below own
+            # concurrency once this request has selected its session.
+            if guard_held:
+                preparation_guard.release()
+                guard_held = False
             # Handles are process-local. After a gateway restart the durable
             # record can remain active while its handle is absent. Reattach
             # the exact provider binding before applying continuation policy.
@@ -772,8 +781,9 @@ def _dispatch_session_request(
             provider_capability="supported" if str(provider_id).startswith("gpt-auto") else "unknown",
         )
         client_defaults.remember(project_root, record)
-        preparation_guard.release()
-        guard_held = False
+        if guard_held:
+            preparation_guard.release()
+            guard_held = False
         # This only proves that SessionRuntime was entered.  Provider
         # submission state comes from the transport's typed failure contract.
         runtime_invoked = True
