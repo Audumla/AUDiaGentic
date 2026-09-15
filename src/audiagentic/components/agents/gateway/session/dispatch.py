@@ -672,38 +672,54 @@ def _dispatch_session_request(
                         if opening_request_ids
                         else None
                     )
-                    runtime.rehydrate_session(
-                        project_root,
-                        session_id,
-                        execution_profile_id=execution_profile_id,
-                        provider_id=provider_id,
-                        model_id=session_store.session_model_id(session_record)
-                        or record.get("resolved-model-id"),
-                        surface_hint=_build_surface_hint(profile),
-                        idle_timeout_seconds=(
-                            record.get("session-idle-timeout-seconds")
-                            if record.get("session-idle-timeout-seconds") is not None
-                            else session_store.session_idle_timeout_seconds(session_record)
-                        ),
-                        max_lifetime_seconds=(
-                            record.get("session-max-lifetime-seconds")
-                            if record.get("session-max-lifetime-seconds") is not None
-                            else session_store.session_max_lifetime_seconds(session_record)
-                        ),
-                        turn_timeout_seconds=first_present(
-                            params, "session-turn-timeout-seconds", "session_turn_timeout_seconds"
-                        ),
-                        turn_silence_timeout_seconds=first_present(
-                            params,
-                            "session-turn-silence-timeout-seconds",
-                            "session_turn_silence_timeout_seconds",
-                        ),
-                        correlation_id=record.get("correlation-id"),
-                        request_runtime_root=rehydrate_root,
-                        mcp_entries=providers_api.collect_management_mcp_launch_entries(project_root),
-                        project_name=project_name,
-                        resume_existing=resume_existing,
-                    )
+                    try:
+                        runtime.rehydrate_session(
+                            project_root,
+                            session_id,
+                            execution_profile_id=execution_profile_id,
+                            provider_id=provider_id,
+                            model_id=session_store.session_model_id(session_record)
+                            or record.get("resolved-model-id"),
+                            surface_hint=_build_surface_hint(profile),
+                            idle_timeout_seconds=(
+                                record.get("session-idle-timeout-seconds")
+                                if record.get("session-idle-timeout-seconds") is not None
+                                else session_store.session_idle_timeout_seconds(session_record)
+                            ),
+                            max_lifetime_seconds=(
+                                record.get("session-max-lifetime-seconds")
+                                if record.get("session-max-lifetime-seconds") is not None
+                                else session_store.session_max_lifetime_seconds(session_record)
+                            ),
+                            turn_timeout_seconds=first_present(
+                                params, "session-turn-timeout-seconds", "session_turn_timeout_seconds"
+                            ),
+                            turn_silence_timeout_seconds=first_present(
+                                params,
+                                "session-turn-silence-timeout-seconds",
+                                "session_turn_silence_timeout_seconds",
+                            ),
+                            correlation_id=record.get("correlation-id"),
+                            request_runtime_root=rehydrate_root,
+                            mcp_entries=providers_api.collect_management_mcp_launch_entries(project_root),
+                            project_name=project_name,
+                            resume_existing=resume_existing,
+                        )
+                    except AudiaGenticError as exc:
+                        if exc.code == "EXT-AGW-118" and not resume_existing:
+                            # Rehydration happens before this request's prompt
+                            # can be submitted. A transient browser/tab/CDP
+                            # failure after gateway restart is therefore
+                            # recoverable and must stay running; the queue's
+                            # bounded-backoff recovery loop will retry the
+                            # exact durable session instead of failing or
+                            # rotating the client's default session.
+                            raise RecoveryDeferred(
+                                exc,
+                                phase="rehydrate-retry",
+                                side_effect_state="not-started",
+                            ) from exc
+                        raise
 
             # Global/profile policy is applied only to the in-memory handle;
             # _SessionHandle.update_bounds keeps the more-open value.
@@ -799,6 +815,13 @@ def _dispatch_session_request(
         if request_runtime is not None:
             _cleanup_request_runtime(request_runtime)
         return _transition_owned_attempt(project_root, record, "cancelled")
+    except RecoveryDeferred:
+        # RecoveryDeferred is queue control flow, not a terminal provider
+        # error. Preserve it so the queue can retain the running request and
+        # schedule the next exact-session rehydration attempt.
+        if guard_held:
+            preparation_guard.release()
+        raise
     except AudiaGenticError as exc:
         if guard_held:
             preparation_guard.release()
