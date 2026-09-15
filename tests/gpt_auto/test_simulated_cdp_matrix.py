@@ -86,8 +86,8 @@ def test_snapshot_has_structural_progress_fallback_and_semantic_digest() -> None
         "dom-materialization",
     ):
         assert kind in _SNAPSHOT_FN
-    assert "const semanticStateDigest = (node, excludedRoots = null) =>" in _SNAPSHOT_FN
-    assert "const semanticNodeDigest = (node, excludedRoots = null) =>" in _SNAPSHOT_FN
+    assert "const semanticStateDigest = (node, excludedRoots = null, lexicalCarriers = null, canonicalLexicalRoots = []) =>" in _SNAPSHOT_FN
+    assert "const semanticNodeDigest = (node, excludedRoots = null, lexicalCarriers = null, canonicalLexicalRoots = []) =>" in _SNAPSHOT_FN
     assert "const boundedScalarMaterial = value =>" in _SNAPSHOT_FN
     assert "const boundedTextForKind = node =>" in _SNAPSHOT_FN
     assert "const visibleTextDigest = (node, excludedRoots = null) =>" in _SNAPSHOT_FN
