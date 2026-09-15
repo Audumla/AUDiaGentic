@@ -31,10 +31,12 @@ _SNAPSHOT_FN = r"""
   };
   const progressShown = (el) => {
     if (!shown(el)) return false;
-    for (let parent = el.parentElement; parent; parent = parent.parentElement) {
+    let depth = 0;
+    for (let parent = el.parentElement; parent && depth < 64; parent = parent.parentElement, depth++) {
       const style = getComputedStyle(parent);
       if (style.display === "none" || style.visibility === "hidden" || Number.parseFloat(style.opacity || "1") === 0) return false;
     }
+    if (el.parentElement && depth >= 64) return false;
     return true;
   };
   // GP08 slice 1: walk user+assistant DOM nodes together in ONE pass, in
@@ -103,6 +105,7 @@ _SNAPSHOT_FN = r"""
     }
     return null;
   };
+  const lexicalKinds = new Set(["inspected", "fetching", "analyzing", "evaluated", "thinking"]);
   const progressDigest = value => {
     const text = normalizeProgress(value).slice(0, 4096);
     let a = 0x811c9dc5 >>> 0;
@@ -111,6 +114,21 @@ _SNAPSHOT_FN = r"""
       const code = text.charCodeAt(i);
       a = Math.imul((a ^ code) >>> 0, 0x01000193) >>> 0;
       b = Math.imul((b ^ code) >>> 0, 0x85ebca6b) >>> 0;
+    }
+    return a.toString(16).padStart(8, "0") + b.toString(16).padStart(8, "0");
+  };
+  const progressDigestParts = parts => {
+    let a = 0x811c9dc5 >>> 0;
+    let b = 0x9e3779b9 >>> 0;
+    for (const part of parts) {
+      const text = String(part);
+      for (let i = 0; i < text.length; i++) {
+        const code = text.charCodeAt(i);
+        a = Math.imul((a ^ code) >>> 0, 0x01000193) >>> 0;
+        b = Math.imul((b ^ code) >>> 0, 0x85ebca6b) >>> 0;
+      }
+      a = Math.imul((a ^ 0x1e) >>> 0, 0x01000193) >>> 0;
+      b = Math.imul((b ^ 0x1e) >>> 0, 0x85ebca6b) >>> 0;
     }
     return a.toString(16).padStart(8, "0") + b.toString(16).padStart(8, "0");
   };
@@ -151,10 +169,10 @@ _SNAPSHOT_FN = r"""
     const text = normalizeProgress(sample);
     return [String(raw.length), text.slice(0, 256), text.slice(-256)].join("\x1d");
   };
-  const visibleText = node => {
+  const boundedTextForKind = node => {
     const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
     const parts = [];
-    const maxMaterial = 8192;
+    const maxMaterial = 2048;
     let materialLength = 0;
     let visited = 0;
     let textNode;
@@ -162,8 +180,8 @@ _SNAPSHOT_FN = r"""
       visited += 1;
       if (visited > 256) return null;
       if (progressShown(textNode.parentElement) && materialLength < maxMaterial) {
-        // Sample each node before joining so one large text node cannot make
-        // the aggregate unbounded. The aggregate itself is capped as well.
+        // This channel is only for lexical classification. Hashing uses the
+        // separate fixed-size visibleTextDigest channel below.
         const raw = String(textNode.nodeValue || "");
         const sampled = raw.length > 1024 ? raw.slice(0, 512) + " " + raw.slice(-512) : raw;
         const piece = normalizeProgress(sampled);
@@ -174,6 +192,27 @@ _SNAPSHOT_FN = r"""
     }
     return parts.join(" ");
   };
+  const visibleTextDigest = (node, directOnly = false) => {
+    const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+    const parts = ["visible-text-v1"];
+    let visited = 0;
+    let included = 0;
+    let textNode;
+    while ((textNode = walker.nextNode())) {
+      visited += 1;
+      if (visited > 256) return null;
+      if (!progressShown(textNode.parentElement) || (directOnly && textNode.parentElement !== node)) continue;
+      const raw = String(textNode.nodeValue || "");
+      parts.push(String(raw.length));
+      parts.push(progressDigest(boundedScalarMaterial(raw)));
+      included += 1;
+    }
+    // Hidden text participates in the traversal budget, but not in the
+    // digest. This keeps hidden mutation/insertion/removal inert while still
+    // failing closed when an oversized hidden subtree crosses the limit.
+    parts.push(String(included));
+    return progressDigestParts(parts);
+  };
   const attributeDigest = (node, name) => progressDigest(
     boundedScalarMaterial(node.getAttribute(name))
   );
@@ -182,14 +221,14 @@ _SNAPSHOT_FN = r"""
     .join("\x1d");
   const visibleChildCount = node =>
     Array.from(node.children || []).filter(progressShown).length;
-  const semanticNodeDigest = node => {
-    const textMaterial = visibleText(node);
-    if (textMaterial === null) return null;
+  const semanticNodeDigest = (node, structural = false) => {
+    const textDigest = visibleTextDigest(node, structural);
+    if (textDigest === null) return null;
     return progressDigest([
       String(node.tagName || ""),
       attributeMaterial(node),
       String(visibleChildCount(node)),
-      textMaterial
+      textDigest
     ].join("\x1c"));
   };
   const semanticStateDigest = node => {
@@ -206,15 +245,20 @@ _SNAPSHOT_FN = r"""
     while ((descendant = walker.nextNode())) {
       visited += 1;
       if (visited > 256) return null;
-      if (progressShown(descendant) && descendant.matches(semanticSelector)) descendants.push(descendant);
+      const lexical = progressKind(boundedTextForKind(descendant));
+      if (progressShown(descendant) && descendant.matches(semanticSelector) &&
+          !(structuralKind(node) && lexicalKinds.has(lexical) && !structuralKind(descendant))) {
+        descendants.push(descendant);
+      }
     }
     const selected = descendants.slice(0, 32);
     const tail = descendants.slice(-32);
     const selectedNodes = [...selected, ...tail.filter(child => !selected.includes(child))];
     // Every contribution is fixed-size; the final aggregate is therefore
     // intrinsically below progressDigest's input bound.
-    const rootDigest = semanticNodeDigest(node);
-    const nodeDigests = selectedNodes.map(semanticNodeDigest);
+    const rootStructural = Boolean(structuralKind(node));
+    const rootDigest = semanticNodeDigest(node, rootStructural);
+    const nodeDigests = selectedNodes.map(child => semanticNodeDigest(child, Boolean(structuralKind(child))));
     if (rootDigest === null || nodeDigests.some(digest => digest === null)) return null;
     return progressDigest([
       "semantic-state-v2",
@@ -224,13 +268,20 @@ _SNAPSHOT_FN = r"""
     ].join("\x1e"));
   };
   const userEntries = messageEntries.filter(entry => entry.role === "user" && entry.messageId);
+  let ownerUserIndex = userEntries.length - 1;
   const ownerPromptFor = node => {
-    let owner = null;
-    for (const entry of userEntries) {
-      if (entry.el === node || entry.el.contains(node)) owner = entry.messageId;
-      else if (entry.el.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING) owner = entry.messageId;
+    while (ownerUserIndex >= 0) {
+      const entry = userEntries[ownerUserIndex];
+      if (entry.el === node || entry.el.contains(node)) return entry.messageId;
+      const relation = entry.el.compareDocumentPosition(node);
+      if (relation & Node.DOCUMENT_POSITION_FOLLOWING) return entry.messageId;
+      if (relation & Node.DOCUMENT_POSITION_PRECEDING) {
+        ownerUserIndex -= 1;
+        continue;
+      }
+      return null;
     }
-    return owner;
+    return null;
   };
   const progressBlocks = [];
   const MAX_PROGRESS_TURNS = 8;
@@ -277,13 +328,12 @@ _SNAPSHOT_FN = r"""
       // Structural identity wins for structural nodes. Their visible text may
       // contain a lexical child, but the parent must remain an independent
       // candidate so changes to tool/connector/status state are observable.
-      const kind = structuralKind(node) || progressKind(visibleText(node), structural);
+      const kind = structuralKind(node) || progressKind(boundedTextForKind(node), structural);
       if (!kind) continue;
       inspectedCandidates += 1;
       candidates.push({node, kind});
     }
     if (!turnComplete) break;
-    const lexicalKinds = new Set(["inspected", "fetching", "analyzing", "evaluated", "thinking"]);
     // Deduplicate nested lexical labels only. Structural candidates remain
     // independent so a changing tool/connector/status parent is observable
     // even when it contains a lexical child such as "Fetching source".
