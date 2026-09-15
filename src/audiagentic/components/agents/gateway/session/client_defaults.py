@@ -69,6 +69,41 @@ def _read(path: Path) -> dict[str, Any]:
     return value
 
 
+def _claimed_by_other_client(
+    service_root: Path,
+    current_path: Path,
+    session_id: str,
+    logical_client_id: str,
+    provider_surface: str,
+) -> bool:
+    """Return whether another canonical default claims this session.
+
+    A session may be explicitly shared, but it must never be selected as two
+    different clients' implicit default.  Check the bounded service-local
+    default index before adopting an automatic binding; malformed/legacy
+    entries are ignored and therefore cannot establish ownership.
+    """
+    defaults_root = service_root / "client-default-sessions"
+    if not defaults_root.exists():
+        return False
+    for candidate in defaults_root.glob("*.json"):
+        if candidate == current_path:
+            continue
+        try:
+            other = _read(candidate)
+        except (OSError, ValueError):
+            continue
+        if (
+            other.get("schema-generation") == _SCOPE_SCHEMA_GENERATION
+            and other.get("provider-surface") == provider_surface
+            and other.get("session-id") == session_id
+            and other.get("logical-client-id")
+            and other.get("logical-client-id") != logical_client_id
+        ):
+            return True
+    return False
+
+
 def chat_url(metadata: dict[str, Any]) -> str | None:
     from audiagentic.components.providers.adapters.gpt_auto.urls import (
         canonical_chat_url,
@@ -204,7 +239,29 @@ def select(
         if automatic and binding.get("session-id"):
             from audiagentic.components.agents.gateway.session import sessions_store
 
-            selection.session_id = str(binding["session-id"])
+            selected_session_id = str(binding["session-id"])
+            if _claimed_by_other_client(
+                Path(service_root),
+                path,
+                selected_session_id,
+                client_id,
+                provider_id,
+            ):
+                # Do not adopt the other client's conversation or its chat
+                # URL.  Leaving this selection unbound makes admission create
+                # and commit a fresh default for this client.
+                selection.session_id = None
+                selection.provider_chat_url = None
+                selection.binding = {}
+                selection.warnings.append(
+                    warning(
+                        "CON-AGW-123",
+                        "Client default session ownership conflict; creating a separate session.",
+                    )
+                )
+                yield selection
+                return
+            selection.session_id = selected_session_id
             try:
                 session = sessions_store.read_session_record(project_root, selection.session_id)
                 recovered_url = chat_url(sessions_store.session_provider_metadata(session))

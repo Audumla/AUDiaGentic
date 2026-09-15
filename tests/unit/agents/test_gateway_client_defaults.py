@@ -48,6 +48,21 @@ def test_each_logical_client_has_an_independent_default(tmp_path):
             assert chosen.session_id == "ses-b"
 
 
+def test_default_binding_rejects_cross_client_session_collision(tmp_path):
+    with selection(tmp_path, client_id="client-a") as chosen:
+        chosen.commit({"session-id": "ses-shared-by-mistake"})
+
+    # Simulate a previously persisted collision.  The second client must not
+    # continue using the first client's provider conversation.
+    with selection(tmp_path, client_id="client-b") as chosen:
+        chosen.commit({"session-id": "ses-shared-by-mistake"})
+
+    with selection(tmp_path, client_id="client-b") as chosen:
+        assert chosen.session_id is None
+        assert chosen.provider_chat_url is None
+        assert chosen.warnings[0]["code"] == "CON-AGW-123"
+
+
 def test_legacy_default_binding_is_ignored_instead_of_adopted(tmp_path):
     path = tmp_path / "service" / "client-default-sessions" / (
         defaults.scope_key("client-a", tmp_path, "gpt-agent") + ".json"
