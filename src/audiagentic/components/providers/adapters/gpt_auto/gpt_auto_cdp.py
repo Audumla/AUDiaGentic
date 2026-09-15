@@ -169,6 +169,15 @@ _SNAPSHOT_FN = r"""
     const text = normalizeProgress(sample);
     return [String(raw.length), text.slice(0, 256), text.slice(-256)].join("\x1d");
   };
+  const excludedByLexicalRoot = (element, root, excludedRoots) => {
+    if (!excludedRoots) return false;
+    let current = element;
+    for (let depth = 0; current && depth < 64; depth++, current = current.parentElement) {
+      if (current === root) return false;
+      if (excludedRoots.has(current)) return true;
+    }
+    return null;
+  };
   const boundedTextForKind = node => {
     const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
     const parts = [];
@@ -192,7 +201,7 @@ _SNAPSHOT_FN = r"""
     }
     return parts.join(" ");
   };
-  const visibleTextDigest = (node, directOnly = false) => {
+  const visibleTextDigest = (node, excludedRoots = null) => {
     const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
     const parts = ["visible-text-v1"];
     let visited = 0;
@@ -201,7 +210,10 @@ _SNAPSHOT_FN = r"""
     while ((textNode = walker.nextNode())) {
       visited += 1;
       if (visited > 256) return null;
-      if (!progressShown(textNode.parentElement) || (directOnly && textNode.parentElement !== node)) continue;
+      if (!progressShown(textNode.parentElement)) continue;
+      const excluded = excludedByLexicalRoot(textNode.parentElement, node, excludedRoots);
+      if (excluded === null) return null;
+      if (excluded) continue;
       const raw = String(textNode.nodeValue || "");
       parts.push(String(raw.length));
       parts.push(progressDigest(boundedScalarMaterial(raw)));
@@ -219,19 +231,32 @@ _SNAPSHOT_FN = r"""
   const attributeMaterial = node => semanticAttrs
     .map(name => `${name}=${attributeDigest(node, name)}`)
     .join("\x1d");
-  const visibleChildCount = node =>
-    Array.from(node.children || []).filter(progressShown).length;
-  const semanticNodeDigest = (node, structural = false) => {
-    const textDigest = visibleTextDigest(node, structural);
+  const visibleChildCount = (node, excludedRoots = null) => {
+    let visited = 0;
+    let visible = 0;
+    for (let child = node.firstElementChild; child; child = child.nextElementSibling) {
+      visited += 1;
+      if (visited > 256) return null;
+      if (!progressShown(child)) continue;
+      const excluded = excludedByLexicalRoot(child, node, excludedRoots);
+      if (excluded === null) return null;
+      if (!excluded) visible += 1;
+    }
+    return visible;
+  };
+  const semanticNodeDigest = (node, excludedRoots = null) => {
+    const textDigest = visibleTextDigest(node, excludedRoots);
     if (textDigest === null) return null;
+    const childCount = visibleChildCount(node, excludedRoots);
+    if (childCount === null) return null;
     return progressDigest([
       String(node.tagName || ""),
       attributeMaterial(node),
-      String(visibleChildCount(node)),
+      String(childCount),
       textDigest
     ].join("\x1c"));
   };
-  const semanticStateDigest = node => {
+  const semanticStateDigest = (node, excludedRoots = null) => {
     const semanticSelector = [
       "[role]", "[data-testid]", "[aria-busy]", "[aria-expanded]",
       "[aria-valuenow]", "[aria-valuetext]", "[data-state]", "[data-status]",
@@ -245,20 +270,18 @@ _SNAPSHOT_FN = r"""
     while ((descendant = walker.nextNode())) {
       visited += 1;
       if (visited > 256) return null;
-      const lexical = progressKind(boundedTextForKind(descendant));
-      if (progressShown(descendant) && descendant.matches(semanticSelector) &&
-          !(structuralKind(node) && lexicalKinds.has(lexical) && !structuralKind(descendant))) {
-        descendants.push(descendant);
-      }
+      if (!progressShown(descendant)) continue;
+      const excluded = excludedByLexicalRoot(descendant, node, excludedRoots);
+      if (excluded === null) return null;
+      if (!excluded && descendant.matches(semanticSelector)) descendants.push(descendant);
     }
     const selected = descendants.slice(0, 32);
     const tail = descendants.slice(-32);
     const selectedNodes = [...selected, ...tail.filter(child => !selected.includes(child))];
     // Every contribution is fixed-size; the final aggregate is therefore
     // intrinsically below progressDigest's input bound.
-    const rootStructural = Boolean(structuralKind(node));
-    const rootDigest = semanticNodeDigest(node, rootStructural);
-    const nodeDigests = selectedNodes.map(child => semanticNodeDigest(child, Boolean(structuralKind(child))));
+    const rootDigest = semanticNodeDigest(node, excludedRoots);
+    const nodeDigests = selectedNodes.map(child => semanticNodeDigest(child, excludedRoots));
     if (rootDigest === null || nodeDigests.some(digest => digest === null)) return null;
     return progressDigest([
       "semantic-state-v2",
@@ -267,11 +290,16 @@ _SNAPSHOT_FN = r"""
       ...nodeDigests
     ].join("\x1e"));
   };
+  const MAX_PROGRESS_TURNS = 8;
+  const MAX_PROGRESS_VISIBLE_NODES = 2048;
+  const MAX_PROGRESS_CANDIDATES = 256;
+  const MAX_PROGRESS_OWNER_USERS = MAX_PROGRESS_TURNS * 2;
   const userEntries = messageEntries.filter(entry => entry.role === "user" && entry.messageId);
-  let ownerUserIndex = userEntries.length - 1;
+  const progressUserEntries = userEntries.slice(-MAX_PROGRESS_OWNER_USERS);
+  let ownerUserIndex = progressUserEntries.length - 1;
   const ownerPromptFor = node => {
     while (ownerUserIndex >= 0) {
-      const entry = userEntries[ownerUserIndex];
+      const entry = progressUserEntries[ownerUserIndex];
       if (entry.el === node || entry.el.contains(node)) return entry.messageId;
       const relation = entry.el.compareDocumentPosition(node);
       if (relation & Node.DOCUMENT_POSITION_FOLLOWING) return entry.messageId;
@@ -284,9 +312,6 @@ _SNAPSHOT_FN = r"""
     return null;
   };
   const progressBlocks = [];
-  const MAX_PROGRESS_TURNS = 8;
-  const MAX_PROGRESS_VISIBLE_NODES = 2048;
-  const MAX_PROGRESS_CANDIDATES = 256;
   let inspectedNodes = 0;
   let inspectedCandidates = 0;
   // Historical turns can contain persistent tables and tool cards. Inspect
@@ -320,16 +345,16 @@ _SNAPSHOT_FN = r"""
           ownerAssistantMessageId = id;
         }
       }
-      if (inspectedCandidates >= MAX_PROGRESS_CANDIDATES) {
-        turnComplete = false;
-        break;
-      }
       const structural = node.matches(structuralProgressSelector);
       // Structural identity wins for structural nodes. Their visible text may
       // contain a lexical child, but the parent must remain an independent
       // candidate so changes to tool/connector/status state are observable.
       const kind = structuralKind(node) || progressKind(boundedTextForKind(node), structural);
       if (!kind) continue;
+      if (inspectedCandidates >= MAX_PROGRESS_CANDIDATES) {
+        turnComplete = false;
+        break;
+      }
       inspectedCandidates += 1;
       candidates.push({node, kind});
     }
@@ -345,10 +370,15 @@ _SNAPSHOT_FN = r"""
         )
       )
     ];
+    const canonicalLexicalNodes = new WeakSet();
+    for (const candidate of canonicalCandidates) {
+      if (lexicalKinds.has(candidate.kind)) canonicalLexicalNodes.add(candidate.node);
+    }
     for (const {node, kind} of canonicalCandidates) {
       if (progressBlocks.length >= 128) break;
       if (!progressShown(node) || node.closest('[data-message-author-role="user"]')) continue;
-      const digest = semanticStateDigest(node);
+      const excludedRoots = lexicalKinds.has(kind) ? null : canonicalLexicalNodes;
+      const digest = semanticStateDigest(node, excludedRoots);
       if (!digest) continue;
       progressBlocks.push({
         ownerPromptMessageId: String(ownerPromptMessageId).slice(0, 256),

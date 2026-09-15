@@ -86,11 +86,11 @@ def test_snapshot_has_structural_progress_fallback_and_semantic_digest() -> None
         "dom-materialization",
     ):
         assert kind in _SNAPSHOT_FN
-    assert "const semanticStateDigest = node =>" in _SNAPSHOT_FN
-    assert "const semanticNodeDigest = (node, structural = false) =>" in _SNAPSHOT_FN
+    assert "const semanticStateDigest = (node, excludedRoots = null) =>" in _SNAPSHOT_FN
+    assert "const semanticNodeDigest = (node, excludedRoots = null) =>" in _SNAPSHOT_FN
     assert "const boundedScalarMaterial = value =>" in _SNAPSHOT_FN
     assert "const boundedTextForKind = node =>" in _SNAPSHOT_FN
-    assert "const visibleTextDigest = (node, directOnly = false) =>" in _SNAPSHOT_FN
+    assert "const visibleTextDigest = (node, excludedRoots = null) =>" in _SNAPSHOT_FN
 
 
 def test_snapshot_resolves_sidebar_title_by_active_conversation_url() -> None:
