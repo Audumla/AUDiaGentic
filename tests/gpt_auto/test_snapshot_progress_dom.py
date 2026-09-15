@@ -189,6 +189,15 @@ async def test_lexical_child_is_canonical_activity_node(
             snapshot = await _snapshot(page, monkeypatch)
             assert [item["kind"] for item in snapshot["progressBlocks"]].count("fetching") == 1
             assert "dom-tool-result" in [item["kind"] for item in snapshot["progressBlocks"]]
+            before = {item["kind"]: item["digest"] for item in snapshot["progressBlocks"]}
+            await page.evaluate("document.querySelector('span').textContent = 'Fetching next source'")
+            child_changed = {item["kind"]: item["digest"] for item in (await _snapshot(page, monkeypatch))["progressBlocks"]}
+            assert child_changed["fetching"] != before["fetching"]
+            assert child_changed["dom-tool-result"] == before["dom-tool-result"]
+            await page.evaluate("document.querySelector('[data-testid=tool-result]').setAttribute('data-state', 'complete')")
+            parent_changed = {item["kind"]: item["digest"] for item in (await _snapshot(page, monkeypatch))["progressBlocks"]}
+            assert parent_changed["fetching"] == child_changed["fetching"]
+            assert parent_changed["dom-tool-result"] != child_changed["dom-tool-result"]
         finally:
             await browser.close()
 
