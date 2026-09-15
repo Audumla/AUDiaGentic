@@ -178,6 +178,12 @@ _SNAPSHOT_FN = r"""
     }
     return null;
   };
+  const childContainsCanonicalLexical = (child, canonicalLexicalRoots) => {
+    for (const root of canonicalLexicalRoots) {
+      if (child === root || child.contains(root)) return true;
+    }
+    return false;
+  };
   const boundedTextForKind = node => {
     const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
     const parts = [];
@@ -231,7 +237,7 @@ _SNAPSHOT_FN = r"""
   const attributeMaterial = node => semanticAttrs
     .map(name => `${name}=${attributeDigest(node, name)}`)
     .join("\x1d");
-  const visibleChildCount = (node, excludedRoots = null) => {
+  const visibleChildCount = (node, excludedRoots = null, lexicalCarriers = null, canonicalLexicalRoots = []) => {
     let visited = 0;
     let visible = 0;
     for (let child = node.firstElementChild; child; child = child.nextElementSibling) {
@@ -240,14 +246,15 @@ _SNAPSHOT_FN = r"""
       if (!progressShown(child)) continue;
       const excluded = excludedByLexicalRoot(child, node, excludedRoots);
       if (excluded === null) return null;
+      if (lexicalCarriers?.has(child) || childContainsCanonicalLexical(child, canonicalLexicalRoots)) continue;
       if (!excluded) visible += 1;
     }
     return visible;
   };
-  const semanticNodeDigest = (node, excludedRoots = null) => {
+  const semanticNodeDigest = (node, excludedRoots = null, lexicalCarriers = null, canonicalLexicalRoots = []) => {
     const textDigest = visibleTextDigest(node, excludedRoots);
     if (textDigest === null) return null;
-    const childCount = visibleChildCount(node, excludedRoots);
+    const childCount = visibleChildCount(node, excludedRoots, lexicalCarriers, canonicalLexicalRoots);
     if (childCount === null) return null;
     return progressDigest([
       String(node.tagName || ""),
@@ -256,7 +263,7 @@ _SNAPSHOT_FN = r"""
       textDigest
     ].join("\x1c"));
   };
-  const semanticStateDigest = (node, excludedRoots = null) => {
+  const semanticStateDigest = (node, excludedRoots = null, lexicalCarriers = null, canonicalLexicalRoots = []) => {
     const semanticSelector = [
       "[role]", "[data-testid]", "[aria-busy]", "[aria-expanded]",
       "[aria-valuenow]", "[aria-valuetext]", "[data-state]", "[data-status]",
@@ -280,8 +287,8 @@ _SNAPSHOT_FN = r"""
     const selectedNodes = [...selected, ...tail.filter(child => !selected.includes(child))];
     // Every contribution is fixed-size; the final aggregate is therefore
     // intrinsically below progressDigest's input bound.
-    const rootDigest = semanticNodeDigest(node, excludedRoots);
-    const nodeDigests = selectedNodes.map(child => semanticNodeDigest(child, excludedRoots));
+    const rootDigest = semanticNodeDigest(node, excludedRoots, lexicalCarriers, canonicalLexicalRoots);
+    const nodeDigests = selectedNodes.map(child => semanticNodeDigest(child, excludedRoots, lexicalCarriers, canonicalLexicalRoots));
     if (rootDigest === null || nodeDigests.some(digest => digest === null)) return null;
     return progressDigest([
       "semantic-state-v2",
@@ -371,14 +378,25 @@ _SNAPSHOT_FN = r"""
       )
     ];
     const canonicalLexicalNodes = new WeakSet();
+    const canonicalLexicalRoots = [];
+    const lexicalCarrierNodes = new WeakSet();
+    for (const candidate of candidates) {
+      if (lexicalKinds.has(candidate.kind)) lexicalCarrierNodes.add(candidate.node);
+    }
     for (const candidate of canonicalCandidates) {
-      if (lexicalKinds.has(candidate.kind)) canonicalLexicalNodes.add(candidate.node);
+      if (lexicalKinds.has(candidate.kind)) {
+        canonicalLexicalNodes.add(candidate.node);
+        canonicalLexicalRoots.push(candidate.node);
+      }
     }
     for (const {node, kind} of canonicalCandidates) {
       if (progressBlocks.length >= 128) break;
       if (!progressShown(node) || node.closest('[data-message-author-role="user"]')) continue;
-      const excludedRoots = lexicalKinds.has(kind) ? null : canonicalLexicalNodes;
-      const digest = semanticStateDigest(node, excludedRoots);
+      const structural = !lexicalKinds.has(kind);
+      const excludedRoots = structural ? canonicalLexicalNodes : null;
+      const carriers = structural ? lexicalCarrierNodes : null;
+      const roots = structural ? canonicalLexicalRoots : [];
+      const digest = semanticStateDigest(node, excludedRoots, carriers, roots);
       if (!digest) continue;
       progressBlocks.push({
         ownerPromptMessageId: String(ownerPromptMessageId).slice(0, 256),
