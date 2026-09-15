@@ -305,6 +305,37 @@ def test_session_id_continues_same_live_transport(rig):
     assert transports[0].turns == ["hello", "hello"]
 
 
+def test_stale_active_rehydrate_failure_is_deferred_for_retry(rig, monkeypatch):
+    """A post-restart rehydrate failure cannot terminally reject the turn."""
+    from audiagentic.components.agents.gateway.queue.recovery_control import RecoveryDeferred
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+    runtime, _transports, tmp_path = rig
+    first = _dispatch(
+        tmp_path, _running_record(tmp_path, session_keep_alive=True), dispatch_prompt="hello"
+    )
+    session_id = first["session-id"]
+
+    monkeypatch.setattr(runtime, "session_runtime_status", lambda _session_id: {"available": False})
+
+    def rehydrate_failure(*_args, **_kwargs):
+        raise AudiaGenticError(
+            code="EXT-AGW-118",
+            kind="agents",
+            message="provider rejected durable session rehydration",
+        )
+
+    monkeypatch.setattr(runtime, "rehydrate_session", rehydrate_failure)
+    record = _running_record(tmp_path, session_id=session_id, session_keep_alive=True)
+    with pytest.raises(RecoveryDeferred) as exc:
+        _dispatch(tmp_path, record, dispatch_prompt="after restart")
+
+    assert exc.value.phase == "rehydrate-retry"
+    assert exc.value.side_effect_state == "not-started"
+    stored = store.read_record(tmp_path, record["request-id"])
+    assert stored["state"] == "running"
+
+
 def test_persistent_surface_ignores_execution_context_drift_on_continuation(
     rig, monkeypatch
 ):
