@@ -258,15 +258,7 @@ async def test_structural_semantic_wrapper_survives_nested_lexical_child(
         browser = await pw.chromium.launch(headless=True)
         try:
             page = await browser.new_page()
-            await page.set_content(_BASE + """
-                <div class="agent-turn">
-                  <div id="tool" data-testid="tool-result">
-                    <div id="state" data-state="working">
-                      <span id="lexical" class="box">Fetching source</span>
-                    </div>
-                  </div>
-                </div>
-            """)
+            await page.set_content(_BASE + '<div class="agent-turn"><div id="tool" class="box" data-testid="tool-result"><div id="state" data-state="working"><span id="lexical" class="box">Fetching source</span></div></div></div>')
             initial = {item["kind"]: item["digest"] for item in (await _snapshot(page, monkeypatch))["progressBlocks"]}
             await page.evaluate("document.querySelector('#lexical').textContent = 'Fetching next source'")
             lexical_changed = {item["kind"]: item["digest"] for item in (await _snapshot(page, monkeypatch))["progressBlocks"]}
@@ -276,6 +268,17 @@ async def test_structural_semantic_wrapper_survives_nested_lexical_child(
             structural_changed = {item["kind"]: item["digest"] for item in (await _snapshot(page, monkeypatch))["progressBlocks"]}
             assert structural_changed["fetching"] == lexical_changed["fetching"]
             assert structural_changed["dom-tool-result"] != lexical_changed["dom-tool-result"]
+            await page.evaluate("document.querySelector('#state').remove()")
+            assert "dom-tool-result" in [item["kind"] for item in (await _snapshot(page, monkeypatch))["progressBlocks"]]
+            await page.evaluate("""
+                () => document.querySelector('#tool').insertAdjacentHTML(
+                  'beforeend',
+                  '<div id="state" data-state="complete"><span id="lexical" class="box">Fetching next source</span></div>'
+                )
+            """)
+            remounted = {item["kind"]: item["digest"] for item in (await _snapshot(page, monkeypatch))["progressBlocks"]}
+            assert remounted["dom-tool-result"] == structural_changed["dom-tool-result"]
+            assert remounted["fetching"] == lexical_changed["fetching"]
         finally:
             await browser.close()
 
