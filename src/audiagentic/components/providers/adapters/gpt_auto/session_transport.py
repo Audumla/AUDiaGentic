@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 from pathlib import Path
 from typing import Any
 
@@ -20,7 +21,10 @@ from audiagentic.foundation.transports.agent_session import (
     SessionOpenResult,
     SessionPrompt,
     SessionTurnResult,
+    TransportObservation,
+    TransportObservationKind,
 )
+from audiagentic.foundation.time import now_iso_z
 from audiagentic.foundation.transports.session_binding import ProviderSessionRef
 
 from .chat import ChatState, PersistentChat
@@ -69,6 +73,12 @@ class GptAutoSessionTransport:
     async def prompt(self, request: SessionPrompt, sink: ObservationSink) -> SessionTurnResult:
         if self._closed:
             raise RuntimeError("gpt-auto chat is not ready")
+        # Readiness and project admission can spend a long time in CDP/browser
+        # work before GptAutoTurn has a DOM snapshot to compare.  Emit a
+        # request-scoped provider observation before entering that path so the
+        # durable gateway activity lease does not remain at sequence zero while
+        # the provider adapter is actively inspecting the browser.
+        await self._emit_activity(sink, request, "inspected")
         # Admission can fail before a GptAutoTurn exists (for example an
         # unresolved prior send).  Route that failure through the same
         # provider recovery disposition as failures raised by turn.run();
@@ -77,6 +87,10 @@ class GptAutoSessionTransport:
         # RES-AGW-003.
         try:
             await self.chat.ensure_ready()
+            # A successful readiness pass is a second meaningful provider
+            # observation even when the first post-submit DOM snapshot has not
+            # materialized a new user/assistant node yet.
+            await self._emit_activity(sink, request, "evaluated")
         except Exception as exc:
             metadata_fn = getattr(self.chat, "unresolved_metadata", None)
             metadata = metadata_fn() if callable(metadata_fn) else {}
@@ -131,6 +145,26 @@ class GptAutoSessionTransport:
         finally:
             self._active_turn = None
 
+    async def _emit_activity(
+        self,
+        sink: ObservationSink,
+        request: SessionPrompt,
+        phase: str,
+    ) -> None:
+        """Relay bounded provider lifecycle activity without provider payloads."""
+        observation = TransportObservation(
+            ag_session_id=self.chat.ag_session_id,
+            turn_id=request.turn_id,
+            sequence=None,
+            kind=TransportObservationKind.ACTIVITY,
+            observed_at=now_iso_z(),
+            correlation_quality=CorrelationQuality.REQUEST_SCOPED,
+            attributes={"model_activity": phase},
+        )
+        result = sink(observation)
+        if inspect.isawaitable(result):
+            await result
+
     async def resume_existing(
         self, request: SessionPrompt, sink: ObservationSink
     ) -> SessionTurnResult:
@@ -142,6 +176,11 @@ class GptAutoSessionTransport:
         """
         if self._closed:
             raise RuntimeError("gpt-auto chat is not ready")
+        # Recovery can spend the same long interval rehydrating/revalidating
+        # the CDP page. Keep the request-owned activity lease honest on this
+        # path as well; the resumed turn will emit its sequenced observations
+        # once its provider snapshot loop is active.
+        await self._emit_activity(sink, request, "inspected")
         metadata = self.chat.unresolved_metadata()
         if not metadata.get("unresolved-turn-pending"):
             raise AudiaGenticError(
