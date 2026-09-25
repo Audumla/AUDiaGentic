@@ -43,3 +43,39 @@ def test_acp_content_renews_activity_without_leaking_body(tmp_path, kind, phase)
         relay.observe_provider(source_sequence=2, source_instance="turn", phase="heartbeat")
         relay.observe_provider(source_sequence=3, source_instance="turn", phase="transport-error")
         assert record.call_count == 1
+
+
+@pytest.mark.parametrize(
+    "phase",
+    [
+        "inspected",
+        "fetching",
+        "analyzing",
+        "evaluated",
+        "dom-status",
+        "dom-progress",
+        "dom-tool-result",
+        "dom-connector",
+        "dom-citation",
+        "dom-table",
+        "dom-materialization",
+        "connection-refreshing",
+    ],
+)
+def test_gpt_auto_dom_progress_renews_request_activity(tmp_path, phase):
+    relay = RequestActivityRelay(tmp_path, "req_test", owner_epoch="owner", worker_id="worker", attempt_epoch=1)
+    with patch("audiagentic.components.agents.gateway.activity.store.record_owned_activity") as record:
+        relay.observe_provider(source_sequence=1, source_instance="turn", phase=phase)
+
+    assert record.call_count == 1
+    assert record.call_args.kwargs["phase"] == phase
+
+
+def test_unsequenced_lifecycle_activity_does_not_mask_first_dom_sequence(tmp_path):
+    relay = RequestActivityRelay(tmp_path, "req_test", owner_epoch="owner", worker_id="worker", attempt_epoch=1)
+    with patch("audiagentic.components.agents.gateway.activity.store.record_owned_activity") as record:
+        relay.observe_provider(source_sequence=None, source_instance="turn", phase="inspected")
+        relay.observe_provider(source_sequence=0, source_instance="turn", phase="response-progress")
+
+    assert record.call_count == 2
+    assert record.call_args.kwargs["source_sequence"] == 0

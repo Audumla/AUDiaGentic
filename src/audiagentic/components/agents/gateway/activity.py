@@ -86,6 +86,7 @@ class RequestActivityRelay:
                 source_sequence is not None
                 and previous is not None
                 and previous[0] == source_instance
+                and previous[1] is not None
                 and source_sequence <= int(previous[1] or 0)
             ):
                 return

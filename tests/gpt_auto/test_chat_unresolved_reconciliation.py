@@ -21,6 +21,7 @@ from audiagentic.foundation.transports.agent_session import (
     SessionControlRequest,
     SessionFailureDisposition,
     SessionPrompt,
+    TransportObservationKind,
 )
 
 from .test_greenfield_config_urls import valid_config
@@ -77,6 +78,48 @@ async def test_readiness_failure_is_typed_as_not_started_and_retryable(
     assert error.__cause__ is not None
     assert retained_errors[0].details["retryable-same-session"] is False
     assert transport.turn_failure_disposition() is SessionFailureDisposition.RETAIN
+
+
+@pytest.mark.asyncio
+async def test_prompt_relays_provider_activity_before_slow_readiness(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A slow CDP admission path must not leave the request at activity zero."""
+    chat = _chat(unresolved=False)
+    transport = GptAutoSessionTransport(chat)
+    events: list[tuple[str, object]] = []
+
+    async def ensure_ready() -> None:
+        events.append(("ensure-ready", None))
+
+    async def fake_run(_turn) -> object:
+        events.append(("turn-run", None))
+        return "complete"
+
+    async def sink(observation) -> None:
+        events.append(("observation", observation))
+
+    chat.ensure_ready = ensure_ready  # type: ignore[method-assign]
+    monkeypatch.setattr(transport_module.GptAutoTurn, "run", fake_run)
+
+    result = await transport.prompt(SessionPrompt(turn_id="req-activity", body="hello"), sink)
+
+    assert result == "complete"
+    assert [kind for kind, _ in events] == [
+        "observation",
+        "ensure-ready",
+        "observation",
+        "turn-run",
+    ]
+    observations = [value for kind, value in events if kind == "observation"]
+    assert [item.kind for item in observations] == [
+        TransportObservationKind.ACTIVITY,
+        TransportObservationKind.ACTIVITY,
+    ]
+    assert [item.attributes["model_activity"] for item in observations] == [
+        "inspected",
+        "evaluated",
+    ]
 
 
 @pytest.mark.asyncio
