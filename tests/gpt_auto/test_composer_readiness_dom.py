@@ -51,6 +51,29 @@ async def test_real_dom_readiness_and_exact_prompt(monkeypatch, mismatch, paragr
             async def evaluate(ref, function, argument=None):
                 return await page.evaluate(function, argument)
             monkeypatch.setattr(controller, "evaluate", evaluate)
+
+            async def insert_text(ref, text):
+                return await page.evaluate(
+                    """text => {
+                        const editor = document.querySelector('#prompt-textarea');
+                        editor.focus();
+                        const selection = window.getSelection();
+                        selection.removeAllRanges();
+                        const range = document.createRange();
+                        range.selectNodeContents(editor);
+                        selection.addRange(range);
+                        if (!document.execCommand('insertText', false, text)) {
+                            throw new Error('test input insertion failed');
+                        }
+                        editor.dispatchEvent(new InputEvent('input', {
+                            bubbles: true, inputType: 'insertText', data: text
+                        }));
+                        return true;
+                    }""",
+                    text,
+                )
+
+            monkeypatch.setattr(controller, "insert_text", insert_text)
             prompt = 'Review the repository.\n\nPreserve case and punctuation.\n' + ('Real content, not a repeated-character task. ' * 100)
             if mismatch:
                 with pytest.raises(ComposerSubmissionTimeout) as raised:

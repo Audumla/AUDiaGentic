@@ -566,11 +566,12 @@ class _GptOperationBridge:
     def __init__(self, *, send_enabled: bool = True, stop_visible: bool = True) -> None:
         self.send_enabled = send_enabled
         self.stop_visible = stop_visible
+        self.inserted_text = ""
         self.calls: list[tuple[str, dict]] = []
 
     async def evaluate(self, page_handle, function, argument=None, **kwargs):
-        if "execCommand" in function:
-            return str(argument or "")
+        if "editor?.innerText" in function:
+            return self.inserted_text
         if "send-button" in function:
             return self.send_enabled
         if "stop-button" in function or "stop-generating" in function:
@@ -579,6 +580,8 @@ class _GptOperationBridge:
 
     async def call(self, method, params=None, **kwargs):
         self.calls.append((method, params or {}))
+        if method == "insert_text":
+            self.inserted_text = str((params or {}).get("text") or "")
         if method == "dispatch_enter":
             return {"ok": True}
         return {"ok": True}

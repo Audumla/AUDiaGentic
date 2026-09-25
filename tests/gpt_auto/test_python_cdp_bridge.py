@@ -482,6 +482,24 @@ async def test_typed_browser_api_validates_and_wraps_page_operations():
 
 
 @pytest.mark.asyncio
+async def test_bridge_insert_text_uses_native_cdp_input():
+    bridge = PythonCdpBridge(GptAutoConfig.from_dict(valid_config()))
+    fake = _FakeClient()
+    bridge._client = fake
+    page = await bridge.call("create_page")
+
+    result = await bridge.call(
+        "insert_text", {"pageHandle": page["pageHandle"], "text": "native input"}
+    )
+
+    assert result == {"inserted": True}
+    assert any(
+        method == "Input.insertText" and params == {"text": "native input"}
+        for method, params, _session in fake.calls
+    )
+
+
+@pytest.mark.asyncio
 async def test_generic_browser_api_supports_common_page_composites():
     bridge = PythonCdpBridge(GptAutoConfig.from_dict(valid_config()))
     fake = _FakeClient()
