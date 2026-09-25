@@ -888,9 +888,15 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                         page,
                         r"""(text) => {
                           // innerText includes layout whitespace between rich-editor
-                          // paragraphs. Compare content without that presentation
-                          // whitespace; never rewrite the submitted prompt itself.
-                          const normalize = value => String(value || '').replace(/\s+/g, ' ').trim();
+                          // paragraphs. ChatGPT's autolink widget also inserts a
+                          // presentation space after an inline-code backtick before
+                          // a URL. Canonicalize those two provider-owned render
+                          // details for comparison only; never rewrite the submitted
+                          // prompt itself.
+                          const normalize = value => String(value || '')
+                            .replace(/\s+/g, ' ')
+                            .trim()
+                            .replace(/`\s+(?=(?:https?:\/\/|www\.))/g, '`');
                            const editor = document.querySelector('#prompt-textarea') || Array.from(
                              document.querySelectorAll('[contenteditable="true"]')
                            ).find(el => /^(new chat in\b|ask chatgpt$|message chatgpt$)/i.test(String(el.getAttribute('aria-label') || '').trim()));
