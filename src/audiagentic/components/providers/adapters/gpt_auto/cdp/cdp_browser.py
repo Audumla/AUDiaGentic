@@ -121,6 +121,13 @@ class CdpBrowserController:
     async def close(self, page: CdpPageRef) -> None:
         await self.bridge.call("close_page", {"pageHandle": self._handle(page)})
 
+    async def insert_text(self, page: CdpPageRef, text: str) -> None:
+        if not isinstance(text, str) or not text:
+            raise ValueError("text must be a non-empty string")
+        await self.bridge.call(
+            "insert_text", {"pageHandle": self._handle(page), "text": text}
+        )
+
     async def navigate(self, page: CdpPageRef, url: str) -> CdpPageRef:
         url = _required(url, "url")
         if not urlparse(url).scheme:
