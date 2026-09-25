@@ -87,6 +87,24 @@ _NON_WORK_ACTIVITY_LABELS = frozenset({
     "transport-unknown",
 })
 _WORK_ACTIVITY_LABELS = frozenset({
+    # Provider-neutral DOM progress labels.  GPT-auto projects these from
+    # bounded, request-owned progress blocks; they are real work even when
+    # the assistant response text has not changed yet.
+    "inspected",
+    "fetching",
+    "analyzing",
+    "evaluated",
+    "dom-status",
+    "dom-progress",
+    "dom-tool-result",
+    "dom-connector",
+    "dom-citation",
+    "dom-table",
+    "dom-materialization",
+    # Synthetic gateway-lease activity while the provider's interruption
+    # banner remains visible.  GPT-auto keeps this separate from its real
+    # recovery clock; the gateway still needs it to retain the request lease.
+    "connection-refreshing",
     "thinking",
     "searching-web",
     "searching-the-web",
