@@ -570,6 +570,9 @@ _SNAPSHOT_FN = r"""
     // than stripping their labels from the resulting string: a real prompt is
     // allowed to contain words such as "Show more".
     clone.querySelectorAll('button, [role="button"], [aria-label*="show more" i], [aria-label*="show less" i]').forEach(el => el.remove());
+    clone.querySelectorAll('[aria-hidden="true"]').forEach(el => {
+      if (String(el.innerText || el.textContent || "").trim() === "…") el.remove();
+    });
     const hrs = Array.from(clone.querySelectorAll('hr'));
     for (const hr of hrs) hr.replaceWith(document.createTextNode("\n---\n"));
     const text = structuralText(clone).slice(0, 200000) || null;
