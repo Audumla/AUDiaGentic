@@ -108,7 +108,12 @@ settings:
         # instead -- role-specific by itself, testid kept only as an extra
         # qualifier, not an independently-sufficient alternative.
         scope: latest-assistant-turn
-        selectors: ['button[data-testid="copy-turn-action-button"][aria-label="Copy response"]']
+        selectors:
+          - 'button[data-testid="copy-turn-action-button"][aria-label="Copy response"]'
+          # Current ChatGPT project conversations use the same assistant-scoped
+          # control with the generic labels "Copy" or "Copy message".
+          - 'button[aria-label="Copy"]'
+          - 'button[aria-label="Copy message"]'
         visible: false
       error-page:
         scope: document
