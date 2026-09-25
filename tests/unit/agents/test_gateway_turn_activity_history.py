@@ -142,6 +142,55 @@ async def test_session_timeline_retains_every_later_activity_label(
 
 
 @pytest.mark.asyncio
+async def test_pre_readiness_activity_reaches_real_relay_path(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The lifecycle marker must renew the durable lease before CDP readiness."""
+    relay = RequestActivityRelay(
+        tmp_path,
+        "req-early-activity",
+        owner_epoch="owner",
+        worker_id="worker",
+        attempt_epoch=1,
+    )
+    recorded: list[dict] = []
+    monkeypatch.setattr(
+        store,
+        "record_owned_activity",
+        lambda *args, **kwargs: recorded.append(dict(kwargs)) or {},
+    )
+    monkeypatch.setattr(
+        turn_events.session_store,
+        "record_session_timeline",
+        lambda *args, **kwargs: {},
+    )
+    callback = turn_events._make_on_event_callback(
+        "ses-early-activity",
+        tmp_path,
+        "req-early-activity",
+        "profile-1",
+        "corr-1",
+        activity_relay=relay,
+    )
+
+    await callback(
+        TransportObservation(
+            ag_session_id="ag-s-1",
+            turn_id="req-early-activity",
+            sequence=None,
+            kind=TransportObservationKind.ACTIVITY,
+            observed_at="2026-09-04T00:00:00Z",
+            correlation_quality=CorrelationQuality.REQUEST_SCOPED,
+            attributes={"model_activity": "inspected"},
+        )
+    )
+
+    assert len(recorded) == 1
+    assert recorded[0]["phase"] == "inspected"
+
+
+@pytest.mark.asyncio
 async def test_timing_milestones_are_timeline_only_not_activity(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
