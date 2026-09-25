@@ -121,3 +121,37 @@ async def test_real_dom_readiness_accepts_chatgpt_rich_url_rendering(monkeypatch
             assert await page.evaluate('window.clicks') == 1
         finally:
             await browser.close()
+
+
+@pytest.mark.asyncio
+async def test_real_dom_readiness_rejects_changed_paragraph_boundary(monkeypatch):
+    """The send guard must not turn a semantic line break into a space."""
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            await page.set_content('''<div id="prompt-textarea" contenteditable="true"></div>
+                <button data-testid="send-button" disabled>Send</button>''')
+            controller = GptAutoCdpBrowserController(object())
+
+            async def evaluate(ref, function, argument=None):
+                return await page.evaluate(function, argument)
+
+            monkeypatch.setattr(controller, "evaluate", evaluate)
+
+            async def insert_text(ref, text):
+                await page.evaluate('''() => {
+                    const editor = document.querySelector('#prompt-textarea');
+                    editor.innerHTML = '<p>line one</p><p>line two</p>';
+                    document.querySelector('button').disabled = false;
+                }''')
+
+            monkeypatch.setattr(controller, "insert_text", insert_text)
+            with pytest.raises(ComposerSubmissionTimeout) as raised:
+                await controller.submit(
+                    CdpPageRef('test', 'test'), 'line one line two', timeout=0.8
+                )
+            assert raised.value.send_attempted is False
+            assert await page.evaluate('document.querySelector("button").disabled') is False
+        finally:
+            await browser.close()

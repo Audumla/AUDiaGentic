@@ -533,6 +533,34 @@ _SNAPSHOT_FN = r"""
   // present.  Visible text remains untouched for diagnostics and display;
   // correlationText is used only with the existing prompt fingerprint and
   // freshness/order/terminal proof gates.
+  // ``innerText`` on a detached clone falls back to ``textContent`` in
+  // Chromium, which drops the paragraph boundaries that are present in the
+  // rendered user message.  Walk the cloned DOM instead so the correlation
+  // representation preserves semantic line boundaries without depending on
+  // layout being painted.  This is deliberately structural rather than a
+  // general whitespace normalizer: prompt_fingerprint.py owns the bounded
+  // Markdown/renderer tolerance after this extraction.
+  const structuralText = (root) => {
+    const blockTags = new Set([
+      "ADDRESS", "ARTICLE", "ASIDE", "BLOCKQUOTE", "DD", "DIV", "DL", "DT",
+      "FIELDSET", "FIGURE", "FOOTER", "FORM", "H1", "H2", "H3", "H4",
+      "H5", "H6", "HEADER", "LI", "MAIN", "NAV", "OL", "P", "PRE",
+      "SECTION", "TABLE", "TR", "UL"
+    ]);
+    const walk = (node) => {
+      if (node.nodeType === Node.TEXT_NODE) return node.nodeValue || "";
+      if (node.nodeType !== Node.ELEMENT_NODE) return "";
+      const element = /** @type {Element} */ (node);
+      if (element.getAttribute("data-markdown-copy") === "exclude") return "";
+      if (element.matches("button, [role=button]")) return "";
+      if (element.tagName === "BR") return "\n";
+      let value = "";
+      for (const child of element.childNodes) value += walk(child);
+      if (blockTags.has(element.tagName) && !value.endsWith("\n")) value += "\n";
+      return value;
+    };
+    return walk(root).replace(/\n+$/, "");
+  };
   const userCorrelation = (element) => {
     const source = element?.querySelector('[data-testid="collapsible-user-message-content"]') || element;
     if (!source) return {text: null, hrCount: 0};
@@ -544,7 +572,7 @@ _SNAPSHOT_FN = r"""
     clone.querySelectorAll('button, [role="button"], [aria-label*="show more" i], [aria-label*="show less" i]').forEach(el => el.remove());
     const hrs = Array.from(clone.querySelectorAll('hr'));
     for (const hr of hrs) hr.replaceWith(document.createTextNode("\n---\n"));
-    const text = ((clone.innerText || clone.textContent || "").trim()).slice(0, 200000) || null;
+    const text = structuralText(clone).slice(0, 200000) || null;
     return {text, hrCount: hrs.length};
   };
   // generating mirrors the same per-signal-scoped evidence the domSignals
@@ -887,21 +915,44 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                     sent = await self.evaluate(
                         page,
                         r"""(text) => {
-                          // innerText includes layout whitespace between rich-editor
-                          // paragraphs. ChatGPT's autolink widget also inserts a
-                          // presentation space after an inline-code backtick before
-                          // a URL. Canonicalize those two provider-owned render
-                          // details for comparison only; never rewrite the submitted
-                          // prompt itself.
-                          const normalize = value => String(value || '')
-                            .replace(/\s+/g, ' ')
-                            .trim()
-                            .replace(/`\s+(?=(?:https?:\/\/|www\.))/g, '`');
+                           // Read the editor's semantic DOM rather than innerText.
+                           // ChatGPT's rich-link widget owns the presentation
+                           // whitespace around its URL, so replace only that
+                           // provider-owned node with its stable link value.
+                           // Preserve caller whitespace everywhere else: this is
+                           // the final fail-closed guard before button.click().
+                           const renderedText = root => {
+                             const blockTags = new Set([
+                               'ADDRESS', 'ARTICLE', 'ASIDE', 'BLOCKQUOTE', 'DD', 'DIV', 'DL', 'DT',
+                               'FIELDSET', 'FIGURE', 'FOOTER', 'FORM', 'H1', 'H2', 'H3', 'H4',
+                               'H5', 'H6', 'HEADER', 'LI', 'MAIN', 'NAV', 'OL', 'P', 'PRE',
+                               'SECTION', 'TABLE', 'TR', 'UL'
+                             ]);
+                             const walk = node => {
+                               if (node.nodeType === Node.TEXT_NODE) return node.nodeValue || '';
+                               if (node.nodeType !== Node.ELEMENT_NODE) return '';
+                               const element = node;
+                               const link = element.getAttribute('text-link-href');
+                               if (link) return link;
+                               if (element.getAttribute('data-markdown-copy') === 'exclude') return '';
+                               if (element.matches('button, [role=button]')) return '';
+                               if (element.tagName === 'BR') return '\n';
+                               let value = '';
+                               for (const child of element.childNodes) value += walk(child);
+                               if (blockTags.has(element.tagName) && !value.endsWith('\n')) value += '\n';
+                               return value;
+                             };
+                             return walk(root).replace(/\n+$/, '');
+                           };
+                           const sourceText = value => String(value || '')
+                             .replace(/\r\n/g, '\n')
+                             .replace(/\r/g, '\n')
+                             .replace(/\n+$/, '');
                            const editor = document.querySelector('#prompt-textarea') || Array.from(
                              document.querySelectorAll('[contenteditable="true"]')
                            ).find(el => /^(new chat in\b|ask chatgpt$|message chatgpt$)/i.test(String(el.getAttribute('aria-label') || '').trim()));
                           if (!editor || !editor.isContentEditable) return false;
-                          if (normalize(editor.innerText || editor.textContent || '') !== normalize(text)) return false;
+                           if (renderedText(editor) !== sourceText(text)) return false;
                           const button = document.querySelector('[data-testid="send-button"], button[aria-label*="Send" i]');
                           if (!button || button.disabled || button.getAttribute('aria-disabled') === 'true' || !button.getClientRects().length) return false;
                           button.click(); return true;
