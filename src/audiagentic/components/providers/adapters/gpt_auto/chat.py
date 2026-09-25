@@ -341,12 +341,12 @@ class PersistentChat:
             if not self.provider_session_id and not parse_project_id(self.project_url or ""):
                 if hasattr(browser, "page_by_handle"):
                     page = await browser.page_by_handle(self.page_handle)
-                    await browser.navigate(page, "https://chatgpt.com/projects")
+                    await browser.navigate(page, "https://chatgpt.com/")
                     match = await browser.find_project_url(page, self.project_name)
                 else:
                     await self.runtime.bridge.call(
                         "navigate",
-                        {"pageHandle": self.page_handle, "url": "https://chatgpt.com/projects"},
+                        {"pageHandle": self.page_handle, "url": "https://chatgpt.com/"},
                     )
                     match = await self.runtime.bridge.call(
                         "find_project_url",

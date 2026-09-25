@@ -90,7 +90,7 @@ async def test_initial_chat_discovers_project_by_active_project_name(monkeypatch
         "find_project_url",
         "navigate",
     ]
-    assert runtime.bridge.calls[1][1]["url"] == "https://chatgpt.com/projects"
+    assert runtime.bridge.calls[1][1]["url"] == "https://chatgpt.com/"
     assert runtime.bridge.calls[3][1]["url"] == chat.project_url
 
 

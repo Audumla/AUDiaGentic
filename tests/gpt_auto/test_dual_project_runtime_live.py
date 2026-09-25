@@ -12,7 +12,7 @@ same scenarios re-verified through the full MCP/gateway surface.
 
 Targets two REAL, dedicated ChatGPT projects created for this purpose:
 "gpt-t1" and "gpt-t2", matched by name via PersistentChat's project
-discovery (chat.py's find_project_url path over https://chatgpt.com/projects,
+discovery (chat.py's find_project_url path over ChatGPT's sidebar,
 exercised deterministically in test_project_discovery.py). Both simulated
 chats share ONE GptAutoProviderRuntime -- the runtime is machine-scoped by
 design (runtime_registry.get_runtime's explicit ``del project_root``), so

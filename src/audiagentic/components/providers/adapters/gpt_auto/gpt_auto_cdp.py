@@ -10,7 +10,7 @@ from .cdp.cdp_browser import CdpBrowserController, CdpPageRef, CdpWindowBounds
 from .cdp.client import CdpError
 from .urls import parse_project_id
 
-_PROJECTS_URL = "https://chatgpt.com/projects"
+_CHATGPT_HOME_URL = "https://chatgpt.com/"
 
 
 class ComposerSubmissionTimeout(TimeoutError):
@@ -48,15 +48,41 @@ _SNAPSHOT_FN = r"""
   // desync: collecting ids and texts via separately-filtered passes let an
   // empty/transient text node fall out of one array but not the other.
   const allRoleNodes = Array.from(document.querySelectorAll('[data-message-author-role="user"], [data-message-author-role="assistant"]'));
+  const usingFallbackMessages = allRoleNodes.length === 0;
   const messageEntries = [];
-  for (const el of allRoleNodes) {
-    const role = el.getAttribute("data-message-author-role");
-    if (role === "assistant" && (el.getAttribute("data-message-id") || "").startsWith("request-placeholder-request-")) continue;
-    messageEntries.push({role, el, messageId: el.getAttribute("data-message-id") || null});
+  if (allRoleNodes.length) {
+    for (const el of allRoleNodes) {
+      const role = el.getAttribute("data-message-author-role");
+      if (role === "assistant" && (el.getAttribute("data-message-id") || "").startsWith("request-placeholder-request-")) continue;
+      messageEntries.push({role, el, messageId: el.getAttribute("data-message-id") || null});
+    }
+  } else {
+    // The current ChatGPT renderer (2026-09) replaced data-message-author-role
+    // with labelled turn blocks. Keep the same ordered prompt/response model
+    // and derive bounded synthetic IDs from the stable DOM order when the new
+    // renderer does not expose message UUIDs.
+    const fallbackBlocks = Array.from(document.querySelectorAll('.block-BQZwFn'));
+    let userIndex = 0;
+    let assistantIndex = 0;
+    for (const block of fallbackBlocks) {
+      const label = String(block.querySelector('h4.sr-only')?.innerText || '').trim().toLowerCase();
+      if (label === 'you said:') {
+        const content = block.querySelector('[data-user-message-bubble="true"]') || block;
+        const messageId = content.getAttribute('data-chatgpt-search-message-ids') || `fallback-user-${userIndex++}`;
+        messageEntries.push({role: 'user', el: content, messageId});
+      } else if (label === 'chatgpt said:') {
+        messageEntries.push({role: 'assistant', el: block, messageId: `fallback-assistant-${assistantIndex++}`});
+      }
+    }
   }
-  const users = messageEntries.filter(m => m.role === "user").map(m => m.el);
-  const assistants = messageEntries.filter(m => m.role === "assistant").map(m => m.el);
-  const latestAssistant = assistants.length ? assistants[assistants.length - 1] : null;
+  const userMessageEntries = messageEntries.filter(m => m.role === "user");
+  const assistantMessageEntries = messageEntries.filter(m => m.role === "assistant");
+  const users = userMessageEntries.map(m => m.el);
+  const assistants = assistantMessageEntries.map(m => m.el);
+  const latestAssistantRef = assistantMessageEntries.length
+    ? assistantMessageEntries[assistantMessageEntries.length - 1]
+    : null;
+  const latestAssistant = latestAssistantRef?.el || null;
   // During a streamed response ChatGPT can render connector/tool rows inside
   // the current `.agent-turn` before it materializes the assistant message
   // node (`data-message-author-role="assistant"`).  The old implementation
@@ -75,6 +101,7 @@ _SNAPSHOT_FN = r"""
   // for a differently-nested turn. <article> has never been observed to
   // exist in current ChatGPT markup; kept as a legacy fallback only.
   const assistantTurn = latestAssistant ? (
+    (usingFallbackMessages && latestAssistant.closest("[data-turn-key]")) ||
     latestAssistant.closest(".agent-turn") || latestAssistant.closest("article") || latestAssistant.parentElement?.parentElement
   ) : latestAgentTurn;
   // Progress rows are rendered as visible, short-lived status blocks in the
@@ -481,7 +508,7 @@ _SNAPSHOT_FN = r"""
   const terminalWitnessAssistantId = (
     domSignals["completion-control"] || domSignals["more-actions-menu"] ||
     domSignals["canvas-edit-control"] || domSignals["canvas-open-editor-control"]
-  ) ? (latestAssistant?.getAttribute("data-message-id") || null) : null;
+  ) ? (latestAssistantRef?.messageId || null) : null;
   // GP19: this bound was 20000, which is small enough that a genuinely
   // long real prompt/response can never satisfy exact-text correlation
   // matching even with otherwise-perfect DOM extraction (a distinct latent
@@ -537,10 +564,14 @@ _SNAPSHOT_FN = r"""
   // the real chat composer in DOM order. A plain '.ProseMirror' query
   // matches that canvas editor instead of the real composer whenever any
   // canvas turn exists anywhere in the conversation -- live-reproduced as
-  // a misdirected prompt submission. #prompt-textarea is the real
-  // composer's own stable, unique id; confirmed present across every
-  // observed page state, canvas or not.
-  const composer = document.querySelector("#prompt-textarea");
+  // a misdirected prompt submission. #prompt-textarea is the stable
+  // conversation composer. A project landing page reached through the
+  // sidebar's "New chat in <project>" control uses a contenteditable with an
+  // aria-label instead. Prefer the id and otherwise accept only the
+  // project-labelled editor so a canvas editor cannot receive the prompt.
+  const composer = document.querySelector("#prompt-textarea") || Array.from(
+    document.querySelectorAll('[contenteditable="true"]')
+  ).find(el => /^(new chat in\b|ask chatgpt$|message chatgpt$)/i.test(String(el.getAttribute("aria-label") || "").trim()));
   // ChatGPT assigns a short conversation label in the left navigation.  The
   // label can be generated/renamed while a turn is running, so resolve it by
   // the active conversation URL on every snapshot rather than relying on the
@@ -589,10 +620,16 @@ _SNAPSHOT_FN = r"""
   // GP08 slice 1: text extraction happens exactly once per node here, so
   // an id and its text can never desync between two independently-filtered
   // arrays the way the old users.map(...)/assistants.map(...) pairs could.
+  const assistantText = (element) => {
+    if (!element) return null;
+    const clone = element.cloneNode(true);
+    clone.querySelectorAll('h4.sr-only').forEach(el => el.remove());
+    return boundedText(clone);
+  };
   const messageRefs = messageEntries.map((m, sequence) => ({
     role: m.role,
     messageId: m.messageId,
-    text: m.role === "user" ? userText(m.el) : boundedText(m.el),
+    text: m.role === "user" ? userText(m.el) : assistantText(m.el),
     ...(m.role === "user" ? (() => {
       const correlation = userCorrelation(m.el);
       return correlation.text ? {
@@ -625,7 +662,7 @@ _SNAPSHOT_FN = r"""
     assistantMessageIds: assistantRefs.map(m => m.messageId).filter(Boolean),
     assistantMessageTexts: assistantRefs.map(m => m.text).filter(Boolean).slice(-64),
     latestUserId: userRefs.length ? userRefs[userRefs.length - 1].messageId : null,
-    latestAssistantId: latestAssistant?.getAttribute("data-message-id") || null,
+    latestAssistantId: latestAssistantRef?.messageId || null,
     latestUserText: lastText(userRefs), latestAssistantText: lastText(assistantRefs), generating, domSignals,
     terminalWitnessAssistantId,
     toolActivityCounts,
@@ -823,8 +860,10 @@ class GptAutoCdpBrowserController(CdpBrowserController):
             async with asyncio.timeout(timeout if timeout is not None else self._SUBMIT_DEFAULT_TIMEOUT_SECONDS):
                 typed = await self.evaluate(
                     page,
-                    """(text) => {
-                      const editor = document.querySelector('#prompt-textarea');
+                    r"""(text) => {
+                       const editor = document.querySelector('#prompt-textarea') || Array.from(
+                         document.querySelectorAll('[contenteditable="true"]')
+                       ).find(el => /^(new chat in\b|ask chatgpt$|message chatgpt$)/i.test(String(el.getAttribute('aria-label') || '').trim()));
                       if (!editor) throw new Error('composer not found');
                       editor.focus();
                       const selection = window.getSelection(); selection.removeAllRanges();
@@ -848,7 +887,9 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                           // paragraphs. Compare content without that presentation
                           // whitespace; never rewrite the submitted prompt itself.
                           const normalize = value => String(value || '').replace(/\s+/g, ' ').trim();
-                          const editor = document.querySelector('#prompt-textarea');
+                           const editor = document.querySelector('#prompt-textarea') || Array.from(
+                             document.querySelectorAll('[contenteditable="true"]')
+                           ).find(el => /^(new chat in\b|ask chatgpt$|message chatgpt$)/i.test(String(el.getAttribute('aria-label') || '').trim()));
                           if (!editor || !editor.isContentEditable) return false;
                           if (normalize(editor.innerText || editor.textContent || '') !== normalize(text)) return false;
                           const button = document.querySelector('[data-testid="send-button"], button[aria-label*="Send" i]');
@@ -872,29 +913,26 @@ class GptAutoCdpBrowserController(CdpBrowserController):
             r"""async (name) => {
               const normalize = value => String(value || '').replace(/\s+/g, ' ').trim();
               const wanted = normalize(name).toLowerCase();
-              const matchingProjectLink = () => Array.from(document.querySelectorAll('a[href]')).find(anchor => {
-                const label = normalize(anchor.innerText || anchor.textContent || anchor.getAttribute('aria-label'));
-                if (label.toLowerCase() !== wanted) return false;
-                try { return /\/g\/g-p-[^/]+\/project\/?$/.test(new URL(anchor.href, location.origin).pathname); }
-                catch (_) { return false; }
-              });
+              const matchingProjectRow = () => Array.from(
+                document.querySelectorAll('[data-app-action-sidebar-project-row]')
+              ).find(row => normalize(row.getAttribute('data-app-action-sidebar-project-label')).toLowerCase() === wanted);
               for (let i = 0; i < 120; i++) {
-                const projectLink = matchingProjectLink();
-                if (projectLink) return {url: new URL(projectLink.href, location.origin).href, name};
-                const row = Array.from(document.querySelectorAll('[role=row]')).find(row => {
-                  const values = [...Array.from(row.querySelectorAll('[role=cell], [role=gridcell]')).map(c => c.innerText || c.textContent), ...(row.innerText || '').split(/\r?\n/)].map(normalize);
-                  return values.some(value => value.toLowerCase() === wanted);
-                });
+                const row = matchingProjectRow();
                 if (row) {
-                  row.click();
-                  let projectLocation = null;
-                  for (let j = 0; j < 120; j++) {
-                    const hydratedLink = matchingProjectLink();
-                    if (hydratedLink) return {url: new URL(hydratedLink.href, location.origin).href, name};
-                    if (/\/g\/g-p-[^/]+/.test(location.pathname)) projectLocation = location.href;
-                    await new Promise(r => setTimeout(r, 100));
+                  if (row.getAttribute('aria-expanded') !== 'true') row.click();
+                  const button = Array.from(row.querySelectorAll('button')).find(candidate =>
+                    normalize(candidate.getAttribute('aria-label')).toLowerCase() === `new chat in ${wanted}`
+                      && candidate.getClientRects().length
+                  );
+                  if (button) button.click();
+                  if (button) {
+                    for (let j = 0; j < 120; j++) {
+                      if (/\/g\/g-p-[^/]+\/project\/?$/.test(location.pathname)) {
+                        return {url: location.href, name};
+                      }
+                      await new Promise(r => setTimeout(r, 100));
+                    }
                   }
-                  if (projectLocation) return {url: projectLocation, name};
                 }
                 await new Promise(r => setTimeout(r, 100));
               }
@@ -913,17 +951,17 @@ class GptAutoCdpBrowserController(CdpBrowserController):
         navigation_timeout: float,
         ready_timeout: float,
     ) -> dict[str, Any]:
-        """Open a genuinely new chat through ChatGPT's Projects UI.
+        """Open a genuinely new chat through ChatGPT's sidebar UI.
 
         A configured URL is validation data only. New sessions always select
-        the exact visible project name from /projects; existing sessions use
+        the exact visible project name from ChatGPT's sidebar; existing sessions use
         their persisted /c/ URL and never enter this method.
         """
         expected_project_id = parse_project_id(project_url or "")
         page = await self.new_tab(in_window=anchor_page) if anchor_page else await self.new_window()
         try:
             async with asyncio.timeout(navigation_timeout):
-                page = await self.navigate(page, _PROJECTS_URL)
+                page = await self.navigate(page, _CHATGPT_HOME_URL)
             known_targets = {candidate.target_id for candidate in await self.pages()}
             deadline = asyncio.get_running_loop().time() + navigation_timeout
             clicked = False
@@ -931,19 +969,20 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                 clicked = await self.evaluate(
                     page,
                     r"""(name) => {
-                      const normalize = value => String(value || '').replace(/\s+/g, ' ').trim();
-                      const wanted = normalize(name).toLowerCase();
-                      const exact = value => normalize(value).toLowerCase() === wanted;
-                      const anchor = Array.from(document.querySelectorAll('a[href]')).find(item =>
-                        exact(item.innerText || item.textContent || item.getAttribute('aria-label'))
-                      );
-                      if (anchor) { anchor.click(); return true; }
-                      const row = Array.from(document.querySelectorAll('[role="row"]')).find(item =>
-                        (item.innerText || item.textContent || '').split(/\r?\n/).some(exact)
-                      );
-                      if (row) { row.click(); return true; }
-                      return false;
-                    }""",
+                       const normalize = value => String(value || '').replace(/\s+/g, ' ').trim();
+                       const wanted = normalize(name).toLowerCase();
+                       const row = Array.from(document.querySelectorAll('[data-app-action-sidebar-project-row]')).find(item =>
+                         normalize(item.getAttribute('data-app-action-sidebar-project-label')).toLowerCase() === wanted
+                       );
+                       if (!row) return false;
+                       if (row.getAttribute('aria-expanded') !== 'true') row.click();
+                       const button = Array.from(row.querySelectorAll('button')).find(candidate =>
+                         normalize(candidate.getAttribute('aria-label')).toLowerCase() === `new chat in ${wanted}`
+                           && candidate.getClientRects().length
+                       );
+                       if (button) { button.click(); return true; }
+                       return false;
+                     }""",
                     project_name,
                 )
                 if clicked is True:
@@ -952,9 +991,10 @@ class GptAutoCdpBrowserController(CdpBrowserController):
             if not clicked:
                 raise RuntimeError(f"ChatGPT project not found: {project_name}")
 
-            # ChatGPT may navigate the Projects target or open the selected
-            # project in a new target. Adopt whichever target the UI created;
-            # never leave the session watcher attached to stale /projects.
+            # ChatGPT may navigate the sidebar-selected project in-place or
+            # briefly reuse the home route. Adopt whichever target the UI
+            # created; never leave the session watcher attached to the stale
+            # home page.
             source_page = page
             deadline = asyncio.get_running_loop().time() + navigation_timeout
             selected_url = ""
