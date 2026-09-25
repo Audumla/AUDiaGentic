@@ -292,7 +292,7 @@ async def test_bridge_positive_lifecycle_sequence_is_typed_and_reusable():
 
 
 @pytest.mark.asyncio
-async def test_new_session_selects_exact_project_from_projects_page(monkeypatch) -> None:
+async def test_new_session_selects_exact_project_from_sidebar(monkeypatch) -> None:
     browser = GptAutoCdpBrowserController(SimpleNamespace())
     anchor = CdpPageRef("anchor", "anchor-target", 7, "http://127.0.0.1:8765/dashboard", "")
     page = CdpPageRef("page-1", "target-1", 7, "about:blank", "")
@@ -345,7 +345,7 @@ async def test_new_session_selects_exact_project_from_projects_page(monkeypatch)
 
     assert calls == [
         ("new-tab", (anchor, None)),
-        ("navigate", "https://chatgpt.com/projects"),
+        ("navigate", "https://chatgpt.com/"),
         ("find-project", "BigCherry"),
         ("composer", 4),
     ]
@@ -428,7 +428,7 @@ async def test_new_session_adopts_ui_opened_target_and_closes_projects_tab(monke
     async def page_by_handle(_handle):
         return CdpPageRef(
             projects_page.handle, projects_page.target_id, projects_page.window_id,
-            "https://chatgpt.com/projects", "Projects",
+            "https://chatgpt.com/", "ChatGPT",
         )
 
     async def wait_for_composer(page, *, timeout):
