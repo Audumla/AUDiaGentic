@@ -858,7 +858,7 @@ class GptAutoCdpBrowserController(CdpBrowserController):
         stage = "composer-insertion"
         try:
             async with asyncio.timeout(timeout if timeout is not None else self._SUBMIT_DEFAULT_TIMEOUT_SECONDS):
-                typed = await self.evaluate(
+                await self.evaluate(
                     page,
                     r"""(text) => {
                        const editor = document.querySelector('#prompt-textarea') || Array.from(
@@ -868,12 +868,16 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                       editor.focus();
                       const selection = window.getSelection(); selection.removeAllRanges();
                       const range = document.createRange(); range.selectNodeContents(editor); selection.addRange(range);
-                      if (!document.execCommand('insertText', false, text)) throw new Error('browser rejected atomic composer insertion');
-                      editor.dispatchEvent(new InputEvent('input', {bubbles: true, inputType: 'insertText', data: text}));
-                      return (editor.innerText || editor.textContent || '').trim();
+                      return true;
                     }""",
                     text,
                 )
+                await self.insert_text(page, text)
+                # The send-side DOM check below re-reads and compares the
+                # composer text.  Input.insertText has already delivered the
+                # exact caller text to the focused editor, so a second read
+                # here only adds another CDP race window.
+                typed = text
                 while True:
                     # One synchronous DOM operation verifies both readiness
                     # conditions and clicks once. No browser-side timer survives

@@ -408,6 +408,17 @@ class PythonCdpBridge:
                     timeout=timeout,
                 )
             return {"ok": True}
+        if method == "insert_text":
+            text = params.get("text")
+            if not isinstance(text, str) or not text:
+                raise ValueError("text must be a non-empty string")
+            await self._session_command(
+                handle,
+                "Input.insertText",
+                {"text": text},
+                timeout=timeout,
+            )
+            return {"inserted": True}
         if method == "close_page":
             target_id = await self._target(handle)
             await self.client.command(
