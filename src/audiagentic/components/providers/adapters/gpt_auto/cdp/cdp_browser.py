@@ -138,6 +138,64 @@ class CdpBrowserController:
     async def evaluate(self, page: CdpPageRef, function: str, argument: Any = None) -> Any:
         return await self.bridge.evaluate(self._handle(page), function, argument)
 
+    async def hover_text(self, page: CdpPageRef, label: str) -> bool:
+        """Move the native CDP pointer over the visible exact-label control."""
+        point = await self._text_point(page, label)
+        if point is None:
+            return False
+        await self.bridge.call(
+            "hover",
+            {"pageHandle": self._handle(page), "x": point["x"], "y": point["y"]},
+        )
+        return True
+
+    async def click_text(self, page: CdpPageRef, label: str) -> bool:
+        """Press and release the native CDP pointer on an exact-label element."""
+        point = await self._text_point(page, label)
+        if point is None:
+            return False
+        await self.bridge.call(
+            "click",
+            {"pageHandle": self._handle(page), "x": point["x"], "y": point["y"]},
+        )
+        return True
+
+    async def _text_point(self, page: CdpPageRef, label: str) -> dict[str, float] | None:
+        """Resolve an exact visible text/ARIA label to viewport coordinates."""
+        point = await self.evaluate(
+            page,
+            r"""(wantedLabel) => {
+              const normalize = value => String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
+              const wanted = normalize(wantedLabel);
+              const visible = element => {
+                const rect = element.getBoundingClientRect();
+                const style = getComputedStyle(element);
+                return rect.width > 0 && rect.height > 0 &&
+                  style.display !== 'none' && style.visibility !== 'hidden' &&
+                  style.opacity !== '0';
+              };
+              const label = element => normalize(
+                element.getAttribute('aria-label') || element.innerText ||
+                element.textContent || element.getAttribute('title')
+              );
+              const node = Array.from(document.querySelectorAll('*')).find(
+                candidate => visible(candidate) && label(candidate) === wanted
+              );
+              if (!node) return null;
+              node.scrollIntoView({block: 'center', inline: 'nearest'});
+              const rect = node.getBoundingClientRect();
+              return {x: rect.left + rect.width / 2, y: rect.top + rect.height / 2};
+            }""",
+            label,
+        )
+        if not isinstance(point, dict):
+            return None
+        x = point.get("x")
+        y = point.get("y")
+        if not isinstance(x, (int, float)) or not isinstance(y, (int, float)):
+            return None
+        return {"x": float(x), "y": float(y)}
+
     async def activate(self, page: CdpPageRef) -> None:
         await self.bridge.call("activate_target", {"pageHandle": self._handle(page)})
 

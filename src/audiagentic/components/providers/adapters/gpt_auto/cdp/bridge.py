@@ -419,6 +419,48 @@ class PythonCdpBridge:
                 timeout=timeout,
             )
             return {"inserted": True}
+        if method == "hover":
+            x = params.get("x")
+            y = params.get("y")
+            if not isinstance(x, (int, float)) or not isinstance(y, (int, float)):
+                raise ValueError("hover coordinates must be numeric")
+            await self._session_command(
+                handle,
+                "Input.dispatchMouseEvent",
+                {
+                    "type": "mouseMoved",
+                    "x": float(x),
+                    "y": float(y),
+                    "pointerType": "mouse",
+                },
+                timeout=timeout,
+            )
+            return {"hovered": True}
+        if method == "click":
+            x = params.get("x")
+            y = params.get("y")
+            if not isinstance(x, (int, float)) or not isinstance(y, (int, float)):
+                raise ValueError("click coordinates must be numeric")
+            for event_type, buttons in (
+                ("mouseMoved", 0),
+                ("mousePressed", 1),
+                ("mouseReleased", 0),
+            ):
+                await self._session_command(
+                    handle,
+                    "Input.dispatchMouseEvent",
+                    {
+                        "type": event_type,
+                        "x": float(x),
+                        "y": float(y),
+                        **({"button": "left"} if event_type != "mouseMoved" else {}),
+                        "buttons": buttons,
+                        **({"clickCount": 1} if event_type != "mouseMoved" else {}),
+                        "pointerType": "mouse",
+                    },
+                    timeout=timeout,
+                )
+            return {"clicked": True}
         if method == "close_page":
             target_id = await self._target(handle)
             await self.client.command(
