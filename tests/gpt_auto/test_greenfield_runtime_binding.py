@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -155,6 +156,9 @@ class _IdleTabRuntime:
         if handle:
             self.released.append(handle)
 
+    def unregister_chat(self, _chat) -> None:
+        return None
+
 
 def _idle_chat(runtime: _IdleTabRuntime) -> PersistentChat:
     chat = PersistentChat(
@@ -193,7 +197,7 @@ async def test_idle_tab_reaper_closes_physical_page_but_preserves_session_bindin
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("guard", ["active", "pending", "unresolved", "recent", "not-ready"])
+@pytest.mark.parametrize("guard", ["active", "pending", "recent"])
 async def test_idle_tab_reaper_never_closes_ineligible_page(guard: str) -> None:
     bridge = _IdleTabBridge()
     runtime = _IdleTabRuntime(bridge)
@@ -202,18 +206,57 @@ async def test_idle_tab_reaper_never_closes_ineligible_page(guard: str) -> None:
         chat.active_turn_id = "req-1"
     elif guard == "pending":
         chat.pending_turns = 1
-    elif guard == "unresolved":
-        chat.unresolved_turn_pending = True
     elif guard == "recent":
         chat._last_validated_activity_monotonic = 7_000.0
-    else:
-        chat.state = ChatState.BUSY
 
     reclaimed = await chat.close_physical_page_if_idle(now=7_301.0, idle_timeout_seconds=7_200.0)
 
     assert reclaimed is False
     assert bridge.calls == []
     assert chat.page_handle == "page-1"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("state", [ChatState.BUSY, ChatState.RECOVERING, ChatState.FAILED])
+async def test_idle_tab_reaper_ignores_failure_state_when_session_is_stale(
+    state: ChatState,
+) -> None:
+    bridge = _IdleTabBridge()
+    runtime = _IdleTabRuntime(bridge)
+    chat = _idle_chat(runtime)
+    chat.state = state
+    chat.unresolved_turn_pending = True
+
+    reclaimed = await chat.close_physical_page_if_idle(now=7_301.0, idle_timeout_seconds=7_200.0)
+
+    assert reclaimed is True
+    assert bridge.calls == [("close_page", {"pageHandle": "page-1"})]
+
+
+@pytest.mark.asyncio
+async def test_closed_session_tab_is_retained_for_independent_idle_reaping() -> None:
+    bridge = _IdleTabBridge()
+    config = GptAutoConfig.from_dict(valid_config())
+    runtime = _IdleTabRuntime(bridge)
+    runtime.config = config
+    runtime.retained = []
+    runtime.retain_detached_page = lambda _chat, handle, last: runtime.retained.append((handle, last))
+    chat = PersistentChat(
+        ag_session_id="ses-detached",
+        project_name="project",
+        project_url="https://chatgpt.com/g/g-p-project",
+        runtime=runtime,  # type: ignore[arg-type]
+        config=config,
+        binding_sink=lambda _update: None,
+    )
+    chat.page_handle = "page-detached"
+    chat.state = ChatState.READY
+    chat._last_validated_activity_monotonic = 100.0
+
+    await chat.close()
+
+    assert runtime.retained == [("page-detached", 100.0)]
+    assert bridge.calls == []
 
 
 @pytest.mark.asyncio
@@ -247,6 +290,33 @@ async def test_runtime_idle_sweep_uses_configured_interval_and_threshold() -> No
 
     assert calls
     assert all(timeout == 17.0 for _now, timeout in calls)
+
+
+@pytest.mark.asyncio
+async def test_runtime_idle_sweep_reaps_detached_retained_tab() -> None:
+    config = GptAutoConfig.from_dict(valid_config())
+    config = replace(
+        config,
+        browser=replace(
+            config.browser,
+            physical_tab_reaper_interval_seconds=0.001,
+            physical_tab_idle_timeout_seconds=17.0,
+        ),
+    )
+    runtime = GptAutoProviderRuntime(config)
+    bridge = _IdleTabBridge()
+    runtime._bridge = bridge  # type: ignore[assignment]
+    runtime.retain_detached_page(SimpleNamespace(ag_session_id="ses-detached"), "page-1", 100.0)
+
+    task = asyncio.create_task(runtime._reap_idle_tabs(bridge))
+    try:
+        await asyncio.sleep(0.01)
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+    assert bridge.calls == [("close_page", {"pageHandle": "page-1"})]
+    assert runtime._detached_tab_leases == {}
 
 
 async def _true() -> bool:

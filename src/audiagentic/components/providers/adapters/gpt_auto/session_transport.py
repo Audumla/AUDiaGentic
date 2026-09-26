@@ -10,6 +10,7 @@ from audiagentic.components.agents.gateway.session.client_defaults import (
     _bounded_cause_message,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.foundation.time import now_iso_z
 from audiagentic.foundation.transports.agent_session import (
     ControlDisposition,
     CorrelationQuality,
@@ -24,7 +25,6 @@ from audiagentic.foundation.transports.agent_session import (
     TransportObservation,
     TransportObservationKind,
 )
-from audiagentic.foundation.time import now_iso_z
 from audiagentic.foundation.transports.session_binding import ProviderSessionRef
 
 from .chat import ChatState, PersistentChat
@@ -152,6 +152,9 @@ class GptAutoSessionTransport:
         phase: str,
     ) -> None:
         """Relay bounded provider lifecycle activity without provider payloads."""
+        mark_activity = getattr(self.chat, "mark_validated_activity", None)
+        if callable(mark_activity) and phase != "connection-refreshing":
+            mark_activity()
         observation = TransportObservation(
             ag_session_id=self.chat.ag_session_id,
             turn_id=request.turn_id,

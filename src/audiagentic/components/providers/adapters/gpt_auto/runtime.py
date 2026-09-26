@@ -84,6 +84,11 @@ class GptAutoProviderRuntime:
         # provider sessions drive the same tab concurrently, even when both
         # happen to resolve the same project or ChatGPT URL.
         self._page_owners: dict[str, str] = {}
+        # Session transport can be closed while the physical conversation tab
+        # is intentionally retained for resume. Keep such tabs under the
+        # reaper's ownership until they are claimed again or become idle.
+        self._detached_tab_leases: dict[str, tuple[str, float]] = {}
+        self._detached_tab_closing: set[str] = set()
         self._conversation_owners: dict[str, str] = {}
         self._event_task: asyncio.Task[None] | None = None
         self._tab_reaper_task: asyncio.Task[None] | None = None
@@ -506,11 +511,20 @@ class GptAutoProviderRuntime:
         return True
 
     def claim_page(self, chat: PersistentChat, page_handle: str) -> bool:
+        if page_handle in self._detached_tab_closing:
+            return False
         owner = self._page_owners.get(page_handle)
         if owner is not None and owner != chat.ag_session_id:
             return False
         self._page_owners[page_handle] = chat.ag_session_id
+        self._detached_tab_leases.pop(page_handle, None)
         return True
+
+    def retain_detached_page(
+        self, chat: PersistentChat, page_handle: str, last_activity: float
+    ) -> None:
+        """Keep a retained session tab eligible for independent idle reaping."""
+        self._detached_tab_leases[page_handle] = (chat.ag_session_id, float(last_activity))
 
     def release_page(self, chat: PersistentChat, page_handle: str | None) -> None:
         if page_handle and self._page_owners.get(page_handle) == chat.ag_session_id:
@@ -593,6 +607,26 @@ class GptAutoProviderRuntime:
                             extra={"session-id": chat.ag_session_id},
                             exc_info=True,
                         )
+                for page_handle, lease in tuple(self._detached_tab_leases.items()):
+                    session_id, last_activity = lease
+                    if now - last_activity < threshold:
+                        continue
+                    if self._detached_tab_leases.get(page_handle) != lease:
+                        continue
+                    self._detached_tab_closing.add(page_handle)
+                    try:
+                        await bridge.call("close_page", {"pageHandle": page_handle})
+                    except Exception:  # noqa: BLE001 - isolate one tab
+                        logger.warning(
+                            "gpt-auto detached idle physical-tab close failed",
+                            extra={"session-id": session_id, "page-handle": page_handle},
+                            exc_info=True,
+                        )
+                    else:
+                        if self._detached_tab_leases.get(page_handle) == lease:
+                            self._detached_tab_leases.pop(page_handle, None)
+                    finally:
+                        self._detached_tab_closing.discard(page_handle)
         except asyncio.CancelledError:
             raise
 
