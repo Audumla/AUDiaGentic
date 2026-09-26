@@ -1457,6 +1457,7 @@ class GptAutoTurn:
             if (
                 current.generating
                 or bool(current.progress_blocks)
+                or bool(current.dom_activity_digest)
                 or bool(response_ref is not None and response_ref.text)
                 or response_started
             ):
@@ -1595,11 +1596,17 @@ class GptAutoTurn:
                 if response_ref.text:
                     await self._emit_timing("first-assistant-text")
             # Recovery clocks are reset only by evidence correlated to this
-            # request's assistant turn.  Conversation-global counts, DOM
-            # marker changes, generating toggles, and foreign activity are
-            # intentionally excluded.
+            # request's assistant turn.  Conversation-global counts and
+            # foreign activity remain excluded, but a changed bounded DOM
+            # digest is request-owned evidence when the bridge assigned it to
+            # this prompt.  This covers ChatGPT status/card/ARIA mutations
+            # that do not change response text or known tool counters.
             progress_labels = _progress_activity_labels(current, seen_progress_blocks)
-            request_owned_activity = bool(progress_labels)
+            dom_activity_changed = bool(
+                current.dom_activity_digest
+                and current.dom_activity_digest != previous.dom_activity_digest
+            )
+            request_owned_activity = bool(progress_labels) or dom_activity_changed
             if response_ref is not None:
                 request_owned_activity = request_owned_activity or bool(
                     (
@@ -1798,6 +1805,7 @@ class GptAutoTurn:
                 )
                 or current.latest_assistant_text != previous.latest_assistant_text
                 or bool(progress_labels)
+                or dom_activity_changed
             )
             # Only request-owned assistant identity/text/tool changes reset
             # the recovery epoch.  The broad progress edge remains useful for
@@ -1847,8 +1855,12 @@ class GptAutoTurn:
                 # ACTIVITY emissions arriving throughout the turn, not just
                 # at the start.
                 activity_labels = (
-                    progress_labels
+                    tuple((*progress_labels, "dom-activity"))
+                    if progress_labels and dom_activity_changed
+                    else progress_labels
                     if progress_labels
+                    else ("dom-activity",)
+                    if dom_activity_changed
                     else (
                         ("response-progress",)
                         if EvidenceCapability.PROGRESS in caps
@@ -2493,6 +2505,11 @@ def _scope_response_snapshot(
         return block.owner_assistant_message_id in {None, response_ref.message_id}
 
     scoped_progress = tuple(block for block in snapshot.progress_blocks if owned_progress(block))
+    scoped_dom_digest = (
+        snapshot.dom_activity_digest
+        if snapshot.dom_activity_owner_prompt_id == prompt_message_id
+        else None
+    )
     if response_ref is None:
         return (
             replace(
@@ -2503,6 +2520,10 @@ def _scope_response_snapshot(
                 # Conversation-global counts are useful diagnostics only;
                 # they are not request-addressable recovery evidence.
                 tool_activity_counts=(),
+                dom_activity_digest=scoped_dom_digest,
+                dom_activity_owner_prompt_id=(
+                    prompt_message_id if scoped_dom_digest else None
+                ),
             ),
             None,
         )
@@ -2521,6 +2542,10 @@ def _scope_response_snapshot(
             dom_signals=dom_signals,
             progress_blocks=scoped_progress,
             tool_activity_counts=(),
+            dom_activity_digest=scoped_dom_digest,
+            dom_activity_owner_prompt_id=(
+                prompt_message_id if scoped_dom_digest else None
+            ),
         ),
         response_ref,
     )

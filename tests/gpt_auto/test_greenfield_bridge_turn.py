@@ -55,6 +55,7 @@ def snap(
     composer_editable=True,
     tool_activity_counts=(),
     progress_blocks=None,
+    dom_activity_digest=None,
     user_correlation=None,
     structural_hr_count=0,
 ):
@@ -128,6 +129,8 @@ def snap(
         message_refs=tuple(message_refs),
         tool_activity_counts=tuple(tool_activity_counts),
         progress_blocks=tuple(progress_blocks),
+        dom_activity_digest=dom_activity_digest,
+        dom_activity_owner_prompt_id=resolved_user_id if dom_activity_digest else None,
     )
 
 
@@ -1438,6 +1441,49 @@ async def test_tool_app_activity_emits_progress_when_response_text_is_unchanged(
     assert {obs.attributes.get("model_activity") for obs in tool_progress} >= {
         "called-tool", "talked-to-app"
     }
+
+
+@pytest.mark.asyncio
+async def test_dom_activity_emits_progress_when_text_and_known_rows_are_unchanged():
+    """Structural/ARIA DOM mutations renew a long-running response."""
+    chat = _Chat()
+    observations = []
+    chat._snapshots = iter(
+        [
+            snap(),
+            snap(users=1, user="Review AU01"),
+            snap(users=1, user="Review AU01"),
+            snap(users=1, user="Review AU01", generating=True),
+            snap(
+                users=1,
+                assistants=1,
+                user="Review AU01",
+                assistant="Working",
+                dom_activity_digest="dom-state-1",
+            ),
+            snap(
+                users=1,
+                assistants=1,
+                user="Review AU01",
+                assistant="Working",
+                dom_activity_digest="dom-state-2",
+            ),
+            snap(users=1, assistants=1, user="Review AU01", assistant="Done", complete=True),
+            snap(users=1, assistants=1, user="Review AU01", assistant="Done", complete=True),
+            snap(users=1, assistants=1, user="Review AU01", assistant="Done", complete=True),
+        ]
+    )
+
+    result = await GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="turn-dom-activity", body="Review AU01"),
+        observations.append,
+    ).run()
+
+    assert result.stop_reason == "end-turn"
+    assert any(
+        obs.attributes.get("model_activity") == "dom-activity" for obs in observations
+    )
 
 
 @pytest.mark.asyncio

@@ -8,6 +8,7 @@ tested repeatably, including malformed/negative responses.
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -61,7 +62,9 @@ def test_snapshot_activity_anchors_to_latest_agent_turn_before_assistant_node() 
     """
     assert "const agentTurns = Array.from(document.querySelectorAll('.agent-turn'))" in _SNAPSHOT_FN
     assert "const latestAgentTurn = agentTurns.length ? agentTurns[agentTurns.length - 1] : null" in _SNAPSHOT_FN
-    assert ") : latestAgentTurn;" in _SNAPSHOT_FN
+    assert "const progressTurns = agentTurns.length" in _SNAPSHOT_FN
+    assert "const latestFallbackActivityBlock" in _SNAPSHOT_FN
+    assert "fallbackHasUnansweredPrompt" in _SNAPSHOT_FN
     assert "[class~=\"group/tool-message\"]" in _SNAPSHOT_FN
 
 
@@ -91,6 +94,16 @@ def test_snapshot_has_structural_progress_fallback_and_semantic_digest() -> None
     assert "const boundedScalarMaterial = value =>" in _SNAPSHOT_FN
     assert "const boundedTextForKind = node =>" in _SNAPSHOT_FN
     assert "const visibleTextDigest = (node, excludedRoots = null) =>" in _SNAPSHOT_FN
+    assert "dom-activity-v1" in _SNAPSHOT_FN
+    assert "domActivityOwnerPromptMessageId" in _SNAPSHOT_FN
+
+
+def test_completion_snapshot_accepts_current_regenerate_response_control() -> None:
+    defaults = (
+        Path(__file__).parents[2]
+        / "src/audiagentic/components/providers/adapters/gpt_auto/gpt-auto-defaults.yaml"
+    )
+    assert 'button[aria-label="Regenerate response"]' in defaults.read_text(encoding="utf-8")
 
 
 def test_snapshot_resolves_sidebar_title_by_active_conversation_url() -> None:

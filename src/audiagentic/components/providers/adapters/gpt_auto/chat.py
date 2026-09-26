@@ -1793,8 +1793,14 @@ class PersistentChat:
         if self.state is ChatState.CLOSED:
             return
         handle, self.page_handle = self.page_handle, None
+        runtime_config = getattr(self.runtime, "config", None)
+        browser_config = getattr(runtime_config, "browser", None)
+        # Small recovery/test runtimes may intentionally omit the full
+        # provider config. Closing a failed open must still reach CLOSED and
+        # unregister the chat; absence of an optional tab-retention setting
+        # means retain the default behavior.
         close_on_session_close = bool(
-            self.runtime.config.browser.close_tabs_on_session_close
+            getattr(browser_config, "close_tabs_on_session_close", False)
         )
         if handle and not close_on_session_close:
             retain = getattr(self.runtime, "retain_detached_page", None)
