@@ -23,6 +23,7 @@ class CdpPageRef:
     window_id: int | None = None
     url: str = ""
     title: str = ""
+    opener_id: str = ""
 
     def __post_init__(self) -> None:
         _required(self.handle, "page handle")
@@ -66,6 +67,7 @@ class CdpBrowserController:
                 i.get("windowId"),
                 str(i.get("url") or ""),
                 str(i.get("title") or ""),
+                str(i.get("openerId") or ""),
             )
             for i in raw
         )
@@ -84,6 +86,7 @@ class CdpBrowserController:
             value.get("windowId"),
             str(value.get("url") or ""),
             str(value.get("title") or ""),
+            str(value.get("openerId") or ""),
         )
 
     async def page(self, handle: str) -> CdpPageRef:

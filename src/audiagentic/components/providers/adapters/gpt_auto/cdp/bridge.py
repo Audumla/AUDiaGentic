@@ -158,6 +158,7 @@ class PythonCdpBridge:
                     "title": str(info.get("title") or ""),
                     "targetId": target_id,
                     "windowId": window_id,
+                    "openerId": str(info.get("openerId") or ""),
                 }
             )
         return result
@@ -207,6 +208,7 @@ class PythonCdpBridge:
             "title": str(info.get("title") or ""),
             "targetId": target_id,
             "windowId": window_id,
+            "openerId": str(info.get("openerId") or ""),
         }
 
     def _handle_for_target(self, target_id: str) -> str:

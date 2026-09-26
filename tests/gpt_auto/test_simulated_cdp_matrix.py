@@ -94,7 +94,8 @@ def test_snapshot_has_structural_progress_fallback_and_semantic_digest() -> None
     assert "const boundedScalarMaterial = value =>" in _SNAPSHOT_FN
     assert "const boundedTextForKind = node =>" in _SNAPSHOT_FN
     assert "const visibleTextDigest = (node, excludedRoots = null) =>" in _SNAPSHOT_FN
-    assert "dom-activity-v1" in _SNAPSHOT_FN
+    assert "dom-activity-v2" in _SNAPSHOT_FN
+    assert "new MutationObserver" in _SNAPSHOT_FN
     assert "domActivityOwnerPromptMessageId" in _SNAPSHOT_FN
 
 
@@ -459,7 +460,9 @@ async def test_new_session_adopts_ui_opened_target_and_closes_projects_tab(monke
     opened_page = CdpPageRef(
         "chat", "chat-target", 7,
         f"https://chatgpt.com/g/{project_id}-bigcherry/project", "BigCherry",
+        opener_id=projects_page.target_id,
     )
+    foreign_page = CdpPageRef("personal", "personal-target", 7, opened_page.url, "Personal")
     closed: list[CdpPageRef] = []
     page_scans = 0
 
@@ -487,7 +490,7 @@ async def test_new_session_adopts_ui_opened_target_and_closes_projects_tab(monke
     async def pages():
         nonlocal page_scans
         page_scans += 1
-        return (projects_page,) if page_scans == 1 else (projects_page, opened_page)
+        return (projects_page,) if page_scans == 1 else (projects_page, foreign_page, opened_page)
 
     async def page_by_handle(_handle):
         return CdpPageRef(

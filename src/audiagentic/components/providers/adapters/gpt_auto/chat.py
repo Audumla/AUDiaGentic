@@ -26,6 +26,7 @@ from .urls import (
     canonical_project_url,
     parse_project_id,
     parse_provider_session_id,
+    same_chat_identity,
     url_matches_provider_session,
 )
 
@@ -116,6 +117,8 @@ class PersistentChat:
         # unresolved-turn reconciler must never navigate the same physical
         # tab concurrently or allow a stale page handle to win.
         self._page_mutation_lock = asyncio.Lock()
+        self._physical_idle_closed = False
+        self._idle_closed_turn_id: str | None = None
         self.unresolved_prompt_message_id = _metadata_text(metadata, "prompt-message-id")
         self.unresolved_assistant_message_id = _metadata_text(metadata, "assistant-message-id")
         self.unresolved_assistant_before_id = _metadata_text(
@@ -415,6 +418,12 @@ class PersistentChat:
 
     async def ensure_ready(self) -> None:
         """Lazily recover admission and only expose READY after quiescence."""
+        if self._physical_idle_closed:
+            if self.active_turn_id and self.active_turn_id == self._idle_closed_turn_id:
+                raise RuntimeError("physical tab was closed after session inactivity")
+            # Only a new admission can reopen an intentionally reaped tab.
+            self._physical_idle_closed = False
+            self._idle_closed_turn_id = None
         # Bridge page handles are local to one CDP connection and can be
         # invalidated without the runtime seeing a Target event (for example,
         # an operator closes a tab through a second CDP client).  A handle can
@@ -492,6 +501,9 @@ class PersistentChat:
             time.monotonic() if at is None else float(at)
         )
         self._validated_activity_generation += 1
+        remember = getattr(self.runtime, "remember_tab_activity", None)
+        if callable(remember):
+            remember(self)
 
     def mark_turn_pending(self) -> None:
         """Expose a queued session turn to the physical-tab reaper."""
@@ -512,29 +524,40 @@ class PersistentChat:
             return False
         async with self._page_mutation_lock:
             handle = self.page_handle
-            generation = self._validated_activity_generation
             if (
-                self.active_turn_id is not None
-                or self.pending_turns > 0
-                or not handle
+                not handle
                 or now - self._last_validated_activity_monotonic < idle_timeout_seconds
             ):
                 return False
+            digest = getattr(self.runtime, "_tab_digest", None)
+            before = getattr(self, "_last_snapshot", None)
+            if callable(digest) and before is not None:
+                try:
+                    current = await self.snapshot(allow_recovering=True)
+                    if same_chat_identity(current.url, before.url) and digest(current) != digest(before):
+                        self.mark_validated_activity()
+                        return False
+                except Exception:
+                    # Failure is not activity and cannot grant an unlimited
+                    # retention exemption. The last validated clock still owns
+                    # the physical cleanup deadline.
+                    logger.debug("gpt-auto pre-cleanup observation failed", exc_info=True)
+            if handle != self.page_handle or now - self._last_validated_activity_monotonic < idle_timeout_seconds:
+                return False
+            self._physical_idle_closed = True
+            self._idle_closed_turn_id = self.active_turn_id
             try:
                 await self.runtime.bridge.call("close_page", {"pageHandle": handle})
             except Exception:
+                self._physical_idle_closed = False
+                self._idle_closed_turn_id = None
                 logger.debug(
                     "gpt-auto physical idle-tab close failed",
                     extra={"session-id": self.ag_session_id, "page-handle": handle},
                     exc_info=True,
                 )
                 return False
-            if (
-                handle != self.page_handle
-                or generation != self._validated_activity_generation
-                or self.active_turn_id is not None
-                or self.pending_turns > 0
-            ):
+            if handle != self.page_handle:
                 return False
             self.page_handle = None
             self.target_id = None
@@ -619,12 +642,12 @@ class PersistentChat:
         same_conversation = (
             url_matches_provider_session(current_url, str(provider_session_id))
             if provider_session_id
-            else bool(chat_url and canonical_chat_url(current_url) == chat_url)
+            else bool(chat_url and same_chat_identity(current_url, str(chat_url)))
         )
         return bool(
             (not target_id or not current_target or current_target == target_id)
             and same_conversation
-            and canonical_chat_url(current_url) == chat_url
+            and bool(chat_url and same_chat_identity(current_url, str(chat_url)))
         )
 
     async def _reconciled_binding_is_current(self) -> bool:
@@ -709,6 +732,9 @@ class PersistentChat:
         )
         self._last_url = snapshot.url
         self._last_snapshot = snapshot
+        remember = getattr(self.runtime, "remember_tab_activity", None)
+        if callable(remember):
+            remember(self)
         # Capture labels during recovery/baseline observations too, not only
         # the normal response loop. Never relay a label from a different tab.
         if snapshot.conversation_title and (
@@ -1238,13 +1264,15 @@ class PersistentChat:
                         )
                     )
                     current_url = observed.url
-                if current_url and canonical_chat_url(current_url) != bound_url:
+                if current_url and not same_chat_identity(current_url, bound_url):
                     raise RuntimeError("bound page conversation URL changed before refresh")
                 if not current_url or not url_matches_provider_session(
                     current_url, self.provider_session_id
                 ):
                     raise RuntimeError("bound page provider session changed before refresh")
-                await browser.navigate(page, bound_url)
+                # Refresh the observed route after validating stable identity;
+                # a saved slugless route need not be directly navigable.
+                await browser.navigate(page, canonical_chat_url(current_url) or bound_url)
                 await asyncio.sleep(self.config.turn.poll_interval_seconds)
                 if handle != self.page_handle:
                     raise RuntimeError("bound page handle changed during refresh")
@@ -1263,7 +1291,7 @@ class PersistentChat:
                     raise RuntimeError("bound page target changed after refresh")
                 if (
                     not refreshed_url
-                    or canonical_chat_url(refreshed_url) != bound_url
+                    or not same_chat_identity(refreshed_url, bound_url)
                     or not url_matches_provider_session(
                         refreshed_url, self.provider_session_id
                     )
@@ -1443,6 +1471,14 @@ class PersistentChat:
             if provider_id:
                 expected_project_id = parse_project_id(self.project_url or "")
                 observed_project_id = parse_project_id(snap.url)
+                # The SPA can publish /c/<id> before adding its project route.
+                # No further side effect is permitted here: wait within the
+                # existing identity-acquisition deadline, never accept the bare
+                # route or resend the already-submitted prompt.
+                if expected_project_id and observed_project_id is None:
+                    snap = None
+                    await asyncio.sleep(0.2)
+                    continue
                 if not expected_project_id or observed_project_id != expected_project_id:
                     self._move(ChatState.FAILED)
                     raise AudiaGenticError(
@@ -1503,6 +1539,9 @@ class PersistentChat:
         raise RuntimeError("ChatGPT accepted the turn but no provider session id appeared")
 
     async def page_lost(self, handle: str) -> None:
+        if self._physical_idle_closed:
+            # An intentional inactivity close is not a CDP failure to heal.
+            return
         if handle != self.page_handle or self.state is ChatState.CLOSED:
             return
         self.page_handle = None
@@ -1650,6 +1689,8 @@ class PersistentChat:
             self._move(ChatState.FAILED)
 
     async def reconcile(self, pages: list[dict]) -> None:
+        if self._physical_idle_closed:
+            return
         if self.state is ChatState.CLOSED:
             return
         if self.provider_session_id:

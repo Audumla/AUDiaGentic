@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
+import time
 from enum import StrEnum
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
@@ -14,7 +16,9 @@ from .browser_process import BrowserProcessController
 from .cdp.bridge import PythonCdpBridge
 from .config import GptAutoConfig
 from .gpt_auto_cdp import GptAutoCdpBrowserController
-from .urls import url_matches_provider_session
+from .snapshot import ChatSnapshot
+from .tab_leases import TabLeaseStore
+from .urls import canonical_chat_url, same_chat_identity, url_matches_provider_session
 from .window_anchor import (
     gateway_dashboard_anchor_url,
     is_gateway_dashboard_anchor_url,
@@ -89,6 +93,9 @@ class GptAutoProviderRuntime:
         # reaper's ownership until they are claimed again or become idle.
         self._detached_tab_leases: dict[str, tuple[str, float]] = {}
         self._detached_tab_closing: set[str] = set()
+        self._tab_lease_store: TabLeaseStore | None = None
+        self._tab_lease_cache: dict[str, tuple[object, ...]] = {}
+        self._tab_lease_unsafe_targets: set[str] = set()
         self._conversation_owners: dict[str, str] = {}
         self._event_task: asyncio.Task[None] | None = None
         self._tab_reaper_task: asyncio.Task[None] | None = None
@@ -209,6 +216,12 @@ class GptAutoProviderRuntime:
             try:
                 remaining = max(0.01, deadline - asyncio.get_running_loop().time())
                 await bridge.start(connect_timeout=remaining)
+                from audiagentic.foundation.paths.home import global_provider_runtime
+
+                endpoint_key = hashlib.sha256(self.config.cdp_url.encode()).hexdigest()[:24]
+                self._tab_lease_store = TabLeaseStore(
+                    global_provider_runtime("gpt-auto") / f"tab-leases-{endpoint_key}.sqlite3"
+                )
                 return bridge
             except Exception as exc:  # endpoint may still be starting
                 last_error = exc
@@ -526,6 +539,79 @@ class GptAutoProviderRuntime:
         """Keep a retained session tab eligible for independent idle reaping."""
         self._detached_tab_leases[page_handle] = (chat.ag_session_id, float(last_activity))
 
+    def remember_tab_activity(self, chat: PersistentChat) -> None:
+        """Persist only an explicitly owned target with durable conversation identity."""
+        store = self._tab_lease_store
+        snapshot = getattr(chat, "_last_snapshot", None)
+        url = canonical_chat_url(getattr(chat, "chat_url", "") or "")
+        if store is None or snapshot is None or not chat.target_id or not url:
+            return
+        if not same_chat_identity(snapshot.url, url):
+            return
+        digest = self._tab_digest(snapshot)
+        material = (chat.ag_session_id, url, chat._last_validated_activity_monotonic, digest)
+        if self._tab_lease_cache.get(chat.target_id) == material:
+            return
+        age = max(0.0, time.monotonic() - chat._last_validated_activity_monotonic)
+        try:
+            store.observe(chat.target_id, chat.ag_session_id, url, time.time() - age, digest)
+        except Exception:
+            # Cleanup storage is not request execution authority. An old lease
+            # must not authorize closing a target whose renewal failed.
+            self._tab_lease_unsafe_targets.add(chat.target_id)
+            logger.warning("gpt-auto tab lease renewal failed", exc_info=True)
+            return
+        self._tab_lease_cache[chat.target_id] = material
+        self._tab_lease_unsafe_targets.discard(chat.target_id)
+
+    @staticmethod
+    def _tab_digest(snapshot: ChatSnapshot) -> str:
+        return hashlib.sha256(repr((snapshot.latest_user_id, snapshot.latest_assistant_id,
+            snapshot.latest_assistant_text, snapshot.dom_activity_digest)).encode()).hexdigest()
+
+    async def _reap_durable_tabs(self, threshold: float) -> None:
+        store = self._tab_lease_store
+        if store is None or threshold <= 0:
+            return
+        pages = {page.target_id: page for page in await self.gpt_browser.pages()}
+        for target, session, url, activity, digest in store.entries():
+            if target in self._tab_lease_unsafe_targets:
+                continue
+            page = pages.get(target)
+            if page is None or not same_chat_identity(page.url, url):
+                # Missing/repurposed targets are not ours to recreate or close.
+                store.forget(target)
+                continue
+            if page.handle in self._page_owners:
+                continue
+            self._detached_tab_closing.add(page.handle)
+            try:
+                snapshot = ChatSnapshot.from_bridge(await self.gpt_browser.snapshot(
+                    page, signals=self.config.workflow.bridge_signals()))
+                if not same_chat_identity(snapshot.url, url):
+                    store.forget(target)
+                    continue
+                observed_digest = self._tab_digest(snapshot)
+                if observed_digest != digest:
+                    store.observe(target, session, url, time.time(), observed_digest)
+                    continue
+                if time.time() - activity < threshold:
+                    continue
+                # Recheck after observation; never close a target re-admitted
+                # during the CDP await or navigated into a different conversation.
+                current = await self.gpt_browser.page_by_handle(page.handle)
+                if current.target_id != target or not same_chat_identity(current.url, url):
+                    continue
+                await self.gpt_browser.close(current)
+                store.forget(target)
+                self._detached_tab_leases.pop(page.handle, None)
+                self._tab_lease_cache.pop(target, None)
+            except Exception:
+                # A broken target must not starve every later retained tab.
+                logger.warning("gpt-auto owned tab cleanup failed", exc_info=True)
+            finally:
+                self._detached_tab_closing.discard(page.handle)
+
     def release_page(self, chat: PersistentChat, page_handle: str | None) -> None:
         if page_handle and self._page_owners.get(page_handle) == chat.ag_session_id:
             self._page_owners.pop(page_handle, None)
@@ -595,6 +681,11 @@ class GptAutoProviderRuntime:
                 if self._bridge is not bridge:
                     return
                 now = asyncio.get_running_loop().time()
+                if self._tab_lease_store is not None:
+                    try:
+                        await self._reap_durable_tabs(threshold)
+                    except Exception:
+                        logger.warning("gpt-auto durable tab sweep failed", exc_info=True)
                 for chat in tuple(self._chats.values()):
                     try:
                         await chat.close_physical_page_if_idle(
@@ -608,6 +699,11 @@ class GptAutoProviderRuntime:
                             exc_info=True,
                         )
                 for page_handle, lease in tuple(self._detached_tab_leases.items()):
+                    if self._tab_lease_store is not None:
+                        # Durable sweep observes post-session DOM changes before
+                        # applying inactivity; the old timestamp-only loop must
+                        # not bypass that renewal or target-identity fencing.
+                        continue
                     session_id, last_activity = lease
                     if now - last_activity < threshold:
                         continue

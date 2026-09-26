@@ -318,7 +318,7 @@ class GptAutoTurn:
         # not by polling or synthetic connection-refreshing lease ticks.
         if kind is not TransportObservationKind.TIMING and attributes.get(
             "model_activity"
-        ) != "connection-refreshing":
+        ) not in {"connection-refreshing", "provider-busy"}:
             mark_activity = getattr(self.chat, "mark_validated_activity", None)
             if callable(mark_activity):
                 mark_activity()
@@ -1784,6 +1784,18 @@ class GptAutoTurn:
                 )
             if now - last_heartbeat_at >= self._HEARTBEAT_INTERVAL_SECONDS:
                 last_heartbeat_at = now
+                if (
+                    current.generating
+                    and current.latest_user_id == self._prompt_message_id
+                    and self._prompt_message_id
+                    and not complete.satisfied
+                ):
+                    # Request-owned busy UI proves observer liveness, not new
+                    # work. Never let this renew physical idle or recovery clocks.
+                    await self._emit(
+                        TransportObservationKind.ACTIVITY,
+                        {"model_activity": "provider-busy"},
+                    )
                 logger.info(
                     "gpt-auto response poll heartbeat tracker_state=%s generating=%s "
                     "complete_satisfied=%s complete_evidence=%s text_len=%d "

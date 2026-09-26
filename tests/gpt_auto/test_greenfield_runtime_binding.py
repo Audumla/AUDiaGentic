@@ -198,7 +198,7 @@ async def test_idle_tab_reaper_closes_physical_page_but_preserves_session_bindin
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("guard", ["active", "pending", "recent"])
-async def test_idle_tab_reaper_never_closes_ineligible_page(guard: str) -> None:
+async def test_idle_tab_reaper_uses_activity_not_request_or_queue_state(guard: str) -> None:
     bridge = _IdleTabBridge()
     runtime = _IdleTabRuntime(bridge)
     chat = _idle_chat(runtime)
@@ -211,9 +211,22 @@ async def test_idle_tab_reaper_never_closes_ineligible_page(guard: str) -> None:
 
     reclaimed = await chat.close_physical_page_if_idle(now=7_301.0, idle_timeout_seconds=7_200.0)
 
-    assert reclaimed is False
-    assert bridge.calls == []
-    assert chat.page_handle == "page-1"
+    if guard == "recent":
+        assert reclaimed is False
+        assert bridge.calls == []
+        assert chat.page_handle == "page-1"
+    else:
+        assert reclaimed is True
+        assert bridge.calls == [("close_page", {"pageHandle": "page-1"})]
+        assert chat.page_handle is None
+        # A late target-destroyed event and generic reconciliation must not
+        # immediately recreate the intentionally closed tab.
+        await chat.page_lost("page-1")
+        await chat.reconcile([])
+        assert len(bridge.calls) == 1
+        if guard == "active":
+            with pytest.raises(RuntimeError, match="closed after session inactivity"):
+                await chat.ensure_ready()
 
 
 @pytest.mark.asyncio
