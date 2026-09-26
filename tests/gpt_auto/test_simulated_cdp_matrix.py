@@ -312,6 +312,22 @@ async def test_new_session_selects_exact_project_from_sidebar(monkeypatch) -> No
         calls.append(("find-project", name))
         return True
 
+    async def hover_text(_page, label):
+        calls.append(("hover", label))
+        return True
+
+    async def click_text(_page, label):
+        calls.append(("click", label))
+        return True
+
+    async def wait_for_projects_route(_page, *, timeout):
+        calls.append(("projects-route", timeout))
+        return True
+
+    async def select_project(_page, name, *, timeout):
+        calls.append(("select-project", (name, timeout)))
+        return True
+
     page_after_click = CdpPageRef(page.handle, page.target_id, page.window_id, selected_url, "")
 
     async def pages():
@@ -330,6 +346,10 @@ async def test_new_session_selects_exact_project_from_sidebar(monkeypatch) -> No
     monkeypatch.setattr(browser, "new_tab", new_tab)
     monkeypatch.setattr(browser, "navigate", navigate)
     monkeypatch.setattr(browser, "evaluate", evaluate)
+    monkeypatch.setattr(browser, "hover_text", hover_text)
+    monkeypatch.setattr(browser, "click_text", click_text)
+    monkeypatch.setattr(browser, "_wait_for_projects_route", wait_for_projects_route)
+    monkeypatch.setattr(browser, "_select_project_from_projects_page", select_project)
     monkeypatch.setattr(browser, "pages", pages)
     monkeypatch.setattr(browser, "page_by_handle", page_by_handle)
     monkeypatch.setattr(browser, "snapshot", snapshot)
@@ -346,7 +366,10 @@ async def test_new_session_selects_exact_project_from_sidebar(monkeypatch) -> No
     assert calls == [
         ("new-tab", (anchor, None)),
         ("navigate", "https://chatgpt.com/"),
-        ("find-project", "BigCherry"),
+        ("hover", "Explore"),
+        ("click", "Projects"),
+        ("projects-route", 1.0),
+        ("select-project", ("BigCherry", 3)),
         ("composer", 4),
     ]
     assert opened["projectUrl"] == selected_url
@@ -369,6 +392,18 @@ async def test_new_session_rejects_projects_ui_identity_mismatch(monkeypatch) ->
     async def evaluate(_page, _function, _name=None):
         return True
 
+    async def hover_text(_page, _label):
+        return True
+
+    async def click_text(_page, _label):
+        return True
+
+    async def wait_for_projects_route(_page, *, timeout):
+        return True
+
+    async def select_project(_page, _name, *, timeout):
+        return True
+
     discovered = CdpPageRef(page.handle, page.target_id, page.window_id, discovered_url, "")
 
     async def pages():
@@ -383,6 +418,10 @@ async def test_new_session_rejects_projects_ui_identity_mismatch(monkeypatch) ->
     monkeypatch.setattr(browser, "new_window", new_window)
     monkeypatch.setattr(browser, "navigate", navigate)
     monkeypatch.setattr(browser, "evaluate", evaluate)
+    monkeypatch.setattr(browser, "hover_text", hover_text)
+    monkeypatch.setattr(browser, "click_text", click_text)
+    monkeypatch.setattr(browser, "_wait_for_projects_route", wait_for_projects_route)
+    monkeypatch.setattr(browser, "_select_project_from_projects_page", select_project)
     monkeypatch.setattr(browser, "pages", pages)
     monkeypatch.setattr(browser, "page_by_handle", page_by_handle)
     monkeypatch.setattr(browser, "close", close)
@@ -420,6 +459,18 @@ async def test_new_session_adopts_ui_opened_target_and_closes_projects_tab(monke
     async def evaluate(_page, _function, _name=None):
         return True
 
+    async def hover_text(_page, _label):
+        return True
+
+    async def click_text(_page, _label):
+        return True
+
+    async def wait_for_projects_route(_page, *, timeout):
+        return True
+
+    async def select_project(_page, _name, *, timeout):
+        return True
+
     async def pages():
         nonlocal page_scans
         page_scans += 1
@@ -442,6 +493,10 @@ async def test_new_session_adopts_ui_opened_target_and_closes_projects_tab(monke
     monkeypatch.setattr(browser, "new_window", new_window)
     monkeypatch.setattr(browser, "navigate", navigate)
     monkeypatch.setattr(browser, "evaluate", evaluate)
+    monkeypatch.setattr(browser, "hover_text", hover_text)
+    monkeypatch.setattr(browser, "click_text", click_text)
+    monkeypatch.setattr(browser, "_wait_for_projects_route", wait_for_projects_route)
+    monkeypatch.setattr(browser, "_select_project_from_projects_page", select_project)
     monkeypatch.setattr(browser, "pages", pages)
     monkeypatch.setattr(browser, "page_by_handle", page_by_handle)
     monkeypatch.setattr(browser, "wait_for_composer", wait_for_composer)

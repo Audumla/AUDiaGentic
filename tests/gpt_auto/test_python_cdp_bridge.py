@@ -500,6 +500,82 @@ async def test_bridge_insert_text_uses_native_cdp_input():
 
 
 @pytest.mark.asyncio
+async def test_bridge_hover_uses_native_cdp_mouse_event():
+    bridge = PythonCdpBridge(GptAutoConfig.from_dict(valid_config()))
+    fake = _FakeClient()
+    bridge._client = fake
+    page = await bridge.call("create_page")
+
+    result = await bridge.call(
+        "hover", {"pageHandle": page["pageHandle"], "x": 42, "y": 17}
+    )
+
+    assert result == {"hovered": True}
+    assert any(
+        method == "Input.dispatchMouseEvent"
+        and params == {
+            "type": "mouseMoved",
+            "x": 42.0,
+            "y": 17.0,
+            "pointerType": "mouse",
+        }
+        for method, params, _session in fake.calls
+    )
+
+
+@pytest.mark.asyncio
+async def test_bridge_click_uses_native_cdp_mouse_press_and_release():
+    bridge = PythonCdpBridge(GptAutoConfig.from_dict(valid_config()))
+    fake = _FakeClient()
+    bridge._client = fake
+    page = await bridge.call("create_page")
+
+    assert await bridge.call("click", {"pageHandle": page["pageHandle"], "x": 11, "y": 23}) == {
+        "clicked": True
+    }
+    assert [
+        (method, params)
+        for method, params, _session in fake.calls
+        if method == "Input.dispatchMouseEvent"
+    ] == [
+        (
+            "Input.dispatchMouseEvent",
+            {
+                "type": "mouseMoved",
+                "x": 11.0,
+                "y": 23.0,
+                "buttons": 0,
+                "pointerType": "mouse",
+            },
+        ),
+        (
+            "Input.dispatchMouseEvent",
+            {
+                "type": "mousePressed",
+                "x": 11.0,
+                "y": 23.0,
+                "button": "left",
+                "buttons": 1,
+                "clickCount": 1,
+                "pointerType": "mouse",
+            },
+        ),
+        (
+            "Input.dispatchMouseEvent",
+            {
+                "type": "mouseReleased",
+                "x": 11.0,
+                "y": 23.0,
+                "button": "left",
+                "buttons": 0,
+                "clickCount": 1,
+                "pointerType": "mouse",
+            },
+        ),
+    ]
+
+
+@pytest.mark.asyncio
 async def test_generic_browser_api_supports_common_page_composites():
     bridge = PythonCdpBridge(GptAutoConfig.from_dict(valid_config()))
     fake = _FakeClient()

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -11,6 +12,87 @@ from .cdp.client import CdpError
 from .urls import parse_project_id
 
 _CHATGPT_HOME_URL = "https://chatgpt.com/"
+
+_CLICK_PROJECTS_TAB_FN = r"""() => {
+  const normalize = value => String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
+  const visible = element => {
+    const rect = element.getBoundingClientRect();
+    const style = getComputedStyle(element);
+    return rect.width > 0 && rect.height > 0 &&
+      style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
+  };
+  const label = element => normalize(
+    element.getAttribute('aria-label') || element.innerText ||
+    element.textContent || element.getAttribute('title')
+  );
+  const node = Array.from(document.querySelectorAll('*')).find(
+    element => visible(element) && label(element) === 'projects'
+  );
+  if (!node) return false;
+  const candidate = node.closest('a, button, [role], [tabindex]') || node;
+  candidate.click();
+  return true;
+}"""
+
+_CLICK_PROJECT_NAME_FN = r"""(name) => {
+  const normalize = value => String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
+  const wanted = normalize(name);
+  const visible = element => {
+    const rect = element.getBoundingClientRect();
+    const style = getComputedStyle(element);
+    return rect.width > 0 && rect.height > 0 &&
+      style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
+  };
+  const label = element => normalize(
+    element.getAttribute('aria-label') || element.innerText ||
+    element.textContent || element.getAttribute('title')
+  );
+  const selectors = [
+    '[data-testid*="project" i] a',
+    '[data-testid*="project" i] button',
+    '[data-project-name]',
+    'a[href*="/g/"]',
+    'button',
+    '[role="link"]',
+    '[role="button"]',
+  ];
+  for (const selector of selectors) {
+    const candidate = Array.from(document.querySelectorAll(selector)).find(
+      element => visible(element) && label(element) === wanted
+    );
+    if (candidate) {
+      candidate.click();
+      return true;
+    }
+  }
+  const node = Array.from(document.querySelectorAll('*')).find(
+    element => visible(element) && label(element) === wanted
+  );
+  if (node) {
+    const candidate = node.closest('a, button, [role], [tabindex]') || node;
+    candidate.click();
+    return true;
+  }
+  return false;
+}"""
+
+_CLICK_PROJECT_NEW_CHAT_FN = r"""(name) => {
+  const normalize = value => String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
+  const wanted = normalize(name);
+  const row = Array.from(document.querySelectorAll('[data-project-row="true"]')).find(
+    candidate => Array.from(candidate.querySelectorAll('span')).some(
+      element => normalize(element.textContent) === wanted
+    )
+  );
+  if (!row) return false;
+  const button = Array.from(row.querySelectorAll('button')).find(
+    candidate => normalize(candidate.getAttribute('aria-label')) === 'start new chat in project'
+      && candidate.getClientRects().length
+  );
+  if (!button) return false;
+  button.click();
+  return true;
+}"""
 
 
 class ComposerSubmissionTimeout(TimeoutError):
@@ -972,6 +1054,19 @@ class GptAutoCdpBrowserController(CdpBrowserController):
             raise ComposerSubmissionTimeout(send_attempted=send_attempted, stage=stage) from exc
 
     async def find_project_url(self, page: CdpPageRef, project_name: str) -> dict[str, str]:
+        projects_tab_opened = await self._open_projects_tab(page, timeout=12.0)
+        if projects_tab_opened:
+            clicked = await self._select_project_from_projects_page(
+                page, project_name, timeout=12.0
+            )
+            if clicked:
+                for _ in range(120):
+                    if re.match(r"^/g/g-p-[^/]+/project/?$", urlsplit(page.url).path):
+                        return {"url": page.url, "name": project_name}
+                    current = await self.page_by_handle(page.handle)
+                    if re.match(r"^/g/g-p-[^/]+/project/?$", urlsplit(current.url).path):
+                        return {"url": current.url, "name": project_name}
+                    await asyncio.sleep(0.1)
         result = await self.evaluate(
             page,
             r"""async (name) => {
@@ -1006,6 +1101,48 @@ class GptAutoCdpBrowserController(CdpBrowserController):
         )
         return {"url": str(result["url"]), "name": str(result.get("name") or project_name)}
 
+    async def _open_projects_tab(self, page: CdpPageRef, *, timeout: float) -> bool:
+        """Use the current sidebar Explore hover menu when it is available."""
+        deadline = asyncio.get_running_loop().time() + max(0.1, timeout)
+        while asyncio.get_running_loop().time() < deadline:
+            if await self.hover_text(page, "Explore"):
+                if await self.click_text(page, "Projects"):
+                    if await self._wait_for_projects_route(page, timeout=1.0):
+                        return True
+                if await self.evaluate(page, _CLICK_PROJECTS_TAB_FN):
+                    if await self._wait_for_projects_route(page, timeout=1.0):
+                        return True
+            await asyncio.sleep(0.1)
+        return False
+
+    async def _wait_for_projects_route(self, page: CdpPageRef, *, timeout: float) -> bool:
+        deadline = asyncio.get_running_loop().time() + max(0.1, timeout)
+        while asyncio.get_running_loop().time() < deadline:
+            try:
+                current = await self.page_by_handle(page.handle)
+            except Exception:  # noqa: BLE001 - navigation may replace the target briefly
+                current = page
+            if urlsplit(current.url).path.rstrip("/") == "/projects":
+                return True
+            await asyncio.sleep(0.1)
+        return False
+
+    async def _select_project_from_projects_page(
+        self, page: CdpPageRef, project_name: str, *, timeout: float
+    ) -> bool:
+        """Select a project using its project-page new-chat control.
+
+        The current Projects page renders project names as non-link text. The
+        action that actually creates a project-scoped chat is the
+        ``Start new chat in project`` button inside that exact project row.
+        """
+        deadline = asyncio.get_running_loop().time() + max(0.1, timeout)
+        while asyncio.get_running_loop().time() < deadline:
+            if await self.evaluate(page, _CLICK_PROJECT_NEW_CHAT_FN, project_name):
+                return True
+            await asyncio.sleep(0.1)
+        return False
+
     async def open_project_page(
         self,
         *,
@@ -1027,9 +1164,16 @@ class GptAutoCdpBrowserController(CdpBrowserController):
             async with asyncio.timeout(navigation_timeout):
                 page = await self.navigate(page, _CHATGPT_HOME_URL)
             known_targets = {candidate.target_id for candidate in await self.pages()}
+            projects_tab_opened = await self._open_projects_tab(page, timeout=navigation_timeout)
             deadline = asyncio.get_running_loop().time() + navigation_timeout
             clicked = False
+            if projects_tab_opened:
+                clicked = await self._select_project_from_projects_page(
+                    page, project_name, timeout=navigation_timeout
+                )
             while asyncio.get_running_loop().time() < deadline:
+                if clicked:
+                    break
                 clicked = await self.evaluate(
                     page,
                     r"""(name) => {
