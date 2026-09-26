@@ -266,6 +266,7 @@ async def test_get_page_resolves_single_target_without_enumerating_all_tabs():
         "title": "",
         "targetId": "target-1",
         "windowId": 42,
+        "openerId": "",
     }
     assert get_targets_calls == 0
 

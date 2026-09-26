@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import unquote, urlsplit, urlunsplit
 
 from .window_anchor import is_gateway_dashboard_url
 
@@ -24,7 +24,15 @@ def parse_project_id(url: str) -> str | None:
 
 def parse_provider_session_id(url: str) -> str | None:
     match = _CHAT_RE.search(urlsplit(url).path)
-    return match.group(1) if match else None
+    if not match:
+        return None
+    value = match.group(1)
+    # The SPA exposes a provisional local-chatgpt:<uuid> route while its
+    # server conversation is being created. It cannot be resumed or persisted
+    # as provider identity, even when URL-encoded inside a project route.
+    if unquote(value).lower().startswith("local-chatgpt:"):
+        return None
+    return value
 
 
 def canonical_project_url(url: str) -> str:
@@ -64,6 +72,20 @@ def url_matches_provider_session(url: str, provider_session_id: str) -> bool:
     a session outside its configured project.
     """
     return bool(parse_project_id(url)) and parse_provider_session_id(url) == provider_session_id
+
+
+def same_chat_identity(left: str, right: str) -> bool:
+    """Compare trusted conversation identities without mutable project titles.
+
+    Keep canonical_chat_url route-preserving: navigation may require the
+    observed display slug, whereas ownership must survive project renames.
+    """
+    return bool(
+        canonical_chat_url(left)
+        and canonical_chat_url(right)
+        and parse_project_id(left) == parse_project_id(right)
+        and parse_provider_session_id(left) == parse_provider_session_id(right)
+    )
 
 
 def is_gpt_auto_relevant_url(url: str) -> bool:
