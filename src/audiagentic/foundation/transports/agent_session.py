@@ -106,6 +106,7 @@ _WORK_ACTIVITY_LABELS = frozenset({
     # banner remains visible.  GPT-auto keeps this separate from its real
     # recovery clock; the gateway still needs it to retain the request lease.
     "connection-refreshing",
+    "provider-busy",
     "thinking",
     "searching-web",
     "searching-the-web",

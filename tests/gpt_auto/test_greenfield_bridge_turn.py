@@ -566,6 +566,33 @@ async def test_connection_interrupted_emits_synthetic_activity_until_completion(
 
 
 @pytest.mark.asyncio
+async def test_provider_busy_heartbeat_does_not_renew_real_session_activity():
+    from unittest.mock import Mock
+    chat = _Chat()
+    chat.mark_validated_activity = Mock()
+    observations = []
+    turn = GptAutoTurn(chat, SessionPrompt(turn_id="busy-lease", body="prompt"), observations.append)
+    await turn._emit(TransportObservationKind.ACTIVITY, {"model_activity": "provider-busy"})
+    chat.mark_validated_activity.assert_not_called()
+    assert observations[-1].attributes['model_activity'] == 'provider-busy'
+
+
+@pytest.mark.asyncio
+async def test_response_observer_emits_busy_lease_for_current_prompt():
+    chat = _Chat()
+    busy = snap(users=1, user="Review AU01", generating=True)
+    completed = snap(users=1, assistants=1, user="Review AU01", assistant="done", complete=True)
+    chat._snapshots = iter([busy, busy, completed, completed, completed])
+    observations = []
+    turn = GptAutoTurn(chat, SessionPrompt(turn_id="busy-observer", body="Review AU01"), observations.append)
+    turn._HEARTBEAT_INTERVAL_SECONDS = 0
+    turn.state = TurnState.AWAITING_RESPONSE
+    turn._prompt_message_id = "prompt-1"
+    assert await turn._await_response(snap(users=1, user="Review AU01"), busy) == "done"
+    assert any(item.attributes.get('model_activity') == 'provider-busy' for item in observations)
+
+
+@pytest.mark.asyncio
 async def test_interruption_present_at_baseline_is_not_a_new_refresh_edge():
     """A retained interruption banner must not refresh a new request immediately."""
     chat = _Chat()

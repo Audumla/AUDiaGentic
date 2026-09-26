@@ -457,19 +457,45 @@ _SNAPSHOT_FN = r"""
   // represented explicitly so a large DOM cannot silently look unchanged.
   const activityStateDigest = node => {
     if (!node) return null;
-    const parts = ["dom-activity-v1", String(node.tagName || ""), attributeMaterial(node)];
+    // A request-root observer catches interior and between-poll changes that
+    // bounded head/tail snapshots cannot see. Keep only one observer per page;
+    // changing the root disconnects old-turn observation. Animation classes
+    // are deliberately excluded from meaningful work activity.
+    const key = '__audiagenticActivityObserverV2';
+    let observed = window[key];
+    if (!observed || observed.root !== node) {
+      if (observed) observed.observer.disconnect();
+      observed = {root: node, revision: 0};
+      observed.consume = records => {
+        if (records.some(record => {
+          const target = record.target.nodeType === Node.ELEMENT_NODE
+            ? record.target : record.target.parentElement;
+          return target && progressShown(target);
+        })) observed.revision += 1;
+      };
+      observed.observer = new MutationObserver(observed.consume);
+      observed.observer.observe(node, {
+        subtree: true, childList: true, characterData: true,
+        attributes: true, attributeFilter: semanticAttrs
+      });
+      window[key] = observed;
+    }
+    observed.consume(observed.observer.takeRecords());
+    const parts = ["dom-activity-v2", String(observed.revision), String(node.tagName || ""), attributeMaterial(node)];
     const elementWalker = document.createTreeWalker(node, NodeFilter.SHOW_ELEMENT);
     const firstNodes = [];
     const lastNodes = [];
     let elementCount = 0;
+    let visitedElements = 0;
     let element;
     while ((element = elementWalker.nextNode())) {
+      if (++visitedElements > 256) break;
       if (!progressShown(element)) continue;
       elementCount += 1;
       const material = [
         String(element.tagName || ""),
         attributeMaterial(element),
-        boundedScalarMaterial(element.innerText || element.textContent || "")
+        String(element.childElementCount)
       ].join("\x1d");
       if (firstNodes.length < 32) firstNodes.push(material);
       lastNodes.push(material);
@@ -482,7 +508,9 @@ _SNAPSHOT_FN = r"""
     let textCount = 0;
     let textLength = 0;
     let textNode;
+    let visitedTexts = 0;
     while ((textNode = textWalker.nextNode())) {
+      if (++visitedTexts > 256) break;
       if (!progressShown(textNode.parentElement)) continue;
       const raw = String(textNode.nodeValue || "");
       textCount += 1;
@@ -668,8 +696,26 @@ _SNAPSHOT_FN = r"""
     if (kind) toolActivityCounts[kind] = (toolActivityCounts[kind] || 0) + 1;
   }
   const domSignals = {};
+  // The labelled renderer places its response action bar next to the
+  // block-list, not inside the assistant block. Admit only a direct sibling
+  // toolbar whose bounded wrapper ends with this exact latest assistant.
+  let fallbackResponseControls = null;
+  if (usingFallbackMessages && latestAssistant && !fallbackHasUnansweredPrompt) {
+    let wrapper = latestAssistant.parentElement;
+    for (let depth = 0; wrapper && depth < 4; depth++, wrapper = wrapper.parentElement) {
+      const blocks = Array.from(wrapper.querySelectorAll('.block-BQZwFn'));
+      if (blocks.at(-1) !== latestAssistant) break;
+      const controls = Array.from(wrapper.children).find(child =>
+        child.classList.contains('turn-action-controls')
+      );
+      if (controls) { fallbackResponseControls = controls; break; }
+    }
+  }
   for (const spec of signalSpecs) {
-    const root = spec.scope === "latest-assistant-turn" ? assistantTurn : document;
+    const completionAction = spec.name === 'completion-control' || spec.name === 'more-actions-menu';
+    const root = spec.scope === "latest-assistant-turn"
+      ? (completionAction && fallbackResponseControls ? fallbackResponseControls : assistantTurn)
+      : document;
     // ChatGPT currently leaves `.streaming-animation` on completed assistant
     // messages.  It describes the renderer, not an active generation, so it
     // must never be allowed to make the provider appear busy during resume.
@@ -1358,6 +1404,7 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                     candidate
                     for candidate in await self.pages()
                     if candidate.target_id not in known_targets
+                    and candidate.opener_id == source_page.target_id
                 )
                 for candidate in candidates:
                     candidate_project_id = parse_project_id(candidate.url)
