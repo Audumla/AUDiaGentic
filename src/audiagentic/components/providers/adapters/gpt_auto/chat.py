@@ -102,8 +102,8 @@ class PersistentChat:
         self._last_url: str | None = None
         self._last_snapshot: ChatSnapshot | None = None
         # Physical-tab reclamation uses only validated request/session
-        # evidence. Polling, DOM mutation, focus and foreign turns never
-        # update this clock.
+        # evidence. Raw polling, renderer churn, focus and foreign turns
+        # never update this clock; emitted provider activity may.
         self._last_validated_activity_monotonic = time.monotonic()
         self._validated_activity_generation = 0
         metadata = resume_provider_metadata or {}
@@ -514,10 +514,8 @@ class PersistentChat:
             handle = self.page_handle
             generation = self._validated_activity_generation
             if (
-                self.state is not ChatState.READY
-                or self.active_turn_id is not None
+                self.active_turn_id is not None
                 or self.pending_turns > 0
-                or self.unresolved_turn_pending
                 or not handle
                 or now - self._last_validated_activity_monotonic < idle_timeout_seconds
             ):
@@ -536,7 +534,6 @@ class PersistentChat:
                 or generation != self._validated_activity_generation
                 or self.active_turn_id is not None
                 or self.pending_turns > 0
-                or self.unresolved_turn_pending
             ):
                 return False
             self.page_handle = None
@@ -1796,10 +1793,17 @@ class PersistentChat:
         if self.state is ChatState.CLOSED:
             return
         handle, self.page_handle = self.page_handle, None
+        close_on_session_close = bool(
+            self.runtime.config.browser.close_tabs_on_session_close
+        )
+        if handle and not close_on_session_close:
+            retain = getattr(self.runtime, "retain_detached_page", None)
+            if callable(retain):
+                retain(self, handle, self._last_validated_activity_monotonic)
         self.runtime.release_page(self, handle)
         self._move(ChatState.CLOSED)
         self.runtime.unregister_chat(self)
-        if handle and self.runtime.config.browser.close_tabs_on_session_close:
+        if handle and close_on_session_close:
             try:
                 await self.runtime.bridge.call("close_page", {"pageHandle": handle})
             except Exception:
