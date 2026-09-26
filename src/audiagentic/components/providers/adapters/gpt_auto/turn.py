@@ -314,6 +314,14 @@ class GptAutoTurn:
         self.state = target
 
     async def _emit(self, kind: TransportObservationKind, attributes: dict[str, Any]) -> None:
+        # The physical-tab reaper is driven by real request/session activity,
+        # not by polling or synthetic connection-refreshing lease ticks.
+        if kind is not TransportObservationKind.TIMING and attributes.get(
+            "model_activity"
+        ) != "connection-refreshing":
+            mark_activity = getattr(self.chat, "mark_validated_activity", None)
+            if callable(mark_activity):
+                mark_activity()
         value = TransportObservation(
             ag_session_id=self.chat.ag_session_id,
             turn_id=self.request.turn_id,

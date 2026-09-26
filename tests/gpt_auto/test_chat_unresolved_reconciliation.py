@@ -120,6 +120,32 @@ async def test_prompt_relays_provider_activity_before_slow_readiness(
         "inspected",
         "evaluated",
     ]
+    assert chat._validated_activity_generation == 2
+
+
+@pytest.mark.asyncio
+async def test_physical_tab_clock_ignores_synthetic_connection_heartbeat() -> None:
+    chat = _chat(unresolved=False)
+    chat._last_validated_activity_monotonic = 100.0
+    turn = transport_module.GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="req-clock", body="hello"),
+        lambda _observation: None,
+    )
+
+    await turn._emit(
+        TransportObservationKind.ACTIVITY,
+        {"model_activity": "connection-refreshing"},
+    )
+    assert chat._last_validated_activity_monotonic == 100.0
+    assert chat._validated_activity_generation == 0
+
+    await turn._emit(
+        TransportObservationKind.ACTIVITY,
+        {"model_activity": "response-progress"},
+    )
+    assert chat._last_validated_activity_monotonic > 100.0
+    assert chat._validated_activity_generation == 1
 
 
 @pytest.mark.asyncio
