@@ -605,11 +605,16 @@ class SessionRuntime:
                 prompt,
                 request_id=request_id,
                 correlation_id=correlation_id,
+                active_timeout_seconds=timeout_seconds,
                 activity_relay=activity_relay,
                 dispatch_claim=dispatch_claim,
                 resume_existing=resume_existing,
             ),
-            timeout=timeout_seconds,
+            # Queue wait is deliberately unbounded here.  A caller timeout
+            # must not expire while an earlier turn owns the session FIFO
+            # lock; it applies only after this turn has started invoking the
+            # provider transport below.
+            timeout=None,
         )
 
     def focus_existing_conversation(
@@ -2358,6 +2363,7 @@ class SessionRuntime:
         *,
         request_id: str | None,
         correlation_id: str | None,
+        active_timeout_seconds: float | None = None,
         activity_relay: Any | None = None,
         dispatch_claim: Callable[[], dict[str, Any]] | None = None,
         resume_existing: bool = False,
@@ -2578,7 +2584,11 @@ class SessionRuntime:
                         message="provider transport cannot recover an existing turn",
                         details={"session-id": session_id, "request-id": request_id},
                     )
-                result = await method(session_prompt, _observation_sink)
+                invocation = method(session_prompt, _observation_sink)
+                if active_timeout_seconds is not None and active_timeout_seconds > 0:
+                    result = await asyncio.wait_for(invocation, timeout=active_timeout_seconds)
+                else:
+                    result = await invocation
             except Exception as exc:
                 if request_id is not None:
                     self._console_trace.failed(

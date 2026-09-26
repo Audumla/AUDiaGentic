@@ -661,6 +661,52 @@ def test_concurrent_prompts_queue_fifo(rig):
     assert len(results) == 2
 
 
+def test_queued_prompt_timeout_starts_after_fifo_admission(rig):
+    """A caller deadline must not expire while an earlier turn is active."""
+    runtime, clock, transports, tmp_path = rig
+    record = _open(runtime, tmp_path)
+    session_id = record["session-id"]
+    gate = threading.Event()
+    transports[0].block_event = gate
+    results: list[Any] = []
+    errors: list[BaseException] = []
+
+    def first_turn() -> None:
+        try:
+            results.append(runtime.prompt_in_session(tmp_path, session_id, "first"))
+        except BaseException as exc:  # pragma: no cover - assertion below reports it
+            errors.append(exc)
+
+    def queued_turn() -> None:
+        try:
+            results.append(
+                runtime.prompt_in_session(
+                    tmp_path,
+                    session_id,
+                    "second",
+                    timeout_seconds=0.05,
+                )
+            )
+        except BaseException as exc:  # pragma: no cover - assertion below reports it
+            errors.append(exc)
+
+    first = threading.Thread(target=first_turn)
+    second = threading.Thread(target=queued_turn)
+    first.start()
+    time.sleep(0.1)
+    second.start()
+    time.sleep(0.2)  # exceed the queued turn's deadline while first owns the lock
+    assert second.is_alive()
+    gate.set()
+    first.join(timeout=2)
+    second.join(timeout=2)
+
+    assert not errors
+    assert not first.is_alive() and not second.is_alive()
+    assert transports[0].turns == ["first", "second"]
+    runtime.close_session(tmp_path, session_id)
+
+
 def test_session_snapshot_all_reports_active_turn(rig):
     runtime, clock, transports, tmp_path = rig
     record = _open(runtime, tmp_path)

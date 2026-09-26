@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import re
 from typing import Any
 from urllib.parse import urlsplit
 
+from .cdp.bridge import PythonCdpBridge
 from .cdp.cdp_browser import CdpBrowserController, CdpPageRef, CdpWindowBounds
 from .cdp.client import CdpError
 from .urls import parse_project_id
+
+logger = logging.getLogger(__name__)
 
 _CHATGPT_HOME_URL = "https://chatgpt.com/"
 
@@ -131,6 +135,34 @@ _SNAPSHOT_FN = r"""
   // empty/transient text node fall out of one array but not the other.
   const allRoleNodes = Array.from(document.querySelectorAll('[data-message-author-role="user"], [data-message-author-role="assistant"]'));
   const usingFallbackMessages = allRoleNodes.length === 0;
+  // The labelled fallback renderer can mount a live "Thinking"/tool block
+  // after the latest user block before it assigns the eventual
+  // `ChatGPT said:` label or assistant message id. Keep the block inventory
+  // outside the message-id extraction so that the live block can be used as
+  // the request-owned observation root during that gap.
+  const fallbackBlocks = usingFallbackMessages
+    ? Array.from(document.querySelectorAll('.block-BQZwFn'))
+    : [];
+  const fallbackBlockLabel = block => String(
+    block.querySelector('h4.sr-only')?.innerText || ''
+  ).trim().toLowerCase();
+  const latestFallbackUserBlock = usingFallbackMessages
+    ? fallbackBlocks.slice().reverse().find(block => fallbackBlockLabel(block) === 'you said:') || null
+    : null;
+  const latestFallbackUserIndex = latestFallbackUserBlock
+    ? fallbackBlocks.indexOf(latestFallbackUserBlock)
+    : -1;
+  const latestFallbackActivityBlock = latestFallbackUserIndex >= 0
+    ? fallbackBlocks.slice(latestFallbackUserIndex + 1).reverse()[0] || null
+    : null;
+  const latestFallbackAssistantBlock = usingFallbackMessages
+    ? fallbackBlocks.slice().reverse().find(block => fallbackBlockLabel(block) === 'chatgpt said:') || null
+    : null;
+  const fallbackHasUnansweredPrompt = Boolean(
+    latestFallbackUserBlock &&
+    (!latestFallbackAssistantBlock ||
+      fallbackBlocks.indexOf(latestFallbackUserBlock) > fallbackBlocks.indexOf(latestFallbackAssistantBlock))
+  );
   const messageEntries = [];
   if (allRoleNodes.length) {
     for (const el of allRoleNodes) {
@@ -143,11 +175,10 @@ _SNAPSHOT_FN = r"""
     // with labelled turn blocks. Keep the same ordered prompt/response model
     // and derive bounded synthetic IDs from the stable DOM order when the new
     // renderer does not expose message UUIDs.
-    const fallbackBlocks = Array.from(document.querySelectorAll('.block-BQZwFn'));
     let userIndex = 0;
     let assistantIndex = 0;
     for (const block of fallbackBlocks) {
-      const label = String(block.querySelector('h4.sr-only')?.innerText || '').trim().toLowerCase();
+      const label = fallbackBlockLabel(block);
       if (label === 'you said:') {
         const content = block.querySelector('[data-user-message-bubble="true"]') || block;
         const messageId = content.getAttribute('data-chatgpt-search-message-ids') || `fallback-user-${userIndex++}`;
@@ -182,10 +213,23 @@ _SNAPSHOT_FN = r"""
   // for the specific DOM depths tested and has no structural guarantee
   // for a differently-nested turn. <article> has never been observed to
   // exist in current ChatGPT markup; kept as a legacy fallback only.
-  const assistantTurn = latestAssistant ? (
-    (usingFallbackMessages && latestAssistant.closest("[data-turn-key]")) ||
-    latestAssistant.closest(".agent-turn") || latestAssistant.closest("article") || latestAssistant.parentElement?.parentElement
-  ) : latestAgentTurn;
+  // Prefer the fallback block mounted after the latest prompt. Falling back
+  // to the previous assistant wrapper here makes a live pre-assistant
+  // "Thinking" turn look idle/complete and assigns its DOM digest to the
+  // previous prompt.
+  const assistantTurn = usingFallbackMessages
+    ? (latestFallbackActivityBlock || (latestAssistant ? (
+        latestAssistant.closest("[data-turn-key]") ||
+        latestAssistant.closest(".agent-turn") ||
+        latestAssistant.closest("article") ||
+        latestAssistant.parentElement?.parentElement
+      ) : null))
+    : (latestAssistant ? (
+        latestAssistant.closest("[data-turn-key]") ||
+        latestAssistant.closest(".agent-turn") ||
+        latestAssistant.closest("article") ||
+        latestAssistant.parentElement?.parentElement
+      ) : latestAgentTurn);
   // Progress rows are rendered as visible, short-lived status blocks in the
   // assistant turn. They may say "Inspected ...", "Fetching ...",
   // "Analyzing ...", or "Evaluated ..." without changing the assistant
@@ -406,6 +450,51 @@ _SNAPSHOT_FN = r"""
       ...nodeDigests
     ].join("\x1e"));
   };
+  // ChatGPT frequently mutates a current agent turn without changing the
+  // assistant text, known tool labels, or one of the configured DOM signals.
+  // Keep a bounded structural/text digest as a final activity channel.  It
+  // is a digest only: no provider payload crosses CDP, and truncation is
+  // represented explicitly so a large DOM cannot silently look unchanged.
+  const activityStateDigest = node => {
+    if (!node) return null;
+    const parts = ["dom-activity-v1", String(node.tagName || ""), attributeMaterial(node)];
+    const elementWalker = document.createTreeWalker(node, NodeFilter.SHOW_ELEMENT);
+    const firstNodes = [];
+    const lastNodes = [];
+    let elementCount = 0;
+    let element;
+    while ((element = elementWalker.nextNode())) {
+      if (!progressShown(element)) continue;
+      elementCount += 1;
+      const material = [
+        String(element.tagName || ""),
+        attributeMaterial(element),
+        boundedScalarMaterial(element.innerText || element.textContent || "")
+      ].join("\x1d");
+      if (firstNodes.length < 32) firstNodes.push(material);
+      lastNodes.push(material);
+      if (lastNodes.length > 32) lastNodes.shift();
+    }
+    parts.push("elements=" + String(elementCount), ...firstNodes, ...lastNodes);
+    const textWalker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+    const firstText = [];
+    const lastText = [];
+    let textCount = 0;
+    let textLength = 0;
+    let textNode;
+    while ((textNode = textWalker.nextNode())) {
+      if (!progressShown(textNode.parentElement)) continue;
+      const raw = String(textNode.nodeValue || "");
+      textCount += 1;
+      textLength += raw.length;
+      const material = boundedScalarMaterial(raw);
+      if (firstText.length < 32) firstText.push(material);
+      lastText.push(material);
+      if (lastText.length > 32) lastText.shift();
+    }
+    parts.push("texts=" + String(textCount), "text-length=" + String(textLength), ...firstText, ...lastText);
+    return progressDigestParts(parts);
+  };
   const MAX_PROGRESS_TURNS = 8;
   const MAX_PROGRESS_VISIBLE_NODES = 2048;
   const MAX_PROGRESS_CANDIDATES = 256;
@@ -427,15 +516,31 @@ _SNAPSHOT_FN = r"""
     }
     return null;
   };
+  const ownerPromptIdFor = node => {
+    if (!node) return null;
+    for (let index = progressUserEntries.length - 1; index >= 0; index--) {
+      const entry = progressUserEntries[index];
+      if (entry.el === node || entry.el.contains(node)) return entry.messageId;
+      const relation = entry.el.compareDocumentPosition(node);
+      if (relation & Node.DOCUMENT_POSITION_FOLLOWING) return entry.messageId;
+    }
+    return null;
+  };
+  const domActivityRoot = latestAgentTurn || assistantTurn;
+  const domActivityDigest = activityStateDigest(domActivityRoot);
+  const domActivityOwnerPromptMessageId = ownerPromptIdFor(domActivityRoot);
   const progressBlocks = [];
+  const progressTurns = agentTurns.length
+    ? agentTurns
+    : (assistantTurn ? [assistantTurn] : []);
   let inspectedNodes = 0;
   let inspectedCandidates = 0;
   // Historical turns can contain persistent tables and tool cards. Inspect
   // newest turns first and stop at fixed turn/node/candidate budgets.
-  for (let turnIndex = agentTurns.length - 1, turnsInspected = 0;
+  for (let turnIndex = progressTurns.length - 1, turnsInspected = 0;
        turnIndex >= 0 && turnsInspected < MAX_PROGRESS_TURNS && progressBlocks.length < 128;
        turnIndex--, turnsInspected++) {
-    const turn = agentTurns[turnIndex];
+    const turn = progressTurns[turnIndex];
     const ownerPromptMessageId = ownerPromptFor(turn);
     if (!ownerPromptMessageId) continue;
     const candidates = [];
@@ -590,7 +695,7 @@ _SNAPSHOT_FN = r"""
   const terminalWitnessAssistantId = (
     domSignals["completion-control"] || domSignals["more-actions-menu"] ||
     domSignals["canvas-edit-control"] || domSignals["canvas-open-editor-control"]
-  ) ? (latestAssistantRef?.messageId || null) : null;
+  ) && !fallbackHasUnansweredPrompt ? (latestAssistantRef?.messageId || null) : null;
   // GP19: this bound was 20000, which is small enough that a genuinely
   // long real prompt/response can never satisfy exact-text correlation
   // matching even with otherwise-perfect DOM extraction (a distinct latent
@@ -641,7 +746,12 @@ _SNAPSHOT_FN = r"""
       if (blockTags.has(element.tagName) && !value.endsWith("\n")) value += "\n";
       return value;
     };
-    return walk(root).replace(/\n+$/, "");
+    return walk(root)
+      .replace(/[ \t\f\v]+/g, " ")
+      .replace(/[ ]*\n[ ]*/g, "\n")
+      .replace(/\n+/g, "\n")
+      .replace(/\n+$/, "")
+      .trim();
   };
   const userCorrelation = (element) => {
     const source = element?.querySelector('[data-testid="collapsible-user-message-content"]') || element;
@@ -780,6 +890,8 @@ _SNAPSHOT_FN = r"""
     terminalWitnessAssistantId,
     toolActivityCounts,
     progressBlocks: progressBlocks.slice(-128),
+    domActivityDigest,
+    domActivityOwnerPromptMessageId,
     errorPresent: !!document.querySelector('.error-page, [data-testid*="error"]')
   };
 }
@@ -788,6 +900,13 @@ _SNAPSHOT_FN = r"""
 
 class GptAutoCdpBrowserController(CdpBrowserController):
     """ChatGPT-specific selectors, composites, and conversation operations."""
+
+    def __init__(self, bridge: PythonCdpBridge) -> None:
+        super().__init__(bridge)
+        # Project new-chat creation is a shared-window operation.  Without a
+        # single critical section, two sessions can both observe the other's
+        # newly-created target and adopt the wrong conversation.
+        self._project_open_lock = asyncio.Lock()
 
     async def wait_for_composer(self, page: CdpPageRef, *, timeout: float) -> dict[str, Any]:
         deadline = asyncio.get_running_loop().time() + timeout
@@ -1024,10 +1143,15 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                                if (element.tagName === 'BR') return '\n';
                                let value = '';
                                for (const child of element.childNodes) value += walk(child);
+                               if (element.tagName === 'DIV' && value === '\n') return '\n\n';
                                if (blockTags.has(element.tagName) && !value.endsWith('\n')) value += '\n';
                                return value;
                              };
-                             return walk(root).replace(/\n+$/, '');
+                             return walk(root)
+                               .replace(/\u00a0/g, ' ')
+                               .replace(/([`])\s+(https?:\/\/)/g, '$1$2')
+                               .replace(/(https?:\/\/[^\s`]+)\s+([`])/g, '$1$2')
+                               .replace(/\n+$/, '');
                            };
                            const sourceText = value => String(value || '')
                              .replace(/\r\n/g, '\n')
@@ -1061,8 +1185,6 @@ class GptAutoCdpBrowserController(CdpBrowserController):
             )
             if clicked:
                 for _ in range(120):
-                    if re.match(r"^/g/g-p-[^/]+/project/?$", urlsplit(page.url).path):
-                        return {"url": page.url, "name": project_name}
                     current = await self.page_by_handle(page.handle)
                     if re.match(r"^/g/g-p-[^/]+/project/?$", urlsplit(current.url).path):
                         return {"url": current.url, "name": project_name}
@@ -1152,6 +1274,24 @@ class GptAutoCdpBrowserController(CdpBrowserController):
         navigation_timeout: float,
         ready_timeout: float,
     ) -> dict[str, Any]:
+        async with self._project_open_lock:
+            return await self._open_project_page_unlocked(
+                project_name=project_name,
+                project_url=project_url,
+                anchor_page=anchor_page,
+                navigation_timeout=navigation_timeout,
+                ready_timeout=ready_timeout,
+            )
+
+    async def _open_project_page_unlocked(
+        self,
+        *,
+        project_name: str,
+        project_url: str | None,
+        anchor_page: CdpPageRef | None,
+        navigation_timeout: float,
+        ready_timeout: float,
+    ) -> dict[str, Any]:
         """Open a genuinely new chat through ChatGPT's sidebar UI.
 
         A configured URL is validation data only. New sessions always select
@@ -1207,6 +1347,7 @@ class GptAutoCdpBrowserController(CdpBrowserController):
             deadline = asyncio.get_running_loop().time() + navigation_timeout
             selected_url = ""
             observed_wrong_project = False
+            wrong_project_pages: dict[str, CdpPageRef] = {}
             while asyncio.get_running_loop().time() < deadline:
                 candidates: list[CdpPageRef] = []
                 try:
@@ -1224,6 +1365,8 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                         continue
                     if expected_project_id and candidate_project_id != expected_project_id:
                         observed_wrong_project = True
+                        if candidate.target_id != source_page.target_id:
+                            wrong_project_pages[candidate.handle] = candidate
                         continue
                     page = candidate
                     selected_url = candidate.url
@@ -1244,6 +1387,22 @@ class GptAutoCdpBrowserController(CdpBrowserController):
             project_landing_url = f"https://chatgpt.com{parts.path.rstrip('/')}"
             return {"page": page, "projectUrl": project_landing_url}
         except Exception as exc:
+            wrong_pages = (
+                wrong_project_pages.values()
+                if "wrong_project_pages" in locals()
+                else ()
+            )
+            for wrong_page in wrong_pages:
+                if wrong_page.handle == page.handle:
+                    continue
+                try:
+                    await self.close(wrong_page)
+                except Exception:
+                    logger.debug(
+                        "gpt-auto failed to close wrong-project target",
+                        extra={"page-handle": wrong_page.handle},
+                        exc_info=True,
+                    )
             await self.close(page)
             raise RuntimeError(
                 f"gpt-auto project page open failed: {type(exc).__name__}: {exc}"
