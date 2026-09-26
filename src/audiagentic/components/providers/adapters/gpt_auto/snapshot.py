@@ -129,6 +129,12 @@ class ChatSnapshot:
     # is still working even when the assistant text is unchanged.
     tool_activity_counts: tuple[tuple[str, int], ...] = ()
     progress_blocks: tuple[ChatProgressBlock, ...] = ()
+    # Bounded digest of the current request-owned agent-turn DOM.  This is
+    # deliberately separate from visible assistant text/tool counts: current
+    # ChatGPT renders meaningful work by mutating status rows, cards, ARIA
+    # state, and structural nodes without changing any of those projections.
+    dom_activity_digest: str | None = None
+    dom_activity_owner_prompt_id: str | None = None
 
     @classmethod
     def from_bridge(cls, value: dict[str, Any]) -> ChatSnapshot:
@@ -205,6 +211,10 @@ class ChatSnapshot:
                 )
             ),
             progress_blocks=_progress_blocks(value.get("progressBlocks")),
+            dom_activity_digest=_bounded_token(value.get("domActivityDigest"), 16),
+            dom_activity_owner_prompt_id=_bounded_token(
+                value.get("domActivityOwnerPromptMessageId")
+            ),
         )
 
     def latest_user_ref(self) -> ChatMessageRef | None:

@@ -114,6 +114,10 @@ settings:
           # control with the generic labels "Copy" or "Copy message".
           - 'button[aria-label="Copy"]'
           - 'button[aria-label="Copy message"]'
+          # The current action bar also exposes this stable terminal control
+          # after a completed response, even when the copy control is
+          # virtualized or temporarily absent.
+          - 'button[aria-label="Regenerate response"]'
         visible: false
       error-page:
         scope: document

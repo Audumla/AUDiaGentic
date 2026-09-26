@@ -43,3 +43,42 @@ async def test_fallback_snapshot_preserves_paragraphs_and_ignores_collapsed_mark
             )
         finally:
             await browser.close()
+
+
+@pytest.mark.asyncio
+async def test_fallback_live_thinking_block_owns_activity_after_latest_prompt() -> None:
+    """A pre-assistant fallback block must not reuse the previous turn."""
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            await page.set_content(
+                """
+                <div class="block-BQZwFn">
+                  <h4 class="sr-only">You said:</h4>
+                  <div data-user-message-bubble="true">old prompt</div>
+                </div>
+                <div class="block-BQZwFn">
+                  <h4 class="sr-only">ChatGPT said:</h4>
+                  <div>old answer</div>
+                </div>
+                <div class="block-BQZwFn">
+                  <h4 class="sr-only">You said:</h4>
+                  <div data-user-message-bubble="true">new prompt</div>
+                </div>
+                <div class="block-BQZwFn">
+                  <div role="status" style="display:block;width:40px;height:20px">Thinking</div>
+                </div>
+                """
+            )
+
+            snapshot = await page.evaluate(_SNAPSHOT_FN, [])
+
+            assert snapshot["latestUserId"] == "fallback-user-1"
+            assert snapshot["domActivityOwnerPromptMessageId"] == "fallback-user-1"
+            assert snapshot["latestAssistantText"] == "old answer"
+            assert snapshot["terminalWitnessAssistantId"] is None
+            assert snapshot["progressBlocks"][0]["ownerPromptMessageId"] == "fallback-user-1"
+            assert snapshot["progressBlocks"][0]["kind"] == "dom-status"
+        finally:
+            await browser.close()
