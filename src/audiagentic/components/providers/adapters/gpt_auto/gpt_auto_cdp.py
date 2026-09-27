@@ -122,6 +122,23 @@ _PROJECT_NEW_CHAT_POINT_FN = r"""(name) => {
   return {x: rect.x + rect.width / 2, y: rect.y + rect.height / 2};
 }"""
 
+_COMPOSER_READY_FN = r"""() => {
+  const composer = document.querySelector("#prompt-textarea") || Array.from(
+    document.querySelectorAll('[contenteditable="true"]')
+  ).find(element => /^(new chat in\b|ask chatgpt$|message chatgpt$)/i.test(
+    String(element.getAttribute("aria-label") || "").trim()
+  ));
+  if (!composer) return {composerPresent: false, composerEditable: false};
+  const rect = composer.getBoundingClientRect();
+  const style = getComputedStyle(composer);
+  return {
+    composerPresent: true,
+    composerEditable: composer.isContentEditable && !composer.hasAttribute("disabled"),
+    visible: rect.width > 0 && rect.height > 0 && style.visibility !== "hidden"
+      && style.display !== "none" && style.opacity !== "0"
+  };
+}"""
+
 
 class ComposerSubmissionTimeout(TimeoutError):
     """Preserve whether a send-capable operation was dispatched before timeout."""
@@ -1170,9 +1187,19 @@ class GptAutoCdpBrowserController(CdpBrowserController):
         deadline = asyncio.get_running_loop().time() + timeout
         next_retry_probe = asyncio.get_running_loop().time() + 1.0
         while asyncio.get_running_loop().time() < deadline:
-            snapshot = await self.snapshot(page)
-            if snapshot.get("composerPresent") and snapshot.get("composerEditable"):
-                return snapshot
+            # Do not run the full message/activity snapshot as a readiness
+            # probe. Project landing pages can contain a large history, and a
+            # full DOM walk can time out even while the composer is already
+            # interactive. The first authoritative turn snapshot happens after
+            # admission and remains responsible for identity/activity proof.
+            readiness = await self.evaluate(page, _COMPOSER_READY_FN)
+            if (
+                isinstance(readiness, dict)
+                and readiness.get("composerPresent")
+                and readiness.get("composerEditable")
+                and readiness.get("visible")
+            ):
+                return readiness
             now = asyncio.get_running_loop().time()
             if now >= next_retry_probe:
                 retry_focused = await self.evaluate(
