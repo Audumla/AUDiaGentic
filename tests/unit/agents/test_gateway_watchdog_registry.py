@@ -126,3 +126,80 @@ def test_host_watchdog_reconciles_stale_transport_without_replaying_prompt(
     ]
     assert result == (persisted,)
     assert registry.updates[-1] == persisted
+
+
+def test_host_watchdog_retries_operator_requested_reconciliation(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """An operator reconcile intent must not suppress the next watchdog pass."""
+    from audiagentic.components.agents.gateway.service.host import GatewayServiceHost
+
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    request_id = "req-reconcile-requested"
+    diagnosed = {
+        "request-id": request_id,
+        "state": "running",
+        "session-id": "ses-1",
+        "revision": 8,
+        "watchdog-state": "intervention",
+        "diagnostics": {
+            "resolution-state": "reconciliation-requested",
+            "reason": "stale-progress",
+        },
+    }
+
+    class Registry:
+        def __init__(self) -> None:
+            self.current = (project_root.resolve(), dict(diagnosed))
+
+        def snapshot(self):
+            return ((self.current[0], dict(self.current[1])),)
+
+        def update(self, root, record):
+            self.current = (root.resolve(), dict(record))
+
+        def unregister(self, *_args):
+            raise AssertionError("a non-terminal reconcile must remain registered")
+
+    class Runtime:
+        def reconcile_active_transport(self, session_id: str, req_id: str):
+            assert (session_id, req_id) == ("ses-1", request_id)
+            return {"status": "reconciled"}
+
+    registry = Registry()
+    recovered: list[dict] = []
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.queue.watchdog_registry.watchdog_registry",
+        lambda: registry,
+    )
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.queue.dispatch.diagnose_activity_lease",
+        lambda _root, _record: dict(diagnosed),
+    )
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.session.sessions.peek_session_runtime",
+        lambda: Runtime(),
+    )
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.api.recover_execution_request",
+        lambda root, req_id, **kwargs: recovered.append(
+            {"root": root, "request-id": req_id, **kwargs}
+        ),
+    )
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.store.read_record",
+        lambda _root, _req_id: dict(diagnosed),
+    )
+
+    result = GatewayServiceHost.run_watchdog_pass(object.__new__(GatewayServiceHost))
+
+    assert recovered == [
+        {
+            "root": project_root.resolve(),
+            "request-id": request_id,
+            "action": "reconcile",
+            "expected_revision": 8,
+        }
+    ]
+    assert result == (diagnosed,)
