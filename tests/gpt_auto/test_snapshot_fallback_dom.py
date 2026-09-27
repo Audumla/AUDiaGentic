@@ -93,6 +93,9 @@ async def test_activity_observer_captures_interior_changes_but_not_shimmer():
             await page.evaluate("document.querySelector('#n300').className = 'shimmer-active'")
             animation = await page.evaluate(_SNAPSHOT_FN, [])
             assert animation['domActivityDigest'] == after['domActivityDigest']
+            await page.evaluate("document.querySelector('#n300').className = 'progress-active'")
+            meaningful_class = await page.evaluate(_SNAPSHOT_FN, [])
+            assert meaningful_class['domActivityDigest'] != animation['domActivityDigest']
         finally:
             await browser.close()
 
