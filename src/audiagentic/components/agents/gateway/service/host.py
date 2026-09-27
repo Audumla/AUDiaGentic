@@ -330,8 +330,93 @@ class GatewayServiceHost:
         from audiagentic.components.agents.gateway import store
         from audiagentic.components.agents.gateway.api import recover_execution_request
         from audiagentic.components.agents.gateway.queue.dispatch import diagnose_activity_lease
+        from audiagentic.components.agents.gateway.queue.watchdog_policy import load_watchdog_policy
         from audiagentic.components.agents.gateway.queue.watchdog_registry import watchdog_registry
+        from audiagentic.components.agents.gateway.session import sessions_store
         from audiagentic.components.agents.gateway.session.sessions import peek_session_runtime
+
+        def _retire_unbound_initial_timeout(updated: dict[str, Any]) -> dict[str, Any]:
+            """Terminalize an orphaned attempt only when no provider side effect is possible.
+
+            A watchdog observation is not proof that a prompt failed.  The
+            exception here is deliberately narrow: the initial observation
+            expired, the session never acquired a durable provider binding,
+            the provider did not report an unresolved turn, and the session is
+            not live in this gateway process.  Keeping that combination in
+            ``running`` otherwise permanently consumes queue capacity.
+            """
+            if updated.get("state") != "running" or updated.get("watchdog-reason") != "initial-activity-observation-expired":
+                return updated
+            session_id = updated.get("session-id")
+            if not isinstance(session_id, str) or not session_id:
+                return updated
+            diagnostics = updated.get("diagnostics")
+            if not isinstance(diagnostics, dict) or diagnostics.get("resolution-state") != "unresolved":
+                return updated
+            try:
+                session = sessions_store.read_session_record(project_root, session_id)
+            except Exception:  # noqa: BLE001 - watchdog recovery is best effort
+                return updated
+            if session.get("binding"):
+                return updated
+            metadata = sessions_store.session_provider_metadata(session)
+            if metadata.get("unresolved-turn-pending"):
+                return updated
+            if runtime is not None:
+                try:
+                    if runtime.session_runtime_status(session_id).get("available"):
+                        return updated
+                except Exception:  # noqa: BLE001 - retain reconcile-only behavior on probe failure
+                    return updated
+            from datetime import datetime, timedelta, timezone
+            try:
+                diagnosed_at = datetime.fromisoformat(str(updated.get("updated-at")).replace("Z", "+00:00"))
+                if diagnosed_at.tzinfo is None:
+                    diagnosed_at = diagnosed_at.replace(tzinfo=timezone.utc)
+                policy = updated.get("watchdog-policy")
+                grace = float(policy.get("diagnostic-grace-seconds", 30.0)) if isinstance(policy, dict) else load_watchdog_policy().diagnostic_grace_seconds
+                if datetime.now(timezone.utc) < diagnosed_at + timedelta(seconds=max(grace, 1.0)):
+                    return updated
+            except (TypeError, ValueError, OverflowError):
+                return updated
+            error = {
+                "code": "RES-AGW-003",
+                "kind": "agents",
+                "message": "provider session binding was not established before the initial activity window expired",
+                "details": {
+                    "session-id": session_id,
+                    "failure-reason": "provider-binding-not-established",
+                    "watchdog-reason": "initial-activity-observation-expired",
+                    "retry-safe": True,
+                    "suggestion": "retry the request; no provider conversation binding or unresolved turn was found",
+                },
+            }
+            try:
+                retired = store.transition_owned_terminal(
+                    project_root,
+                    updated["request-id"],
+                    "failed",
+                    updates={
+                        "error": error,
+                        "recovery": {"reason": "unproven-execution", "outcome": "resubmit-required"},
+                    },
+                    owner_epoch=updated["dispatch-owner-epoch"],
+                    worker_id=updated["worker-id"],
+                    attempt_epoch=updated["attempt-epoch"],
+                )
+            except Exception:  # noqa: BLE001 - a live worker or newer owner wins the race
+                return store.read_record(project_root, updated["request-id"])
+            try:
+                if session.get("state") == "active":
+                    sessions_store.transition_session_record(
+                        project_root,
+                        session_id,
+                        "failed",
+                        updates={"close-reason": "failed"},
+                    )
+            except Exception:  # noqa: BLE001 - request terminal state remains authoritative
+                logger.warning("failed to retire orphaned gateway session", extra={"session-id": session_id}, exc_info=True)
+            return retired
 
         registry = watchdog_registry()
         runtime = peek_session_runtime()
@@ -339,13 +424,16 @@ class GatewayServiceHost:
         for project_root, record in registry.snapshot():
             updated = diagnose_activity_lease(project_root, record)
             registry.update(project_root, updated)
+            updated = _retire_unbound_initial_timeout(updated)
+            registry.update(project_root, updated)
             diagnostics = updated.get("diagnostics")
             if (
                 runtime is not None
                 and updated.get("watchdog-state") == "intervention"
                 and isinstance(updated.get("session-id"), str)
                 and isinstance(diagnostics, dict)
-                and diagnostics.get("resolution-state") == "unresolved"
+                and diagnostics.get("resolution-state")
+                in {"unresolved", "reconciliation-requested"}
             ):
                 outcome = runtime.reconcile_active_transport(
                     updated["session-id"], updated["request-id"]
