@@ -14,6 +14,7 @@ from audiagentic.components.providers.adapters.gpt_auto.chat import (
     _unresolved_prompt_match,
     _unresolved_prompt_match_diagnostics,
 )
+from audiagentic.components.providers.adapters.gpt_auto.turn import _scalar_binding_metadata
 from audiagentic.components.providers.adapters.gpt_auto.config import GptAutoConfig
 from audiagentic.components.providers.adapters.gpt_auto.prompt_fingerprint import (
     PromptFingerprint,
@@ -319,6 +320,24 @@ async def test_unresolved_checkpoint_persists_snapshot_counts() -> None:
     assert updates[-1]["unresolved-baseline-error-alert-occurrences"] == [
         {"digest": "baseline-alert", "ownerPromptMessageId": None}
     ]
+
+
+def test_binding_metadata_projection_drops_structured_checkpoint_evidence() -> None:
+    metadata = {
+        "prompt-message-id": "prompt-1",
+        "submission-proven": True,
+        "prompt-text-digest": "f" * 64,
+        "unresolved-baseline-error-alert-occurrences": [
+            {"digest": "alert", "ownerPromptMessageId": None}
+        ],
+    }
+
+    assert _scalar_binding_metadata(metadata) == {
+        "prompt-message-id": "prompt-1",
+        "submission-proven": True,
+        "prompt-text-digest": "f" * 64,
+    }
+    assert metadata["unresolved-baseline-error-alert-occurrences"]
 
 
 @pytest.mark.asyncio
