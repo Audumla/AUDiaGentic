@@ -988,6 +988,31 @@ _SNAPSHOT_FN = r"""
 }
 """
 
+# Module-level so browser-fixture tests can evaluate the exact production
+# logic (mirrors _SNAPSHOT_FN above) instead of re-deriving it inline.
+_RETRY_DELIVERY_TIMEOUT_FN = r"""() => {
+  const normalize = value => String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
+  // `[role="alert"] button` covers the current renderer's plain-text Retry
+  // control (no aria-label, no data-testid), live-captured 2026-09-27 as a
+  // stuck "ChatGPT stream recovery polling timed out" alert. The exact-text
+  // guard below still requires the button's own text to equal "retry", so a
+  // dismiss/report/other button in the same alert is never activated by
+  // this broader selector.
+  const candidates = Array.from(document.querySelectorAll(
+    'button[data-testid="regenerate-thread-error-button"], button[aria-label="Retry"], button[data-testid*="regenerate"][data-testid*="error"], [role="alert"] button'
+  ));
+  const button = candidates.find(candidate => {
+    if (candidate.disabled || !candidate.getClientRects().length) return false;
+    const text = normalize(candidate.innerText || candidate.textContent || candidate.getAttribute('aria-label'));
+    // Keep the exact retry-text guard explicit: text !== 'retry' must never
+    // be treated as a provider recovery control.
+    return text === 'retry';
+  });
+  if (!button) return false;
+  button.click();
+  return true;
+}"""
+
 
 class GptAutoCdpBrowserController(CdpBrowserController):
     """ChatGPT-specific selectors, composites, and conversation operations."""
@@ -1039,25 +1064,7 @@ class GptAutoCdpBrowserController(CdpBrowserController):
         This action never types or submits a prompt; it only activates the
         provider-owned recovery control for a visible delivery timeout.
         """
-        result = await self.evaluate(
-            page,
-            r"""() => {
-              const normalize = value => String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
-              const candidates = Array.from(document.querySelectorAll(
-                'button[data-testid="regenerate-thread-error-button"], button[aria-label="Retry"], button[data-testid*="regenerate"][data-testid*="error"]'
-              ));
-              const button = candidates.find(candidate => {
-                if (candidate.disabled || !candidate.getClientRects().length) return false;
-                const text = normalize(candidate.innerText || candidate.textContent || candidate.getAttribute('aria-label'));
-                // Keep the exact retry-text guard explicit: text !== 'retry'
-                // must never be treated as a provider recovery control.
-                return text === 'retry';
-              });
-              if (!button) return false;
-              button.click();
-              return true;
-            }""",
-        )
+        result = await self.evaluate(page, _RETRY_DELIVERY_TIMEOUT_FN)
         return bool(result)
 
     async def materialize_latest_assistant_turn(self, page: CdpPageRef) -> bool:
