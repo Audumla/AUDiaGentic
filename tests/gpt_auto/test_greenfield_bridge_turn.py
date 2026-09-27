@@ -2422,6 +2422,81 @@ async def test_prompt_and_response_message_ids_are_published_for_resume_metadata
 
 
 @pytest.mark.asyncio
+async def test_structured_checkpoint_metadata_is_request_owned_not_binding_metadata():
+    chat = _Chat()
+    chat.provider_session_id = "conversation-1"
+    binding_updates = []
+    request_updates = []
+    chat.binding_sink = binding_updates.append
+
+    async def persist_request_metadata(metadata):
+        request_updates.append(metadata)
+
+    chat.persist_request_metadata = persist_request_metadata
+    chat.unresolved_metadata = lambda: {
+        "unresolved-turn-pending": True,
+        "submission-proven": True,
+        "unresolved-baseline-error-alert-occurrences": [
+            {"digest": "alert", "ownerPromptMessageId": None}
+        ],
+    }
+    turn = GptAutoTurn(
+        chat, SessionPrompt(turn_id="turn-structured-checkpoint", body="Review AU01"), lambda _: None
+    )
+    turn._prompt_message_id = "prompt-1"
+
+    await turn._publish_message_ids(strict=True)
+
+    assert binding_updates[0].metadata == {
+        "prompt-message-id": "prompt-1",
+        "unresolved-turn-pending": True,
+        "submission-proven": True,
+    }
+    assert request_updates[0]["unresolved-baseline-error-alert-occurrences"]
+
+
+@pytest.mark.asyncio
+async def test_publish_message_ids_strict_binding_failure_raises():
+    chat = _Chat()
+    chat.provider_session_id = "conversation-1"
+
+    def failed_binding(_update):
+        raise RuntimeError("binding unavailable")
+
+    chat.binding_sink = failed_binding
+    turn = GptAutoTurn(
+        chat, SessionPrompt(turn_id="turn-binding-failure", body="Review AU01"), lambda _: None
+    )
+    turn._prompt_message_id = "prompt-1"
+
+    with pytest.raises(AudiaGenticError, match="provider message identity") as captured:
+        await turn._publish_message_ids(strict=True)
+
+    assert captured.value.code == "EXT-GPTAUTO-004"
+
+
+@pytest.mark.asyncio
+async def test_publish_message_ids_strict_request_metadata_failure_raises():
+    chat = _Chat()
+    chat.provider_session_id = "conversation-1"
+    chat.binding_sink = lambda _update: None
+
+    async def failed_request_metadata(_metadata):
+        raise RuntimeError("request checkpoint unavailable")
+
+    chat.persist_request_metadata = failed_request_metadata
+    turn = GptAutoTurn(
+        chat, SessionPrompt(turn_id="turn-request-metadata-failure", body="Review AU01"), lambda _: None
+    )
+    turn._prompt_message_id = "prompt-1"
+
+    with pytest.raises(AudiaGenticError, match="provider message identity") as captured:
+        await turn._publish_message_ids(strict=True)
+
+    assert captured.value.code == "EXT-GPTAUTO-004"
+
+
+@pytest.mark.asyncio
 async def test_post_submit_observer_failure_preserves_phase_and_cause():
     chat = _Chat()
 
