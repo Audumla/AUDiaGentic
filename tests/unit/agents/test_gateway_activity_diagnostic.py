@@ -31,6 +31,8 @@ def test_meaningful_activity_vocabulary_excludes_heartbeat_and_context_flags() -
         "dom-table",
         "dom-materialization",
         "connection-refreshing",
+        "soft-liveness",
+        "delivery-timeout-retry",
     ):
         assert is_meaningful_activity_label(label)
     assert not is_meaningful_activity("session-transport", "activity")

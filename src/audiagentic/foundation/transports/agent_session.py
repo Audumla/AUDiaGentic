@@ -122,6 +122,11 @@ _WORK_ACTIVITY_LABELS = frozenset({
     "assistant-message",
     "thought",
     "in-progress",
+    # These are emitted by the GPT-auto response loop when the DOM shows
+    # continued request-owned work without a new semantic tool/text label.
+    # They are real observation edges, not transport heartbeats.
+    "soft-liveness",
+    "delivery-timeout-retry",
 })
 
 
