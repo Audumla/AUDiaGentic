@@ -1575,9 +1575,10 @@ def transition_owned_terminal(
     worker_id: str,
     attempt_epoch: int,
     updates: dict[str, Any] | None = None,
+    expected_revision: int | None = None,
     service_root: Path | None = None,
 ) -> dict[str, Any]:
-    """Write a terminal result only with the complete dispatch fence."""
+    """Write a terminal result only with dispatch and optional revision fences."""
     if new_state not in _shared.TERMINAL_STATES:
         raise AudiaGenticError("VAL-AGW-084", "agents", "owned transition must be terminal", {})
     _require_owned_identity(owner_epoch, worker_id, attempt_epoch)
@@ -1599,6 +1600,7 @@ def transition_owned_terminal(
         request_id,
         new_state,
         updates=terminal_updates,
+        expected_revision=expected_revision,
         expected_dispatch_owner_epoch=owner_epoch,
         expected_worker_id=worker_id,
         expected_attempt_epoch=attempt_epoch,
