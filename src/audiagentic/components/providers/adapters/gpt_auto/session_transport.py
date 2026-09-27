@@ -157,7 +157,7 @@ class GptAutoSessionTransport:
     ) -> None:
         """Relay bounded provider lifecycle activity without provider payloads."""
         mark_activity = getattr(self.chat, "mark_validated_activity", None)
-        if callable(mark_activity) and phase not in {"connection-refreshing", "provider-busy"}:
+        if callable(mark_activity) and phase not in {"connection-refreshing", "provider-busy", "response-observing"}:
             mark_activity()
         observation = TransportObservation(
             ag_session_id=self.chat.ag_session_id,

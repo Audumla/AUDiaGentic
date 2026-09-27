@@ -336,7 +336,7 @@ class GptAutoTurn:
         # not by polling or synthetic connection-refreshing lease ticks.
         if kind is not TransportObservationKind.TIMING and attributes.get(
             "model_activity"
-        ) not in {"connection-refreshing", "provider-busy"}:
+        ) not in {"connection-refreshing", "provider-busy", "response-observing"}:
             mark_activity = getattr(self.chat, "mark_validated_activity", None)
             if callable(mark_activity):
                 mark_activity()
@@ -1898,16 +1898,24 @@ class GptAutoTurn:
             if now - last_heartbeat_at >= self._HEARTBEAT_INTERVAL_SECONDS:
                 last_heartbeat_at = now
                 if (
-                    current.generating
+                    response_started
                     and current.latest_user_id == self._prompt_message_id
                     and self._prompt_message_id
                     and not complete.satisfied
                 ):
-                    # Request-owned busy UI proves observer liveness, not new
-                    # work. Never let this renew physical idle or recovery clocks.
+                    # Once the request-owned response has started, the
+                    # observer itself is durable liveness evidence even when
+                    # ChatGPT temporarily reports no generating flag (for
+                    # example while reasoning or materialising an action
+                    # bar). Keep this distinct from real work and from the
+                    # provider recovery clock: it renews the gateway lease
+                    # but never the physical-tab idle clock.
+                    model_activity = (
+                        "provider-busy" if current.generating else "response-observing"
+                    )
                     await self._emit(
                         TransportObservationKind.ACTIVITY,
-                        {"model_activity": "provider-busy"},
+                        {"model_activity": model_activity},
                     )
                 logger.info(
                     "gpt-auto response poll heartbeat tracker_state=%s generating=%s "
