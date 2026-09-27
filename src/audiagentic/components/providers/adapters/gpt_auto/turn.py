@@ -34,7 +34,12 @@ from .observation_engine import (
     ObservationTracker,
 )
 from .prompt_fingerprint import PromptFingerprint, match_prompt
-from .snapshot import ChatMessageRef, ChatProgressBlock, ChatSnapshot
+from .snapshot import (
+    ChatMessageRef,
+    ChatProgressBlock,
+    ChatSnapshot,
+    _error_alert_occurrences,
+)
 from .urls import (
     canonical_chat_url,
     canonical_project_url,
@@ -273,6 +278,10 @@ class GptAutoTurn:
         self._composer_verification_mismatch: dict[str, Any] | None = None
         self._prompt_message_id: str | None = None
         self._response_message_id: str | None = None
+        # Normal turns may retain a confirmed prompt anchor while ChatGPT
+        # virtualizes that user node out of later snapshots. Recovery turns
+        # remain stricter and use the existing unresolved-correlation rules.
+        self._recovered_existing_turn = False
         self._submission_settled = asyncio.Event()
         self._done = asyncio.Event()
         # Keep the last bounded observation locally so an unprovable provider
@@ -428,6 +437,7 @@ class GptAutoTurn:
 
     async def resume_existing(self) -> SessionTurnResult:
         """Resume observation of a previously submitted turn, with zero send."""
+        self._recovered_existing_turn = True
         self.chat.active_turn_id = self.request.turn_id
         try:
             await self._emit_timing("restart-recovery-start")
@@ -453,6 +463,10 @@ class GptAutoTurn:
             self.side_effect_attempted = True
             self.submission_confirmed = True
             current = await self.chat.snapshot()
+            persisted_alerts = checkpoint.get(
+                "unresolved-baseline-error-alert-occurrences"
+            )
+            legacy_alert_baseline = persisted_alerts is None
             if not isinstance(self._prompt_message_id, str) or not self._prompt_message_id:
                 # The checkpoint is written before Send and prompt identity is
                 # published afterward. If the generation ended in that small
@@ -477,6 +491,11 @@ class GptAutoTurn:
             # response that completed while the gateway was down without
             # mistaking the existing answer for an unrelated old turn.
             baseline = current
+            if not legacy_alert_baseline:
+                baseline = replace(
+                    baseline,
+                    error_alert_occurrences=_error_alert_occurrences(persisted_alerts),
+                )
             if response_ref is not None:
                 response_index = next(
                     index for index, ref in enumerate(current.message_refs)
@@ -501,7 +520,11 @@ class GptAutoTurn:
                     await persist_identity()
             self._move(TurnState.SUBMITTED)
             self._move(TurnState.AWAITING_RESPONSE)
-            final = await self._await_response(baseline, current)
+            final = await self._await_response(
+                baseline,
+                current,
+                allow_legacy_owned_error_alert=legacy_alert_baseline,
+            )
             if final is None:
                 raise RuntimeError("recovered response observation ended without a result")
             await self._publish_message_ids(strict=False)
@@ -1176,7 +1199,13 @@ class GptAutoTurn:
     # while the provider is still working. Edge-only detection then stops
     # renewing the gateway lease even though the browser is visibly busy.
 
-    async def _await_response(self, baseline: ChatSnapshot, current: ChatSnapshot) -> str | None:
+    async def _await_response(
+        self,
+        baseline: ChatSnapshot,
+        current: ChatSnapshot,
+        *,
+        allow_legacy_owned_error_alert: bool = False,
+    ) -> str | None:
         """GP07: re-expresses the previously-bespoke start/stall/total timer
         loop through the shared observation engine. Closes a real latent
         hole the old loop had: last_activity_at could be reset by
@@ -1454,7 +1483,12 @@ class GptAutoTurn:
                     )
             if prompt_message_id:
                 current, response_ref = _scope_response_snapshot(
-                    baseline, raw_current, prompt_message_id=prompt_message_id
+                    baseline,
+                    raw_current,
+                    prompt_message_id=prompt_message_id,
+                    prompt_text=self.request.body,
+                    allow_virtualized_prompt=not self._recovered_existing_turn,
+                    allow_legacy_owned_error_alert=allow_legacy_owned_error_alert,
                 )
             else:
                 # Defensive fallback only -- _await_submission_proof() and
@@ -1520,6 +1554,8 @@ class GptAutoTurn:
                                     baseline,
                                     raw_current,
                                     prompt_message_id=prompt_message_id,
+                                    prompt_text=self.request.body,
+                                    allow_virtualized_prompt=not self._recovered_existing_turn,
                                 )
                             else:
                                 current, response_ref = raw_current, None
@@ -1995,7 +2031,11 @@ class GptAutoTurn:
                 self._remember_snapshot(raw_verify)
                 if prompt_message_id:
                     verify, verify_ref = _scope_response_snapshot(
-                        baseline, raw_verify, prompt_message_id=prompt_message_id
+                        baseline,
+                        raw_verify,
+                        prompt_message_id=prompt_message_id,
+                        prompt_text=self.request.body,
+                        allow_virtualized_prompt=not self._recovered_existing_turn,
                     )
                 else:
                     verify = raw_verify
@@ -2545,7 +2585,13 @@ def _same_response_slot_replacement(
 
 
 def _scope_response_snapshot(
-    baseline: ChatSnapshot, snapshot: ChatSnapshot, *, prompt_message_id: str
+    baseline: ChatSnapshot,
+    snapshot: ChatSnapshot,
+    *,
+    prompt_message_id: str,
+    prompt_text: str | None = None,
+    allow_virtualized_prompt: bool = False,
+    allow_legacy_owned_error_alert: bool = False,
 ) -> tuple[ChatSnapshot, ChatMessageRef | None]:
     """Project a raw snapshot onto this request's own response, not
     whatever is conversation-global-latest.
@@ -2556,6 +2602,112 @@ def _scope_response_snapshot(
     now the document-global latest controls.
     """
     response_ref = _response_ref_for_prompt(snapshot, prompt_message_id)
+    request_error_alert = _request_error_alert_is_owned(
+        baseline,
+        snapshot,
+        prompt_message_id,
+        allow_legacy_owned=allow_legacy_owned_error_alert,
+    )
+    matched_prompt_id = prompt_message_id
+    if response_ref is None and prompt_text:
+        # The project renderer can replace the synthetic fallback user id
+        # with a real UUID after submission.  The request already proved its
+        # prompt text during submission proof, so use the exact prompt digest
+        # to rebind that one visible user node and preserve the ordered
+        # prompt-to-assistant boundary.
+        prompt_digest = PromptFingerprint.from_text(prompt_text).digest
+        prompt_refs = [
+            ref for ref in snapshot.message_refs
+            if ref.role == "user"
+            and PromptFingerprint.from_text(ref.text).digest == prompt_digest
+        ]
+        if len(prompt_refs) == 1:
+            matched_prompt_id = prompt_refs[0].message_id
+            response_ref = _response_ref_for_prompt(snapshot, matched_prompt_id)
+        if response_ref is None:
+            # Some renderer revisions expose the latest prompt/assistant
+            # fields but omit one or both nodes from message_refs while the
+            # response action bar is already mounted.  The exact prompt
+            # fingerprint plus a same-conversation terminal witness is still
+            # request-owned evidence; do not discard a completed answer just
+            # because the ordered ref projection is temporarily incomplete.
+            latest_prompt_text = snapshot.latest_user_correlation_text()
+            prompt_matches = (
+                latest_prompt_text is not None
+                and PromptFingerprint.from_text(latest_prompt_text).digest
+                == prompt_digest
+            )
+            same_conversation = canonical_chat_url(snapshot.url) == canonical_chat_url(baseline.url)
+            terminal_bound = (
+                snapshot.terminal_witness_assistant_id
+                == snapshot.latest_assistant_id
+            )
+            if (
+                prompt_matches
+                and same_conversation
+                and terminal_bound
+                and snapshot.latest_assistant_id
+                and snapshot.latest_assistant_text
+            ):
+                response_ref = ChatMessageRef(
+                    role="assistant",
+                    message_id=snapshot.latest_assistant_id,
+                    text=snapshot.latest_assistant_text,
+                    sequence=len(snapshot.message_refs),
+                )
+    if response_ref is None and allow_virtualized_prompt:
+        # ChatGPT's project renderer can unmount the submitted user block
+        # after submission while leaving the fresh assistant response and its
+        # terminal action bar mounted.  The prompt anchor was already proven
+        # by the submission-proof phase, so a newer assistant with a bound
+        # terminal witness is safe to correlate without treating a foreign
+        # conversation-global answer as this request's response.
+        current_user_ids = set(snapshot.user_message_ids)
+        baseline_assistant_ids = set(baseline.assistant_message_ids)
+        fresh_assistant = (
+            snapshot.latest_assistant_id
+            and snapshot.latest_assistant_text
+            and snapshot.latest_assistant_id not in baseline_assistant_ids
+            and snapshot.latest_assistant_id != baseline.latest_assistant_id
+        )
+        prompt_unmounted = (
+            snapshot.latest_user_id is None
+            and not current_user_ids
+            and snapshot.user_count == 0
+        )
+        same_conversation = canonical_chat_url(snapshot.url) == canonical_chat_url(baseline.url)
+        terminal_bound = snapshot.terminal_witness_assistant_id == snapshot.latest_assistant_id
+        if fresh_assistant and prompt_unmounted and same_conversation and terminal_bound:
+            response_ref = ChatMessageRef(
+                role="assistant",
+                message_id=snapshot.latest_assistant_id,
+                text=snapshot.latest_assistant_text,
+                sequence=len(snapshot.message_refs),
+            )
+    if (
+        response_ref is not None
+        and response_ref.message_id == baseline.latest_assistant_id
+        and response_ref.text != baseline.latest_assistant_text
+    ):
+        # When the renderer keeps a bounded fallback ordinal, a new logical
+        # response can reuse the previous latest assistant id.  A response
+        # already scoped to this request's prompt is sufficient correlation
+        # proof even when the fallback user ordinal is reused unchanged; do
+        # not require the prompt-text rematch branch to have run.  Synthesize
+        # a request-local id so the assistant-fresh policy does not mistake
+        # the completed answer for the old turn.
+        response_ref = replace(
+            response_ref,
+            message_id=(
+                f"{response_ref.message_id}:prompt-"
+                f"{PromptFingerprint.from_text(prompt_text or '').digest[:16]}"
+            ),
+        )
+        snapshot = replace(
+            snapshot,
+            latest_assistant_id=response_ref.message_id,
+            terminal_witness_assistant_id=response_ref.message_id,
+        )
     def owned_progress(block: ChatProgressBlock) -> bool:
         if block.owner_prompt_message_id != prompt_message_id:
             return False
@@ -2572,6 +2724,10 @@ def _scope_response_snapshot(
         else None
     )
     if response_ref is None:
+        scoped_signals = set(snapshot.dom_signals)
+        scoped_signals.discard("request-error-alert")
+        if request_error_alert:
+            scoped_signals.add("request-error-alert")
         return (
             replace(
                 snapshot,
@@ -2585,10 +2741,16 @@ def _scope_response_snapshot(
                 dom_activity_owner_prompt_id=(
                     prompt_message_id if scoped_dom_digest else None
                 ),
+                dom_signals=frozenset(scoped_signals),
             ),
             None,
         )
     dom_signals = snapshot.dom_signals
+    dom_signals = frozenset(
+        signal for signal in dom_signals if signal != "request-error-alert"
+    )
+    if request_error_alert:
+        dom_signals = frozenset((*dom_signals, "request-error-alert"))
     if snapshot.terminal_witness_assistant_id != response_ref.message_id:
         dom_signals = frozenset(
             signal
@@ -2610,6 +2772,73 @@ def _scope_response_snapshot(
         ),
         response_ref,
     )
+
+
+def _request_error_alert_is_owned(
+    baseline: ChatSnapshot,
+    snapshot: ChatSnapshot,
+    prompt_message_id: str,
+    *,
+    allow_legacy_owned: bool = False,
+) -> bool:
+    """Derive a request-owned error from a post-submit alert occurrence.
+
+    ``error-alert`` is document-scoped and may be left behind by an earlier
+    turn.  A raw boolean edge is insufficient when the same alert remains
+    mounted, so compare bounded occurrence identities as a multiset.  An
+    occurrence is admissible when it is structurally owned by this prompt, or
+    when the renderer cannot expose an owner but the occurrence is provably
+    new after this request's baseline.  Foreign/later-turn alerts remain
+    unowned by this request and are ignored.
+    """
+    baseline_total: Counter[str] = Counter(
+        digest for digest, _owner in baseline.error_alert_occurrences
+    )
+    current_total: Counter[str] = Counter(
+        digest for digest, _owner in snapshot.error_alert_occurrences
+    )
+    baseline_owner: Counter[tuple[str, str | None]] = Counter(
+        baseline.error_alert_occurrences
+    )
+    current_owner: Counter[tuple[str, str | None]] = Counter(
+        snapshot.error_alert_occurrences
+    )
+    for digest in current_total:
+        if current_total[digest] <= baseline_total[digest]:
+            continue
+        baseline_buckets = {
+            owner: count
+            for (bucket_digest, owner), count in baseline_owner.items()
+            if bucket_digest == digest
+        }
+        current_buckets = {
+            owner: count
+            for (bucket_digest, owner), count in current_owner.items()
+            if bucket_digest == digest
+        }
+        # If ownership of an existing semantic alert moved between buckets,
+        # the multiset cannot prove which node is new. Fail closed rather
+        # than turning redistribution plus a foreign insertion into a request
+        # error.
+        if any(
+            current_buckets.get(owner, 0) < count
+            for owner, count in baseline_buckets.items()
+        ):
+            continue
+        for owner, count in current_buckets.items():
+            extra = count - baseline_buckets.get(owner, 0)
+            if extra <= 0:
+                continue
+            if owner == prompt_message_id or (
+                owner is None and snapshot.latest_user_id == prompt_message_id
+            ):
+                return True
+    if allow_legacy_owned:
+        return any(
+            owner == prompt_message_id
+            for _digest, owner in snapshot.error_alert_occurrences
+        )
+    return False
 
 
 def _facts(

@@ -783,6 +783,9 @@ def _workflow_config(data: dict[str, Any]) -> TurnWorkflowConfig:
         "composer-present",
         "composer-editable",
         "composer-unavailable",
+        # Derived by turn.py from request-owned post-baseline error-alert
+        # occurrences; the raw document-scoped signal remains diagnostic.
+        "request-error-alert",
         # GP34 code-review follow-up: derived from ChatSnapshot.generating
         # directly (the raw stop/streaming/thinking/aria-busy check), not a
         # dom-signal selector. Lets a policy require the ABSENCE of active
