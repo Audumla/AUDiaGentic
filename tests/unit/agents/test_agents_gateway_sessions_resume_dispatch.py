@@ -214,6 +214,45 @@ class TestResumeSuccess:
         finally:
             runtime.shutdown()
 
+    def test_resume_rehydrates_existing_successor_after_prior_persistence_failure(
+        self, tmp_path: Path
+    ):
+        source = _write_terminal_source_session(tmp_path)
+        existing = session_store.build_session_record(
+            execution_profile_id=source["execution-profile-id"],
+            provider_id=_PROVIDER_ID,
+            model_id="m1",
+            provider_session_ref="source-provider-ref-1",
+            surface_id=_SURFACE_ID,
+            idle_timeout_seconds=900,
+            max_lifetime_seconds=14_400,
+        )
+        existing["binding"] = binding_store.resume_binding(
+            session_id=existing["session-id"],
+            provider_id=_PROVIDER_ID,
+            surface_id=_SURFACE_ID,
+            provider_ref="source-provider-ref-1",
+            predecessor_binding_id=source["binding"]["binding-id"],
+            ref_namespace=source["binding"].get("ref-namespace"),
+            identity_context_fingerprint=_IDENTITY_FP,
+            execution_context_fingerprint=_EXECUTION_FP,
+        )
+        session_store.write_session_record(tmp_path, existing)
+        binding_store.register_open_binding(tmp_path, existing)
+
+        runtime = _make_runtime()
+        try:
+            resumed = runtime.resume_session(
+                tmp_path,
+                source["session-id"],
+                control_id="ctrl-rehydrate-existing-successor",
+                execution_context_fingerprint=_EXECUTION_FP,
+            )
+            assert resumed["session-id"] == existing["session-id"]
+            assert runtime.live_session_ids() == [existing["session-id"]]
+        finally:
+            runtime.shutdown()
+
 
 class TestResumeRejections:
     @pytest.mark.parametrize("surface_id", ["acp", "mcp-a2a"])

@@ -826,6 +826,45 @@ def test_queued_prompt_timeout_starts_after_fifo_admission(rig):
     runtime.close_session(tmp_path, session_id)
 
 
+def test_cancelled_fifo_waiter_releases_pending_before_predecessor_finishes(rig):
+    runtime, clock, transports, tmp_path = rig
+    session_id = _open(runtime, tmp_path)["session-id"]
+    gate = threading.Event()
+    transports[0].block_event = gate
+    errors = []
+
+    def submit(body, request_id=None):
+        try:
+            runtime.prompt_in_session(tmp_path, session_id, body, request_id=request_id)
+        except BaseException as exc:
+            errors.append(exc)
+
+    first = threading.Thread(target=submit, args=("first",))
+    second = threading.Thread(target=submit, args=("cancel me", "req_fifo_cancel"))
+    first.start()
+    try:
+        time.sleep(0.1)
+        second.start()
+        deadline = time.monotonic() + 2
+        while runtime._handles[session_id].pending == 0 and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert runtime._handles[session_id].pending == 1
+        runtime.request_cancel("req_fifo_cancel")
+        second.join(timeout=2)
+        assert not second.is_alive()
+        assert first.is_alive()
+        assert runtime._handles[session_id].pending == 0
+        assert len(errors) == 1 and errors[0].code == "CON-AGW-099"
+        assert "cancel me" not in transports[0].turns
+    finally:
+        gate.set()
+        first.join(timeout=2)
+        if second.ident is not None:
+            second.join(timeout=2)
+        runtime.close_session(tmp_path, session_id)
+    assert transports[0].turns == ["first"]
+
+
 def test_session_snapshot_all_reports_active_turn(rig):
     runtime, clock, transports, tmp_path = rig
     record = _open(runtime, tmp_path)

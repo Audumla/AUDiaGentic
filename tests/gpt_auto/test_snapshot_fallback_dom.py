@@ -74,6 +74,46 @@ async def test_fallback_sibling_action_bar_is_bound_to_latest_response():
 
 
 @pytest.mark.asyncio
+async def test_fallback_outer_turn_action_bar_is_bound_to_latest_response():
+    """The live renderer may put the assistant bar above the message block.
+
+    The user prompt has its own Copy message bar, so completion controls must
+    be selected from the assistant's ancestor turn wrapper rather than with a
+    document-wide selector.
+    """
+    signals = [
+        dict(name='completion-control', scope='latest-assistant-turn', selectors=['button[aria-label="Copy"]', 'button[aria-label="Copy message"]'], visible=True),
+        dict(name='more-actions-menu', scope='latest-assistant-turn', selectors=['button[aria-label="More actions"]'], visible=True),
+    ]
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            await page.set_content('''
+              <div class="turn-shell">
+                <div class="message-list">
+                  <div class="block-BQZwFn"><h4 class="sr-only">You said:</h4>
+                    <div class="group/user-message">prompt</div>
+                    <div class="turn-action-controls"><button aria-label="Copy message">Copy</button></div>
+                  </div>
+                  <div class="block-BQZwFn"><h4 class="sr-only">ChatGPT said:</h4>
+                    <div>answer</div>
+                  </div>
+                </div>
+                <div class="group flex flex-col">
+                  <div class="turn-action-controls"><button aria-label="Copy">Copy</button>
+                    <button aria-label="More actions">More</button></div>
+                </div>
+              </div>''')
+            complete = await page.evaluate(_SNAPSHOT_FN, signals)
+            assert complete['domSignals']['completion-control']
+            assert complete['domSignals']['more-actions-menu']
+            assert complete['terminalWitnessAssistantId'] == complete['latestAssistantId']
+        finally:
+            await browser.close()
+
+
+@pytest.mark.asyncio
 async def test_activity_observer_captures_interior_changes_but_not_shimmer():
     async with async_playwright() as pw:
         browser = await pw.chromium.launch(headless=True)

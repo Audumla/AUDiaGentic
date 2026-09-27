@@ -549,11 +549,23 @@ class GptAutoProviderRuntime:
         if not same_chat_identity(snapshot.url, url):
             return
         digest = self._tab_digest(snapshot)
-        material = (chat.ag_session_id, url, chat._last_validated_activity_monotonic, digest)
-        if self._tab_lease_cache.get(chat.target_id) == material:
-            return
-        age = max(0.0, time.monotonic() - chat._last_validated_activity_monotonic)
         try:
+            if chat.target_id not in self._tab_lease_cache and not getattr(chat, "_validated_activity_generation", 0):
+                persisted = store.get(chat.target_id)
+                if (
+                    persisted is not None
+                    and persisted[1] == chat.ag_session_id
+                    and same_chat_identity(persisted[2], url)
+                    and persisted[4] == digest
+                ):
+                    # Monotonic clocks are process-local. Reconstruct elapsed
+                    # inactivity from the durable wall clock, not constructor age.
+                    elapsed = max(0.0, time.time() - persisted[3])
+                    chat._last_validated_activity_monotonic = time.monotonic() - elapsed
+            material = (chat.ag_session_id, url, chat._last_validated_activity_monotonic, digest)
+            if self._tab_lease_cache.get(chat.target_id) == material:
+                return
+            age = max(0.0, time.monotonic() - chat._last_validated_activity_monotonic)
             store.observe(chat.target_id, chat.ag_session_id, url, time.time() - age, digest)
         except Exception:
             # Cleanup storage is not request execution authority. An old lease
@@ -676,8 +688,15 @@ class GptAutoProviderRuntime:
             getattr(self.config.browser, "physical_tab_idle_timeout_seconds", 7200.0)
         )
         try:
+            first_pass = True
             while self._bridge is bridge:
-                await asyncio.sleep(interval)
+                # Sweep once immediately.  Apart from making startup
+                # deterministic, this prevents a short-lived runtime/test
+                # task from missing its only cleanup opportunity while still
+                # preserving the configured interval between later passes.
+                if not first_pass:
+                    await asyncio.sleep(interval)
+                first_pass = False
                 if self._bridge is not bridge:
                     return
                 now = asyncio.get_running_loop().time()

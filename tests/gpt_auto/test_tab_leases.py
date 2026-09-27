@@ -13,7 +13,7 @@ URL = 'https://chatgpt.com/g/g-p-project/c/chat'
 
 def test_lease_renewal_failure_does_not_fail_request_or_allow_stale_cleanup():
     runtime = object.__new__(GptAutoProviderRuntime)
-    runtime._tab_lease_store = SimpleNamespace(observe=Mock(side_effect=OSError('disk unavailable')))
+    runtime._tab_lease_store = SimpleNamespace(get=lambda _: None, observe=Mock(side_effect=OSError('disk unavailable')))
     runtime._tab_lease_cache = {}
     runtime._tab_lease_unsafe_targets = set()
     chat = SimpleNamespace(target_id='target', ag_session_id='session', chat_url=URL,
@@ -26,6 +26,24 @@ def test_lease_renewal_failure_does_not_fail_request_or_allow_stale_cleanup():
     assert not runtime._tab_lease_unsafe_targets
     runtime.remember_tab_activity(chat)
     runtime._tab_lease_store.observe.assert_called_once()
+
+
+def test_reattached_session_retains_7190_seconds_of_inactivity(tmp_path, monkeypatch):
+    from audiagentic.components.providers.adapters.gpt_auto import runtime as module
+    monkeypatch.setattr(module.time, 'time', lambda: 10000.0)
+    monkeypatch.setattr(module.time, 'monotonic', lambda: 500.0)
+    runtime = object.__new__(GptAutoProviderRuntime)
+    runtime._tab_lease_store = TabLeaseStore(tmp_path / 'leases.sqlite3')
+    runtime._tab_lease_cache = {}
+    runtime._tab_lease_unsafe_targets = set()
+    snapshot = ChatSnapshot.from_bridge({'url': URL, 'latestAssistantText': 'done'})
+    runtime._tab_lease_store.observe('target', 'session', URL, 2810.0, runtime._tab_digest(snapshot))
+    chat = SimpleNamespace(target_id='target', ag_session_id='session', chat_url=URL,
+        _last_snapshot=snapshot, _last_validated_activity_monotonic=500.0,
+        _validated_activity_generation=0)
+    runtime.remember_tab_activity(chat)
+    assert 500.0 - chat._last_validated_activity_monotonic == 7190.0
+    assert runtime._tab_lease_store.get('target')[3] == 2810.0
 
 
 def test_lease_store_survives_restart_without_regressing_activity(tmp_path):
