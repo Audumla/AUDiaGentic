@@ -11,6 +11,7 @@ from audiagentic.foundation.transports.agent_session import (
 def test_meaningful_activity_vocabulary_excludes_heartbeat_and_context_flags() -> None:
     assert not is_meaningful_activity_label("worker-heartbeat")
     assert not is_meaningful_activity_label("provider-turn-pending")
+    assert not is_meaningful_activity_label("provider-busy")
     assert not is_meaningful_activity_label("transport-unknown")
     for label in (
         "thinking",

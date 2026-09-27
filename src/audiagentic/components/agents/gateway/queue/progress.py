@@ -249,7 +249,9 @@ def project_request_progress(
     if candidate_ts:
         latest_transition_ts = max(candidate_ts)
 
-    # Latest session event timestamp (only kind + timestamp, redacted).
+    # Latest session event timestamp (only kind + timestamp, redacted).  This
+    # is display/phase evidence only; session timelines also contain timing
+    # and non-meaningful observations and must never clear stale progress.
     session_event_ts = None
     safe_session_event = None
     if latest_session_event is not None and isinstance(latest_session_event, dict):
@@ -260,22 +262,31 @@ def project_request_progress(
             safe_session_event = {"kind": kind, "timestamp": latest_session_event.get("timestamp")}
 
     # --- last-progress-at / source ---
+    # The durable gateway relay is the sole freshness authority.  Its
+    # activity-sequence is advanced only after provider-neutral filtering, so
+    # synthetic heartbeats, timing events, and provider-specific context cannot
+    # make a stalled request appear active in the operator dashboard.
+    gateway_activity_ts = None
+    activity_sequence = record.get("activity-sequence", 0)
+    if isinstance(activity_sequence, int) and not isinstance(activity_sequence, bool) and activity_sequence > 0:
+        gateway_activity_ts = _parse_ts(record.get("last-activity-at"))
+
     last_progress_at = None
     last_progress_source = None
 
-    if latest_transition_ts and session_event_ts:
-        if latest_transition_ts >= session_event_ts:
+    if latest_transition_ts and gateway_activity_ts:
+        if latest_transition_ts >= gateway_activity_ts:
             last_progress_at = latest_transition_ts.isoformat()
             last_progress_source = "request-transition"
         else:
-            last_progress_at = session_event_ts.isoformat()
-            last_progress_source = "session-event"
+            last_progress_at = gateway_activity_ts.isoformat()
+            last_progress_source = "gateway-activity"
     elif latest_transition_ts:
         last_progress_at = latest_transition_ts.isoformat()
         last_progress_source = "request-transition"
-    elif session_event_ts:
-        last_progress_at = session_event_ts.isoformat()
-        last_progress_source = "session-event"
+    elif gateway_activity_ts:
+        last_progress_at = gateway_activity_ts.isoformat()
+        last_progress_source = "gateway-activity"
 
     # --- running-seconds ---
     running_seconds = None

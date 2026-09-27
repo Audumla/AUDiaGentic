@@ -79,3 +79,12 @@ def test_unsequenced_lifecycle_activity_does_not_mask_first_dom_sequence(tmp_pat
 
     assert record.call_count == 2
     assert record.call_args.kwargs["source_sequence"] == 0
+
+
+def test_provider_busy_does_not_renew_gateway_activity(tmp_path):
+    relay = RequestActivityRelay(tmp_path, "req_test", owner_epoch="owner", worker_id="worker", attempt_epoch=1)
+    with patch("audiagentic.components.agents.gateway.activity.store.record_owned_activity") as record:
+        relay.observe_provider(source_sequence=1, source_instance="turn", phase="provider-busy")
+        relay.observe_provider(source_sequence=2, source_instance="turn", phase="provider-busy")
+
+    record.assert_not_called()
