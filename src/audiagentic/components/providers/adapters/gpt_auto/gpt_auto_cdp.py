@@ -1007,22 +1007,34 @@ _SNAPSHOT_FN = r"""
 # logic (mirrors _SNAPSHOT_FN above) instead of re-deriving it inline.
 _RETRY_DELIVERY_TIMEOUT_FN = r"""() => {
   const normalize = value => String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
-  // `[role="alert"] button` covers the current renderer's plain-text Retry
-  // control (no aria-label, no data-testid), live-captured 2026-09-27 as a
-  // stuck "ChatGPT stream recovery polling timed out" alert. The exact-text
-  // guard below still requires the button's own text to equal "retry", so a
-  // dismiss/report/other button in the same alert is never activated by
-  // this broader selector.
-  const candidates = Array.from(document.querySelectorAll(
-    'button[data-testid="regenerate-thread-error-button"], button[aria-label="Retry"], button[data-testid*="regenerate"][data-testid*="error"], [role="alert"] button'
-  ));
-  const button = candidates.find(candidate => {
+  const isRetryButton = candidate => {
     if (candidate.disabled || !candidate.getClientRects().length) return false;
     const text = normalize(candidate.innerText || candidate.textContent || candidate.getAttribute('aria-label'));
     // Keep the exact retry-text guard explicit: text !== 'retry' must never
     // be treated as a provider recovery control.
     return text === 'retry';
-  });
+  };
+  const attributeCandidates = Array.from(document.querySelectorAll(
+    'button[data-testid="regenerate-thread-error-button"], button[aria-label="Retry"], button[data-testid*="regenerate"][data-testid*="error"]'
+  ));
+  let button = attributeCandidates.find(isRetryButton);
+  if (!button) {
+    // The current renderer's Retry control has neither aria-label nor
+    // data-testid (live-captured 2026-09-27 as a stuck "ChatGPT stream
+    // recovery polling timed out" alert), so it cannot be found by button
+    // attributes at all. Identify the alert by its own known message text
+    // instead of matching any role="alert" button generically -- a
+    // generic match would also fire on an unrelated alert's differently
+    // meant Retry-labelled control, and the exact-text guard alone cannot
+    // tell the two apart. Only the exact-text "retry" button inside this
+    // specific, identified alert is ever clicked.
+    const knownAlert = Array.from(document.querySelectorAll('[role="alert"]')).find(
+      alert => normalize(alert.innerText || alert.textContent).includes('stream recovery polling timed out')
+    );
+    if (knownAlert) {
+      button = Array.from(knownAlert.querySelectorAll('button')).find(isRetryButton);
+    }
+  }
   if (!button) return false;
   button.click();
   return true;
