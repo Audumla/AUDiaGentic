@@ -17,6 +17,7 @@ from audiagentic.components.providers.services.config.provider_config import (
 
 from .config import GptAutoConfig
 from .runtime_registry import get_runtime
+from .snapshot import ChatSnapshot
 from .urls import canonical_chat_url, parse_project_id, parse_provider_session_id
 
 
@@ -173,4 +174,46 @@ async def focus_existing_conversation(
     return ConversationFocusResult(ConversationFocusOutcome.FOCUSED)
 
 
-__all__ = ["focus_existing_conversation", "select_focus_page"]
+async def capture_latest_response(
+    project_root: Path,
+    *,
+    provider_id: str,
+    locator: ConversationFocusLocator,
+) -> dict[str, object]:
+    """Read the current rendered response from one exact retained GPT tab.
+
+    This is deliberately read-only: it never opens a tab, navigates, types, or
+    submits.  The caller still owns request correlation and terminalization.
+    """
+    document = load_provider_config(project_root)
+    provider_cfg = (document.get("providers") or {}).get(provider_id)
+    if not isinstance(provider_cfg, dict) and provider_id.startswith("gpt-auto-"):
+        provider_cfg = (document.get("providers") or {}).get("gpt-auto")
+    if not isinstance(provider_cfg, dict):
+        return {"outcome": "unavailable", "reason": "provider-config-unavailable"}
+    runtime = get_runtime(project_root, GptAutoConfig.from_project_dict(provider_cfg))
+    if not await runtime.connect_existing():
+        return {"outcome": "unavailable", "reason": "cdp-unavailable"}
+    pages = await runtime.bridge.call("list_pages")
+    runtime.adopt_existing_dedicated_window(pages)
+    scoped = [p for p in pages if runtime.page_belongs_to_dedicated_window(p)]
+    selected, result = select_focus_page(scoped, locator)
+    if selected is None and result is not None and result.outcome is ConversationFocusOutcome.NOT_FOUND and scoped != pages:
+        selected, result = select_focus_page(pages, locator)
+    if selected is None:
+        return {"outcome": "unavailable", "reason": (result.reason if result else "conversation-tab-not-found")}
+    handle = str(selected.get("pageHandle") or "")
+    if not handle:
+        return {"outcome": "unavailable", "reason": "target-handle-missing"}
+    page = await runtime.gpt_browser.page_by_handle(handle)
+    await runtime.gpt_browser.materialize_latest_assistant_turn(page)
+    snapshot = ChatSnapshot.from_bridge(
+        await runtime.gpt_browser.snapshot(page, signals=runtime.config.workflow.bridge_signals())
+    )
+    return {
+        "outcome": "captured",
+        "snapshot": snapshot,
+    }
+
+
+__all__ = ["capture_latest_response", "focus_existing_conversation", "select_focus_page"]

@@ -589,7 +589,9 @@ def submit_execution_request(
         },
     )
 
-    from audiagentic.components.agents.gateway.session.client_defaults import select as select_default_session
+    from audiagentic.components.agents.gateway.session.client_defaults import (
+        select as select_default_session,
+    )
     with select_default_session(
         project_root, service_root=_dispatch_service_root, client_id=logical_client_id,
         agent_id=agent_id, provider_id=resolved_provider_id, session_id=continuation_session_id,
@@ -598,7 +600,9 @@ def submit_execution_request(
         continuation_session_id = default_selection.session_id
         normalized_provider_chat_url = default_selection.provider_chat_url
         if normalized_provider_chat_url:
-            from audiagentic.components.agents.gateway.session.conversation_owner import resolve_conversation_owner
+            from audiagentic.components.agents.gateway.session.conversation_owner import (
+                resolve_conversation_owner,
+            )
             continuation_session_id = resolve_conversation_owner(
                 project_root, normalized_provider_chat_url, continuation_session_id,
             )
@@ -1062,6 +1066,80 @@ def focus_execution_chat(project_root: Path, request_id: str) -> dict[str, Any]:
         project_root, provider_id=str(provider_id), locator=locator
     )
     return {"request-id": request_id, **result}
+
+
+def complete_execution_from_provider(project_root: Path, request_id: str) -> dict[str, Any]:
+    """Capture and commit the request-owned current GPT response.
+
+    This is an operator recovery action, not a best-effort "latest text" read:
+    the provider snapshot must prove the same prompt, a quiescent assistant
+    turn, and the structural completion witness before the request is closed.
+    """
+    record = store.read_record(project_root, request_id)
+    if record.get("state") in store.TERMINAL_STATES:
+        raise AudiaGenticError(code="CON-AGW-151", kind="agents", message="request is already terminal", details={"request-id": request_id})
+    if record.get("state") not in {"queued", "running"}:
+        raise AudiaGenticError(code="CON-AGW-152", kind="agents", message="request is not operator-completable", details={"request-id": request_id})
+    provider_id = record.get("resolved-provider-id") or record.get("provider-id")
+    metadata = dict(record.get("provider-metadata") or {})
+    session_id = record.get("session-id")
+    if session_id:
+        from audiagentic.components.agents.gateway.session import sessions_store as session_store
+        session_record = session_store.read_session_record(project_root, str(session_id))
+        metadata = {**session_store.session_provider_metadata(session_record), **metadata}
+        provider_id = provider_id or session_store.session_provider_id(session_record)
+    if not provider_id or not session_id:
+        raise AudiaGenticError(code="CON-AGW-153", kind="agents", message="request provider session is unavailable", details={"request-id": request_id})
+    from audiagentic.components.providers.contracts.conversation_focus import ConversationFocusLocator
+    locator = ConversationFocusLocator(
+        chat_url=metadata.get("chat-url"),
+        provider_session_id=metadata.get("provider-session-id"),
+        project_url=metadata.get("project-url"),
+        gateway_session_id=str(session_id),
+    )
+    from audiagentic.components.agents.gateway.session.sessions import get_session_runtime
+    captured = get_session_runtime().capture_latest_response(project_root, provider_id=str(provider_id), locator=locator)
+    if captured.get("outcome") != "captured":
+        raise AudiaGenticError(code="CON-AGW-154", kind="agents", message="provider response could not be captured", details={"request-id": request_id, "reason": captured.get("reason")})
+    snapshot = captured.get("snapshot")
+    text = getattr(snapshot, "latest_assistant_text", None)
+    latest_user = getattr(snapshot, "latest_user_text", None)
+    latest_user_id = getattr(snapshot, "latest_user_id", None)
+    latest_assistant_id = getattr(snapshot, "latest_assistant_id", None)
+    witness_id = getattr(snapshot, "terminal_witness_assistant_id", None)
+    prompt_id = metadata.get("prompt-message-id")
+    expected_assistant = metadata.get("assistant-message-id")
+    before_assistant = metadata.get("assistant-before-message-id") or metadata.get("assistant-before-id")
+    if not isinstance(text, str) or not text.strip() or getattr(snapshot, "generating", True):
+        raise AudiaGenticError(code="CON-AGW-155", kind="agents", message="provider response is not terminal", details={"request-id": request_id})
+    if not ("completion-control" in getattr(snapshot, "dom_signals", frozenset()) and "more-actions-menu" in getattr(snapshot, "dom_signals", frozenset())):
+        raise AudiaGenticError(code="CON-AGW-155", kind="agents", message="provider completion witness is missing", details={"request-id": request_id})
+    if not latest_assistant_id or witness_id != latest_assistant_id:
+        raise AudiaGenticError(code="CON-AGW-156", kind="agents", message="provider response is not request-owned", details={"request-id": request_id})
+    expected_assistant_is_real = bool(expected_assistant and not str(expected_assistant).startswith("fallback-"))
+    before_assistant_is_real = bool(before_assistant and not str(before_assistant).startswith("fallback-"))
+    if expected_assistant_is_real and expected_assistant != latest_assistant_id:
+        raise AudiaGenticError(code="CON-AGW-156", kind="agents", message="provider assistant identity does not match request", details={"request-id": request_id})
+    if before_assistant_is_real and before_assistant == latest_assistant_id:
+        raise AudiaGenticError(code="CON-AGW-156", kind="agents", message="provider response did not advance", details={"request-id": request_id})
+    if prompt_id:
+        if latest_user_id != prompt_id:
+            raise AudiaGenticError(code="CON-AGW-156", kind="agents", message="provider prompt identity does not match request", details={"request-id": request_id})
+    else:
+        from audiagentic.components.agents.agents_paths import gateway_admitted_prompt_path
+        from audiagentic.foundation.io import read_bytes_with_retry
+        import hashlib
+        prompt = read_bytes_with_retry(gateway_admitted_prompt_path(project_root, request_id)).decode("utf-8")
+        if not isinstance(latest_user, str) or latest_user.strip() != prompt.strip() or record.get("prompt-digest") != hashlib.sha256(prompt.encode("utf-8")).hexdigest():
+            raise AudiaGenticError(code="CON-AGW-156", kind="agents", message="provider prompt text does not match request", details={"request-id": request_id})
+    from audiagentic.components.agents.gateway.output import persist_final_response
+    artifact = persist_final_response(project_root, request_id, text)
+    artifact_ref = {key: artifact[key] for key in ("artifact-id", "request-id", "media-type", "bytes", "sha256")}
+    updated = store.transition_operator_terminal(
+        project_root, request_id, expected_revision=int(record.get("revision", 0)),
+        updates={"response-artifact": artifact_ref, "error": None, "completion": {"source": "operator-provider-capture", "provider-message-id": latest_assistant_id}},
+    )
+    return {"request-id": request_id, "state": updated.get("state"), "response-artifact": artifact_ref, "capture-source": "provider-current-response"}
 
 
 def request_runtime_status(project_root: Path, request_id: str) -> dict[str, Any]:
