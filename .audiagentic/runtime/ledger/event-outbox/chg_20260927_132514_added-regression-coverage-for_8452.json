@@ -1,0 +1,23 @@
+{
+  "event": {
+    "change-class": "tests",
+    "event-id": "chg_20260927_132514_added-regression-coverage-for_8452",
+    "files": [
+      "tests/unit/agents/test_agents_gateway_sessions.py"
+    ],
+    "plan-item-ids": [
+      "AS134"
+    ],
+    "status": "unreleased",
+    "technical-summary": "Added a SessionRuntime FIFO regression that holds request A in the provider transport, queues request B, and verifies per-request metadata sinks remain isolated through promotion and completion.",
+    "timestamp-utc": "2026-09-27T13:25:14.902424Z",
+    "user-summary-candidate": "Added regression coverage for queued gateway requests so continuation metadata cannot be attributed to the preceding request."
+  },
+  "event-id": "chg_20260927_132514_added-regression-coverage-for_8452",
+  "plan-item-ids": [
+    "AS134"
+  ],
+  "project-root": "H:\\development\\projects\\AUDia\\AUDiaGentic",
+  "source": null,
+  "timestamp-utc": "2026-09-27T13:25:14.902424Z"
+}

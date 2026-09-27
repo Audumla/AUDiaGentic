@@ -10,6 +10,7 @@ with a FakeAgentSessionTransport — no AcpLaunch / AcpSessionTransport required
 
 from __future__ import annotations
 
+import asyncio
 import functools
 import multiprocessing
 import subprocess
@@ -204,6 +205,39 @@ class _OpenFailureTransport(FakeAgentSessionTransport):
         self.opened = True
         self.alive = True
         raise RuntimeError("provider open failed")
+
+
+class _RequestScopedMetadataTransport(FakeAgentSessionTransport):
+    """Transport double that exposes the real runtime FIFO sink boundary."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.metadata_sink: Any = None
+        self.first_started = threading.Event()
+        self.release_first = threading.Event()
+        self.metadata_by_prompt: list[tuple[str, Any]] = []
+
+    def set_request_metadata_sink(self, sink: Any) -> None:
+        self.metadata_sink = sink
+
+    async def prompt(self, prompt, sink=None, **kwargs) -> SessionTurnResult:
+        prompt_text = prompt.body if hasattr(prompt, "body") else str(prompt)
+        request_sink = self.metadata_sink
+        if len(self.metadata_by_prompt) == 0:
+            self.first_started.set()
+            while not self.release_first.is_set():
+                await asyncio.sleep(0.01)
+        metadata = {
+            "submission-proven": True,
+            "prompt-message-id": f"prompt-{prompt_text}",
+            "assistant-message-id": f"assistant-{prompt_text}",
+        }
+        if request_sink is not None:
+            result = request_sink(metadata)
+            if hasattr(result, "__await__"):
+                await result
+        self.metadata_by_prompt.append((prompt_text, request_sink))
+        return await super().prompt(prompt, sink=sink, **kwargs)
 
 
 def _build_fake_surface() -> Any:
@@ -548,6 +582,91 @@ def test_open_prompt_close_lifecycle(rig):
     assert closed["close-reason"] == "client-request"
     assert transports[0].closed
     assert runtime.live_session_ids() == []
+
+
+def test_fifo_continuation_keeps_request_metadata_sinks_scoped(tmp_path):
+    """A queued continuation must not inherit the opener request's sink."""
+    clock = _Clock()
+    transport = _RequestScopedMetadataTransport()
+
+    def prepare(project_root, *, provider_id, surface_hint, model_id=None, **kwargs):
+        transport.ag_session_id = kwargs["ag_session_id"]
+        return _build_fake_prepared(transport)
+
+    runtime = SessionRuntime(
+        clock=clock,
+        reap_interval_seconds=60,
+        provider_prepare_fn=prepare,
+    )
+    record = runtime.open_session(
+        tmp_path,
+        execution_profile_id="profile-1",
+        provider_id="opencode",
+        model_id="m1",
+    )
+    request_a: list[dict[str, Any]] = []
+    request_b: list[dict[str, Any]] = []
+
+    async def sink_a(metadata: dict[str, Any]) -> None:
+        request_a.append(dict(metadata))
+
+    async def sink_b(metadata: dict[str, Any]) -> None:
+        request_b.append(dict(metadata))
+
+    results: list[SessionTurnResult] = []
+
+    def run_a() -> None:
+        results.append(
+            runtime.prompt_in_session(
+                tmp_path,
+                record["session-id"],
+                "request-a",
+                request_id="req-a",
+                request_provider_metadata_sink=sink_a,
+            )
+        )
+
+    def run_b() -> None:
+        results.append(
+            runtime.prompt_in_session(
+                tmp_path,
+                record["session-id"],
+                "request-b",
+                request_id="req-b",
+                request_provider_metadata_sink=sink_b,
+            )
+        )
+
+    first = threading.Thread(target=run_a)
+    second = threading.Thread(target=run_b)
+    try:
+        first.start()
+        assert transport.first_started.wait(timeout=2)
+        second.start()
+        time.sleep(0.05)
+        transport.release_first.set()
+        first.join(timeout=2)
+        second.join(timeout=2)
+
+        assert not first.is_alive()
+        assert not second.is_alive()
+        assert [entry[0] for entry in transport.metadata_by_prompt] == [
+            "request-a",
+            "request-b",
+        ]
+        assert request_a[0]["prompt-message-id"] == "prompt-request-a"
+        assert request_b[0]["prompt-message-id"] == "prompt-request-b"
+        assert len(request_a) == 1
+        assert len(request_b) == 1
+        assert all(entry not in request_a for entry in request_b)
+        assert all(entry not in request_b for entry in request_a)
+        assert len(results) == 2
+    finally:
+        transport.release_first.set()
+        first.join(timeout=2)
+        second.join(timeout=2)
+        runtime.close_session(tmp_path, record["session-id"])
+        runtime.shutdown()
 
 
 def test_recoverable_turn_failure_retains_live_session(tmp_path):
