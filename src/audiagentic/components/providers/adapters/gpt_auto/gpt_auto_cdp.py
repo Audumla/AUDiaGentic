@@ -182,22 +182,35 @@ _SNAPSHOT_FN = r"""
     // on `[data-user-message-bubble="true"]` (that attribute is no longer
     // rendered by the current renderer). Read it from whichever element in
     // the block actually carries it before falling back to a synthetic id.
+    // Fail closed to null (never guess) when: the carrier's nearest
+    // `.block-BQZwFn` ancestor is not this block (the id belongs to a
+    // nested/foreign block, not this semantic message), or the attribute
+    // holds more than one space-separated id (no proven canonical token,
+    // and its ordering is not a stable identity across polls).
     const realMessageId = block => {
       const carrier = block.hasAttribute('data-chatgpt-search-message-ids')
         ? block
         : block.querySelector('[data-chatgpt-search-message-ids]');
-      const raw = carrier ? carrier.getAttribute('data-chatgpt-search-message-ids') : null;
-      return raw ? raw.split(/\s+/)[0] : null;
+      if (!carrier) return null;
+      if (carrier !== block && carrier.closest('.block-BQZwFn') !== block) return null;
+      const raw = (carrier.getAttribute('data-chatgpt-search-message-ids') || '').trim();
+      if (!raw) return null;
+      const ids = raw.split(/\s+/);
+      return ids.length === 1 ? ids[0] : null;
     };
     for (const block of fallbackBlocks) {
       const label = fallbackBlockLabel(block);
       if (label === 'you said:') {
         const content = block.querySelector('[data-user-message-bubble="true"]') || block;
-        const messageId = realMessageId(block) || `fallback-user-${userIndex++}`;
-        messageEntries.push({role: 'user', el: content, messageId});
+        // Advance the ordinal for every user block regardless of whether a
+        // real id was found: the ordinal must stay a stable, non-reused
+        // identity across polls, independent of which blocks happen to
+        // expose a real id on a given poll.
+        const synthetic = `fallback-user-${userIndex++}`;
+        messageEntries.push({role: 'user', el: content, messageId: realMessageId(block) || synthetic});
       } else if (label === 'chatgpt said:') {
-        const messageId = realMessageId(block) || `fallback-assistant-${assistantIndex++}`;
-        messageEntries.push({role: 'assistant', el: block, messageId});
+        const synthetic = `fallback-assistant-${assistantIndex++}`;
+        messageEntries.push({role: 'assistant', el: block, messageId: realMessageId(block) || synthetic});
       }
     }
   }
