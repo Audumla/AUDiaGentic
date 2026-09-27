@@ -1452,7 +1452,22 @@ class GptAutoTurn:
             if self.cancel_event.is_set():
                 if self._stop_task is None:
                     self._stop_task = asyncio.create_task(self._stop_generation_best_effort())
-                await asyncio.gather(self._stop_task, return_exceptions=True)
+                # Stop-control and quiescence are provider-side best effort.
+                # A hung CDP stop/quiescence check must not strand the gateway
+                # request in ``cancelling`` forever; the unresolved checkpoint
+                # and recovering chat state preserve the no-resubmit fence.
+                try:
+                    await asyncio.wait_for(
+                        asyncio.shield(self._stop_task),
+                        timeout=self._cancellation_settle_timeout_seconds(),
+                    )
+                except asyncio.TimeoutError:
+                    self._set_chat_state(ChatState.RECOVERING)
+                    self._stop_task.cancel()
+                    logger.warning(
+                        "gpt-auto cancellation settlement timed out; retaining recovery fence",
+                        extra={"turn-id": self.request.turn_id},
+                    )
                 self._move(TurnState.CANCELLED)
                 return None
             try:
@@ -2251,6 +2266,14 @@ class GptAutoTurn:
         # even while submission/proof polling is in progress.
         if self._stop_task is None or self._stop_task.done():
             self._stop_task = asyncio.create_task(self._stop_generation_best_effort())
+
+    def _cancellation_settle_timeout_seconds(self) -> float:
+        """Bound provider stop/quiescence before returning cancellation."""
+        cdp_config = getattr(self.chat.config, "cdp", None)
+        protocol_timeout = float(getattr(cdp_config, "protocol_timeout_seconds", 30.0))
+        if protocol_timeout <= 0:
+            protocol_timeout = 30.0
+        return max(1.0, min(30.0, protocol_timeout + 1.0))
 
     async def _stop_generation_best_effort(self) -> None:
         stopped = False
