@@ -53,6 +53,7 @@ class GatewayHTTPServer(ThreadingHTTPServer):
         self.dashboard_purge_session_path = f"{self.dashboard_path}/purge-session"
         self.dashboard_restart_path = f"{self.dashboard_path}/restart"
         self.dashboard_cancel_path = f"{self.dashboard_path}/cancel-request"
+        self.dashboard_complete_path = f"{self.dashboard_path}/complete-from-provider"
         self.dashboard_image_path = f"{self.dashboard_path}/project-image"
         self.dashboard_recent_seconds = dashboard_recent_seconds
         super().__init__(address, GatewayHTTPRequestHandler)
@@ -85,7 +86,7 @@ class GatewayHTTPRequestHandler(BaseHTTPRequestHandler):
                     render_dashboard_html,
                 )
 
-                self._write_bytes(200, "text/html; charset=utf-8", render_dashboard_html(self.server.dashboard_snapshot_path, focus_path=self.server.dashboard_focus_path, purge_session_path=self.server.dashboard_purge_session_path, focus_token=self.server.application.dashboard_action_token))
+                self._write_bytes(200, "text/html; charset=utf-8", render_dashboard_html(self.server.dashboard_snapshot_path, focus_path=self.server.dashboard_focus_path, purge_session_path=self.server.dashboard_purge_session_path, focus_token=self.server.application.dashboard_action_token, complete_path=self.server.dashboard_complete_path))
                 return
             if method == "GET" and parsed.path == self.server.dashboard_snapshot_path:
                 query = parse_qs(parsed.query, keep_blank_values=True)
@@ -128,6 +129,14 @@ class GatewayHTTPRequestHandler(BaseHTTPRequestHandler):
                     raise transport_error(23, "dashboard cancel body must contain request-id only")
                 result = self.server.application.cancel_dashboard_request(_string(body, "request-id"))
                 self._write_json(200, {"ok": True, "result": result})
+                return
+            if method == "POST" and parsed.path == self.server.dashboard_complete_path:
+                self._authenticate_dashboard_action()
+                body = self._read_body()
+                if set(body) != {"request-id"}:
+                    raise transport_error(23, "dashboard completion body must contain request-id only")
+                result = self.server.application.complete_dashboard_request(_string(body, "request-id"))
+                self._write_json(200, {"contract-version": "v1", "ok": True, "result": result})
                 return
             if method == "POST" and parsed.path == self.server.dashboard_focus_path:
                 self._authenticate_dashboard_action()

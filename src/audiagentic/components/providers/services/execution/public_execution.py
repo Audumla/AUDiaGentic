@@ -76,6 +76,24 @@ async def focus_existing_conversation(
         "invalid-provider-capability-result",
     )
 
+
+async def capture_latest_response(
+    project_root: Path,
+    *,
+    provider_id: str,
+    locator: ConversationFocusLocator,
+) -> dict[str, Any]:
+    """Read-only provider capability for operator response recovery."""
+    from .execution import load_conversation_capture_capability
+
+    hook = load_conversation_capture_capability(provider_id)
+    if hook is None:
+        return {"outcome": "unsupported", "reason": "provider-capability-unavailable"}
+    value = hook(project_root, provider_id=provider_id, locator=locator)
+    if inspect.isawaitable(value):
+        value = await value
+    return value if isinstance(value, dict) else {"outcome": "unavailable", "reason": "invalid-provider-capability-result"}
+
 #: Preparation failed with an exception that was not a classified
 #: :class:`AudiaGenticError` — the builder raised something unmodelled.
 _UNCLASSIFIED_BUILDER_FAILURE = "EXT-PROVEXEC-901"
