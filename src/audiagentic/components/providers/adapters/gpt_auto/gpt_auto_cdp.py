@@ -98,6 +98,30 @@ _CLICK_PROJECT_NEW_CHAT_FN = r"""(name) => {
   return true;
 }"""
 
+_PROJECT_NEW_CHAT_POINT_FN = r"""(name) => {
+  const normalize = value => String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
+  const wanted = normalize(name);
+  const visible = element => {
+    const rect = element.getBoundingClientRect();
+    const style = getComputedStyle(element);
+    return rect.width > 0 && rect.height > 0 &&
+      style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
+  };
+  const row = Array.from(document.querySelectorAll('[data-project-row="true"]')).find(
+    candidate => Array.from(candidate.querySelectorAll('span')).some(
+      element => normalize(element.textContent) === wanted
+    )
+  );
+  if (!row) return null;
+  const button = Array.from(row.querySelectorAll('button')).find(
+    candidate => normalize(candidate.getAttribute('aria-label')) === 'start new chat in project'
+      && visible(candidate)
+  );
+  if (!button) return null;
+  const rect = button.getBoundingClientRect();
+  return {x: rect.x + rect.width / 2, y: rect.y + rect.height / 2};
+}"""
+
 
 class ComposerSubmissionTimeout(TimeoutError):
     """Preserve whether a send-capable operation was dispatched before timeout."""
@@ -1476,7 +1500,16 @@ class GptAutoCdpBrowserController(CdpBrowserController):
         """
         deadline = asyncio.get_running_loop().time() + max(0.1, timeout)
         while asyncio.get_running_loop().time() < deadline:
-            if await self.evaluate(page, _CLICK_PROJECT_NEW_CHAT_FN, project_name):
+            # ChatGPT's Projects page currently ignores the page-JavaScript
+            # ``button.click()`` path for this control: it returns success but
+            # does not create/navigate the project chat. Use the same trusted
+            # CDP pointer path as the Explore -> Projects navigation instead.
+            point = await self.evaluate(page, _PROJECT_NEW_CHAT_POINT_FN, project_name)
+            if isinstance(point, dict) and isinstance(point.get("x"), (int, float)) and isinstance(point.get("y"), (int, float)):
+                await self.bridge.call(
+                    "click",
+                    {"pageHandle": page.handle, "x": point["x"], "y": point["y"]},
+                )
                 return True
             await asyncio.sleep(0.1)
         return False
