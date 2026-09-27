@@ -1704,13 +1704,17 @@ class GptAutoTurn:
                         retried,
                         extra={"turn-id": self.request.turn_id},
                     )
-                    await self._emit(
-                        TransportObservationKind.IN_PROGRESS,
-                        {
-                            "model_activity": "delivery-timeout-retry",
-                        },
-                    )
                     if retried:
+                        # Count only an actual provider retry click as work.
+                        # A failed probe found no matching control and must not
+                        # renew the durable activity lease or physical tab idle
+                        # clock.
+                        await self._emit(
+                            TransportObservationKind.IN_PROGRESS,
+                            {
+                                "model_activity": "delivery-timeout-retry",
+                            },
+                        )
                         await asyncio.sleep(self.chat.config.turn.poll_interval_seconds)
                         continue
                     if not self._delivery_timeout_retry_probe_failed:
