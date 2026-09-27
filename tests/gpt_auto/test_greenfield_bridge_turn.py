@@ -393,11 +393,13 @@ async def test_submission_proof_materializes_missing_first_render_without_resend
     chat.provider_session_id = "conversation-1"
     chat.chat_url = "https://chatgpt.com/g/g-p-project/c/conversation-1"
     refreshed = []
+    activities = []
 
     async def refresh_bound_conversation(**kwargs):
         refreshed.append(kwargs)
         chat._snapshots = iter(
             [
+                snap(dom_activity_digest="render-1"),
                 snap(users=1, user="Review AU01"),
                 snap(users=1, user="Review AU01"),
             ]
@@ -409,7 +411,7 @@ async def test_submission_proof_materializes_missing_first_render_without_resend
     turn = GptAutoTurn(
         chat,
         SessionPrompt(turn_id="turn-materialize-first-render", body="Review AU01"),
-        lambda _: None,
+        activities.append,
     )
 
     result = await turn._await_submission_proof(snap())
@@ -418,6 +420,10 @@ async def test_submission_proof_materializes_missing_first_render_without_resend
     assert len(refreshed) == 1
     assert refreshed[0]["trigger"] == "submission-proof-materialization"
     assert turn._initial_refresh_succeeded is True
+    assert any(
+        getattr(item, "attributes", {}).get("model_activity") == "dom-activity"
+        for item in activities
+    )
 
 
 @pytest.mark.asyncio

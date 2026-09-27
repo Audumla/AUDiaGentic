@@ -1053,6 +1053,7 @@ class GptAutoTurn:
         previous_dom_signals = baseline.dom_signals
         previous_assistant_id = baseline.latest_assistant_id
         previous_assistant_text = baseline.latest_assistant_text
+        previous_dom_activity_digest = baseline.dom_activity_digest
         # Keep the local classification variable initialized even when the
         # first post-submit snapshot fails. Without this, the exhaustion
         # path itself raised UnboundLocalError and discarded the real CDP
@@ -1158,8 +1159,12 @@ class GptAutoTurn:
                 snap.latest_assistant_id != previous_assistant_id
                 or snap.latest_assistant_text != previous_assistant_text
             )
+            dom_activity_changed = (
+                snap.dom_activity_digest is not None
+                and snap.dom_activity_digest != previous_dom_activity_digest
+            )
             caps = EvidenceCapability.NONE
-            if (new_msg and user_id_changed) or assistant_progress:
+            if (new_msg and user_id_changed) or assistant_progress or dom_activity_changed:
                 caps |= EvidenceCapability.PROGRESS
             # GP19: sustained generating=True is real, ongoing evidence of
             # activity, not just the moment it first became true -- a level
@@ -1184,7 +1189,11 @@ class GptAutoTurn:
                 try:
                     await self._emit(
                         TransportObservationKind.ACTIVITY,
-                        {"model_activity": "response-progress"},
+                        {
+                            "model_activity": (
+                                "dom-activity" if dom_activity_changed else "response-progress"
+                            )
+                        },
                     )
                 except Exception:  # noqa: BLE001 - activity is advisory
                     logger.debug(
@@ -1197,6 +1206,7 @@ class GptAutoTurn:
             previous_dom_signals = snap.dom_signals
             previous_assistant_id = snap.latest_assistant_id
             previous_assistant_text = snap.latest_assistant_text
+            previous_dom_activity_digest = snap.dom_activity_digest
             if text_matches:
                 self._prompt_message_id = self._prompt_id_for_snapshot(snap)
             outcome = _advance_with_trace(
