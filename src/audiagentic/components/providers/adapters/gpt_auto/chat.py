@@ -98,7 +98,8 @@ class PersistentChat:
         self.runtime = runtime
         self.config = config
         self.binding_sink = binding_sink
-        self.checkpoint_sink = checkpoint_sink
+        self._session_checkpoint_sink = checkpoint_sink
+        self._request_checkpoint_sink = None
         self._lost_during_turn = False
         self._last_url: str | None = None
         self._last_snapshot: ChatSnapshot | None = None
@@ -185,26 +186,39 @@ class PersistentChat:
             ):
                 if value is not None and value != "":
                     self._checkpoint_metadata[key] = value
-        sink = self.checkpoint_sink
-        if sink is None:
-            return
-        result = sink({**self.unresolved_metadata(), **self._checkpoint_metadata})
-        if asyncio.iscoroutine(result):
-            await result
+        await self._persist_checkpoint({**self.unresolved_metadata(), **self._checkpoint_metadata})
+
+    async def _persist_checkpoint(self, metadata: dict[str, object]) -> None:
+        sinks = (self._session_checkpoint_sink, self._request_checkpoint_sink)
+        seen: set[int] = set()
+        for sink in sinks:
+            if sink is None or id(sink) in seen:
+                continue
+            seen.add(id(sink))
+            result = sink(metadata)
+            if inspect.isawaitable(result):
+                await result
+
+    @property
+    def checkpoint_sink(self):
+        """Compatibility view of the durable session checkpoint sink."""
+        return self._session_checkpoint_sink
+
+    @checkpoint_sink.setter
+    def checkpoint_sink(self, sink) -> None:
+        self._session_checkpoint_sink = sink
+
+    def set_request_metadata_sink(self, sink) -> None:
+        """Bind only the request leg; retain the durable session leg."""
+        self._request_checkpoint_sink = sink
 
     async def persist_unresolved_identity(self) -> None:
         """Persist prompt identity without rewriting the pre-send baseline."""
-        sink = self.checkpoint_sink
-        if sink is None:
-            return
-        result = sink(self.unresolved_metadata())
-        if inspect.isawaitable(result):
-            await result
+        await self._persist_checkpoint(self.unresolved_metadata())
 
     async def persist_unresolved_clear(self) -> None:
         """Durably clear the checkpoint only after terminal proof."""
-        sink = self.checkpoint_sink
-        if sink is None:
+        if self._session_checkpoint_sink is None and self._request_checkpoint_sink is None:
             self._checkpoint_metadata = {}
             return
         # Emit the intended durable state explicitly.  Callers may persist
@@ -221,9 +235,7 @@ class PersistentChat:
             ):
                 if value:
                     metadata[key] = value
-        result = sink(metadata)
-        if inspect.isawaitable(result):
-            await result
+        await self._persist_checkpoint(metadata)
         self._checkpoint_metadata = {}
 
     def _claim_page(self, page_handle: str) -> bool:
