@@ -357,6 +357,12 @@ _SNAPSHOT_FN = r"""
     "aria-valuenow", "aria-valuetext", "data-state", "data-status",
     "data-phase", "data-progress"
   ];
+  const activityAttrs = [...semanticAttrs, "class"];
+  const animationClassToken = /^(?:animate|animation|transition|duration|ease|delay|shimmer|pulse|spin|blink|caret)(?:-|$)/i;
+  const classMutationIsAnimationOnly = value => {
+    const tokens = normalizeProgress(value).split(/\s+/).filter(Boolean);
+    return tokens.length > 0 && tokens.every(token => animationClassToken.test(token));
+  };
   const boundedScalarMaterial = value => {
     const raw = String(value || "");
     const sample = raw.length > 1024 ? raw.slice(0, 512) + " " + raw.slice(-512) : raw;
@@ -516,6 +522,20 @@ _SNAPSHOT_FN = r"""
           const target = record.target.nodeType === Node.ELEMENT_NODE
             ? record.target : record.target.parentElement;
           if (!target || !progressShown(target)) return false;
+          if (record.type === 'attributes' && record.attributeName === 'class') {
+            const currentClass = target.getAttribute('class') || '';
+            const previousClass = record.oldValue || '';
+            // Renderer animation classes are visual shimmer/caret noise. A
+            // class edge that carries any non-animation token is meaningful
+            // DOM state and must renew activity.
+            if (
+              (classMutationIsAnimationOnly(currentClass) &&
+                (!previousClass || classMutationIsAnimationOnly(previousClass))) ||
+              (classMutationIsAnimationOnly(previousClass) &&
+                (!currentClass || classMutationIsAnimationOnly(currentClass)))
+            ) return false;
+            return true;
+          }
           if (record.type !== 'childList') return true;
           const addedVisible = Array.from(record.addedNodes).some(child =>
             child.nodeType === Node.TEXT_NODE
@@ -536,7 +556,7 @@ _SNAPSHOT_FN = r"""
       observed.observer = new MutationObserver(observed.consume);
       observed.observer.observe(node, {
         subtree: true, childList: true, characterData: true,
-        attributes: true, attributeFilter: semanticAttrs
+        attributes: true, attributeFilter: activityAttrs, attributeOldValue: true
       });
       window[key] = observed;
     }
