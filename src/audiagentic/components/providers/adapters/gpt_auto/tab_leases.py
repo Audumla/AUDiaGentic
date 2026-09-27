@@ -37,6 +37,12 @@ class TabLeaseStore:
         with self._connect() as db:
             return db.execute('SELECT target, session, url, activity, digest FROM tabs').fetchall()
 
+    def get(self, target: str) -> tuple[str, str, str, float, str] | None:
+        with self._connect() as db:
+            return db.execute(
+                'SELECT target, session, url, activity, digest FROM tabs WHERE target=?', (target,)
+            ).fetchone()
+
     def forget(self, target: str) -> None:
         with self._connect() as db:
             db.execute('DELETE FROM tabs WHERE target=?', (target,))
