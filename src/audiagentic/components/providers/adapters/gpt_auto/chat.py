@@ -125,6 +125,7 @@ class PersistentChat:
             metadata, "assistant-before-message-id"
         )
         self.unresolved_prompt_text_digest = _metadata_text(metadata, "prompt-text-digest")
+        self._submission_proven = _metadata_bool(metadata, "submission-proven")
         # Message IDs are durable correlation evidence and remain present
         # after a successful turn.  Only the explicit lifecycle marker says
         # that a previous send still needs reconciliation.
@@ -1162,6 +1163,8 @@ class PersistentChat:
         values: dict[str, object] = {
             "unresolved-turn-pending": self.unresolved_turn_pending,
         }
+        if self._submission_proven:
+            values["submission-proven"] = True
         for key, value in (
             ("prompt-message-id", self.unresolved_prompt_message_id),
             ("assistant-message-id", self.unresolved_assistant_message_id),
@@ -1176,6 +1179,7 @@ class PersistentChat:
     def mark_submission_unresolved(self, prompt_text: str | None = None) -> None:
         """Record that a send command completed but its provider identity is unknown."""
         self.unresolved_turn_pending = True
+        self._submission_proven = False
         self._unresolved_recovery_reason = None
         self._unresolved_recovery_details = {}
         self._reconciliation_refresh_attempted = False
@@ -1189,6 +1193,7 @@ class PersistentChat:
         prompt_text: str | None = None,
     ) -> None:
         self.unresolved_turn_pending = True
+        self._submission_proven = True
         self._unresolved_recovery_reason = None
         self._unresolved_recovery_details = {}
         self._reconciliation_refresh_attempted = False
@@ -2115,4 +2120,3 @@ def _unresolved_observation_details(snapshot: ChatSnapshot | None) -> dict[str, 
     if snapshot.dom_signals:
         details["observed-dom-signals"] = sorted(snapshot.dom_signals)
     return details
-

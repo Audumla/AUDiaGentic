@@ -1534,6 +1534,10 @@ class SessionRuntime:
                 metadata,
                 remove_keys=remove,
             )
+            if request_provider_metadata_sink is not None:
+                relay_result = request_provider_metadata_sink(metadata)
+                if inspect.isawaitable(relay_result):
+                    await relay_result
 
         # AS28 slice 4a: resolve provider-neutral transport via the public
         # prepare seam. No AcpLaunch / AcpSessionTransport construction here.
