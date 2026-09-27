@@ -212,6 +212,15 @@ class PersistentChat:
         """Bind only the request leg; retain the durable session leg."""
         self._request_checkpoint_sink = sink
 
+    async def persist_request_metadata(self, metadata: dict[str, object]) -> None:
+        """Persist provider identity only to the current request leg."""
+        sink = self._request_checkpoint_sink
+        if sink is None:
+            return
+        result = sink(metadata)
+        if inspect.isawaitable(result):
+            await result
+
     async def persist_unresolved_identity(self) -> None:
         """Persist prompt identity without rewriting the pre-send baseline."""
         await self._persist_checkpoint(self.unresolved_metadata())
