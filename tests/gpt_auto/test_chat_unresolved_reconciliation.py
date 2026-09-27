@@ -286,6 +286,57 @@ async def test_cancel_during_gateway_gap_is_latched_until_rehydrated_turn_exists
 
 
 @pytest.mark.asyncio
+async def test_pending_recovery_cancel_returns_cancelled_without_resubmission():
+    """A cancel latched before resume_existing must remain a real cancellation."""
+    chat = _chat()
+    chat.state = ChatState.READY
+    chat._checkpoint_metadata.update(
+        {
+            "unresolved-turn-id": "req-1",
+            "prompt-message-id": "u1",
+            "assistant-message-id": None,
+        }
+    )
+    stop_calls: list[str] = []
+
+    class Bridge:
+        async def call(self, method, _params, **_kwargs):
+            if method == "submit_prompt":
+                raise AssertionError("recovered cancellation must never submit")
+            if method == "stop_generation":
+                stop_calls.append(method)
+                return {"stopped": True}
+            return {"ok": True}
+
+    chat.runtime = SimpleNamespace(bridge=Bridge())
+    chat.ensure_ready = lambda: asyncio.sleep(0)  # type: ignore[method-assign]
+    chat.snapshot = lambda **_kwargs: asyncio.sleep(  # type: ignore[method-assign]
+        0, result=_terminal_snapshot(dom_signals=frozenset())
+    )
+    chat.wait_quiescent = lambda **_kwargs: asyncio.sleep(  # type: ignore[method-assign]
+        0, result=_terminal_snapshot(dom_signals=frozenset())
+    )
+    chat.persist_unresolved_clear = lambda: asyncio.sleep(0)  # type: ignore[method-assign]
+
+    transport = GptAutoSessionTransport(chat)
+    cancel = SessionControlRequest(
+        ag_session_id=chat.ag_session_id,
+        turn_id="req-1",
+        action=SessionControlAction.CANCEL_TURN,
+    )
+    accepted = await transport.control(cancel)
+    assert accepted.disposition is ControlDisposition.ACCEPTED
+
+    result = await transport.resume_existing(
+        SessionPrompt(turn_id="req-1", body="already submitted"),
+        lambda _observation: None,
+    )
+
+    assert result.stop_reason == "cancelled"
+    assert stop_calls == ["stop_generation"]
+
+
+@pytest.mark.asyncio
 async def test_resume_existing_exposes_definitive_provider_failure_as_terminal(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
