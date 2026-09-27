@@ -462,7 +462,7 @@ class GptAutoTurn:
                 )
             self.side_effect_attempted = True
             self.submission_confirmed = True
-            current = await self.chat.snapshot()
+            current = await self._snapshot_for_observation()
             persisted_alerts = checkpoint.get(
                 "unresolved-baseline-error-alert-occurrences"
             )
@@ -587,19 +587,37 @@ class GptAutoTurn:
                 )
             await asyncio.sleep(self.chat.config.turn.poll_interval_seconds)
             try:
-                current = await self.chat.snapshot()
+                current = await self._snapshot_for_observation()
             except Exception:  # noqa: BLE001 - renderer lag is not proof of failure
                 continue
 
     async def wait_done(self, timeout: float) -> None:
         await asyncio.wait_for(self._done.wait(), timeout=timeout)
 
+    async def _snapshot_for_observation(self) -> ChatSnapshot:
+        """Keep one CDP observation from wedging the whole turn forever.
+
+        Response observation intentionally has no total-duration deadline: a
+        healthy provider turn may run for an arbitrary amount of time.  Each
+        individual browser snapshot is different, however.  If its CDP call
+        hangs, the turn must regain control so the existing recovery/watchdog
+        path can record the loss of observation and decide what to do.  This
+        is an observation bound only; it never submits or retries a prompt.
+        """
+        cdp_config = getattr(self.chat.config, "cdp", None)
+        protocol_timeout = float(
+            getattr(cdp_config, "protocol_timeout_seconds", 30.0)
+        )
+        if protocol_timeout <= 0:
+            protocol_timeout = 30.0
+        return await asyncio.wait_for(self.chat.snapshot(), timeout=protocol_timeout)
+
     async def _run(self) -> SessionTurnResult:
         if self.cancel_event.is_set():
             self._move(TurnState.CANCELLED)
             return self._result("cancelled")
         self._phase = "baseline-observation"
-        baseline = await self.chat.snapshot()
+        baseline = await self._snapshot_for_observation()
         baseline = await self._ensure_admitted_project(baseline)
         if baseline.generating or not baseline.composer_editable:
             baseline = await self._await_composer_settled(baseline)
@@ -758,14 +776,14 @@ class GptAutoTurn:
             page,
             timeout=self.chat.config.chat.ready_timeout_seconds,
         )
-        repaired = await self.chat.snapshot()
+        repaired = await self._snapshot_for_observation()
         self._require_admitted_project(repaired, phase="pre-submission-recovery")
         return repaired
 
     async def _capture_provider_identity_after_ambiguous_submission(self) -> None:
         """Persist a conversation URL observed after an ambiguous submit."""
         try:
-            current = await self.chat.snapshot()
+            current = await self._snapshot_for_observation()
             self._remember_snapshot(current)
             is_new = _new_user_message(self._baseline_snapshot, current) if self._baseline_snapshot else True
             if (
@@ -821,7 +839,7 @@ class GptAutoTurn:
             except Exception as exc:  # noqa: BLE001 - preserve proof fallback
                 self._last_observation_error = exc
         try:
-            final_snapshot = await self.chat.snapshot()
+            final_snapshot = await self._snapshot_for_observation()
         except Exception as exc:  # noqa: BLE001 - retain bounded failure evidence
             self._last_observation_error = exc
 
@@ -870,7 +888,7 @@ class GptAutoTurn:
             if loop.time() >= deadline:
                 break
             await asyncio.sleep(poll_interval)
-            current = await self.chat.snapshot()
+            current = await self._snapshot_for_observation()
         return current
 
     async def _submit_once(self) -> None:
@@ -1029,7 +1047,7 @@ class GptAutoTurn:
                 self._move(TurnState.CANCELLED)
                 return None
             try:
-                snap = await self.chat.snapshot()
+                snap = await self._snapshot_for_observation()
             except Exception as exc:  # noqa: BLE001 - reconcile after attempted side effect
                 self._last_observation_error = exc
                 last_observation_error = exc
@@ -1438,7 +1456,7 @@ class GptAutoTurn:
                 self._move(TurnState.CANCELLED)
                 return None
             try:
-                raw_current = await self.chat.snapshot()
+                raw_current = await self._snapshot_for_observation()
             except Exception as exc:  # noqa: BLE001 - never re-submit after an attempted send
                 self._last_observation_error = exc
                 logger.info(
@@ -1543,7 +1561,7 @@ class GptAutoTurn:
                         )
                     if self._completion_materialization_succeeded:
                         try:
-                            raw_current = await self.chat.snapshot()
+                            raw_current = await self._snapshot_for_observation()
                             self._remember_snapshot(raw_current)
                             # Re-scope the materialized observation immediately;
                             # otherwise this poll would continue evaluating the
@@ -2004,7 +2022,7 @@ class GptAutoTurn:
                 # same regular poll cadence -- confirms the candidate before
                 # it is trusted, matching the pre-existing design.
                 try:
-                    raw_verify = await self.chat.snapshot()
+                    raw_verify = await self._snapshot_for_observation()
                 except Exception as exc:  # noqa: BLE001 - verification resumes on next poll
                     self._last_observation_error = exc
                     logger.info(
