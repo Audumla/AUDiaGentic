@@ -1076,9 +1076,9 @@ def complete_execution_from_provider(project_root: Path, request_id: str) -> dic
     turn, and the structural completion witness before the request is closed.
     """
     record = store.read_record(project_root, request_id)
-    if record.get("state") in store.TERMINAL_STATES:
+    if record.get("state") in store.TERMINAL_STATES and record.get("state") != "interrupted":
         raise AudiaGenticError(code="CON-AGW-151", kind="agents", message="request is already terminal", details={"request-id": request_id})
-    if record.get("state") != "running":
+    if record.get("state") not in {"running", "interrupted"}:
         raise AudiaGenticError(code="CON-AGW-152", kind="agents", message="request is not operator-completable", details={"request-id": request_id})
     provider_id = record.get("resolved-provider-id") or record.get("provider-id")
     metadata = dict(record.get("provider-metadata") or {})

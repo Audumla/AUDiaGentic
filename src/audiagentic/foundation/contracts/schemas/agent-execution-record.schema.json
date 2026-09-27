@@ -377,7 +377,7 @@
         },
         "outcome": {
           "type": "string",
-          "enum": ["resubmit-required", "replay-required", "manual-review-required", "in-place"]
+          "enum": ["resubmit-required", "replay-required", "manual-review-required", "in-place", "bounded-recovery-exhausted"]
         },
         "from-owner-epoch": {"type": ["string", "null"]},
         "handoff-id": {"type": ["string", "null"]},

@@ -20,7 +20,7 @@ kinds:
           failed: []
           cancelled: []
           rejected: []
-          interrupted: []
+          interrupted: [completed]
         state-sets:
           terminal: [completed, failed, cancelled, rejected, interrupted]
   # Live agent session lifecycle (plan agent-sessions AS03). Live handles are
