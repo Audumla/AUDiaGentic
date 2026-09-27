@@ -317,6 +317,42 @@ async def test_unresolved_checkpoint_persists_snapshot_counts() -> None:
     assert updates[-1]["unresolved-baseline-assistant-count"] == 2
 
 
+@pytest.mark.asyncio
+async def test_request_metadata_sink_can_be_rebound_for_each_turn() -> None:
+    config = GptAutoConfig.from_dict(valid_config())
+    first_updates = []
+    second_updates = []
+    chat = PersistentChat(
+        ag_session_id="session-turn-sink",
+        project_name="project",
+        project_url="https://chatgpt.com/g/g-p-project/project",
+        runtime=SimpleNamespace(),
+        config=config,
+        binding_sink=lambda _update: None,
+        checkpoint_sink=first_updates.append,
+    )
+    baseline = ChatSnapshot(
+        url="https://chatgpt.com/g/g-p-project/c/provider-session",
+        composer_present=True,
+        composer_editable=True,
+        user_count=0,
+        assistant_count=0,
+        latest_user_text=None,
+        latest_assistant_id=None,
+        latest_assistant_text=None,
+        dom_signals=frozenset(),
+        error_present=False,
+    )
+
+    chat.checkpoint_sink = second_updates.append
+    chat.mark_prompt_submitted("prompt-2", None, "second turn")
+    await chat.persist_unresolved_checkpoint(turn_id="turn-2", baseline=baseline)
+
+    assert first_updates == []
+    assert second_updates[-1]["submission-proven"] is True
+    assert second_updates[-1]["prompt-message-id"] == "prompt-2"
+
+
 def test_explicit_unresolved_marker_remains_authoritative() -> None:
     config = GptAutoConfig.from_dict(valid_config())
     chat = PersistentChat(

@@ -596,6 +596,7 @@ class SessionRuntime:
         activity_relay: Any | None = None,
         dispatch_claim: Callable[[], dict[str, Any]] | None = None,
         resume_existing: bool = False,
+        request_provider_metadata_sink: Any = None,
     ) -> SessionTurnResult:
         """Run one turn on a live session; refreshes its idle clock."""
         return self._call(
@@ -609,6 +610,7 @@ class SessionRuntime:
                 activity_relay=activity_relay,
                 dispatch_claim=dispatch_claim,
                 resume_existing=resume_existing,
+                request_provider_metadata_sink=request_provider_metadata_sink,
             ),
             # Queue wait is deliberately unbounded here.  A caller timeout
             # must not expire while an earlier turn owns the session FIFO
@@ -769,6 +771,7 @@ class SessionRuntime:
             handle = self._handles.get(session_id)
             if handle is None:
                 return SessionFailureDisposition.TERMINATE
+            set_metadata_sink = None
             try:
                 return SessionFailureDisposition(handle.transport.turn_failure_disposition())
             except (AttributeError, TypeError, ValueError):
@@ -2437,6 +2440,7 @@ class SessionRuntime:
         activity_relay: Any | None = None,
         dispatch_claim: Callable[[], dict[str, Any]] | None = None,
         resume_existing: bool = False,
+        request_provider_metadata_sink: Any = None,
     ) -> SessionTurnResult:
         handle = self._require_handle(session_id)
         # Turns queue FIFO on the session lock (RV513) — reject only when the
@@ -2646,6 +2650,9 @@ class SessionRuntime:
                 cancel_token=_local_cancel_event if request_id is not None else None,
             )
             try:
+                set_metadata_sink = getattr(handle.transport, "set_request_metadata_sink", None)
+                if callable(set_metadata_sink):
+                    set_metadata_sink(request_provider_metadata_sink)
                 # Call the neutral seam: AgentSessionTransport.prompt().
                 # A configured timeout is retained as a provider/profile
                 # observation setting, but never converted to a local kill.
@@ -2703,6 +2710,8 @@ class SessionRuntime:
                     await self._fail_session(handle, reason="failed")
                 raise
             finally:
+                if callable(set_metadata_sink):
+                    set_metadata_sink(None)
                 handle.last_activity_clock = self._clock()
                 handle.current_request_id = None
                 handle.owning_turn_task = None
