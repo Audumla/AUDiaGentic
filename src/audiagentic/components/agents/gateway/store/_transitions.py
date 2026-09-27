@@ -1644,9 +1644,9 @@ def transition_operator_terminal(
             expected_worker_id=None,
             expected_attempt_epoch=None,
         )
-        if record["state"] in _shared.TERMINAL_STATES:
+        if record["state"] in _shared.TERMINAL_STATES and record["state"] != "interrupted":
             return record
-        if record["state"] not in {"queued", "running"}:
+        if record["state"] not in {"queued", "running", "interrupted"}:
             raise AudiaGenticError(code="CON-AGW-151", kind="agents", message="request is not operator-completable", details={})
         updated = dict(record)
         # Older v8 records may carry the transitional preview fields even

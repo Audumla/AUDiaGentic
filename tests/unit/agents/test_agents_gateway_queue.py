@@ -133,6 +133,52 @@ def test_recovery_deferred_stays_running_and_retries_same_request(tmp_path: Path
     )
 
 
+def test_recovery_deferred_is_bounded_and_interrupts_without_resubmit(tmp_path: Path):
+    """Observation-only recovery cannot leave a lost provider turn running forever."""
+    manager = queue_mod.GatewayQueueManager()
+    project = tmp_path / "project"
+    project.mkdir()
+    record = store.build_record(execution_profile_id="recovery-bounded", prompt_body="x")
+    record["provider-metadata"] = {
+        "submission-proven": True,
+        "chat-url": "https://chatgpt.com/g/g-p-project/c/conversation",
+        "unresolved-turn-pending": True,
+    }
+    store.write_record(project, record)
+    calls = 0
+
+    def runner(_project_root: Path, _current: dict, **_kwargs) -> dict:
+        nonlocal calls
+        calls += 1
+        raise RecoveryDeferred(
+            AudiaGenticError(
+                code="EXT-AGW-118",
+                kind="agents",
+                message="provider reattach unavailable",
+            )
+        )
+
+    manager.enqueue(
+        project,
+        record,
+        {
+            "virtual-capacity": 1,
+            "provider-session-recovery-initial-delay-seconds": 0.01,
+            "provider-session-recovery-max-delay-seconds": 0.01,
+            "provider-session-recovery-max-attempts": 2,
+        },
+        runner,
+    )
+
+    terminal = manager.wait(project, record["request-id"], timeout_seconds=3)
+    assert terminal["state"] == "interrupted"
+    assert calls == 2
+    assert terminal["error"]["code"] == "CON-AGW-084"
+    assert terminal["provider-metadata"]["submission-proven"] is True
+    assert terminal["provider-metadata"]["chat-url"].endswith("/conversation")
+    assert terminal["recovery"]["outcome"] == "bounded-recovery-exhausted"
+
+
 def test_cancelled_recovery_backoff_is_not_stranded(tmp_path: Path):
     """Cancellation during deferred recovery still gets a worker pass."""
     manager = queue_mod.GatewayQueueManager()

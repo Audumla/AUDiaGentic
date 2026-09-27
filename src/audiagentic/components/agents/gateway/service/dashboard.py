@@ -557,7 +557,7 @@ document.addEventListener('click',event=>{
  const cancelIcon='<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8 8 8 8m0-8-8 8"/></svg>';
  const completeIcon='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>';
  function cancelControl(r) { return ACTIVE_REQUEST_STATES.has(r.state)?` <button type="button" class="action-button icon-button cancel-request" data-request-id="${esc(r['request-id'])}" aria-label="Cancel request" title="Cancel request">${cancelIcon}</button>`:''; }
- function providerCaptureEligible(r) { const provider=String(r['resolved-provider-id']||r['provider-id']||''); return r.state==='running' && provider.startsWith('gpt-auto') && !!r['session-id']; }
+ function providerCaptureEligible(r) { const provider=String(r['resolved-provider-id']||r['provider-id']||''); return (r.state==='running'||r.state==='interrupted') && provider.startsWith('gpt-auto') && !!r['session-id']; }
  function completeControl(r) { return providerCaptureEligible(r)?` <button type="button" class="action-button icon-button complete-provider" data-request-id="${esc(r['request-id'])}" aria-label="Complete from current GPT response" title="Capture the current GPT response and mark completed">${completeIcon}</button>`:''; }
 async function cancelRequest(button) {
   if(!window.confirm('Cancel this request? Its history will be retained.'))return;

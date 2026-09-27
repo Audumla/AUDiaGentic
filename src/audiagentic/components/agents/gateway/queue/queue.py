@@ -59,6 +59,7 @@ _WAIT_INITIAL_BACKOFF_SECONDS = 0.05
 _WAIT_MAX_BACKOFF_SECONDS = 0.5
 _RECOVERY_RETRY_INITIAL_SECONDS = 0.5
 _RECOVERY_RETRY_MAX_SECONDS = 15.0
+_RECOVERY_RETRY_MAX_ATTEMPTS = 6
 
 # SH07 crash-matrix test-only hook: widens the claim-to-start control-plane
 # window so a real OS process kill can be observed landing inside it (the
@@ -940,6 +941,26 @@ class GatewayQueueManager:
         )
         return min(maximum, initial * (2 ** max(0, recovery_attempt - 1)))
 
+    @staticmethod
+    def _recovery_retry_max_attempts(entry: QueuedDispatch) -> int:
+        """Resolve the finite observation-only recovery bound.
+
+        A provider-session recovery may not resend an ambiguous prompt, but it
+        also may not keep a durable request in ``running`` forever when the
+        provider target has disappeared.  The bound is admission-scoped with
+        the rest of the profile parameters so a request cannot be changed by
+        a later profile reload.
+        """
+        params = dict(entry.snapshot.execution_params)
+        value = params.get("provider-session-recovery-max-attempts", _RECOVERY_RETRY_MAX_ATTEMPTS)
+        if isinstance(value, bool):
+            return _RECOVERY_RETRY_MAX_ATTEMPTS
+        try:
+            value = int(value)
+        except (TypeError, ValueError):
+            return _RECOVERY_RETRY_MAX_ATTEMPTS
+        return value if value > 0 else _RECOVERY_RETRY_MAX_ATTEMPTS
+
     def _schedule_recovery_retry(
         self,
         pq: _RuntimeState,
@@ -1344,6 +1365,60 @@ class GatewayQueueManager:
                     entry,
                     int((current.get("recovery") or {}).get("attempt", 0)) + 1,
                 )
+                recovery_attempt = int((current.get("recovery") or {}).get("attempt", 0)) + 1
+                max_recovery_attempts = self._recovery_retry_max_attempts(entry)
+                if recovery_attempt >= max_recovery_attempts:
+                    recovery_metadata = dict(current.get("recovery") or {})
+                    recovery_metadata.update(
+                        {
+                            "outcome": "bounded-recovery-exhausted",
+                            "phase": deferred.phase,
+                            "side-effect-state": deferred.side_effect_state,
+                            "next-retry-at": None,
+                            "retry-delay-seconds": 0,
+                        }
+                    )
+                    interrupted = store.transition_owned_terminal(
+                        project_root,
+                        request_id,
+                        "interrupted",
+                        updates={
+                            "error": {
+                                "code": "CON-AGW-084",
+                                "kind": "agents",
+                                "message": (
+                                    "bounded provider-session recovery exhausted; "
+                                    "provider outcome remains unresolved"
+                                ),
+                                "details": {
+                                    "recovery-attempt": recovery_attempt,
+                                    "recovery-max-attempts": max_recovery_attempts,
+                                    "recovery-phase": deferred.phase,
+                                    "side-effect-state": deferred.side_effect_state,
+                                    "submission-proven": (
+                                        (current.get("provider-metadata") or {}).get("submission-proven")
+                                        is True
+                                    ),
+                                },
+                            },
+                            "finished-at": now_iso_z(),
+                            "recovery": recovery_metadata,
+                        },
+                        owner_epoch=record["dispatch-owner-epoch"],
+                        worker_id=record["worker-id"],
+                        attempt_epoch=record["attempt-epoch"],
+                        service_root=service_root,
+                    )
+                    _publish_lifecycle_event("interrupted", interrupted)
+                    logger.warning(
+                        "gateway request recovery exhausted; request interrupted",
+                        extra={
+                            "request-id": request_id,
+                            "recovery-attempts": recovery_attempt,
+                            "recovery-max-attempts": max_recovery_attempts,
+                        },
+                    )
+                    return
                 try:
                     deferred_record = store.defer_owned_recovery(
                         project_root,

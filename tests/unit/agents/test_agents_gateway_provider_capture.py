@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from audiagentic.components.agents.gateway import api
+from audiagentic.components.agents.gateway import store
 from audiagentic.components.agents.gateway.session import sessions as session_runtime_module
 from audiagentic.components.agents.gateway.session import sessions_store
 from audiagentic.components.agents.agents_paths import gateway_admitted_prompt_path
@@ -162,3 +163,39 @@ def test_complete_execution_from_provider_uses_prompt_text_for_synthetic_ids(mon
 
     assert result["state"] == "completed"
     assert calls["updates"]["__final-response-text"] == "answer"
+
+
+def test_operator_provider_capture_can_complete_bounded_interruption(tmp_path: Path):
+    """An interrupted recovery remains eligible for a verified operator capture."""
+    record = store.build_record(execution_profile_id="gpt-auto", prompt_body="request")
+    store.write_record(tmp_path, record)
+    running = store.transition_record(
+        tmp_path,
+        record["request-id"],
+        "running",
+        updates={"started-at": "2026-09-27T00:00:00Z"},
+    )
+    interrupted = store.transition_record(
+        tmp_path,
+        record["request-id"],
+        "interrupted",
+        updates={
+            "error": {
+                "code": "CON-AGW-084",
+                "kind": "agents",
+                "message": "bounded recovery exhausted",
+            },
+            "finished-at": "2026-09-27T00:01:00Z",
+        },
+    )
+
+    completed = store.transition_operator_terminal(
+        tmp_path,
+        record["request-id"],
+        expected_revision=interrupted["revision"],
+        updates={"__final-response-text": "captured answer"},
+    )
+
+    assert running["state"] == "running"
+    assert completed["state"] == "completed"
+    assert completed["response-artifact"]["artifact-id"] == "final-response"
