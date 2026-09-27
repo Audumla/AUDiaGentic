@@ -933,11 +933,12 @@ def _dispatch_session_request(
         if guard_held:
             preparation_guard.release()
         if resume_existing:
+            cause = repr(exc) or f"<{type(exc).__name__}>"
             wrapped = AudiaGenticError(
                 code="INT-AGW-098",
                 kind="agents",
-                message=f"session recovery failed: {exc}",
-                details={"original-type": type(exc).__name__},
+                message=f"session recovery failed: {cause}",
+                details={"original-type": type(exc).__name__, "original-repr": cause[:500]},
             )
             raise RecoveryDeferred(wrapped) from exc
         # Safety net: wrap any non-AudiaGenticError so _redact_error preserves
@@ -949,11 +950,12 @@ def _dispatch_session_request(
         )
         if request_runtime is not None:
             _quarantine_request_runtime(request_runtime, request_runtime_root.parent / "quarantine")
+        cause = repr(exc) or f"<{type(exc).__name__}>"
         wrapped = AudiaGenticError(
             code="INT-AGW-098",
             kind="agents",
-            message=f"session dispatch failed: {exc}",
-            details={"original-type": type(exc).__name__},
+            message=f"session dispatch failed: {cause}",
+            details={"original-type": type(exc).__name__, "original-repr": cause[:500]},
         )
         if isinstance(exc, Exception) and not resume_existing and _default_recovery_attempt < 2 and not store.read_record(project_root, request_id).get("cancel-requested"):
             replacement = client_defaults.replace_failed_default(
