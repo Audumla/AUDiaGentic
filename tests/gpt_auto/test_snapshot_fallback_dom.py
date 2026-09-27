@@ -3,7 +3,33 @@
 import pytest
 from playwright.async_api import async_playwright
 
-from audiagentic.components.providers.adapters.gpt_auto.gpt_auto_cdp import _SNAPSHOT_FN
+from audiagentic.components.providers.adapters.gpt_auto.gpt_auto_cdp import (
+    _RETRY_DELIVERY_TIMEOUT_FN,
+    _SNAPSHOT_FN,
+)
+
+# The exact markup captured live 2026-09-27 from a stuck ChatGPT conversation:
+# a role="alert" aside with a plain <button>Retry</button> that carries
+# neither aria-label nor data-testid.
+_LIVE_STREAM_RECOVERY_TIMEOUT_ALERT_HTML = """
+<aside role="alert" class="text-danger">
+  <div>ChatGPT stream recovery polling timed out</div>
+  <button type="button" class="rounded-full border-default">Retry</button>
+</aside>
+"""
+
+_DELIVERY_TIMEOUT_RETRY_SIGNAL = dict(
+    name="delivery-timeout-retry",
+    scope="document",
+    selectors=[
+        'button[data-testid="regenerate-thread-error-button"]',
+        'button[aria-label="Retry"]',
+        'button[data-testid*="regenerate"][data-testid*="error"]',
+        '[role="alert"] button',
+    ],
+    visible=True,
+    textContainsAny=["retry"],
+)
 
 
 @pytest.mark.asyncio
@@ -260,6 +286,94 @@ async def test_fallback_multi_id_carrier_is_ambiguous_and_falls_back_to_syntheti
             snapshot = await page.evaluate(_SNAPSHOT_FN, [])
 
             assert snapshot["latestUserId"] == "fallback-user-0"
+        finally:
+            await browser.close()
+
+
+@pytest.mark.asyncio
+async def test_delivery_timeout_retry_signal_detects_plain_text_alert_button() -> None:
+    """The current renderer's Retry control has no aria-label or
+    data-testid; the `[role="alert"] button` selector must still detect it
+    via the domSignals path used by turn.py to trigger recovery."""
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            await page.set_content(_LIVE_STREAM_RECOVERY_TIMEOUT_ALERT_HTML)
+
+            snapshot = await page.evaluate(_SNAPSHOT_FN, [_DELIVERY_TIMEOUT_RETRY_SIGNAL])
+
+            assert snapshot["domSignals"]["delivery-timeout-retry"] is True
+        finally:
+            await browser.close()
+
+
+@pytest.mark.asyncio
+async def test_delivery_timeout_retry_signal_ignores_non_retry_alert_button() -> None:
+    """A role="alert" button whose own text is not exactly "retry" (e.g. a
+    Dismiss control in the same banner) must not be treated as the delivery
+    recovery signal, even though it matches the broadened selector."""
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            await page.set_content(
+                '<aside role="alert"><div>Something went wrong</div>'
+                '<button type="button">Dismiss</button></aside>'
+            )
+
+            snapshot = await page.evaluate(_SNAPSHOT_FN, [_DELIVERY_TIMEOUT_RETRY_SIGNAL])
+
+            assert snapshot["domSignals"]["delivery-timeout-retry"] is False
+        finally:
+            await browser.close()
+
+
+@pytest.mark.asyncio
+async def test_retry_delivery_timeout_clicks_plain_text_alert_button() -> None:
+    """The actual click function (module-level _RETRY_DELIVERY_TIMEOUT_FN,
+    the same code retry_delivery_timeout() evaluates) must find and click
+    the live-captured plain-text Retry control."""
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            await page.set_content(_LIVE_STREAM_RECOVERY_TIMEOUT_ALERT_HTML)
+            await page.evaluate(
+                "document.querySelector('button').addEventListener("
+                "'click', () => { document.querySelector('button').dataset.clicked = 'true'; })"
+            )
+
+            clicked = await page.evaluate(_RETRY_DELIVERY_TIMEOUT_FN)
+
+            assert clicked is True
+            assert await page.evaluate("document.querySelector('button').dataset.clicked") == "true"
+        finally:
+            await browser.close()
+
+
+@pytest.mark.asyncio
+async def test_retry_delivery_timeout_never_clicks_a_non_retry_button() -> None:
+    """A visible, enabled button in a role="alert" whose text is not
+    exactly "retry" must never be activated, even under the broadened
+    `[role="alert"] button` selector."""
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            await page.set_content(
+                '<aside role="alert"><div>Something went wrong</div>'
+                '<button type="button">Dismiss</button></aside>'
+            )
+            await page.evaluate(
+                "document.querySelector('button').addEventListener("
+                "'click', () => { document.querySelector('button').dataset.clicked = 'true'; })"
+            )
+
+            clicked = await page.evaluate(_RETRY_DELIVERY_TIMEOUT_FN)
+
+            assert clicked is False
+            assert await page.evaluate("document.querySelector('button').dataset.clicked") is None
         finally:
             await browser.close()
 
