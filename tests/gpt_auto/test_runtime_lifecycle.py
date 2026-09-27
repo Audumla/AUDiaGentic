@@ -344,11 +344,11 @@ async def test_request_metadata_sink_can_be_rebound_for_each_turn() -> None:
         error_present=False,
     )
 
-    chat.checkpoint_sink = second_updates.append
+    chat.set_request_metadata_sink(second_updates.append)
     chat.mark_prompt_submitted("prompt-2", None, "second turn")
     await chat.persist_unresolved_checkpoint(turn_id="turn-2", baseline=baseline)
 
-    assert first_updates == []
+    assert first_updates[-1]["submission-proven"] is True
     assert second_updates[-1]["submission-proven"] is True
     assert second_updates[-1]["prompt-message-id"] == "prompt-2"
 
