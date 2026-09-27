@@ -2410,16 +2410,22 @@ class GptAutoTurn:
         if not metadata:
             return
         try:
-            update = ProviderSessionBindingUpdate(
-                provider_session_ref=ProviderSessionRef(self.chat.provider_session_id),
-                metadata=metadata,
-            )
+            # The request checkpoint is JSON-shaped and may contain structured
+            # correlation evidence (for example the alert-occurrence baseline),
+            # while the foundation binding contract deliberately accepts only
+            # scalar metadata.  Keep those two durable projections separate:
+            # dropping structured fields from the binding update must not drop
+            # them from the request-owned checkpoint.
             sink = getattr(self.chat, "binding_sink", None)
-            if sink is None:
-                return
-            result = sink(update)
-            if asyncio.iscoroutine(result):
-                await result
+            binding_metadata = _scalar_binding_metadata(metadata)
+            if sink is not None and binding_metadata:
+                update = ProviderSessionBindingUpdate(
+                    provider_session_ref=ProviderSessionRef(self.chat.provider_session_id),
+                    metadata=binding_metadata,
+                )
+                result = sink(update)
+                if asyncio.iscoroutine(result):
+                    await result
             persist_request = getattr(self.chat, "persist_request_metadata", None)
             if persist_request is not None:
                 await persist_request(metadata)
@@ -2879,6 +2885,15 @@ def _message_ids(turn: GptAutoTurn) -> dict[str, str]:
         ),
     }
     return {key: value for key, value in values.items() if value}
+
+
+def _scalar_binding_metadata(metadata: dict[str, Any]) -> dict[str, str | int | float | bool | None]:
+    """Project request metadata onto the scalar-only binding contract."""
+    return {
+        key: value
+        for key, value in metadata.items()
+        if value is None or isinstance(value, (str, int, float, bool))
+    }
 
 
 def _snapshot_diagnostics(
