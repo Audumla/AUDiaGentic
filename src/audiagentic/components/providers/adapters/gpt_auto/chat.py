@@ -757,6 +757,19 @@ class PersistentChat:
         raise RuntimeError("ChatGPT conversation did not become quiescent")
 
     async def snapshot(self, *, allow_recovering: bool = False) -> ChatSnapshot:
+        """Read one bounded CDP snapshot without bounding the whole turn."""
+        cdp_config = getattr(self.config, "cdp", None)
+        protocol_timeout = float(
+            getattr(cdp_config, "protocol_timeout_seconds", 30.0)
+        )
+        if protocol_timeout <= 0:
+            protocol_timeout = 30.0
+        return await asyncio.wait_for(
+            self._snapshot_impl(allow_recovering=allow_recovering),
+            timeout=protocol_timeout,
+        )
+
+    async def _snapshot_impl(self, *, allow_recovering: bool = False) -> ChatSnapshot:
         if self.state is ChatState.RECOVERING:
             if not allow_recovering:
                 try:
