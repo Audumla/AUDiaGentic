@@ -2,11 +2,12 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from pathlib import Path
 
 import pytest
 
-from audiagentic.components.agents.agents_paths import gateway_final_response_path
+from audiagentic.components.agents.agents_paths import gateway_final_response_path, gateway_request_path
 from audiagentic.components.agents.gateway.output import (
     OutputPolicy,
     create_relay,
@@ -110,3 +111,18 @@ def test_final_response_artifact_hashes_exact_utf8_bytes(tmp_path: Path) -> None
     assert artifact["bytes"] == len(raw)
     assert artifact["sha256"] == hashlib.sha256(raw).hexdigest()
     assert read_final_response(tmp_path, "request", artifact) == text
+
+
+def test_late_terminal_writer_does_not_overwrite_winner_artifact(tmp_path: Path) -> None:
+    request_id = "request"
+    request_path = gateway_request_path(tmp_path, request_id)
+    request_path.parent.mkdir(parents=True, exist_ok=True)
+    request_path.write_text(json.dumps({"state": "running"}), encoding="utf-8")
+    winner = "winner response"
+    persist_final_response(tmp_path, request_id, winner)
+    request_path.write_text(json.dumps({"state": "completed"}), encoding="utf-8")
+
+    late = persist_final_response(tmp_path, request_id, "late worker response")
+
+    assert gateway_final_response_path(tmp_path, request_id).read_text(encoding="utf-8") == winner
+    assert late["sha256"] == hashlib.sha256("late worker response".encode()).hexdigest()

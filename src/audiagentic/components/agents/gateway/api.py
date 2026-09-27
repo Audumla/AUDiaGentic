@@ -1078,7 +1078,7 @@ def complete_execution_from_provider(project_root: Path, request_id: str) -> dic
     record = store.read_record(project_root, request_id)
     if record.get("state") in store.TERMINAL_STATES:
         raise AudiaGenticError(code="CON-AGW-151", kind="agents", message="request is already terminal", details={"request-id": request_id})
-    if record.get("state") not in {"queued", "running"}:
+    if record.get("state") != "running":
         raise AudiaGenticError(code="CON-AGW-152", kind="agents", message="request is not operator-completable", details={"request-id": request_id})
     provider_id = record.get("resolved-provider-id") or record.get("provider-id")
     metadata = dict(record.get("provider-metadata") or {})
@@ -1102,6 +1102,27 @@ def complete_execution_from_provider(project_root: Path, request_id: str) -> dic
     if captured.get("outcome") != "captured":
         raise AudiaGenticError(code="CON-AGW-154", kind="agents", message="provider response could not be captured", details={"request-id": request_id, "reason": captured.get("reason")})
     snapshot = captured.get("snapshot")
+    confirmed = get_session_runtime().capture_latest_response(
+        project_root, provider_id=str(provider_id), locator=locator
+    )
+    if confirmed.get("outcome") != "captured":
+        raise AudiaGenticError(code="CON-AGW-155", kind="agents", message="provider terminal response could not be revalidated", details={"request-id": request_id})
+    confirmed_snapshot = confirmed.get("snapshot")
+
+    def snapshot_signature(value: Any) -> tuple[Any, ...]:
+        return (
+            getattr(value, "latest_user_id", None),
+            getattr(value, "latest_user_text", None),
+            getattr(value, "latest_assistant_id", None),
+            getattr(value, "latest_assistant_text", None),
+            getattr(value, "terminal_witness_assistant_id", None),
+            bool(getattr(value, "generating", True)),
+            tuple(sorted(getattr(value, "dom_signals", frozenset()))),
+        )
+
+    if snapshot_signature(snapshot) != snapshot_signature(confirmed_snapshot):
+        raise AudiaGenticError(code="CON-AGW-155", kind="agents", message="provider terminal response was not stable across verification snapshots", details={"request-id": request_id})
+    snapshot = confirmed_snapshot
     text = getattr(snapshot, "latest_assistant_text", None)
     latest_user = getattr(snapshot, "latest_user_text", None)
     latest_user_id = getattr(snapshot, "latest_user_id", None)
@@ -1122,24 +1143,35 @@ def complete_execution_from_provider(project_root: Path, request_id: str) -> dic
         raise AudiaGenticError(code="CON-AGW-156", kind="agents", message="provider assistant identity does not match request", details={"request-id": request_id})
     if before_assistant_is_real and before_assistant == latest_assistant_id:
         raise AudiaGenticError(code="CON-AGW-156", kind="agents", message="provider response did not advance", details={"request-id": request_id})
-    if prompt_id:
+    prompt_is_real = bool(prompt_id and not str(prompt_id).startswith("fallback-"))
+    if prompt_is_real:
         if latest_user_id != prompt_id:
             raise AudiaGenticError(code="CON-AGW-156", kind="agents", message="provider prompt identity does not match request", details={"request-id": request_id})
-    else:
+    if not prompt_is_real:
         from audiagentic.components.agents.agents_paths import gateway_admitted_prompt_path
         from audiagentic.foundation.io import read_bytes_with_retry
         import hashlib
         prompt = read_bytes_with_retry(gateway_admitted_prompt_path(project_root, request_id)).decode("utf-8")
-        if not isinstance(latest_user, str) or latest_user.strip() != prompt.strip() or record.get("prompt-digest") != hashlib.sha256(prompt.encode("utf-8")).hexdigest():
+        prompt_digest = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
+        if record.get("prompt-digest") != prompt_digest:
+            raise AudiaGenticError(code="CON-AGW-156", kind="agents", message="admitted request prompt digest is inconsistent", details={"request-id": request_id})
+        latest_user_ref = next(
+            (ref for ref in reversed(getattr(snapshot, "message_refs", ())) if getattr(ref, "role", None) == "user"),
+            None,
+        )
+        latest_assistant_ref = next(
+            (ref for ref in reversed(getattr(snapshot, "message_refs", ())) if getattr(ref, "role", None) == "assistant"),
+            None,
+        )
+        if latest_user_ref is not None and latest_assistant_ref is not None and latest_user_ref.sequence >= latest_assistant_ref.sequence:
+            raise AudiaGenticError(code="CON-AGW-156", kind="agents", message="provider response ordering does not follow the request prompt", details={"request-id": request_id})
+        if not isinstance(latest_user, str) or latest_user.strip() != prompt.strip() or (latest_user_ref is not None and (latest_user_ref.correlation_text or latest_user_ref.text or "").strip() != prompt.strip()):
             raise AudiaGenticError(code="CON-AGW-156", kind="agents", message="provider prompt text does not match request", details={"request-id": request_id})
-    from audiagentic.components.agents.gateway.output import persist_final_response
-    artifact = persist_final_response(project_root, request_id, text)
-    artifact_ref = {key: artifact[key] for key in ("artifact-id", "request-id", "media-type", "bytes", "sha256")}
     updated = store.transition_operator_terminal(
         project_root, request_id, expected_revision=int(record.get("revision", 0)),
-        updates={"response-artifact": artifact_ref, "error": None, "completion": {"source": "operator-provider-capture", "provider-message-id": latest_assistant_id}},
+        updates={"__final-response-text": text, "error": None, "completion": {"source": "operator-provider-capture", "provider-message-id": latest_assistant_id}},
     )
-    return {"request-id": request_id, "state": updated.get("state"), "response-artifact": artifact_ref, "capture-source": "provider-current-response"}
+    return {"request-id": request_id, "state": updated.get("state"), "response-artifact": updated.get("response-artifact"), "capture-source": "provider-current-response"}
 
 
 def request_runtime_status(project_root: Path, request_id: str) -> dict[str, Any]:

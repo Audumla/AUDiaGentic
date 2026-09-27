@@ -1661,6 +1661,20 @@ def transition_operator_terminal(
         updated["watchdog-state"] = "not-started"
         updated["watchdog-reason"] = None
         updated["recovery-required"] = False
+        final_response_text = updates.pop("__final-response-text", None)
+        if final_response_text is not None:
+            from audiagentic.components.agents.gateway.output import persist_final_response
+
+            artifact = persist_final_response(
+                project_root,
+                request_id,
+                str(final_response_text),
+                lock_held=True,
+            )
+            updates["response-artifact"] = {
+                key: artifact[key]
+                for key in ("artifact-id", "request-id", "media-type", "bytes", "sha256")
+            }
         for key, value in updates.items():
             updated[key.replace("_", "-")] = value
         write_record(project_root, updated)
