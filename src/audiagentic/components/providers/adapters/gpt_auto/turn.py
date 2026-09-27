@@ -1089,6 +1089,47 @@ class GptAutoTurn:
                 continue
             last_observation_error = None
             self._remember_snapshot(snap)
+            if (
+                not self._initial_refresh_attempted
+                and snap.user_count == 0
+                and snap.assistant_count == 0
+            ):
+                # A freshly-created local-chatgpt renderer can show the
+                # request as Working before it mounts either message node.
+                # The submission checkpoint is already durable at this point,
+                # so one identity-bound refresh can materialize the same
+                # conversation without retyping or resending the prompt.
+                refresh = getattr(self.chat, "refresh_bound_conversation", None)
+                if callable(refresh):
+                    self._initial_refresh_attempted = True
+                    try:
+                        binding_token = getattr(self.chat, "_binding_token", None)
+                        self._initial_refresh_succeeded = bool(
+                            await refresh(
+                                request_id=self.request.turn_id,
+                                expected_binding=(
+                                    binding_token(snap)
+                                    if callable(binding_token)
+                                    else None
+                                ),
+                                trigger="submission-proof-materialization",
+                            )
+                        )
+                    except Exception as exc:  # noqa: BLE001 - proof loop owns recovery
+                        self._initial_refresh_succeeded = False
+                        self._last_observation_error = exc
+                    if self._initial_refresh_succeeded:
+                        try:
+                            await self._emit(
+                                TransportObservationKind.ACTIVITY,
+                                {"model_activity": "dom-materialization"},
+                            )
+                        except Exception:  # noqa: BLE001 - activity is advisory
+                            logger.debug(
+                                "gpt-auto submission materialization activity relay failed",
+                                extra={"turn-id": self.request.turn_id},
+                                exc_info=True,
+                            )
             publish_title = getattr(self.chat, "publish_conversation_title", None)
             if callable(publish_title):
                 try:
