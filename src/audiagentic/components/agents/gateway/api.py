@@ -1082,19 +1082,22 @@ def complete_execution_from_provider(project_root: Path, request_id: str) -> dic
         raise AudiaGenticError(code="CON-AGW-152", kind="agents", message="request is not operator-completable", details={"request-id": request_id})
     provider_id = record.get("resolved-provider-id") or record.get("provider-id")
     metadata = dict(record.get("provider-metadata") or {})
+    if metadata.get("submission-proven") is not True:
+        raise AudiaGenticError(code="CON-AGW-157", kind="agents", message="request prompt submission is not proven", details={"request-id": request_id})
+    locator_metadata = dict(metadata)
     session_id = record.get("session-id")
     if session_id:
         from audiagentic.components.agents.gateway.session import sessions_store as session_store
         session_record = session_store.read_session_record(project_root, str(session_id))
-        metadata = {**session_store.session_provider_metadata(session_record), **metadata}
+        locator_metadata = {**session_store.session_provider_metadata(session_record), **metadata}
         provider_id = provider_id or session_store.session_provider_id(session_record)
     if not provider_id or not session_id:
         raise AudiaGenticError(code="CON-AGW-153", kind="agents", message="request provider session is unavailable", details={"request-id": request_id})
     from audiagentic.components.providers.contracts.conversation_focus import ConversationFocusLocator
     locator = ConversationFocusLocator(
-        chat_url=metadata.get("chat-url"),
-        provider_session_id=metadata.get("provider-session-id"),
-        project_url=metadata.get("project-url"),
+        chat_url=locator_metadata.get("chat-url"),
+        provider_session_id=locator_metadata.get("provider-session-id"),
+        project_url=locator_metadata.get("project-url"),
         gateway_session_id=str(session_id),
     )
     from audiagentic.components.agents.gateway.session.sessions import get_session_runtime

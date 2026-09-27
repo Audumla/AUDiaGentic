@@ -236,3 +236,4 @@ CON-AGW-153: "The request has no live, request-owned provider session available 
 CON-AGW-154: "The provider response could not be captured from the request-owned conversation."
 CON-AGW-155: "The provider response is not proven complete; wait for completion controls and a quiescent turn."
 CON-AGW-156: "The provider response could not be proven to belong to this request."
+CON-AGW-157: "The request has not durably proven that its own prompt was submitted; wait for provider submission evidence before capturing."

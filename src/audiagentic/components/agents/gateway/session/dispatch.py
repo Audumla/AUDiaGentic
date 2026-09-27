@@ -498,7 +498,22 @@ def _dispatch_session_request(
                 merged_metadata = (
                     dict(current_metadata) if isinstance(current_metadata, dict) else {}
                 )
-                merged_metadata.update(metadata)
+                turn_metadata_keys = {
+                    "prompt-message-id",
+                    "assistant-message-id",
+                    "assistant-before-message-id",
+                    "assistant-before-id",
+                    "prompt-text-digest",
+                    "submission-proven",
+                }
+                if not metadata.get("submission-proven"):
+                    for key in turn_metadata_keys:
+                        merged_metadata.pop(key, None)
+                request_metadata = dict(metadata)
+                if not request_metadata.get("submission-proven"):
+                    for key in turn_metadata_keys:
+                        request_metadata.pop(key, None)
+                merged_metadata.update(request_metadata)
                 record = store.update_owned_running_session(
                     project_root,
                     request_id,
