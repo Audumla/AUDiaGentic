@@ -102,11 +102,10 @@ _WORK_ACTIVITY_LABELS = frozenset({
     "dom-table",
     "dom-materialization",
     "dom-activity",
-    # Synthetic gateway-lease activity while the provider's interruption
-    # banner remains visible.  GPT-auto keeps this separate from its real
-    # recovery clock; the gateway still needs it to retain the request lease.
+    # Bounded recovery lease evidence.  This is intentionally distinct from
+    # GPT-auto's real recovery/physical-idle clock, but keeps an interrupted
+    # provider turn from being declared stale while recovery is active.
     "connection-refreshing",
-    "provider-busy",
     "thinking",
     "searching-web",
     "searching-the-web",

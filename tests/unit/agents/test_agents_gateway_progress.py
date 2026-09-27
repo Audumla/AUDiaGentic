@@ -235,6 +235,8 @@ def test_source_loss_then_progress_event_recovers_without_terminalizing() -> Non
     now = datetime.datetime(2026, 1, 1, 0, 10, 0, tzinfo=datetime.timezone.utc)
     stale = progress_mod.project_request_progress(record, now=now)
     assert stale["stale-progress"] is True
+    record["activity-sequence"] = 1
+    record["last-activity-at"] = "2026-01-01T00:09:55Z"
     recovered = progress_mod.project_request_progress(
         record,
         latest_session_event={"kind": "assistant-message", "timestamp": "2026-01-01T00:09:55Z"},
@@ -279,6 +281,20 @@ def test_stale_progress_with_session_event_past_threshold(tmp_path: Path) -> Non
     assert projection["phase"] == "model-active"
     assert projection["stale-progress"] is True
     assert projection["stale-reason"] == "no-turn-evidence-past-threshold"
+
+
+def test_session_event_cannot_clear_stale_without_gateway_activity() -> None:
+    record = store.build_record(execution_profile_id="default", prompt_body="hello")
+    record["state"] = "running"
+    record["started-at"] = "2026-01-01T00:00:00Z"
+    now = datetime.datetime(2026, 1, 1, 0, 10, 10, tzinfo=datetime.timezone.utc)
+    projection = progress_mod.project_request_progress(
+        record,
+        latest_session_event={"kind": "timing", "timestamp": "2026-01-01T00:10:05Z"},
+        now=now,
+    )
+    assert projection["stale-progress"] is True
+    assert projection["last-progress-source"] == "request-transition"
 
 
 def test_terminal_record_phase_and_not_stale(tmp_path: Path) -> None:
@@ -430,10 +446,12 @@ def test_last_progress_source_request_transition(tmp_path: Path) -> None:
     assert projection["last-progress-source"] == "request-transition"
 
 
-def test_last_progress_source_session_event(tmp_path: Path) -> None:
+def test_last_progress_source_gateway_activity(tmp_path: Path) -> None:
     record = store.build_record(execution_profile_id="default", prompt_body="hello")
     record["state"] = "running"
     record["started-at"] = "2026-01-01T00:00:05Z"
+    record["activity-sequence"] = 1
+    record["last-activity-at"] = "2026-01-01T00:00:10Z"
 
     session_event = {
         "kind": "assistant-message",
@@ -447,7 +465,7 @@ def test_last_progress_source_session_event(tmp_path: Path) -> None:
         now=now,
     )
 
-    assert projection["last-progress-source"] == "session-event"
+    assert projection["last-progress-source"] == "gateway-activity"
 
 
 def test_running_seconds_none_when_not_started(tmp_path: Path) -> None:
