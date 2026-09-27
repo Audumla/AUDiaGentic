@@ -25,6 +25,7 @@ def test_complete_execution_from_provider_persists_correlated_response(monkeypat
             "provider-session-id": "conversation",
             "prompt-message-id": "prompt-1",
             "assistant-message-id": "fallback-assistant-0",
+            "submission-proven": True,
         },
     }
     snapshot = SimpleNamespace(
@@ -96,6 +97,22 @@ def test_complete_execution_from_provider_rejects_queued_request(monkeypatch, tm
     assert getattr(caught.value, "code", None) == "CON-AGW-152"
 
 
+def test_complete_execution_from_provider_requires_request_submission_proof(monkeypatch, tmp_path: Path):
+    record = {
+        "request-id": "req_unsubmitted",
+        "state": "running",
+        "revision": 1,
+        "session-id": "ses_capture",
+        "resolved-provider-id": "gpt-auto",
+    }
+    monkeypatch.setattr(api.store, "read_record", lambda *_: record)
+
+    with pytest.raises(Exception) as caught:
+        api.complete_execution_from_provider(tmp_path, "req_unsubmitted")
+
+    assert getattr(caught.value, "code", None) == "CON-AGW-157"
+
+
 def test_complete_execution_from_provider_uses_prompt_text_for_synthetic_ids(monkeypatch, tmp_path: Path):
     prompt = "synthetic prompt"
     request_id = "req_synthetic"
@@ -112,6 +129,7 @@ def test_complete_execution_from_provider_uses_prompt_text_for_synthetic_ids(mon
             "provider-session-id": "conversation",
             "prompt-message-id": "fallback-user-0",
             "assistant-message-id": "fallback-assistant-0",
+            "submission-proven": True,
         },
     }
     prompt_path = gateway_admitted_prompt_path(tmp_path, request_id)
