@@ -78,6 +78,46 @@ def test_relay_preserves_all_activity_labels_in_durable_request_history(
     ] == list(ACTIVITY_LABELS)
 
 
+def test_relay_persists_dom_edge_activity_labels(tmp_path: Path) -> None:
+    record = store.build_record(execution_profile_id="default", prompt_body="hello")
+    store.write_record(tmp_path, record)
+    claimed = store.claim_dispatch(
+        tmp_path, record["request-id"], owner_epoch="service-a", expected_revision=0
+    )
+    running = store.start_owned_attempt(
+        tmp_path,
+        record["request-id"],
+        owner_epoch="service-a",
+        worker_id="worker-a",
+        expected_revision=claimed["revision"],
+    )
+    relay = RequestActivityRelay(
+        tmp_path,
+        record["request-id"],
+        owner_epoch="service-a",
+        worker_id="worker-a",
+        attempt_epoch=running["attempt-epoch"],
+        min_interval_seconds=999.0,
+    )
+
+    relay.observe_provider(
+        source="session-transport",
+        source_instance="session:ses-1:turn:req-1",
+        source_sequence=1,
+        phase="soft-liveness",
+    )
+    relay.observe_provider(
+        source="session-transport",
+        source_instance="session:ses-1:turn:req-1",
+        source_sequence=2,
+        phase="delivery-timeout-retry",
+    )
+
+    persisted = store.read_record(tmp_path, record["request-id"])
+    assert persisted["activity-sequence"] == 2
+    assert persisted["activity"]["provider"]["phase"] == "delivery-timeout-retry"
+
+
 @pytest.mark.asyncio
 async def test_session_timeline_retains_every_later_activity_label(
     tmp_path: Path,
