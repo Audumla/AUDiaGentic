@@ -2376,6 +2376,9 @@ class GptAutoTurn:
             result = sink(update)
             if asyncio.iscoroutine(result):
                 await result
+            persist_request = getattr(self.chat, "persist_request_metadata", None)
+            if persist_request is not None:
+                await persist_request(metadata)
         except Exception as exc:  # noqa: BLE001 - durable identity is required after proof
             if strict:
                 raise AudiaGenticError(

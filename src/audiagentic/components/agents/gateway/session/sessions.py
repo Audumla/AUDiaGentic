@@ -1514,21 +1514,9 @@ class SessionRuntime:
                 effective_capability_digest=effective_capability_digest,
             )
             # Provider identity is discovered during the first turn, after
-            # the request has entered ``running``.  Relay that immutable
-            # binding metadata (especially GPT's durable chat URL) to the
-            # request immediately so operator surfaces can locate an active
-            # tab; terminal dispatch will still persist the final snapshot.
-            if request_provider_metadata_sink is not None:
-                try:
-                    relay_result = request_provider_metadata_sink(metadata)
-                    if inspect.isawaitable(relay_result):
-                        await relay_result
-                except Exception:  # noqa: BLE001 - dashboard metadata is best-effort
-                    logger.warning(
-                        "failed to relay provider identity to running request",
-                        extra={"session-id": allocated_session_id},
-                        exc_info=True,
-                    )
+            # the request has entered ``running``. Persist the immutable
+            # binding metadata to the canonical session record; the active
+            # request receives its own metadata through the per-turn sink.
 
         async def checkpoint_sink(metadata: dict[str, Any]) -> None:
             pending = bool(metadata.get("unresolved-turn-pending"))
