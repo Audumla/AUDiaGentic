@@ -387,6 +387,40 @@ async def test_submission_proof_reports_observation_failure_instead_of_unbound_l
 
 
 @pytest.mark.asyncio
+async def test_submission_proof_materializes_missing_first_render_without_resend():
+    """A new local-chatgpt view may mount Working before message nodes."""
+    chat = _Chat()
+    chat.provider_session_id = "conversation-1"
+    chat.chat_url = "https://chatgpt.com/g/g-p-project/c/conversation-1"
+    refreshed = []
+
+    async def refresh_bound_conversation(**kwargs):
+        refreshed.append(kwargs)
+        chat._snapshots = iter(
+            [
+                snap(users=1, user="Review AU01"),
+                snap(users=1, user="Review AU01"),
+            ]
+        )
+        return True
+
+    chat.refresh_bound_conversation = refresh_bound_conversation
+    chat._snapshots = iter([snap()])
+    turn = GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="turn-materialize-first-render", body="Review AU01"),
+        lambda _: None,
+    )
+
+    result = await turn._await_submission_proof(snap())
+
+    assert result is not None
+    assert len(refreshed) == 1
+    assert refreshed[0]["trigger"] == "submission-proof-materialization"
+    assert turn._initial_refresh_succeeded is True
+
+
+@pytest.mark.asyncio
 async def test_turn_proves_submission_once_and_completes_from_atomic_snapshots():
     chat = _Chat()
     observations = []
