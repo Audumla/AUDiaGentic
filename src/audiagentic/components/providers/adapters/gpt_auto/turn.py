@@ -314,6 +314,14 @@ class GptAutoTurn:
             raise RuntimeError(f"illegal turn transition {self.state}->{target}: {failure}")
         self.state = target
 
+    @staticmethod
+    def _prompt_id_for_snapshot(snapshot: ChatSnapshot) -> str | None:
+        if snapshot.latest_user_id:
+            return snapshot.latest_user_id
+        if snapshot.user_count > 0:
+            return f"fallback-user-{snapshot.user_count - 1}"
+        return None
+
     async def _emit(self, kind: TransportObservationKind, attributes: dict[str, Any]) -> None:
         # The physical-tab reaper is driven by real request/session activity,
         # not by polling or synthetic connection-refreshing lease ticks.
@@ -454,12 +462,12 @@ class GptAutoTurn:
                 current = await self._await_recovered_prompt_identity(
                     checkpoint, current
                 )
-                self._prompt_message_id = current.latest_user_id
+                self._prompt_message_id = self._prompt_id_for_snapshot(current)
                 derived_prompt_id = True
                 mark_prompt = getattr(self.chat, "mark_prompt_submitted", None)
-                if mark_prompt is not None:
+                if mark_prompt is not None and self._prompt_message_id is not None:
                     mark_prompt(
-                        current.latest_user_id,
+                        self._prompt_message_id,
                         checkpoint.get("unresolved-baseline-assistant-id"),
                         self.request.body,
                     )
@@ -623,10 +631,11 @@ class GptAutoTurn:
         mark_activity = getattr(self.chat, "mark_validated_activity", None)
         if callable(mark_activity):
             mark_activity()
-        if proof.latest_user_id:
+        prompt_id = self._prompt_message_id or self._prompt_id_for_snapshot(proof)
+        if prompt_id:
             mark_prompt = getattr(self.chat, "mark_prompt_submitted", None)
             if mark_prompt is not None:
-                mark_prompt(proof.latest_user_id, baseline.latest_assistant_id, self.request.body)
+                mark_prompt(prompt_id, baseline.latest_assistant_id, self.request.body)
                 persist_checkpoint = getattr(self.chat, "persist_unresolved_checkpoint", None)
                 if persist_checkpoint is not None:
                     await persist_checkpoint(turn_id=self.request.turn_id, baseline=baseline)
@@ -741,13 +750,12 @@ class GptAutoTurn:
                 and match_prompt(
                     self.request.body, current.latest_user_correlation_text() or ""
                 )
-                and current.latest_user_id
             ):
-                self._prompt_message_id = current.latest_user_id
+                self._prompt_message_id = self._prompt_id_for_snapshot(current)
                 mark_prompt = getattr(self.chat, "mark_prompt_submitted", None)
-                if mark_prompt is not None:
+                if mark_prompt is not None and self._prompt_message_id is not None:
                     mark_prompt(
-                        current.latest_user_id,
+                        self._prompt_message_id,
                         self._baseline_snapshot.latest_assistant_id
                         if self._baseline_snapshot
                         else None,
@@ -803,8 +811,7 @@ class GptAutoTurn:
                     final_snapshot.latest_user_correlation_text() or "",
                 )
             ):
-                if final_snapshot.latest_user_id:
-                    self._prompt_message_id = final_snapshot.latest_user_id
+                self._prompt_message_id = self._prompt_id_for_snapshot(final_snapshot)
                 return final_snapshot
 
         # A retained duplicate tab may have the accepted prompt mounted even
@@ -818,8 +825,7 @@ class GptAutoTurn:
                 self._last_observation_error = exc
                 alternate = None
             if alternate is not None:
-                if alternate.latest_user_id:
-                    self._prompt_message_id = alternate.latest_user_id
+                self._prompt_message_id = self._prompt_id_for_snapshot(alternate)
                 return alternate
         return None
 
@@ -1094,7 +1100,7 @@ class GptAutoTurn:
             previous_assistant_id = snap.latest_assistant_id
             previous_assistant_text = snap.latest_assistant_text
             if text_matches:
-                self._prompt_message_id = snap.latest_user_id
+                self._prompt_message_id = self._prompt_id_for_snapshot(snap)
             outcome = _advance_with_trace(
                 tracker,
                 observation,
@@ -1112,7 +1118,7 @@ class GptAutoTurn:
             if finder is not None:
                 alternate = await finder(baseline, self.request.body)
                 if alternate is not None:
-                    self._prompt_message_id = alternate.latest_user_id
+                    self._prompt_message_id = self._prompt_id_for_snapshot(alternate)
                     return alternate
             await asyncio.sleep(0.2)
         # The last poll can observe a completed assistant answer while the
