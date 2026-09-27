@@ -306,6 +306,29 @@ async def test_bridge_positive_lifecycle_sequence_is_typed_and_reusable():
 
 
 @pytest.mark.asyncio
+async def test_projects_new_chat_uses_trusted_cdp_pointer_click(monkeypatch) -> None:
+    calls: list[tuple[str, object]] = []
+
+    class Bridge:
+        async def call(self, method, params=None, **_kwargs):
+            calls.append((method, params))
+            return {"clicked": True}
+
+    browser = GptAutoCdpBrowserController(Bridge())
+    page = CdpPageRef("page-1", "target-1", 7, "https://chatgpt.com/projects", "")
+
+    async def evaluate(_page, _function, _name=None):
+        return {"x": 123.5, "y": 456.5}
+
+    monkeypatch.setattr(browser, "evaluate", evaluate)
+
+    assert await browser._select_project_from_projects_page(page, "AUDiaGentic", timeout=1) is True
+    assert calls == [
+        ("click", {"pageHandle": "page-1", "x": 123.5, "y": 456.5}),
+    ]
+
+
+@pytest.mark.asyncio
 async def test_new_session_selects_exact_project_from_sidebar(monkeypatch) -> None:
     browser = GptAutoCdpBrowserController(SimpleNamespace())
     anchor = CdpPageRef("anchor", "anchor-target", 7, "http://127.0.0.1:8765/dashboard", "")
