@@ -25,10 +25,24 @@ _DELIVERY_TIMEOUT_RETRY_SIGNAL = dict(
         'button[data-testid="regenerate-thread-error-button"]',
         'button[aria-label="Retry"]',
         'button[data-testid*="regenerate"][data-testid*="error"]',
-        '[role="alert"] button',
     ],
     visible=True,
     textContainsAny=["retry"],
+)
+
+# The current renderer's plain-text Retry control has neither aria-label nor
+# data-testid, so it is identified by its alert's own known message text
+# instead of by button attributes -- see gpt-auto-defaults.yaml. Matching by
+# an exact known phrase (rather than the generic `[role="alert"] button` +
+# substring "retry" first attempted) avoids firing on an unrelated alert
+# whose own Retry-ish button would otherwise permanently consume the
+# turn's one-shot retry attempt before the real control is ever found.
+_DELIVERY_TIMEOUT_ALERT_SIGNAL = dict(
+    name="delivery-timeout-alert",
+    scope="document",
+    selectors=['[role="alert"]'],
+    visible=True,
+    textContainsAny=["stream recovery polling timed out"],
 )
 
 
@@ -307,40 +321,51 @@ async def test_fallback_multi_id_carrier_is_ambiguous_and_falls_back_to_syntheti
 
 
 @pytest.mark.asyncio
-async def test_delivery_timeout_retry_signal_detects_plain_text_alert_button() -> None:
+async def test_delivery_timeout_alert_signal_detects_known_alert_text() -> None:
     """The current renderer's Retry control has no aria-label or
-    data-testid; the `[role="alert"] button` selector must still detect it
-    via the domSignals path used by turn.py to trigger recovery."""
+    data-testid, so it cannot be found by delivery-timeout-retry's
+    button-attribute selectors; delivery-timeout-alert must detect the
+    known alert message text instead."""
     async with async_playwright() as pw:
         browser = await pw.chromium.launch(headless=True)
         try:
             page = await browser.new_page()
             await page.set_content(_LIVE_STREAM_RECOVERY_TIMEOUT_ALERT_HTML)
 
-            snapshot = await page.evaluate(_SNAPSHOT_FN, [_DELIVERY_TIMEOUT_RETRY_SIGNAL])
+            snapshot = await page.evaluate(
+                _SNAPSHOT_FN, [_DELIVERY_TIMEOUT_RETRY_SIGNAL, _DELIVERY_TIMEOUT_ALERT_SIGNAL]
+            )
 
-            assert snapshot["domSignals"]["delivery-timeout-retry"] is True
+            assert snapshot["domSignals"]["delivery-timeout-retry"] is False
+            assert snapshot["domSignals"]["delivery-timeout-alert"] is True
         finally:
             await browser.close()
 
 
 @pytest.mark.asyncio
-async def test_delivery_timeout_retry_signal_ignores_non_retry_alert_button() -> None:
-    """A role="alert" button whose own text is not exactly "retry" (e.g. a
-    Dismiss control in the same banner) must not be treated as the delivery
-    recovery signal, even though it matches the broadened selector."""
+async def test_delivery_timeout_alert_signal_ignores_unrelated_alert_with_retry_button() -> None:
+    """An unrelated role="alert" that happens to contain a differently
+    meant Retry-labelled button (e.g. "Retry upload") must NOT satisfy
+    delivery-timeout-alert: it does not carry the known stream-recovery
+    message text, so it must not consume the turn's one-shot retry
+    attempt before the real control is ever found. This is the exact
+    signal/click divergence an earlier, broader `[role="alert"] button` +
+    substring "retry" attempt introduced."""
     async with async_playwright() as pw:
         browser = await pw.chromium.launch(headless=True)
         try:
             page = await browser.new_page()
             await page.set_content(
-                '<aside role="alert"><div>Something went wrong</div>'
-                '<button type="button">Dismiss</button></aside>'
+                '<aside role="alert"><div>Upload failed</div>'
+                '<button type="button">Retry upload</button></aside>'
             )
 
-            snapshot = await page.evaluate(_SNAPSHOT_FN, [_DELIVERY_TIMEOUT_RETRY_SIGNAL])
+            snapshot = await page.evaluate(
+                _SNAPSHOT_FN, [_DELIVERY_TIMEOUT_RETRY_SIGNAL, _DELIVERY_TIMEOUT_ALERT_SIGNAL]
+            )
 
             assert snapshot["domSignals"]["delivery-timeout-retry"] is False
+            assert snapshot["domSignals"]["delivery-timeout-alert"] is False
         finally:
             await browser.close()
 
@@ -370,9 +395,8 @@ async def test_retry_delivery_timeout_clicks_plain_text_alert_button() -> None:
 
 @pytest.mark.asyncio
 async def test_retry_delivery_timeout_never_clicks_a_non_retry_button() -> None:
-    """A visible, enabled button in a role="alert" whose text is not
-    exactly "retry" must never be activated, even under the broadened
-    `[role="alert"] button` selector."""
+    """A visible, enabled button in an unrelated role="alert" whose text is
+    not exactly "retry" must never be activated."""
     async with async_playwright() as pw:
         browser = await pw.chromium.launch(headless=True)
         try:
@@ -380,6 +404,37 @@ async def test_retry_delivery_timeout_never_clicks_a_non_retry_button() -> None:
             await page.set_content(
                 '<aside role="alert"><div>Something went wrong</div>'
                 '<button type="button">Dismiss</button></aside>'
+            )
+            await page.evaluate(
+                "document.querySelector('button').addEventListener("
+                "'click', () => { document.querySelector('button').dataset.clicked = 'true'; })"
+            )
+
+            clicked = await page.evaluate(_RETRY_DELIVERY_TIMEOUT_FN)
+
+            assert clicked is False
+            assert await page.evaluate("document.querySelector('button').dataset.clicked") is None
+        finally:
+            await browser.close()
+
+
+@pytest.mark.asyncio
+async def test_retry_delivery_timeout_never_clicks_an_unrelated_alerts_retry_button() -> None:
+    """An unrelated alert's own Retry-labelled button (e.g. an upload
+    failure's "Retry upload", whose accessible text after normalization is
+    not exactly "retry") must never be clicked, and critically: an alert
+    that does not carry the known stream-recovery-timeout message text
+    must never be scanned for a retry button at all, even if one of its
+    buttons happens to have exactly the text "Retry". This is the
+    signal/click divergence fix: only the specific known alert is ever a
+    candidate scope."""
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            await page.set_content(
+                '<aside role="alert"><div>Upload failed</div>'
+                '<button type="button">Retry</button></aside>'
             )
             await page.evaluate(
                 "document.querySelector('button').addEventListener("

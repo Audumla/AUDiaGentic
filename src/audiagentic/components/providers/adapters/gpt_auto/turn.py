@@ -1650,15 +1650,29 @@ class GptAutoTurn:
                         **self._diagnostics(),
                     },
                 )
-            if (
+            # "delivery-timeout-retry" (attribute-identified control) and
+            # "delivery-timeout-alert" (the current renderer's plain-text
+            # control, identified by its alert's own known message text
+            # instead -- see gpt-auto-defaults.yaml) are two independent
+            # detections of the same recovery opportunity; either is
+            # sufficient to attempt the click.
+            delivery_timeout_signal_now = (
                 "delivery-timeout-retry" in current.dom_signals
+                or "delivery-timeout-alert" in current.dom_signals
+            )
+            delivery_timeout_signal_at_baseline = (
+                "delivery-timeout-retry" in baseline.dom_signals
+                or "delivery-timeout-alert" in baseline.dom_signals
+            )
+            if (
+                delivery_timeout_signal_now
                 and not self._delivery_timeout_retry_attempted
                 and response_ref is None
                 and not completion_candidate
                 # A control already present at the request baseline belongs
                 # to an earlier/provider turn; only a post-submit edge may
                 # be activated by this observer.
-                and "delivery-timeout-retry" not in baseline.dom_signals
+                and not delivery_timeout_signal_at_baseline
             ):
                 # Retry controls are document-scoped in ChatGPT's DOM. Only
                 # activate one when the current latest user node is this
@@ -1669,9 +1683,15 @@ class GptAutoTurn:
                     and current.latest_user_id == prompt_message_id
                 )
                 if retry_is_request_owned:
-                    self._delivery_timeout_retry_attempted = True
                     retry = getattr(self.chat, "retry_delivery_timeout", None)
                     retried = bool(await retry()) if callable(retry) else False
+                    # Only consume the one-shot attempt on an actual click.
+                    # A signal that fired without a matching button (e.g. a
+                    # transient DOM state between polls) has caused no page
+                    # side effect, so a later poll must still be allowed to
+                    # retry once a real recovery control is present.
+                    if retried:
+                        self._delivery_timeout_retry_attempted = True
                     logger.info(
                         "gpt-auto delivery-timeout recovery attempted=%s",
                         retried,

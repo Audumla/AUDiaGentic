@@ -812,8 +812,14 @@ class PersistentChat:
         if "auth-required" in snapshot.dom_signals:
             self._set_unresolved_recovery("authentication-required")
             return False
-        if (
+        # See turn.py's mirrored delivery_timeout_signal_now: two independent
+        # detections of the same recovery opportunity, either sufficient.
+        delivery_timeout_signal = (
             "delivery-timeout-retry" in snapshot.dom_signals
+            or "delivery-timeout-alert" in snapshot.dom_signals
+        )
+        if (
+            delivery_timeout_signal
             and not self._reconciliation_delivery_retry_attempted
             and not completion_candidate
         ):
@@ -838,11 +844,8 @@ class PersistentChat:
                 )
             )
             if retry_is_request_owned:
-                self._reconciliation_delivery_retry_attempted = True
                 try:
-                    if await self.retry_delivery_timeout():
-                        await asyncio.sleep(self.config.turn.poll_interval_seconds)
-                        snapshot = await self.snapshot(allow_recovering=True)
+                    retried = await self.retry_delivery_timeout()
                 except Exception as exc:  # noqa: BLE001 - preserve recovery evidence
                     self._set_unresolved_recovery(
                         "delivery-timeout-retry-failed",
@@ -850,6 +853,14 @@ class PersistentChat:
                         exception=str(exc),
                     )
                     return False
+                # Only consume the one-shot attempt on an actual click. A
+                # signal that fired without a matching button has caused no
+                # page side effect, so a later reconciliation pass must
+                # still be allowed to retry once a real control is present.
+                if retried:
+                    self._reconciliation_delivery_retry_attempted = True
+                    await asyncio.sleep(self.config.turn.poll_interval_seconds)
+                    snapshot = await self.snapshot(allow_recovering=True)
             else:
                 self._set_unresolved_recovery(
                     "delivery-timeout-retry-not-request-owned",

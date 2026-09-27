@@ -137,20 +137,33 @@ settings:
         text-equals-any: ['Connection interrupted. Waiting for the complete answer']
       delivery-timeout-retry:
         # Conversation-scoped delivery timeout; never a generic error click.
-        # `[role="alert"] button` covers the current renderer's plain-text
-        # Retry control (live-captured 2026-09-27: "ChatGPT stream recovery
-        # polling timed out" -- a <button>Retry</button> with neither
-        # aria-label nor data-testid). text-contains-any still requires the
-        # button's own visible text to contain "retry", so this cannot match
-        # an unrelated control inside the same alert.
         scope: document
         selectors:
           - 'button[data-testid="regenerate-thread-error-button"]'
           - 'button[aria-label="Retry"]'
           - 'button[data-testid*="regenerate"][data-testid*="error"]'
-          - '[role="alert"] button'
         visible: true
         text-contains-any: ['retry']
+      delivery-timeout-alert:
+        # The current renderer's plain-text Retry control (live-captured
+        # 2026-09-27) has neither aria-label nor data-testid, so it cannot
+        # be identified by button attributes the way delivery-timeout-retry
+        # above does. A prior attempt widened delivery-timeout-retry's own
+        # selectors to `[role="alert"] button`, but that signal's
+        # text-contains-any (["retry"]) is a substring match, so it would
+        # also fire on any unrelated role="alert" containing a
+        # differently-labelled Retry-ish button (e.g. "Retry upload") --
+        # and turn.py marks the one-shot retry attempted before the click
+        # runs, so that false-positive would permanently consume the
+        # attempt and starve a later, genuine timeout retry. Detect this
+        # specific alert by its own message text instead, which is exact
+        # and does not depend on the button's accessible name at all; the
+        # click side (gpt_auto_cdp.py's _RETRY_DELIVERY_TIMEOUT_FN) locates
+        # the exact-text "retry" button scoped to this same alert.
+        scope: document
+        selectors: ['[role="alert"]']
+        visible: true
+        text-contains-any: ['stream recovery polling timed out']
       auth-required:
         scope: document
         selectors: ['[data-testid="login-button"]', '[data-testid="signup-button"]', 'input[type="email"]']

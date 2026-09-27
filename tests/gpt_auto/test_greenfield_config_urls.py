@@ -323,7 +323,13 @@ def test_live_workflow_declares_delivery_timeout_retry_signal() -> None:
         'button[data-testid="regenerate-thread-error-button"]',
         'button[aria-label="Retry"]',
         'button[data-testid*="regenerate"][data-testid*="error"]',
-        '[role="alert"] button',
+    ]
+    # The current renderer's Retry control has neither aria-label nor
+    # data-testid, so it is identified by its alert's own known message text
+    # instead of by button attributes -- see gpt-auto-defaults.yaml.
+    assert signals["delivery-timeout-alert"]["selectors"] == ['[role="alert"]']
+    assert signals["delivery-timeout-alert"]["textContainsAny"] == [
+        "stream recovery polling timed out"
     ]
 
 
