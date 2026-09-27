@@ -1586,7 +1586,23 @@ class GptAutoCdpBrowserController(CdpBrowserController):
         their persisted /c/ URL and never enter this method.
         """
         expected_project_id = parse_project_id(project_url or "")
-        page = await self.new_tab(in_window=anchor_page) if anchor_page else await self.new_window()
+        if anchor_page:
+            # Same-window creation uses window.open on the dashboard anchor.
+            # A stale/contended CDP session can block that attach for the
+            # bridge's full command timeout even though a fresh browser target
+            # is available. Keep the normal same-window path, but fail over
+            # quickly to a fresh tab so request creation remains bounded.
+            try:
+                async with asyncio.timeout(min(5.0, max(0.1, navigation_timeout))):
+                    page = await self.new_tab(in_window=anchor_page)
+            except TimeoutError:
+                logger.warning(
+                    "gpt-auto dashboard anchor did not accept same-window tab creation; "
+                    "falling back to a fresh browser tab"
+                )
+                page = await self.new_tab()
+        else:
+            page = await self.new_window()
         try:
             async with asyncio.timeout(navigation_timeout):
                 page = await self.navigate(page, _CHATGPT_HOME_URL)
