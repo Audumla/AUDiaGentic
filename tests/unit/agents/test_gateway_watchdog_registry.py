@@ -203,3 +203,110 @@ def test_host_watchdog_retries_operator_requested_reconciliation(
         }
     ]
     assert result == (diagnosed,)
+
+
+def test_host_watchdog_orphan_retirement_aborts_on_revision_race(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """A binding/revision race must not terminalize the request or session."""
+    from datetime import datetime, timedelta, timezone
+
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+    from audiagentic.components.agents.gateway.service.host import GatewayServiceHost
+
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    request_id = "req-orphan-race"
+    diagnosed = {
+        "request-id": request_id,
+        "state": "running",
+        "session-id": "ses-race",
+        "revision": 11,
+        "updated-at": (datetime.now(timezone.utc) - timedelta(seconds=120)).isoformat(),
+        "watchdog-state": "intervention",
+        "watchdog-reason": "initial-activity-observation-expired",
+        "watchdog-policy": {"diagnostic-grace-seconds": 1},
+        "diagnostics": {"resolution-state": "unresolved"},
+        "dispatch-owner-epoch": "owner-1",
+        "worker-id": "worker-1",
+        "attempt-epoch": 1,
+    }
+
+    class Registry:
+        def __init__(self) -> None:
+            self.current = (project_root.resolve(), dict(diagnosed))
+
+        def snapshot(self):
+            return ((self.current[0], dict(self.current[1])),)
+
+        def update(self, root, record):
+            self.current = (root.resolve(), dict(record))
+
+        def unregister(self, *_args):
+            raise AssertionError("the raced request must remain registered")
+
+    class Runtime:
+        def session_runtime_status(self, session_id: str):
+            assert session_id == "ses-race"
+            return {"available": False}
+
+        def reconcile_active_transport(self, session_id: str, req_id: str):
+            assert (session_id, req_id) == ("ses-race", "req-orphan-race")
+            return {"status": "unavailable"}
+
+    terminal_call: dict = {}
+    session_terminalized = False
+
+    def raced_terminal(*_args, **kwargs):
+        terminal_call.update(kwargs)
+        raise AudiaGenticError(
+            code="CON-AGW-071",
+            kind="agents",
+            message="gateway request revision changed",
+            details={"expected": 11, "actual": 12},
+        )
+
+    def fail_session_transition(*_args, **_kwargs):
+        nonlocal session_terminalized
+        session_terminalized = True
+
+    registry = Registry()
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.queue.watchdog_registry.watchdog_registry",
+        lambda: registry,
+    )
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.queue.dispatch.diagnose_activity_lease",
+        lambda _root, _record: dict(diagnosed),
+    )
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.session.sessions.peek_session_runtime",
+        lambda: Runtime(),
+    )
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.session.sessions_store.read_session_record",
+        lambda _root, _session_id: {"state": "active", "binding": None},
+    )
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.session.sessions_store.session_provider_metadata",
+        lambda _session: {},
+    )
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.store.transition_owned_terminal",
+        raced_terminal,
+    )
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.session.sessions_store.transition_session_record",
+        fail_session_transition,
+    )
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.store.read_record",
+        lambda _root, _request_id: {**diagnosed, "revision": 12, "state": "running"},
+    )
+
+    result = GatewayServiceHost.run_watchdog_pass(object.__new__(GatewayServiceHost))
+
+    assert terminal_call["expected_revision"] == 11
+    assert result[0]["state"] == "running"
+    assert result[0]["revision"] == 12
+    assert session_terminalized is False

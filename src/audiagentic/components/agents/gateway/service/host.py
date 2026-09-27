@@ -403,6 +403,7 @@ class GatewayServiceHost:
                     owner_epoch=updated["dispatch-owner-epoch"],
                     worker_id=updated["worker-id"],
                     attempt_epoch=updated["attempt-epoch"],
+                    expected_revision=updated.get("revision"),
                 )
             except Exception:  # noqa: BLE001 - a live worker or newer owner wins the race
                 return store.read_record(project_root, updated["request-id"])
