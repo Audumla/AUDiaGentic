@@ -177,14 +177,27 @@ _SNAPSHOT_FN = r"""
     // renderer does not expose message UUIDs.
     let userIndex = 0;
     let assistantIndex = 0;
+    // The real ChatGPT message UUID rides in `data-chatgpt-search-message-ids`
+    // on a descendant of the labelled block, not on the block itself and not
+    // on `[data-user-message-bubble="true"]` (that attribute is no longer
+    // rendered by the current renderer). Read it from whichever element in
+    // the block actually carries it before falling back to a synthetic id.
+    const realMessageId = block => {
+      const carrier = block.hasAttribute('data-chatgpt-search-message-ids')
+        ? block
+        : block.querySelector('[data-chatgpt-search-message-ids]');
+      const raw = carrier ? carrier.getAttribute('data-chatgpt-search-message-ids') : null;
+      return raw ? raw.split(/\s+/)[0] : null;
+    };
     for (const block of fallbackBlocks) {
       const label = fallbackBlockLabel(block);
       if (label === 'you said:') {
         const content = block.querySelector('[data-user-message-bubble="true"]') || block;
-        const messageId = content.getAttribute('data-chatgpt-search-message-ids') || `fallback-user-${userIndex++}`;
+        const messageId = realMessageId(block) || `fallback-user-${userIndex++}`;
         messageEntries.push({role: 'user', el: content, messageId});
       } else if (label === 'chatgpt said:') {
-        messageEntries.push({role: 'assistant', el: block, messageId: `fallback-assistant-${assistantIndex++}`});
+        const messageId = realMessageId(block) || `fallback-assistant-${assistantIndex++}`;
+        messageEntries.push({role: 'assistant', el: block, messageId});
       }
     }
   }
@@ -456,12 +469,16 @@ _SNAPSHOT_FN = r"""
   // is a digest only: no provider payload crosses CDP, and truncation is
   // represented explicitly so a large DOM cannot silently look unchanged.
   const activityStateDigest = node => {
-    if (!node) return null;
+    const key = '__audiagenticActivityObserverV2';
+    if (!node) {
+      window[key]?.observer.disconnect();
+      delete window[key];
+      return null;
+    }
     // A request-root observer catches interior and between-poll changes that
     // bounded head/tail snapshots cannot see. Keep only one observer per page;
     // changing the root disconnects old-turn observation. Animation classes
     // are deliberately excluded from meaningful work activity.
-    const key = '__audiagenticActivityObserverV2';
     let observed = window[key];
     if (!observed || observed.root !== node) {
       if (observed) observed.observer.disconnect();
@@ -470,7 +487,22 @@ _SNAPSHOT_FN = r"""
         if (records.some(record => {
           const target = record.target.nodeType === Node.ELEMENT_NODE
             ? record.target : record.target.parentElement;
-          return target && progressShown(target);
+          if (!target || !progressShown(target)) return false;
+          if (record.type !== 'childList') return true;
+          const addedVisible = Array.from(record.addedNodes).some(child =>
+            child.nodeType === Node.TEXT_NODE
+              ? Boolean(child.nodeValue)
+              : child.nodeType === Node.ELEMENT_NODE && progressShown(child)
+          );
+          const removedVisible = Array.from(record.removedNodes).some(child => {
+            if (child.nodeType === Node.TEXT_NODE) return Boolean(child.nodeValue);
+            if (child.nodeType !== Node.ELEMENT_NODE) return false;
+            // Detached nodes have no geometry. Preserve real removals while
+            // excluding explicitly hidden bookkeeping subtrees.
+            return !child.hidden && child.getAttribute('aria-hidden') !== 'true'
+              && child.style.display !== 'none' && child.style.visibility !== 'hidden';
+          });
+          return addedVisible || removedVisible;
         })) observed.revision += 1;
       };
       observed.observer = new MutationObserver(observed.consume);
