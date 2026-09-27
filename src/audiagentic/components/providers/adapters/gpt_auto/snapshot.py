@@ -135,6 +135,10 @@ class ChatSnapshot:
     # state, and structural nodes without changing any of those projections.
     dom_activity_digest: str | None = None
     dom_activity_owner_prompt_id: str | None = None
+    # Bounded occurrence identities for document-scoped error alerts.  The
+    # raw ``error-alert`` signal remains diagnostic; turn.py derives the
+    # request-owned failure signal from baseline/current occurrence deltas.
+    error_alert_occurrences: tuple[tuple[str, str | None], ...] = ()
 
     @classmethod
     def from_bridge(cls, value: dict[str, Any]) -> ChatSnapshot:
@@ -215,6 +219,9 @@ class ChatSnapshot:
             dom_activity_owner_prompt_id=_bounded_token(
                 value.get("domActivityOwnerPromptMessageId")
             ),
+            error_alert_occurrences=_error_alert_occurrences(
+                value.get("errorAlertOccurrences")
+            ),
         )
 
     def latest_user_ref(self) -> ChatMessageRef | None:
@@ -274,7 +281,7 @@ class ChatSnapshot:
             markers.add("text-changed")
         auth_required = "auth-required" in signals
         error_visible = self.error_present or bool(
-            signals.intersection({"error-page", "error-alert"})
+            signals.intersection({"error-page", "request-error-alert"})
         )
         busy = self.generating or bool(
             signals.intersection(
@@ -356,6 +363,27 @@ def _progress_blocks(value: Any) -> tuple[ChatProgressBlock, ...]:
             )
         )
     return tuple(result)
+
+
+def _error_alert_occurrences(value: Any) -> tuple[tuple[str, str | None], ...]:
+    """Parse bounded alert identities fail-closed."""
+    if not isinstance(value, (list, tuple)) or len(value) > 32:
+        return ()
+    parsed: list[tuple[str, str | None]] = []
+    for item in value:
+        if not isinstance(item, dict):
+            return ()
+        digest = _bounded_token(item.get("digest"), 32)
+        if not digest:
+            return ()
+        owner_raw = item.get("ownerPromptMessageId")
+        if owner_raw is not None and not isinstance(owner_raw, str):
+            return ()
+        owner = _bounded_token(owner_raw)
+        if owner_raw is not None and not owner:
+            return ()
+        parsed.append((digest, owner))
+    return tuple(parsed)
 
 
 def _text(value: Any) -> str | None:

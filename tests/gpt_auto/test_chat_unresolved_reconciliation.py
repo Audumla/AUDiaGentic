@@ -172,6 +172,28 @@ async def test_unresolved_prior_turn_blocks_presubmit_replay(
     assert raised.value.details["retryable-same-session"] is False
 
 
+@pytest.mark.asyncio
+async def test_failed_session_does_not_retain_request_after_readiness_failure() -> None:
+    chat = _chat(unresolved=True)
+    chat.state = ChatState.FAILED
+    transport = GptAutoSessionTransport(chat)
+
+    async def fail_ready() -> None:
+        raise RuntimeError("session is no longer usable")
+
+    chat.ensure_ready = fail_ready  # type: ignore[method-assign]
+    chat.retain_after_turn_failure = lambda _error: asyncio.sleep(0, result=True)  # type: ignore[method-assign]
+
+    with pytest.raises(AudiaGenticError) as raised:
+        await transport.prompt(
+            SessionPrompt(turn_id="req-failed-session", body="hello"),
+            lambda _observation: None,
+        )
+
+    assert raised.value.details["retryable-same-session"] is False
+    assert transport.turn_failure_disposition() is SessionFailureDisposition.TERMINATE
+
+
 def _terminal_snapshot(*, dom_signals: frozenset[str]) -> ChatSnapshot:
     return ChatSnapshot(
         url="https://chatgpt.com/c/abc",
@@ -327,6 +349,50 @@ async def test_retain_releases_fence_after_stable_request_owned_provider_error()
 
     assert retained is True
     assert chat.state.value == "ready"
+    assert chat.unresolved_turn_pending is False
+    assert persisted == [{"unresolved-turn-pending": False}]
+
+
+@pytest.mark.asyncio
+async def test_retain_releases_fence_for_correlated_request_error_alert() -> None:
+    chat = _chat(response_stability_seconds=0.001)
+    chat.state = ChatState.FAILED
+    error_snapshot = ChatSnapshot(
+        url="https://chatgpt.com/c/abc",
+        composer_present=True,
+        composer_editable=True,
+        user_count=1,
+        assistant_count=0,
+        latest_assistant_id=None,
+        latest_user_text="hi",
+        latest_assistant_text=None,
+        dom_signals=frozenset({"error-alert"}),
+        error_present=False,
+        generating=False,
+        latest_user_id="u1",
+        user_message_ids=("u1",),
+        user_message_texts=("hi",),
+    )
+    clean_snapshot = replace(error_snapshot, dom_signals=frozenset())
+    snapshots = iter([error_snapshot, clean_snapshot])
+    chat.snapshot = lambda **_kwargs: asyncio.sleep(0, result=next(snapshots))  # type: ignore[method-assign]
+    chat._binding_token_is_current = lambda _token: asyncio.sleep(0, result=True)  # type: ignore[method-assign]
+    persisted: list[dict[str, object]] = []
+    chat.checkpoint_sink = persisted.append
+
+    retained = await chat.retain_after_turn_failure(
+        AudiaGenticError(
+            code="EXT-GPTAUTO-003",
+            kind="providers",
+            message="provider failure policy matched",
+            details={
+                "failure-reason": "provider-failure-policy-matched",
+                "phase": "response-observation",
+                "evidence": ["request-error-alert"],
+            },
+        )
+    )
+    assert retained is True
     assert chat.unresolved_turn_pending is False
     assert persisted == [{"unresolved-turn-pending": False}]
 

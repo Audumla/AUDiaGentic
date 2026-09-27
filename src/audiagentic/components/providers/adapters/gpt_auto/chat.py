@@ -6,6 +6,7 @@ import asyncio
 import inspect
 import logging
 import time
+from dataclasses import replace
 from enum import StrEnum
 
 from audiagentic.components.agents.gateway.mapping import normalize_chat_title
@@ -159,6 +160,7 @@ class PersistentChat:
                 "unresolved-baseline-assistant-id",
                 "unresolved-baseline-user-count",
                 "unresolved-baseline-assistant-count",
+                "unresolved-baseline-error-alert-occurrences",
             )
             if key in metadata and metadata[key] not in (None, "")
         }
@@ -183,6 +185,16 @@ class PersistentChat:
                 ("unresolved-baseline-assistant-id", baseline.latest_assistant_id),
                 ("unresolved-baseline-user-count", baseline.user_count),
                 ("unresolved-baseline-assistant-count", baseline.assistant_count),
+                (
+                    "unresolved-baseline-error-alert-occurrences",
+                    [
+                        {
+                            "digest": digest,
+                            "ownerPromptMessageId": owner,
+                        }
+                        for digest, owner in baseline.error_alert_occurrences
+                    ],
+                ),
             ):
                 if value is not None and value != "":
                     self._checkpoint_metadata[key] = value
@@ -1682,7 +1694,8 @@ class PersistentChat:
         if not isinstance(evidence, (list, tuple, set)):
             return False
         evidence = {str(item) for item in evidence}
-        if not evidence.intersection({"error-page", "error-alert"}):
+        request_error_alert = "request-error-alert" in evidence
+        if not evidence.intersection({"error-page", "error-alert", "request-error-alert"}):
             return False
         if "auth-required" in evidence:
             return False
@@ -1703,20 +1716,38 @@ class PersistentChat:
                 or snapshot.generating
                 or not snapshot.composer_present
                 or not snapshot.composer_editable
-                or not (
-                    snapshot.error_present
-                    or snapshot.dom_signals.intersection({"error-page", "error-alert"})
+                or (
+                    not request_error_alert
+                    and not (
+                        snapshot.error_present
+                        or snapshot.dom_signals.intersection(
+                            {"error-page", "error-alert", "request-error-alert"}
+                        )
+                    )
                 )
                 or snapshot.dom_signals.intersection(busy_signals)
             ):
                 return False
             if not _terminal_error_request_owned(self, snapshot):
                 return False
-            if stable is not None and snapshot != stable:
+            stable_snapshot = snapshot
+            if request_error_alert:
+                # The correlated terminal decision is authoritative; the
+                # provider may remove its transient alert before cleanup.
+                stable_snapshot = replace(
+                    snapshot,
+                    dom_signals=frozenset(
+                        signal
+                        for signal in snapshot.dom_signals
+                        if signal not in {"error-alert", "request-error-alert"}
+                    ),
+                    error_alert_occurrences=(),
+                )
+            if stable is not None and not request_error_alert and stable_snapshot != stable:
                 return False
             if binding_token is None:
                 binding_token = self._binding_token(snapshot)
-            stable = snapshot
+            stable = stable_snapshot
             await asyncio.sleep(self.config.turn.response_stability_seconds)
         if binding_token is None or not await self._binding_token_is_current(binding_token):
             return False
@@ -1725,7 +1756,11 @@ class PersistentChat:
         self._reconciled_binding_token = binding_token
         self._set_unresolved_recovery(
             "request-owned-provider-error-released",
-            evidence=sorted(evidence.intersection({"error-page", "error-alert"})),
+            evidence=sorted(
+                evidence.intersection(
+                    {"error-page", "error-alert", "request-error-alert"}
+                )
+            ),
         )
         return True
 
@@ -1933,7 +1968,9 @@ def provider_quiescent(snapshot: ChatSnapshot) -> bool:
     # The stop button is advisory only: it can stick after completion.  Do not
     # let a stale renderer control override the provider's generation state.
     busy_signals = {"streaming-indicator", "thinking-indicator", "busy-indicator"}
-    failed_signals = {"auth-required", "error-page", "error-alert"}
+    # A document-level role=alert can be stale from a prior turn. It is
+    # diagnostic only; request-owned correlation is decided by the turn.
+    failed_signals = {"auth-required", "error-page"}
     return bool(
         snapshot.composer_present
         and snapshot.composer_editable
@@ -1998,7 +2035,7 @@ def _reconciliation_evidence_clear(
     busy_signals = {"streaming-indicator", "thinking-indicator", "busy-indicator"}
     failed_signals = {"auth-required"}
     if not allow_terminal_errors:
-        failed_signals.update({"error-page", "error-alert"})
+        failed_signals.update({"error-page"})
     return bool(
         snapshot.composer_present
         and snapshot.composer_editable
