@@ -143,9 +143,15 @@ _SNAPSHOT_FN = r"""
   const fallbackBlocks = usingFallbackMessages
     ? Array.from(document.querySelectorAll('.block-BQZwFn'))
     : [];
-  const fallbackBlockLabel = block => String(
-    block.querySelector('h4.sr-only')?.innerText || ''
-  ).trim().toLowerCase();
+  // Only an h4.sr-only owned by this exact block (not a nested .block-BQZwFn)
+  // may label it -- otherwise an unlabelled outer wrapper around a labelled
+  // inner block would silently adopt the inner block's label, turning one
+  // semantic message into two messageEntries.
+  const fallbackBlockLabel = block => {
+    const heading = Array.from(block.querySelectorAll('h4.sr-only'))
+      .find(h => h.closest('.block-BQZwFn') === block);
+    return String(heading?.innerText || '').trim().toLowerCase();
+  };
   const latestFallbackUserBlock = usingFallbackMessages
     ? fallbackBlocks.slice().reverse().find(block => fallbackBlockLabel(block) === 'you said:') || null
     : null;
@@ -182,21 +188,30 @@ _SNAPSHOT_FN = r"""
     // on `[data-user-message-bubble="true"]` (that attribute is no longer
     // rendered by the current renderer). Read it from whichever element in
     // the block actually carries it before falling back to a synthetic id.
-    // Fail closed to null (never guess) when: the carrier's nearest
-    // `.block-BQZwFn` ancestor is not this block (the id belongs to a
-    // nested/foreign block, not this semantic message), or the attribute
-    // holds more than one space-separated id (no proven canonical token,
-    // and its ordering is not a stable identity across polls).
+    // Collect every candidate carrier (self plus all descendants), keep only
+    // the ones actually owned by this block (nearest `.block-BQZwFn`
+    // ancestor is this block, not a nested/foreign one -- a querySelector
+    // that stopped at the first match could silently shadow a later owned
+    // carrier with an earlier foreign one, or pick an arbitrary one of two
+    // disagreeing owned carriers), and fail closed to null (never guess)
+    // unless every owned carrier resolves to exactly one single-id value.
     const realMessageId = block => {
-      const carrier = block.hasAttribute('data-chatgpt-search-message-ids')
-        ? block
-        : block.querySelector('[data-chatgpt-search-message-ids]');
-      if (!carrier) return null;
-      if (carrier !== block && carrier.closest('.block-BQZwFn') !== block) return null;
-      const raw = (carrier.getAttribute('data-chatgpt-search-message-ids') || '').trim();
-      if (!raw) return null;
-      const ids = raw.split(/\s+/);
-      return ids.length === 1 ? ids[0] : null;
+      const carriers = block.hasAttribute('data-chatgpt-search-message-ids')
+        ? [block, ...block.querySelectorAll('[data-chatgpt-search-message-ids]')]
+        : Array.from(block.querySelectorAll('[data-chatgpt-search-message-ids]'));
+      const owned = carriers.filter(carrier => carrier.closest('.block-BQZwFn') === block);
+      const ids = new Set();
+      for (const carrier of owned) {
+        const raw = (carrier.getAttribute('data-chatgpt-search-message-ids') || '').trim();
+        if (!raw) continue;
+        const tokens = raw.split(/\s+/);
+        // A carrier's own value is ambiguous (more than one space-separated
+        // id, no proven canonical token) -- fail the whole block closed
+        // rather than silently pick a token from it.
+        if (tokens.length !== 1) return null;
+        ids.add(tokens[0]);
+      }
+      return ids.size === 1 ? [...ids][0] : null;
     };
     for (const block of fallbackBlocks) {
       const label = fallbackBlockLabel(block);

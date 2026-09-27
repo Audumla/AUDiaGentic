@@ -225,7 +225,15 @@ async def test_fallback_ordinal_stays_stable_across_mixed_real_and_synthetic_ids
     """The synthetic ordinal must advance for every block of a role, even
     when some blocks resolve a real id -- otherwise a later missing-id
     block can collide with an earlier synthetic id (id reuse across
-    distinct messages, not merely a fail-closed miss)."""
+    distinct messages, not merely a fail-closed miss).
+
+    A no-id -> real-id -> no-id sequence per role is required to actually
+    pin this: the prior buggy `realMessageId(block) || fallback-${i++}`
+    implementation only advanced the ordinal on the synthetic branch, so it
+    would produce fallback-user-1 (not -2) for the third user block here --
+    a two-block no-id/real-id sequence cannot distinguish the two
+    implementations because there is no third block for the stale ordinal
+    to collide into."""
     async with async_playwright() as pw:
         browser = await pw.chromium.launch(headless=True)
         try:
@@ -246,7 +254,15 @@ async def test_fallback_ordinal_stays_stable_across_mixed_real_and_synthetic_ids
                 </div>
                 <div class="block-BQZwFn">
                   <h4 class="sr-only">ChatGPT said:</h4>
-                  <div>second answer, no real id</div>
+                  <div data-chatgpt-search-message-ids="real-assistant-uuid">second answer, real id</div>
+                </div>
+                <div class="block-BQZwFn">
+                  <h4 class="sr-only">You said:</h4>
+                  <div>third prompt, no real id</div>
+                </div>
+                <div class="block-BQZwFn">
+                  <h4 class="sr-only">ChatGPT said:</h4>
+                  <div>third answer, no real id</div>
                 </div>
                 """
             )
@@ -255,8 +271,8 @@ async def test_fallback_ordinal_stays_stable_across_mixed_real_and_synthetic_ids
 
             user_ids = [m["messageId"] for m in snapshot["messageRefs"] if m["role"] == "user"]
             assistant_ids = [m["messageId"] for m in snapshot["messageRefs"] if m["role"] == "assistant"]
-            assert user_ids == ["fallback-user-0", "real-user-uuid"]
-            assert assistant_ids == ["fallback-assistant-0", "fallback-assistant-1"]
+            assert user_ids == ["fallback-user-0", "real-user-uuid", "fallback-user-2"]
+            assert assistant_ids == ["fallback-assistant-0", "real-assistant-uuid", "fallback-assistant-2"]
         finally:
             await browser.close()
 
@@ -374,6 +390,192 @@ async def test_retry_delivery_timeout_never_clicks_a_non_retry_button() -> None:
 
             assert clicked is False
             assert await page.evaluate("document.querySelector('button').dataset.clicked") is None
+        finally:
+            await browser.close()
+
+
+@pytest.mark.asyncio
+async def test_fallback_foreign_carrier_does_not_shadow_a_later_owned_carrier() -> None:
+    """A first-encountered foreign/nested carrier must not stop the search:
+    a later descendant carrier that IS owned by this block must still be
+    found and used, not discarded because querySelector found the foreign
+    one first."""
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            await page.set_content(
+                """
+                <div class="block-BQZwFn">
+                  <h4 class="sr-only">You said:</h4>
+                  <div class="block-BQZwFn" data-chatgpt-search-message-ids="foreign">nested unrelated block</div>
+                  <div data-chatgpt-search-message-ids="real-user-uuid">prompt</div>
+                </div>
+                <div class="block-BQZwFn">
+                  <h4 class="sr-only">ChatGPT said:</h4>
+                  <div>answer</div>
+                </div>
+                """
+            )
+
+            snapshot = await page.evaluate(_SNAPSHOT_FN, [])
+
+            assert snapshot["latestUserId"] == "real-user-uuid"
+        finally:
+            await browser.close()
+
+
+@pytest.mark.asyncio
+async def test_fallback_two_owned_carriers_with_different_ids_is_ambiguous() -> None:
+    """Two carriers both owned by the same block but disagreeing on the id
+    must fail closed to the synthetic id, not silently adopt whichever one
+    DOM order or querySelector happens to return first."""
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            await page.set_content(
+                """
+                <div class="block-BQZwFn">
+                  <h4 class="sr-only">You said:</h4>
+                  <div data-chatgpt-search-message-ids="id-a">part one</div>
+                  <div data-chatgpt-search-message-ids="id-b">part two</div>
+                </div>
+                <div class="block-BQZwFn">
+                  <h4 class="sr-only">ChatGPT said:</h4>
+                  <div>answer</div>
+                </div>
+                """
+            )
+
+            snapshot = await page.evaluate(_SNAPSHOT_FN, [])
+
+            assert snapshot["latestUserId"] == "fallback-user-0"
+        finally:
+            await browser.close()
+
+
+@pytest.mark.asyncio
+async def test_fallback_two_owned_carriers_agreeing_on_id_resolve_to_it() -> None:
+    """Two carriers owned by the same block that agree on the same id are
+    not ambiguous -- the shared id must be used, not discarded."""
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            await page.set_content(
+                """
+                <div class="block-BQZwFn">
+                  <h4 class="sr-only">You said:</h4>
+                  <div data-chatgpt-search-message-ids="shared-id">part one</div>
+                  <div data-chatgpt-search-message-ids="shared-id">part two</div>
+                </div>
+                <div class="block-BQZwFn">
+                  <h4 class="sr-only">ChatGPT said:</h4>
+                  <div>answer</div>
+                </div>
+                """
+            )
+
+            snapshot = await page.evaluate(_SNAPSHOT_FN, [])
+
+            assert snapshot["latestUserId"] == "shared-id"
+        finally:
+            await browser.close()
+
+
+@pytest.mark.asyncio
+async def test_fallback_unlabelled_wrapper_does_not_adopt_a_nested_blocks_label() -> None:
+    """An unlabelled outer `.block-BQZwFn` wrapping a labelled nested block
+    must not adopt the nested block's h4 label -- that would turn one
+    semantic message into two messageEntries (the outer wrapper plus the
+    inner block), inflating userCount and shifting every later ordinal."""
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            await page.set_content(
+                """
+                <div class="block-BQZwFn">
+                  wrapper, no label of its own
+                  <div class="block-BQZwFn" data-chatgpt-search-message-ids="u1">
+                    <h4 class="sr-only">You said:</h4>
+                    <div>prompt</div>
+                  </div>
+                </div>
+                <div class="block-BQZwFn">
+                  <h4 class="sr-only">ChatGPT said:</h4>
+                  <div>answer</div>
+                </div>
+                """
+            )
+
+            snapshot = await page.evaluate(_SNAPSHOT_FN, [])
+
+            assert snapshot["userCount"] == 1
+            assert snapshot["latestUserId"] == "u1"
+        finally:
+            await browser.close()
+
+
+@pytest.mark.asyncio
+async def test_fallback_real_user_id_propagates_to_activity_ownership() -> None:
+    """A real user id must propagate through to domActivityOwnerPromptMessageId
+    and progressBlocks ownership exactly like a synthetic id does -- the
+    scoping in _scope_response_snapshot()/turn.py compares raw message ids,
+    so a real id must not be treated differently from a fallback-user-N id
+    by that comparison."""
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            await page.set_content(
+                """
+                <div class="block-BQZwFn">
+                  <h4 class="sr-only">You said:</h4>
+                  <div data-chatgpt-search-message-ids="real-u">prompt</div>
+                </div>
+                <div class="block-BQZwFn">
+                  <div role="status" style="display:block;width:40px;height:20px">Thinking</div>
+                </div>
+                """
+            )
+
+            snapshot = await page.evaluate(_SNAPSHOT_FN, [])
+
+            assert snapshot["latestUserId"] == "real-u"
+            assert snapshot["domActivityOwnerPromptMessageId"] == "real-u"
+            assert snapshot["progressBlocks"][0]["ownerPromptMessageId"] == "real-u"
+        finally:
+            await browser.close()
+
+
+@pytest.mark.asyncio
+async def test_fallback_real_assistant_id_binds_terminal_witness() -> None:
+    """A real assistant id must satisfy the same sibling-action-bar terminal
+    witness binding a synthetic fallback-assistant-N id does."""
+    signals = [
+        dict(name='completion-control', scope='latest-assistant-turn', selectors=['button[aria-label="Copy"]'], visible=True),
+        dict(name='more-actions-menu', scope='latest-assistant-turn', selectors=['button[aria-label="More actions"]'], visible=True),
+    ]
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            await page.set_content(
+                """<div id="turn"><div>
+                  <div class="block-BQZwFn"><h4 class="sr-only">You said:</h4>
+                    <div data-chatgpt-search-message-ids="real-u">prompt</div></div>
+                  <div class="block-BQZwFn"><h4 class="sr-only">ChatGPT said:</h4>
+                    <div data-chatgpt-search-message-ids="real-a"><p>answer</p></div></div>
+                  </div><div class="turn-action-controls"><button aria-label="Copy">Copy</button>
+                  <button aria-label="More actions">More</button></div></div>"""
+            )
+
+            snapshot = await page.evaluate(_SNAPSHOT_FN, signals)
+
+            assert snapshot["latestAssistantId"] == "real-a"
+            assert snapshot["terminalWitnessAssistantId"] == "real-a"
         finally:
             await browser.close()
 
