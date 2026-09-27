@@ -58,6 +58,7 @@ def snap(
     dom_activity_digest=None,
     user_correlation=None,
     structural_hr_count=0,
+    error_alert_occurrences=(),
 ):
     signals = set(extra_signals)
     if generating:
@@ -131,6 +132,7 @@ def snap(
         progress_blocks=tuple(progress_blocks),
         dom_activity_digest=dom_activity_digest,
         dom_activity_owner_prompt_id=resolved_user_id if dom_activity_digest else None,
+        error_alert_occurrences=tuple(error_alert_occurrences),
     )
 
 
@@ -1812,6 +1814,149 @@ def test_progress_scope_rejects_foreign_and_unproven_assistant_ownership():
     assert scoped.tool_activity_counts == ()
 
 
+def test_error_alert_scope_ignores_stale_and_foreign_occurrences():
+    baseline = replace(
+        snap(users=1, user="Request A", user_id="prompt-a", extra_signals=("error-alert",)),
+        error_alert_occurrences=(("old-alert", None),),
+    )
+    foreign = replace(
+        baseline,
+        error_alert_occurrences=(("old-alert", None), ("foreign-alert", "prompt-b")),
+    )
+    scoped, _ = _scope_response_snapshot(baseline, foreign, prompt_message_id="prompt-a")
+    assert "error-alert" in scoped.dom_signals
+    assert "request-error-alert" not in scoped.dom_signals
+    assert "request-error-alert" not in _facts(baseline, baseline, scoped)
+
+
+def test_error_alert_scope_accepts_new_owned_or_unowned_occurrence():
+    baseline = replace(
+        snap(users=1, user="Request A", user_id="prompt-a"),
+        error_alert_occurrences=(("old-alert", None),),
+    )
+    owned = replace(
+        baseline,
+        dom_signals=frozenset({"error-alert"}),
+        error_alert_occurrences=(("old-alert", None), ("new-alert", "prompt-a")),
+    )
+    unowned_new = replace(
+        baseline,
+        dom_signals=frozenset({"error-alert"}),
+        error_alert_occurrences=(("old-alert", None), ("same-text-new-node", None)),
+    )
+    for current in (owned, unowned_new):
+        scoped, _ = _scope_response_snapshot(baseline, current, prompt_message_id="prompt-a")
+        assert "request-error-alert" in scoped.dom_signals
+        assert "request-error-alert" in _facts(baseline, baseline, scoped)
+
+
+def test_error_alert_scope_does_not_accept_unproven_baseline_alert():
+    baseline = replace(
+        snap(users=1, user="Request A", user_id="prompt-a", extra_signals=("error-alert",)),
+        error_alert_occurrences=(("old-alert", None),),
+    )
+    current = replace(baseline, dom_signals=frozenset({"error-alert"}))
+    scoped, _ = _scope_response_snapshot(baseline, current, prompt_message_id="prompt-a")
+    assert "request-error-alert" not in scoped.dom_signals
+
+
+def test_error_alert_owner_recomputation_does_not_create_new_occurrence():
+    baseline = replace(
+        snap(users=1, user="Request A", user_id="prompt-a"),
+        error_alert_occurrences=(("stable-node", "prompt-old"),),
+    )
+    current = replace(
+        baseline,
+        dom_signals=frozenset({"error-alert"}),
+        error_alert_occurrences=(("stable-node", "prompt-a"),),
+    )
+    scoped, _ = _scope_response_snapshot(baseline, current, prompt_message_id="prompt-a")
+    assert "request-error-alert" not in scoped.dom_signals
+
+
+def test_error_alert_occurrence_parser_fails_closed_for_bad_shape_and_oversize():
+    base = {
+        "url": "https://chatgpt.com/c/one",
+        "composerPresent": True,
+        "composerEditable": True,
+        "domSignals": {},
+        "errorAlertOccurrences": [
+            {"digest": "one", "ownerPromptMessageId": None},
+            {"digest": "two", "ownerPromptMessageId": 7},
+        ],
+    }
+    assert ChatSnapshot.from_bridge(base).error_alert_occurrences == ()
+    oversized = dict(base, errorAlertOccurrences=[{"digest": str(i)} for i in range(33)])
+    assert ChatSnapshot.from_bridge(oversized).error_alert_occurrences == ()
+
+
+def test_error_alert_multiset_ignores_foreign_insertion_and_detects_same_signature_extra():
+    baseline = replace(
+        snap(users=1, user="Request A", user_id="prompt-a"),
+        error_alert_occurrences=(("same", None),),
+    )
+    foreign_inserted = replace(
+        baseline,
+        dom_signals=frozenset({"error-alert"}),
+        error_alert_occurrences=(("foreign", "prompt-b"), ("same", None)),
+    )
+    extra_same = replace(
+        baseline,
+        dom_signals=frozenset({"error-alert"}),
+        error_alert_occurrences=(("same", None), ("same", None)),
+    )
+    shifted, _ = _scope_response_snapshot(
+        baseline, foreign_inserted, prompt_message_id="prompt-a"
+    )
+    added, _ = _scope_response_snapshot(
+        baseline, extra_same, prompt_message_id="prompt-a"
+    )
+    assert "request-error-alert" not in shifted.dom_signals
+    assert "request-error-alert" in added.dom_signals
+
+
+def test_error_alert_multiset_fails_closed_on_owner_redistribution():
+    baseline = replace(
+        snap(users=1, user="Request A", user_id="prompt-a"),
+        error_alert_occurrences=(("same", None),),
+    )
+    current = replace(
+        baseline,
+        dom_signals=frozenset({"error-alert"}),
+        error_alert_occurrences=(("same", "prompt-a"), ("same", "prompt-b")),
+    )
+    scoped, _ = _scope_response_snapshot(baseline, current, prompt_message_id="prompt-a")
+    assert "request-error-alert" not in scoped.dom_signals
+
+
+def test_legacy_resume_allows_only_structurally_owned_error_alert():
+    baseline = snap(users=1, user="Request A", user_id="prompt-a")
+    owned = replace(
+        baseline,
+        dom_signals=frozenset({"error-alert"}),
+        error_alert_occurrences=(("existing", "prompt-a"),),
+    )
+    foreign = replace(
+        baseline,
+        dom_signals=frozenset({"error-alert"}),
+        error_alert_occurrences=(("existing", "prompt-b"),),
+    )
+    owned_scoped, _ = _scope_response_snapshot(
+        baseline,
+        owned,
+        prompt_message_id="prompt-a",
+        allow_legacy_owned_error_alert=True,
+    )
+    foreign_scoped, _ = _scope_response_snapshot(
+        baseline,
+        foreign,
+        prompt_message_id="prompt-a",
+        allow_legacy_owned_error_alert=True,
+    )
+    assert "request-error-alert" in owned_scoped.dom_signals
+    assert "request-error-alert" not in foreign_scoped.dom_signals
+
+
 def test_pre_assistant_progress_requires_null_assistant_owner():
     baseline = snap(users=1, user="Request A", user_id="prompt-a")
     valid = ChatProgressBlock("prompt-a", None, "dom-status", "1111111111111111")
@@ -1824,6 +1969,118 @@ def test_pre_assistant_progress_requires_null_assistant_owner():
     scoped, response_ref = _scope_response_snapshot(baseline, raw, prompt_message_id="prompt-a")
     assert response_ref is None
     assert scoped.progress_blocks == (valid,)
+
+
+def test_response_scope_accepts_confirmed_prompt_when_project_renderer_unmounts_user_node():
+    """A confirmed prompt may disappear while its fresh answer remains mounted."""
+    baseline = snap(users=1, user="Request A", user_id="prompt-a")
+    raw = replace(
+        snap(
+            users=0,
+            assistants=1,
+            assistant="Answer A",
+            assistant_id="assistant-a",
+            complete=True,
+        ),
+        message_refs=(ChatMessageRef("assistant", "assistant-a", "Answer A", 0),),
+        latest_user_id=None,
+        latest_user_text=None,
+        user_message_ids=(),
+        user_message_texts=(),
+    )
+
+    scoped, response_ref = _scope_response_snapshot(
+        baseline,
+        raw,
+        prompt_message_id="prompt-a",
+        allow_virtualized_prompt=True,
+    )
+
+    assert response_ref is not None
+    assert response_ref.message_id == "assistant-a"
+    assert scoped.latest_assistant_id == "assistant-a"
+
+
+def test_response_scope_rebinds_real_prompt_id_and_reused_fallback_assistant_slot():
+    baseline = snap(
+        users=1,
+        assistants=1,
+        user="Old prompt",
+        user_id="fallback-user-4",
+        assistant="Old answer",
+        assistant_id="fallback-assistant-4",
+    )
+    raw = replace(
+        snap(
+            users=1,
+            assistants=1,
+            user="New prompt",
+            user_id="real-user-uuid",
+            assistant="New answer",
+            assistant_id="fallback-assistant-4",
+            complete=True,
+        ),
+        message_refs=(
+            ChatMessageRef("user", "real-user-uuid", "New prompt", 0),
+            ChatMessageRef("assistant", "fallback-assistant-4", "New answer", 1),
+        ),
+        latest_user_id="real-user-uuid",
+        latest_user_text="New prompt",
+        user_message_ids=("real-user-uuid",),
+        user_message_texts=("New prompt",),
+    )
+
+    scoped, response_ref = _scope_response_snapshot(
+        baseline,
+        raw,
+        prompt_message_id="fallback-user-4",
+        prompt_text="New prompt",
+    )
+
+    assert response_ref is not None
+    assert response_ref.message_id.startswith("fallback-assistant-4:prompt-")
+    assert scoped.terminal_witness_assistant_id == response_ref.message_id
+
+
+def test_response_scope_rebinds_reused_fallback_slot_when_prompt_ordinal_is_unchanged():
+    baseline = snap(
+        users=1,
+        assistants=1,
+        user="Old prompt",
+        user_id="fallback-user-4",
+        assistant="Old answer",
+        assistant_id="fallback-assistant-4",
+    )
+    raw = replace(
+        snap(
+            users=1,
+            assistants=1,
+            user="New prompt",
+            user_id="fallback-user-4",
+            assistant="New answer",
+            assistant_id="fallback-assistant-4",
+            complete=True,
+        ),
+        message_refs=(
+            ChatMessageRef("user", "fallback-user-4", "New prompt", 0),
+            ChatMessageRef("assistant", "fallback-assistant-4", "New answer", 1),
+        ),
+        latest_user_id="fallback-user-4",
+        latest_user_text="New prompt",
+        user_message_ids=("fallback-user-4",),
+        user_message_texts=("New prompt",),
+    )
+
+    scoped, response_ref = _scope_response_snapshot(
+        baseline,
+        raw,
+        prompt_message_id="fallback-user-4",
+        prompt_text="New prompt",
+    )
+
+    assert response_ref is not None
+    assert response_ref.message_id.startswith("fallback-assistant-4:prompt-")
+    assert scoped.terminal_witness_assistant_id == response_ref.message_id
 
 
 @pytest.mark.asyncio

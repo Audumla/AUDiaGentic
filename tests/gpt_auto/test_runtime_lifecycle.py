@@ -309,12 +309,16 @@ async def test_unresolved_checkpoint_persists_snapshot_counts() -> None:
         latest_assistant_text="answer",
         dom_signals=frozenset(),
         error_present=False,
+        error_alert_occurrences=(("baseline-alert", None),),
     )
 
     await chat.persist_unresolved_checkpoint(turn_id="turn-1", baseline=baseline)
 
     assert updates[-1]["unresolved-baseline-user-count"] == 3
     assert updates[-1]["unresolved-baseline-assistant-count"] == 2
+    assert updates[-1]["unresolved-baseline-error-alert-occurrences"] == [
+        {"digest": "baseline-alert", "ownerPromptMessageId": None}
+    ]
 
 
 @pytest.mark.asyncio
@@ -1007,6 +1011,26 @@ def test_provider_quiescent_ignores_stale_stop_control_after_completion() -> Non
         latest_assistant_text="done",
     )
 
+    assert provider_quiescent(snapshot) is True
+
+
+def test_provider_quiescent_treats_document_alert_as_advisory() -> None:
+    from audiagentic.components.providers.adapters.gpt_auto.chat import provider_quiescent
+    from audiagentic.components.providers.adapters.gpt_auto.snapshot import ChatSnapshot
+
+    snapshot = ChatSnapshot(
+        url="https://chatgpt.com/g/g-p-project/project",
+        composer_present=True,
+        composer_editable=True,
+        generating=False,
+        error_present=False,
+        dom_signals=frozenset({"error-alert"}),
+        user_count=1,
+        assistant_count=1,
+        latest_assistant_id="assistant-1",
+        latest_user_text="request",
+        latest_assistant_text="done",
+    )
     assert provider_quiescent(snapshot) is True
 
 

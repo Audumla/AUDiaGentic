@@ -634,6 +634,53 @@ _SNAPSHOT_FN = r"""
     }
     return null;
   };
+  // `error-alert` is document-scoped and can survive from an earlier turn.
+  // Keep a bounded occurrence projection so the Python turn can distinguish a
+  // new alert from a stale one without receiving alert text or DOM handles.
+  const errorAlertSpec = signalSpecs.find(spec => spec.name === "error-alert");
+  const errorAlertOccurrences = [];
+  if (errorAlertSpec) {
+    const structuralOwnerFor = node => {
+      // Document-global alerts have no structural owner. Only claim an owner
+      // inside one bounded turn/message wrapper containing exactly one prompt;
+      // DOM order alone is not ownership proof.
+      const wrapper = node.closest('[data-turn-key], .agent-turn, .block-BQZwFn, article');
+      if (!wrapper) return null;
+      const owners = progressUserEntries.filter(entry => wrapper.contains(entry.el));
+      return owners.length === 1 ? owners[0].messageId : null;
+    };
+    const matchingAlerts = Array.from(document.querySelectorAll('[role="alert"]'))
+      .filter(element => {
+        if (errorAlertSpec.visible && !shown(element)) return false;
+        const content = (element.innerText || element.textContent || "").trim();
+        const fragments = errorAlertSpec.textContainsAny || [];
+        const exact = errorAlertSpec.textEqualsAny || [];
+        if (exact.length && exact.some(fragment => content === String(fragment).trim())) return true;
+        if (!fragments.length) return !exact.length;
+        const lowered = content.toLowerCase();
+        return fragments.some(fragment => lowered.includes(String(fragment).toLowerCase()));
+      })
+      .slice(-32);
+    matchingAlerts.forEach(element => {
+      const ownerPromptMessageId = structuralOwnerFor(element);
+      const content = String(element.innerText || element.textContent || "")
+        .replace(/\s+/g, " ").trim().slice(0, 2048);
+      const attrs = Array.from(element.attributes || [])
+        .filter(attribute => attribute.name !== "class" && attribute.name !== "style")
+        .map(attribute => `${attribute.name}=${String(attribute.value).slice(0, 160)}`)
+        .sort();
+      errorAlertOccurrences.push({
+        // Identity deliberately excludes ownerPromptMessageId. Ownership is
+        // recomputed from the current DOM and must not turn a stale alert
+        // into a new occurrence merely because a later prompt was inserted.
+        // Use a position-independent semantic signature. Python compares the
+        // resulting projections as a multiset/count delta, so reordering or
+        // inserting a foreign alert cannot rename a stale occurrence.
+        digest: progressDigestParts(["error-alert", content, ...attrs]),
+        ownerPromptMessageId: ownerPromptMessageId || null
+      });
+    });
+  }
   const domActivityRoot = latestAgentTurn || assistantTurn;
   const domActivityDigest = activityStateDigest(domActivityRoot);
   const domActivityOwnerPromptMessageId = ownerPromptIdFor(domActivityRoot);
@@ -781,13 +828,29 @@ _SNAPSHOT_FN = r"""
   // toolbar whose bounded wrapper ends with this exact latest assistant.
   let fallbackResponseControls = null;
   if (usingFallbackMessages && latestAssistant && !fallbackHasUnansweredPrompt) {
-    let wrapper = latestAssistant.parentElement;
-    for (let depth = 0; wrapper && depth < 4; depth++, wrapper = wrapper.parentElement) {
-      const blocks = Array.from(wrapper.querySelectorAll('.block-BQZwFn'));
-      if (blocks.at(-1) !== latestAssistant) break;
-      const controls = Array.from(wrapper.children).find(child =>
-        child.classList.contains('turn-action-controls')
-      );
+    // The fallback renderer has used three action-bar placements in live DOMs:
+    // a direct sibling of the message list, a descendant of the assistant
+    // block, and (2026-09) a descendant of the outer turn wrapper.  The user
+    // block can have its own "Copy message" bar, so a document-wide query is
+    // unsafe. Walk only ancestors of the latest assistant and choose a control
+    // bar that is inside/after that assistant; this binds the bar to the
+    // response without assuming one renderer-specific depth.
+    let wrapper = latestAssistant;
+    for (let depth = 0; wrapper && depth < 8; depth++, wrapper = wrapper.parentElement) {
+      const controls = Array.from(wrapper.querySelectorAll('.turn-action-controls')).filter(control => {
+        // A user block can be inside the same ancestor and carries its own
+        // Copy message / Edit message toolbar.  Select only a bar that has
+        // an assistant-response action, otherwise the first user toolbar
+        // masks the sibling response controls and completion evidence stays
+        // false even though the tab is visibly finished.
+        const labels = Array.from(control.querySelectorAll('button')).map(button =>
+          String(button.getAttribute('aria-label') || button.innerText || '').trim().toLowerCase()
+        );
+        return labels.some(label => ['copy', 'more actions', 'regenerate response', 'read aloud'].includes(label));
+      }).find(control => {
+        if (latestAssistant.contains(control)) return true;
+        return Boolean(latestAssistant.compareDocumentPosition(control) & Node.DOCUMENT_POSITION_FOLLOWING);
+      });
       if (controls) { fallbackResponseControls = controls; break; }
     }
   }
@@ -1018,6 +1081,7 @@ _SNAPSHOT_FN = r"""
     progressBlocks: progressBlocks.slice(-128),
     domActivityDigest,
     domActivityOwnerPromptMessageId,
+    errorAlertOccurrences,
     errorPresent: !!document.querySelector('.error-page, [data-testid*="error"]')
   };
 }
