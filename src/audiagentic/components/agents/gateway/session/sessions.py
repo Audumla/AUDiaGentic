@@ -633,6 +633,22 @@ class SessionRuntime:
             timeout=timeout_seconds,
         ).to_mapping()
 
+    def capture_latest_response(
+        self,
+        project_root: Path,
+        *,
+        provider_id: str,
+        locator: ConversationFocusLocator,
+        timeout_seconds: float = 20.0,
+    ) -> dict[str, Any]:
+        """Read the current response from the request-owned provider tab."""
+        return self._call(
+            providers_api.capture_latest_response(
+                project_root, provider_id=provider_id, locator=locator
+            ),
+            timeout=timeout_seconds,
+        )
+
     def resume_session(
         self,
         project_root: Path,
@@ -946,12 +962,20 @@ class SessionRuntime:
         # per-request asyncio.Event so the transport's internal cancel race
         # sees it. The _turn_cancels dict is populated in _prompt().
         def _set_local() -> None:
-            event = self._turn_cancels.get(request_id)
-            if event is not None:
-                event.set()
+            # A worker may still be preparing FIFO admission. Preserve the
+            # signal so registration cannot miss a preceding durable cancel.
+            event = self._turn_cancels.setdefault(request_id, asyncio.Event())
+            event.set()
 
         loop.call_soon_threadsafe(_set_local)
         return True
+
+    def forget_request_cancel(self, request_id: str) -> None:
+        """Retire an early cancel signal once its queue worker has exited."""
+        with self._loop_lock:
+            loop = self._loop
+        if loop is not None and loop.is_running():
+            loop.call_soon_threadsafe(self._turn_cancels.pop, request_id, None)
 
     def control_session(
         self,
@@ -1991,7 +2015,34 @@ class SessionRuntime:
         # provider_session_transport needs a real model id now to resolve the
         # provider's model selection (VAL-MODEL-002 otherwise).
         resume_model_id = model_id or session_store.session_model_id(source_record)
-        successor_session_id = session_store.generate_session_id()
+        # A provider resume may have succeeded in an earlier gateway
+        # generation while persistence failed after the provider was opened.
+        # Rehydrate the newest matching successor instead of creating a
+        # second owned binding for the same provider conversation.
+        existing_successors = [
+            candidate
+            for candidate in session_store.list_session_records(project_root)
+            if candidate.get("state") == "active"
+            and candidate.get("session-id") != source_session_id
+            and isinstance(candidate.get("binding"), dict)
+            and candidate["binding"].get("provider-session-ref")
+            == source_binding["provider-session-ref"]
+            and candidate["binding"].get("predecessor-binding-id")
+            == source_binding.get("binding-id")
+        ]
+        existing_successors.sort(
+            key=lambda candidate: str(
+                (candidate.get("timing") or {}).get("created-at") or ""
+            )
+        )
+        existing_successor = existing_successors[-1] if existing_successors else None
+        successor_session_id = (
+            existing_successor["session-id"]
+            if existing_successor is not None
+            else session_store.generate_session_id()
+        )
+        if existing_successor is not None and successor_session_id in self._handles:
+            return existing_successor
 
         async def resume_binding_sink(update: Any) -> None:
             # The successor record is created before a resumed GPT-auto turn
@@ -2012,28 +2063,30 @@ class SessionRuntime:
                     message="resumed transport attempted to replace its provider binding",
                     details={"session-id": successor_session_id},
                 )
-            session_store.install_initial_provider_binding(
+            # The successor was already written and registered before the
+            # resumed transport was handed to the turn.  Calling
+            # install_initial_provider_binding here attempts to register the
+            # same provider-ref under a second active session on every
+            # message-id checkpoint, which correctly fails closed as a
+            # duplicate owned binding.  A checkpoint is only a metadata
+            # refresh; keep the immutable binding/index untouched.
+            successor = session_store.read_session_record(
+                project_root, successor_session_id
+            )
+            successor_binding = successor.get("binding")
+            if not isinstance(successor_binding, dict) or successor_binding.get(
+                "provider-session-ref"
+            ) != update.provider_session_ref.value:
+                raise AudiaGenticError(
+                    code="CON-AGW-120",
+                    kind="agents",
+                    message="resumed transport binding does not match successor record",
+                    details={"session-id": successor_session_id},
+                )
+            session_store.update_provider_metadata(
                 project_root,
                 successor_session_id,
-                provider_id=provider_id,
-                surface_id=surface_id,
-                provider_session_ref=update.provider_session_ref.value,
-                metadata=dict(update.metadata),
-                # Identity is provider-conversation provenance, not a
-                # caller-controlled resume input.  Preserve the immutable
-                # source binding value while allowing persistent surfaces to
-                # ignore gateway execution-context drift.
-                identity_context_fingerprint=source_binding.get(
-                    "identity-context-fingerprint"
-                ),
-                execution_context_fingerprint=execution_context_fingerprint,
-                context_id=source_binding.get("context-id"),
-                agent_definition_id=source_binding.get("agent-definition-id"),
-                agent_definition_digest=source_binding.get("agent-definition-digest"),
-                role_ids=source_binding.get("role-ids"),
-                role_set_digest=source_binding.get("role-set-digest"),
-                execution_profile_digest=source_binding.get("execution-profile-digest"),
-                effective_capability_digest=source_binding.get("effective-capability-digest"),
+                dict(update.metadata),
             )
 
         # AS49: reuse the ORIGINAL request's runtime root, where a provider's
@@ -2152,58 +2205,71 @@ class SessionRuntime:
             _record_failure(exc)
             raise exc
 
-        # ── Build the new generation's record + RESUMED_FROM binding ──
-        record = session_store.build_session_record(
-            session_id=successor_session_id,
-            execution_profile_id=source_record["execution-profile-id"],
-            provider_id=provider_id,
-            model_id=resume_model_id,
-            provider_session_ref=provider_session_ref,
-            surface_id=surface_id,
-            idle_timeout_seconds=idle_timeout_seconds,
-            max_lifetime_seconds=max_lifetime_seconds,
-            provider_metadata=dict(open_result.metadata),
-            context_id=source_binding.get("context-id"),
-            agent_definition_id=source_binding.get("agent-definition-id"),
-            agent_definition_digest=source_binding.get("agent-definition-digest"),
-            role_ids=source_binding.get("role-ids"),
-            role_set_digest=source_binding.get("role-set-digest"),
-            execution_profile_digest=source_binding.get("execution-profile-digest"),
-            effective_capability_digest=source_binding.get("effective-capability-digest"),
-        )
-        session_id = record["session-id"]
-        record["binding"] = binding_store.resume_binding(
-            session_id=session_id,
-            provider_id=provider_id,
-            surface_id=surface_id,
-            provider_ref=provider_session_ref,
-            predecessor_binding_id=source_binding["binding-id"],
-            ref_namespace=source_binding.get("ref-namespace"),
-            identity_context_fingerprint=source_binding.get("identity-context-fingerprint"),
-            execution_context_fingerprint=source_binding.get("execution-context-fingerprint"),
-        )
+        # ── Build or rehydrate the generation's record ──
+        rehydrating_successor = existing_successor is not None
+        if rehydrating_successor:
+            record = session_store.update_provider_metadata(
+                project_root,
+                successor_session_id,
+                dict(open_result.metadata),
+            )
+            session_id = successor_session_id
+        else:
+            record = session_store.build_session_record(
+                session_id=successor_session_id,
+                execution_profile_id=source_record["execution-profile-id"],
+                provider_id=provider_id,
+                model_id=resume_model_id,
+                provider_session_ref=provider_session_ref,
+                surface_id=surface_id,
+                idle_timeout_seconds=idle_timeout_seconds,
+                max_lifetime_seconds=max_lifetime_seconds,
+                provider_metadata=dict(open_result.metadata),
+                context_id=source_binding.get("context-id"),
+                agent_definition_id=source_binding.get("agent-definition-id"),
+                agent_definition_digest=source_binding.get("agent-definition-digest"),
+                role_ids=source_binding.get("role-ids"),
+                role_set_digest=source_binding.get("role-set-digest"),
+                execution_profile_digest=source_binding.get("execution-profile-digest"),
+                effective_capability_digest=source_binding.get("effective-capability-digest"),
+            )
+            session_id = record["session-id"]
+            record["binding"] = binding_store.resume_binding(
+                session_id=session_id,
+                provider_id=provider_id,
+                surface_id=surface_id,
+                provider_ref=provider_session_ref,
+                predecessor_binding_id=source_binding["binding-id"],
+                ref_namespace=source_binding.get("ref-namespace"),
+                identity_context_fingerprint=source_binding.get("identity-context-fingerprint"),
+                execution_context_fingerprint=source_binding.get("execution-context-fingerprint"),
+            )
         try:
-            session_store.write_session_record(project_root, record)
-            binding_store.register_open_binding(project_root, record)
+            if not rehydrating_successor:
+                session_store.write_session_record(project_root, record)
+                binding_store.register_open_binding(project_root, record)
         except Exception as exc:
             # Provider resume succeeded but persistence failed: never expose a
-            # live new generation the client cannot look up. Detach/close per
-            # ownership and remove no provisional index state was written.
+            # live new generation the client cannot look up. For a fresh
+            # generation, detach/close and roll back the provisional record.
+            # A rehydrated generation already has durable ownership; do not
+            # destroy that record merely because its metadata refresh failed.
             await _close_failed_transport(transport)
-            try:
-                failed_record = session_store.transition_session_record(
-                    project_root,
-                    session_id,
-                    "failed",
-                    updates={"close-reason": "resume-persistence-failed", "closed-at": now_iso_z()},
-                )
-                binding_store.retire_binding(project_root, failed_record, state="failed")
-            except Exception:  # noqa: BLE001 - preserve the original persistence failure
-                logger.warning(
-                    "failed to roll back resumed session record",
-                    extra={"session-id": session_id},
-                    exc_info=True,
-                )
+            if not rehydrating_successor:
+                try:
+                    failed_record = session_store.transition_session_record(
+                        project_root,
+                        session_id,
+                        "failed",
+                        updates={"close-reason": "resume-persistence-failed", "closed-at": now_iso()},
+                    )
+                    binding_store.retire_binding(project_root, failed_record, state="failed")
+                except Exception:  # noqa: BLE001 - preserve the original persistence failure
+                    logger.warning(
+                        "failed to roll back resumed session record",
+                        extra={"session-id": session_id},
+                        exc_info=True,
+                    )
             wrapped = AudiaGenticError(
                 code="IO-AGW-119",
                 kind="agents",
@@ -2388,10 +2454,20 @@ class SessionRuntime:
         mark_turn_pending = getattr(handle.transport, "mark_turn_pending", None)
         clear_turn_pending = getattr(handle.transport, "clear_turn_pending", None)
         handle.pending += 1
+        _local_cancel_event = (
+            self._turn_cancels.setdefault(request_id, asyncio.Event())
+            if request_id is not None else asyncio.Event()
+        )
         if callable(mark_turn_pending):
             mark_turn_pending()
         try:
-            await handle.turn_lock.acquire()
+            from .fifo_wait import acquire_turn_lock
+
+            await acquire_turn_lock(handle.turn_lock, _local_cancel_event)
+        except BaseException:
+            if request_id is not None:
+                self._turn_cancels.pop(request_id, None)
+            raise
         finally:
             handle.pending -= 1
             if callable(clear_turn_pending):
@@ -2471,9 +2547,7 @@ class SessionRuntime:
             # The neutral control path (SessionControlAction.CANCEL_TURN) is the
             # protocol-level contract; this local event remains for the fallback
             # cancel path when callers cannot resolve session_id.
-            _local_cancel_event = asyncio.Event()
-            if request_id is not None:
-                self._turn_cancels[request_id] = _local_cancel_event
+            # Reuse the cancellation event registered before FIFO admission.
 
             def _mark_activity() -> None:
                 handle.last_event_clock = self._clock()
@@ -2633,6 +2707,8 @@ class SessionRuntime:
                     self._turn_cancels.pop(request_id, None)
         finally:
             try:
+                if request_id is not None:
+                    self._turn_cancels.pop(request_id, None)
                 if request_id is not None and turn_slot_started:
                     from audiagentic.components.agents.gateway.queue.queue import notify_turn_done
 

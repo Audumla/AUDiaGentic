@@ -80,8 +80,11 @@ def dashboard_snapshot(
 ) -> dict[str, Any]:
     """Return the complete redacted cross-project gateway operator snapshot."""
     from audiagentic.components.agents.gateway import api
+    from audiagentic.components.agents.gateway.service.dashboard_images import (
+        image_path,
+        project_image_id,
+    )
     from audiagentic.components.agents.gateway.service.known_projects import load_known_projects
-    from audiagentic.components.agents.gateway.service.dashboard_images import project_image_id, image_path
     from audiagentic.components.agents.gateway.session.sessions import peek_session_runtime
 
     registry = load_known_projects(service_root / "known-projects.json")
@@ -318,12 +321,14 @@ def render_dashboard_html(
     focus_path: str = "/dashboard/focus",
     purge_session_path: str = "/dashboard/purge-session",
     focus_token: str = "",
+    complete_path: str = "/dashboard/complete-from-provider",
 ) -> bytes:
     """Return a self-refreshing page.  It has no provider/browser dependency."""
     source = json.dumps(snapshot_path)
     focus_source = json.dumps(focus_path)
     purge_source = json.dumps(purge_session_path)
     token_source = json.dumps(focus_token)
+    complete_source = json.dumps(complete_path)
     html = """<!doctype html>
 <meta charset="utf-8"><title>Agent gateway dashboard</title>
 <style>
@@ -548,8 +553,11 @@ document.addEventListener('click',event=>{
     }catch(error){feedback.textContent=error.message||'Project image upload failed';}
   });input.click();
 });
-const cancelIcon='<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8 8 8 8m0-8-8 8"/></svg>';
-function cancelControl(r) { return ACTIVE_REQUEST_STATES.has(r.state)?` <button type="button" class="action-button icon-button cancel-request" data-request-id="${esc(r['request-id'])}" aria-label="Cancel request" title="Cancel request">${cancelIcon}</button>`:''; }
+ const completeEndpoint=__COMPLETE_PATH__;
+ const cancelIcon='<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8 8 8 8m0-8-8 8"/></svg>';
+ const completeIcon='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>';
+ function cancelControl(r) { return ACTIVE_REQUEST_STATES.has(r.state)?` <button type="button" class="action-button icon-button cancel-request" data-request-id="${esc(r['request-id'])}" aria-label="Cancel request" title="Cancel request">${cancelIcon}</button>`:''; }
+ function completeControl(r) { return ACTIVE_REQUEST_STATES.has(r.state)?` <button type="button" class="action-button icon-button complete-provider" data-request-id="${esc(r['request-id'])}" aria-label="Complete from current GPT response" title="Capture the current GPT response and mark completed">${completeIcon}</button>`:''; }
 async function cancelRequest(button) {
   if(!window.confirm('Cancel this request? Its history will be retained.'))return;
   button.disabled=true;
@@ -563,12 +571,13 @@ async function cancelRequest(button) {
     await refresh();
   }catch(error){feedback.textContent=error.message||'Cancellation could not be confirmed';}
   finally{button.disabled=false;}
-}
+ }
+ async function completeFromProvider(button) { if(!window.confirm('Capture the current response from GPT and mark this request completed?'))return; button.disabled=true; const feedback=document.getElementById('request-action-feedback'); feedback.textContent='Capturing current GPT response…'; try { const response=await fetch(completeEndpoint,{method:'POST',headers:{'Content-Type':'application/json','X-AudiaGentic-Dashboard-Token':focusToken},body:JSON.stringify({'request-id':button.dataset.requestId}),signal:AbortSignal.timeout(30000)}); const body=await response.json(); if(!response.ok)throw new Error(body.error?.message||'Provider response was not accepted'); feedback.textContent='Request completed from current GPT response'; await refresh(); } catch(error){ feedback.textContent=error.message||'Provider response could not be captured'; } finally { button.disabled=false; } }
 function chatLink(r) { if(!r['focus-tab-available']) return ''; return ` <button type="button" class="action-button icon-button icon-action focus-chat" data-request-id="${esc(r['request-id'])}" aria-label="Open or focus GPT tab" title="Open the retained GPT tab, or focus it if already open">${focusIcon}</button>`; }
 function setFeedback(button, text) { button.classList.add('feedback'); button.title=text; button.setAttribute('aria-label',text); setTimeout(()=>button.classList.remove('feedback'),1800); }
 async function focusChat(button) { const id=button.dataset.requestId; button.disabled=true; try { const response=await fetch(focusEndpoint,{method:'POST',headers:{'Content-Type':'application/json','X-AudiaGentic-Dashboard-Token':focusToken},body:JSON.stringify({'request-id':id})}); const body=await response.json(); const result=body.result||{}; setFeedback(button,result.reason==='conversation-tab-opened'?'GPT tab opened':(result.outcome==='focused'?'GPT tab focused':(result.reason||result.outcome||'GPT tab unavailable'))); } catch(error) { setFeedback(button,'GPT tab unavailable'); } finally { setTimeout(()=>{button.disabled=false;},1200); } }
 async function purgeSession(button) { const id=button.dataset.sessionId; if(!window.confirm('Purge this session and all gateway request data? This cannot be undone.')) return; button.disabled=true; try { const response=await fetch(purgeEndpoint,{method:'POST',headers:{'Content-Type':'application/json','X-AudiaGentic-Dashboard-Token':focusToken},body:JSON.stringify({'session-id':id})}); const body=await response.json(); const result=body.result||{}; setFeedback(button,result.outcome==='purged'?'Session purged':(result.reason||result.outcome||'Purge unavailable')); if(result.outcome==='purged') setTimeout(refresh,400); } catch(error) { setFeedback(button,'Purge unavailable'); } finally { setTimeout(()=>{button.disabled=false;},1200); } }
-function bindFocusButtons() { document.querySelectorAll('.cancel-request').forEach(button=>button.addEventListener('click',()=>cancelRequest(button))); document.querySelectorAll('.focus-chat').forEach(button=>button.addEventListener('click',()=>focusChat(button))); document.querySelectorAll('.purge-session').forEach(button=>button.addEventListener('click',()=>purgeSession(button))); }
+ function bindFocusButtons() { document.querySelectorAll('.cancel-request').forEach(button=>button.addEventListener('click',()=>cancelRequest(button))); document.querySelectorAll('.complete-provider').forEach(button=>button.addEventListener('click',()=>completeFromProvider(button))); document.querySelectorAll('.focus-chat').forEach(button=>button.addEventListener('click',()=>focusChat(button))); document.querySelectorAll('.purge-session').forEach(button=>button.addEventListener('click',()=>purgeSession(button))); }
 function bindSessionToggles() { document.querySelectorAll('details.session[data-session-id] > summary').forEach(summary=>summary.addEventListener('click',event=>{if(event.target.closest('button,a'))return; event.preventDefault(); const session=summary.parentElement; const id=session.dataset.sessionId; const opening=!session.open; if(opening){collapsedSessionIds.delete(id);expandedSessionIds.add(id);}else{expandedSessionIds.delete(id);collapsedSessionIds.add(id);} persistCollapsedSessions(); try{localStorage.setItem(EXPANDED_SESSIONS_KEY,JSON.stringify([...expandedSessionIds].slice(-500)));}catch(_){} if(latest)draw(latest); })); }
 function executionSummary(profile, provider, model) { const identity=[]; if(profile)identity.push(profile); if(provider&&provider!==profile)identity.push(provider); const left=identity.join(' · '); return model&&!identity.includes(model)?left+(left?' / ':'')+model:left; }
 function requestDiagnostic(r) {
@@ -583,7 +592,7 @@ function requestRows(rows, includeExecution=true) {
     const execution=includeExecution?executionSummary(r['execution-profile-id'],r['resolved-provider-id'],r['resolved-model-id']):'';
     const title=r.title||(includeExecution&&r['provider-chat-title']?r['provider-chat-title']:'');
     const diagnostic=requestDiagnostic(r);
-    return `<div class="request-row"><div class="request-identity">${clientIcon(r)}<code class="request-id">${esc(r['request-id'])}</code>${title?`<span class="request-title" title="${esc(title)}">${esc(title)}</span>`:''}${execution?`<span class="request-execution" title="${esc(execution)}">${esc(execution)}</span>`:''}</div><div class="request-state">${badge(r.state)}${sideEffectFlag(r)}</div><div class="request-meta">${activityLabel(r)}</div><div class="request-meta request-updated">${stamp(recent(r))}</div><div class="request-actions">${cancelControl(r)}${chatLink(r)}</div>${diagnostic?`<div class="request-diagnostic" tabindex="0" title="${esc(diagnostic)}" aria-label="${esc(diagnostic)}">${esc(diagnostic)}</div>`:''}</div>`;
+     return `<div class="request-row"><div class="request-identity">${clientIcon(r)}<code class="request-id">${esc(r['request-id'])}</code>${title?`<span class="request-title" title="${esc(title)}">${esc(title)}</span>`:''}${execution?`<span class="request-execution" title="${esc(execution)}">${esc(execution)}</span>`:''}</div><div class="request-state">${badge(r.state)}${sideEffectFlag(r)}</div><div class="request-meta">${activityLabel(r)}</div><div class="request-meta request-updated">${stamp(recent(r))}</div><div class="request-actions">${completeControl(r)}${cancelControl(r)}${chatLink(r)}</div>${diagnostic?`<div class="request-diagnostic" tabindex="0" title="${esc(diagnostic)}" aria-label="${esc(diagnostic)}">${esc(diagnostic)}</div>`:''}</div>`;
   }).join('');
 }
 function sessionActivitySummary(session) {
@@ -671,7 +680,7 @@ function draw(snapshot) {
 async function refresh(){if(refreshInFlight)return; const generation=++refreshGeneration; refreshInFlight=true; try{const response=await fetch(endpoint,{cache:'no-store'}); const snapshot=await response.json(); if(generation===refreshGeneration) draw(snapshot);}catch(error){if(generation===refreshGeneration){document.getElementById('health').classList.add('stale');document.getElementById('updated').textContent='Dashboard refresh failed: '+error}}finally{refreshInFlight=false;}}
 function applyWindow(){const value=recentWindow.value.trim(); if(value){const parsed=Number.parseInt(value,10); if(!Number.isInteger(parsed)||parsed<1)return; endpoint.searchParams.set('recent-seconds',String(parsed));}else endpoint.searchParams.delete('recent-seconds'); const pageUrl=new URL(window.location.href); if(endpoint.searchParams.has('recent-seconds')) pageUrl.searchParams.set('recent-seconds',endpoint.searchParams.get('recent-seconds')); else pageUrl.searchParams.delete('recent-seconds'); window.history.replaceState(null,'',pageUrl.pathname+(pageUrl.search?`?${pageUrl.searchParams}`:'')+pageUrl.hash); refresh();}
 stateFilter.addEventListener('change',()=>latest&&draw(latest)); layoutFilter.addEventListener('change',()=>{localStorage.setItem('gateway-dashboard-layout',layoutFilter.value); latest&&draw(latest)}); document.getElementById('apply-window').addEventListener('click',applyWindow); refresh(); setInterval(refresh,3000);
-</script></main>""".replace("__SNAPSHOT_PATH__", source).replace("__FOCUS_PATH__", focus_source).replace("__PURGE_PATH__", purge_source).replace("__FOCUS_TOKEN__", token_source)
+</script></main>""".replace("__SNAPSHOT_PATH__", source).replace("__FOCUS_PATH__", focus_source).replace("__PURGE_PATH__", purge_source).replace("__FOCUS_TOKEN__", token_source).replace("__COMPLETE_PATH__", complete_source)
     return html.encode("utf-8")
 
 

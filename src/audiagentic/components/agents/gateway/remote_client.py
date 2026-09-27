@@ -190,6 +190,9 @@ class StandaloneGatewayClient:
             self._call("focus_execution_chat", project_root, {"request_id": request_id}),
         )
 
+    def complete_execution_from_provider(self, project_root: Path, request_id: str) -> dict[str, Any]:
+        return cast(dict[str, Any], self._call("complete_execution_from_provider", project_root, {"request_id": request_id}))
+
     def wait_execution_request(
         self,
         project_root: Path,

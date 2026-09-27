@@ -1790,6 +1790,18 @@ async def focus_existing_conversation(
     return await _focus(project_root, provider_id=provider_id, locator=locator)
 
 
+async def capture_latest_response(
+    project_root: Path,
+    *,
+    provider_id: str,
+    locator: ConversationFocusLocator,
+) -> dict[str, Any]:
+    from audiagentic.components.providers.services.execution.public_execution import (
+        capture_latest_response as _capture,
+    )
+    return await _capture(project_root, provider_id=provider_id, locator=locator)
+
+
 # --- AS29 slice 5a: resolved session-surface through public boundary --------
 
 
@@ -2021,6 +2033,7 @@ __all__ = [
     "ProviderLaunch",
     "prepare_provider_session_transport",
     "focus_existing_conversation",
+    "capture_latest_response",
     "prepare_provider_execution_environment",
     "McpLaunchServerEntry",
     "McpLaunchSurfaceResult",

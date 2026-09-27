@@ -62,6 +62,7 @@ CAPABILITIES = (
     "requests.diagnostics",
     "requests.recover",
     "requests.response",
+    "requests.complete-from-provider",
     "conversations.focus-existing",
     "requests.wait",
     "requests.cancel",
@@ -176,6 +177,12 @@ class GatewayServiceApplication:
             raise service_conflict_error(30, "request not found or request id is ambiguous")
         self._application.cancel_execution_request(matches[0], request_id)
         return {"request-id": request_id, "outcome": "cancellation-requested"}
+
+    def complete_dashboard_request(self, request_id: str) -> dict[str, Any]:
+        matches = self._dashboard_request_projects(request_id)
+        if len(matches) != 1:
+            raise service_conflict_error(31, "request not found or request id is ambiguous")
+        return self._application.complete_execution_from_provider(matches[0], request_id)
 
     def _dashboard_request_projects(self, request_id: str) -> list[Path]:
         from audiagentic.components.agents.gateway.service.known_projects import load_known_projects
@@ -349,6 +356,9 @@ class GatewayServiceApplication:
         if operation == "focus_execution_chat":
             _reject_unknown(arguments, {"request_id"})
             return self._application.focus_execution_chat(root, _required(arguments, "request_id"))
+        if operation == "complete_execution_from_provider":
+            _reject_unknown(arguments, {"request_id"})
+            return self._application.complete_execution_from_provider(root, _required(arguments, "request_id"))
         if operation == "wait_execution_request":
             _reject_unknown(arguments, {"request_id", "timeout_seconds"})
             return self._application.wait_execution_request(

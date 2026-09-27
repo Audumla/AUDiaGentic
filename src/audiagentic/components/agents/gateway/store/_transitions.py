@@ -1622,6 +1622,56 @@ def transition_owned_terminal(
     return updated
 
 
+def transition_operator_terminal(
+    project_root: Path,
+    request_id: str,
+    *,
+    expected_revision: int,
+    updates: dict[str, Any],
+) -> dict[str, Any]:
+    """Terminalize a request from an operator after a compare-and-swap.
+
+    Clearing the dispatch fence is intentional: a provider worker may still be
+    unwinding after the operator captured the already-rendered answer, and its
+    later terminal write must be rejected rather than overwrite this result.
+    """
+    with _request_lock(project_root, request_id):
+        record = _read_record_locked(project_root, request_id)
+        _check_expected_identity(
+            record,
+            expected_revision=expected_revision,
+            expected_dispatch_owner_epoch=None,
+            expected_worker_id=None,
+            expected_attempt_epoch=None,
+        )
+        if record["state"] in _shared.TERMINAL_STATES:
+            return record
+        if record["state"] not in {"queued", "running"}:
+            raise AudiaGenticError(code="CON-AGW-151", kind="agents", message="request is not operator-completable", details={})
+        updated = dict(record)
+        # Older v8 records may carry the transitional preview fields even
+        # though the canonical artifact schema no longer persists them.
+        # Rebuild the preview from response-artifact on read instead of
+        # allowing an operator terminalization to preserve stale fields.
+        updated.pop("output-preview", None)
+        updated.pop("output-truncated", None)
+        updated.update({"state": "completed", "updated-at": now_iso_z(), "finished-at": now_iso_z()})
+        updated["revision"] = record["revision"] + 1
+        updated.update({"worker-id": None, "dispatch-owner-epoch": None, "dispatch-claimed-at": None})
+        updated["watchdog-state"] = "not-started"
+        updated["watchdog-reason"] = None
+        updated["recovery-required"] = False
+        for key, value in updates.items():
+            updated[key.replace("_", "-")] = value
+        write_record(project_root, updated)
+        record_gateway_timeline(
+            project_root, request_id, "state.changed", state="completed",
+            attributes={"from": record["state"], "to": "completed", "source": "operator-provider-capture"},
+        )
+    _finalize_worker_session_if_terminal(project_root, updated)
+    return updated
+
+
 def bind_and_start_owned_attempt(
     project_root: Path,
     request_id: str,

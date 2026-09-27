@@ -175,6 +175,14 @@ def agent_task_response(request_id: str) -> dict[str, Any]:
 
 @mcp.tool()
 @tool_boundary
+def agent_task_complete_from_provider(request_id: str) -> dict[str, Any]:
+    """Capture the request-owned current provider response and mark it completed; never send a prompt."""
+    project_root = project_root_from_env()
+    return _sparse(call_gateway_method("complete_execution_from_provider", project_root, request_id))
+
+
+@mcp.tool()
+@tool_boundary
 def agent_task_cancel(request_id: str) -> dict[str, Any]:
     """Cancel a queued request, or best-effort mark a running one cancel-requested."""
     project_root = project_root_from_env()

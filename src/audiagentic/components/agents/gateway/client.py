@@ -38,6 +38,7 @@ class GatewayClient(Protocol):
     def recover_execution_request(self, project_root: Path, request_id: str, **kwargs: Any) -> dict[str, Any]: ...
     def get_execution_response(self, project_root: Path, request_id: str) -> str: ...
     def focus_execution_chat(self, project_root: Path, request_id: str) -> dict[str, Any]: ...
+    def complete_execution_from_provider(self, project_root: Path, request_id: str) -> dict[str, Any]: ...
     def wait_execution_request(
         self,
         project_root: Path,
@@ -107,6 +108,9 @@ class EmbeddedGatewayClient:
 
     def focus_execution_chat(self, project_root: Path, request_id: str) -> dict[str, Any]:
         return self._application.focus_execution_chat(project_root, request_id)
+
+    def complete_execution_from_provider(self, project_root: Path, request_id: str) -> dict[str, Any]:
+        return self._application.complete_execution_from_provider(project_root, request_id)
 
     def wait_execution_request(
         self,
