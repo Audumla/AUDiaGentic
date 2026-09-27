@@ -1318,6 +1318,15 @@ class SessionRuntime:
                 "unresolved-baseline-user-count",
                 "unresolved-baseline-assistant-count",
             )
+            if metadata.get("submission-proven") is not True:
+                remove += (
+                    "submission-proven",
+                    "prompt-message-id",
+                    "assistant-message-id",
+                    "assistant-before-message-id",
+                    "assistant-before-id",
+                    "prompt-text-digest",
+                )
             session_store.update_provider_metadata(
                 project_root, session_id, metadata, remove_keys=remove
             )
@@ -1531,6 +1540,15 @@ class SessionRuntime:
                 "unresolved-baseline-user-count",
                 "unresolved-baseline-assistant-count",
             )
+            if metadata.get("submission-proven") is not True:
+                remove += (
+                    "submission-proven",
+                    "prompt-message-id",
+                    "assistant-message-id",
+                    "assistant-before-message-id",
+                    "assistant-before-id",
+                    "prompt-text-digest",
+                )
             session_store.update_provider_metadata(
                 project_root,
                 allocated_session_id,

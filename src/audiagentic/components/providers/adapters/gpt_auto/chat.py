@@ -210,7 +210,18 @@ class PersistentChat:
         # Emit the intended durable state explicitly.  Callers may persist
         # before mutating the in-memory marker so a failed write cannot expose
         # READY and then resurrect an unresolved lock after restart.
-        result = sink({"unresolved-turn-pending": False})
+        metadata: dict[str, object] = {"unresolved-turn-pending": False}
+        if self._submission_proven:
+            metadata["submission-proven"] = True
+            for key, value in (
+                ("prompt-message-id", self.unresolved_prompt_message_id),
+                ("assistant-message-id", self.unresolved_assistant_message_id),
+                ("assistant-before-message-id", self.unresolved_assistant_before_id),
+                ("prompt-text-digest", self.unresolved_prompt_text_digest),
+            ):
+                if value:
+                    metadata[key] = value
+        result = sink(metadata)
         if inspect.isawaitable(result):
             await result
         self._checkpoint_metadata = {}
@@ -1162,9 +1173,8 @@ class PersistentChat:
         """Return sparse correlation evidence for successor session records."""
         values: dict[str, object] = {
             "unresolved-turn-pending": self.unresolved_turn_pending,
+            "submission-proven": self._submission_proven,
         }
-        if self._submission_proven:
-            values["submission-proven"] = True
         for key, value in (
             ("prompt-message-id", self.unresolved_prompt_message_id),
             ("assistant-message-id", self.unresolved_assistant_message_id),
@@ -1180,6 +1190,13 @@ class PersistentChat:
         """Record that a send command completed but its provider identity is unknown."""
         self.unresolved_turn_pending = True
         self._submission_proven = False
+        # A reusable session may carry the previous turn's durable identity.
+        # Clear it before writing this turn's pre-send fence; omission alone
+        # cannot remove merge-persisted predecessor metadata.
+        self.unresolved_prompt_message_id = None
+        self.unresolved_assistant_message_id = None
+        self.unresolved_assistant_before_id = None
+        self.unresolved_prompt_text_digest = None
         self._unresolved_recovery_reason = None
         self._unresolved_recovery_details = {}
         self._reconciliation_refresh_attempted = False

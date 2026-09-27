@@ -353,6 +353,57 @@ async def test_request_metadata_sink_can_be_rebound_for_each_turn() -> None:
     assert second_updates[-1]["prompt-message-id"] == "prompt-2"
 
 
+def test_new_submission_fence_clears_predecessor_identity() -> None:
+    config = GptAutoConfig.from_dict(valid_config())
+    chat = PersistentChat(
+        ag_session_id="session-turn-fence",
+        project_name="project",
+        project_url="https://chatgpt.com/g/g-p-project/project",
+        runtime=SimpleNamespace(),
+        config=config,
+        binding_sink=lambda _update: None,
+    )
+
+    chat.mark_prompt_submitted("old-prompt", "old-assistant", "old turn")
+    chat.mark_assistant_observed("old-answer")
+    chat.mark_submission_unresolved("new turn")
+
+    metadata = chat.unresolved_metadata()
+    assert metadata["submission-proven"] is False
+    assert "prompt-message-id" not in metadata
+    assert "assistant-message-id" not in metadata
+    assert "assistant-before-message-id" not in metadata
+    assert metadata["prompt-text-digest"] == PromptFingerprint.from_text("new turn").digest
+
+
+@pytest.mark.asyncio
+async def test_terminal_checkpoint_clear_retains_submission_proof() -> None:
+    config = GptAutoConfig.from_dict(valid_config())
+    updates = []
+    chat = PersistentChat(
+        ag_session_id="session-terminal-proof",
+        project_name="project",
+        project_url="https://chatgpt.com/g/g-p-project/project",
+        runtime=SimpleNamespace(),
+        config=config,
+        binding_sink=lambda _update: None,
+        checkpoint_sink=updates.append,
+    )
+
+    chat.mark_prompt_submitted("prompt-1", "assistant-0", "turn")
+    chat.mark_assistant_observed("assistant-1")
+    await chat.persist_unresolved_clear()
+
+    assert updates[-1] == {
+        "unresolved-turn-pending": False,
+        "submission-proven": True,
+        "prompt-message-id": "prompt-1",
+        "assistant-message-id": "assistant-1",
+        "assistant-before-message-id": "assistant-0",
+        "prompt-text-digest": chat.unresolved_prompt_text_digest,
+    }
+
+
 def test_explicit_unresolved_marker_remains_authoritative() -> None:
     config = GptAutoConfig.from_dict(valid_config())
     chat = PersistentChat(
