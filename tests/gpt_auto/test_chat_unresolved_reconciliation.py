@@ -46,6 +46,30 @@ def _chat(*, response_stability_seconds: float = 6.0, unresolved: bool = True) -
     return chat
 
 
+class _HangingSnapshotBrowser:
+    async def page_by_handle(self, _handle: str):
+        return SimpleNamespace(target_id="target-1")
+
+    async def snapshot(self, _page, *, signals):
+        del signals
+        await asyncio.Event().wait()
+
+
+@pytest.mark.asyncio
+async def test_unresolved_reconciliation_bounds_a_hanging_cdp_snapshot() -> None:
+    chat = _chat(unresolved=True)
+    chat.config = replace(
+        chat.config,
+        cdp=replace(chat.config.cdp, protocol_timeout_seconds=0.01),
+    )
+    chat.runtime = SimpleNamespace(gpt_browser=_HangingSnapshotBrowser())
+
+    result = await asyncio.wait_for(chat._reconcile_unresolved_turn(), timeout=0.2)
+
+    assert result is False
+    assert chat._unresolved_recovery_reason == "snapshot-observation-failed"
+
+
 @pytest.mark.asyncio
 async def test_readiness_failure_is_typed_as_not_started_and_retryable(
     monkeypatch: pytest.MonkeyPatch,
