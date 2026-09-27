@@ -51,6 +51,10 @@ class GptAutoSessionTransport:
     def ag_session_id(self) -> str:
         return self.chat.ag_session_id
 
+    def set_request_metadata_sink(self, sink: Any | None) -> None:
+        """Route checkpoint metadata to the request owning the active turn."""
+        self.chat.checkpoint_sink = sink
+
     async def open(self) -> SessionOpenResult:
         await self.chat.open()
         metadata: dict[str, Any] = {"project-url": self.chat.project_url}
