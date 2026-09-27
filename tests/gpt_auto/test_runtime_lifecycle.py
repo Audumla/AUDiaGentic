@@ -353,6 +353,50 @@ async def test_request_metadata_sink_can_be_rebound_for_each_turn() -> None:
     assert second_updates[-1]["prompt-message-id"] == "prompt-2"
 
 
+@pytest.mark.asyncio
+async def test_fifo_turns_share_session_checkpoint_but_isolate_request_sinks() -> None:
+    config = GptAutoConfig.from_dict(valid_config())
+    session_updates = []
+    request_a_updates = []
+    request_b_updates = []
+    chat = PersistentChat(
+        ag_session_id="session-fifo-sinks",
+        project_name="project",
+        project_url="https://chatgpt.com/g/g-p-project/project",
+        runtime=SimpleNamespace(),
+        config=config,
+        binding_sink=lambda _update: None,
+        checkpoint_sink=session_updates.append,
+    )
+    baseline = ChatSnapshot(
+        url="https://chatgpt.com/g/g-p-project/c/provider-session",
+        composer_present=True,
+        composer_editable=True,
+        user_count=0,
+        assistant_count=0,
+        latest_user_text=None,
+        latest_assistant_id=None,
+        latest_assistant_text=None,
+        dom_signals=frozenset(),
+        error_present=False,
+    )
+
+    chat.set_request_metadata_sink(request_a_updates.append)
+    chat.mark_prompt_submitted("prompt-a", None, "turn A")
+    await chat.persist_unresolved_checkpoint(turn_id="turn-a", baseline=baseline)
+
+    chat.set_request_metadata_sink(request_b_updates.append)
+    chat.mark_submission_unresolved("turn B")
+    await chat.persist_unresolved_checkpoint(turn_id="turn-b", baseline=baseline)
+
+    assert len(session_updates) == 2
+    assert len(request_a_updates) == 1
+    assert len(request_b_updates) == 1
+    assert request_a_updates[0]["unresolved-turn-id"] == "turn-a"
+    assert request_b_updates[0]["unresolved-turn-id"] == "turn-b"
+    assert session_updates[-1]["unresolved-turn-id"] == "turn-b"
+
+
 def test_new_submission_fence_clears_predecessor_identity() -> None:
     config = GptAutoConfig.from_dict(valid_config())
     chat = PersistentChat(
