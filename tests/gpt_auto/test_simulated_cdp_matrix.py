@@ -32,6 +32,11 @@ from audiagentic.components.providers.adapters.gpt_auto.snapshot import ChatSnap
 from .test_greenfield_config_urls import valid_config
 
 
+class _NoopBridge:
+    async def call(self, *_args, **_kwargs):
+        return {}
+
+
 def test_snapshot_does_not_promote_static_streaming_animation_to_busy() -> None:
     """The live ChatGPT DOM keeps this class after a response completes."""
     assert 'selector !== ".streaming-animation"' in _SNAPSHOT_FN
@@ -331,7 +336,7 @@ async def test_projects_new_chat_uses_trusted_cdp_pointer_click(monkeypatch) -> 
 
 @pytest.mark.asyncio
 async def test_new_session_selects_exact_project_from_sidebar(monkeypatch) -> None:
-    browser = GptAutoCdpBrowserController(SimpleNamespace())
+    browser = GptAutoCdpBrowserController(_NoopBridge())
     anchor = CdpPageRef("anchor", "anchor-target", 7, "http://127.0.0.1:8765/dashboard", "")
     page = CdpPageRef("page-1", "target-1", 7, "about:blank", "")
     project_id = "g-p-6a7bbf85d06c8191835b0d64958b4d7a"
@@ -415,7 +420,7 @@ async def test_new_session_selects_exact_project_from_sidebar(monkeypatch) -> No
 
 @pytest.mark.asyncio
 async def test_new_session_rejects_projects_ui_identity_mismatch(monkeypatch) -> None:
-    browser = GptAutoCdpBrowserController(SimpleNamespace())
+    browser = GptAutoCdpBrowserController(_NoopBridge())
     page = CdpPageRef("page-1", "target-1", 7, "about:blank", "")
     configured_id = "g-p-configured"
     discovered_url = "https://chatgpt.com/g/g-p-different-project/project"
@@ -478,7 +483,7 @@ async def test_new_session_rejects_projects_ui_identity_mismatch(monkeypatch) ->
 
 @pytest.mark.asyncio
 async def test_new_session_adopts_ui_opened_target_and_closes_projects_tab(monkeypatch) -> None:
-    browser = GptAutoCdpBrowserController(SimpleNamespace())
+    browser = GptAutoCdpBrowserController(_NoopBridge())
     projects_page = CdpPageRef("projects", "projects-target", 7, "about:blank", "")
     project_id = "g-p-6a7bbf85d06c8191835b0d64958b4d7a"
     opened_page = CdpPageRef(

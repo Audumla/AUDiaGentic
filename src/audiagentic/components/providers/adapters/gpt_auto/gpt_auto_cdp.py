@@ -1465,6 +1465,11 @@ class GptAutoCdpBrowserController(CdpBrowserController):
 
     async def _open_projects_tab(self, page: CdpPageRef, *, timeout: float) -> bool:
         """Use the current sidebar Explore hover menu when it is available."""
+        # Newly-created CDP targets are intentionally background targets.  The
+        # current ChatGPT renderer ignores the Explore hover/menu transition
+        # until that target is foregrounded, so activate it before probing the
+        # sidebar controls.
+        await self.bridge.call("keep_page_active", {"pageHandle": page.handle})
         deadline = asyncio.get_running_loop().time() + max(0.1, timeout)
         while asyncio.get_running_loop().time() < deadline:
             if await self.hover_text(page, "Explore"):
