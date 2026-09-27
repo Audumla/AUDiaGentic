@@ -24,6 +24,7 @@ from audiagentic.components.providers.adapters.gpt_auto.cdp.cdp_browser import (
 )
 from audiagentic.components.providers.adapters.gpt_auto.config import GptAutoConfig
 from audiagentic.components.providers.adapters.gpt_auto.gpt_auto_cdp import (
+    _COMPOSER_READY_FN,
     _SNAPSHOT_FN,
     GptAutoCdpBrowserController,
 )
@@ -35,6 +36,28 @@ from .test_greenfield_config_urls import valid_config
 class _NoopBridge:
     async def call(self, *_args, **_kwargs):
         return {}
+
+
+@pytest.mark.asyncio
+async def test_wait_for_composer_uses_lightweight_readiness_probe(monkeypatch) -> None:
+    browser = GptAutoCdpBrowserController(_NoopBridge())
+    page = CdpPageRef("page-1", "target-1", 7, "https://chatgpt.com/projects", "")
+    functions: list[str] = []
+
+    async def evaluate(_page, function, _argument=None):
+        functions.append(function)
+        return {"composerPresent": True, "composerEditable": True, "visible": True}
+
+    async def snapshot(_page, **_kwargs):
+        raise AssertionError("full DOM snapshot must not gate composer readiness")
+
+    monkeypatch.setattr(browser, "evaluate", evaluate)
+    monkeypatch.setattr(browser, "snapshot", snapshot)
+
+    ready = await browser.wait_for_composer(page, timeout=1)
+
+    assert ready["composerEditable"] is True
+    assert functions == [_COMPOSER_READY_FN]
 
 
 def test_snapshot_does_not_promote_static_streaming_animation_to_busy() -> None:
