@@ -197,6 +197,27 @@ async def test_idle_tab_reaper_closes_physical_page_but_preserves_session_bindin
 
 
 @pytest.mark.asyncio
+async def test_idle_tab_reaper_uses_session_activity_not_tab_age() -> None:
+    """A very old tab remains open when its represented session was active recently."""
+    bridge = _IdleTabBridge()
+    runtime = _IdleTabRuntime(bridge)
+    chat = _idle_chat(runtime)
+
+    # The tab has existed for much longer than the cleanup threshold, but the
+    # session recorded validated provider activity only 30 seconds ago.
+    chat._last_validated_activity_monotonic = 7_270.0
+
+    reclaimed = await chat.close_physical_page_if_idle(
+        now=7_300.0,
+        idle_timeout_seconds=7_200.0,
+    )
+
+    assert reclaimed is False
+    assert bridge.calls == []
+    assert chat.page_handle == "page-1"
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("guard", ["active", "pending", "recent"])
 async def test_idle_tab_reaper_uses_activity_not_request_or_queue_state(guard: str) -> None:
     bridge = _IdleTabBridge()

@@ -1090,6 +1090,29 @@ class GatewayQueueManager:
                 and current.get("recovery-required") is True
                 and current.get("dispatch-owner-epoch") == owner_epoch
             )
+            if recovered_running and current.get("cancel-requested"):
+                # A recovered provider-session request may be waiting on a
+                # delayed reattach retry.  Cancellation must be terminalized
+                # before invoking the runner; otherwise a non-live session
+                # can remain in running/cancelling forever.
+                cancelled = store.transition_owned_terminal(
+                    project_root,
+                    request_id,
+                    "cancelled",
+                    updates={
+                        "error": {
+                            "code": "CON-AGW-CANCELLED",
+                            "kind": "agents",
+                            "message": "gateway request cancelled during recovery",
+                        },
+                        "finished-at": now_iso_z(),
+                    },
+                    owner_epoch=current["dispatch-owner-epoch"],
+                    worker_id=current["worker-id"],
+                    attempt_epoch=current["attempt-epoch"],
+                )
+                _publish_lifecycle_event("cancelled", cancelled)
+                return
             if request_id in pq.cancel_requested and not recovered_running:
                 logger.info(
                     "gateway request cancelled before dispatch", extra={"request-id": request_id}
@@ -1361,6 +1384,29 @@ class GatewayQueueManager:
                 # Send is non-terminal.  Keep the same request and session
                 # in durable recovery and retry only the observation path.
                 current = store.read_record(project_root, request_id)
+                if current.get("cancel-requested") and current.get("state") == "running":
+                    # Cancellation is an explicit client disposition.  It
+                    # must win over another recovery retry; otherwise a
+                    # non-live session can leave a cancelled request in
+                    # running/cancelling indefinitely.
+                    cancelled = store.transition_owned_terminal(
+                        project_root,
+                        request_id,
+                        "cancelled",
+                        updates={
+                            "error": {
+                                "code": "CON-AGW-CANCELLED",
+                                "kind": "agents",
+                                "message": "gateway request cancelled during recovery",
+                            },
+                            "finished-at": now_iso_z(),
+                        },
+                        owner_epoch=record["dispatch-owner-epoch"],
+                        worker_id=record["worker-id"],
+                        attempt_epoch=record["attempt-epoch"],
+                    )
+                    _publish_lifecycle_event("cancelled", cancelled)
+                    return
                 delay = self._recovery_retry_delay(
                     entry,
                     int((current.get("recovery") or {}).get("attempt", 0)) + 1,
@@ -1468,7 +1514,7 @@ class GatewayQueueManager:
                 )
                 current = store.read_record(project_root, request_id)
                 cancellation_boundary = (
-                    getattr(exc, "code", None) == "CON-AGW-CANCELLED"
+                    getattr(exc, "code", None) in {"CON-AGW-CANCELLED", "CON-AGW-099"}
                     or current.get("cancel-requested", False)
                 )
                 if cancellation_boundary and current["state"] == "queued":
@@ -1535,6 +1581,13 @@ class GatewayQueueManager:
                 pq.idle.discard(request_id)
                 pq.cancel_requested.discard(request_id)
             self._active_requests.pop(request_id, None)
+            # Preparation may fail before registering a session waiter. Do
+            # not retain that request's pre-registration cancel signal forever.
+            from audiagentic.components.agents.gateway.session.sessions import peek_session_runtime
+
+            runtime = peek_session_runtime()
+            if runtime is not None:
+                runtime.forget_request_cancel(request_id)
             _TURNCB.clear(request_id)
             if not self._shutdown_event.is_set():
                 self._drain_all()
@@ -1601,6 +1654,17 @@ class GatewayQueueManager:
                 project_root, request_id, source="api", actor_type="client", reason="client-request"
             )
             if updated["state"] == "cancelled":
+                # The worker can already be waiting on a session FIFO lock
+                # even though its durable request is still queued. Signal only
+                # that request's local event; never cancel the active provider
+                # turn belonging to its predecessor.
+                from audiagentic.components.agents.gateway.session.sessions import (
+                    peek_session_runtime,
+                )
+
+                runtime = peek_session_runtime()
+                if runtime is not None:
+                    runtime.request_cancel(request_id)
                 logger.info(
                     "gateway request cancelled before running", extra={"request-id": request_id}
                 )

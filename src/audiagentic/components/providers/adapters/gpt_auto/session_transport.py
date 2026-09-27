@@ -116,10 +116,24 @@ class GptAutoSessionTransport:
             )
             retained = await self.chat.retain_after_turn_failure(failure)
             details = dict(failure.details or {})
+            # A recovery helper may return True after it has performed best-
+            # effort cleanup, but that does not mean the provider session is
+            # still usable.  In particular, an unresolved turn on a session
+            # that has already entered FAILED/CLOSED must not keep the
+            # gateway request in an endless recovery retry loop.
+            post_retain_metadata_fn = getattr(self.chat, "unresolved_metadata", None)
+            post_retain_metadata = (
+                post_retain_metadata_fn() if callable(post_retain_metadata_fn) else {}
+            )
+            post_retain_unresolved = bool(
+                post_retain_metadata.get("unresolved-turn-pending")
+            )
+            session_state = getattr(self.chat, "state", None)
+            session_usable = session_state not in {ChatState.FAILED, ChatState.CLOSED}
             details["retryable-same-session"] = bool(
                 retained
-                and not unresolved
-                and getattr(self.chat, "state", None) not in {ChatState.FAILED, ChatState.CLOSED}
+                and not post_retain_unresolved
+                and session_usable
             )
             failure = AudiaGenticError(
                 code=failure.code,
@@ -129,7 +143,7 @@ class GptAutoSessionTransport:
             )
             self._turn_failure_disposition = (
                 SessionFailureDisposition.RETAIN
-                if retained
+                if retained and session_usable
                 else SessionFailureDisposition.TERMINATE
             )
             raise failure from exc

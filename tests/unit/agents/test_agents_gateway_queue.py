@@ -180,7 +180,7 @@ def test_recovery_deferred_is_bounded_and_interrupts_without_resubmit(tmp_path: 
 
 
 def test_cancelled_recovery_backoff_is_not_stranded(tmp_path: Path):
-    """Cancellation during deferred recovery still gets a worker pass."""
+    """Cancellation during deferred recovery terminalizes without a retry."""
     manager = queue_mod.GatewayQueueManager()
     project = tmp_path / "project"
     project.mkdir()
@@ -201,13 +201,7 @@ def test_cancelled_recovery_backoff_is_not_stranded(tmp_path: Path):
                     message="provider reattach unavailable",
                 )
             )
-        assert current["cancel-requested"] is True
-        return store.transition_record(
-            project_root,
-            current["request-id"],
-            "cancelled",
-            updates={"finished-at": now_iso_z()},
-        )
+        pytest.fail("cancelled recovery must not re-enter the provider runner")
 
     manager.enqueue(
         project,
@@ -229,7 +223,7 @@ def test_cancelled_recovery_backoff_is_not_stranded(tmp_path: Path):
     manager.cancel(project, "recovery-cancel", record["request-id"])
     terminal = manager.wait(project, record["request-id"], timeout_seconds=3)
     assert terminal["state"] == "cancelled"
-    assert calls == 2
+    assert calls == 1
 
 
 def test_queue_shutdown_cancels_delayed_recovery_retry(tmp_path: Path):
@@ -531,9 +525,21 @@ def test_session_workers_share_one_profile_compute_slot(tmp_path: Path):
     assert max_active == 1
 
 
-def test_cancelled_session_waiter_is_not_misclassified_as_failed(tmp_path: Path):
+def test_cancelled_session_waiter_is_not_misclassified_as_failed(tmp_path: Path, monkeypatch):
     """A cancel racing the turn-lock boundary keeps the durable state cancelled."""
     manager = queue_mod.GatewayQueueManager()
+    from types import SimpleNamespace
+
+    from audiagentic.components.agents.gateway.session import sessions
+    signalled = []
+
+    def signal(request_id):
+        assert store.read_record(tmp_path, request_id)['state'] == 'cancelled'
+        signalled.append(request_id)
+
+    monkeypatch.setattr(sessions, 'peek_session_runtime', lambda: SimpleNamespace(
+        request_cancel=signal, forget_request_cancel=lambda _: None,
+    ))
     entered = threading.Event()
     allow_start = threading.Event()
 
@@ -560,6 +566,7 @@ def test_cancelled_session_waiter_is_not_misclassified_as_failed(tmp_path: Path)
     # the worker may still be between its preparation and lock callback.
     assert cancelled["state"] == "cancelled"
     assert cancelled["cancel-requested"] is True
+    assert signalled == [record['request-id']]
 
     allow_start.set()
     result = manager.wait(tmp_path, record["request-id"], timeout_seconds=5)

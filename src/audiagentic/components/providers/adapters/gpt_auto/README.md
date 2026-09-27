@@ -51,10 +51,19 @@ Important invariants:
   activity at the configured cadence so the client/gateway lease stays alive;
   this synthetic activity never resets the real recovery clock or refresh
   budget. The packaged defaults are a 240-second refresh interval, 15
-  refreshes, a 30-second interruption activity cadence, and 600 seconds of
-  final grace.
-  zero disables stall/total policies where the schema permits it.
-- a submitted turn is never automatically sent again during recovery.
+   refreshes, a 30-second interruption activity cadence, and 600 seconds of
+   final grace.
+   zero disables stall/total policies where the schema permits it.
+- GPT-auto progress emitted from the bounded DOM snapshot is request activity
+  when it carries one of the provider-neutral phases `inspected`, `fetching`,
+  `analyzing`, `evaluated`, `dom-status`, `dom-progress`, `dom-tool-result`,
+  `dom-connector`, `dom-citation`, `dom-table`, or `dom-materialization`.
+  These phases renew the durable activity lease even when assistant text has
+  not changed; heartbeat, static, and unknown transport observations do not.
+  The synthetic `connection-refreshing` phase renews only the gateway lease
+  while the interruption banner remains visible; it never resets GPT-auto's
+  real recovery clock or refresh budget.
+ - a submitted turn is never automatically sent again during recovery.
 - the Gateway serializes turns within one session; the provider adds no second queue.
 
 Run deterministic coverage with `pytest tests/gpt_auto`. The opt-in live gateway
