@@ -291,6 +291,7 @@ class GptAutoTurn:
         self._completion_materialization_attempted = False
         self._completion_materialization_succeeded = False
         self._delivery_timeout_retry_attempted = False
+        self._delivery_timeout_retry_probe_failed = False
         self._timing_events: set[str] = set()
         self._initial_refresh_attempted = False
         self._initial_refresh_succeeded: bool | None = None
@@ -1704,6 +1705,21 @@ class GptAutoTurn:
                         },
                     )
                     if retried:
+                        await asyncio.sleep(self.chat.config.turn.poll_interval_seconds)
+                        continue
+                    if not self._delivery_timeout_retry_probe_failed:
+                        # The click found no matching button this poll (DOM
+                        # flicker, or the control not yet mounted/already
+                        # gone). `facts` below was computed from this same
+                        # stale pre-click snapshot, so falling through to
+                        # evaluate provider failure now would risk a
+                        # terminal failure the very next line based on a
+                        # transient timing race, not a real dead end. Give
+                        # the DOM exactly one more poll to settle before
+                        # that evaluation runs -- bounded to once per turn
+                        # so a genuinely un-clickable, persistent alert still
+                        # reaches failure evaluation instead of stalling.
+                        self._delivery_timeout_retry_probe_failed = True
                         await asyncio.sleep(self.chat.config.turn.poll_interval_seconds)
                         continue
             # Evaluate completion before provider failure.  ChatGPT can leave
