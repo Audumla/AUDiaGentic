@@ -453,6 +453,40 @@ def _dispatch_session_request(
             # session binding/checkpoint when the request-level relay was
             # interrupted before publication.
             is_new_session = False
+
+        async def _relay_provider_metadata(metadata: dict[str, Any]) -> None:
+            nonlocal record
+            current_metadata = record.get("provider-metadata")
+            merged_metadata = (
+                dict(current_metadata) if isinstance(current_metadata, dict) else {}
+            )
+            turn_metadata_keys = {
+                "prompt-message-id",
+                "assistant-message-id",
+                "assistant-before-message-id",
+                "assistant-before-id",
+                "prompt-text-digest",
+                "submission-proven",
+            }
+            if not metadata.get("submission-proven"):
+                for key in turn_metadata_keys:
+                    merged_metadata.pop(key, None)
+            request_metadata = dict(metadata)
+            if not request_metadata.get("submission-proven"):
+                for key in turn_metadata_keys:
+                    request_metadata.pop(key, None)
+            merged_metadata.update(request_metadata)
+            record = store.update_owned_running_session(
+                project_root,
+                request_id,
+                owner_epoch=record["dispatch-owner-epoch"],
+                worker_id=record["worker-id"],
+                attempt_epoch=record["attempt-epoch"],
+                session_id=session_id,
+                provider_metadata=merged_metadata,
+            )
+            client_defaults.remember(project_root, record)
+
         if is_new_session:
             # keep-alive: open a new session bound to this profile
             request_runtime_root.mkdir(parents=True, exist_ok=True)
@@ -492,39 +526,6 @@ def _dispatch_session_request(
             # (AS49) is the correct, non-speculative behavior until a real
             # need for a finer split shows up.
             manifest_context_fingerprint = context_fingerprint or record.get("context-fingerprint")
-            async def _relay_provider_metadata(metadata: dict[str, Any]) -> None:
-                nonlocal record
-                current_metadata = record.get("provider-metadata")
-                merged_metadata = (
-                    dict(current_metadata) if isinstance(current_metadata, dict) else {}
-                )
-                turn_metadata_keys = {
-                    "prompt-message-id",
-                    "assistant-message-id",
-                    "assistant-before-message-id",
-                    "assistant-before-id",
-                    "prompt-text-digest",
-                    "submission-proven",
-                }
-                if not metadata.get("submission-proven"):
-                    for key in turn_metadata_keys:
-                        merged_metadata.pop(key, None)
-                request_metadata = dict(metadata)
-                if not request_metadata.get("submission-proven"):
-                    for key in turn_metadata_keys:
-                        request_metadata.pop(key, None)
-                merged_metadata.update(request_metadata)
-                record = store.update_owned_running_session(
-                    project_root,
-                    request_id,
-                    owner_epoch=record["dispatch-owner-epoch"],
-                    worker_id=record["worker-id"],
-                    attempt_epoch=record["attempt-epoch"],
-                    session_id=session_id,
-                    provider_metadata=merged_metadata,
-                )
-                client_defaults.remember(project_root, record)
-
             session_record = runtime.open_session(
                 project_root,
                 execution_profile_id=execution_profile_id,
@@ -823,6 +824,7 @@ def _dispatch_session_request(
             activity_relay=activity_relay,
             dispatch_claim=dispatch_claim,
             resume_existing=resume_existing,
+            request_provider_metadata_sink=_relay_provider_metadata,
         )
     except _CancelledDuringDispatch:
         if guard_held:
