@@ -462,6 +462,20 @@ class GptAutoTurn:
                 )
             self.side_effect_attempted = True
             self.submission_confirmed = True
+            # A cancel can be latched before recovery creates this turn.  The
+            # initial cancel task may have observed the pre-recovery state and
+            # returned before the retained provider side effect was attached;
+            # re-arm stop settlement now that recovery has established it.
+            if self.cancel_event.is_set() and (
+                self._stop_task is None or self._stop_task.done()
+            ):
+                self._stop_task = asyncio.create_task(
+                    self._stop_generation_best_effort()
+                )
+            if self.cancel_event.is_set():
+                self._move(TurnState.SUBMITTING)
+                self._move(TurnState.SIDE_EFFECT_ATTEMPTED)
+                return await self._cancelled_result()
             current = await self._snapshot_for_observation()
             persisted_alerts = checkpoint.get(
                 "unresolved-baseline-error-alert-occurrences"
@@ -525,6 +539,8 @@ class GptAutoTurn:
                 current,
                 allow_legacy_owned_error_alert=legacy_alert_baseline,
             )
+            if self.state is TurnState.CANCELLED or self.cancel_event.is_set():
+                return self._result("cancelled")
             if final is None:
                 raise RuntimeError("recovered response observation ended without a result")
             await self._publish_message_ids(strict=False)
@@ -1450,25 +1466,7 @@ class GptAutoTurn:
 
         while True:
             if self.cancel_event.is_set():
-                if self._stop_task is None:
-                    self._stop_task = asyncio.create_task(self._stop_generation_best_effort())
-                # Stop-control and quiescence are provider-side best effort.
-                # A hung CDP stop/quiescence check must not strand the gateway
-                # request in ``cancelling`` forever; the unresolved checkpoint
-                # and recovering chat state preserve the no-resubmit fence.
-                try:
-                    await asyncio.wait_for(
-                        asyncio.shield(self._stop_task),
-                        timeout=self._cancellation_settle_timeout_seconds(),
-                    )
-                except asyncio.TimeoutError:
-                    self._set_chat_state(ChatState.RECOVERING)
-                    self._stop_task.cancel()
-                    logger.warning(
-                        "gpt-auto cancellation settlement timed out; retaining recovery fence",
-                        extra={"turn-id": self.request.turn_id},
-                    )
-                self._move(TurnState.CANCELLED)
+                await self._cancelled_result()
                 return None
             try:
                 raw_current = await self._snapshot_for_observation()
@@ -2274,6 +2272,26 @@ class GptAutoTurn:
         if protocol_timeout <= 0:
             protocol_timeout = 30.0
         return max(1.0, min(30.0, protocol_timeout + 1.0))
+
+    async def _cancelled_result(self) -> SessionTurnResult:
+        """Bound provider stop/quiescence before returning a cancel result."""
+        if self._stop_task is None:
+            self._stop_task = asyncio.create_task(self._stop_generation_best_effort())
+        try:
+            await asyncio.wait_for(
+                asyncio.shield(self._stop_task),
+                timeout=self._cancellation_settle_timeout_seconds(),
+            )
+        except asyncio.TimeoutError:
+            self._set_chat_state(ChatState.RECOVERING)
+            self._stop_task.cancel()
+            logger.warning(
+                "gpt-auto cancellation settlement timed out; retaining recovery fence",
+                extra={"turn-id": self.request.turn_id},
+            )
+        if not _ENGINE.is_terminal(self.state.value):
+            self._move(TurnState.CANCELLED)
+        return self._result("cancelled")
 
     async def _stop_generation_best_effort(self) -> None:
         stopped = False
