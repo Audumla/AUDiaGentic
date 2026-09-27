@@ -53,7 +53,7 @@ class GptAutoSessionTransport:
 
     def set_request_metadata_sink(self, sink: Any | None) -> None:
         """Route checkpoint metadata to the request owning the active turn."""
-        self.chat.checkpoint_sink = sink
+        self.chat.set_request_metadata_sink(sink)
 
     async def open(self) -> SessionOpenResult:
         await self.chat.open()
