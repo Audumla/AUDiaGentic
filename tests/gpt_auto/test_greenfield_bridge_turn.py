@@ -273,6 +273,22 @@ class _Chat:
 
 
 @pytest.mark.asyncio
+async def test_snapshot_for_observation_is_bounded_without_turn_deadline():
+    """A wedged CDP read must return control to recovery, not wedge the turn."""
+    chat = _Chat()
+    chat.config.cdp = SimpleNamespace(protocol_timeout_seconds=0.01)
+
+    async def hanging_snapshot():
+        await asyncio.Event().wait()
+
+    chat.snapshot = hanging_snapshot
+    turn = GptAutoTurn(chat, SessionPrompt(turn_id="snapshot-timeout", body="prompt"), lambda _: None)
+
+    with pytest.raises(asyncio.TimeoutError):
+        await turn._snapshot_for_observation()
+
+
+@pytest.mark.asyncio
 async def test_await_response_never_returns_a_later_foreign_turns_answer():
     """GP08/GP30 core regression: once a later, unrelated turn (from any
     actor -- a human typing in the same tab, or a later gateway request)
