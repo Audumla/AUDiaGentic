@@ -118,6 +118,7 @@ _WORK_ACTIVITY_LABELS = frozenset({
     "tool-finished",
     "response-progress",
     "response-observed",
+    "response-observing",
     "response-started",
     "assistant-message",
     "thought",

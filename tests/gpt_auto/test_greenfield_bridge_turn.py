@@ -611,6 +611,40 @@ async def test_response_observer_emits_busy_lease_for_current_prompt():
 
 
 @pytest.mark.asyncio
+async def test_response_observer_renews_lease_when_generating_flag_is_temporarily_absent():
+    """A started response can be busy while the DOM briefly loses ``generating``.
+
+    The observer must keep the request lease alive without treating polling as
+    model progress or resetting the physical-tab inactivity clock.
+    """
+    chat = _Chat()
+    working = snap(users=1, assistants=1, user="Review AU01", assistant="Working")
+    completed = snap(
+        users=1,
+        assistants=1,
+        user="Review AU01",
+        assistant="done",
+        complete=True,
+    )
+    chat._snapshots = iter([working, working, completed, completed, completed])
+    observations = []
+    turn = GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="observing-lease", body="Review AU01"),
+        observations.append,
+    )
+    turn._HEARTBEAT_INTERVAL_SECONDS = 0
+    turn.state = TurnState.AWAITING_RESPONSE
+    turn._prompt_message_id = "prompt-1"
+
+    assert await turn._await_response(snap(users=1, user="Review AU01"), working) == "done"
+    assert any(
+        item.attributes.get("model_activity") == "response-observing"
+        for item in observations
+    )
+
+
+@pytest.mark.asyncio
 async def test_interruption_present_at_baseline_is_not_a_new_refresh_edge():
     """A retained interruption banner must not refresh a new request immediately."""
     chat = _Chat()
