@@ -171,6 +171,34 @@ async def test_activity_revision_tracks_reverted_changes_and_rebinds_only_curren
 
 
 @pytest.mark.asyncio
+async def test_unlabelled_fallback_activity_block_still_renews_dom_activity():
+    """Visible work can precede both role nodes and fallback labels."""
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            await page.set_content(
+                '<div class="block-BQZwFn">'
+                '<div role="status" style="display:block;width:40px;height:20px">'
+                'Inspecting commit metadata</div></div>'
+            )
+            before = await page.evaluate(_SNAPSHOT_FN, [])
+            assert before["userCount"] == 0
+            assert before["assistantCount"] == 0
+            assert before["domActivityDigest"]
+            assert before["domActivityOwnerPromptMessageId"] is None
+
+            await page.locator('[role="status"]').evaluate(
+                "node => node.textContent = 'Reviewed lifecycle paths'"
+            )
+            after = await page.evaluate(_SNAPSHOT_FN, [])
+            assert after["domActivityDigest"] != before["domActivityDigest"]
+            assert after["domActivityOwnerPromptMessageId"] is None
+        finally:
+            await browser.close()
+
+
+@pytest.mark.asyncio
 async def test_fallback_snapshot_preserves_paragraphs_and_ignores_collapsed_marker() -> None:
     async with async_playwright() as pw:
         browser = await pw.chromium.launch(headless=True)

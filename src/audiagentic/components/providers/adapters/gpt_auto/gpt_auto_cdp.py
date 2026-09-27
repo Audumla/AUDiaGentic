@@ -681,7 +681,14 @@ _SNAPSHOT_FN = r"""
       });
     });
   }
-  const domActivityRoot = latestAgentTurn || assistantTurn;
+  // A live GPT-auto turn can briefly expose only an unlabeled fallback block:
+  // the renderer has mounted visible Thinking/tool activity, but has not yet
+  // assigned either a role node or the "ChatGPT said:" label. Keep that
+  // newest block as a provisional DOM root so progress renews the lease. It
+  // cannot claim prompt ownership (ownerPromptIdFor remains null) and is
+  // therefore never sufficient evidence for completion or failure.
+  const domActivityRoot = latestAgentTurn || assistantTurn ||
+    latestFallbackActivityBlock || fallbackBlocks.slice(-1)[0] || null;
   const domActivityDigest = activityStateDigest(domActivityRoot);
   const domActivityOwnerPromptMessageId = ownerPromptIdFor(domActivityRoot);
   const progressBlocks = [];
