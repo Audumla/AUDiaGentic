@@ -1506,6 +1506,12 @@ class GptAutoCdpBrowserController(CdpBrowserController):
             # CDP pointer path as the Explore -> Projects navigation instead.
             point = await self.evaluate(page, _PROJECT_NEW_CHAT_POINT_FN, project_name)
             if isinstance(point, dict) and isinstance(point.get("x"), (int, float)) and isinstance(point.get("y"), (int, float)):
+                # CDP mouse input is delivered to the target renderer, but
+                # ChatGPT ignores route-changing presses when the target is a
+                # background tab.  Foreground the Projects target first so
+                # the trusted pointer event receives the same user-activation
+                # treatment as a visible browser press.
+                await self.bridge.call("keep_page_active", {"pageHandle": page.handle})
                 await self.bridge.call(
                     "click",
                     {"pageHandle": page.handle, "x": point["x"], "y": point["y"]},
