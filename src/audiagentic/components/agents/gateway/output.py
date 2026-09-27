@@ -21,7 +21,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from audiagentic.components.agents.agents_paths import gateway_final_response_path
+from audiagentic.components.agents.agents_paths import (
+    gateway_final_response_path,
+    gateway_request_path,
+)
 from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
 from audiagentic.foundation.io import (
     atomic_write_bytes,
@@ -56,13 +59,8 @@ def _utf8_preview(text: str, limit: int = FINAL_RESPONSE_PREVIEW_BYTES) -> tuple
     return preview, True
 
 
-def persist_final_response(project_root: Path, request_id: str, text: str) -> dict[str, Any]:
-    """Persist the exact terminal UTF-8 response before terminal record commit."""
-    if not isinstance(text, str):
-        text = str(text)
-    path = gateway_final_response_path(project_root, request_id)
+def _final_response_artifact(text: str, request_id: str) -> dict[str, Any]:
     raw = text.encode("utf-8")
-    atomic_write_bytes(path, raw)
     preview, truncated = _utf8_preview(text)
     return {
         "artifact-id": "final-response",
@@ -73,6 +71,46 @@ def persist_final_response(project_root: Path, request_id: str, text: str) -> di
         "output-preview": preview,
         "output-truncated": truncated,
     }
+
+
+def _request_is_terminal(project_root: Path, request_id: str) -> bool:
+    record_path = gateway_request_path(project_root, request_id)
+    try:
+        record = json.loads(record_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    return isinstance(record, dict) and record.get("state") not in {
+        "queued", "dispatching", "running",
+    }
+
+
+def persist_final_response(
+    project_root: Path,
+    request_id: str,
+    text: str,
+    *,
+    lock_held: bool = False,
+) -> dict[str, Any]:
+    """Persist the exact terminal UTF-8 response before terminal record commit."""
+    if not isinstance(text, str):
+        text = str(text)
+    artifact = _final_response_artifact(text, request_id)
+
+    def write_if_owned() -> None:
+        # A worker may finish unwinding after an operator has already won the
+        # request CAS.  Do not let that late worker overwrite the winner's
+        # request-owned artifact before its own fenced transition is rejected.
+        if _request_is_terminal(project_root, request_id):
+            return
+        atomic_write_bytes(gateway_final_response_path(project_root, request_id), text.encode("utf-8"))
+
+    if lock_held:
+        write_if_owned()
+    else:
+        lock_path = gateway_request_path(project_root, request_id).with_name("mutation.lock")
+        with StartupLock(lock_path, timeout=10.0):
+            write_if_owned()
+    return artifact
 
 
 def read_final_response(project_root: Path, request_id: str, artifact: dict[str, Any]) -> str:
