@@ -2982,6 +2982,31 @@ async def test_cancel_after_submit_blocks_ready_when_quiescence_is_unproven():
 
 
 @pytest.mark.asyncio
+async def test_cancellation_does_not_wait_forever_for_hung_provider_stop():
+    chat = _Chat()
+    chat.state = ChatState.BUSY
+    turn = GptAutoTurn(chat, SessionPrompt(turn_id="turn-1", body="Review"), lambda _: None)
+    turn.state = TurnState.AWAITING_RESPONSE
+    turn.side_effect_attempted = True
+
+    async def hung_stop():
+        await asyncio.sleep(60)
+
+    turn._stop_generation_best_effort = hung_stop
+    turn._cancellation_settle_timeout_seconds = lambda: 0.01
+    turn.cancel()
+
+    result = await asyncio.wait_for(
+        turn._await_response(snap(), snap()),
+        timeout=2.0,
+    )
+
+    assert result is None
+    assert turn.state is TurnState.CANCELLED
+    assert chat.state is ChatState.RECOVERING
+
+
+@pytest.mark.asyncio
 async def test_delayed_cancel_for_old_turn_does_not_cancel_active_turn():
     chat = _Chat()
     transport = GptAutoSessionTransport(chat)
