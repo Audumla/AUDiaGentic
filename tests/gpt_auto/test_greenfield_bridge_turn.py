@@ -799,6 +799,46 @@ async def test_active_turn_does_not_click_foreign_delivery_retry_control():
 
 
 @pytest.mark.asyncio
+async def test_delivery_timeout_retry_failure_does_not_terminal_fail_immediately():
+    """A retry click that finds no matching button (DOM flicker, or the
+    control not yet mounted/already gone) must not fall through to
+    evaluate response-failed against the same stale pre-click snapshot --
+    that would terminal-fail the turn on a transient timing race rather
+    than genuine provider failure. It must get one more poll to observe a
+    real recovery first."""
+    chat = _Chat()
+    baseline = snap(users=1, user="Review AU01")
+    timeout_snap = replace(
+        baseline,
+        dom_signals=frozenset({"delivery-timeout-retry", "error-alert"}),
+    )
+    recovered = snap(users=1, assistants=1, user="Review AU01", assistant="Recovered", complete=True)
+    chat._snapshots = iter([timeout_snap, recovered, recovered, recovered, recovered])
+    retry_calls = 0
+
+    async def retry() -> bool:
+        nonlocal retry_calls
+        retry_calls += 1
+        return False
+
+    chat.retry_delivery_timeout = retry
+    turn = GptAutoTurn(
+        chat, SessionPrompt(turn_id="turn-timeout-then-recovers", body="Review AU01"), lambda _: None
+    )
+    turn.state = TurnState.AWAITING_RESPONSE
+    turn._prompt_message_id = "prompt-1"
+
+    result = await turn._await_response(baseline, timeout_snap)
+
+    assert result == "Recovered"
+    assert retry_calls == 1
+    assert turn._delivery_timeout_retry_probe_failed is True
+    # The one-shot flag is only consumed by an actual click; a failed probe
+    # must not permanently block a later genuine retry within this turn.
+    assert turn._delivery_timeout_retry_attempted is False
+
+
+@pytest.mark.asyncio
 async def test_active_turn_does_not_click_retry_present_before_submission():
     chat = _Chat()
     stale_retry = replace(
