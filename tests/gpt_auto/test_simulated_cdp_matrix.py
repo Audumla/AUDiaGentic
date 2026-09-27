@@ -324,6 +324,7 @@ async def test_projects_new_chat_uses_trusted_cdp_pointer_click(monkeypatch) -> 
 
     assert await browser._select_project_from_projects_page(page, "AUDiaGentic", timeout=1) is True
     assert calls == [
+        ("keep_page_active", {"pageHandle": "page-1"}),
         ("click", {"pageHandle": "page-1", "x": 123.5, "y": 456.5}),
     ]
 
