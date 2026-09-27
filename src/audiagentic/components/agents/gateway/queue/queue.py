@@ -732,6 +732,9 @@ class GatewayQueueManager:
                 while bound is None:
                     if self._shutdown_event.is_set():
                         return
+                    current = store.read_record(project_root, entry.request_id)
+                    if self._terminalize_recovered_cancel(entry, current):
+                        return
                     with pq.lock:
                         bound = self._try_reserve_source(entry, pq)
                     if bound is None:
@@ -992,6 +995,8 @@ class GatewayQueueManager:
                     if self._shutdown_event.is_set():
                         return
                     current = store.read_record(entry.project_root, entry.request_id)
+                    if self._terminalize_recovered_cancel(entry, current):
+                        return
                     if (
                         current.get("state") != "running"
                         or current.get("dispatch-owner-epoch") != entry.owner_epoch
@@ -1049,6 +1054,31 @@ class GatewayQueueManager:
                 1 for root in self._recovery_pending.values()
                 if root.resolve() == project_key
             )
+
+    def _terminalize_recovered_cancel(
+        self, entry: QueuedDispatch, current: dict[str, Any]
+    ) -> bool:
+        """Finish a cancelled provider-less recovery before waiting for capacity."""
+        if current.get("state") != "running" or not current.get("cancel-requested"):
+            return False
+        cancelled = store.transition_owned_terminal(
+            entry.project_root,
+            entry.request_id,
+            "cancelled",
+            updates={
+                "error": {
+                    "code": "CON-AGW-CANCELLED",
+                    "kind": "agents",
+                    "message": "gateway request cancelled during recovery",
+                },
+                "finished-at": now_iso_z(),
+            },
+            owner_epoch=current.get("dispatch-owner-epoch") or entry.owner_epoch,
+            worker_id=str(current.get("worker-id") or ""),
+            attempt_epoch=int(current.get("attempt-epoch") or 0),
+        )
+        _publish_lifecycle_event("cancelled", cancelled)
+        return True
 
     def _reserve_session_when_available(
         self, entry: QueuedDispatch, pq: _RuntimeState, template: _QueueReservation,

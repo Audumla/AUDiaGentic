@@ -226,6 +226,48 @@ def test_cancelled_recovery_backoff_is_not_stranded(tmp_path: Path):
     assert calls == 1
 
 
+def test_cancelled_recovered_request_does_not_wait_forever_for_source(tmp_path: Path):
+    """Restart recovery must observe cancellation while reserving a source."""
+    manager = queue_mod.GatewayQueueManager()
+    project = tmp_path / "project"
+    project.mkdir()
+    record = store.build_record(
+        execution_profile_id="recovery-reservation-cancel",
+        prompt_body="x",
+        gateway_profile_id="recovery-reservation-cancel",
+        gateway_profile_generation="gen_test123",
+        gateway_profile_config_digest="sha256:abcd1234",
+        resolved_provider_id="local",
+        resolved_instance_ids=["m"],
+    )
+    record.update(
+        {
+            "state": "running",
+            "cancel-requested": True,
+            "recovery-required": True,
+            "worker-id": "recovery-worker",
+            "attempt-epoch": 1,
+            "dispatch-owner-epoch": "owner-epoch",
+        }
+    )
+    store.write_record(project, record)
+
+    def runner(_project_root: Path, _current: dict) -> dict:
+        pytest.fail("provider runner must not be entered after cancellation")
+
+    manager.enqueue_recovered_running(
+        project,
+        record,
+        {"virtual-capacity": 1},
+        runner,
+        dispatch_owner_epoch="owner-epoch",
+        dispatch_service_root=tmp_path,
+    )
+    terminal = manager.wait(project, record["request-id"], timeout_seconds=3)
+    assert terminal["state"] == "cancelled"
+    assert terminal["error"]["code"] == "CON-AGW-CANCELLED"
+
+
 def test_queue_shutdown_cancels_delayed_recovery_retry(tmp_path: Path):
     """A retired queue cannot reattach after its delayed retry is cancelled."""
     manager = queue_mod.GatewayQueueManager()
