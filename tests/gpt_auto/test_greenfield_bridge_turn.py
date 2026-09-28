@@ -59,6 +59,7 @@ def snap(
     user_correlation=None,
     structural_hr_count=0,
     error_alert_occurrences=(),
+    url="https://chatgpt.com/g/g-p-project/c/conversation-1",
 ):
     signals = set(extra_signals)
     if generating:
@@ -109,7 +110,7 @@ def snap(
             for _ in range(count)
         )
     return ChatSnapshot(
-        url="https://chatgpt.com/g/g-p-project/c/conversation-1",
+        url=url,
         composer_present=True,
         composer_editable=composer_editable,
         user_count=users,
@@ -2310,8 +2311,10 @@ async def test_completed_response_proves_submission_when_user_turn_is_unmounted(
         assistant_id="assistant-new",
         assistant="Complete answer",
         complete=True,
+        url="https://chatgpt.com/g/g-p-project/c/conversation-2",
     )
-    chat._snapshots = iter([snap(), completed, completed, completed, completed])
+    landing = snap(url="https://chatgpt.com/g/g-p-project/project")
+    chat._snapshots = iter([landing, completed, completed, completed, completed])
 
     turn = GptAutoTurn(
         chat,
@@ -2324,6 +2327,31 @@ async def test_completed_response_proves_submission_when_user_turn_is_unmounted(
     assert result.stop_reason == "end-turn"
     assert result.final_summary == "Complete answer"
     assert turn.state is TurnState.COMPLETE
+    assert chat.runtime.bridge.submit_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_unmounted_completion_does_not_adopt_retained_conversation_turn():
+    """A retained conversation still needs an observable request anchor."""
+    chat = _Chat()
+    chat.runtime.config.turn.submission_proof_progress_lease_seconds = 0.01
+    chat.runtime.config.turn.submission_proof_absolute_ceiling_seconds = 0.05
+    completed = snap(
+        assistants=1,
+        assistant_id="assistant-later",
+        assistant="A later response",
+        complete=True,
+    )
+    chat._snapshots = iter([snap(), completed, completed, completed, completed])
+
+    turn = GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="turn-retained-unmounted", body="Review AU01"),
+        lambda _: None,
+    )
+
+    with pytest.raises(AudiaGenticError, match="submission-proof-not-observed-before-deadline"):
+        await turn.run()
     assert chat.runtime.bridge.submit_calls == 1
 
 
