@@ -1706,6 +1706,7 @@ class GptAutoTurn:
                     prompt_text=self.request.body,
                     allow_virtualized_prompt=not self._recovered_existing_turn,
                     virtualized_assistant_id=self._submission_proof_assistant_id,
+                    bound_assistant_id=self._response_message_id,
                     allow_legacy_owned_error_alert=allow_legacy_owned_error_alert,
                 )
             else:
@@ -1775,6 +1776,7 @@ class GptAutoTurn:
                                     prompt_text=self.request.body,
                                     allow_virtualized_prompt=not self._recovered_existing_turn,
                                     virtualized_assistant_id=self._submission_proof_assistant_id,
+                                    bound_assistant_id=self._response_message_id,
                                 )
                             else:
                                 current, response_ref = raw_current, None
@@ -2221,6 +2223,7 @@ class GptAutoTurn:
                         prompt_text=self.request.body,
                         allow_virtualized_prompt=not self._recovered_existing_turn,
                         virtualized_assistant_id=self._submission_proof_assistant_id,
+                        bound_assistant_id=self._response_message_id,
                     )
                 else:
                     verify = raw_verify
@@ -2769,6 +2772,7 @@ def _scope_response_snapshot(
     prompt_text: str | None = None,
     allow_virtualized_prompt: bool = False,
     virtualized_assistant_id: str | None = None,
+    bound_assistant_id: str | None = None,
     allow_legacy_owned_error_alert: bool = False,
 ) -> tuple[ChatSnapshot, ChatMessageRef | None]:
     """Project a raw snapshot onto this request's own response, not
@@ -2841,6 +2845,45 @@ def _scope_response_snapshot(
                     message_id=snapshot.latest_assistant_id,
                     text=snapshot.latest_assistant_text,
                     sequence=len(snapshot.message_refs),
+                )
+    if response_ref is None and bound_assistant_id:
+        # A later user turn creates a hard ownership boundary. If the
+        # assistant already bound to this request has disappeared and a
+        # newer assistant exists beyond that boundary, fail closed instead
+        # of masking the mismatch as "no response".
+        prompt_index = next(
+            (
+                index
+                for index, ref in enumerate(snapshot.message_refs)
+                if ref.role == "user" and ref.message_id == matched_prompt_id
+            ),
+            None,
+        )
+        if prompt_index is not None:
+            later_user_index = next(
+                (
+                    index
+                    for index, ref in enumerate(
+                        snapshot.message_refs[prompt_index + 1 :], prompt_index + 1
+                    )
+                    if ref.role == "user"
+                ),
+                None,
+            )
+            bound_assistant_present = any(
+                ref.role == "assistant" and ref.message_id == bound_assistant_id
+                for ref in snapshot.message_refs
+            )
+            later_assistant_present = (
+                later_user_index is not None
+                and any(
+                    ref.role == "assistant"
+                    for ref in snapshot.message_refs[later_user_index + 1 :]
+                )
+            )
+            if later_assistant_present and not bound_assistant_present:
+                raise ProviderBindingIntegrityError(
+                    "provider assistant identity changed during response observation"
                 )
     if response_ref is None and allow_virtualized_prompt:
         # ChatGPT's project renderer can unmount the submitted user block
