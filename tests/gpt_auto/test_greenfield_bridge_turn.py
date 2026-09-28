@@ -1050,8 +1050,8 @@ async def test_stale_progress_focus_probe_is_configurable_and_disabled():
 
 
 @pytest.mark.asyncio
-async def test_same_response_slot_id_replacement_is_adopted_without_refresh() -> None:
-    """A renderer bump must adopt the original turn's replacement node.
+async def test_terminal_response_slot_id_replacement_fails_closed() -> None:
+    """A terminal renderer ID bump must not adopt an unproven response node.
 
     The first terminal-looking snapshot exposes a provisional assistant ID;
     the next snapshot exposes a different ID in the same exact prompt-owned
@@ -1104,17 +1104,15 @@ async def test_same_response_slot_id_replacement_is_adopted_without_refresh() ->
         lambda _observation: None,
     )
 
-    result = await turn.run()
-
-    assert result.final_summary == "final response"
+    with pytest.raises(AudiaGenticError, match="assistant identity changed"):
+        await turn.run()
     assert chat.runtime.bridge.submit_calls == 1
     assert refresh_calls == 0
-    assert turn._response_message_id == "assistant-final"
 
 
 @pytest.mark.asyncio
-async def test_text_progress_after_recovery_budget_does_not_fail_replacement() -> None:
-    """A proven replacement with new text still wins over stale recovery state."""
+async def test_terminal_replacement_after_recovery_budget_fails_closed() -> None:
+    """A replacement with new text cannot bypass the identity boundary."""
     chat = _Chat()
     final_snapshot = snap(
         users=1,
@@ -1166,9 +1164,8 @@ async def test_text_progress_after_recovery_budget_does_not_fail_replacement() -
 
     chat.snapshot = snapshot_with_exhausted_recovery
 
-    result = await turn.run()
-
-    assert result.final_summary == "final response"
+    with pytest.raises(AudiaGenticError, match="assistant identity changed"):
+        await turn.run()
     assert refresh_calls == 0
     assert chat.runtime.bridge.submit_calls == 1
 
@@ -1287,15 +1284,15 @@ async def test_repeated_id_only_replacements_cannot_bypass_recovery() -> None:
         lambda _observation: None,
     )
 
-    with pytest.raises(asyncio.TimeoutError):
-        await asyncio.wait_for(turn.run(), timeout=0.5)
-    assert refresh_calls == 1
+    with pytest.raises(AudiaGenticError, match="assistant identity changed"):
+        await turn.run()
+    assert refresh_calls == 0
     assert chat.runtime.bridge.submit_calls == 1
 
 
 @pytest.mark.asyncio
-async def test_terminal_verification_adopts_same_response_slot_replacement() -> None:
-    """Terminal verification applies the same structural replacement proof."""
+async def test_terminal_verification_rejects_same_response_slot_replacement() -> None:
+    """Terminal verification must reject a changed assistant identity."""
     chat = _Chat()
     final_snapshot = snap(
         users=1,
@@ -1353,17 +1350,15 @@ async def test_terminal_verification_adopts_same_response_slot_replacement() -> 
         lambda _observation: None,
     )
 
-    result = await turn.run()
-
-    assert result.final_summary == "final response"
+    with pytest.raises(AudiaGenticError, match="assistant identity changed"):
+        await turn.run()
     assert chat.runtime.bridge.submit_calls == 1
     assert refresh_calls == 0
-    assert turn._response_message_id == "assistant-final"
 
 
 @pytest.mark.asyncio
-async def test_stale_error_does_not_fail_after_id_only_remount() -> None:
-    """A remount preserves fresh completion evidence over stale error markers."""
+async def test_stale_error_does_not_mask_id_only_remount_failure() -> None:
+    """A stale error cannot make an assistant identity change safe."""
     chat = _Chat()
     final_snapshot = snap(
         users=1,
@@ -1408,11 +1403,9 @@ async def test_stale_error_does_not_fail_after_id_only_remount() -> None:
         lambda _observation: None,
     )
 
-    result = await turn.run()
-
-    assert result.final_summary == "final response"
+    with pytest.raises(AudiaGenticError, match="assistant identity changed"):
+        await turn.run()
     assert chat.runtime.bridge.submit_calls == 1
-    assert turn._response_message_id == "assistant-final"
 
 
 @pytest.mark.asyncio
