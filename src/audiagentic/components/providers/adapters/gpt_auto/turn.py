@@ -1284,7 +1284,44 @@ class GptAutoTurn:
     # while the provider is still working. Edge-only detection then stops
     # renewing the gateway lease even though the browser is visibly busy.
 
+    async def _response_observation_heartbeat(self) -> None:
+        """Keep the client lease alive independently of a CDP snapshot."""
+        interval = max(0.01, float(self._HEARTBEAT_INTERVAL_SECONDS))
+        while True:
+            await asyncio.sleep(interval)
+            if self.cancel_event.is_set():
+                return
+            try:
+                await self._emit(
+                    TransportObservationKind.ACTIVITY,
+                    {"model_activity": "response-observing"},
+                )
+            except Exception:  # noqa: BLE001 - heartbeat is advisory
+                logger.debug(
+                    "gpt-auto response observation heartbeat relay failed",
+                    extra={"turn-id": self.request.turn_id},
+                    exc_info=True,
+                )
+
     async def _await_response(
+        self,
+        baseline: ChatSnapshot,
+        current: ChatSnapshot,
+        *,
+        allow_legacy_owned_error_alert: bool = False,
+    ) -> str | None:
+        heartbeat = asyncio.create_task(self._response_observation_heartbeat())
+        try:
+            return await self._await_response_impl(
+                baseline,
+                current,
+                allow_legacy_owned_error_alert=allow_legacy_owned_error_alert,
+            )
+        finally:
+            heartbeat.cancel()
+            await asyncio.gather(heartbeat, return_exceptions=True)
+
+    async def _await_response_impl(
         self,
         baseline: ChatSnapshot,
         current: ChatSnapshot,
