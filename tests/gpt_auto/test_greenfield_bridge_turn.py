@@ -1111,6 +1111,50 @@ async def test_terminal_response_slot_id_replacement_fails_closed() -> None:
 
 
 @pytest.mark.asyncio
+async def test_nonterminal_response_slot_id_replacement_fails_before_controls_appear() -> None:
+    """A remount must fail on the first changed-ID poll, not later at completion."""
+    chat = _Chat()
+    chat._snapshots = iter(
+        [
+            snap(),
+            snap(users=1, user="Review AU01"),
+            snap(users=1, user="Review AU01"),
+            snap(users=1, user="Review AU01", generating=True),
+            snap(
+                users=1,
+                assistants=1,
+                user="Review AU01",
+                assistant="partial",
+                assistant_id="assistant-a",
+            ),
+            snap(
+                users=1,
+                assistants=1,
+                user="Review AU01",
+                assistant="partial",
+                assistant_id="assistant-b",
+            ),
+            snap(
+                users=1,
+                assistants=1,
+                user="Review AU01",
+                assistant="complete later",
+                assistant_id="assistant-b",
+                complete=True,
+            ),
+        ]
+    )
+    turn = GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="turn-nonterminal-replacement", body="Review AU01"),
+        lambda _observation: None,
+    )
+
+    with pytest.raises(AudiaGenticError, match="assistant identity changed"):
+        await turn.run()
+
+
+@pytest.mark.asyncio
 async def test_terminal_replacement_after_recovery_budget_fails_closed() -> None:
     """A replacement with new text cannot bypass the identity boundary."""
     chat = _Chat()
