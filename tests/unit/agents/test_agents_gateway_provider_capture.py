@@ -114,6 +114,33 @@ def test_complete_execution_from_provider_requires_request_submission_proof(monk
     assert getattr(caught.value, "code", None) == "CON-AGW-157"
 
 
+def test_complete_execution_from_provider_allows_unresolved_turn_recovery(monkeypatch, tmp_path: Path):
+    record = {
+        "request-id": "req_unresolved",
+        "state": "running",
+        "revision": 1,
+        "session-id": "ses_capture",
+        "resolved-provider-id": "gpt-auto",
+        "provider-metadata": {
+            "project-url": "https://chatgpt.com/g/g-p-project/project",
+            "unresolved-turn-pending": True,
+        },
+    }
+    monkeypatch.setattr(api.store, "read_record", lambda *_: record)
+    monkeypatch.setattr(sessions_store, "read_session_record", lambda *_: {"provider": {"metadata": {}}})
+    monkeypatch.setattr(sessions_store, "session_provider_metadata", lambda _: {})
+    monkeypatch.setattr(
+        session_runtime_module,
+        "get_session_runtime",
+        lambda: SimpleNamespace(capture_latest_response=lambda *_args, **_kwargs: {"outcome": "not-captured", "reason": "test"}),
+    )
+
+    with pytest.raises(Exception) as caught:
+        api.complete_execution_from_provider(tmp_path, "req_unresolved")
+
+    assert getattr(caught.value, "code", None) == "CON-AGW-154"
+
+
 def test_complete_execution_from_provider_uses_prompt_text_for_synthetic_ids(monkeypatch, tmp_path: Path):
     prompt = "synthetic prompt"
     request_id = "req_synthetic"
