@@ -282,6 +282,7 @@ class GptAutoTurn:
         self._composer_action_confirmed = False
         self._prompt_message_id: str | None = None
         self._response_message_id: str | None = None
+        self._submission_proof_url: str | None = None
         # Normal turns may retain a confirmed prompt anchor while ChatGPT
         # virtualizes that user node out of later snapshots. Recovery turns
         # remain stricter and use the existing unresolved-correlation rules.
@@ -711,7 +712,16 @@ class GptAutoTurn:
             return self._result("cancelled")
         self._move(TurnState.AWAITING_RESPONSE)
         self._phase = "response-observation"
-        final = await self._await_response(baseline, proof)
+        # A new session starts on the project landing route and becomes a
+        # conversation route only after ChatGPT accepts the prompt. Preserve
+        # that post-submit conversation identity for response scoping while
+        # retaining the original baseline's message IDs.
+        response_baseline = (
+            replace(baseline, url=proof.url)
+            if self._submission_proof_url and not parse_provider_session_id(baseline.url)
+            else baseline
+        )
+        final = await self._await_response(response_baseline, proof)
         if self.state is TurnState.CANCELLED:
             return self._result("cancelled")
         if final is None:
@@ -1191,6 +1201,8 @@ class GptAutoTurn:
             )
             prompt_unmounted_completion = (
                 self._composer_action_confirmed
+                and not baseline_provider_session
+                and parse_provider_session_id(snap.url)
                 and not snap.generating
                 and snap.latest_assistant_id
                 and snap.latest_assistant_id != baseline.latest_assistant_id
@@ -1209,6 +1221,7 @@ class GptAutoTurn:
                 self._prompt_message_id = (
                     f"virtualized-prompt-for-{snap.latest_assistant_id}"
                 )
+                self._submission_proof_url = canonical_chat_url(snap.url)
                 return snap
             caps = EvidenceCapability.NONE
             if (new_msg and user_id_changed) or assistant_progress or dom_activity_changed:
