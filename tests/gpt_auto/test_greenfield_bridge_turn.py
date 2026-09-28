@@ -7,7 +7,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from audiagentic.components.providers.adapters.gpt_auto.chat import ChatState
+from audiagentic.components.providers.adapters.gpt_auto.chat import (
+    ChatState,
+    ProviderBindingIntegrityError,
+)
 from audiagentic.components.providers.adapters.gpt_auto.config import GptAutoConfig
 from audiagentic.components.providers.adapters.gpt_auto.gpt_auto_cdp import (
     ComposerSubmissionTimeout,
@@ -2160,6 +2163,36 @@ def test_response_scope_rebinds_real_prompt_id_and_reused_fallback_assistant_slo
     assert scoped.terminal_witness_assistant_id == response_ref.message_id
 
 
+def test_response_scope_rejects_prompt_rebind_to_unpinned_assistant():
+    baseline = snap(users=1, user="Request A", user_id="prompt-a")
+    raw = replace(
+        snap(
+            users=1,
+            assistants=1,
+            user="Request A",
+            user_id="real-user-uuid",
+            assistant="Foreign answer",
+            assistant_id="assistant-b",
+            complete=True,
+        ),
+        message_refs=(
+            ChatMessageRef("user", "real-user-uuid", "Request A", 0),
+            ChatMessageRef("assistant", "assistant-b", "Foreign answer", 1),
+        ),
+    )
+
+    scoped, response_ref = _scope_response_snapshot(
+        baseline,
+        raw,
+        prompt_message_id="prompt-a",
+        prompt_text="Request A",
+        virtualized_assistant_id="assistant-a",
+    )
+
+    assert response_ref is None
+    assert scoped.latest_assistant_id == baseline.latest_assistant_id
+
+
 def test_response_scope_rebinds_reused_fallback_slot_when_prompt_ordinal_is_unchanged():
     baseline = snap(
         users=1,
@@ -2357,6 +2390,45 @@ async def test_completed_response_proves_submission_when_user_turn_is_unmounted(
     assert result.final_summary == "Complete answer"
     assert turn.state is TurnState.COMPLETE
     assert chat.runtime.bridge.submit_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_submission_proof_rejects_same_project_conversation_route_drift():
+    """A new project turn must stay on its first durable conversation route."""
+    chat = _Chat()
+    working_a = snap(
+        users=1,
+        user="Review AU01",
+        assistants=1,
+        assistant="Working in conversation A",
+        assistant_id="assistant-a",
+        generating=True,
+        url="https://chatgpt.com/g/g-p-project/c/conversation-a",
+    )
+    completed_b = snap(
+        assistants=1,
+        assistant="Completed in conversation B",
+        assistant_id="assistant-b",
+        complete=True,
+        url="https://chatgpt.com/g/g-p-project/c/conversation-b",
+    )
+    chat._snapshots = iter(
+        [
+            snap(url="https://chatgpt.com/g/g-p-project/project"),
+            working_a,
+            completed_b,
+        ]
+    )
+    turn = GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="turn-route-drift", body="Review AU01"),
+        lambda _: None,
+    )
+
+    with pytest.raises(ProviderBindingIntegrityError, match="conversation changed"):
+        await turn._await_submission_proof(
+            snap(url="https://chatgpt.com/g/g-p-project/project")
+        )
 
 
 @pytest.mark.asyncio

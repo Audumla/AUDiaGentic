@@ -1071,6 +1071,10 @@ class GptAutoTurn:
         previous_assistant_id = baseline.latest_assistant_id
         previous_assistant_text = baseline.latest_assistant_text
         previous_dom_activity_digest = baseline.dom_activity_digest
+        baseline_is_project_landing = (
+            not parse_provider_session_id(baseline.url)
+            and urlsplit(baseline.url).path.rstrip("/").lower().endswith("/project")
+        )
         # Keep the local classification variable initialized even when the
         # first post-submit snapshot fails. Without this, the exhaustion
         # path itself raised UnboundLocalError and discarded the real CDP
@@ -1107,6 +1111,21 @@ class GptAutoTurn:
                 continue
             last_observation_error = None
             self._remember_snapshot(snap)
+            # Once a new project session leaves /project, pin the first
+            # durable conversation route.  A later same-project route is not
+            # causal proof for this Send and must fail closed rather than
+            # allowing a foreign/human turn to be adopted.
+            if baseline_is_project_landing:
+                observed_conversation_url = canonical_chat_url(snap.url)
+                if observed_conversation_url:
+                    if (
+                        self._submission_proof_url
+                        and observed_conversation_url != self._submission_proof_url
+                    ):
+                        raise ProviderBindingIntegrityError(
+                            "post-submit provider conversation changed before proof"
+                        )
+                    self._submission_proof_url = observed_conversation_url
             if (
                 not self._initial_refresh_attempted
                 and snap.user_count == 0
@@ -1200,7 +1219,11 @@ class GptAutoTurn:
             same_bound_conversation = (
                 canonical_chat_url(snap.url) == canonical_chat_url(baseline.url)
                 if baseline_provider_session
-                else same_admitted_project
+                else (
+                    canonical_chat_url(snap.url) == self._submission_proof_url
+                    if self._submission_proof_url
+                    else same_admitted_project
+                )
             )
             prompt_unmounted_completion = (
                 self._composer_action_confirmed
@@ -2930,6 +2953,15 @@ def _scope_response_snapshot(
                 text=snapshot.latest_assistant_text,
                 sequence=len(snapshot.message_refs),
             )
+    if (
+        virtualized_assistant_id
+        and response_ref is not None
+        and response_ref.message_id != virtualized_assistant_id
+    ):
+        # Prompt-text rebinding runs before the virtualized-prompt fallback.
+        # Do not let that earlier branch bypass the request-owned assistant
+        # identity pinned during submission proof after a renderer remount.
+        response_ref = None
     if (
         response_ref is not None
         and response_ref.message_id == baseline.latest_assistant_id
