@@ -1,11 +1,26 @@
 """Isolated browser checks; never attach to the provider's CDP connection."""
-import json
 import base64
+import json
 
 import pytest
 
-from audiagentic.components.agents.gateway.service.dashboard import render_dashboard_html
-from audiagentic.components.agents.gateway.service.dashboard_images import save_image, image_path
+from audiagentic.components.agents.gateway.service.dashboard import _request_row, render_dashboard_html
+from audiagentic.components.agents.gateway.service.dashboard_images import image_path, save_image
+
+
+def test_session_request_row_keeps_provider_identity_for_manual_capture() -> None:
+    row = _request_row(
+        {
+            "request-id": "req_running",
+            "session-id": "ses_running",
+            "state": "running",
+            "provider-id": "gpt-auto",
+            "provider-turn-pending": True,
+        },
+        include_execution=False,
+    )
+
+    assert row["provider-id"] == "gpt-auto"
 
 
 def test_dashboard_actions_activity_and_card_icons(tmp_path):
@@ -14,7 +29,7 @@ def test_dashboard_actions_activity_and_card_icons(tmp_path):
     projects = []
     for index, name in enumerate(["AUDiaGentic", "BigCherry"]):
         session = {"session-id": f"ses_{index}abc1234567890", "state": "active", "turn-count": 2, "execution-profile-id": "gpt-dev", "provider-id": "gpt-auto", "model-id": "chatgpt", "provider-chat-title": "Review gateway dashboard layout"}
-        requests = [{"request-id": f"req_{index}{state}123456789", "session-id": session["session-id"], "state": state, "updated-at": stamp, "activity-type": "tool-progress", "activity-sequence": 13, "focus-tab-available": True} for state in ["running", "completed"]]
+        requests = [{"request-id": f"req_{index}{state}123456789", "session-id": session["session-id"], "state": state, "updated-at": stamp, "activity-type": "tool-progress", "activity-sequence": 13, "focus-tab-available": True, "provider-id": "gpt-auto"} for state in ["running", "completed"]]
         projects.append({"name": name, "project-id": str(index)*64, "sessions": [session], "requests": requests, "queues": {}})
     snapshot = {"projects": projects, "counts": {"running": 2}, "dashboard": {"recent-window-seconds": 43200}}
     with playwright.sync_playwright() as pw:
@@ -64,6 +79,7 @@ def test_dashboard_actions_activity_and_card_icons(tmp_path):
             assert page.locator(".request-row:has(.badge.state-completed) .cancel-request").count() == 0
             assert page.locator('.session').count() == 2
             assert page.locator(".work-section-active .cancel-request").count() == 2
+            assert page.locator(".work-section-active .complete-provider").count() == 2
             row = page.locator(".request-row").first
             assert row.locator(".request-actions .focus-chat").count() == 1
             assert row.locator(".focus-chat").bounding_box()["x"] > row.locator(".request-updated").bounding_box()["x"]
