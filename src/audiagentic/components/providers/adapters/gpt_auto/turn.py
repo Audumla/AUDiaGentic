@@ -9,6 +9,7 @@ from collections import Counter
 from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import Any, NoReturn
+from urllib.parse import urlsplit
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.time import now_iso_z
@@ -283,6 +284,7 @@ class GptAutoTurn:
         self._prompt_message_id: str | None = None
         self._response_message_id: str | None = None
         self._submission_proof_url: str | None = None
+        self._submission_proof_assistant_id: str | None = None
         # Normal turns may retain a confirmed prompt anchor while ChatGPT
         # virtualizes that user node out of later snapshots. Recovery turns
         # remain stricter and use the existing unresolved-correlation rules.
@@ -1190,6 +1192,7 @@ class GptAutoTurn:
             # submit and never treats a generating or unbound response as
             # proof.
             baseline_provider_session = parse_provider_session_id(baseline.url)
+            exact_project_landing = urlsplit(baseline.url).path.rstrip("/").lower().endswith("/project")
             same_admitted_project = (
                 parse_project_id(snap.url) == parse_project_id(baseline.url)
                 and parse_project_id(snap.url) == parse_project_id(self.chat.project_url or snap.url)
@@ -1202,6 +1205,7 @@ class GptAutoTurn:
             prompt_unmounted_completion = (
                 self._composer_action_confirmed
                 and not baseline_provider_session
+                and exact_project_landing
                 and parse_provider_session_id(snap.url)
                 and not snap.generating
                 and snap.latest_assistant_id
@@ -1222,6 +1226,7 @@ class GptAutoTurn:
                     f"virtualized-prompt-for-{snap.latest_assistant_id}"
                 )
                 self._submission_proof_url = canonical_chat_url(snap.url)
+                self._submission_proof_assistant_id = snap.latest_assistant_id
                 return snap
             caps = EvidenceCapability.NONE
             if (new_msg and user_id_changed) or assistant_progress or dom_activity_changed:
@@ -1677,6 +1682,7 @@ class GptAutoTurn:
                     prompt_message_id=prompt_message_id,
                     prompt_text=self.request.body,
                     allow_virtualized_prompt=not self._recovered_existing_turn,
+                    virtualized_assistant_id=self._submission_proof_assistant_id,
                     allow_legacy_owned_error_alert=allow_legacy_owned_error_alert,
                 )
             else:
@@ -1745,6 +1751,7 @@ class GptAutoTurn:
                                     prompt_message_id=prompt_message_id,
                                     prompt_text=self.request.body,
                                     allow_virtualized_prompt=not self._recovered_existing_turn,
+                                    virtualized_assistant_id=self._submission_proof_assistant_id,
                                 )
                             else:
                                 current, response_ref = raw_current, None
@@ -2233,6 +2240,7 @@ class GptAutoTurn:
                         prompt_message_id=prompt_message_id,
                         prompt_text=self.request.body,
                         allow_virtualized_prompt=not self._recovered_existing_turn,
+                        virtualized_assistant_id=self._submission_proof_assistant_id,
                     )
                 else:
                     verify = raw_verify
@@ -2824,6 +2832,7 @@ def _scope_response_snapshot(
     prompt_message_id: str,
     prompt_text: str | None = None,
     allow_virtualized_prompt: bool = False,
+    virtualized_assistant_id: str | None = None,
     allow_legacy_owned_error_alert: bool = False,
 ) -> tuple[ChatSnapshot, ChatMessageRef | None]:
     """Project a raw snapshot onto this request's own response, not
@@ -2900,6 +2909,10 @@ def _scope_response_snapshot(
         fresh_assistant = (
             snapshot.latest_assistant_id
             and snapshot.latest_assistant_text
+            and (
+                virtualized_assistant_id is None
+                or snapshot.latest_assistant_id == virtualized_assistant_id
+            )
             and snapshot.latest_assistant_id not in baseline_assistant_ids
             and snapshot.latest_assistant_id != baseline.latest_assistant_id
         )

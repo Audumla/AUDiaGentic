@@ -2090,6 +2090,35 @@ def test_response_scope_accepts_confirmed_prompt_when_project_renderer_unmounts_
     assert scoped.latest_assistant_id == "assistant-a"
 
 
+def test_response_scope_rejects_unpinned_virtualized_assistant_remount():
+    baseline = snap(users=1, user="Request A", user_id="prompt-a")
+    raw = replace(
+        snap(
+            users=0,
+            assistants=1,
+            assistant="Later answer",
+            assistant_id="assistant-b",
+            complete=True,
+        ),
+        message_refs=(ChatMessageRef("assistant", "assistant-b", "Later answer", 0),),
+        latest_user_id=None,
+        latest_user_text=None,
+        user_message_ids=(),
+        user_message_texts=(),
+    )
+
+    scoped, response_ref = _scope_response_snapshot(
+        baseline,
+        raw,
+        prompt_message_id="prompt-a",
+        allow_virtualized_prompt=True,
+        virtualized_assistant_id="assistant-a",
+    )
+
+    assert response_ref is None
+    assert scoped.latest_assistant_id == baseline.latest_assistant_id
+
+
 def test_response_scope_rebinds_real_prompt_id_and_reused_fallback_assistant_slot():
     baseline = snap(
         users=1,
