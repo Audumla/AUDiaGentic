@@ -2048,6 +2048,31 @@ def test_scope_does_not_rebind_a_real_prompt_id_by_text():
     assert scoped.latest_assistant_id == baseline.latest_assistant_id
 
 
+def test_scope_rejects_unpinned_prompt_unmounted_completion():
+    baseline = snap(users=1, user="Request A", user_id="prompt-a")
+    raw = replace(
+        baseline,
+        user_count=0,
+        assistant_count=1,
+        latest_user_id=None,
+        latest_assistant_id="assistant-b",
+        latest_assistant_text="Later answer",
+        terminal_witness_assistant_id="assistant-b",
+        message_refs=(ChatMessageRef("assistant", "assistant-b", "Later answer", 0),),
+    )
+
+    with pytest.raises(
+        ProviderBindingIntegrityError,
+        match="unpinned after prompt virtualization",
+    ):
+        _scope_response_snapshot(
+            baseline,
+            raw,
+            prompt_message_id="prompt-a",
+            allow_virtualized_prompt=True,
+        )
+
+
 def test_error_alert_scope_ignores_stale_and_foreign_occurrences():
     baseline = replace(
         snap(users=1, user="Request A", user_id="prompt-a", extra_signals=("error-alert",)),
@@ -2228,6 +2253,7 @@ def test_response_scope_accepts_confirmed_prompt_when_project_renderer_unmounts_
         raw,
         prompt_message_id="prompt-a",
         allow_virtualized_prompt=True,
+        virtualized_assistant_id="assistant-a",
     )
 
     assert response_ref is not None

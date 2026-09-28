@@ -2929,6 +2929,19 @@ def _scope_response_snapshot(
         same_conversation = canonical_chat_url(snapshot.url) == canonical_chat_url(baseline.url)
         terminal_bound = snapshot.terminal_witness_assistant_id == snapshot.latest_assistant_id
         if (
+            fresh_assistant
+            and prompt_unmounted
+            and same_conversation
+            and terminal_bound
+            and virtualized_assistant_id is None
+        ):
+            # A prompt-unmounted assistant is request-owned only when its
+            # identity was pinned during submission proof. Without that
+            # durable anchor, a later turn can be mistaken for this request.
+            raise ProviderBindingIntegrityError(
+                "provider assistant identity is unpinned after prompt virtualization"
+            )
+        if (
             virtualized_assistant_id
             and snapshot.latest_assistant_id
             and snapshot.latest_assistant_id != virtualized_assistant_id
