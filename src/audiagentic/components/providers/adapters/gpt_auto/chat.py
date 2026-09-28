@@ -1336,9 +1336,7 @@ class PersistentChat:
                     request_id=request_id,
                     trigger=trigger,
                 )
-                if trigger == "response-recovery":
-                    raise ProviderBindingIntegrityError("page binding changed before response recovery")
-                return False
+                raise ProviderBindingIntegrityError("page binding changed before response recovery")
             browser = self._gpt_browser()
             try:
                 page = await browser.page_by_handle(handle)
@@ -1365,7 +1363,7 @@ class PersistentChat:
                 await browser.navigate(page, canonical_chat_url(current_url) or bound_url)
                 await asyncio.sleep(self.config.turn.poll_interval_seconds)
                 if handle != self.page_handle:
-                    raise RuntimeError("bound page handle changed during refresh")
+                    raise ProviderBindingIntegrityError("bound page handle changed during refresh")
                 refreshed_page = await browser.page_by_handle(handle)
                 refreshed_target = str(getattr(refreshed_page, "target_id", "") or "")
                 refreshed_url = str(getattr(refreshed_page, "url", "") or "")
@@ -1401,9 +1399,7 @@ class PersistentChat:
                     exception_type=type(exc).__name__,
                     exception=str(exc),
                 )
-                if trigger == "response-recovery":
-                    raise
-                return False
+                raise
             except Exception as exc:  # noqa: BLE001 - caller owns bounded retry policy
                 self._set_unresolved_recovery(
                     "refresh-failed",
