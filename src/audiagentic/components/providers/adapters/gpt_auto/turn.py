@@ -1810,6 +1810,10 @@ class GptAutoTurn:
                     expected_assistant_id = self._response_message_id
                     observed_assistant_id = response_ref.message_id
                     if _replacement_proven(raw_current, observed_assistant_id):
+                        if raw_current.terminal_witness_assistant_id == observed_assistant_id:
+                            raise ProviderBindingIntegrityError(
+                                "provider assistant identity changed during response observation"
+                            )
                         self._response_message_id = observed_assistant_id
                         mark_assistant = getattr(self.chat, "mark_assistant_observed", None)
                         if mark_assistant is not None:
@@ -2305,6 +2309,10 @@ class GptAutoTurn:
                 ):
                     expected_assistant_id = self._response_message_id
                     if _replacement_proven(raw_verify, verify_message_id):
+                        if raw_verify.terminal_witness_assistant_id == verify_message_id:
+                            raise ProviderBindingIntegrityError(
+                                "provider assistant identity changed during response verification"
+                            )
                         self._response_message_id = verify_message_id
                         mark_assistant = getattr(self.chat, "mark_assistant_observed", None)
                         if mark_assistant is not None:
