@@ -1549,7 +1549,17 @@ class GptAutoTurn:
                 and now - final_recovery_grace_started_at >= final_grace_seconds
                 and not completion_candidate
             ):
-                self._raise_response_recovery_exhausted(recovery_refresh_attempts)
+                # Inactivity is not terminal authority.  Once the bounded
+                # refresh budget and grace phase are exhausted, remain in
+                # passive observation until an explicit outer timeout,
+                # provider error, cancellation, or unrecoverable protocol /
+                # session failure decides the request.  Request-owned
+                # progress still resets this epoch above and permits a new
+                # bounded recovery sequence.
+                logger.info(
+                    "gpt-auto response recovery exhausted; continuing passive observation",
+                    extra={"turn-id": self.request.turn_id, "refresh-attempts": recovery_refresh_attempts},
+                )
             return False
 
         while True:
