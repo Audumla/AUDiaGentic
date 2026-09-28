@@ -2827,7 +2827,10 @@ def _scope_response_snapshot(
         prompt_refs = [
             ref for ref in snapshot.message_refs
             if ref.role == "user"
-            and PromptFingerprint.from_text(ref.text).digest == prompt_digest
+            and PromptFingerprint.from_text(
+                ref.correlation_text or ref.text or ""
+            ).digest
+            == prompt_digest
         ]
         if len(prompt_refs) == 1:
             matched_prompt_id = prompt_refs[0].message_id

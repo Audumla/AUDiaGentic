@@ -2383,6 +2383,51 @@ def test_response_scope_rebinds_real_prompt_id_and_reused_fallback_assistant_slo
     assert scoped.terminal_witness_assistant_id == response_ref.message_id
 
 
+def test_response_scope_rebind_uses_prompt_correlation_text():
+    baseline = snap(
+        users=1,
+        assistants=0,
+        user_id="fallback-user-0",
+        user="Old renderer text",
+    )
+    raw = replace(
+        snap(
+            users=1,
+            assistants=1,
+            user="Rendered prompt text",
+            user_id="real-user-uuid",
+            assistant="PASS",
+            assistant_id="fallback-assistant-0",
+            complete=True,
+        ),
+        message_refs=(
+            ChatMessageRef(
+                "user",
+                "real-user-uuid",
+                "Rendered prompt text",
+                0,
+                correlation_text="Original prompt with renderer-only formatting",
+            ),
+            ChatMessageRef("assistant", "fallback-assistant-0", "PASS", 1),
+        ),
+        latest_user_id="real-user-uuid",
+        latest_user_text="Rendered prompt text",
+        user_message_ids=("real-user-uuid",),
+        user_message_texts=("Rendered prompt text",),
+    )
+
+    scoped, response_ref = _scope_response_snapshot(
+        baseline,
+        raw,
+        prompt_message_id="fallback-user-0",
+        prompt_text="Original prompt with renderer-only formatting",
+    )
+
+    assert response_ref is not None
+    assert response_ref.message_id == "fallback-assistant-0"
+    assert scoped.latest_assistant_text == "PASS"
+
+
 def test_response_scope_rejects_prompt_rebind_to_unpinned_assistant():
     baseline = snap(users=1, user="Request A", user_id="prompt-a")
     raw = replace(
