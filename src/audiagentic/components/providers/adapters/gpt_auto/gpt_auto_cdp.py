@@ -205,6 +205,13 @@ _SNAPSHOT_FN = r"""
   const latestFallbackAssistantBlock = usingFallbackMessages
     ? fallbackBlocks.slice().reverse().find(block => fallbackBlockLabel(block) === 'chatgpt said:') || null
     : null;
+  // The current labelled renderer places the assistant action bar beside the
+  // labelled block, inside the encompassing data-turn-key wrapper. Scoping
+  // only to the .block-BQZwFn content misses More actions/Regenerate response
+  // and leaves a completed answer looking permanently in-progress.
+  const fallbackTurnRoot = block => block
+    ? (block.closest('[data-turn-key]') || block.closest('[data-content-search-turn-key]'))
+    : null;
   const fallbackHasUnansweredPrompt = Boolean(
     latestFallbackUserBlock &&
     (!latestFallbackAssistantBlock ||
@@ -300,9 +307,9 @@ _SNAPSHOT_FN = r"""
   // "Thinking" turn look idle/complete and assigns its DOM digest to the
   // previous prompt.
   const assistantTurn = usingFallbackMessages
-    ? (latestFallbackActivityBlock || (latestAssistant ? (
-        latestAssistant.closest("[data-turn-key]") ||
-        latestAssistant.closest(".agent-turn") ||
+    ? (fallbackTurnRoot(latestFallbackActivityBlock) || latestFallbackActivityBlock || (latestAssistant ? (
+         latestAssistant.closest("[data-turn-key]") ||
+         latestAssistant.closest(".agent-turn") ||
         latestAssistant.closest("article") ||
         latestAssistant.parentElement?.parentElement
       ) : null))
@@ -1586,6 +1593,12 @@ class GptAutoCdpBrowserController(CdpBrowserController):
         their persisted /c/ URL and never enter this method.
         """
         expected_project_id = parse_project_id(project_url or "")
+        anchor_target_ids: set[str] = set()
+        if anchor_page:
+            try:
+                anchor_target_ids = {candidate.target_id for candidate in await self.pages()}
+            except Exception:  # noqa: BLE001 - fresh-tab fallback remains safe
+                logger.debug("gpt-auto could not baseline anchor window targets", exc_info=True)
         if anchor_page:
             # Same-window creation uses window.open on the dashboard anchor.
             # A stale/contended CDP session can block that attach for the
@@ -1600,6 +1613,7 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                     "gpt-auto dashboard anchor did not accept same-window tab creation; "
                     "falling back to a fresh browser tab"
                 )
+                await self._close_late_anchor_targets(anchor_page, anchor_target_ids)
                 page = await self.new_tab()
         else:
             page = await self.new_window()
@@ -1711,6 +1725,31 @@ class GptAutoCdpBrowserController(CdpBrowserController):
             raise RuntimeError(
                 f"gpt-auto project page open failed: {type(exc).__name__}: {exc}"
             ) from exc
+
+    async def _close_late_anchor_targets(
+        self, anchor_page: CdpPageRef, known_target_ids: set[str]
+    ) -> None:
+        """Close only blank targets left by a timed-out ``window.open``."""
+        try:
+            candidates = await self.pages()
+        except Exception:  # noqa: BLE001 - cleanup is best effort
+            logger.debug("gpt-auto could not enumerate late anchor targets", exc_info=True)
+            return
+        for candidate in candidates:
+            if candidate.target_id in known_target_ids:
+                continue
+            if candidate.opener_id != anchor_page.target_id:
+                continue
+            if candidate.url not in {"", "about:blank"}:
+                continue
+            try:
+                await self.close(candidate)
+            except Exception:  # noqa: BLE001 - isolate one late target
+                logger.debug(
+                    "gpt-auto failed to close late blank anchor target",
+                    extra={"target-id": candidate.target_id},
+                    exc_info=True,
+                )
 
 
 __all__ = ["GptAutoCdpBrowserController", "CdpPageRef", "CdpWindowBounds"]

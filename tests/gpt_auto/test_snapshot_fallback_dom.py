@@ -114,6 +114,40 @@ async def test_fallback_outer_turn_action_bar_is_bound_to_latest_response():
 
 
 @pytest.mark.asyncio
+async def test_fallback_current_renderer_turn_root_includes_sibling_completion_bar():
+    """The current renderer puts controls outside the labelled block."""
+    signals = [
+        dict(name='completion-control', scope='latest-assistant-turn', selectors=['button[aria-label="Copy message"]'], visible=True),
+        dict(name='more-actions-menu', scope='latest-assistant-turn', selectors=['button[aria-label="More actions"]'], visible=True),
+    ]
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            await page.set_content('''
+              <div data-turn-key="prompt-id">
+                <div data-content-search-turn-key="fallback-turn-0">
+                  <div class="block-BQZwFn"><h4 class="sr-only">You said:</h4>
+                    <div data-user-message-bubble="true">prompt</div>
+                    <button aria-label="Copy message">Copy</button>
+                  </div>
+                  <div class="block-BQZwFn"><h4 class="sr-only">ChatGPT said:</h4>
+                    <p>answer</p>
+                  </div>
+                </div>
+                <div class="assistant-actions">
+                  <button aria-label="Copy message">Copy</button>
+                  <button aria-label="More actions">More</button>
+                </div>
+              </div>''')
+            snapshot = await page.evaluate(_SNAPSHOT_FN, signals)
+            assert snapshot['domSignals']['completion-control']
+            assert snapshot['domSignals']['more-actions-menu']
+        finally:
+            await browser.close()
+
+
+@pytest.mark.asyncio
 async def test_activity_observer_captures_interior_changes_but_not_shimmer():
     async with async_playwright() as pw:
         browser = await pw.chromium.launch(headless=True)
