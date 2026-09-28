@@ -2181,6 +2181,32 @@ def test_response_scope_rejects_unpinned_virtualized_assistant_remount():
         )
 
 
+def test_response_scope_rejects_nonterminal_virtualized_assistant_remount():
+    baseline = snap(users=1, user="Request A", user_id="prompt-a")
+    raw = replace(
+        snap(
+            users=0,
+            assistants=1,
+            assistant="Still working after remount",
+            assistant_id="assistant-b",
+        ),
+        message_refs=(ChatMessageRef("assistant", "assistant-b", "Still working after remount", 0),),
+        latest_user_id=None,
+        latest_user_text=None,
+        user_message_ids=(),
+        user_message_texts=(),
+    )
+
+    with pytest.raises(ProviderBindingIntegrityError, match="assistant identity changed"):
+        _scope_response_snapshot(
+            baseline,
+            raw,
+            prompt_message_id="prompt-a",
+            allow_virtualized_prompt=True,
+            virtualized_assistant_id="assistant-a",
+        )
+
+
 def test_response_scope_rebinds_real_prompt_id_and_reused_fallback_assistant_slot():
     baseline = snap(
         users=1,
