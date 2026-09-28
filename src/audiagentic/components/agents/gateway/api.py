@@ -1146,6 +1146,26 @@ def complete_execution_from_provider(project_root: Path, request_id: str) -> dic
         raise AudiaGenticError(code="CON-AGW-155", kind="agents", message="provider completion witness is missing", details={"request-id": request_id})
     if not latest_assistant_id or witness_id != latest_assistant_id:
         raise AudiaGenticError(code="CON-AGW-156", kind="agents", message="provider response is not request-owned", details={"request-id": request_id})
+    if metadata.get("submission-proven") is not True:
+        baseline_user_count = metadata.get("unresolved-baseline-user-count")
+        baseline_assistant_count = metadata.get("unresolved-baseline-assistant-count")
+        latest_user_ref = snapshot.latest_user_ref() if hasattr(snapshot, "latest_user_ref") else None
+        latest_assistant_ref = next(
+            (ref for ref in reversed(getattr(snapshot, "message_refs", ())) if getattr(ref, "role", None) == "assistant"),
+            None,
+        )
+        if (
+            not isinstance(baseline_user_count, int)
+            or isinstance(baseline_user_count, bool)
+            or not isinstance(baseline_assistant_count, int)
+            or isinstance(baseline_assistant_count, bool)
+            or getattr(snapshot, "user_count", 0) <= baseline_user_count
+            or getattr(snapshot, "assistant_count", 0) <= baseline_assistant_count
+            or latest_user_ref is None
+            or latest_assistant_ref is None
+            or latest_user_ref.sequence >= latest_assistant_ref.sequence
+        ):
+            raise AudiaGenticError(code="CON-AGW-156", kind="agents", message="provider response did not advance beyond the unresolved-turn baseline", details={"request-id": request_id})
     expected_assistant_is_real = bool(expected_assistant and not str(expected_assistant).startswith("fallback-"))
     before_assistant_is_real = bool(before_assistant and not str(before_assistant).startswith("fallback-"))
     if expected_assistant_is_real and expected_assistant != latest_assistant_id:
