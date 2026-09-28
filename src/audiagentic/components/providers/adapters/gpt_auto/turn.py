@@ -52,6 +52,11 @@ from .urls import (
 logger = logging.getLogger(__name__)
 
 
+def _is_durable_assistant_message_id(message_id: str | None) -> bool:
+    """Return whether an assistant ID can survive renderer virtualization."""
+    return bool(message_id and not message_id.startswith("fallback-assistant-"))
+
+
 def _text_digest(text: str | None) -> str | None:
     """Return a bounded diagnostic fingerprint without logging response text."""
     if text is None:
@@ -336,6 +341,13 @@ class GptAutoTurn:
             return snapshot.latest_user_id
         if snapshot.user_count > 0:
             return f"fallback-user-{snapshot.user_count - 1}"
+        return None
+
+    def _virtualized_assistant_id(self) -> str | None:
+        """Return the durable request-owned assistant identity, if known."""
+        for candidate in (self._submission_proof_assistant_id, self._response_message_id):
+            if _is_durable_assistant_message_id(candidate):
+                return candidate
         return None
 
     async def _emit(self, kind: TransportObservationKind, attributes: dict[str, Any]) -> None:
@@ -1234,6 +1246,7 @@ class GptAutoTurn:
                 and snap.latest_assistant_id
                 and snap.latest_assistant_id != baseline.latest_assistant_id
                 and snap.latest_assistant_id not in baseline.assistant_message_ids
+                and _is_durable_assistant_message_id(snap.latest_assistant_id)
                 and snap.latest_assistant_text
                 and snap.user_count == 0
                 and not snap.user_message_ids
@@ -1705,7 +1718,7 @@ class GptAutoTurn:
                     prompt_message_id=prompt_message_id,
                     prompt_text=self.request.body,
                     allow_virtualized_prompt=not self._recovered_existing_turn,
-                    virtualized_assistant_id=self._submission_proof_assistant_id,
+                    virtualized_assistant_id=self._virtualized_assistant_id(),
                     bound_assistant_id=self._response_message_id,
                     allow_legacy_owned_error_alert=allow_legacy_owned_error_alert,
                 )
@@ -1775,7 +1788,7 @@ class GptAutoTurn:
                                     prompt_message_id=prompt_message_id,
                                     prompt_text=self.request.body,
                                     allow_virtualized_prompt=not self._recovered_existing_turn,
-                                    virtualized_assistant_id=self._submission_proof_assistant_id,
+                                    virtualized_assistant_id=self._virtualized_assistant_id(),
                                     bound_assistant_id=self._response_message_id,
                                 )
                             else:
@@ -2222,7 +2235,7 @@ class GptAutoTurn:
                         prompt_message_id=prompt_message_id,
                         prompt_text=self.request.body,
                         allow_virtualized_prompt=not self._recovered_existing_turn,
-                        virtualized_assistant_id=self._submission_proof_assistant_id,
+                        virtualized_assistant_id=self._virtualized_assistant_id(),
                         bound_assistant_id=self._response_message_id,
                     )
                 else:
