@@ -117,6 +117,7 @@ def test_complete_execution_from_provider_requires_request_submission_proof(monk
 def test_complete_execution_from_provider_uses_prompt_text_for_synthetic_ids(monkeypatch, tmp_path: Path):
     prompt = "synthetic prompt"
     request_id = "req_synthetic"
+    materialized_prompt = "governed instructions\n\n" + prompt
     record = {
         "request-id": request_id,
         "state": "running",
@@ -124,6 +125,7 @@ def test_complete_execution_from_provider_uses_prompt_text_for_synthetic_ids(mon
         "session-id": "ses_capture",
         "resolved-provider-id": "gpt-auto",
         "prompt-digest": hashlib.sha256(prompt.encode()).hexdigest(),
+        "prompt-template-digest": hashlib.sha256(materialized_prompt.encode()).hexdigest(),
         "provider-metadata": {
             "chat-url": "https://chatgpt.com/g/g-p-project/c/conversation",
             "project-url": "https://chatgpt.com/g/g-p-project/project",
@@ -135,14 +137,14 @@ def test_complete_execution_from_provider_uses_prompt_text_for_synthetic_ids(mon
     }
     prompt_path = gateway_admitted_prompt_path(tmp_path, request_id)
     prompt_path.parent.mkdir(parents=True, exist_ok=True)
-    prompt_path.write_text(prompt, encoding="utf-8")
+    prompt_path.write_bytes(materialized_prompt.encode("utf-8"))
     refs = (
-        SimpleNamespace(role="user", sequence=0, text=prompt, correlation_text=prompt),
+        SimpleNamespace(role="user", sequence=0, text=materialized_prompt, correlation_text=materialized_prompt),
         SimpleNamespace(role="assistant", sequence=1, text="answer", correlation_text="answer"),
     )
     snapshot = SimpleNamespace(
         latest_assistant_text="answer",
-        latest_user_text=prompt,
+        latest_user_text=materialized_prompt,
         latest_user_id="fallback-user-0",
         latest_assistant_id="fallback-assistant-1",
         terminal_witness_assistant_id="fallback-assistant-1",
