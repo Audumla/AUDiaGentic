@@ -26,7 +26,7 @@ from audiagentic.foundation.transports.session_binding import (
 )
 from audiagentic.foundation.workflow import TransitionConfig, TransitionEngine
 
-from .chat import ChatState, PersistentChat
+from .chat import ChatState, PersistentChat, ProviderBindingIntegrityError
 from .observation_engine import (
     EvidenceCapability,
     Observation,
@@ -2530,6 +2530,8 @@ class GptAutoTurn:
             if self._response_recovery_refresh_attempts >= max_refreshes:
                 self._response_recovery_final_grace_started_at = loop.time()
             return refreshed
+        except ProviderBindingIntegrityError:
+            raise
         except Exception as exc:  # noqa: BLE001 - preserve original conflict diagnostics
             logger.info(
                 "gpt-auto retained-conversation refresh after correlation conflict failed",
