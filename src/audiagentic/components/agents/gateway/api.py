@@ -1082,7 +1082,13 @@ def complete_execution_from_provider(project_root: Path, request_id: str) -> dic
         raise AudiaGenticError(code="CON-AGW-152", kind="agents", message="request is not operator-completable", details={"request-id": request_id})
     provider_id = record.get("resolved-provider-id") or record.get("provider-id")
     metadata = dict(record.get("provider-metadata") or {})
-    if metadata.get("submission-proven") is not True:
+    # A provider can reach a terminal DOM response after the turn checkpoint
+    # has recorded an unresolved turn but before the provider-specific prompt
+    # identity checkpoint is durable. Operator capture is precisely the
+    # recovery path for that state. The later snapshot checks still require
+    # the admitted prompt text, assistant witness, completion controls, and
+    # stable repeated capture before any terminal transition is allowed.
+    if metadata.get("submission-proven") is not True and metadata.get("unresolved-turn-pending") is not True:
         raise AudiaGenticError(code="CON-AGW-157", kind="agents", message="request prompt submission is not proven", details={"request-id": request_id})
     locator_metadata = dict(metadata)
     session_id = record.get("session-id")
