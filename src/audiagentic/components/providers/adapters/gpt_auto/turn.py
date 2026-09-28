@@ -2956,6 +2956,17 @@ def _scope_response_snapshot(
         )
         same_conversation = canonical_chat_url(snapshot.url) == canonical_chat_url(baseline.url)
         terminal_bound = snapshot.terminal_witness_assistant_id == snapshot.latest_assistant_id
+        if (
+            virtualized_assistant_id
+            and snapshot.latest_assistant_id
+            and snapshot.latest_assistant_id != virtualized_assistant_id
+            and prompt_unmounted
+            and same_conversation
+            and terminal_bound
+        ):
+            raise ProviderBindingIntegrityError(
+                "provider assistant identity changed during response observation"
+            )
         if fresh_assistant and prompt_unmounted and same_conversation and terminal_bound:
             response_ref = ChatMessageRef(
                 role="assistant",
