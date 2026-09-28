@@ -1967,6 +1967,34 @@ def test_progress_scope_rejects_foreign_and_unproven_assistant_ownership():
     assert scoped.tool_activity_counts == ()
 
 
+def test_scope_fails_when_bound_assistant_is_hidden_by_later_turn():
+    baseline = snap(users=1, user="Request A", user_id="prompt-a")
+    raw = replace(
+        baseline,
+        user_count=2,
+        assistant_count=2,
+        latest_user_id="prompt-b",
+        latest_assistant_id="assistant-b",
+        latest_assistant_text="Later answer",
+        message_refs=(
+            ChatMessageRef("user", "prompt-a", "Request A", 0),
+            ChatMessageRef("user", "prompt-b", "Later request", 1),
+            ChatMessageRef("assistant", "assistant-b", "Later answer", 2),
+        ),
+    )
+
+    with pytest.raises(
+        ProviderBindingIntegrityError,
+        match="assistant identity changed",
+    ):
+        _scope_response_snapshot(
+            baseline,
+            raw,
+            prompt_message_id="prompt-a",
+            bound_assistant_id="assistant-a",
+        )
+
+
 def test_error_alert_scope_ignores_stale_and_foreign_occurrences():
     baseline = replace(
         snap(users=1, user="Request A", user_id="prompt-a", extra_signals=("error-alert",)),
