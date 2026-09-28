@@ -1778,6 +1778,8 @@ class GptAutoTurn:
                                 )
                             else:
                                 current, response_ref = raw_current, None
+                        except ProviderBindingIntegrityError:
+                            raise
                         except Exception as exc:  # noqa: BLE001 - next poll retries evidence
                             self._last_observation_error = exc
                             logger.info(
