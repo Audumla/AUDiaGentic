@@ -1995,6 +1995,59 @@ def test_scope_fails_when_bound_assistant_is_hidden_by_later_turn():
         )
 
 
+def test_scope_fails_when_bound_prompt_and_assistant_are_both_virtualized():
+    baseline = snap(users=1, user="Request A", user_id="prompt-a")
+    raw = replace(
+        baseline,
+        user_count=1,
+        assistant_count=1,
+        latest_user_id="prompt-b",
+        latest_assistant_id="assistant-b",
+        latest_assistant_text="Later answer",
+        message_refs=(
+            ChatMessageRef("user", "prompt-b", "Later request", 0),
+            ChatMessageRef("assistant", "assistant-b", "Later answer", 1),
+        ),
+    )
+
+    with pytest.raises(
+        ProviderBindingIntegrityError,
+        match="assistant identity changed",
+    ):
+        _scope_response_snapshot(
+            baseline,
+            raw,
+            prompt_message_id="prompt-a",
+            bound_assistant_id="assistant-a",
+        )
+
+
+def test_scope_does_not_rebind_a_real_prompt_id_by_text():
+    baseline = snap(users=1, user="Request A", user_id="prompt-a")
+    raw = replace(
+        baseline,
+        user_count=1,
+        assistant_count=1,
+        latest_user_id="prompt-b",
+        latest_assistant_id="assistant-b",
+        latest_assistant_text="Answer B",
+        message_refs=(
+            ChatMessageRef("user", "prompt-b", "Request A", 0),
+            ChatMessageRef("assistant", "assistant-b", "Answer B", 1),
+        ),
+    )
+
+    scoped, response_ref = _scope_response_snapshot(
+        baseline,
+        raw,
+        prompt_message_id="real-prompt-a",
+        prompt_text="Request A",
+    )
+
+    assert response_ref is None
+    assert scoped.latest_assistant_id == baseline.latest_assistant_id
+
+
 def test_error_alert_scope_ignores_stale_and_foreign_occurrences():
     baseline = replace(
         snap(users=1, user="Request A", user_id="prompt-a", extra_signals=("error-alert",)),
