@@ -218,15 +218,13 @@ async def test_idle_tab_reaper_uses_session_activity_not_tab_age() -> None:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("guard", ["active", "pending", "recent"])
-async def test_idle_tab_reaper_uses_activity_not_request_or_queue_state(guard: str) -> None:
+@pytest.mark.parametrize("guard", ["active", "recent"])
+async def test_idle_tab_reaper_closes_stale_tabs_even_with_active_or_recently_failed_work(guard: str) -> None:
     bridge = _IdleTabBridge()
     runtime = _IdleTabRuntime(bridge)
     chat = _idle_chat(runtime)
     if guard == "active":
         chat.active_turn_id = "req-1"
-    elif guard == "pending":
-        chat.pending_turns = 1
     elif guard == "recent":
         chat._last_validated_activity_monotonic = 7_000.0
 
@@ -248,6 +246,23 @@ async def test_idle_tab_reaper_uses_activity_not_request_or_queue_state(guard: s
         if guard == "active":
             with pytest.raises(RuntimeError, match="closed after session inactivity"):
                 await chat.ensure_ready()
+
+
+@pytest.mark.asyncio
+async def test_idle_tab_reaper_preserves_stale_tab_with_queued_fifo_turn() -> None:
+    bridge = _IdleTabBridge()
+    runtime = _IdleTabRuntime(bridge)
+    chat = _idle_chat(runtime)
+    chat.pending_turns = 1
+
+    reclaimed = await chat.close_physical_page_if_idle(
+        now=7_301.0,
+        idle_timeout_seconds=7_200.0,
+    )
+
+    assert reclaimed is False
+    assert bridge.calls == []
+    assert chat.page_handle == "page-1"
 
 
 @pytest.mark.asyncio
