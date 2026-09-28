@@ -2967,7 +2967,6 @@ def _scope_response_snapshot(
             and snapshot.latest_assistant_id != virtualized_assistant_id
             and prompt_unmounted
             and same_conversation
-            and terminal_bound
         ):
             raise ProviderBindingIntegrityError(
                 "provider assistant identity changed during response observation"
