@@ -34,6 +34,10 @@ from .urls import (
 logger = logging.getLogger(__name__)
 
 
+class ProviderBindingIntegrityError(RuntimeError):
+    """A request-owned provider page no longer identifies the bound turn."""
+
+
 class ChatState(StrEnum):
     OPENING = "opening"
     READY = "ready"
@@ -1332,13 +1336,15 @@ class PersistentChat:
                     request_id=request_id,
                     trigger=trigger,
                 )
+                if trigger == "response-recovery":
+                    raise ProviderBindingIntegrityError("page binding changed before response recovery")
                 return False
             browser = self._gpt_browser()
             try:
                 page = await browser.page_by_handle(handle)
                 current_target = str(getattr(page, "target_id", "") or "")
                 if self.target_id and current_target and current_target != self.target_id:
-                    raise RuntimeError("bound page target changed before refresh")
+                    raise ProviderBindingIntegrityError("bound page target changed before refresh")
                 current_url = str(getattr(page, "url", "") or "")
                 if not current_url and hasattr(browser, "snapshot"):
                     observed = ChatSnapshot.from_bridge(
@@ -1349,11 +1355,11 @@ class PersistentChat:
                     )
                     current_url = observed.url
                 if current_url and not same_chat_identity(current_url, bound_url):
-                    raise RuntimeError("bound page conversation URL changed before refresh")
+                    raise ProviderBindingIntegrityError("bound page conversation URL changed before refresh")
                 if not current_url or not url_matches_provider_session(
                     current_url, self.provider_session_id
                 ):
-                    raise RuntimeError("bound page provider session changed before refresh")
+                    raise ProviderBindingIntegrityError("bound page provider session changed before refresh")
                 # Refresh the observed route after validating stable identity;
                 # a saved slugless route need not be directly navigable.
                 await browser.navigate(page, canonical_chat_url(current_url) or bound_url)
@@ -1372,7 +1378,7 @@ class PersistentChat:
                     )
                     refreshed_url = observed.url
                 if self.target_id and refreshed_target and refreshed_target != self.target_id:
-                    raise RuntimeError("bound page target changed after refresh")
+                    raise ProviderBindingIntegrityError("bound page target changed after refresh")
                 if (
                     not refreshed_url
                     or not same_chat_identity(refreshed_url, bound_url)
@@ -1380,13 +1386,24 @@ class PersistentChat:
                         refreshed_url, self.provider_session_id
                     )
                 ):
-                    raise RuntimeError("refresh left the bound conversation URL")
+                    raise ProviderBindingIntegrityError("refresh left the bound conversation URL")
                 logger.info(
                     "gpt-auto refreshed bound conversation trigger=%s request_id=%s",
                     trigger,
                     request_id,
                 )
                 return True
+            except ProviderBindingIntegrityError as exc:
+                self._set_unresolved_recovery(
+                    "provider-binding-invalid",
+                    request_id=request_id,
+                    trigger=trigger,
+                    exception_type=type(exc).__name__,
+                    exception=str(exc),
+                )
+                if trigger == "response-recovery":
+                    raise
+                return False
             except Exception as exc:  # noqa: BLE001 - caller owns bounded retry policy
                 self._set_unresolved_recovery(
                     "refresh-failed",

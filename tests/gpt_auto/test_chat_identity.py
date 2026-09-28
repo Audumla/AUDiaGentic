@@ -58,6 +58,39 @@ async def test_refresh_preserves_observed_slug_and_validates_binding():
 
 
 @pytest.mark.asyncio
+async def test_response_recovery_rejects_recycled_provider_target():
+    import asyncio
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    from audiagentic.components.providers.adapters.gpt_auto.chat import (
+        PersistentChat,
+        ProviderBindingIntegrityError,
+    )
+
+    page = SimpleNamespace(target_id="recycled-target", url=BASE + "/c/chat")
+    browser = SimpleNamespace(page_by_handle=AsyncMock(return_value=page))
+    chat = object.__new__(PersistentChat)
+    chat._page_mutation_lock = asyncio.Lock()
+    chat._page_generation = 1
+    chat.page_handle = "page"
+    chat.target_id = "original-target"
+    chat.provider_session_id = "chat"
+    chat.chat_url = BASE + "/c/chat"
+    chat._last_snapshot = None
+    chat.config = SimpleNamespace(turn=SimpleNamespace(poll_interval_seconds=0))
+    chat._gpt_browser = lambda: browser
+    token = (1, "page", "original-target", "chat", chat.chat_url)
+
+    with pytest.raises(ProviderBindingIntegrityError):
+        await chat.refresh_bound_conversation(
+            expected_binding=token,
+            request_id="req-binding-loss",
+            trigger="response-recovery",
+        )
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize('initial_url', [
     'https://chatgpt.com/c/chat', BASE + '/c/local-chatgpt%3Atemporary',
 ])
