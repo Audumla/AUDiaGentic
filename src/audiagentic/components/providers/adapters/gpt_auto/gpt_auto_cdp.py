@@ -1593,7 +1593,7 @@ class GptAutoCdpBrowserController(CdpBrowserController):
         their persisted /c/ URL and never enter this method.
         """
         expected_project_id = parse_project_id(project_url or "")
-        anchor_target_ids: set[str] = set()
+        anchor_target_ids: set[str] | None = None
         if anchor_page:
             try:
                 anchor_target_ids = {candidate.target_id for candidate in await self.pages()}
@@ -1727,29 +1727,42 @@ class GptAutoCdpBrowserController(CdpBrowserController):
             ) from exc
 
     async def _close_late_anchor_targets(
-        self, anchor_page: CdpPageRef, known_target_ids: set[str]
+        self, anchor_page: CdpPageRef, known_target_ids: set[str] | None
     ) -> None:
-        """Close only blank targets left by a timed-out ``window.open``."""
-        try:
-            candidates = await self.pages()
-        except Exception:  # noqa: BLE001 - cleanup is best effort
-            logger.debug("gpt-auto could not enumerate late anchor targets", exc_info=True)
+        """Close only proven-late blank targets left by a timed-out ``window.open``.
+
+        A failed baseline enumeration is unknown, not an empty baseline: doing
+        destructive cleanup in that case could close a pre-existing blank tab.
+        A short bounded grace period catches a target whose creation completes
+        just after the outer CDP command timeout.
+        """
+        if known_target_ids is None:
             return
-        for candidate in candidates:
-            if candidate.target_id in known_target_ids:
-                continue
-            if candidate.opener_id != anchor_page.target_id:
-                continue
-            if candidate.url not in {"", "about:blank"}:
-                continue
+        seen: set[str] = set()
+        for scan in range(3):
             try:
-                await self.close(candidate)
-            except Exception:  # noqa: BLE001 - isolate one late target
-                logger.debug(
-                    "gpt-auto failed to close late blank anchor target",
-                    extra={"target-id": candidate.target_id},
-                    exc_info=True,
-                )
+                candidates = await self.pages()
+            except Exception:  # noqa: BLE001 - cleanup is best effort
+                logger.debug("gpt-auto could not enumerate late anchor targets", exc_info=True)
+                return
+            for candidate in candidates:
+                if candidate.target_id in known_target_ids or candidate.target_id in seen:
+                    continue
+                if candidate.opener_id != anchor_page.target_id:
+                    continue
+                if candidate.url not in {"", "about:blank"}:
+                    continue
+                seen.add(candidate.target_id)
+                try:
+                    await self.close(candidate)
+                except Exception:  # noqa: BLE001 - isolate one late target
+                    logger.debug(
+                        "gpt-auto failed to close late blank anchor target",
+                        extra={"target-id": candidate.target_id},
+                        exc_info=True,
+                    )
+            if scan < 2:
+                await asyncio.sleep(0.2)
 
 
 __all__ = ["GptAutoCdpBrowserController", "CdpPageRef", "CdpWindowBounds"]

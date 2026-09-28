@@ -381,6 +381,42 @@ async def test_timed_out_anchor_cleanup_closes_only_late_blank_targets(monkeypat
 
 
 @pytest.mark.asyncio
+async def test_timed_out_anchor_cleanup_fails_closed_when_baseline_is_unknown() -> None:
+    browser = GptAutoCdpBrowserController(_NoopBridge())
+    anchor = CdpPageRef("anchor", "anchor-target", 7, "http://127.0.0.1:8765/dashboard", "")
+    closed: list[CdpPageRef] = []
+
+    async def close(page):
+        closed.append(page)
+
+    browser.close = close  # type: ignore[method-assign]
+    await browser._close_late_anchor_targets(anchor, None)
+
+    assert closed == []
+
+
+@pytest.mark.asyncio
+async def test_timed_out_anchor_cleanup_catches_target_that_appears_after_first_scan(monkeypatch) -> None:
+    browser = GptAutoCdpBrowserController(_NoopBridge())
+    anchor = CdpPageRef("anchor", "anchor-target", 7, "http://127.0.0.1:8765/dashboard", "")
+    late_blank = CdpPageRef("late", "late-target", 7, "about:blank", "", "anchor-target")
+    closed: list[CdpPageRef] = []
+    scans = iter([(), (late_blank,), (late_blank,)])
+
+    async def pages():
+        return next(scans)
+
+    async def close(page):
+        closed.append(page)
+
+    monkeypatch.setattr(browser, "pages", pages)
+    monkeypatch.setattr(browser, "close", close)
+    await browser._close_late_anchor_targets(anchor, {"anchor-target"})
+
+    assert closed == [late_blank]
+
+
+@pytest.mark.asyncio
 async def test_new_session_selects_exact_project_from_sidebar(monkeypatch) -> None:
     browser = GptAutoCdpBrowserController(_NoopBridge())
     anchor = CdpPageRef("anchor", "anchor-target", 7, "http://127.0.0.1:8765/dashboard", "")

@@ -588,7 +588,11 @@ class PersistentChat:
                     # retention exemption. The last validated clock still owns
                     # the physical cleanup deadline.
                     logger.debug("gpt-auto pre-cleanup observation failed", exc_info=True)
-            if handle != self.page_handle or now - self._last_validated_activity_monotonic < idle_timeout_seconds:
+            if (
+                handle != self.page_handle
+                or self.pending_turns > 0
+                or now - self._last_validated_activity_monotonic < idle_timeout_seconds
+            ):
                 return False
             self._physical_idle_closed = True
             self._idle_closed_turn_id = self.active_turn_id

@@ -214,6 +214,11 @@ def _request_row(
         or ""
     )
     row = {key: status.get(key) for key in visible if status.get(key) is not None}
+    if provider_id:
+        # Session-backed request rows omit execution fields, but the provider
+        # identity is still required to expose GPT's manual response-capture
+        # control for a running request.
+        row["provider-id"] = provider_id
     # ``provider-turn-pending`` is useful while a request is active, but a
     # terminal request must not look live merely because cancellation retained
     # historical side-effect evidence for recovery/audit.  The terminal

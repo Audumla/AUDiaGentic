@@ -266,6 +266,31 @@ async def test_idle_tab_reaper_preserves_stale_tab_with_queued_fifo_turn() -> No
 
 
 @pytest.mark.asyncio
+async def test_idle_tab_reaper_rechecks_fifo_pending_after_observation() -> None:
+    bridge = _IdleTabBridge()
+    runtime = _IdleTabRuntime(bridge)
+    runtime._tab_digest = lambda _snapshot: "unchanged"  # type: ignore[attr-defined]
+    chat = _idle_chat(runtime)
+    chat._last_snapshot = SimpleNamespace(url=chat.chat_url)
+
+    async def snapshot(*, allow_recovering: bool = False):
+        del allow_recovering
+        chat.pending_turns = 1
+        return SimpleNamespace(url=chat.chat_url)
+
+    chat.snapshot = snapshot  # type: ignore[method-assign]
+
+    reclaimed = await chat.close_physical_page_if_idle(
+        now=7_301.0,
+        idle_timeout_seconds=7_200.0,
+    )
+
+    assert reclaimed is False
+    assert bridge.calls == []
+    assert chat.page_handle == "page-1"
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("state", [ChatState.BUSY, ChatState.RECOVERING, ChatState.FAILED])
 async def test_idle_tab_reaper_ignores_failure_state_when_session_is_stale(
     state: ChatState,
