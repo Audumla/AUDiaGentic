@@ -1156,7 +1156,12 @@ def complete_execution_from_provider(project_root: Path, request_id: str) -> dic
         import hashlib
         prompt = read_bytes_with_retry(gateway_admitted_prompt_path(project_root, request_id)).decode("utf-8")
         prompt_digest = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
-        if record.get("prompt-digest") != prompt_digest:
+        # The admitted file contains the materialized agent prompt, whose
+        # digest is persisted as prompt-template-digest. prompt-digest is the
+        # caller's raw prompt identity and intentionally differs whenever the
+        # agent definition adds governed prompt instructions.
+        admitted_digest = record.get("prompt-template-digest") or record.get("prompt-digest")
+        if admitted_digest != prompt_digest:
             raise AudiaGenticError(code="CON-AGW-156", kind="agents", message="admitted request prompt digest is inconsistent", details={"request-id": request_id})
         latest_user_ref = next(
             (ref for ref in reversed(getattr(snapshot, "message_refs", ())) if getattr(ref, "role", None) == "user"),
