@@ -2073,6 +2073,34 @@ def test_scope_rejects_unpinned_prompt_unmounted_completion():
         )
 
 
+def test_scope_rejects_reused_fallback_assistant_after_virtualization():
+    baseline = snap(users=1, user="Request A", user_id="prompt-a")
+    raw = replace(
+        baseline,
+        user_count=0,
+        assistant_count=1,
+        latest_user_id=None,
+        latest_assistant_id="fallback-assistant-0",
+        latest_assistant_text="Later answer",
+        terminal_witness_assistant_id="fallback-assistant-0",
+        message_refs=(
+            ChatMessageRef("assistant", "fallback-assistant-0", "Later answer", 0),
+        ),
+    )
+
+    with pytest.raises(
+        ProviderBindingIntegrityError,
+        match="unpinned after prompt virtualization",
+    ):
+        _scope_response_snapshot(
+            baseline,
+            raw,
+            prompt_message_id="prompt-a",
+            allow_virtualized_prompt=True,
+            virtualized_assistant_id=None,
+        )
+
+
 def test_error_alert_scope_ignores_stale_and_foreign_occurrences():
     baseline = replace(
         snap(users=1, user="Request A", user_id="prompt-a", extra_signals=("error-alert",)),
