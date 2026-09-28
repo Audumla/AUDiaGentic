@@ -2870,7 +2870,6 @@ def _scope_response_snapshot(
     snapshot_conversation_url = canonical_chat_url(snapshot.url)
     if (
         baseline_conversation_url
-        and snapshot_conversation_url
         and snapshot_conversation_url != baseline_conversation_url
     ):
         raise ProviderBindingIntegrityError(

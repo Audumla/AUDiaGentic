@@ -532,14 +532,38 @@ async def test_initial_blank_page_settings_do_not_authorize_a_refresh():
     )
     turn.state = TurnState.AWAITING_RESPONSE
     turn._prompt_message_id = "prompt-1"
-    with pytest.raises(asyncio.TimeoutError):
-        await asyncio.wait_for(
-            turn._await_response(snap(users=1, user="Review AU01"), blank),
-            timeout=0.05,
-        )
+    with pytest.raises(ProviderBindingIntegrityError, match="conversation changed"):
+        await turn._await_response(snap(users=1, user="Review AU01"), blank)
 
-    assert refreshes == [True]
+    assert refreshes == []
     assert turn._initial_refresh_attempted is False
+
+
+def test_response_scope_rejects_pinned_conversation_when_route_disappears():
+    baseline = snap(
+        users=1,
+        user="Request A",
+        user_id="prompt-a",
+        url="https://chatgpt.com/g/g-p-project/c/conversation-a",
+    )
+    retained_completion = snap(
+        users=1,
+        user="Request A",
+        user_id="prompt-a",
+        assistants=1,
+        assistant="Retained completed answer",
+        assistant_id="assistant-a",
+        complete=True,
+        url="https://chatgpt.com/g/g-p-project/project",
+    )
+
+    with pytest.raises(ProviderBindingIntegrityError, match="conversation changed"):
+        _scope_response_snapshot(
+            baseline,
+            retained_completion,
+            prompt_message_id="prompt-a",
+            prompt_text="Request A",
+        )
 
 
 @pytest.mark.asyncio
