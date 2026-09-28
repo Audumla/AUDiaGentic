@@ -276,6 +276,10 @@ class GptAutoTurn:
         self._delivered = 0
         self._phase = "initialization"
         self._composer_verification_mismatch: dict[str, Any] | None = None
+        # The browser submit action itself is a prerequisite for the
+        # prompt-unmounted completion proof.  Keep it separate from
+        # side_effect_attempted, which also covers ambiguous pre-ack failures.
+        self._composer_action_confirmed = False
         self._prompt_message_id: str | None = None
         self._response_message_id: str | None = None
         # Normal turns may retain a confirmed prompt anchor while ChatGPT
@@ -1006,6 +1010,7 @@ class GptAutoTurn:
                     **self._diagnostics(expected_prompt=self.request.body),
                 },
             )
+        self._composer_action_confirmed = True
         if not match_prompt(self.request.body, str(typed_text or "")):
             # The browser has already reported a completed send action.  The
             # editor's read-back text is only a local pre-flight signal and
@@ -1163,6 +1168,48 @@ class GptAutoTurn:
                 snap.dom_activity_digest is not None
                 and snap.dom_activity_digest != previous_dom_activity_digest
             )
+            # The current labelled renderer can unmount the user block after
+            # a long response while retaining the fresh assistant and its
+            # completed action bar.  In that state exact prompt proof is no
+            # longer observable, but treating the request as ambiguous until
+            # the absolute ceiling discards a response that is already
+            # visibly complete.  Accept only the tightly fenced combination
+            # of a confirmed browser send, a fresh assistant identity, the
+            # bound conversation, no mounted user nodes, and a terminal
+            # witness.  This never applies to an unacknowledged/ambiguous
+            # submit and never treats a generating or unbound response as
+            # proof.
+            baseline_provider_session = parse_provider_session_id(baseline.url)
+            same_admitted_project = (
+                parse_project_id(snap.url) == parse_project_id(baseline.url)
+                and parse_project_id(snap.url) == parse_project_id(self.chat.project_url or snap.url)
+            )
+            same_bound_conversation = (
+                canonical_chat_url(snap.url) == canonical_chat_url(baseline.url)
+                if baseline_provider_session
+                else same_admitted_project
+            )
+            prompt_unmounted_completion = (
+                self._composer_action_confirmed
+                and not snap.generating
+                and snap.latest_assistant_id
+                and snap.latest_assistant_id != baseline.latest_assistant_id
+                and snap.latest_assistant_id not in baseline.assistant_message_ids
+                and snap.latest_assistant_text
+                and snap.user_count == 0
+                and not snap.user_message_ids
+                and same_bound_conversation
+                and snap.terminal_witness_assistant_id == snap.latest_assistant_id
+            )
+            if prompt_unmounted_completion:
+                # _scope_response_snapshot already has the corresponding
+                # virtualized-prompt safety fence.  Give it a request-local
+                # anchor so the normal response observer can correlate the
+                # fresh assistant without inventing a provider message ID.
+                self._prompt_message_id = (
+                    f"virtualized-prompt-for-{snap.latest_assistant_id}"
+                )
+                return snap
             caps = EvidenceCapability.NONE
             if (new_msg and user_id_changed) or assistant_progress or dom_activity_changed:
                 caps |= EvidenceCapability.PROGRESS

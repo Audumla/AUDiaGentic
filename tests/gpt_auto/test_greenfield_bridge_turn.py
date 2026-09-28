@@ -2296,6 +2296,38 @@ async def test_completed_response_rescues_submission_proof_after_dom_mismatch():
 
 
 @pytest.mark.asyncio
+async def test_completed_response_proves_submission_when_user_turn_is_unmounted():
+    """The current renderer may unmount the user block after a long turn.
+
+    A confirmed send plus a fresh, same-conversation assistant with bound
+    completion controls is the only accepted prompt-unmounted proof.  This
+    reproduces the live CDP shape that previously waited for the 15-minute
+    submission-proof ceiling and then failed with EXT-GPTAUTO-003.
+    """
+    chat = _Chat()
+    completed = snap(
+        assistants=1,
+        assistant_id="assistant-new",
+        assistant="Complete answer",
+        complete=True,
+    )
+    chat._snapshots = iter([snap(), completed, completed, completed, completed])
+
+    turn = GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="turn-unmounted-user", body="Review AU01"),
+        lambda _: None,
+    )
+
+    result = await turn.run()
+
+    assert result.stop_reason == "end-turn"
+    assert result.final_summary == "Complete answer"
+    assert turn.state is TurnState.COMPLETE
+    assert chat.runtime.bridge.submit_calls == 1
+
+
+@pytest.mark.asyncio
 async def test_turn_completes_despite_stuck_stop_control_signal():
     """Live-reproduced 2026-08-16: ChatGPT's own stop/submit button can stay
     in its 'stop' state indefinitely after a response has actually finished
