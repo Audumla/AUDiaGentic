@@ -1453,8 +1453,8 @@ async def test_stale_error_does_not_mask_id_only_remount_failure() -> None:
 
 
 @pytest.mark.asyncio
-async def test_ambiguous_response_identity_recovers_without_resubmitting() -> None:
-    """Coexisting assistant nodes remain ambiguous and fail closed by recovery."""
+async def test_ambiguous_response_identity_fails_closed_immediately() -> None:
+    """Coexisting assistant nodes fail closed without recovery adoption."""
     chat = _Chat()
     ambiguous = replace(
         snap(
@@ -1507,9 +1507,9 @@ async def test_ambiguous_response_identity_recovers_without_resubmitting() -> No
         lambda _observation: None,
     )
 
-    with pytest.raises(asyncio.TimeoutError):
-        await asyncio.wait_for(turn.run(), timeout=0.5)
-    assert refresh_invocations == 1
+    with pytest.raises(AudiaGenticError, match="assistant identity changed"):
+        await turn.run()
+    assert refresh_invocations == 0
     assert chat.runtime.bridge.submit_calls == 1
 
 
