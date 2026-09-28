@@ -571,6 +571,7 @@ class PersistentChat:
             handle = self.page_handle
             if (
                 not handle
+                or self.pending_turns > 0
                 or now - self._last_validated_activity_monotonic < idle_timeout_seconds
             ):
                 return False
