@@ -358,6 +358,29 @@ async def test_projects_new_chat_uses_trusted_cdp_pointer_click(monkeypatch) -> 
 
 
 @pytest.mark.asyncio
+async def test_timed_out_anchor_cleanup_closes_only_late_blank_targets(monkeypatch) -> None:
+    browser = GptAutoCdpBrowserController(_NoopBridge())
+    anchor = CdpPageRef("anchor", "anchor-target", 7, "http://127.0.0.1:8765/dashboard", "")
+    late_blank = CdpPageRef("late", "late-target", 7, "about:blank", "", "anchor-target")
+    navigated = CdpPageRef("navigated", "navigated-target", 7, "https://example.test/", "", "anchor-target")
+    unrelated = CdpPageRef("unrelated", "unrelated-target", 7, "about:blank", "", "other-target")
+    closed: list[CdpPageRef] = []
+
+    async def pages():
+        return (late_blank, navigated, unrelated)
+
+    async def close(page):
+        closed.append(page)
+
+    monkeypatch.setattr(browser, "pages", pages)
+    monkeypatch.setattr(browser, "close", close)
+
+    await browser._close_late_anchor_targets(anchor, {"anchor-target"})
+
+    assert closed == [late_blank]
+
+
+@pytest.mark.asyncio
 async def test_new_session_selects_exact_project_from_sidebar(monkeypatch) -> None:
     browser = GptAutoCdpBrowserController(_NoopBridge())
     anchor = CdpPageRef("anchor", "anchor-target", 7, "http://127.0.0.1:8765/dashboard", "")
