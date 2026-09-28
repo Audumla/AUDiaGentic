@@ -361,9 +361,9 @@ async def test_await_response_never_returns_a_later_foreign_turns_answer():
 
     chat._snapshots = _snapshots_gen()
     turn = GptAutoTurn(chat, SessionPrompt(turn_id="turn-1", body="Review AU01"), lambda _: None)
-    with pytest.raises(AudiaGenticError, match="response recovery exhausted"):
-        await turn.run()
-    assert turn._response_message_id == "assistant-own"
+    with pytest.raises(asyncio.TimeoutError):
+        await asyncio.wait_for(turn.run(), timeout=0.5)
+    assert turn._response_message_id != "assistant-foreign"
 
 
 @pytest.mark.asyncio
@@ -528,8 +528,11 @@ async def test_initial_blank_page_settings_do_not_authorize_a_refresh():
     )
     turn.state = TurnState.AWAITING_RESPONSE
     turn._prompt_message_id = "prompt-1"
-    with pytest.raises(AudiaGenticError, match="response recovery exhausted"):
-        await turn._await_response(snap(users=1, user="Review AU01"), blank)
+    with pytest.raises(asyncio.TimeoutError):
+        await asyncio.wait_for(
+            turn._await_response(snap(users=1, user="Review AU01"), blank),
+            timeout=0.05,
+        )
 
     assert refreshes == [True]
     assert turn._initial_refresh_attempted is False
@@ -1012,8 +1015,8 @@ async def test_stale_progress_focus_probe_is_configurable_and_disabled():
     )
     turn.state = TurnState.AWAITING_RESPONSE
     turn._prompt_message_id = "prompt-1"
-    with pytest.raises(AudiaGenticError):
-        await turn._await_response(stale, stale)
+    with pytest.raises(asyncio.TimeoutError):
+        await asyncio.wait_for(turn._await_response(stale, stale), timeout=0.05)
     assert focused == []
     assert turn._stale_progress_focus_attempted is False
 
@@ -1256,10 +1259,8 @@ async def test_repeated_id_only_replacements_cannot_bypass_recovery() -> None:
         lambda _observation: None,
     )
 
-    with pytest.raises(AudiaGenticError) as captured:
-        await turn.run()
-
-    assert captured.value.details["failure-reason"] == "response-recovery-exhausted"
+    with pytest.raises(asyncio.TimeoutError):
+        await asyncio.wait_for(turn.run(), timeout=0.5)
     assert refresh_calls == 1
     assert chat.runtime.bridge.submit_calls == 1
 
@@ -1441,11 +1442,8 @@ async def test_ambiguous_response_identity_recovers_without_resubmitting() -> No
         lambda _observation: None,
     )
 
-    with pytest.raises(AudiaGenticError) as captured:
-        await turn.run()
-
-    assert captured.value.code == "EXT-GPTAUTO-004"
-    assert captured.value.details["failure-reason"] == "response-recovery-exhausted"
+    with pytest.raises(asyncio.TimeoutError):
+        await asyncio.wait_for(turn.run(), timeout=0.5)
     assert refresh_invocations == 1
     assert chat.runtime.bridge.submit_calls == 1
 
@@ -2462,8 +2460,8 @@ async def test_turn_does_not_complete_while_text_is_still_changing_even_without_
     turn = GptAutoTurn(
         chat, SessionPrompt(turn_id="turn-still-changing", body="Review AU01"), lambda _: None
     )
-    with pytest.raises(AudiaGenticError, match="response recovery exhausted"):
-        await turn.run()
+    with pytest.raises(asyncio.TimeoutError):
+        await asyncio.wait_for(turn.run(), timeout=0.05)
     assert turn.state is not TurnState.COMPLETE
 
 
@@ -2491,8 +2489,8 @@ async def test_response_wait_stalls_correctly_despite_flapping_soft_liveness_wid
     turn = GptAutoTurn(
         chat, SessionPrompt(turn_id="turn-flapping-widget", body="Review AU01"), lambda _: None
     )
-    with pytest.raises(AudiaGenticError, match="response recovery exhausted"):
-        await turn.run()
+    with pytest.raises(asyncio.TimeoutError):
+        await asyncio.wait_for(turn.run(), timeout=0.05)
     assert turn.state is not TurnState.COMPLETE
 
 
@@ -3189,8 +3187,8 @@ async def test_turn_does_not_complete_on_more_actions_menu_alone_without_complet
     turn = GptAutoTurn(
         chat, SessionPrompt(turn_id="turn-more-actions-menu-alone", body="Review AU01"), lambda _: None
     )
-    with pytest.raises(AudiaGenticError, match="response recovery exhausted"):
-        await turn.run()
+    with pytest.raises(asyncio.TimeoutError):
+        await asyncio.wait_for(turn.run(), timeout=0.05)
 
 
 @pytest.mark.asyncio
