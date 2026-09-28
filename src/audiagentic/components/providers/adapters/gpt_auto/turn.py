@@ -1809,57 +1809,9 @@ class GptAutoTurn:
                         mark_assistant(response_ref.message_id)
                     await self._publish_message_ids(strict=True)
                 elif self._response_message_id != response_ref.message_id:
-                    expected_assistant_id = self._response_message_id
-                    observed_assistant_id = response_ref.message_id
-                    if _replacement_proven(raw_current, observed_assistant_id):
-                        raise ProviderBindingIntegrityError(
-                            "provider assistant identity changed during response observation"
-                        )
-                        self._response_message_id = observed_assistant_id
-                        mark_assistant = getattr(self.chat, "mark_assistant_observed", None)
-                        if mark_assistant is not None:
-                            mark_assistant(observed_assistant_id)
-                        await self._publish_message_ids(strict=True)
-                        request_activity_response_id = observed_assistant_id
-                        logger.info(
-                            "gpt-auto adopted structurally proven assistant-id replacement",
-                            extra={
-                                "turn-id": self.request.turn_id,
-                                "old-assistant-id": expected_assistant_id,
-                                "new-assistant-id": observed_assistant_id,
-                            },
-                        )
-                        adopted_same_slot_replacement = True
-                        # The replacement is renderer churn, not model
-                        # progress. Re-establish terminal stability against
-                        # the new node without resubmitting the prompt. Keep
-                        # processing this observation so recovery accounting
-                        # cannot be bypassed by repeated ID-only remounts.
-                        tracker = ObservationTracker(policy=policy, now=loop.time())
-                    else:
-                        if await self._refresh_after_response_correlation_conflict():
-                            logger.info(
-                                "gpt-auto refreshed retained conversation after response "
-                                "correlation conflict; continuing the original turn",
-                                extra={
-                                    "turn-id": self.request.turn_id,
-                                    "expected-assistant-id": expected_assistant_id,
-                                    "observed-assistant-id": response_ref.message_id,
-                                },
-                            )
-                            continue
-                        # Correlation uncertainty is recoverable and must not
-                        # be converted into an immediate request failure. The
-                        # existing response-recovery budget decides when this
-                        # bound conversation has genuinely exhausted recovery.
-                        if await _attempt_response_recovery(
-                            loop.time(),
-                            interruption_present="provider-interruption" in current.dom_signals,
-                            completion_candidate=False,
-                        ):
-                            continue
-                        await asyncio.sleep(self.chat.config.turn.poll_interval_seconds)
-                        continue
+                    raise ProviderBindingIntegrityError(
+                        "provider assistant identity changed during response observation"
+                    )
                 if response_ref.text:
                     await self._emit_timing("first-assistant-text")
             # Recovery clocks are reset only by evidence correlated to this
@@ -2308,56 +2260,9 @@ class GptAutoTurn:
                     and verify_message_id
                     and verify_message_id != self._response_message_id
                 ):
-                    expected_assistant_id = self._response_message_id
-                    if _replacement_proven(raw_verify, verify_message_id):
-                        raise ProviderBindingIntegrityError(
-                            "provider assistant identity changed during response verification"
-                        )
-                        self._response_message_id = verify_message_id
-                        mark_assistant = getattr(self.chat, "mark_assistant_observed", None)
-                        if mark_assistant is not None:
-                            mark_assistant(verify_message_id)
-                        await self._publish_message_ids(strict=True)
-                        adopted_same_slot_replacement = True
-                        verification_replacement_adopted = True
-                        request_activity_response_id = verify_message_id
-                        request_activity_response_text = verify.latest_assistant_text
-                        logger.info(
-                            "gpt-auto adopted structurally proven assistant-id replacement "
-                            "during terminal verification",
-                            extra={
-                                "turn-id": self.request.turn_id,
-                                "old-assistant-id": expected_assistant_id,
-                                "new-assistant-id": verify_message_id,
-                            },
-                        )
-                        tracker = ObservationTracker(policy=policy, now=loop.time())
-                        # The verification node has just been remounted. Do
-                        # not accept the old candidate immediately; the next
-                        # observation must re-establish terminal stability.
-                        completion_candidate = False
-                    else:
-                        if await self._refresh_after_response_correlation_conflict():
-                            tracker = ObservationTracker(policy=policy, now=loop.time())
-                            previous = current
-                            logger.info(
-                                "gpt-auto refreshed retained conversation after terminal "
-                                "verification correlation conflict; restarting verification",
-                                extra={
-                                    "turn-id": self.request.turn_id,
-                                    "expected-assistant-id": expected_assistant_id,
-                                    "observed-assistant-id": verify_message_id,
-                                },
-                            )
-                            continue
-                        if await _attempt_response_recovery(
-                            loop.time(),
-                            interruption_present="provider-interruption" in verify.dom_signals,
-                            completion_candidate=False,
-                        ):
-                            continue
-                        await asyncio.sleep(self.chat.config.turn.poll_interval_seconds)
-                        continue
+                    raise ProviderBindingIntegrityError(
+                        "provider assistant identity changed during response verification"
+                    )
                 terminal_verified_ok = (
                     verified.satisfied
                     and verify_message_id is not None
