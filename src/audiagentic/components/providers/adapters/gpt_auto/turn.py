@@ -2800,7 +2800,11 @@ def _scope_response_snapshot(
         allow_legacy_owned=allow_legacy_owned_error_alert,
     )
     matched_prompt_id = prompt_message_id
-    if response_ref is None and prompt_text:
+    if (
+        response_ref is None
+        and prompt_text
+        and prompt_message_id.startswith("fallback-user-")
+    ):
         # The project renderer can replace the synthetic fallback user id
         # with a real UUID after submission.  The request already proved its
         # prompt text during submission proof, so use the exact prompt digest
@@ -2885,6 +2889,19 @@ def _scope_response_snapshot(
                 raise ProviderBindingIntegrityError(
                     "provider assistant identity changed during response observation"
                 )
+        elif (
+            any(ref.role == "user" for ref in snapshot.message_refs)
+            and any(
+                ref.role == "assistant" and ref.message_id != bound_assistant_id
+                for ref in snapshot.message_refs
+            )
+        ):
+            # Both the original prompt and its bound assistant may be
+            # virtualized out of the DOM. A remaining user/assistant pair is
+            # then necessarily a later turn, not an answer to this request.
+            raise ProviderBindingIntegrityError(
+                "provider assistant identity changed during response observation"
+            )
     if response_ref is None and allow_virtualized_prompt:
         # ChatGPT's project renderer can unmount the submitted user block
         # after submission while leaving the fresh assistant response and its
@@ -2927,6 +2944,17 @@ def _scope_response_snapshot(
                 message_id=snapshot.latest_assistant_id,
                 text=snapshot.latest_assistant_text,
                 sequence=len(snapshot.message_refs),
+            )
+    if response_ref is None and virtualized_assistant_id:
+        unpinned_fresh_assistant = any(
+            ref.role == "assistant"
+            and ref.message_id != virtualized_assistant_id
+            and ref.message_id not in set(baseline.assistant_message_ids)
+            for ref in snapshot.message_refs
+        )
+        if unpinned_fresh_assistant:
+            raise ProviderBindingIntegrityError(
+                "provider assistant identity changed during response observation"
             )
     if (
         virtualized_assistant_id
