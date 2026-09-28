@@ -2866,6 +2866,16 @@ def _scope_response_snapshot(
     keep this request alive or complete it merely because its controls are
     now the document-global latest controls.
     """
+    baseline_conversation_url = canonical_chat_url(baseline.url)
+    snapshot_conversation_url = canonical_chat_url(snapshot.url)
+    if (
+        baseline_conversation_url
+        and snapshot_conversation_url
+        and snapshot_conversation_url != baseline_conversation_url
+    ):
+        raise ProviderBindingIntegrityError(
+            "provider conversation changed during response observation"
+        )
     response_ref = _response_ref_for_prompt(snapshot, prompt_message_id)
     request_error_alert = _request_error_alert_is_owned(
         baseline,
@@ -2961,7 +2971,9 @@ def _scope_response_snapshot(
         # Prompt-text rebinding runs before the virtualized-prompt fallback.
         # Do not let that earlier branch bypass the request-owned assistant
         # identity pinned during submission proof after a renderer remount.
-        response_ref = None
+        raise ProviderBindingIntegrityError(
+            "provider assistant identity changed during response observation"
+        )
     if (
         response_ref is not None
         and response_ref.message_id == baseline.latest_assistant_id
