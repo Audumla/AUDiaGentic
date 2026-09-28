@@ -2181,16 +2181,47 @@ def test_response_scope_rejects_prompt_rebind_to_unpinned_assistant():
         ),
     )
 
-    scoped, response_ref = _scope_response_snapshot(
-        baseline,
-        raw,
-        prompt_message_id="prompt-a",
-        prompt_text="Request A",
-        virtualized_assistant_id="assistant-a",
+    with pytest.raises(ProviderBindingIntegrityError, match="assistant identity changed"):
+        _scope_response_snapshot(
+            baseline,
+            raw,
+            prompt_message_id="prompt-a",
+            prompt_text="Request A",
+            virtualized_assistant_id="assistant-a",
+        )
+
+
+def test_response_scope_rejects_same_project_conversation_drift_before_rebinding():
+    baseline = snap(
+        users=1,
+        user="Request A",
+        user_id="prompt-a",
+        url="https://chatgpt.com/g/g-p-project/c/conversation-a",
+    )
+    foreign = replace(
+        snap(
+            users=1,
+            assistants=1,
+            user="Request A",
+            user_id="foreign-prompt",
+            assistant="Foreign answer",
+            assistant_id="assistant-b",
+            complete=True,
+            url="https://chatgpt.com/g/g-p-project/c/conversation-b",
+        ),
+        message_refs=(
+            ChatMessageRef("user", "foreign-prompt", "Request A", 0),
+            ChatMessageRef("assistant", "assistant-b", "Foreign answer", 1),
+        ),
     )
 
-    assert response_ref is None
-    assert scoped.latest_assistant_id == baseline.latest_assistant_id
+    with pytest.raises(ProviderBindingIntegrityError, match="conversation changed"):
+        _scope_response_snapshot(
+            baseline,
+            foreign,
+            prompt_message_id="prompt-a",
+            prompt_text="Request A",
+        )
 
 
 def test_response_scope_rebinds_reused_fallback_slot_when_prompt_ordinal_is_unchanged():
