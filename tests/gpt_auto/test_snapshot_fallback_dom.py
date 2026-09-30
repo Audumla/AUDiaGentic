@@ -56,6 +56,14 @@ _CONVERSATION_LOAD_FAILED_SIGNAL = dict(
     ],
 )
 
+_STREAM_CACHE_EXPIRED_SIGNAL = dict(
+    name="stream-cache-expired",
+    scope="document",
+    selectors=["body"],
+    visible=True,
+    textContainsAny=["Stream cache expired"],
+)
+
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
@@ -74,6 +82,26 @@ async def test_conversation_load_failure_matches_current_and_legacy_renderer_tex
             await page.set_content(f"<body>{message}<button>Retry</button></body>")
             snapshot = await page.evaluate(_SNAPSHOT_FN, [_CONVERSATION_LOAD_FAILED_SIGNAL])
             assert snapshot["domSignals"]["conversation-load-failed"]
+        finally:
+            await browser.close()
+
+
+@pytest.mark.asyncio
+async def test_document_stream_cache_error_ignores_text_inside_conversation_messages():
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            await page.set_content(
+                '<div class="block-BQZwFn"><h4 class="sr-only">You said:</h4>'
+                '<div class="group/user-message">Stream cache expired</div></div>'
+            )
+            quoted = await page.evaluate(_SNAPSHOT_FN, [_STREAM_CACHE_EXPIRED_SIGNAL])
+            assert not quoted["domSignals"]["stream-cache-expired"]
+
+            await page.set_content('<div class="provider-error">Stream cache expired</div>')
+            provider_error = await page.evaluate(_SNAPSHOT_FN, [_STREAM_CACHE_EXPIRED_SIGNAL])
+            assert provider_error["domSignals"]["stream-cache-expired"]
         finally:
             await browser.close()
 
