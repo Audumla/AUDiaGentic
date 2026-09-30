@@ -446,6 +446,74 @@ def test_followup_reconciliation_waits_past_generic_recovery_bound(tmp_path: Pat
     assert all("followup-prompt-digest" in item for item in seen_continuations)
 
 
+def test_conversation_load_reconciliation_waits_past_generic_recovery_bound(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """A submitted conversation-load failure stays observation-only."""
+    manager = queue_mod.GatewayQueueManager()
+    project = tmp_path / "project"
+    project.mkdir()
+    record = store.build_record(
+        execution_profile_id="conversation-load-reconcile",
+        prompt_body="x",
+    )
+    store.write_record(project, record)
+    monkeypatch.setattr(queue_mod, "_has_durable_provider_identity", lambda *_args: True)
+    monkeypatch.setattr(queue_mod, "_durable_provider_session_is_active", lambda *_args: True)
+    calls = 0
+
+    def runner(_project_root: Path, _current: dict, **_kwargs) -> dict:
+        nonlocal calls
+        calls += 1
+        if calls <= 3:
+            if calls == 1:
+                current = store.read_record(_project_root, _current["request-id"])
+                current.update(
+                    {
+                        "session-id": "ses-conversation-load",
+                        "provider-transport-kind": "provider-session",
+                        "provider-metadata": {
+                            "provider-session-id": "conversation-ref",
+                            "chat-url": "https://chatgpt.com/g/g-p-project/c/conversation",
+                            "submission-proven": True,
+                        },
+                    }
+                )
+                current["revision"] += 1
+                store.write_record(_project_root, current)
+            raise RecoveryDeferred(
+                AudiaGenticError(
+                    code="EXT-GPTAUTO-003",
+                    kind="providers",
+                    message="conversation still loading",
+                ),
+                phase="conversation-load-reconcile",
+                side_effect_state="may-have-started",
+            )
+        return store.transition_record(
+            _project_root,
+            _current["request-id"],
+            "completed",
+            updates={"output": "reconciled", "finished-at": now_iso_z()},
+        )
+
+    manager.enqueue(
+        project,
+        record,
+        {
+            "virtual-capacity": 1,
+            "provider-session-recovery-initial-delay-seconds": 0.01,
+            "provider-session-recovery-max-delay-seconds": 0.01,
+            "provider-session-recovery-max-attempts": 2,
+        },
+        runner,
+    )
+
+    terminal = manager.wait(project, record["request-id"], timeout_seconds=3)
+    assert terminal["state"] == "completed"
+    assert calls == 4
+
+
 def test_cancelled_recovery_backoff_is_not_stranded(tmp_path: Path):
     """Cancellation during deferred recovery terminalizes without a retry."""
     manager = queue_mod.GatewayQueueManager()

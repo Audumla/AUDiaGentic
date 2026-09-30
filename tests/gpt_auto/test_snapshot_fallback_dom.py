@@ -394,10 +394,11 @@ async def test_fallback_pre_prompt_activity_block_owns_live_activity_with_stop_c
 
             before = await page.evaluate(_SNAPSHOT_FN, [])
             assert before["latestUserId"] == "fallback-user-0"
-            assert before["domActivityOwnerPromptMessageId"] == "fallback-user-0"
-            assert before["progressBlocks"]
-            assert before["progressBlocks"][0]["ownerPromptMessageId"] == "fallback-user-0"
-            assert before["progressBlocks"][0]["kind"] == "inspected"
+            # Stop proves only conversation-level liveness.  The first
+            # pre-prompt observation cannot prove that this block belongs to
+            # the current prompt.
+            assert before["domActivityOwnerPromptMessageId"] is None
+            assert not before["progressBlocks"]
 
             await page.locator(".summary-lK7Lpm").evaluate(
                 "node => node.textContent = 'Evaluated recovery evidence'"
@@ -405,6 +406,8 @@ async def test_fallback_pre_prompt_activity_block_owns_live_activity_with_stop_c
             after = await page.evaluate(_SNAPSHOT_FN, [])
             assert after["domActivityDigest"] != before["domActivityDigest"]
             assert after["domActivityOwnerPromptMessageId"] == "fallback-user-0"
+            assert after["progressBlocks"]
+            assert after["progressBlocks"][0]["ownerPromptMessageId"] == "fallback-user-0"
         finally:
             await browser.close()
 

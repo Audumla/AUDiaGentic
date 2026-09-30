@@ -299,11 +299,7 @@ _SNAPSHOT_FN = r"""
       }
     }
   }
-  const fallbackActivityOwnerPromptMessageId = latestFallbackActivityBeforePrompt && latestFallbackUserBlock
-    ? (messageEntries.find(entry =>
-        entry.role === 'user' && latestFallbackUserBlock.contains(entry.el)
-      )?.messageId || null)
-    : null;
+  let fallbackActivityOwnerPromptMessageId = null;
   const userMessageEntries = messageEntries.filter(m => m.role === "user");
   const assistantMessageEntries = messageEntries.filter(m => m.role === "assistant");
   const users = userMessageEntries.map(m => m.el);
@@ -685,6 +681,28 @@ _SNAPSHOT_FN = r"""
   const userEntries = messageEntries.filter(entry => entry.role === "user" && entry.messageId);
   const progressUserEntries = userEntries.slice(-MAX_PROGRESS_OWNER_USERS);
   let ownerUserIndex = progressUserEntries.length - 1;
+  // Stop is only conversation-level liveness.  For a fallback activity block
+  // that renders before the current prompt, require a second observation in
+  // which that same block mutates while the same prompt remains current.  A
+  // static older/manual generation therefore stays unowned instead of
+  // resetting the current request's recovery clock.
+  if (latestFallbackActivityBeforePrompt && latestFallbackUserBlock && activeStopControlVisible) {
+    const promptId = messageEntries.find(entry =>
+      entry.role === 'user' && latestFallbackUserBlock.contains(entry.el)
+    )?.messageId || null;
+    if (promptId) {
+      const stateKey = '__audiagenticPrePromptActivityState';
+      const state = window[stateKey] instanceof WeakMap
+        ? window[stateKey]
+        : (window[stateKey] = new WeakMap());
+      const digest = activityStateDigest(latestFallbackActivityBeforePrompt);
+      const prior = state.get(latestFallbackActivityBeforePrompt);
+      if (prior && prior.promptId === promptId && prior.digest !== digest) {
+        fallbackActivityOwnerPromptMessageId = promptId;
+      }
+      state.set(latestFallbackActivityBeforePrompt, {promptId, digest});
+    }
+  }
   const fallbackActivityOwnerFor = node => {
     if (!fallbackActivityOwnerPromptMessageId || !latestFallbackActivityBeforePrompt || !node) return null;
     return node === latestFallbackActivityBeforePrompt ||

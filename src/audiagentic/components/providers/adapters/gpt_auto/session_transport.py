@@ -25,7 +25,10 @@ from audiagentic.foundation.transports.agent_session import (
     TransportObservation,
     TransportObservationKind,
 )
-from audiagentic.foundation.transports.session_binding import ProviderSessionRef
+from audiagentic.foundation.transports.session_binding import (
+    ProviderSessionBindingUpdate,
+    ProviderSessionRef,
+)
 
 from .chat import ChatState, PersistentChat
 from .config import GptAutoConfig
@@ -62,12 +65,26 @@ class GptAutoSessionTransport:
         ref = None
         if self.chat.provider_session_id:
             ref = ProviderSessionRef(self.chat.provider_session_id)
-            metadata.update(
-                {
-                    "provider-session-id": self.chat.provider_session_id,
-                    "chat-url": self.chat.chat_url,
-                }
+            binding_metadata = {
+                "provider-session-id": self.chat.provider_session_id,
+                "chat-url": self.chat.chat_url,
+            }
+            if self.chat.target_id:
+                binding_metadata["target-id"] = self.chat.target_id
+            metadata.update(binding_metadata)
+            # Rehydration may have rebound to an exact-URL fallback target.
+            # Refresh the immutable provider binding's scalar metadata without
+            # changing its provider-session reference, so the next restart
+            # prefers the newly proven physical target. This is observation
+            # only; no prompt is sent from this path.
+            result = self.chat.binding_sink(
+                ProviderSessionBindingUpdate(
+                    provider_session_ref=ref,
+                    metadata=binding_metadata,
+                )
             )
+            if inspect.isawaitable(result):
+                await result
         return SessionOpenResult(
             ag_session_id=self.chat.ag_session_id,
             provider_session_ref=ref,
