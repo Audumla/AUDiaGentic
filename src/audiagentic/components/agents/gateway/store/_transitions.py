@@ -635,6 +635,7 @@ def defer_owned_recovery(
     side_effect_state: str,
     retry_delay_seconds: float,
     continuation: Mapping[str, Any] | None = None,
+    _allow_queued: bool = False,
 ) -> dict[str, Any]:
     """Persist a fenced, non-terminal recovery retry.
 
@@ -657,7 +658,7 @@ def defer_owned_recovery(
             expected_worker_id=worker_id,
             expected_attempt_epoch=attempt_epoch,
         )
-        if record["state"] != "running":
+        if record["state"] != "running" and not (_allow_queued and record["state"] == "queued"):
             raise AudiaGenticError(
                 "CON-AGW-088", "agents", "gateway request is not running", {}
             )
@@ -694,11 +695,14 @@ def defer_owned_recovery(
         elif isinstance(prior_continuation, Mapping):
             recovery["continuation"] = dict(prior_continuation)
         updated = dict(record)
+        queued_recovery = record["state"] == "queued"
         updated.update({
             "recovery": recovery,
-            "recovery-required": True,
-            "watchdog-state": "active",
-            "watchdog-reason": "recovery-retry-scheduled",
+            "recovery-required": not queued_recovery,
+            "watchdog-state": "not-started" if queued_recovery else "active",
+            "watchdog-reason": (
+                "queued-recovery-retry" if queued_recovery else "recovery-retry-scheduled"
+            ),
             "updated-at": timestamp,
             "revision": record["revision"] + 1,
         })
@@ -707,7 +711,7 @@ def defer_owned_recovery(
             project_root,
             request_id,
             "recovery.retry-scheduled",
-            state="running",
+            state=updated["state"],
             attributes={
                 "phase": phase,
                 "attempt": attempt,
@@ -717,6 +721,42 @@ def defer_owned_recovery(
             },
         )
         return updated
+
+
+def defer_owned_queued_recovery(
+    project_root: Path,
+    request_id: str,
+    *,
+    owner_epoch: str,
+    worker_id: str,
+    attempt_epoch: int,
+    error: BaseException | dict[str, Any] | None,
+    phase: str,
+    side_effect_state: str,
+    retry_delay_seconds: float,
+    continuation: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Persist a recovery retry before a session turn owns the FIFO lock.
+
+    Provider-session recovery can attach a successor or rehydrate a browser
+    surface before the turn-start CAS.  If that observation path defers, the
+    request is still safely queued; it must retain its claim and be retried,
+    rather than being passed to the running-only recovery transition and left
+    stranded with a live session.
+    """
+    return defer_owned_recovery(
+        project_root,
+        request_id,
+        owner_epoch=owner_epoch,
+        worker_id=worker_id,
+        attempt_epoch=attempt_epoch,
+        error=error,
+        phase=phase,
+        side_effect_state=side_effect_state,
+        retry_delay_seconds=retry_delay_seconds,
+        continuation=continuation,
+        _allow_queued=True,
+    )
 
 
 def transition_recovered_terminal(
