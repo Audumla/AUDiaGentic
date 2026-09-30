@@ -1871,6 +1871,72 @@ async def test_reconcile_replaces_retained_conversation_load_error_without_resub
 
 
 @pytest.mark.asyncio
+async def test_resume_open_attaches_to_generating_retained_tab_without_waiting_quiescence() -> None:
+    """Restart recovery must attach while the provider is still reasoning."""
+    config = GptAutoConfig.from_dict(valid_config())
+    chat_url = "https://chatgpt.com/g/g-p-project/c/provider-session"
+    retained = {"pageHandle": "retained-generating", "targetId": "generating-target", "url": chat_url}
+
+    class _Browser:
+        async def page_by_handle(self, handle):
+            return SimpleNamespace(handle=handle, target_id="generating-target", url=chat_url)
+
+        async def snapshot(self, _page, *, signals=None):
+            return {
+                "url": chat_url,
+                "composerPresent": True,
+                "composerEditable": True,
+                "userCount": 1,
+                "assistantCount": 0,
+                "latestUserId": "prompt-id",
+                "domSignals": {"stop-control": True},
+                "errorPresent": False,
+                "generating": True,
+            }
+
+    class _Bridge:
+        async def call(self, method, params=None, **kwargs):
+            assert method == "list_pages"
+            return [retained]
+
+    async def find_page(_provider_session_id, *, preferred_target_id=None):
+        return retained
+
+    runtime = SimpleNamespace(
+        gpt_browser=_Browser(),
+        bridge=_Bridge(),
+        find_conversation_page=find_page,
+        ensure_available=lambda: asyncio.sleep(0),
+        register_chat=lambda _chat: asyncio.sleep(0),
+        claim_conversation=lambda _chat, _provider_session_id: True,
+        claim_page=lambda _chat, _handle: True,
+        release_page=lambda _chat, _handle: None,
+    )
+    chat = PersistentChat(
+        ag_session_id="session-generating-recovery",
+        project_name="project",
+        project_url="https://chatgpt.com/g/g-p-project/project",
+        runtime=runtime,
+        config=config,
+        binding_sink=lambda _update: None,
+        provider_session_id="provider-session",
+        chat_url=chat_url,
+    )
+    chat.unresolved_turn_pending = True
+    chat.defer_unresolved_reconciliation()
+
+    async def must_not_wait(*, allow_recovering=False):
+        raise AssertionError("restart recovery must not wait for provider quiescence")
+
+    chat.wait_quiescent = must_not_wait  # type: ignore[method-assign]
+
+    await chat.open()
+
+    assert chat.state is ChatState.READY
+    assert chat.page_handle == retained["pageHandle"]
+
+
+@pytest.mark.asyncio
 async def test_find_conversation_page_prefers_healthy_duplicate_over_load_error(monkeypatch) -> None:
     """A later restart must select the healthy duplicate, not the broken tab."""
     runtime = GptAutoProviderRuntime(GptAutoConfig.from_dict(valid_config()))
