@@ -67,6 +67,29 @@ settings:
     stale-progress-focus-enabled: true
     stale-progress-focus-after-seconds: 30
   workflow:
+    recovery:
+      # Recovery policy is workflow data; dispatch still enforces session and
+      # request correlation before applying any of these actions.
+      network-error-followup-enabled: true
+      network-error-followup-max-attempts: 1
+      network-error-followup-prompt-template: >-
+        Complete the previous request. The previous response was interrupted by a
+        network error. Continue from the work already done and provide the complete
+        answer.
+
+        Original request:
+        {original_request}
+      provider-error-followup-enabled: true
+      provider-error-followup-max-attempts: 1
+      provider-error-followup-prompt-template: >-
+        Complete the previous request. ChatGPT reported a temporary request error.
+        Continue from the work already done and provide the complete answer.
+
+        Original request:
+        {original_request}
+      conversation-load-failure-recovery-enabled: true
+      conversation-load-failure-max-attempts: 2
+      action-pause-seconds: 0.15
     dom-signals:
       stop-control:
         scope: document
@@ -87,6 +110,22 @@ settings:
         scope: latest-assistant-turn
         selectors: ['[aria-busy="true"]', '[data-busy="true"]']
         visible: true
+      conversation-load-failed:
+        scope: document
+        selectors: ['body']
+        visible: true
+        # The current renderer omits the trailing period, while older
+        # renderers included it. Match both exact provider-owned variants so
+        # a persistent load-error page cannot fall through to heartbeat-only
+        # response observation.
+        text-contains-any:
+          - 'Could not load this ChatGPT conversation'
+          - 'Could not load this ChatGPT conversation.'
+      network-error-alert:
+        scope: document
+        selectors: ['body']
+        visible: true
+        text-contains-any: ['A network error occurred. Please check your connection and try again.']
       completion-control:
         # GP41 (2026-08-17): [data-testid="copy-turn-action-button"] is NOT
         # unique to assistant turns -- confirmed live it is the SAME
@@ -253,8 +292,8 @@ settings:
         # completion-control alone is unreliable (proven live to fire on a
         # genuinely-incomplete turn mid-stream, GP17 2026-08-16) and can
         # stay persistently true (not flap) through the whole
-        # response_stability_seconds window, so a second, independent
-        # corroborating signal is required. any-of-groups (not a single
+        # response_stability_seconds window, so a second independent
+        # corroborating fact is required. any-of-groups (not a single
         # flat all-of) so a future DOM change breaking one corroborating
         # signal degrades to the other surviving groups instead of making
         # response-complete permanently unsatisfiable -- exactly what
@@ -275,6 +314,14 @@ settings:
         # these two; add further groups only after their own live
         # validation, never speculatively.
         #
+        # The current standard renderer can omit the historical
+        # more-actions-menu while retaining Copy message after generation
+        # has ended.  completion-control + not-generating is therefore a
+        # validated alternate group: it still rejects a mid-generation
+        # completion-control-only snapshot, while allowing the current DOM
+        # variant to terminalize once the assistant text is stable and
+        # request-correlated.
+        #
         # GP34/code review 2026-08-17: unlike the standard pair, the
         # canvas pair's own two members were proven to co-fire at
         # canvas-panel-creation time (not completion) -- see
@@ -292,6 +339,7 @@ settings:
         all-of: [assistant-fresh, text-present]
         any-of-groups:
           - [completion-control, more-actions-menu]
+          - [completion-control, not-generating]
           - [canvas-edit-control, canvas-open-editor-control, not-generating]
         # A stale delivery-error panel can remain visible after ChatGPT has
         # produced the replacement answer.  Fresh assistant correlation plus
@@ -299,4 +347,4 @@ settings:
         # error marker; auth-required remains a hard veto.
         none-of: [streaming-indicator, thinking-indicator, auth-required]
       response-failed:
-        any-of: [error-page, request-error-alert, auth-required]
+        any-of: [error-page, request-error-alert, network-error-alert, conversation-load-failed, auth-required]

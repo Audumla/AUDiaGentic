@@ -45,6 +45,38 @@ _DELIVERY_TIMEOUT_ALERT_SIGNAL = dict(
     textContainsAny=["stream recovery polling timed out"],
 )
 
+_CONVERSATION_LOAD_FAILED_SIGNAL = dict(
+    name="conversation-load-failed",
+    scope="document",
+    selectors=["body"],
+    visible=True,
+    textContainsAny=[
+        "Could not load this ChatGPT conversation",
+        "Could not load this ChatGPT conversation.",
+    ],
+)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "message",
+    [
+        "Could not load this ChatGPT conversation",
+        "Could not load this ChatGPT conversation.",
+    ],
+)
+async def test_conversation_load_failure_matches_current_and_legacy_renderer_text(message):
+    """The live error page currently drops the trailing period."""
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            await page.set_content(f"<body>{message}<button>Retry</button></body>")
+            snapshot = await page.evaluate(_SNAPSHOT_FN, [_CONVERSATION_LOAD_FAILED_SIGNAL])
+            assert snapshot["domSignals"]["conversation-load-failed"]
+        finally:
+            await browser.close()
+
 
 @pytest.mark.asyncio
 async def test_fallback_sibling_action_bar_is_bound_to_latest_response():
