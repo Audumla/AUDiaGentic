@@ -9,6 +9,7 @@ import subprocess
 import sys
 import threading
 import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -337,6 +338,98 @@ def test_terminal_durable_session_does_not_keep_request_running_forever(
     assert calls == 1
     assert terminal["error"]["code"] == "CON-AGW-084"
     assert terminal["recovery"]["outcome"] == "bounded-recovery-exhausted"
+
+
+def test_durable_recovery_expires_session_at_absolute_max_lifetime(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """Recovery exemption stops once the durable session lifetime elapses."""
+    monkeypatch.setattr(
+        queue_mod.GatewayQueueManager,
+        "_recovery_retry_delay",
+        staticmethod(lambda _entry, _attempt: 0.01),
+    )
+    monkeypatch.setattr(
+        queue_mod.GatewayQueueManager,
+        "_recovery_retry_max_attempts",
+        staticmethod(lambda _entry: 2),
+    )
+    manager = queue_mod.GatewayQueueManager()
+    project = tmp_path / "project"
+    project.mkdir()
+    session_id = "ses_expired_recovery"
+    created_at = (datetime.now(timezone.utc) - timedelta(seconds=120)).isoformat().replace(
+        "+00:00", "Z"
+    )
+    session = sessions_store.build_session_record(
+        session_id=session_id,
+        execution_profile_id="recovery-expiring-session",
+        provider_transport_kind="provider-session",
+        provider_id="gpt-auto",
+        provider_session_ref="provider-conversation",
+        surface_id="gpt-auto-cdp",
+        max_lifetime_seconds=60,
+        created_at=created_at,
+    )
+    sessions_store.write_session_record(project, session)
+    record = store.build_record(
+        execution_profile_id="recovery-expiring-session",
+        prompt_body="x",
+        gateway_profile_id="recovery-expiring-session",
+        gateway_profile_generation="gen_test123",
+        gateway_profile_config_digest="sha256:abcd1234",
+        resolved_provider_id="gpt-auto",
+        resolved_instance_ids=["gpt-auto"],
+        provider_transport_kind="provider-session",
+        session_id=session_id,
+    )
+    record.update(
+        {
+            "state": "running",
+            "provider-metadata": {
+                "submission-proven": True,
+                "provider-session-id": "provider-conversation",
+                "chat-url": "https://chatgpt.com/g/g-p-project/c/conversation",
+                "unresolved-turn-pending": True,
+            },
+            "recovery-required": True,
+            "worker-id": "recovery-worker",
+            "attempt-epoch": 1,
+            "dispatch-owner-epoch": "owner-epoch",
+        }
+    )
+    store.write_record(project, record)
+    calls = 0
+
+    def runner(_project_root: Path, _current: dict, **_kwargs) -> dict:
+        nonlocal calls
+        calls += 1
+        raise RecoveryDeferred(
+            AudiaGenticError(
+                code="EXT-AGW-118",
+                kind="agents",
+                message="provider reattach unavailable",
+            )
+        )
+
+    manager.enqueue_recovered_running(
+        project,
+        record,
+        {
+            "virtual-capacity": 1,
+            "provider-session-recovery-initial-delay-seconds": 0.01,
+            "provider-session-recovery-max-delay-seconds": 0.01,
+            "provider-session-recovery-max-attempts": 2,
+        },
+        runner,
+        dispatch_owner_epoch="owner-epoch",
+        dispatch_service_root=tmp_path,
+    )
+
+    terminal = manager.wait(project, record["request-id"], timeout_seconds=3)
+    assert terminal["state"] == "interrupted"
+    assert calls == 2
+    assert sessions_store.read_session_record(project, session_id)["state"] == "expired"
 
 
 def test_presubmit_reconciliation_waits_past_generic_recovery_bound(tmp_path: Path):

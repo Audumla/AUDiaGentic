@@ -31,6 +31,7 @@ from audiagentic.foundation.transports.session_binding import (
 )
 
 from .chat import ChatState, PersistentChat
+from .cdp.client import CdpError
 from .config import GptAutoConfig
 from .runtime_registry import get_runtime
 from .turn import GptAutoTurn
@@ -266,7 +267,8 @@ class GptAutoSessionTransport:
             # cleared the checkpoint is terminal.
             unresolved = self.chat.unresolved_metadata()
             durable_observation_recovery = bool(
-                not definitively_failed
+                isinstance(exc, CdpError)
+                and not definitively_failed
                 and unresolved.get("unresolved-turn-pending")
                 and self.chat.provider_session_id
                 and self.chat.state not in {ChatState.FAILED, ChatState.CLOSED}

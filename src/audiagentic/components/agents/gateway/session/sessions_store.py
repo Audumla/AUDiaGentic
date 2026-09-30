@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -132,6 +133,84 @@ def session_idle_timeout_seconds(record: dict[str, Any]) -> float | None:
 
 def session_max_lifetime_seconds(record: dict[str, Any]) -> float | None:
     return (record.get("policy") or {}).get("max-lifetime-seconds")
+
+
+def session_created_age_seconds(
+    record: dict[str, Any], *, now: datetime | None = None
+) -> float | None:
+    """Return the durable age of a session, or ``None`` for invalid metadata."""
+    created_at = session_created_at(record)
+    if not isinstance(created_at, str) or not created_at.strip():
+        return None
+    try:
+        created = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    if created.tzinfo is None:
+        created = created.replace(tzinfo=timezone.utc)
+    current = now or datetime.now(timezone.utc)
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=timezone.utc)
+    return max(0.0, (current.astimezone(timezone.utc) - created.astimezone(timezone.utc)).total_seconds())
+
+
+def session_lifetime_expiry(record: dict[str, Any]) -> datetime | None:
+    """Derive the absolute max-lifetime expiry from durable session fields."""
+    age = session_created_age_seconds(record)
+    max_lifetime = session_max_lifetime_seconds(record)
+    created_at = session_created_at(record)
+    if age is None or not isinstance(created_at, str):
+        return None
+    try:
+        cap = float(max_lifetime) if max_lifetime is not None else 0.0
+        created = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    if cap <= 0:
+        return None
+    if created.tzinfo is None:
+        created = created.replace(tzinfo=timezone.utc)
+    return created.astimezone(timezone.utc) + timedelta(seconds=cap)
+
+
+def session_lifetime_expired(
+    record: dict[str, Any], *, now: datetime | None = None
+) -> bool:
+    """Return whether the durable absolute max-lifetime has elapsed."""
+    expiry = session_lifetime_expiry(record)
+    if expiry is None:
+        return False
+    current = now or datetime.now(timezone.utc)
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=timezone.utc)
+    return current.astimezone(timezone.utc) > expiry
+
+
+def expire_session_if_lifetime_exceeded(
+    project_root: Path, session_id: str
+) -> dict[str, Any]:
+    """Persist expiry before recovery can re-open an over-age session."""
+    record = read_session_record(project_root, session_id)
+    if record.get("state") in SESSION_TERMINAL_STATES or not session_lifetime_expired(record):
+        return record
+    expired = transition_session_record(
+        project_root,
+        session_id,
+        "expired",
+        updates={"close-reason": "max-lifetime", "closed-at": now_iso_z()},
+    )
+    bindings.retire_binding(project_root, expired, state="expired")
+    try:
+        record_session_timeline(
+            project_root,
+            session_id,
+            "session.expired",
+            state="expired",
+            attributes={"close-reason": "max-lifetime"},
+        )
+    except Exception:  # noqa: BLE001 - expiry state is already authoritative
+        logger.warning("failed to record durable session expiry timeline", exc_info=True)
+    return expired
 
 
 def record_session_timeline(
