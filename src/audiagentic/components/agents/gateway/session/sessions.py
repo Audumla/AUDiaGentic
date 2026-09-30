@@ -54,6 +54,9 @@ from audiagentic.components.agents.gateway.event_topics import (
 from audiagentic.components.agents.gateway.session import bindings as binding_store
 from audiagentic.components.agents.gateway.session import orphan as orphan_lib
 from audiagentic.components.agents.gateway.session import sessions_store as session_store
+from audiagentic.components.agents.agents_paths import (
+    gateway_session_resume_concurrency_lock_path,
+)
 from audiagentic.components.agents.gateway.session.console_trace import GatewayConsoleTrace
 from audiagentic.components.agents.gateway.session.turn_events import (
     _make_on_event_callback,
@@ -77,6 +80,7 @@ from audiagentic.components.providers import providers_api
 from audiagentic.components.providers.contracts.conversation_focus import ConversationFocusLocator
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.time import now_iso_z
+from audiagentic.foundation.system.process import StartupLock
 from audiagentic.foundation.transports.agent_session import (
     SessionControlAction,
     SessionControlRequest,
@@ -686,46 +690,53 @@ class SessionRuntime:
         that resume requires the same execution context. Persistent provider
         conversations opt out through their surface mapping facts.
         """
-        return self._call(
-            self._resume_session(
-                project_root,
-                source_session_id,
-                control_id=control_id,
-                execution_context_fingerprint=execution_context_fingerprint,
-                context_id=context_id,
-                agent_definition_id=agent_definition_id,
-                agent_definition_digest=agent_definition_digest,
-                role_ids=role_ids,
-                role_set_digest=role_set_digest,
-                execution_profile_digest=execution_profile_digest,
-                effective_capability_digest=effective_capability_digest,
-                model_id=model_id,
-                idle_timeout_seconds=(
-                    DEFAULT_SESSION_IDLE_TIMEOUT_SECONDS
-                    if idle_timeout_seconds is None
-                    else idle_timeout_seconds
+        # Idempotency is keyed by control id, but different callers can use
+        # different control ids for the same closed source.  Serialize the
+        # complete source->successor decision so automatic recovery cannot
+        # race an explicit resume and create two successor sessions.
+        with StartupLock(
+            gateway_session_resume_concurrency_lock_path(project_root, source_session_id)
+        ):
+            return self._call(
+                self._resume_session(
+                    project_root,
+                    source_session_id,
+                    control_id=control_id,
+                    execution_context_fingerprint=execution_context_fingerprint,
+                    context_id=context_id,
+                    agent_definition_id=agent_definition_id,
+                    agent_definition_digest=agent_definition_digest,
+                    role_ids=role_ids,
+                    role_set_digest=role_set_digest,
+                    execution_profile_digest=execution_profile_digest,
+                    effective_capability_digest=effective_capability_digest,
+                    model_id=model_id,
+                    idle_timeout_seconds=(
+                        DEFAULT_SESSION_IDLE_TIMEOUT_SECONDS
+                        if idle_timeout_seconds is None
+                        else idle_timeout_seconds
+                    ),
+                    max_lifetime_seconds=(
+                        DEFAULT_SESSION_MAX_LIFETIME_SECONDS
+                        if max_lifetime_seconds is None
+                        else max_lifetime_seconds
+                    ),
+                    turn_timeout_seconds=(
+                        DEFAULT_TURN_TIMEOUT_SECONDS
+                        if turn_timeout_seconds is None
+                        else turn_timeout_seconds
+                    ),
+                    turn_silence_timeout_seconds=(
+                        DEFAULT_TURN_SILENCE_TIMEOUT_SECONDS
+                        if turn_silence_timeout_seconds is None
+                        else turn_silence_timeout_seconds
+                    ),
+                    correlation_id=correlation_id,
+                    request_runtime_root=request_runtime_root,
+                    project_name=project_name,
                 ),
-                max_lifetime_seconds=(
-                    DEFAULT_SESSION_MAX_LIFETIME_SECONDS
-                    if max_lifetime_seconds is None
-                    else max_lifetime_seconds
-                ),
-                turn_timeout_seconds=(
-                    DEFAULT_TURN_TIMEOUT_SECONDS
-                    if turn_timeout_seconds is None
-                    else turn_timeout_seconds
-                ),
-                turn_silence_timeout_seconds=(
-                    DEFAULT_TURN_SILENCE_TIMEOUT_SECONDS
-                    if turn_silence_timeout_seconds is None
-                    else turn_silence_timeout_seconds
-                ),
-                correlation_id=correlation_id,
-                request_runtime_root=request_runtime_root,
-                project_name=project_name,
-            ),
-            timeout=None,
-        )
+                timeout=None,
+            )
 
     def close_session(
         self,
@@ -2272,7 +2283,7 @@ class SessionRuntime:
                         project_root,
                         session_id,
                         "failed",
-                        updates={"close-reason": "resume-persistence-failed", "closed-at": now_iso()},
+                        updates={"close-reason": "resume-persistence-failed", "closed-at": now_iso_z()},
                     )
                     binding_store.retire_binding(project_root, failed_record, state="failed")
                 except Exception:  # noqa: BLE001 - preserve the original persistence failure

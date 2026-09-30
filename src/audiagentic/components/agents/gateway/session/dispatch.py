@@ -13,6 +13,7 @@ module-level cycles.
 from __future__ import annotations
 
 import logging
+import hashlib
 from pathlib import Path
 from typing import Any
 
@@ -206,15 +207,11 @@ def _auto_resume_reopenable_closed_session(
     observation-only restart-recovery path (``allow_failed=True``); ordinary
     continuation still requires an explicit session_resume.
 
-    Reuses AS49's existing resume_session() machinery as-is -- no new
-    concurrency primitive. A control id deterministic in the source
-    session id means concurrent racing continuations against the same
-    closed session converge on resume.py's existing idempotency-by-
-    control-id lookup and resolve to the SAME successor, rather than each
-    minting its own. This is a real, accepted, narrower guarantee than
-    GP13's full per-source reservation model: an EXPLICIT caller resume
-    (a different control id) racing this SAME source session could still
-    mint a second, different successor. Not closed by this patch.
+    Reuses AS49's existing resume_session() machinery.  The runtime now
+    serializes the complete source-to-successor decision per source session;
+    the deterministic control id still makes repeated automatic recovery
+    idempotent, while the lock also closes the race with an explicit resume
+    using a different control id.
 
     Returns (new_session_id, new_session_record, updated_request_record).
     Raises the original RES-AGW-003 for any expected resume-ineligibility
@@ -442,6 +439,34 @@ def _dispatch_session_request(
 
     request_id = record["request-id"]
     execution_profile_id = record["execution-profile-id"]
+    recovery = record.get("recovery")
+    recovery = recovery if isinstance(recovery, dict) else {}
+    continuation = recovery.get("continuation")
+    continuation = continuation if isinstance(continuation, dict) else {}
+    # A follow-up prompt is a provider-side continuation, not a fresh root
+    # dispatch.  The queue may invoke this runner again after the provider
+    # adapter lost its observation handle; restore the durable counters and
+    # force observation-only recovery so the original prompt is never replayed.
+    if recovery.get("phase") == "followup-reconcile" and continuation:
+        resume_existing = True
+        try:
+            _network_followup_attempts = max(
+                _network_followup_attempts,
+                int(continuation.get("network-followup-attempts", 0)),
+            )
+            _provider_error_followup_attempts = max(
+                _provider_error_followup_attempts,
+                int(continuation.get("provider-error-followup-attempts", 0)),
+            )
+            _default_recovery_attempt = max(
+                _default_recovery_attempt,
+                int(continuation.get("default-recovery-attempt", 0)),
+            )
+        except (TypeError, ValueError):
+            # Invalid private recovery metadata must not make the request
+            # eligible for a new prompt.  Observation-only recovery remains
+            # the safe default.
+            resume_existing = True
     runtime = get_session_runtime()
     project_name = _admitted_project_name(record)
 
@@ -913,9 +938,15 @@ def _dispatch_session_request(
                 # Rehydrate/open failures cannot prove that the old generation
                 # did not submit the turn. The queue owns the non-terminal
                 # retry and keeps the durable request/session identity.
+                followup_recovery = recovery.get("phase") == "followup-reconcile"
                 raise RecoveryDeferred(
                     exc,
-                    phase="rehydrate-retry" if not runtime_invoked else "observe-retry",
+                    phase=(
+                        "followup-reconcile"
+                        if followup_recovery
+                        else ("rehydrate-retry" if not runtime_invoked else "observe-retry")
+                    ),
+                    continuation=continuation if followup_recovery else None,
                 ) from exc
         cancelled = store.read_record(project_root, request_id).get("cancel-requested")
         if (
@@ -1175,6 +1206,58 @@ def _dispatch_session_request(
                     session_start=session_start,
                     resume_existing=False,
                 )
+            if (
+                not cancelled
+                and runtime_invoked
+                and (_network_followup_attempts > 0 or _provider_error_followup_attempts > 0)
+            ):
+                # A recovery prompt has already been submitted in this
+                # provider conversation.  A subsequent provider alert is not
+                # proof that the recovery turn did not start: the live tab
+                # may still be generating while the old error panel remains
+                # in the document.  Preserve the failed-attempt evidence and
+                # re-enter observation-only recovery; never terminalize the
+                # parent request while that follow-up may still be running.
+                failure_updates = _failure_response_updates(project_root, request_id, exc)
+                if failure_updates:
+                    record = store.update_owned_running_session(
+                        project_root,
+                        request_id,
+                        owner_epoch=record["dispatch-owner-epoch"],
+                        worker_id=record["worker-id"],
+                        attempt_epoch=record["attempt-epoch"],
+                        session_id=session_id,
+                        result_updates=failure_updates,
+                    )
+                store.record_gateway_timeline(
+                    project_root,
+                    request_id,
+                    "provider.followup.observation-deferred",
+                    state="running",
+                    attributes={
+                        "network-followup-attempts": _network_followup_attempts,
+                        "provider-error-followup-attempts": _provider_error_followup_attempts,
+                        "same-session": True,
+                        "failure-response-available": bool(failure_updates),
+                        "dom-signals": sorted(error_evidence),
+                    },
+                )
+                raise RecoveryDeferred(
+                    exc,
+                    phase="followup-reconcile",
+                    side_effect_state="may-have-started",
+                    continuation={
+                        "kind": "provider-followup",
+                        "resume-existing": True,
+                        "network-followup-attempts": _network_followup_attempts,
+                        "provider-error-followup-attempts": _provider_error_followup_attempts,
+                        "default-recovery-attempt": _default_recovery_attempt,
+                        "followup-prompt-length": len(dispatch_prompt),
+                        "followup-prompt-digest": hashlib.sha256(
+                            dispatch_prompt.encode("utf-8")
+                        ).hexdigest(),
+                    },
+                ) from exc
             replacement = client_defaults.replace_failed_default(
                 project_root, record, exc,
                 recover_url=not runtime_invoked and _default_recovery_attempt == 0 and not (record.get("metadata") or {}).get("provider-chat-url"),

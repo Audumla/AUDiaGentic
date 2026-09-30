@@ -288,6 +288,45 @@ def test_generic_provider_error_continues_same_session_once(rig, monkeypatch):
     assert len(transports) == 1
 
 
+def test_failed_followup_defers_observation_and_keeps_request_running(rig, monkeypatch):
+    """A recovery prompt may be generating after its provider alert fires."""
+    from audiagentic.components.agents.gateway.queue.recovery_control import RecoveryDeferred
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+    runtime, transports, root = rig
+    first = _dispatch(root, _running_record(root, session_keep_alive=True), dispatch_prompt="first")
+    session_id = first["session-id"]
+    prompts: list[str] = []
+
+    def prompt(*args, **kwargs):
+        prompts.append(args[2])
+        raise AudiaGenticError(
+            code="EXT-GPTAUTO-003",
+            kind="providers",
+            message="provider failure policy matched: network-error-alert",
+            details={
+                "failure-reason": "provider-failure-policy-matched",
+                "evidence": ["error-alert", "network-error-alert"],
+                "dom-signals": ["error-alert", "network-error-alert"],
+                "failure-response-available": True,
+                "failure-response-text": "partial review",
+            },
+        )
+
+    monkeypatch.setattr(runtime, "prompt_in_session", prompt)
+    record = _running_record(root, session_id=session_id, session_keep_alive=True)
+    with pytest.raises(RecoveryDeferred) as exc:
+        _dispatch(root, record, dispatch_prompt="first")
+
+    assert exc.value.phase == "followup-reconcile"
+    assert exc.value.side_effect_state == "may-have-started"
+    assert len(prompts) == 2
+    assert "Complete the previous request" in prompts[1]
+    stored = store.read_record(root, record["request-id"])
+    assert stored["state"] == "running"
+    assert len(transports) == 1
+
+
 def test_profile_turn_deadline_never_cancels_a_session_turn(rig, monkeypatch):
     """A profile's legacy elapsed-time setting cannot override activity policy."""
     runtime, _transports, tmp_path = rig
