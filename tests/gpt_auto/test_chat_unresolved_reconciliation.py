@@ -961,6 +961,31 @@ async def test_reconciliation_clear_is_persisted_before_memory_is_exposed_ready(
 
 
 @pytest.mark.asyncio
+async def test_durable_terminal_clear_removes_stale_unresolved_marker_without_dom_retry():
+    chat = _chat(unresolved=True)
+    chat._checkpoint_metadata["terminal-evidence"] = {
+        "checkpoint-clear-persisted": True,
+        "policy": "response-complete",
+        "verification-evidence": [
+            "assistant-fresh",
+            "completion-control",
+            "not-generating",
+            "text-present",
+        ],
+    }
+    writes = []
+
+    async def checkpoint(metadata):
+        writes.append(dict(metadata))
+
+    chat.checkpoint_sink = checkpoint
+
+    assert await chat._reconcile_unresolved_turn() is True
+    assert chat.unresolved_turn_pending is False
+    assert writes == [{"unresolved-turn-pending": False}]
+
+
+@pytest.mark.asyncio
 async def test_failed_durable_clear_keeps_unresolved_fence_in_memory():
     chat = _chat(response_stability_seconds=0.001)
     snapshot = _terminal_snapshot(

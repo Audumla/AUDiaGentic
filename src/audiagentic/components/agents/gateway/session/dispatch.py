@@ -26,6 +26,34 @@ from audiagentic.foundation.transports.agent_session import SessionFailureDispos
 logger = logging.getLogger(__name__)
 
 
+def _merge_provider_metadata(
+    current_metadata: dict[str, Any] | None,
+    request_metadata: dict[str, Any],
+) -> dict[str, Any]:
+    """Merge provider metadata without destroying unresolved-turn evidence.
+
+    A pre-send fence is deliberately ``submission-proven=False``.  It still
+    carries the prompt text digest used to correlate a completed DOM turn when
+    ChatGPT does not expose message ids.  The old merge removed that digest
+    along with provider ids, leaving the durable unresolved marker with no
+    recovery evidence and causing an endless presubmit-reconcile loop.
+    """
+    merged = dict(current_metadata) if isinstance(current_metadata, dict) else {}
+    if not request_metadata.get("submission-proven"):
+        for key in (
+            "prompt-message-id",
+            "assistant-message-id",
+            "assistant-before-message-id",
+            "assistant-before-id",
+            "submission-proven",
+            "prompt-text-digest",
+            "terminal-evidence",
+        ):
+            merged.pop(key, None)
+    merged.update(request_metadata)
+    return merged
+
+
 def _terminal_session_diagnostics(session_id: str, record: dict[str, Any]) -> dict[str, Any]:
     """Return sparse facts needed to repair a continuation rejection.
 
@@ -456,26 +484,9 @@ def _dispatch_session_request(
 
         async def _relay_provider_metadata(metadata: dict[str, Any]) -> None:
             nonlocal record
-            current_metadata = record.get("provider-metadata")
-            merged_metadata = (
-                dict(current_metadata) if isinstance(current_metadata, dict) else {}
+            merged_metadata = _merge_provider_metadata(
+                record.get("provider-metadata"), dict(metadata)
             )
-            turn_metadata_keys = {
-                "prompt-message-id",
-                "assistant-message-id",
-                "assistant-before-message-id",
-                "assistant-before-id",
-                "prompt-text-digest",
-                "submission-proven",
-            }
-            if not metadata.get("submission-proven"):
-                for key in turn_metadata_keys:
-                    merged_metadata.pop(key, None)
-            request_metadata = dict(metadata)
-            if not request_metadata.get("submission-proven"):
-                for key in turn_metadata_keys:
-                    request_metadata.pop(key, None)
-            merged_metadata.update(request_metadata)
             record = store.update_owned_running_session(
                 project_root,
                 request_id,

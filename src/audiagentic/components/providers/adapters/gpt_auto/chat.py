@@ -165,6 +165,7 @@ class PersistentChat:
                 "unresolved-baseline-user-count",
                 "unresolved-baseline-assistant-count",
                 "unresolved-baseline-error-alert-occurrences",
+                "terminal-evidence",
             )
             if key in metadata and metadata[key] not in (None, "")
         }
@@ -575,6 +576,12 @@ class PersistentChat:
             handle = self.page_handle
             if (
                 not handle
+                # A live provider turn is itself session activity.  Synthetic
+                # transport heartbeats must not allow the physical-tab reaper
+                # to close the only tab while the provider is still working.
+                # Once the turn reaches a terminal state, the independent
+                # validated-DOM inactivity clock may reclaim the tab again.
+                or self.active_turn_id is not None
                 or self.pending_turns > 0
                 or now - self._last_validated_activity_monotonic < idle_timeout_seconds
             ):
@@ -594,6 +601,7 @@ class PersistentChat:
                     logger.debug("gpt-auto pre-cleanup observation failed", exc_info=True)
             if (
                 handle != self.page_handle
+                or self.active_turn_id is not None
                 or self.pending_turns > 0
                 or now - self._last_validated_activity_monotonic < idle_timeout_seconds
             ):
@@ -857,6 +865,16 @@ class PersistentChat:
     async def _reconcile_unresolved_turn(self) -> bool:
         """Prove the retained prompt reached a terminal provider outcome."""
         if not self.unresolved_turn_pending:
+            return True
+        # A completed turn publishes its terminal evidence after the durable
+        # checkpoint clear.  If a later metadata relay left the old unresolved
+        # marker behind, that durable proof is stronger than another DOM poll:
+        # keep the successor from retrying forever against an already-cleared
+        # predecessor.
+        if _terminal_evidence_proves_checkpoint_clear(self._checkpoint_metadata):
+            await self.persist_unresolved_clear()
+            self.clear_unresolved_turn()
+            self._set_unresolved_recovery("stale-unresolved-marker-cleared")
             return True
         observed_page_generation = self._page_generation
         try:
@@ -2048,6 +2066,20 @@ def _reconciliation_completion_candidate(chat: PersistentChat, snapshot: ChatSna
         )
         and assistant_id != chat.unresolved_assistant_before_id
     )
+
+
+def _terminal_evidence_proves_checkpoint_clear(metadata: dict[str, object]) -> bool:
+    """Return whether provider terminal metadata proves the fence was cleared."""
+    evidence = metadata.get("terminal-evidence")
+    if not isinstance(evidence, dict):
+        return False
+    if evidence.get("checkpoint-clear-persisted") is not True:
+        return False
+    if evidence.get("policy") != "response-complete":
+        return False
+    required = {"completion-control", "not-generating", "text-present"}
+    observed = evidence.get("verification-evidence")
+    return isinstance(observed, (list, tuple, set)) and required <= set(observed)
 
 
 def _reconciliation_evidence_clear(
