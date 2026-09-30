@@ -811,18 +811,23 @@ def _dispatch_session_request(
                             resume_existing=resume_existing,
                         )
                     except AudiaGenticError as exc:
-                        if exc.code == "EXT-AGW-118" and not resume_existing:
-                            # Rehydration happens before this request's prompt
-                            # can be submitted. A transient browser/tab/CDP
-                            # failure after gateway restart is therefore
-                            # recoverable and must stay running; the queue's
-                            # bounded-backoff recovery loop will retry the
-                            # exact durable session instead of failing or
-                            # rotating the client's default session.
+                        if exc.code == "EXT-AGW-118":
+                            # Rehydration itself is observation-only.  This is
+                            # true both before a fresh prompt and while
+                            # recovering an already-submitted turn: opening
+                            # the exact retained conversation may fail because
+                            # the CDP bridge/browser is transiently unavailable,
+                            # but that cannot prove the provider turn stopped
+                            # or that the prompt was unsent.  Keep the same
+                            # request/session in recovery for either path;
+                            # never rotate the client default or replay a
+                            # prompt merely because reattachment was refused.
                             raise RecoveryDeferred(
                                 exc,
                                 phase="rehydrate-retry",
-                                side_effect_state="not-started",
+                                side_effect_state=(
+                                    "may-have-started" if resume_existing else "not-started"
+                                ),
                             ) from exc
                         raise
 
