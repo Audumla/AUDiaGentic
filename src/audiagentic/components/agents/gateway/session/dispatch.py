@@ -240,6 +240,7 @@ def _auto_resume_reopenable_closed_session(
             execution_context_fingerprint=context_fingerprint or record.get("context-fingerprint"),
             request_runtime_root=request_runtime_root,
             project_name=project_name,
+            resume_existing=allow_failed,
         )
         # A later gateway shutdown can close the idempotent successor before
         # the next caller arrives. Replaying the original control then
@@ -268,6 +269,7 @@ def _auto_resume_reopenable_closed_session(
                 execution_context_fingerprint=context_fingerprint or record.get("context-fingerprint"),
                 request_runtime_root=request_runtime_root,
                 project_name=project_name,
+                resume_existing=allow_failed,
             )
     except AudiaGenticError as exc:
         if exc.code in _AUTO_RESUME_EXPECTED_REFUSAL_CODES:

@@ -183,6 +183,36 @@ class TestResumeSuccess:
         finally:
             runtime.shutdown()
 
+    def test_observation_only_resume_defers_unresolved_reconciliation_before_open(
+        self, tmp_path: Path
+    ):
+        source = _write_terminal_source_session(tmp_path)
+        transports: list[FakeAgentSessionTransport] = []
+
+        def prepare(
+            project_root, *, provider_id, surface_hint, model_id=None,
+            resume_provider_ref=None, **ignored
+        ):
+            transport = FakeAgentSessionTransport()
+            transport.ag_session_id = ignored["ag_session_id"]
+            transport.provider_session_ref = resume_provider_ref or "x"
+            transports.append(transport)
+            return _build_fake_prepared(transport)
+
+        runtime = _make_runtime(resume_prepare=prepare)
+        try:
+            resumed = runtime.resume_session(
+                tmp_path,
+                source["session-id"],
+                control_id="ctrl-observation-only",
+                execution_context_fingerprint=_EXECUTION_FP,
+                resume_existing=True,
+            )
+            assert resumed["session-id"] != source["session-id"]
+            assert transports[0].defer_unresolved_calls == 1
+        finally:
+            runtime.shutdown()
+
     def test_idempotent_replay_returns_same_new_session(self, tmp_path: Path):
         source = _write_terminal_source_session(tmp_path)
         call_count = 0

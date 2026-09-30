@@ -73,7 +73,11 @@ class FakeAgentSessionTransport:
         self.provider_session_ref = "prov-ses-1"
         self.ag_session_id = "ag-s-fake"
         self.reconcile_calls = 0
+        self.defer_unresolved_calls = 0
         self._turn_failure_disposition = SessionFailureDisposition.TERMINATE
+
+    def defer_unresolved_reconciliation(self) -> None:
+        self.defer_unresolved_calls += 1
 
     async def open(self) -> SessionOpenResult:
         self.opened = True

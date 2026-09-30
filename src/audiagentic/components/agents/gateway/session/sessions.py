@@ -686,6 +686,7 @@ class SessionRuntime:
         correlation_id: str | None = None,
         request_runtime_root: Path | None = None,
         project_name: str | None = None,
+        resume_existing: bool = False,
     ) -> dict[str, Any]:
         """AS49: explicitly resume a terminal session as a new linked generation.
 
@@ -743,6 +744,7 @@ class SessionRuntime:
                     correlation_id=correlation_id,
                     request_runtime_root=request_runtime_root,
                     project_name=project_name,
+                    resume_existing=resume_existing,
                 ),
                 timeout=None,
             )
@@ -1943,6 +1945,7 @@ class SessionRuntime:
         correlation_id: str | None,
         request_runtime_root: Path | None,
         project_name: str | None,
+        resume_existing: bool,
     ) -> dict[str, Any]:
         """AS49: resolve, validate, and dispatch an explicit resume request.
 
@@ -2182,6 +2185,15 @@ class SessionRuntime:
             _record_failure(exc)
             raise exc
         transport = prepared.transport
+        if resume_existing:
+            defer_recovery = getattr(transport, "defer_unresolved_reconciliation", None)
+            if callable(defer_recovery):
+                # The successor must attach to the exact provider tab before
+                # observing the already-submitted turn.  Running ordinary
+                # open-time reconciliation first can reject a still-
+                # generating turn and permanently poison the auto-resume
+                # idempotency record before the request-owned observer starts.
+                defer_recovery()
         try:
             open_result = await transport.open()
         except asyncio.CancelledError:
