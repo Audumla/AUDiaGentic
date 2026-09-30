@@ -22,6 +22,7 @@ from tests.unit.agents.test_agents_gateway_sessions import (
 
 from audiagentic.components.agents.gateway import store as store
 from audiagentic.components.agents.gateway.queue import dispatch as dispatch
+from audiagentic.components.agents.gateway.queue.recovery_control import RecoveryDeferred
 from audiagentic.components.agents.gateway.session import dispatch as session_dispatch
 from audiagentic.components.agents.gateway.session import sessions as sessions_module
 from audiagentic.components.agents.gateway.session import sessions_store
@@ -316,10 +317,51 @@ def test_conversation_load_failure_after_submission_never_replays_in_fresh_sessi
 
     monkeypatch.setattr(runtime, "prompt_in_session", prompt)
     record = _running_record(root, session_id=session_id, session_keep_alive=True)
-    result = _dispatch(root, record, dispatch_prompt="first")
+    with pytest.raises(RecoveryDeferred) as deferred:
+        _dispatch(root, record, dispatch_prompt="first")
 
-    assert result["state"] == "failed"
-    assert result["session-id"] == session_id
+    assert deferred.value.phase == "conversation-load-reconcile"
+    stored = store.read_record(root, record["request-id"])
+    assert stored["state"] == "running"
+    assert stored["session-id"] == session_id
+    assert prompts == [(session_id, "first")]
+    assert len(transports) == 1
+
+
+def test_conversation_load_failure_without_unsent_proof_never_replays(rig, monkeypatch):
+    """An incomplete failure payload must fail closed instead of replaying."""
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+    runtime, transports, root = rig
+    first = _dispatch(root, _running_record(root, session_keep_alive=True), dispatch_prompt="first")
+    session_id = first["session-id"]
+    prompts: list[tuple[str, str]] = []
+
+    def prompt(*args, **kwargs):
+        prompts.append((args[1], args[2]))
+        if len(prompts) == 1:
+            raise AudiaGenticError(
+                code="EXT-GPTAUTO-003",
+                kind="providers",
+                message="provider failure policy matched: conversation-load-failed",
+                details={
+                    "failure-reason": "conversation-load-failed",
+                    "dom-signals": ["conversation-load-failed"],
+                    "submission-proven": False,
+                    "submission-attempted": True,
+                },
+            )
+        raise AssertionError("conversation-load failure without unsent proof was replayed")
+
+    monkeypatch.setattr(runtime, "prompt_in_session", prompt)
+    record = _running_record(root, session_id=session_id, session_keep_alive=True)
+    with pytest.raises(RecoveryDeferred) as deferred:
+        _dispatch(root, record, dispatch_prompt="first")
+
+    assert deferred.value.phase == "conversation-load-reconcile"
+    stored = store.read_record(root, record["request-id"])
+    assert stored["state"] == "running"
+    assert stored["session-id"] == session_id
     assert prompts == [(session_id, "first")]
     assert len(transports) == 1
 
