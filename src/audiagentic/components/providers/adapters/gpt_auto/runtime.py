@@ -445,14 +445,13 @@ class GptAutoProviderRuntime:
         # A gateway restart can recreate the managed window anchor while the
         # browser keeps the original conversation tab in its prior window.
         # For an exact durable provider-session URL, conversation identity is
-        # the stronger safety boundary: prefer the managed window, but fall
-        # back to an exact match in another CDP window rather than opening a
-        # duplicate conversation or declaring the request unrecoverable.
+        # the stronger safety boundary.  First discard only tabs that are
+        # explicitly on the provider load-error page; only then prefer the
+        # managed window among healthy candidates.  A failed managed tab must
+        # not mask a healthy exact match in the prior window.
         managed_matches = [
             page for page in matches if self.page_belongs_to_dedicated_window(page)
         ]
-        if managed_matches:
-            matches = managed_matches
         if len(matches) > 1:
             # A browser can retain both the original failed renderer and a
             # successfully reloaded tab for the same conversation. Prefer a
@@ -466,7 +465,16 @@ class GptAutoProviderRuntime:
                 if not await self._page_has_load_failure(page)
             ]
             if healthy:
-                matches = healthy
+                managed_healthy = [
+                    page
+                    for page in healthy
+                    if self.page_belongs_to_dedicated_window(page)
+                ]
+                matches = managed_healthy or healthy
+            elif managed_matches:
+                matches = managed_matches
+        elif managed_matches:
+            matches = managed_matches
         if len(matches) > 1:
             # Multiple tabs can genuinely display the same canonical
             # conversation (provider_session_id already proved that -- e.g.

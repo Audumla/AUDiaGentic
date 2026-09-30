@@ -1871,6 +1871,65 @@ async def test_reconcile_replaces_retained_conversation_load_error_without_resub
 
 
 @pytest.mark.asyncio
+async def test_conversation_load_recovery_budget_survives_chat_reconstruction() -> None:
+    """A failed replacement consumes durable budget across new chat objects."""
+    config = GptAutoConfig.from_dict(valid_config())
+    checkpointed: list[dict[str, object]] = []
+    failure = ChatSnapshot(
+        url="https://chatgpt.com/g/g-p-project/c/provider-session",
+        composer_present=False,
+        composer_editable=False,
+        user_count=0,
+        assistant_count=0,
+        latest_assistant_id=None,
+        latest_user_text=None,
+        latest_assistant_text=None,
+        dom_signals=frozenset({"conversation-load-failed"}),
+        error_present=True,
+    )
+    runtime = SimpleNamespace()
+
+    async def checkpoint(metadata: dict[str, object]) -> None:
+        checkpointed.append(dict(metadata))
+
+    first = PersistentChat(
+        ag_session_id="session-load-error-budget",
+        project_name="project",
+        project_url="https://chatgpt.com/g/g-p-project/project",
+        runtime=runtime,
+        config=config,
+        binding_sink=lambda _update: None,
+        checkpoint_sink=checkpoint,
+        provider_session_id="provider-session",
+        chat_url=failure.url,
+        resume_provider_metadata={"conversation-load-recovery-attempts": 1},
+    )
+
+    async def fail_to_create_page() -> str:
+        raise RuntimeError("replacement unavailable")
+
+    first._create_recovery_page = fail_to_create_page  # type: ignore[method-assign]
+    with pytest.raises(RuntimeError, match="replacement unavailable"):
+        await first._replace_load_failed_page(failure)
+    assert checkpointed[-1]["conversation-load-recovery-attempts"] == 2
+
+    second = PersistentChat(
+        ag_session_id="session-load-error-budget",
+        project_name="project",
+        project_url="https://chatgpt.com/g/g-p-project/project",
+        runtime=runtime,
+        config=config,
+        binding_sink=lambda _update: None,
+        checkpoint_sink=checkpoint,
+        provider_session_id="provider-session",
+        chat_url=failure.url,
+        resume_provider_metadata=checkpointed[-1],
+    )
+    assert second._conversation_load_recovery_attempts == 2
+    assert await second._replace_load_failed_page(failure) is False
+
+
+@pytest.mark.asyncio
 async def test_resume_open_attaches_to_generating_retained_tab_without_waiting_quiescence() -> None:
     """Restart recovery must attach while the provider is still reasoning."""
     config = GptAutoConfig.from_dict(valid_config())
@@ -1975,6 +2034,47 @@ async def test_find_conversation_page_prefers_healthy_duplicate_over_load_error(
 
     assert selected is not None
     assert selected["pageHandle"] == "healthy-page"
+
+
+@pytest.mark.asyncio
+async def test_find_conversation_page_does_not_mask_prior_window_healthy_tab(monkeypatch) -> None:
+    """A failed managed tab cannot hide a healthy exact conversation elsewhere."""
+    runtime = GptAutoProviderRuntime(GptAutoConfig.from_dict(valid_config()))
+    runtime.state = ProviderState.AVAILABLE
+    runtime._dedicated_window_id = 7
+    pages = [
+        {"pageHandle": "managed-error", "targetId": "managed-target", "windowId": 7,
+         "url": "https://chatgpt.com/g/g-p-project/c/provider-session"},
+        {"pageHandle": "prior-healthy", "targetId": "prior-target", "windowId": 3,
+         "url": "https://chatgpt.com/g/g-p-project/c/provider-session"},
+    ]
+
+    class _Bridge:
+        async def call(self, method, params=None):
+            assert method == "list_pages"
+            return pages
+
+    class _Browser:
+        async def page_by_handle(self, handle):
+            return SimpleNamespace(handle=handle)
+
+        async def snapshot(self, page, *, signals=None):
+            return {"url": pages[0]["url"], "domSignals": {
+                "conversation-load-failed": page.handle == "managed-error"
+            }}
+
+    runtime._bridge = _Bridge()  # type: ignore[assignment]
+    runtime._gpt_browser = _Browser()  # type: ignore[assignment]
+    monkeypatch.setattr(
+        runtime,
+        "ensure_dedicated_window_anchor",
+        lambda: asyncio.sleep(0, result="anchor"),
+    )
+
+    selected = await runtime.find_conversation_page("provider-session")
+
+    assert selected is not None
+    assert selected["pageHandle"] == "prior-healthy"
 
 
 @pytest.mark.asyncio
