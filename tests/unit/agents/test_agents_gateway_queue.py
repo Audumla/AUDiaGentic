@@ -135,6 +135,62 @@ def test_recovery_deferred_stays_running_and_retries_same_request(tmp_path: Path
     )
 
 
+def test_session_recovery_deferred_before_turn_start_retries_queued_request(tmp_path: Path):
+    """A pre-lock recovery deferral must not strand a live successor session."""
+    manager = queue_mod.GatewayQueueManager()
+    calls = 0
+
+    def runner(project_root: Path, current: dict, *, session_start) -> dict:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise RecoveryDeferred(
+                AudiaGenticError(
+                    code="EXT-AGW-118",
+                    kind="providers",
+                    message="provider reattach unavailable before turn start",
+                ),
+                phase="rehydrate-retry",
+                side_effect_state="may-have-started",
+            )
+        started = session_start()
+        return store.transition_owned_terminal(
+            project_root,
+            current["request-id"],
+            "completed",
+            owner_epoch=started["dispatch-owner-epoch"],
+            worker_id=started["worker-id"],
+            attempt_epoch=started["attempt-epoch"],
+            updates={"output": "recovered", "finished-at": now_iso_z()},
+        )
+
+    record = store.build_record(
+        execution_profile_id="session-recovery-before-start",
+        prompt_body="x",
+        session_id="successor-session",
+        provider_transport_kind="provider-session",
+    )
+    store.write_record(tmp_path, record)
+    manager.enqueue(
+        tmp_path,
+        record,
+        {
+            "virtual-capacity": 1,
+            "provider-session-recovery-initial-delay-seconds": 0.01,
+            "provider-session-recovery-max-delay-seconds": 0.01,
+        },
+        runner,
+    )
+
+    terminal = manager.wait(tmp_path, record["request-id"], timeout_seconds=3)
+    assert terminal["state"] == "completed"
+    assert terminal["output"] == "recovered"
+    assert calls == 2
+    events = load_ndjson(gateway_timeline_path(tmp_path, record["request-id"]))
+    assert any(event.get("event") == "recovery.retry-scheduled" and event.get("state") == "queued" for event in events)
+    assert any(event.get("event") == "session-attempt.started" and event.get("state") == "running" for event in events)
+
+
 def test_recovery_deferred_is_bounded_and_interrupts_without_resubmit(tmp_path: Path):
     """Observation-only recovery cannot leave a lost provider turn running forever."""
     manager = queue_mod.GatewayQueueManager()

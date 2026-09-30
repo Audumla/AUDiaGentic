@@ -53,6 +53,7 @@ from audiagentic.components.agents.gateway.store._transitions import (
     cancel_queued_or_mark_requested,
     claim_dispatch,
     defer_owned_recovery,
+    defer_owned_queued_recovery,
     link_replay,
     mark_cancel_requested,
     mark_watchdog_intervention_if_expired,
@@ -119,6 +120,7 @@ __all__ = [
     "transition_recovered_terminal",
     "takeover_nonterminal_owner",
     "defer_owned_recovery",
+    "defer_owned_queued_recovery",
     "update_diagnostics",
     "update_owned_running_session",
 ]
