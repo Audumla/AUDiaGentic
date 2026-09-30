@@ -963,7 +963,9 @@ async def test_reconciliation_clear_is_persisted_before_memory_is_exposed_ready(
 @pytest.mark.asyncio
 async def test_durable_terminal_clear_removes_stale_unresolved_marker_without_dom_retry():
     chat = _chat(unresolved=True)
+    chat._checkpoint_metadata["unresolved-turn-id"] = "req-original"
     chat._checkpoint_metadata["terminal-evidence"] = {
+        "turn-id": "req-original",
         "checkpoint-clear-persisted": True,
         "policy": "response-complete",
         "verification-evidence": [
@@ -983,6 +985,25 @@ async def test_durable_terminal_clear_removes_stale_unresolved_marker_without_do
     assert await chat._reconcile_unresolved_turn() is True
     assert chat.unresolved_turn_pending is False
     assert writes == [{"unresolved-turn-pending": False}]
+
+
+@pytest.mark.asyncio
+async def test_terminal_clear_from_different_turn_does_not_remove_unresolved_marker():
+    chat = _chat(unresolved=True)
+    chat._checkpoint_metadata["unresolved-turn-id"] = "req-current"
+    chat._checkpoint_metadata["terminal-evidence"] = {
+        "turn-id": "req-older",
+        "checkpoint-clear-persisted": True,
+        "policy": "response-complete",
+        "verification-evidence": [
+            "completion-control",
+            "not-generating",
+            "text-present",
+        ],
+    }
+
+    assert await chat._reconcile_unresolved_turn() is False
+    assert chat.unresolved_turn_pending is True
 
 
 @pytest.mark.asyncio
