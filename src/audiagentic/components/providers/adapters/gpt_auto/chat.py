@@ -431,7 +431,17 @@ class PersistentChat:
                 },
                 timeout=self.config.chat.navigation_timeout_seconds + 2,
             )
-        await self._wait_ready()
+        # An exact-bound restart observer must attach before the provider turn
+        # becomes quiescent. GPT can spend minutes in reasoning with a visible
+        # Stop control; requiring READY/quiescence here makes transport.open()
+        # time out and leaves the request running with no live gateway session.
+        # resume_existing() owns the response observer and never submits again.
+        if not (
+            self.provider_session_id
+            and self.unresolved_turn_pending
+            and self._defer_unresolved_reconciliation
+        ):
+            await self._wait_ready()
         # _wait_ready() already tolerates RECOVERING (it calls
         # wait_quiescent(allow_recovering=True)) -- a shared-bridge
         # replacement can race this exact resume window and move state to
