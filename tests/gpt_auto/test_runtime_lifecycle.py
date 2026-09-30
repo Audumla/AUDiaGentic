@@ -2004,6 +2004,45 @@ async def test_deferred_recovery_budget_survives_delayed_load_error() -> None:
 
 
 @pytest.mark.asyncio
+async def test_loadable_but_blank_replacement_does_not_clear_recovery_budget() -> None:
+    """A URL-only replacement is not enough to reset recovery attempts."""
+    config = GptAutoConfig.from_dict(valid_config())
+    chat_url = "https://chatgpt.com/g/g-p-project/c/provider-session"
+    chat = PersistentChat(
+        ag_session_id="session-blank-replacement",
+        project_name="project",
+        project_url="https://chatgpt.com/g/g-p-project/project",
+        runtime=SimpleNamespace(),
+        config=config,
+        binding_sink=lambda _update: None,
+        provider_session_id="provider-session",
+        chat_url=chat_url,
+    )
+    failed = ChatSnapshot(
+        url=chat_url,
+        composer_present=False,
+        composer_editable=False,
+        user_count=0,
+        assistant_count=0,
+        latest_assistant_id=None,
+        latest_user_text=None,
+        latest_assistant_text=None,
+        dom_signals=frozenset({"conversation-load-failed"}),
+        error_present=True,
+    )
+    blank = replace(failed, dom_signals=frozenset(), error_present=False)
+    chat._create_recovery_page = lambda: asyncio.sleep(0, result="replacement")  # type: ignore[method-assign]
+    chat._claim_page = lambda _handle: True  # type: ignore[method-assign]
+    chat.runtime.release_page = lambda _chat, _handle: None
+    chat.runtime.bridge = SimpleNamespace(call=lambda *args, **kwargs: asyncio.sleep(0))
+    chat.snapshot = lambda **kwargs: asyncio.sleep(0, result=blank)  # type: ignore[method-assign]
+    chat.wait_quiescent = lambda **kwargs: asyncio.sleep(0, result=blank)  # type: ignore[method-assign]
+
+    assert await chat._replace_load_failed_page(failed) is True
+    assert chat._conversation_load_recovery_attempts == 1
+
+
+@pytest.mark.asyncio
 async def test_prefer_active_conversation_page_preserves_healthy_durable_target() -> None:
     """DOM richness must not replace a healthy durable tab after restart."""
     config = GptAutoConfig.from_dict(valid_config())
