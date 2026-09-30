@@ -191,6 +191,7 @@ def _dispatch(
     preallocated_session_id=None,
     provider_isolation_tier="full-isolation",
     context_fingerprint="0" * 64,
+    resume_existing=False,
 ):
     return dispatch.dispatch_request(
         tmp_path,
@@ -202,6 +203,7 @@ def _dispatch(
         component_profile="",
         provider_isolation_tier=provider_isolation_tier,
         worker_timeout_seconds=10,
+        resume_existing=resume_existing,
     )
 
 
@@ -487,10 +489,15 @@ def test_stale_active_rehydrate_failure_is_deferred_for_retry(rig, monkeypatch):
     monkeypatch.setattr(runtime, "rehydrate_session", rehydrate_failure)
     record = _running_record(tmp_path, session_id=session_id, session_keep_alive=True)
     with pytest.raises(RecoveryDeferred) as exc:
-        _dispatch(tmp_path, record, dispatch_prompt="after restart")
+        _dispatch(
+            tmp_path,
+            record,
+            dispatch_prompt="after restart",
+            resume_existing=True,
+        )
 
     assert exc.value.phase == "rehydrate-retry"
-    assert exc.value.side_effect_state == "not-started"
+    assert exc.value.side_effect_state == "may-have-started"
     stored = store.read_record(tmp_path, record["request-id"])
     assert stored["state"] == "running"
 
