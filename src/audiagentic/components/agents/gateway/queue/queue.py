@@ -124,7 +124,30 @@ def _durable_provider_session_is_active(project_root: Path, record: dict[str, An
             exc_info=True,
         )
         return False
-    return session_record.get("state") not in {"failed", "closed", "expired"}
+    lifecycle_state = session_record.get("state")
+    if lifecycle_state not in {"failed", "closed", "expired"}:
+        return True
+    if lifecycle_state == "expired":
+        return False
+
+    # A gateway generation can mark its local observer failed while the
+    # provider conversation and unresolved turn remain durable.  In that
+    # narrow restart/owner-loss case, the provider binding is still the
+    # recovery seam: the next attempt can create an exact-session successor
+    # and observe the existing turn without replaying the prompt.  Do not
+    # extend this exception to ordinary provider/session failures.
+    provider_metadata = record.get("provider-metadata")
+    recovery = record.get("recovery")
+    recovery_reason = recovery.get("reason") if isinstance(recovery, dict) else None
+    binding = sessions_store.read_session_binding(project_root, session_id) or {}
+    provider_ref = binding.get("provider-session-ref")
+    return (
+        isinstance(provider_ref, str)
+        and bool(provider_ref.strip())
+        and isinstance(provider_metadata, dict)
+        and provider_metadata.get("unresolved-turn-pending") is True
+        and recovery_reason in {"gateway-restart", "owner-loss", "service-restart"}
+    )
 
 
 def _test_stall_claim_to_start() -> None:
