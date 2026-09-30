@@ -156,6 +156,27 @@ def test_default_load_failure_signal_accepts_current_renderer_punctuation():
     assert "Could not load this ChatGPT conversation." in variants
 
 
+def test_default_stream_cache_expired_is_a_provider_failure_signal():
+    defaults_path = (
+        Path(__file__).parents[2]
+        / "src"
+        / "audiagentic"
+        / "components"
+        / "providers"
+        / "adapters"
+        / "gpt_auto"
+        / "gpt-auto-defaults.yaml"
+    )
+    defaults = yaml.safe_load(defaults_path.read_text(encoding="utf-8"))
+    signals = defaults["settings"]["workflow"]["dom-signals"]
+    assert signals["stream-cache-expired"]["text-contains-any"] == [
+        "Stream cache expired"
+    ]
+    assert "stream-cache-expired" in defaults["settings"]["workflow"]["evidence-policies"][
+        "response-failed"
+    ]["any-of"]
+
+
 def test_cdp_target_location_is_taken_from_configuration():
     data = valid_config()
     data["cdp"]["endpoint"] = "http://192.0.2.10:9222"
@@ -440,6 +461,19 @@ def test_real_merged_config_response_complete_requires_correlated_completion_fac
 
     only_more_actions = _facts(baseline, baseline, _synthetic_snapshot(["more-actions-menu"]))
     assert not policy.evaluate(only_more_actions).satisfied
+
+
+def test_real_merged_config_stream_cache_expired_is_request_failure() -> None:
+    root = Path(__file__).resolve().parents[2]
+    document = yaml.safe_load(
+        (root / ".audiagentic/config/providers/gpt-auto.yaml").read_text(encoding="utf-8")
+    )
+    config = GptAutoConfig.from_project_dict(document)
+    policy = config.workflow.policy("response-failed")
+    baseline = _synthetic_snapshot([], assistant_id=None)
+    current = _synthetic_snapshot(["stream-cache-expired"], assistant_id=None)
+
+    assert policy.evaluate(_facts(baseline, baseline, current)).satisfied
 
 
 def test_real_merged_config_response_complete_recognizes_canvas_variant_alone() -> None:

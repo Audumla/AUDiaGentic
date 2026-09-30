@@ -617,7 +617,10 @@ def dispatch_request(
     The admitted prompt is the frozen semantic payload, reloaded from the
     private request snapshot when the in-memory value is unavailable.
     """
-    if not isinstance(dispatch_prompt, str) or not dispatch_prompt:
+    if (
+        not resume_existing
+        and (not isinstance(dispatch_prompt, str) or not dispatch_prompt)
+    ):
         from audiagentic.components.agents.agents_paths import gateway_admitted_prompt_path
         from audiagentic.foundation.io import read_bytes_with_retry
 
@@ -638,6 +641,10 @@ def dispatch_request(
                 message="admitted prompt snapshot is empty",
                 details={"request-id": record.get("request-id")},
             )
+    # Observation-only restart recovery never replays the admitted prompt.
+    # Its provider-session transport consumes the durable unresolved-turn
+    # checkpoint and exact provider binding instead; requiring the private
+    # prompt snapshot here would fail a safe reattach before DOM observation.
 
     if record.get("provider-transport-kind") == "provider-session":
         return _dispatch_session_request(

@@ -23,8 +23,8 @@ from audiagentic.components.agents.gateway.application import InProcessGatewayAp
 from audiagentic.components.agents.gateway.queue import queue as agents_gateway_queue
 from audiagentic.components.agents.gateway.service.dashboard import (
     _most_recent,
-    _request_sort_key,
     _request_row,
+    _request_sort_key,
     _session_sort_key,
     render_dashboard_html,
 )

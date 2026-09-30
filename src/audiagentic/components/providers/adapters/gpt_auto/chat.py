@@ -490,7 +490,18 @@ class PersistentChat:
             pages = await self.runtime.bridge.call("list_pages")
             await self.reconcile(pages)
         if self.state is ChatState.RECOVERING:
-            if self.page_handle and self.unresolved_turn_pending:
+            if (
+                self.page_handle
+                and self.unresolved_turn_pending
+                and self._defer_unresolved_reconciliation
+            ):
+                # Restart recovery has already established the exact durable
+                # provider binding.  The request-owned resume_existing turn
+                # must observe the in-flight response loop directly; running
+                # the terminal quiescence reconciler here would reject a
+                # genuinely generating turn on every recovery retry.
+                self._move(ChatState.READY)
+            elif self.page_handle and self.unresolved_turn_pending:
                 if await self._await_unresolved_reconciliation():
                     if (
                         self.state is ChatState.RECOVERING
@@ -1747,7 +1758,9 @@ class PersistentChat:
             return False
         evidence = {str(item) for item in evidence}
         request_error_alert = "request-error-alert" in evidence
-        if not evidence.intersection({"error-page", "error-alert", "request-error-alert"}):
+        if not evidence.intersection(
+            {"error-page", "error-alert", "request-error-alert", "stream-cache-expired"}
+        ):
             return False
         if "auth-required" in evidence:
             return False
@@ -1773,7 +1786,12 @@ class PersistentChat:
                     and not (
                         snapshot.error_present
                         or snapshot.dom_signals.intersection(
-                            {"error-page", "error-alert", "request-error-alert"}
+                            {
+                                "error-page",
+                                "error-alert",
+                                "request-error-alert",
+                                "stream-cache-expired",
+                            }
                         )
                     )
                 )
@@ -1810,7 +1828,12 @@ class PersistentChat:
             "request-owned-provider-error-released",
             evidence=sorted(
                 evidence.intersection(
-                    {"error-page", "error-alert", "request-error-alert"}
+                    {
+                        "error-page",
+                        "error-alert",
+                        "request-error-alert",
+                        "stream-cache-expired",
+                    }
                 )
             ),
         )

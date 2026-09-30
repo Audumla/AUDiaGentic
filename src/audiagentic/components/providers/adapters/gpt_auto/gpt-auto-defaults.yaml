@@ -126,6 +126,14 @@ settings:
         selectors: ['body']
         visible: true
         text-contains-any: ['A network error occurred. Please check your connection and try again.']
+      stream-cache-expired:
+        scope: document
+        selectors: ['body']
+        visible: true
+        # ChatGPT can replace the response stream with this plain-text
+        # provider error without mounting role="alert" or the generic
+        # network-error message.
+        text-contains-any: ['Stream cache expired']
       completion-control:
         # GP41 (2026-08-17): [data-testid="copy-turn-action-button"] is NOT
         # unique to assistant turns -- confirmed live it is the SAME
@@ -347,4 +355,4 @@ settings:
         # error marker; auth-required remains a hard veto.
         none-of: [streaming-indicator, thinking-indicator, auth-required]
       response-failed:
-        any-of: [error-page, request-error-alert, network-error-alert, conversation-load-failed, auth-required]
+        any-of: [error-page, request-error-alert, network-error-alert, stream-cache-expired, conversation-load-failed, auth-required]

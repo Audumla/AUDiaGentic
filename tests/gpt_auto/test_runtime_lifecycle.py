@@ -1606,6 +1606,36 @@ async def test_find_conversation_page_restores_window_before_selecting_retained_
 
 
 @pytest.mark.asyncio
+async def test_find_conversation_page_falls_back_to_exact_tab_in_prior_window(
+    monkeypatch,
+) -> None:
+    """A restart may leave the retained conversation outside the new anchor window."""
+    runtime = GptAutoProviderRuntime(GptAutoConfig.from_dict(valid_config()))
+    runtime.state = ProviderState.AVAILABLE
+    runtime._dedicated_window_id = 7
+
+    class _Bridge:
+        async def call(self, method, params=None):
+            assert method == "list_pages"
+            return [
+                {
+                    "pageHandle": "retained-prior-window",
+                    "targetId": "target-retained",
+                    "windowId": 99,
+                    "url": "https://chatgpt.com/g/g-p-project/c/provider-session",
+                }
+            ]
+
+    runtime._bridge = _Bridge()  # type: ignore[assignment]
+    monkeypatch.setattr(runtime, "ensure_dedicated_window_anchor", lambda: asyncio.sleep(0, result="anchor"))
+
+    page = await runtime.find_conversation_page("provider-session")
+
+    assert page is not None
+    assert page["pageHandle"] == "retained-prior-window"
+
+
+@pytest.mark.asyncio
 async def test_find_conversation_page_does_not_trust_recycled_target_id(
     monkeypatch,
 ) -> None:

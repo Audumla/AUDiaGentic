@@ -171,6 +171,12 @@ async def test_physical_tab_clock_ignores_synthetic_connection_heartbeat() -> No
     assert chat._last_validated_activity_monotonic > 100.0
     assert chat._validated_activity_generation == 1
 
+    await turn._emit(
+        TransportObservationKind.ACTIVITY,
+        {"model_activity": "recovery-observing"},
+    )
+    assert chat._validated_activity_generation == 1
+
 
 @pytest.mark.asyncio
 async def test_unresolved_prior_turn_blocks_presubmit_replay(
@@ -858,6 +864,32 @@ async def test_ensure_ready_waits_for_stable_reconciliation_instead_of_failing_f
     assert len(calls) == 2
     assert chat.state.value == "ready"
     assert chat.unresolved_turn_pending is False
+
+
+@pytest.mark.asyncio
+async def test_restart_observer_bypasses_terminal_reconciliation_after_exact_rebind():
+    """A resumed generating turn must enter the response observer directly."""
+    chat = _chat(response_stability_seconds=0.001)
+    chat.provider_session_id = "conversation-1"
+    chat.state = ChatState.RECOVERING
+    chat._defer_unresolved_reconciliation = True
+    calls: list[bool] = []
+
+    async def fake_validate() -> None:
+        return None
+
+    async def fail_reconcile() -> bool:
+        calls.append(True)
+        raise AssertionError("restart observer must not run terminal reconciliation")
+
+    chat._validate_page_binding = fake_validate  # type: ignore[method-assign]
+    chat._reconcile_unresolved_turn = fail_reconcile  # type: ignore[method-assign]
+
+    await chat.ensure_ready()
+
+    assert calls == []
+    assert chat.state is ChatState.READY
+    assert chat.unresolved_turn_pending is True
 
 
 @pytest.mark.asyncio

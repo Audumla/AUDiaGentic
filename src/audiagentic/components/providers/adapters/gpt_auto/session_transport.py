@@ -171,7 +171,12 @@ class GptAutoSessionTransport:
     ) -> None:
         """Relay bounded provider lifecycle activity without provider payloads."""
         mark_activity = getattr(self.chat, "mark_validated_activity", None)
-        if callable(mark_activity) and phase not in {"connection-refreshing", "provider-busy", "response-observing"}:
+        if callable(mark_activity) and phase not in {
+            "connection-refreshing",
+            "provider-busy",
+            "response-observing",
+            "recovery-observing",
+        }:
             mark_activity()
         observation = TransportObservation(
             ag_session_id=self.chat.ag_session_id,
@@ -201,7 +206,10 @@ class GptAutoSessionTransport:
         # the CDP page. Keep the request-owned activity lease honest on this
         # path as well; the resumed turn will emit its sequenced observations
         # once its provider snapshot loop is active.
-        await self._emit_activity(sink, request, "inspected")
+        # This is only a recovery-attempt marker.  It is deliberately not
+        # provider progress: an unchanged DOM inspected by a reconstructed
+        # observer must not renew the request lease or reset recovery bounds.
+        await self._emit_activity(sink, request, "recovery-observing")
         metadata = self.chat.unresolved_metadata()
         if not metadata.get("unresolved-turn-pending"):
             raise AudiaGenticError(

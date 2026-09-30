@@ -12,6 +12,7 @@ def test_meaningful_activity_vocabulary_excludes_heartbeat_and_context_flags() -
     assert not is_meaningful_activity_label("worker-heartbeat")
     assert not is_meaningful_activity_label("provider-turn-pending")
     assert not is_meaningful_activity_label("provider-busy")
+    assert not is_meaningful_activity_label("recovery-observing")
     assert is_meaningful_activity_label("response-observing")
     assert not is_meaningful_activity_label("transport-unknown")
     for label in (

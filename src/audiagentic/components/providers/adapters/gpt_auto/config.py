@@ -206,9 +206,25 @@ class DomSignalConfig:
 
 
 @dataclass(frozen=True)
+class GptAutoRecoveryConfig:
+    """Workflow-owned policy for provider recovery actions."""
+
+    network_error_followup_enabled: bool
+    network_error_followup_max_attempts: int
+    network_error_followup_prompt_template: str
+    provider_error_followup_enabled: bool
+    provider_error_followup_max_attempts: int
+    provider_error_followup_prompt_template: str
+    conversation_load_failure_recovery_enabled: bool
+    conversation_load_failure_max_attempts: int
+    action_pause_seconds: float
+
+
+@dataclass(frozen=True)
 class TurnWorkflowConfig:
     dom_signals: tuple[DomSignalConfig, ...]
     evidence_policies: tuple[tuple[str, EvidencePolicy], ...]
+    recovery: GptAutoRecoveryConfig
 
     def policy(self, name: str) -> EvidencePolicy:
         for policy_name, policy in self.evidence_policies:
@@ -733,7 +749,12 @@ def _non_negative(data: dict[str, Any], key: str) -> float:
 
 
 def _workflow_config(data: dict[str, Any]) -> TurnWorkflowConfig:
-    _exact_keys(data, {"dom-signals", "evidence-policies"}, "workflow")
+    _exact_keys(
+        data,
+        {"dom-signals", "evidence-policies", "recovery"},
+        "workflow",
+        required={"dom-signals", "evidence-policies"},
+    )
     signal_data = _mapping(data, "dom-signals")
     signals: list[DomSignalConfig] = []
     for name, raw in signal_data.items():
@@ -786,6 +807,9 @@ def _workflow_config(data: dict[str, Any]) -> TurnWorkflowConfig:
         # Derived by turn.py from request-owned post-baseline error-alert
         # occurrences; the raw document-scoped signal remains diagnostic.
         "request-error-alert",
+        "network-error-alert",
+        "stream-cache-expired",
+        "conversation-load-failed",
         # GP34 code-review follow-up: derived from ChatSnapshot.generating
         # directly (the raw stop/streaming/thinking/aria-busy check), not a
         # dom-signal selector. Lets a policy require the ABSENCE of active
@@ -809,7 +833,75 @@ def _workflow_config(data: dict[str, Any]) -> TurnWorkflowConfig:
         if unknown:
             _invalid(f"workflow.evidence-policies.{name} references unknown facts")
         policies.append((name, policy))
-    return TurnWorkflowConfig(tuple(signals), tuple(policies))
+    recovery_data = data.get("recovery", {})
+    if not isinstance(recovery_data, dict):
+        _invalid("workflow.recovery must be a mapping")
+    _exact_keys(
+        recovery_data,
+        {
+            "network-error-followup-enabled",
+            "network-error-followup-max-attempts",
+            "network-error-followup-prompt-template",
+            "provider-error-followup-enabled",
+            "provider-error-followup-max-attempts",
+            "provider-error-followup-prompt-template",
+            "conversation-load-failure-recovery-enabled",
+            "conversation-load-failure-max-attempts",
+            "action-pause-seconds",
+        },
+        "workflow.recovery",
+        required=set(),
+    )
+    prompt_template = recovery_data.get(
+        "network-error-followup-prompt-template",
+        "Complete the previous request. The previous response was interrupted by a "
+        "network error. Continue from the work already done and provide the complete "
+        "answer.\\n\\nOriginal request:\\n{original_request}",
+    )
+    if not isinstance(prompt_template, str) or not prompt_template:
+        _invalid("workflow.recovery.network-error-followup-prompt-template must be a string")
+    if "{original_request}" not in prompt_template:
+        _invalid(
+            "workflow.recovery.network-error-followup-prompt-template must contain {original_request}"
+        )
+    provider_prompt_template = recovery_data.get(
+        "provider-error-followup-prompt-template",
+        "Complete the previous request. ChatGPT reported a temporary request error. "
+        "Continue from the work already done and provide the complete answer.\n\n"
+        "Original request:\n{original_request}",
+    )
+    if not isinstance(provider_prompt_template, str) or not provider_prompt_template:
+        _invalid("workflow.recovery.provider-error-followup-prompt-template must be a string")
+    if "{original_request}" not in provider_prompt_template:
+        _invalid(
+            "workflow.recovery.provider-error-followup-prompt-template must contain {original_request}"
+        )
+    recovery = GptAutoRecoveryConfig(
+        network_error_followup_enabled=_optional_boolean(
+            recovery_data, "network-error-followup-enabled", default=True
+        ),
+        network_error_followup_max_attempts=_optional_non_negative_int(
+            recovery_data, "network-error-followup-max-attempts", default=1
+        ),
+        network_error_followup_prompt_template=prompt_template,
+        provider_error_followup_enabled=_optional_boolean(
+            recovery_data, "provider-error-followup-enabled", default=True
+        ),
+        provider_error_followup_max_attempts=_optional_non_negative_int(
+            recovery_data, "provider-error-followup-max-attempts", default=1
+        ),
+        provider_error_followup_prompt_template=provider_prompt_template,
+        conversation_load_failure_recovery_enabled=_optional_boolean(
+            recovery_data, "conversation-load-failure-recovery-enabled", default=True
+        ),
+        conversation_load_failure_max_attempts=_optional_non_negative_int(
+            recovery_data, "conversation-load-failure-max-attempts", default=2
+        ),
+        action_pause_seconds=_optional_non_negative(
+            recovery_data, "action-pause-seconds", default=0.15
+        ),
+    )
+    return TurnWorkflowConfig(tuple(signals), tuple(policies), recovery)
 
 
 def _chatgpt_url(value: Any) -> str:
