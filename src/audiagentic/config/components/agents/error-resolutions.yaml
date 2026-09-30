@@ -99,6 +99,7 @@ CON-AGW-120: "The source session record is missing a valid resolved surface. Reo
 CON-AGW-121: "The provider transport returned a session identity that does not match the gateway request. Verify the provider adapter's session-open contract."
 CON-AGW-122: "The source session cannot be resumed because its provider binding is incomplete or inconsistent. Inspect the stored session binding before retrying."
 CON-AGW-123: "The resumed provider transport did not return a provider session identity. Verify provider resume support and retry with a fresh control id."
+CON-AGW-124: "Provider-session recovery cannot prove the durable provider turn or the requested session composition. Keep the request recoverable and inspect the provider binding before retrying; never replay an ambiguous prompt."
 RES-AGW-111: "The source session has no usable provider binding (missing or empty provider-session-ref) to resume from."
 UNS-AGW-112: "The resolved session surface does not declare resume-by-ref as supported for this provider/surface."
 VER-AGW-113: "The current resolved surface's id or ref namespace is incompatible with the source binding's surface — resume across incompatible surfaces is not allowed."
