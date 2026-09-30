@@ -435,6 +435,7 @@ def _dispatch_session_request(
     _provider_error_followup_attempts: int = 0,
     _unsent_retry_used: bool = False,
     session_start: Any | None = None,
+    project_name: str | None = None,
     resume_existing: bool = False,
 ) -> dict[str, Any]:
     """Dispatch a sessionful request through the live SessionRuntime (AS04).
@@ -485,7 +486,7 @@ def _dispatch_session_request(
             # the safe default.
             resume_existing = True
     runtime = get_session_runtime()
-    project_name = _admitted_project_name(record)
+    project_name = project_name or _admitted_project_name(record)
 
     admitted_snapshot = profiles_mod.snapshot_from_record(record)
     if admitted_snapshot is not None:

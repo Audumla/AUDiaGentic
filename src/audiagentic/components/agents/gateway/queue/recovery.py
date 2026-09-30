@@ -180,6 +180,26 @@ def recovery_runner(record: dict[str, Any], *, project_root: Path | None = None)
         # metadata read is unavailable.  Startup must not fail the gateway or
         # fall back to a potentially duplicating ordinary prompt dispatch.
         session_metadata = {}
+
+    # GPT-auto session preparation requires the admitted ChatGPT project name
+    # even when it is reopening an existing provider conversation.  The normal
+    # dispatch path derives this from the frozen template context, but restart
+    # recovery reconstructs the runner here and previously dropped that value.
+    # Prefer the same immutable context, with the request's operator target as
+    # a compatibility fallback for older records whose template context did
+    # not carry the workspace label.
+    project_name: str | None = None
+    template_context = record.get("template-context")
+    project = template_context.get("project") if isinstance(template_context, dict) else None
+    candidate = project.get("name") if isinstance(project, dict) else None
+    if isinstance(candidate, str) and candidate.strip():
+        project_name = candidate.strip()
+    if project_name is None:
+        request_metadata = record.get("metadata")
+        candidate = request_metadata.get("target") if isinstance(request_metadata, dict) else None
+        if isinstance(candidate, str) and candidate.strip():
+            project_name = candidate.strip()
+
     return functools.partial(
         _dispatch.dispatch_request,
         dispatch_prompt="",
@@ -189,6 +209,7 @@ def recovery_runner(record: dict[str, Any], *, project_root: Path | None = None)
         component_profile="",
         provider_isolation_tier=_resolve_provider_isolation_tier(provider_id),
         worker_timeout_seconds=float(record.get("timeout-seconds") or 300.0),
+        project_name=project_name,
         # A stale provider-session turn is never replayed from a gateway
         # process merely because the request projection lacks a checkpoint.
         # The provider recovery seam can distinguish a durable pending turn;
