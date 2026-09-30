@@ -108,7 +108,7 @@ def dashboard_snapshot(
         # so request identity, lifecycle, and live activity evidence remain
         # visible without reopening the public status contract.
         records = api.list_dashboard_requests(root)
-        sessions = api.list_execution_sessions(root)
+        sessions = api.list_execution_sessions(root, state="all")
         # Caller labels remain request-owned durable metadata. The newest
         # explicit override names the session until another is supplied;
         # unlabeled follow-ups never erase it or replace it with a native title.
@@ -200,6 +200,7 @@ def _request_row(
         "latest-transition", "error", "provider-chat-url", "provider-chat-title",
         "diagnostics",
         "output-preview", "output-truncated", "response-artifact",
+        "failure-response-preview", "failure-response-truncated", "failure-response-artifact",
     )
     if include_execution:
         visible = (
