@@ -163,9 +163,13 @@ class PersistentChat:
         self._defer_unresolved_reconciliation = False
         # A retained exact-URL tab can survive a gateway restart while its
         # renderer is stuck on ChatGPT's conversation-load error page.  Keep a
-        # small per-process replacement budget so recovery can attach a fresh
-        # tab without creating an unbounded trail of failed tabs.
-        self._conversation_load_recovery_attempts = 0
+        # small bounded replacement budget so recovery can attach a fresh
+        # tab without creating an unbounded trail of failed tabs.  The count is
+        # session metadata, not chat-instance state: restart recovery creates a
+        # new PersistentChat and must not reset the provider-side safety bound.
+        self._conversation_load_recovery_attempts = _metadata_int(
+            metadata, "conversation-load-recovery-attempts"
+        )
         self._checkpoint_metadata: dict[str, object] = {
             key: metadata[key]
             for key in (
@@ -177,6 +181,7 @@ class PersistentChat:
                 "unresolved-baseline-assistant-count",
                 "unresolved-baseline-error-alert-occurrences",
                 "terminal-evidence",
+                "conversation-load-recovery-attempts",
             )
             if key in metadata and metadata[key] not in (None, "")
         }
@@ -191,10 +196,15 @@ class PersistentChat:
     ) -> None:
         """Write the side-effect checkpoint before browser Send is invoked."""
         self._reconciliation_delivery_retry_attempted = False
+        load_recovery_attempts = self._conversation_load_recovery_attempts
         self._checkpoint_metadata = {
             "recovery-state": "side-effect-may-have-started",
             "unresolved-turn-id": turn_id,
         }
+        if load_recovery_attempts:
+            self._checkpoint_metadata[
+                "conversation-load-recovery-attempts"
+            ] = load_recovery_attempts
         if baseline is not None:
             for key, value in (
                 ("unresolved-baseline-user-id", baseline.latest_user_id),
@@ -825,6 +835,8 @@ class PersistentChat:
         """
         if snapshot is None or "conversation-load-failed" not in snapshot.dom_signals:
             self._conversation_load_recovery_attempts = 0
+            self._checkpoint_metadata["conversation-load-recovery-attempts"] = 0
+            await self._persist_checkpoint(self.unresolved_metadata())
             return False
         if not self._conversation_load_recovery_allowed():
             return False
@@ -833,6 +845,13 @@ class PersistentChat:
             self.page_handle = None
             self.runtime.release_page(self, old_handle)
         self._conversation_load_recovery_attempts += 1
+        self._checkpoint_metadata[
+            "conversation-load-recovery-attempts"
+        ] = self._conversation_load_recovery_attempts
+        # Fence the increment before creating a replacement tab.  If the
+        # gateway dies during navigation, the next chat instance inherits the
+        # consumed budget instead of starting over.
+        await self._persist_checkpoint(self.unresolved_metadata())
         replacement_handle: str | None = None
         try:
             replacement_handle = await self._create_recovery_page()
@@ -862,6 +881,8 @@ class PersistentChat:
             if not self.unresolved_turn_pending or not self._defer_unresolved_reconciliation:
                 await self._wait_ready()
             self._conversation_load_recovery_attempts = 0
+            self._checkpoint_metadata["conversation-load-recovery-attempts"] = 0
+            await self._persist_checkpoint(self.unresolved_metadata())
             return True
         except Exception:
             if replacement_handle:
@@ -2282,6 +2303,14 @@ def _metadata_text(metadata: dict[str, object], key: str) -> str | None:
 
 def _metadata_bool(metadata: dict[str, object], key: str) -> bool:
     return metadata.get(key) is True
+
+
+def _metadata_int(metadata: dict[str, object], key: str) -> int:
+    value = metadata.get(key)
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return 0
 
 
 def _unresolved_prompt_match(chat: PersistentChat, snapshot: ChatSnapshot) -> str | None:
