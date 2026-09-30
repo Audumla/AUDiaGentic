@@ -432,7 +432,7 @@ class GptAutoProviderRuntime:
                 ),
                 None,
             )
-            if preferred is not None:
+            if preferred is not None and not await self._page_has_load_failure(preferred):
                 return preferred
         matches = [
             page
@@ -454,6 +454,20 @@ class GptAutoProviderRuntime:
         if managed_matches:
             matches = managed_matches
         if len(matches) > 1:
+            # A browser can retain both the original failed renderer and a
+            # successfully reloaded tab for the same conversation. Prefer a
+            # tab whose DOM is not explicitly on ChatGPT's load-error page;
+            # otherwise a deterministic URL/handle choice can keep recovery
+            # bound to the broken tab forever. Unknown snapshot failures stay
+            # eligible because lack of observation is not proof of a bad tab.
+            healthy = [
+                page
+                for page in matches
+                if not await self._page_has_load_failure(page)
+            ]
+            if healthy:
+                matches = healthy
+        if len(matches) > 1:
             # Multiple tabs can genuinely display the same canonical
             # conversation (provider_session_id already proved that -- e.g.
             # a human manually opened a second tab of it). That is tab-
@@ -472,6 +486,26 @@ class GptAutoProviderRuntime:
             candidates = unclaimed or matches
             return min(candidates, key=lambda page: str(page.get("pageHandle") or ""))
         return matches[0] if matches else None
+
+    async def _page_has_load_failure(self, page: dict) -> bool:
+        """Return true only for an observed provider conversation-load error."""
+        browser = self._gpt_browser
+        if browser is None:
+            return False
+        handle = str(page.get("pageHandle") or "")
+        if not handle:
+            return False
+        try:
+            page_ref = await browser.page_by_handle(handle)
+            snapshot = ChatSnapshot.from_bridge(
+                await browser.snapshot(
+                    page_ref,
+                    signals=self.config.workflow.bridge_signals(),
+                )
+            )
+        except Exception:
+            return False
+        return "conversation-load-failed" in snapshot.dom_signals
 
     async def page_record(self, page_handle: str) -> dict | None:
         """Return the current bridge record for a handle without changing ownership."""
