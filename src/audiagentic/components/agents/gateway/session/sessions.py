@@ -1326,6 +1326,7 @@ class SessionRuntime:
                     "assistant-before-message-id",
                     "assistant-before-id",
                     "prompt-text-digest",
+                    "terminal-evidence",
                 )
             session_store.update_provider_metadata(
                 project_root, session_id, metadata, remove_keys=remove

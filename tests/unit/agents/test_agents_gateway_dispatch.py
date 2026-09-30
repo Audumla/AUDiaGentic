@@ -12,6 +12,7 @@ from audiagentic.components.agents.configuration.management import (
 )
 from audiagentic.components.agents.gateway import store as store
 from audiagentic.components.agents.gateway.queue import dispatch as dispatch
+from audiagentic.components.agents.gateway.session import dispatch as session_dispatch
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.features.base import ImplementationState
 from audiagentic.foundation.features.state import set_implementation_state
@@ -67,6 +68,46 @@ def _dispatch(project_root: Path, record: dict, prompt: str = "do the thing") ->
 
 def _worker_result(data: dict) -> SimpleNamespace:
     return SimpleNamespace(result_data=data)
+
+
+def test_unresolved_metadata_preserves_prompt_digest_for_dom_reconciliation() -> None:
+    current = {
+        "project-url": "https://chatgpt.com/g/g-p-example/project",
+        "prompt-message-id": "old-prompt",
+        "assistant-message-id": "old-assistant",
+        "prompt-text-digest": "old-digest",
+        "submission-proven": True,
+    }
+
+    merged = session_dispatch._merge_provider_metadata(
+        current,
+        {
+            "unresolved-turn-pending": True,
+            "unresolved-turn-id": "turn-new",
+            "prompt-text-digest": "new-digest",
+            "submission-proven": False,
+        },
+    )
+
+    assert merged["prompt-text-digest"] == "new-digest"
+    assert merged["unresolved-turn-pending"] is True
+    assert "prompt-message-id" not in merged
+    assert "assistant-message-id" not in merged
+    assert "old-digest" not in merged.values()
+
+
+def test_unresolved_metadata_without_digest_clears_stale_digest() -> None:
+    merged = session_dispatch._merge_provider_metadata(
+        {
+            "prompt-text-digest": "stale",
+            "submission-proven": True,
+            "terminal-evidence": {"checkpoint-clear-persisted": True},
+        },
+        {"unresolved-turn-pending": True, "submission-proven": False},
+    )
+
+    assert "prompt-text-digest" not in merged
+    assert "terminal-evidence" not in merged
 
 
 def test_classify_failure_prefixes():
