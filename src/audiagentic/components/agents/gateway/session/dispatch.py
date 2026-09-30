@@ -39,7 +39,10 @@ def _merge_provider_metadata(
     recovery evidence and causing an endless presubmit-reconcile loop.
     """
     merged = dict(current_metadata) if isinstance(current_metadata, dict) else {}
-    if not request_metadata.get("submission-proven"):
+    # Only an explicit false is a pre-send/unproven fence.  Provider
+    # metadata relays are allowed to omit this field; omission must not erase
+    # correlation or terminal evidence already persisted for the turn.
+    if request_metadata.get("submission-proven") is False:
         for key in (
             "prompt-message-id",
             "assistant-message-id",

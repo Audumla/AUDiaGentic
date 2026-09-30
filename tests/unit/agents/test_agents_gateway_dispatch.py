@@ -110,6 +110,23 @@ def test_unresolved_metadata_without_digest_clears_stale_digest() -> None:
     assert "terminal-evidence" not in merged
 
 
+def test_metadata_without_submission_proven_does_not_clear_turn_evidence() -> None:
+    current = {
+        "prompt-text-digest": "active",
+        "submission-proven": True,
+        "terminal-evidence": {"turn-id": "turn-1"},
+    }
+
+    merged = session_dispatch._merge_provider_metadata(
+        current,
+        {"terminal-evidence": {"turn-id": "turn-1", "text-present": True}},
+    )
+
+    assert merged["prompt-text-digest"] == "active"
+    assert merged["submission-proven"] is True
+    assert merged["terminal-evidence"]["text-present"] is True
+
+
 def test_classify_failure_prefixes():
     # Terminal (validation/config) — never retried.
     for prefix in ("VAL", "RES", "CON", "CFG", "VER", "UNS"):
