@@ -193,8 +193,21 @@ _SNAPSHOT_FN = r"""
       .find(h => h.closest('.block-BQZwFn') === block);
     return String(heading?.innerText || '').trim().toLowerCase();
   };
+  // The current renderer keeps the semantic role on a content-search unit
+  // instead of rendering the legacy "You said:"/"ChatGPT said:" heading on
+  // every message block.  Resolve the role from a unit owned by this block,
+  // while retaining the heading fallback for older snapshots.
+  const fallbackBlockRole = block => {
+    const label = fallbackBlockLabel(block);
+    if (label === 'you said:') return 'user';
+    if (label === 'chatgpt said:') return 'assistant';
+    const roles = new Set(Array.from(block.querySelectorAll('[data-content-search-unit-key]'))
+      .map(unit => String(unit.getAttribute('data-content-search-unit-key') || '').match(/:(user|assistant)$/)?.[1])
+      .filter(Boolean));
+    return roles.size === 1 ? [...roles][0] : null;
+  };
   const latestFallbackUserBlock = usingFallbackMessages
-    ? fallbackBlocks.slice().reverse().find(block => fallbackBlockLabel(block) === 'you said:') || null
+    ? fallbackBlocks.slice().reverse().find(block => fallbackBlockRole(block) === 'user') || null
     : null;
   const latestFallbackUserIndex = latestFallbackUserBlock
     ? fallbackBlocks.indexOf(latestFallbackUserBlock)
@@ -225,7 +238,7 @@ _SNAPSHOT_FN = r"""
     : null;
   const latestFallbackActivityBlock = latestFallbackActivityAfterPrompt || latestFallbackActivityBeforePrompt;
   const latestFallbackAssistantBlock = usingFallbackMessages
-    ? fallbackBlocks.slice().reverse().find(block => fallbackBlockLabel(block) === 'chatgpt said:') || null
+    ? fallbackBlocks.slice().reverse().find(block => fallbackBlockRole(block) === 'assistant') || null
     : null;
   // The current labelled renderer places the assistant action bar beside the
   // labelled block, inside the encompassing data-turn-key wrapper. Scoping
@@ -274,7 +287,10 @@ _SNAPSHOT_FN = r"""
       for (const carrier of owned) {
         const raw = (carrier.getAttribute('data-chatgpt-search-message-ids') || '').trim();
         if (!raw) continue;
-        const tokens = raw.split(/\s+/);
+        // The current renderer repeats the same UUID in one attribute.  A
+        // repeated identical token is still one proven identity; only
+        // genuinely different tokens are ambiguous.
+        const tokens = [...new Set(raw.split(/\s+/))];
         // A carrier's own value is ambiguous (more than one space-separated
         // id, no proven canonical token) -- fail the whole block closed
         // rather than silently pick a token from it.
@@ -284,8 +300,8 @@ _SNAPSHOT_FN = r"""
       return ids.size === 1 ? [...ids][0] : null;
     };
     for (const block of fallbackBlocks) {
-      const label = fallbackBlockLabel(block);
-      if (label === 'you said:') {
+      const role = fallbackBlockRole(block);
+      if (role === 'user') {
         const content = block.querySelector('[data-user-message-bubble="true"]') || block;
         // Advance the ordinal for every user block regardless of whether a
         // real id was found: the ordinal must stay a stable, non-reused
@@ -293,7 +309,7 @@ _SNAPSHOT_FN = r"""
         // expose a real id on a given poll.
         const synthetic = `fallback-user-${userIndex++}`;
         messageEntries.push({role: 'user', el: content, messageId: realMessageId(block) || synthetic});
-      } else if (label === 'chatgpt said:') {
+      } else if (role === 'assistant') {
         const synthetic = `fallback-assistant-${assistantIndex++}`;
         messageEntries.push({role: 'assistant', el: block, messageId: realMessageId(block) || synthetic});
       }

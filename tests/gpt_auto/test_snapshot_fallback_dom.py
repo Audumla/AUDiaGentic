@@ -747,6 +747,47 @@ async def test_fallback_two_owned_carriers_agreeing_on_id_resolve_to_it() -> Non
 
 
 @pytest.mark.asyncio
+async def test_current_renderer_units_restore_prompt_and_repeated_assistant_identity() -> None:
+    """The current ChatGPT fallback renderer has no legacy role headings.
+
+    Its user UUID is carried by the user block's ancestor, while the
+    assistant UUID is repeated in one search-message attribute.  Both must
+    remain request-correlatable for completion detection and operator capture.
+    """
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            await page.set_content(
+                """
+                <div class="block-BQZwFn">
+                  <div class="group/user-message" data-chatgpt-search-message-ids="real-user-uuid">
+                    <div data-content-search-unit-key="fallback-turn-0:0:user">prompt</div>
+                  </div>
+                </div>
+                <div class="block-BQZwFn">
+                  <div data-content-search-unit-key="fallback-turn-0:2:assistant"
+                       data-chatgpt-search-message-ids="real-assistant-uuid real-assistant-uuid">
+                    <h4 class="sr-only">ChatGPT said:</h4>
+                    <div>answer</div>
+                  </div>
+                </div>
+                """
+            )
+
+            snapshot = await page.evaluate(_SNAPSHOT_FN, [])
+
+            assert snapshot["userCount"] == 1
+            assert snapshot["assistantCount"] == 1
+            assert snapshot["latestUserId"] == "real-user-uuid"
+            assert snapshot["latestAssistantId"] == "real-assistant-uuid"
+            assert snapshot["latestUserText"] == "prompt"
+            assert snapshot["latestAssistantText"] == "answer"
+        finally:
+            await browser.close()
+
+
+@pytest.mark.asyncio
 async def test_fallback_unlabelled_wrapper_does_not_adopt_a_nested_blocks_label() -> None:
     """An unlabelled outer `.block-BQZwFn` wrapping a labelled nested block
     must not adopt the nested block's h4 label -- that would turn one
