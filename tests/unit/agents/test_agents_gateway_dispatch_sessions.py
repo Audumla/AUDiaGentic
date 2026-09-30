@@ -324,6 +324,9 @@ def test_failed_followup_defers_observation_and_keeps_request_running(rig, monke
     assert "Complete the previous request" in prompts[1]
     stored = store.read_record(root, record["request-id"])
     assert stored["state"] == "running"
+    assert stored["failure-response-preview"] == "partial review"
+    assert stored["failure-response-truncated"] is False
+    assert stored["failure-response-artifact"]["artifact-id"] == "failure-response"
     assert len(transports) == 1
 
 
