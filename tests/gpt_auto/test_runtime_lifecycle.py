@@ -1777,6 +1777,141 @@ async def test_reconcile_proves_quiescence_before_ready(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_reconcile_replaces_retained_conversation_load_error_without_resubmit() -> None:
+    """A broken retained renderer is replaced without replaying the prompt."""
+    config = GptAutoConfig.from_dict(valid_config())
+    chat_url = "https://chatgpt.com/g/g-p-project/c/provider-session"
+    retained = {"pageHandle": "retained-error", "targetId": "error-target", "url": chat_url}
+    replacement = {"pageHandle": "replacement", "targetId": "replacement-target", "url": chat_url}
+    owned: set[str] = set()
+    released: list[str] = []
+    navigated: list[str] = []
+    closed: list[str] = []
+
+    class _Browser:
+        async def page_by_handle(self, handle):
+            return SimpleNamespace(
+                handle=handle,
+                target_id="error-target" if handle == retained["pageHandle"] else "replacement-target",
+                url=chat_url,
+            )
+
+        async def snapshot(self, page, *, signals=None):
+            return {
+                "url": chat_url,
+                "composerPresent": page.handle != retained["pageHandle"],
+                "composerEditable": page.handle != retained["pageHandle"],
+                "userCount": 0,
+                "assistantCount": 0,
+                "domSignals": (
+                    {"conversation-load-failed": True}
+                    if page.handle == retained["pageHandle"]
+                    else {}
+                ),
+                "errorPresent": page.handle == retained["pageHandle"],
+            }
+
+    class _Bridge:
+        async def call(self, method, params=None, **kwargs):
+            if method == "navigate":
+                navigated.append(str((params or {}).get("url")))
+                return None
+            if method == "close_page":
+                closed.append(str((params or {}).get("pageHandle")))
+                return None
+            if method == "list_pages":
+                return [retained]
+            raise AssertionError(method)
+
+    async def find_page(_provider_session_id, *, preferred_target_id=None):
+        return retained
+
+    async def create_page() -> str:
+        return replacement["pageHandle"]
+
+    def claim(_chat, handle: str) -> bool:
+        if handle in owned:
+            return False
+        owned.add(handle)
+        return True
+
+    def release(_chat, handle: str) -> None:
+        released.append(handle)
+        owned.discard(handle)
+
+    runtime = SimpleNamespace(
+        gpt_browser=_Browser(),
+        bridge=_Bridge(),
+        find_conversation_page=find_page,
+        create_chat_page=create_page,
+        claim_page=claim,
+        release_page=release,
+    )
+    chat = PersistentChat(
+        ag_session_id="session-load-error-recovery",
+        project_name="project",
+        project_url="https://chatgpt.com/g/g-p-project/project",
+        runtime=runtime,
+        config=config,
+        binding_sink=lambda _update: None,
+        provider_session_id="provider-session",
+        chat_url=chat_url,
+    )
+    chat.state = ChatState.RECOVERING
+    chat.unresolved_turn_pending = True
+    chat.defer_unresolved_reconciliation()
+
+    await chat.reconcile([retained])
+
+    assert chat.page_handle == replacement["pageHandle"]
+    assert retained["pageHandle"] in released
+    assert navigated == [chat_url]
+    assert closed == []
+    assert chat._conversation_load_recovery_attempts == 0
+
+
+@pytest.mark.asyncio
+async def test_find_conversation_page_prefers_healthy_duplicate_over_load_error(monkeypatch) -> None:
+    """A later restart must select the healthy duplicate, not the broken tab."""
+    runtime = GptAutoProviderRuntime(GptAutoConfig.from_dict(valid_config()))
+    runtime.state = ProviderState.AVAILABLE
+    runtime._dedicated_window_id = 7
+    pages = [
+        {"pageHandle": "error-page", "targetId": "error-target", "windowId": 7,
+         "url": "https://chatgpt.com/g/g-p-project/c/provider-session"},
+        {"pageHandle": "healthy-page", "targetId": "healthy-target", "windowId": 7,
+         "url": "https://chatgpt.com/g/g-p-project/c/provider-session"},
+    ]
+
+    class _Bridge:
+        async def call(self, method, params=None):
+            assert method == "list_pages"
+            return pages
+
+    class _Browser:
+        async def page_by_handle(self, handle):
+            return SimpleNamespace(handle=handle)
+
+        async def snapshot(self, page, *, signals=None):
+            return {"url": pages[0]["url"], "domSignals": {
+                "conversation-load-failed": page.handle == "error-page"
+            }}
+
+    runtime._bridge = _Bridge()  # type: ignore[assignment]
+    runtime._gpt_browser = _Browser()  # type: ignore[assignment]
+    monkeypatch.setattr(
+        runtime,
+        "ensure_dedicated_window_anchor",
+        lambda: asyncio.sleep(0, result="anchor"),
+    )
+
+    selected = await runtime.find_conversation_page("provider-session")
+
+    assert selected is not None
+    assert selected["pageHandle"] == "healthy-page"
+
+
+@pytest.mark.asyncio
 async def test_ensure_ready_rebinds_when_external_cdp_close_invalidates_handle(monkeypatch) -> None:
     """An operator-side tab close must recover before a new prompt is sent."""
     config = GptAutoConfig.from_dict(valid_config())
