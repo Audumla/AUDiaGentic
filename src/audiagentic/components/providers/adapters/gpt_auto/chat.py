@@ -834,9 +834,11 @@ class PersistentChat:
         load is closed so repeated recovery cannot leak tabs.
         """
         if snapshot is None or "conversation-load-failed" not in snapshot.dom_signals:
-            self._conversation_load_recovery_attempts = 0
-            self._checkpoint_metadata["conversation-load-recovery-attempts"] = 0
-            await self._persist_checkpoint(self.unresolved_metadata())
+            # The absence of the load-error marker is not, by itself, strong
+            # healthy proof: deferred restart observation can see a transient
+            # loading/generating snapshot before the provider turn is bound.
+            # Keep a consumed budget until a replacement completes or the
+            # unresolved checkpoint is terminally cleared.
             return False
         if not self._conversation_load_recovery_allowed():
             return False
