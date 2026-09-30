@@ -51,6 +51,18 @@ class RequestActivityRelay:
         # Only actual provider work renews the gateway lease.  Heartbeats and
         # contextual flags remain useful ownership evidence, but cannot mask
         # a stalled provider turn.
+        normalized_phase = (phase or "").strip().lower().replace("_", "-").replace(" ", "-")
+        if normalized_phase == "response-observing":
+            # The response observer is a synthetic owner heartbeat. Keep the
+            # worker/session lease alive without advancing provider activity or
+            # making a stalled DOM look like real progress.
+            self.observe_owner(
+                source=source,
+                source_instance=source_instance,
+                source_sequence=source_sequence,
+                force=force,
+            )
+            return
         if not is_meaningful_activity(source, phase):
             return
         self._observe("provider", source, source_instance, source_sequence, phase, force)

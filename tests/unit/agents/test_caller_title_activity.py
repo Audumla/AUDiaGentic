@@ -88,3 +88,19 @@ def test_provider_busy_does_not_renew_gateway_activity(tmp_path):
         relay.observe_provider(source_sequence=2, source_instance="turn", phase="provider-busy")
 
     record.assert_not_called()
+
+
+def test_response_observing_renews_owner_lease_without_provider_activity(tmp_path):
+    relay = RequestActivityRelay(
+        tmp_path, "req_test", owner_epoch="owner", worker_id="worker", attempt_epoch=1
+    )
+    with patch("audiagentic.components.agents.gateway.activity.store.record_owned_activity") as record:
+        relay.observe_provider(
+            source_sequence=1,
+            source_instance="turn",
+            phase="response-observing",
+        )
+
+    record.assert_called_once()
+    assert record.call_args.kwargs["kind"] == "owner-heartbeat"
+    assert record.call_args.kwargs["phase"] is None

@@ -803,8 +803,20 @@ class PersistentChat:
         pages = await self.runtime.bridge.call("list_pages")
         await self.reconcile(pages if isinstance(pages, list) else [])
 
-    async def _wait_ready(self) -> None:
-        await self.wait_quiescent(allow_recovering=True)
+    async def _wait_ready(self) -> ChatSnapshot:
+        return await self.wait_quiescent(allow_recovering=True)
+
+    def _replacement_snapshot_is_positive(self, snapshot: ChatSnapshot | None) -> bool:
+        """Require exact, positive DOM evidence before clearing recovery budget."""
+        if snapshot is None or "conversation-load-failed" in snapshot.dom_signals:
+            return False
+        if self.provider_session_id and not url_matches_provider_session(
+            snapshot.url, self.provider_session_id
+        ):
+            return False
+        if self.chat_url and not same_chat_identity(snapshot.url, self.chat_url):
+            return False
+        return _snapshot_has_positive_conversation_evidence(snapshot)
 
     async def _retained_page_snapshot(self) -> ChatSnapshot | None:
         """Read a retained page when the runtime exposes the rich browser API.
@@ -890,14 +902,18 @@ class PersistentChat:
             # During restart recovery the provider may still be generating. A
             # request-owned resume turn must attach and observe immediately;
             # ordinary session opening still proves quiescence below.
+            stable_replacement = self._replacement_snapshot_is_positive(replacement)
             if not self.unresolved_turn_pending or not self._defer_unresolved_reconciliation:
-                await self._wait_ready()
+                ready_snapshot = await self._wait_ready()
+                stable_replacement = stable_replacement and self._replacement_snapshot_is_positive(
+                    ready_snapshot
+                )
             # A deferred restart recovery is still observing an unresolved
             # provider turn. The replacement may look merely loadable before
             # ChatGPT surfaces a delayed conversation-load error, so retain
             # the consumed replacement budget until stable reconciliation or
             # explicit terminal cleanup.
-            if not (
+            if stable_replacement and not (
                 self.unresolved_turn_pending and self._defer_unresolved_reconciliation
             ):
                 self._conversation_load_recovery_attempts = 0

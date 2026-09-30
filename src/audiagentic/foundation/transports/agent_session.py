@@ -84,7 +84,14 @@ _NON_WORK_ACTIVITY_LABELS = frozenset({
     "worker-heartbeat",
     "process-heartbeat",
     "provider-turn-pending",
+    # Response polling keeps the owner lease alive, but is not proof that the
+    # provider DOM or response has changed.
+    "response-observing",
     "transport-unknown",
+    # Recovery attempts are owner/observer liveness, not provider progress.
+    # In particular, reconstructed observers may emit this for an unchanged
+    # DOM while the request remains unresolved.
+    "recovery-observing",
 })
 _WORK_ACTIVITY_LABELS = frozenset({
     # Provider-neutral DOM progress labels.  GPT-auto projects these from
@@ -118,7 +125,6 @@ _WORK_ACTIVITY_LABELS = frozenset({
     "tool-finished",
     "response-progress",
     "response-observed",
-    "response-observing",
     "response-started",
     "assistant-message",
     "thought",
