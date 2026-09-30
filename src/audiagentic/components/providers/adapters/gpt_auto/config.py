@@ -804,8 +804,9 @@ def _workflow_config(data: dict[str, Any]) -> TurnWorkflowConfig:
         "composer-present",
         "composer-editable",
         "composer-unavailable",
-        # Derived by turn.py from request-owned post-baseline error-alert
-        # occurrences; the raw document-scoped signal remains diagnostic.
+        # Derived by turn.py from request-owned post-baseline document
+        # evidence; the raw document-scoped signals remain diagnostic until
+        # the response scoper proves that the current prompt owns them.
         "request-error-alert",
         "network-error-alert",
         "stream-cache-expired",

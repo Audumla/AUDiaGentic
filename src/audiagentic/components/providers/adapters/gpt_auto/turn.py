@@ -2978,6 +2978,14 @@ def _scope_response_snapshot(
                     text=snapshot.latest_assistant_text,
                     sequence=len(snapshot.message_refs),
                 )
+    stream_cache_expired = _document_signal_is_owned(
+        baseline,
+        snapshot,
+        "stream-cache-expired",
+        prompt_message_id=prompt_message_id,
+        matched_prompt_message_id=matched_prompt_id,
+        prompt_text=prompt_text,
+    )
     if response_ref is None and bound_assistant_id:
         # A later user turn creates a hard ownership boundary. If the
         # assistant already bound to this request has disappeared and a
@@ -3149,12 +3157,15 @@ def _scope_response_snapshot(
     )
     if response_ref is None:
         scoped_signals = set(snapshot.dom_signals)
-        scoped_signals.discard("request-error-alert")
-        scoped_signals.discard("network-error-alert")
+        scoped_signals.difference_update(
+            {"request-error-alert", "network-error-alert", "stream-cache-expired"}
+        )
         if request_error_alert:
             scoped_signals.add("request-error-alert")
             if "network-error-alert" in snapshot.dom_signals:
                 scoped_signals.add("network-error-alert")
+        if stream_cache_expired:
+            scoped_signals.add("stream-cache-expired")
         return (
             replace(
                 snapshot,
@@ -3176,12 +3187,14 @@ def _scope_response_snapshot(
     dom_signals = frozenset(
         signal
         for signal in dom_signals
-        if signal not in {"request-error-alert", "network-error-alert"}
+        if signal not in {"request-error-alert", "network-error-alert", "stream-cache-expired"}
     )
     if request_error_alert:
         dom_signals = frozenset((*dom_signals, "request-error-alert"))
         if "network-error-alert" in snapshot.dom_signals:
             dom_signals = frozenset((*dom_signals, "network-error-alert"))
+    if stream_cache_expired:
+        dom_signals = frozenset((*dom_signals, "stream-cache-expired"))
     if snapshot.terminal_witness_assistant_id != response_ref.message_id:
         dom_signals = frozenset(
             signal
@@ -3202,6 +3215,40 @@ def _scope_response_snapshot(
             ),
         ),
         response_ref,
+    )
+
+
+def _document_signal_is_owned(
+    baseline: ChatSnapshot,
+    snapshot: ChatSnapshot,
+    signal: str,
+    *,
+    prompt_message_id: str,
+    matched_prompt_message_id: str,
+    prompt_text: str | None,
+) -> bool:
+    """Accept a document-scoped signal only on a request-owned post-submit edge.
+
+    Plain-text provider failures such as ``Stream cache expired`` are currently
+    rendered on ``body`` without an alert role or a stable turn wrapper.  A
+    level check would therefore let stale history, a later turn, or response
+    prose containing the same phrase fail this request.  The safe fallback is
+    deliberately narrow: the signal must be absent at the request baseline
+    and the current latest user node must still identify this prompt (by the
+    durable id or the exact prompt fingerprint when the renderer replaces a
+    fallback ordinal).
+    """
+    if signal not in snapshot.dom_signals or signal in baseline.dom_signals:
+        return False
+    current_user_id = snapshot.latest_user_id
+    if current_user_id in {prompt_message_id, matched_prompt_message_id}:
+        return True
+    if not prompt_text:
+        return False
+    current_text = snapshot.latest_user_correlation_text()
+    return bool(
+        current_text
+        and PromptFingerprint.from_text(prompt_text).matches_text(current_text)
     )
 
 
