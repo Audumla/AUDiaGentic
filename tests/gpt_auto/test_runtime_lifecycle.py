@@ -1927,6 +1927,9 @@ async def test_conversation_load_recovery_budget_survives_chat_reconstruction() 
     )
     assert second._conversation_load_recovery_attempts == 2
     assert await second._replace_load_failed_page(failure) is False
+    healthy = replace(failure, dom_signals=frozenset(), error_present=False)
+    assert await second._replace_load_failed_page(healthy) is False
+    assert second._conversation_load_recovery_attempts == 2
 
 
 @pytest.mark.asyncio
