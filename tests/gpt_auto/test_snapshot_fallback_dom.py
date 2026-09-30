@@ -371,6 +371,45 @@ async def test_fallback_live_thinking_block_owns_activity_after_latest_prompt() 
 
 
 @pytest.mark.asyncio
+async def test_fallback_pre_prompt_activity_block_owns_live_activity_with_stop_control() -> None:
+    """The live renderer may place its unlabelled activity block before the prompt."""
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            await page.set_content(
+                """
+                <div class="block-BQZwFn">
+                  <div class="summary-lK7Lpm" style="display:block;width:40px;height:20px">
+                    Inspected GPT Auto adapter files, diffs, and configuration logic
+                  </div>
+                </div>
+                <div class="block-BQZwFn">
+                  <h4 class="sr-only">You said:</h4>
+                  <div data-user-message-bubble="true">current prompt</div>
+                </div>
+                <button aria-label="Stop" style="display:block;width:40px;height:20px">Stop</button>
+                """
+            )
+
+            before = await page.evaluate(_SNAPSHOT_FN, [])
+            assert before["latestUserId"] == "fallback-user-0"
+            assert before["domActivityOwnerPromptMessageId"] == "fallback-user-0"
+            assert before["progressBlocks"]
+            assert before["progressBlocks"][0]["ownerPromptMessageId"] == "fallback-user-0"
+            assert before["progressBlocks"][0]["kind"] == "inspected"
+
+            await page.locator(".summary-lK7Lpm").evaluate(
+                "node => node.textContent = 'Evaluated recovery evidence'"
+            )
+            after = await page.evaluate(_SNAPSHOT_FN, [])
+            assert after["domActivityDigest"] != before["domActivityDigest"]
+            assert after["domActivityOwnerPromptMessageId"] == "fallback-user-0"
+        finally:
+            await browser.close()
+
+
+@pytest.mark.asyncio
 async def test_fallback_real_message_id_read_from_descendant_carrier() -> None:
     """The real ChatGPT UUID lives on a descendant, not the block or the
     dead `[data-user-message-bubble="true"]` selector; it must be used."""

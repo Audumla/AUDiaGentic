@@ -199,9 +199,31 @@ _SNAPSHOT_FN = r"""
   const latestFallbackUserIndex = latestFallbackUserBlock
     ? fallbackBlocks.indexOf(latestFallbackUserBlock)
     : -1;
-  const latestFallbackActivityBlock = latestFallbackUserIndex >= 0
+  const latestFallbackActivityAfterPrompt = latestFallbackUserIndex >= 0
     ? fallbackBlocks.slice(latestFallbackUserIndex + 1).reverse()[0] || null
     : null;
+  // The current renderer can mount the live agent-activity block before the
+  // submitted `You said:` block (the visible order is correct, but the
+  // virtualized DOM order is not).  The old after-prompt-only lookup then
+  // discarded every live progress update and left the gateway activity lease
+  // frozen.  Adopt a pre-prompt unlabelled block only with an active Stop
+  // control; without that provider-owned liveness witness, fail closed rather
+  // than attributing an older assistant block to the current request.
+  const activeStopControlVisible = Array.from(document.querySelectorAll(
+    '[data-testid="stop-button"], [data-testid="stop-generating"], button[aria-label*="stop" i], button'
+  )).some(element => {
+    if (!shown(element)) return false;
+    const text = String(element.innerText || '').replace(/\s+/g, ' ').trim().toLowerCase();
+    const aria = String(element.getAttribute('aria-label') || '').trim().toLowerCase();
+    return text === 'stop' || aria === 'stop' || aria.includes('stop generating');
+  });
+  const latestFallbackActivityBeforePrompt = latestFallbackUserIndex >= 0 && activeStopControlVisible
+    ? fallbackBlocks.slice(0, latestFallbackUserIndex).reverse().find(block =>
+        !fallbackBlockLabel(block) &&
+        !block.querySelector('[data-user-message-bubble="true"]')
+      ) || null
+    : null;
+  const latestFallbackActivityBlock = latestFallbackActivityAfterPrompt || latestFallbackActivityBeforePrompt;
   const latestFallbackAssistantBlock = usingFallbackMessages
     ? fallbackBlocks.slice().reverse().find(block => fallbackBlockLabel(block) === 'chatgpt said:') || null
     : null;
@@ -277,6 +299,11 @@ _SNAPSHOT_FN = r"""
       }
     }
   }
+  const fallbackActivityOwnerPromptMessageId = latestFallbackActivityBeforePrompt && latestFallbackUserBlock
+    ? (messageEntries.find(entry =>
+        entry.role === 'user' && latestFallbackUserBlock.contains(entry.el)
+      )?.messageId || null)
+    : null;
   const userMessageEntries = messageEntries.filter(m => m.role === "user");
   const assistantMessageEntries = messageEntries.filter(m => m.role === "assistant");
   const users = userMessageEntries.map(m => m.el);
@@ -658,7 +685,17 @@ _SNAPSHOT_FN = r"""
   const userEntries = messageEntries.filter(entry => entry.role === "user" && entry.messageId);
   const progressUserEntries = userEntries.slice(-MAX_PROGRESS_OWNER_USERS);
   let ownerUserIndex = progressUserEntries.length - 1;
+  const fallbackActivityOwnerFor = node => {
+    if (!fallbackActivityOwnerPromptMessageId || !latestFallbackActivityBeforePrompt || !node) return null;
+    return node === latestFallbackActivityBeforePrompt ||
+      latestFallbackActivityBeforePrompt.contains(node) ||
+      node.contains(latestFallbackActivityBeforePrompt)
+      ? fallbackActivityOwnerPromptMessageId
+      : null;
+  };
   const ownerPromptFor = node => {
+    const fallbackOwner = fallbackActivityOwnerFor(node);
+    if (fallbackOwner) return fallbackOwner;
     while (ownerUserIndex >= 0) {
       const entry = progressUserEntries[ownerUserIndex];
       if (entry.el === node || entry.el.contains(node)) return entry.messageId;
@@ -674,6 +711,8 @@ _SNAPSHOT_FN = r"""
   };
   const ownerPromptIdFor = node => {
     if (!node) return null;
+    const fallbackOwner = fallbackActivityOwnerFor(node);
+    if (fallbackOwner) return fallbackOwner;
     for (let index = progressUserEntries.length - 1; index >= 0; index--) {
       const entry = progressUserEntries[index];
       if (entry.el === node || entry.el.contains(node)) return entry.messageId;
