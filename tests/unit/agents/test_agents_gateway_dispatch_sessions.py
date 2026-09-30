@@ -288,6 +288,42 @@ def test_generic_provider_error_continues_same_session_once(rig, monkeypatch):
     assert len(transports) == 1
 
 
+def test_conversation_load_failure_after_submission_never_replays_in_fresh_session(rig, monkeypatch):
+    """A submitted turn must not be duplicated just because its page reloads."""
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+    runtime, transports, root = rig
+    first = _dispatch(root, _running_record(root, session_keep_alive=True), dispatch_prompt="first")
+    session_id = first["session-id"]
+    prompts: list[tuple[str, str]] = []
+
+    def prompt(*args, **kwargs):
+        prompts.append((args[1], args[2]))
+        if len(prompts) == 1:
+            raise AudiaGenticError(
+                code="EXT-GPTAUTO-003",
+                kind="providers",
+                message="provider failure policy matched: conversation-load-failed",
+                details={
+                    "failure-reason": "conversation-load-failed",
+                    "dom-signals": ["conversation-load-failed"],
+                    "submission-proven": True,
+                    "submission-attempted": True,
+                    "failure-response-available": False,
+                },
+            )
+        raise AssertionError("submitted conversation was replayed")
+
+    monkeypatch.setattr(runtime, "prompt_in_session", prompt)
+    record = _running_record(root, session_id=session_id, session_keep_alive=True)
+    result = _dispatch(root, record, dispatch_prompt="first")
+
+    assert result["state"] == "failed"
+    assert result["session-id"] == session_id
+    assert prompts == [(session_id, "first")]
+    assert len(transports) == 1
+
+
 def test_failed_followup_defers_observation_and_keeps_request_running(rig, monkeypatch):
     """A recovery prompt may be generating after its provider alert fires."""
     from audiagentic.components.agents.gateway.queue.recovery_control import RecoveryDeferred

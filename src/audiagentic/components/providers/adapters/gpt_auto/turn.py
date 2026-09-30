@@ -2616,7 +2616,12 @@ class GptAutoTurn:
         }
         text = getattr(snapshot, "latest_assistant_text", None) if snapshot else None
         if not isinstance(text, str) or not text.strip():
-            return {"failure-response-available": False, "recovery-policy": policy}
+            return {
+                "failure-response-available": False,
+                "submission-proven": self.submission_confirmed,
+                "submission-attempted": self.submission_confirmed or self._phase != "submission",
+                "recovery-policy": policy,
+            }
         bounded = text[:262144]
         return {
             "failure-response-available": True,
@@ -2624,6 +2629,8 @@ class GptAutoTurn:
             "failure-response-truncated": len(bounded) != len(text),
             "failure-response-message-id": getattr(snapshot, "latest_assistant_id", None),
             "failure-response-source": "gpt-auto-dom-latest-assistant",
+            "submission-proven": self.submission_confirmed,
+            "submission-attempted": self.submission_confirmed or self._phase != "submission",
             "recovery-policy": policy,
         }
 

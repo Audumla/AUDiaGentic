@@ -1028,6 +1028,15 @@ def _dispatch_session_request(
                 failure_details.get("failure-reason") == "conversation-load-failed"
                 or "conversation-load-failed" in dom_signals
             )
+            # A conversation-load error is safe to recover in a fresh chat
+            # only when the failed page proves that this request never got
+            # past submission.  Once Send was proven, or submission remains
+            # ambiguous, rotating the session and replaying the original
+            # prompt can duplicate provider work that is still running in the
+            # old conversation.  Preserve the current session/evidence and
+            # let the normal terminal/recovery policy decide its outcome.
+            load_submission_proven = failure_details.get("submission-proven") is True
+            load_submission_ambiguous = failure_details.get("submission-ambiguous") is True
             load_recovery_enabled = bool(
                 recovery_policy.get("conversation-load-failure-recovery-enabled", True)
             )
@@ -1052,6 +1061,8 @@ def _dispatch_session_request(
                 load_failed
                 and load_recovery_enabled
                 and _default_recovery_attempt < load_recovery_max_attempts
+                and not load_submission_proven
+                and not load_submission_ambiguous
             ):
                 replacement = client_defaults.replace_failed_default(
                     project_root, record, exc, recover_url=False, attach_request=True,
@@ -1138,7 +1149,9 @@ def _dispatch_session_request(
                 for signal in (*dom_signals, *(failure_details.get("evidence") or ()))
             }
             provider_error_alert = bool(
-                error_evidence.intersection({"request-error-alert", "error-alert"})
+                error_evidence.intersection(
+                    {"request-error-alert", "error-alert", "stream-cache-expired"}
+                )
             )
             if (
                 provider_error_alert
@@ -1258,7 +1271,7 @@ def _dispatch_session_request(
                         ).hexdigest(),
                     },
                 ) from exc
-            replacement = client_defaults.replace_failed_default(
+            replacement = None if (load_submission_proven or load_submission_ambiguous) else client_defaults.replace_failed_default(
                 project_root, record, exc,
                 recover_url=not runtime_invoked and _default_recovery_attempt == 0 and not (record.get("metadata") or {}).get("provider-chat-url"),
                 attach_request=not runtime_invoked and _default_recovery_attempt < 2,
