@@ -1044,7 +1044,7 @@ class GatewayQueueManager:
                     return
                 current = store.read_record(entry.project_root, entry.request_id)
                 if (
-                    current.get("state") != "running"
+                    current.get("state") not in {"queued", "running"}
                     or current.get("dispatch-owner-epoch") != entry.owner_epoch
                     or current.get("worker-id") != worker_id
                     or current.get("attempt-epoch") != attempt_epoch
@@ -1057,7 +1057,7 @@ class GatewayQueueManager:
                     if self._terminalize_recovered_cancel(entry, current):
                         return
                     if (
-                        current.get("state") != "running"
+                        current.get("state") not in {"queued", "running"}
                         or current.get("dispatch-owner-epoch") != entry.owner_epoch
                         or current.get("worker-id") != worker_id
                         or current.get("attempt-epoch") != attempt_epoch
@@ -1596,7 +1596,12 @@ class GatewayQueueManager:
                     )
                     return
                 try:
-                    deferred_record = store.defer_owned_recovery(
+                    defer_recovery = (
+                        store.defer_owned_queued_recovery
+                        if current.get("state") == "queued"
+                        else store.defer_owned_recovery
+                    )
+                    deferred_record = defer_recovery(
                         project_root,
                         request_id,
                         owner_epoch=record["dispatch-owner-epoch"],
@@ -1611,7 +1616,7 @@ class GatewayQueueManager:
                 except AudiaGenticError:
                     latest = store.read_record(project_root, request_id)
                     same_owner = (
-                        latest.get("state") == "running"
+                        latest.get("state") in {"queued", "running"}
                         and latest.get("dispatch-owner-epoch") == record["dispatch-owner-epoch"]
                         and latest.get("worker-id") == record["worker-id"]
                         and latest.get("attempt-epoch") == record["attempt-epoch"]
