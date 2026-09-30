@@ -189,6 +189,7 @@ def _auto_resume_reopenable_closed_session(
     context_fingerprint: str | None,
     request_runtime_root: Path,
     project_name: str | None = None,
+    allow_failed: bool = False,
 ) -> tuple[str, dict[str, Any], dict[str, Any]]:
     """Transparently resume a session closed by a resumable gateway policy.
 
@@ -201,9 +202,9 @@ def _auto_resume_reopenable_closed_session(
     narrow in scope: a gateway shutdown and its configured ``idle-timeout``
     are resource-lifetime policies, not evidence that the provider
     conversation is invalid. A later turn may therefore resume the durable
-    provider binding. This function is never reached for a genuinely failed
-    session or an intentional client/post-turn close: those still require an
-    explicit session_resume, never a silent reopen.
+    provider binding. A failed source is accepted only for the
+    observation-only restart-recovery path (``allow_failed=True``); ordinary
+    continuation still requires an explicit session_resume.
 
     Reuses AS49's existing resume_session() machinery as-is -- no new
     concurrency primitive. A control id deterministic in the source
@@ -222,6 +223,12 @@ def _auto_resume_reopenable_closed_session(
     propagates as itself -- it must never be masked as mere ineligibility.
     """
     from audiagentic.components.agents.gateway.session import sessions_store as session_store
+
+    if allow_failed:
+        logger.info(
+            "resuming failed local session as an observation-only restart successor",
+            extra={"source-session-id": source_session_id, "request-id": record.get("request-id")},
+        )
 
     try:
         resume_source_id = source_session_id
@@ -352,6 +359,27 @@ def _session_output_from_result(result: Any) -> str | None:
     return result.final_summary if hasattr(result, "final_summary") else None
 
 
+def _failure_response_updates(project_root: Path, request_id: str, error: Any) -> dict[str, Any]:
+    """Persist provider DOM text separately from successful request output."""
+    details = getattr(error, "details", None)
+    if not isinstance(details, dict):
+        return {}
+    text = details.get("failure-response-text")
+    if not isinstance(text, str) or not text.strip():
+        return {}
+    from audiagentic.components.agents.gateway.output import persist_failure_response
+
+    artifact = persist_failure_response(project_root, request_id, text)
+    return {
+        "failure-response-artifact": {
+            key: artifact[key]
+            for key in ("artifact-id", "request-id", "media-type", "bytes", "sha256")
+        },
+        "failure-response-preview": artifact["output-preview"],
+        "failure-response-truncated": artifact["output-truncated"],
+    }
+
+
 def _post_turn_close_continued_session_if_quiescent(
     project_root: Path,
     session_id: str,
@@ -389,6 +417,8 @@ def _dispatch_session_request(
     context_fingerprint: str | None = None,
     preallocated_session_id: str | None = None,
     _default_recovery_attempt: int = 0,
+    _network_followup_attempts: int = 0,
+    _provider_error_followup_attempts: int = 0,
     _unsent_retry_used: bool = False,
     session_start: Any | None = None,
     resume_existing: bool = False,
@@ -695,6 +725,17 @@ def _dispatch_session_request(
                         request_runtime_root=request_runtime_root,
                         project_name=project_name,
                     )
+                elif resume_existing and session_record.get("state") == "failed":
+                    session_id, session_record, record = _auto_resume_reopenable_closed_session(
+                        project_root,
+                        runtime,
+                        source_session_id=session_id,
+                        record=record,
+                        context_fingerprint=context_fingerprint,
+                        request_runtime_root=request_runtime_root,
+                        project_name=project_name,
+                        allow_failed=True,
+                    )
                 elif session_record.get("state") != "active":
                     raise AudiaGenticError(
                         code="RES-AGW-003",
@@ -910,7 +951,230 @@ def _dispatch_session_request(
                 session_start=session_start,
                 resume_existing=resume_existing,
             )
+        if (
+            not cancelled
+            and isinstance(exc.details, dict)
+            and exc.details.get("failure-stage") == "submission"
+            and exc.details.get("submission-state") == "not_started"
+            and exc.details.get("submission-ambiguous") is False
+        ):
+            # A browser admission failure proved that Send was never reached.
+            # Keep the request queued for bounded provider recovery instead of
+            # rotating or terminalizing it; retrying remains safe because the
+            # durable unresolved fence was cleared by the transport.
+            raise RecoveryDeferred(
+                exc,
+                phase="presubmit-retry",
+                side_effect_state="not-started",
+            ) from exc
         if not resume_existing and not store.read_record(project_root, request_id).get("cancel-requested"):
+            failure_details = exc.details if isinstance(exc.details, dict) else {}
+            dom_signals = failure_details.get("dom-signals") or ()
+            recovery_policy = failure_details.get("recovery-policy")
+            if not isinstance(recovery_policy, dict):
+                # Compatibility for older provider records that predate the
+                # workflow recovery block. Resolved current configs always
+                # provide this policy through the adapter diagnostics.
+                recovery_policy = {
+                    "network-error-followup-enabled": True,
+                    "network-error-followup-max-attempts": 1,
+                    "network-error-followup-prompt-template": (
+                        "Complete the previous request. The previous response was interrupted by a "
+                        "network error. Continue from the work already done and provide the complete "
+                        "answer.\n\nOriginal request:\n{original_request}"
+                    ),
+                    "provider-error-followup-enabled": True,
+                    "provider-error-followup-max-attempts": 1,
+                    "provider-error-followup-prompt-template": (
+                        "Complete the previous request. ChatGPT reported a temporary request error. "
+                        "Continue from the work already done and provide the complete "
+                        "answer.\n\nOriginal request:\n{original_request}"
+                    ),
+                    "conversation-load-failure-recovery-enabled": True,
+                    "conversation-load-failure-max-attempts": 2,
+                }
+            load_failed = (
+                failure_details.get("failure-reason") == "conversation-load-failed"
+                or "conversation-load-failed" in dom_signals
+            )
+            load_recovery_enabled = bool(
+                recovery_policy.get("conversation-load-failure-recovery-enabled", True)
+            )
+            try:
+                load_recovery_max_attempts = max(
+                    0,
+                    int(recovery_policy.get("conversation-load-failure-max-attempts", 2)),
+                )
+                network_followup_max_attempts = max(
+                    0,
+                    int(recovery_policy.get("network-error-followup-max-attempts", 1)),
+                )
+                provider_error_followup_max_attempts = max(
+                    0,
+                    int(recovery_policy.get("provider-error-followup-max-attempts", 1)),
+                )
+            except (TypeError, ValueError):
+                load_recovery_max_attempts = 0
+                network_followup_max_attempts = 0
+                provider_error_followup_max_attempts = 0
+            if (
+                load_failed
+                and load_recovery_enabled
+                and _default_recovery_attempt < load_recovery_max_attempts
+            ):
+                replacement = client_defaults.replace_failed_default(
+                    project_root, record, exc, recover_url=False, attach_request=True,
+                )
+                if replacement is None:
+                    replacement = client_defaults.replace_failed_session(project_root, record, exc)
+                if replacement is not None:
+                    return _dispatch_session_request(
+                        project_root, replacement, dispatch_prompt=dispatch_prompt,
+                        context_fingerprint=context_fingerprint,
+                        _default_recovery_attempt=_default_recovery_attempt + 1,
+                        session_start=session_start,
+                        resume_existing=False,
+                    )
+            if (
+                "network-error-alert" in dom_signals
+                and bool(recovery_policy.get("network-error-followup-enabled", True))
+                and _network_followup_attempts < network_followup_max_attempts
+                and runtime_invoked
+                and runtime.session_failure_disposition(session_id)
+                is not SessionFailureDisposition.TERMINAL_FAILED
+            ):
+                # ChatGPT's generic network error is not the provider Retry
+                # control. Keep the validated session, preserve the failed
+                # attempt/evidence, and ask explicitly for completion once.
+                followup_template = str(
+                    recovery_policy.get("network-error-followup-prompt-template", "")
+                )
+                if "{original_request}" not in followup_template:
+                    followup_template = (
+                        "Complete the previous request. The previous response was interrupted by a "
+                        "network error. Continue from the work already done and provide the complete "
+                        "answer.\n\nOriginal request:\n{original_request}"
+                    )
+                followup_prompt = followup_template.replace(
+                    "{original_request}", dispatch_prompt[:20000]
+                )
+                failure_updates = _failure_response_updates(project_root, request_id, exc)
+                if failure_updates:
+                    record = store.update_owned_running_session(
+                        project_root,
+                        request_id,
+                        owner_epoch=record["dispatch-owner-epoch"],
+                        worker_id=record["worker-id"],
+                        attempt_epoch=record["attempt-epoch"],
+                        session_id=session_id,
+                        result_updates=failure_updates,
+                    )
+                store.record_gateway_timeline(
+                    project_root,
+                    request_id,
+                    "provider.turn.failure-recovered",
+                    state="running",
+                    attributes={
+                        "reason": "network-error-alert",
+                        "same-session": True,
+                        "original-prompt-length": len(dispatch_prompt),
+                        "followup-attempt": _network_followup_attempts + 1,
+                        "failure-response-available": bool(failure_updates),
+                        "dom-signals": sorted(str(item) for item in (failure_details.get("dom-signals") or ())),
+                        "observed-assistant-id": failure_details.get("failure-response-message-id"),
+                        "activity-sequence": failure_details.get("activity-sequence"),
+                    },
+                )
+                store.record_gateway_timeline(
+                    project_root,
+                    request_id,
+                    "provider.followup.submitted",
+                    state="running",
+                    attributes={"reason": "network-error-alert", "same-session": True},
+                )
+                return _dispatch_session_request(
+                    project_root,
+                    record,
+                    dispatch_prompt=followup_prompt,
+                    context_fingerprint=context_fingerprint,
+                    _default_recovery_attempt=_default_recovery_attempt,
+                    _network_followup_attempts=_network_followup_attempts + 1,
+                    session_start=session_start,
+                    resume_existing=False,
+                )
+            error_evidence = {
+                str(signal)
+                for signal in (*dom_signals, *(failure_details.get("evidence") or ()))
+            }
+            provider_error_alert = bool(
+                error_evidence.intersection({"request-error-alert", "error-alert"})
+            )
+            if (
+                provider_error_alert
+                and "network-error-alert" not in error_evidence
+                and bool(recovery_policy.get("provider-error-followup-enabled", True))
+                and _provider_error_followup_attempts < provider_error_followup_max_attempts
+                and runtime_invoked
+                and runtime.session_failure_disposition(session_id)
+                is not SessionFailureDisposition.TERMINAL_FAILED
+            ):
+                # A generic ChatGPT request error is not proof that Send was
+                # never reached. Preserve the failed attempt and continue only
+                # on the validated durable session, once.
+                followup_template = str(
+                    recovery_policy.get("provider-error-followup-prompt-template", "")
+                )
+                if "{original_request}" not in followup_template:
+                    followup_template = (
+                        "Complete the previous request. ChatGPT reported a temporary request error. "
+                        "Continue from the work already done and provide the complete answer.\n\n"
+                        "Original request:\n{original_request}"
+                    )
+                followup_prompt = followup_template.replace(
+                    "{original_request}", dispatch_prompt[:20000]
+                )
+                failure_updates = _failure_response_updates(project_root, request_id, exc)
+                if failure_updates:
+                    record = store.update_owned_running_session(
+                        project_root,
+                        request_id,
+                        owner_epoch=record["dispatch-owner-epoch"],
+                        worker_id=record["worker-id"],
+                        attempt_epoch=record["attempt-epoch"],
+                        session_id=session_id,
+                        result_updates=failure_updates,
+                    )
+                store.record_gateway_timeline(
+                    project_root,
+                    request_id,
+                    "provider.turn.failure-recovered",
+                    state="running",
+                    attributes={
+                        "reason": "provider-error-alert",
+                        "same-session": True,
+                        "original-prompt-length": len(dispatch_prompt),
+                        "followup-attempt": _provider_error_followup_attempts + 1,
+                        "failure-response-available": bool(failure_updates),
+                        "dom-signals": sorted(error_evidence),
+                    },
+                )
+                store.record_gateway_timeline(
+                    project_root,
+                    request_id,
+                    "provider.followup.submitted",
+                    state="running",
+                    attributes={"reason": "provider-error-alert", "same-session": True},
+                )
+                return _dispatch_session_request(
+                    project_root,
+                    record,
+                    dispatch_prompt=followup_prompt,
+                    context_fingerprint=context_fingerprint,
+                    _default_recovery_attempt=_default_recovery_attempt,
+                    _provider_error_followup_attempts=_provider_error_followup_attempts + 1,
+                    session_start=session_start,
+                    resume_existing=False,
+                )
             replacement = client_defaults.replace_failed_default(
                 project_root, record, exc,
                 recover_url=not runtime_invoked and _default_recovery_attempt == 0 and not (record.get("metadata") or {}).get("provider-chat-url"),
@@ -941,7 +1205,12 @@ def _dispatch_session_request(
             project_root,
             record,
             "failed",
-            updates={"error": exc, "session-id": session_id, "finished-at": now_iso_z()},
+            updates={
+                "error": exc,
+                "session-id": session_id,
+                "finished-at": now_iso_z(),
+                **_failure_response_updates(project_root, request_id, exc),
+            },
         )
     except BaseException as exc:
         if guard_held:

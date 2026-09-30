@@ -130,7 +130,7 @@ def warning(code: str, message: str, session_id: str | None = None) -> dict[str,
     return result
 
 
-_PRESUBMIT_STAGES = frozenset({"readiness", "turn_setup"})
+_PRESUBMIT_STAGES = frozenset({"readiness", "turn_setup", "submission"})
 
 
 def _bounded_cause_message(error: BaseException) -> str:
@@ -375,3 +375,34 @@ def replace_failed_default(project_root: Path, record: dict[str, Any], error: Ex
         updated = _attach(project_root, record, target if attach_request else record["session-id"], note, url if attach_request else None)
         atomic_write_json(path, {"session-id": target, **({"chat-url": url} if url else {})})
         return updated
+
+
+def replace_failed_session(project_root: Path, record: dict[str, Any], error: Exception) -> dict[str, Any] | None:
+    """Reserve a fresh provider session for an explicit session-bound request."""
+    from audiagentic.components.agents.gateway import store
+    from audiagentic.components.agents.gateway.session import sessions_store
+
+    try:
+        session = sessions_store.build_session_record(
+            created_by_request_id=record["request-id"],
+            provider_transport_kind="provider-session",
+            execution_profile_id=record["execution-profile-id"],
+            provider_id=record["resolved-provider-id"],
+            model_id=record.get("resolved-model-id"),
+        )
+        sessions_store.write_session_record(project_root, session)
+        target = session["session-id"]
+        return _attach(
+            project_root,
+            record,
+            target,
+            warning(
+                getattr(error, "code", "EXT-GPTAUTO-003"),
+                "Provider conversation could not be loaded; resubmitting in a fresh session.",
+                record.get("session-id"),
+            ),
+            None,
+        )
+    except Exception:  # noqa: BLE001 - recovery must leave the original failure authoritative
+        logger.exception("failed to reserve replacement provider session", extra={"request-id": record.get("request-id")})
+        return None

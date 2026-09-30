@@ -249,6 +249,45 @@ def test_composer_retry_preserves_session_and_is_bounded(rig, monkeypatch, ambig
     assert len(transports) == 1
 
 
+def test_generic_provider_error_continues_same_session_once(rig, monkeypatch):
+    """A provider request-error alert gets a bounded continuation, not a duplicate replay."""
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+    runtime, transports, root = rig
+    first = _dispatch(root, _running_record(root, session_keep_alive=True), dispatch_prompt="first")
+    session_id = first["session-id"]
+    original = runtime.prompt_in_session
+    prompts: list[str] = []
+
+    def prompt(*args, **kwargs):
+        prompts.append(args[2])
+        if len(prompts) == 1:
+            raise AudiaGenticError(
+                code="EXT-GPTAUTO-003",
+                kind="providers",
+                message="provider failure policy matched: request-error-alert",
+                details={
+                    "failure-reason": "provider-failure-policy-matched",
+                    "evidence": ["request-error-alert"],
+                    "dom-signals": ["error-alert"],
+                    "failure-response-available": False,
+                },
+            )
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(runtime, "prompt_in_session", prompt)
+    record = _running_record(root, session_id=session_id, session_keep_alive=True)
+    result = _dispatch(root, record, dispatch_prompt="first")
+
+    assert result["state"] == "completed"
+    assert result["session-id"] == session_id
+    assert prompts[0] == "first"
+    assert "Complete the previous request" in prompts[1]
+    assert "Original request:\nfirst" in prompts[1]
+    assert len(prompts) == 2
+    assert len(transports) == 1
+
+
 def test_profile_turn_deadline_never_cancels_a_session_turn(rig, monkeypatch):
     """A profile's legacy elapsed-time setting cannot override activity policy."""
     runtime, _transports, tmp_path = rig
@@ -334,6 +373,46 @@ def test_stale_active_rehydrate_failure_is_deferred_for_retry(rig, monkeypatch):
     assert exc.value.side_effect_state == "not-started"
     stored = store.read_record(tmp_path, record["request-id"])
     assert stored["state"] == "running"
+
+
+def test_proven_unsent_submission_failure_is_deferred_after_safe_retry(rig, monkeypatch):
+    """A composer failure before Send stays queued, never rotates the session."""
+    from audiagentic.components.agents.gateway.queue.recovery_control import RecoveryDeferred
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+    runtime, _transports, tmp_path = rig
+    first = _dispatch(
+        tmp_path, _running_record(tmp_path, session_keep_alive=True), dispatch_prompt="hello"
+    )
+    session_id = first["session-id"]
+    calls = []
+
+    def proven_unsent_failure(*_args, **_kwargs):
+        calls.append(session_id)
+        raise AudiaGenticError(
+            code="EXT-GPTAUTO-003",
+            kind="providers",
+            message="composer unavailable before Send",
+            details={
+                "failure-stage": "submission",
+                "submission-state": "not_started",
+                "submission-proven": False,
+                "submission-ambiguous": False,
+                "retryable-same-session": True,
+            },
+        )
+
+    monkeypatch.setattr(runtime, "prompt_in_session", proven_unsent_failure)
+    record = _running_record(tmp_path, session_id=session_id, session_keep_alive=True)
+    with pytest.raises(RecoveryDeferred) as exc:
+        _dispatch(tmp_path, record, dispatch_prompt="after restart")
+
+    assert calls == [session_id, session_id]
+    assert exc.value.phase == "presubmit-retry"
+    assert exc.value.side_effect_state == "not-started"
+    stored = store.read_record(tmp_path, record["request-id"])
+    assert stored["state"] == "running"
+    assert stored["session-id"] == session_id
 
 
 def test_persistent_surface_ignores_execution_context_drift_on_continuation(
