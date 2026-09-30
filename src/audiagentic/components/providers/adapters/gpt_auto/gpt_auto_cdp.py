@@ -909,6 +909,38 @@ _SNAPSHOT_FN = r"""
       if (controls) { fallbackResponseControls = controls; break; }
     }
   }
+  const documentTextFailureSignals = new Set([
+    "conversation-load-failed",
+    "network-error-alert",
+    "stream-cache-expired"
+  ]);
+  const textMatchesSignal = (element, spec) => {
+    const fragments = spec.textContainsAny || [];
+    const exact = spec.textEqualsAny || [];
+    const content = (element.innerText || element.textContent || "").trim();
+    if (exact.length && exact.some(fragment => content === String(fragment).trim())) return true;
+    if (!fragments.length) return !exact.length;
+    const lowered = content.toLowerCase();
+    return fragments.some(fragment => lowered.includes(String(fragment).toLowerCase()));
+  };
+  const outsideMessageTextMatches = (spec, selectors) => {
+    const messageNodes = messageEntries.map(entry => entry.el);
+    const candidates = new Set();
+    for (const selector of selectors) {
+      for (const root of document.querySelectorAll(selector)) {
+        candidates.add(root);
+        root.querySelectorAll("*").forEach(element => candidates.add(element));
+      }
+    }
+    return Array.from(candidates).some(element => {
+      if (spec.visible && !shown(element)) return false;
+      // Provider failure text rendered outside the conversation is actionable;
+      // the same words inside a submitted prompt or assistant response are not.
+      if (messageNodes.some(message => message === element || message.contains(element))) return false;
+      if (messageNodes.some(message => element.contains(message))) return false;
+      return textMatchesSignal(element, spec);
+    });
+  };
   for (const spec of signalSpecs) {
     const completionAction = spec.name === 'completion-control' || spec.name === 'more-actions-menu';
     const root = spec.scope === "latest-assistant-turn"
@@ -920,18 +952,14 @@ _SNAPSHOT_FN = r"""
     const selectors = spec.name === "streaming-indicator"
       ? spec.selectors.filter(selector => selector !== ".streaming-animation")
       : spec.selectors;
-    domSignals[spec.name] = !!root && selectors.some(selector =>
-      Array.from(root.querySelectorAll(selector)).some(el => {
-        if (spec.visible && !shown(el)) return false;
-        const fragments = spec.textContainsAny || [];
-        const exact = spec.textEqualsAny || [];
-        const content = (el.innerText || el.textContent || "").trim();
-        if (exact.length && exact.some(fragment => content === String(fragment).trim())) return true;
-        if (!fragments.length) return !exact.length;
-        const lowered = content.toLowerCase();
-        return fragments.some(fragment => lowered.includes(String(fragment).toLowerCase()));
-      })
-    );
+    domSignals[spec.name] = documentTextFailureSignals.has(spec.name) && spec.scope === "document"
+      ? outsideMessageTextMatches(spec, selectors)
+      : !!root && selectors.some(selector =>
+          Array.from(root.querySelectorAll(selector)).some(el => {
+            if (spec.visible && !shown(el)) return false;
+            return textMatchesSignal(el, spec);
+          })
+        );
   }
   // Bind structural completion evidence to the assistant turn whose action
   // bar was inspected. A later unrelated turn must not complete an earlier
