@@ -221,6 +221,21 @@ def _auto_resume_reopenable_closed_session(
     """
     from audiagentic.components.agents.gateway.session import sessions_store as session_store
 
+    recovery = record.get("recovery")
+    recovery_attempt = recovery.get("attempt", 0) if isinstance(recovery, dict) else 0
+    try:
+        recovery_attempt = max(0, int(recovery_attempt))
+    except (TypeError, ValueError):
+        recovery_attempt = 0
+
+    def _resume_control_id(resume_source: str) -> str:
+        # A failed observation-only control must not permanently poison all
+        # later attempts for the same source. Each durable recovery attempt
+        # gets its own idempotency key; ordinary explicit/resource-policy
+        # resumes retain the stable source-scoped key.
+        suffix = f":observation:{recovery_attempt}" if allow_failed else ""
+        return f"auto-resume:{resume_source}{suffix}"
+
     if allow_failed:
         logger.info(
             "resuming failed local session as an observation-only restart successor",
@@ -236,7 +251,7 @@ def _auto_resume_reopenable_closed_session(
             # continuations against the SAME closed source must resolve to
             # the same idempotency lookup, which a request-id-derived key
             # would not give them.
-            control_id=f"auto-resume:{resume_source_id}",
+            control_id=_resume_control_id(resume_source_id),
             execution_context_fingerprint=context_fingerprint or record.get("context-fingerprint"),
             request_runtime_root=request_runtime_root,
             project_name=project_name,
@@ -265,7 +280,7 @@ def _auto_resume_reopenable_closed_session(
             new_session_record = runtime.resume_session(
                 project_root,
                 resume_source_id,
-                control_id=f"auto-resume:{resume_source_id}",
+                control_id=_resume_control_id(resume_source_id),
                 execution_context_fingerprint=context_fingerprint or record.get("context-fingerprint"),
                 request_runtime_root=request_runtime_root,
                 project_name=project_name,
