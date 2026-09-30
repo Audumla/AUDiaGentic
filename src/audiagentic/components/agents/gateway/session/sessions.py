@@ -1347,6 +1347,7 @@ class SessionRuntime:
                 "unresolved-baseline-assistant-id",
                 "unresolved-baseline-user-count",
                 "unresolved-baseline-assistant-count",
+                "conversation-load-recovery-attempts",
             )
             if metadata.get("submission-proven") is False:
                 remove += (
@@ -1558,6 +1559,7 @@ class SessionRuntime:
                 "unresolved-baseline-assistant-id",
                 "unresolved-baseline-user-count",
                 "unresolved-baseline-assistant-count",
+                "conversation-load-recovery-attempts",
             )
             if metadata.get("submission-proven") is False:
                 remove += (
