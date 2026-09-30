@@ -34,6 +34,31 @@ logger = logging.getLogger(__name__)
 
 PageHealth = Literal["healthy", "failed", "unknown"]
 
+
+def _snapshot_has_positive_conversation_evidence(snapshot: ChatSnapshot) -> bool:
+    """Return whether a loaded exact conversation has positive DOM evidence."""
+
+    return bool(
+        snapshot.composer_present
+        or snapshot.composer_editable
+        or snapshot.user_count > 0
+        or snapshot.assistant_count > 0
+        or snapshot.latest_user_id
+        or snapshot.latest_assistant_id
+        or snapshot.conversation_title
+        or snapshot.terminal_witness_assistant_id
+        or snapshot.dom_activity_digest
+        or snapshot.dom_signals.intersection(
+            {
+                "composer-ready",
+                "response-active",
+                "response-complete",
+                "response-failed",
+                "stop-control",
+            }
+        )
+    )
+
 # TEMPORARY GP31 debug instrumentation -- gateway subprocess stdout/stderr
 # are redirected to DEVNULL and no file log handler is configured, so
 # logger calls are unrecoverable. Writes directly to disk instead. Remove
@@ -438,7 +463,10 @@ class GptAutoProviderRuntime:
             )
             if (
                 preferred is not None
-                and await self._page_health_state(preferred) == "healthy"
+                and await self._page_health_state(
+                    preferred, provider_session_id
+                )
+                == "healthy"
             ):
                 return preferred
         matches = [
@@ -459,7 +487,9 @@ class GptAutoProviderRuntime:
             # positively healthy exact tabs first, then unknown tabs, and only
             # use managed-window preference within the selected health tier.
             health = {
-                str(page.get("pageHandle") or ""): await self._page_health_state(page)
+                str(page.get("pageHandle") or ""): await self._page_health_state(
+                    page, provider_session_id
+                )
                 for page in matches
             }
             healthy = [
@@ -493,7 +523,9 @@ class GptAutoProviderRuntime:
             return min(candidates, key=lambda page: str(page.get("pageHandle") or ""))
         return matches[0] if matches else None
 
-    async def _page_health_state(self, page: dict) -> PageHealth:
+    async def _page_health_state(
+        self, page: dict, provider_session_id: str | None = None
+    ) -> PageHealth:
         """Classify an exact conversation tab without treating probe errors as healthy."""
         browser = self._gpt_browser
         if browser is None:
@@ -511,11 +543,19 @@ class GptAutoProviderRuntime:
             )
         except Exception:
             return "unknown"
-        return (
-            "failed"
-            if "conversation-load-failed" in snapshot.dom_signals
-            else "healthy"
-        )
+        if "conversation-load-failed" in snapshot.dom_signals:
+            return "failed"
+        if provider_session_id and not url_matches_provider_session(
+            snapshot.url, provider_session_id
+        ):
+            return "unknown"
+        # An exact URL can survive a renderer failure or a still-loading
+        # navigation. Require positive DOM evidence before calling a tab
+        # healthy; otherwise a later load-error observation can invalidate a
+        # recovery choice that was made from an empty snapshot.
+        if not _snapshot_has_positive_conversation_evidence(snapshot):
+            return "unknown"
+        return "healthy"
 
     async def _page_has_load_failure(self, page: dict) -> bool:
         """Return true only for an observed provider conversation-load error."""
