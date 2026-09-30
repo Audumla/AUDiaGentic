@@ -1513,6 +1513,12 @@ class GatewayQueueManager:
                     and deferred.side_effect_state == "not-started"
                 )
                 followup_reconciliation = deferred.phase == "followup-reconcile"
+                conversation_load_reconciliation = (
+                    deferred.phase == "conversation-load-reconcile"
+                    and current.get("provider-transport-kind") == "provider-session"
+                    and _has_durable_provider_identity(project_root, current)
+                    and _durable_provider_session_is_active(project_root, current)
+                )
                 # A durable provider-session has an independent provider
                 # execution that survives this gateway generation.  A CDP
                 # bridge restart, browser startup race, or tab reattachment
@@ -1533,6 +1539,7 @@ class GatewayQueueManager:
                     recovery_attempt >= max_recovery_attempts
                     and not wait_for_previous_turn
                     and not followup_reconciliation
+                    and not conversation_load_reconciliation
                     and not durable_provider_recovery
                 ):
                     recovery_metadata = dict(current.get("recovery") or {})

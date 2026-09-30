@@ -23,6 +23,9 @@ from audiagentic.components.providers.adapters.gpt_auto.runtime import (
     GptAutoProviderRuntime,
     ProviderState,
 )
+from audiagentic.components.providers.adapters.gpt_auto.session_transport import (
+    GptAutoSessionTransport,
+)
 from audiagentic.components.providers.adapters.gpt_auto.snapshot import ChatMessageRef, ChatSnapshot
 from audiagentic.components.providers.adapters.gpt_auto.window_anchor import (
     gateway_dashboard_anchor_url,
@@ -489,6 +492,53 @@ def test_explicit_unresolved_marker_remains_authoritative() -> None:
 
     assert chat.unresolved_turn_pending is True
     assert chat.unresolved_metadata()["unresolved-turn-pending"] is True
+
+
+def test_rehydrated_chat_hydrates_preferred_cdp_target_id() -> None:
+    config = GptAutoConfig.from_dict(valid_config())
+    chat = PersistentChat(
+        ag_session_id="session-target-rehydrate",
+        project_name="project",
+        project_url="https://chatgpt.com/g/g-p-project/project",
+        runtime=SimpleNamespace(),
+        config=config,
+        binding_sink=lambda _update: None,
+        provider_session_id="provider-session",
+        chat_url="https://chatgpt.com/g/g-p-project/c/provider-session",
+        resume_provider_metadata={"target-id": "target-original"},
+    )
+
+    assert chat.target_id == "target-original"
+    assert chat.unresolved_metadata()["target-id"] == "target-original"
+
+
+@pytest.mark.asyncio
+async def test_rehydrated_transport_refreshes_target_binding_without_prompt() -> None:
+    updates = []
+
+    async def binding_sink(update) -> None:
+        updates.append(update)
+
+    async def open_chat() -> None:
+        return None
+
+    chat = SimpleNamespace(
+        open=open_chat,
+        project_url="https://chatgpt.com/g/g-p-project/project",
+        unresolved_metadata=lambda: {"target-id": "target-fallback"},
+        provider_session_id="provider-session",
+        chat_url="https://chatgpt.com/g/g-p-project/c/provider-session",
+        target_id="target-fallback",
+        binding_sink=binding_sink,
+        ag_session_id="session-target-refresh",
+    )
+
+    result = await GptAutoSessionTransport(chat).open()
+
+    assert result.provider_session_ref is not None
+    assert result.provider_session_ref.value == "provider-session"
+    assert len(updates) == 1
+    assert updates[0].metadata["target-id"] == "target-fallback"
 
 
 class _EventBridge:

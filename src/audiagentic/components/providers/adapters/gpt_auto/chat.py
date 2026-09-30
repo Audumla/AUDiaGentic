@@ -91,7 +91,13 @@ class PersistentChat:
         self.provider_session_id = provider_session_id
         self.chat_url = chat_url
         self.page_handle: str | None = None
-        self.target_id: str | None = None
+        # CDP page handles are bridge-local, but the browser target identity
+        # survives a gateway restart while the browser remains alive.  Keep it
+        # as the durable preferred binding; runtime.find_conversation_page()
+        # still falls back to the exact provider conversation URL when the
+        # target has disappeared.
+        metadata = resume_provider_metadata or {}
+        self.target_id: str | None = _metadata_text(metadata, "target-id")
         self._page_generation = 0
         self._reconciled_binding_token: tuple[object, ...] | None = None
         self.active_turn_id: str | None = None
@@ -113,7 +119,6 @@ class PersistentChat:
         # never update this clock; emitted provider activity may.
         self._last_validated_activity_monotonic = time.monotonic()
         self._validated_activity_generation = 0
-        metadata = resume_provider_metadata or {}
         self.conversation_title = _metadata_text(metadata, "chat-title")
         self._pending_conversation_title: str | None = None
         self._title_publish_lock = asyncio.Lock()
@@ -1262,6 +1267,8 @@ class PersistentChat:
             "unresolved-turn-pending": self.unresolved_turn_pending,
             "submission-proven": self._submission_proven,
         }
+        if self.target_id:
+            values["target-id"] = self.target_id
         for key, value in (
             ("prompt-message-id", self.unresolved_prompt_message_id),
             ("assistant-message-id", self.unresolved_assistant_message_id),

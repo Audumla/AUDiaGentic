@@ -1036,7 +1036,27 @@ def _dispatch_session_request(
             # old conversation.  Preserve the current session/evidence and
             # let the normal terminal/recovery policy decide its outcome.
             load_submission_proven = failure_details.get("submission-proven") is True
-            load_submission_ambiguous = failure_details.get("submission-ambiguous") is True
+            # Fresh-session replay is safe only with affirmative proof that
+            # this request never crossed the browser side-effect boundary.
+            # Missing fields are intentionally unsafe: older or incomplete
+            # failure producers must not turn a conversation-load error into
+            # a duplicate provider prompt.
+            load_proven_unsent = (
+                failure_details.get("submission-proven") is False
+                and failure_details.get("submission-ambiguous") is False
+                and (
+                    failure_details.get("submission-attempted") is False
+                    or (
+                        failure_details.get("failure-stage") == "submission"
+                        and failure_details.get("submission-state") == "not_started"
+                    )
+                )
+            )
+            load_submission_ambiguous = (
+                not load_proven_unsent
+                if load_failed
+                else failure_details.get("submission-ambiguous") is True
+            )
             load_recovery_enabled = bool(
                 recovery_policy.get("conversation-load-failure-recovery-enabled", True)
             )
@@ -1057,12 +1077,53 @@ def _dispatch_session_request(
                 load_recovery_max_attempts = 0
                 network_followup_max_attempts = 0
                 provider_error_followup_max_attempts = 0
+            if load_failed and not load_proven_unsent:
+                # A load-error page is not proof that the provider turn
+                # stopped.  Once submission is proven, ambiguous, or simply
+                # undocumented by an older failure producer, retain the
+                # request/session and re-enter observation-only recovery.
+                # Falling through to the terminal failure transition here
+                # strands provider work and breaks FIFO continuation after a
+                # gateway restart.
+                failure_updates = _failure_response_updates(project_root, request_id, exc)
+                if failure_updates:
+                    record = store.update_owned_running_session(
+                        project_root,
+                        request_id,
+                        owner_epoch=record["dispatch-owner-epoch"],
+                        worker_id=record["worker-id"],
+                        attempt_epoch=record["attempt-epoch"],
+                        session_id=session_id,
+                        result_updates=failure_updates,
+                    )
+                store.record_gateway_timeline(
+                    project_root,
+                    request_id,
+                    "provider.conversation.load-observation-deferred",
+                    state="running",
+                    attributes={
+                        "same-session": True,
+                        "submission-proven": load_submission_proven,
+                        "submission-ambiguous": load_submission_ambiguous,
+                        "failure-response-available": bool(failure_updates),
+                    },
+                )
+                raise RecoveryDeferred(
+                    exc,
+                    phase="conversation-load-reconcile",
+                    side_effect_state="may-have-started",
+                    continuation={
+                        "kind": "conversation-load",
+                        "resume-existing": True,
+                        "default-recovery-attempt": _default_recovery_attempt,
+                        "load-recovery-attempts": _default_recovery_attempt + 1,
+                    },
+                ) from exc
             if (
                 load_failed
                 and load_recovery_enabled
                 and _default_recovery_attempt < load_recovery_max_attempts
-                and not load_submission_proven
-                and not load_submission_ambiguous
+                and load_proven_unsent
             ):
                 replacement = client_defaults.replace_failed_default(
                     project_root, record, exc, recover_url=False, attach_request=True,

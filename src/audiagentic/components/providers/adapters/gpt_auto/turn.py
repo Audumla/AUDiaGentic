@@ -467,6 +467,7 @@ class GptAutoTurn:
                         ),
                         "cause-type": type(exc).__name__,
                         "cause-message": cause,
+                        **self._failure_response_details(),
                         "submission-attempted": True,
                         "submission-proven": self.submission_confirmed,
                         "submission-ambiguous": not proven_unsent,
@@ -480,7 +481,6 @@ class GptAutoTurn:
                             else {}
                         ),
                         **self._diagnostics(),
-                        **self._failure_response_details(),
                     },
                 ) from exc
             raise
@@ -2604,6 +2604,15 @@ class GptAutoTurn:
         """
         snapshot = self._last_snapshot
         recovery = self.chat.config.workflow.recovery
+        # The phase name is not a submission proof. _submit_once() raises
+        # side_effect_attempted before invoking the browser, and an exception
+        # can therefore arrive while the phase is still ``submission`` even
+        # though Send may already have been reached. Use the durable turn
+        # fence instead of phase position. A recovered existing turn is
+        # already proven provider work before its observer reattaches.
+        submission_proven = self.submission_confirmed or self._recovered_existing_turn
+        submission_attempted = self.side_effect_attempted or submission_proven
+        submission_ambiguous = submission_attempted and not submission_proven
         policy = {
             "network-error-followup-enabled": recovery.network_error_followup_enabled,
             "network-error-followup-max-attempts": recovery.network_error_followup_max_attempts,
@@ -2618,8 +2627,9 @@ class GptAutoTurn:
         if not isinstance(text, str) or not text.strip():
             return {
                 "failure-response-available": False,
-                "submission-proven": self.submission_confirmed,
-                "submission-attempted": self.submission_confirmed or self._phase != "submission",
+                "submission-proven": submission_proven,
+                "submission-attempted": submission_attempted,
+                "submission-ambiguous": submission_ambiguous,
                 "recovery-policy": policy,
             }
         bounded = text[:262144]
@@ -2629,8 +2639,9 @@ class GptAutoTurn:
             "failure-response-truncated": len(bounded) != len(text),
             "failure-response-message-id": getattr(snapshot, "latest_assistant_id", None),
             "failure-response-source": "gpt-auto-dom-latest-assistant",
-            "submission-proven": self.submission_confirmed,
-            "submission-attempted": self.submission_confirmed or self._phase != "submission",
+            "submission-proven": submission_proven,
+            "submission-attempted": submission_attempted,
+            "submission-ambiguous": submission_ambiguous,
             "recovery-policy": policy,
         }
 
