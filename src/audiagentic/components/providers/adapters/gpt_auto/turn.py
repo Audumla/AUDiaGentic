@@ -46,6 +46,7 @@ from .urls import (
     canonical_project_url,
     parse_project_id,
     parse_provider_session_id,
+    same_chat_identity,
     url_matches_provider_session,
 )
 
@@ -355,7 +356,12 @@ class GptAutoTurn:
         # not by polling or synthetic connection-refreshing lease ticks.
         if kind is not TransportObservationKind.TIMING and attributes.get(
             "model_activity"
-        ) not in {"connection-refreshing", "provider-busy", "response-observing"}:
+        ) not in {
+            "connection-refreshing",
+            "provider-busy",
+            "response-observing",
+            "recovery-observing",
+        }:
             mark_activity = getattr(self.chat, "mark_validated_activity", None)
             if callable(mark_activity):
                 mark_activity()
@@ -403,13 +409,40 @@ class GptAutoTurn:
         except Exception as exc:
             if not _ENGINE.is_terminal(self.state.value):
                 self._move(TurnState.FAILED)
+            proven_unsent = self._proven_unsent_submission_boundary(exc)
+            if proven_unsent:
+                try:
+                    clear_unresolved = getattr(self.chat, "clear_unresolved_turn", None)
+                    if clear_unresolved is not None:
+                        clear_unresolved()
+                    persist_clear = getattr(self.chat, "persist_unresolved_clear", None)
+                    if persist_clear is not None:
+                        await persist_clear()
+                except Exception:  # noqa: BLE001 - fail closed if the fence cannot persist
+                    proven_unsent = False
+                    logger.exception(
+                        "gpt-auto could not persist the proven-unsent submission fence clear",
+                        extra={"turn-id": self.request.turn_id},
+                    )
             if self.chat.state not in {ChatState.FAILED, ChatState.CLOSED}:
-                proven_unsent = (
+                proven_unsent = proven_unsent or (
                     isinstance(exc, AudiaGenticError)
                     and exc.code == "EXT-GPTAUTO-003"
                     and exc.details.get("submission-ambiguous") is False
                 )
                 self._set_chat_state(ChatState.READY if proven_unsent else ChatState.FAILED)
+            if isinstance(exc, AudiaGenticError):
+                details = dict(exc.details or {})
+                details.update(self._failure_response_details())
+                dom_signals = details.get("dom-signals") or ()
+                if "conversation-load-failed" in dom_signals:
+                    details["failure-reason"] = "conversation-load-failed"
+                raise AudiaGenticError(
+                    code=exc.code,
+                    kind=exc.kind,
+                    message=exc.message,
+                    details=details,
+                ) from exc
             if self.side_effect_attempted and not isinstance(exc, AudiaGenticError):
                 cause = str(exc).strip() or "no exception message"
                 observation_failure = self._phase in {
@@ -427,12 +460,27 @@ class GptAutoTurn:
                     ),
                     details={
                         "turn-id": self.request.turn_id,
-                        "failure-reason": "unclassified-provider-boundary-exception",
+                        "failure-reason": (
+                            "composer-not-found-before-submission"
+                            if proven_unsent
+                            else "unclassified-provider-boundary-exception"
+                        ),
                         "cause-type": type(exc).__name__,
                         "cause-message": cause,
                         "submission-attempted": True,
                         "submission-proven": self.submission_confirmed,
+                        "submission-ambiguous": not proven_unsent,
+                        **(
+                            {
+                                "failure-stage": "submission",
+                                "submission-state": "not_started",
+                                "retryable-same-session": True,
+                            }
+                            if proven_unsent
+                            else {}
+                        ),
                         **self._diagnostics(),
+                        **self._failure_response_details(),
                     },
                 ) from exc
             raise
@@ -2485,6 +2533,35 @@ class GptAutoTurn:
         self._last_snapshot = snapshot
         self._last_observation_error = None
 
+    def _proven_unsent_submission_boundary(self, error: BaseException) -> bool:
+        """Recognize a browser admission failure that happened before Send.
+
+        A loading provider page can raise ``composer not found`` from the CDP
+        submit helper before it has typed or clicked anything.  That is safe to
+        retry on the same conversation, unlike a generic provider exception
+        after the browser-side submit call has begun.
+        """
+        if self.submission_confirmed or self._phase != "submission":
+            return False
+        if (
+            isinstance(error, AudiaGenticError)
+            and error.details.get("submission-ambiguous") is False
+        ):
+            return True
+        if not isinstance(error, RuntimeError):
+            return False
+        if "composer not found" not in str(error).lower():
+            return False
+        snapshot = self._last_snapshot
+        return bool(
+            snapshot is not None
+            and not snapshot.composer_present
+            and not snapshot.composer_editable
+            and not snapshot.generating
+            and not snapshot.latest_user_text
+            and not snapshot.latest_assistant_text
+        )
+
     def _diagnostics(self, *, expected_prompt: str | None = None) -> dict[str, Any]:
         """Return bounded, sparse evidence for a provider-boundary failure."""
         details: dict[str, Any] = {
@@ -2516,6 +2593,39 @@ class GptAutoTurn:
                 }
             )
         return {key: value for key, value in details.items() if value is not None and value != ""}
+
+    def _failure_response_details(self) -> dict[str, Any]:
+        """Expose the latest DOM assistant text as failure evidence only.
+
+        This is deliberately not ``final_summary``: a failed turn must never
+        be promoted to successful output.  The gateway stores this projection
+        in a separate failure artifact for clients that need to diagnose where
+        the provider stopped.
+        """
+        snapshot = self._last_snapshot
+        recovery = self.chat.config.workflow.recovery
+        policy = {
+            "network-error-followup-enabled": recovery.network_error_followup_enabled,
+            "network-error-followup-max-attempts": recovery.network_error_followup_max_attempts,
+            "network-error-followup-prompt-template": recovery.network_error_followup_prompt_template,
+            "provider-error-followup-enabled": recovery.provider_error_followup_enabled,
+            "provider-error-followup-max-attempts": recovery.provider_error_followup_max_attempts,
+            "provider-error-followup-prompt-template": recovery.provider_error_followup_prompt_template,
+            "conversation-load-failure-recovery-enabled": recovery.conversation_load_failure_recovery_enabled,
+            "conversation-load-failure-max-attempts": recovery.conversation_load_failure_max_attempts,
+        }
+        text = getattr(snapshot, "latest_assistant_text", None) if snapshot else None
+        if not isinstance(text, str) or not text.strip():
+            return {"failure-response-available": False, "recovery-policy": policy}
+        bounded = text[:262144]
+        return {
+            "failure-response-available": True,
+            "failure-response-text": bounded,
+            "failure-response-truncated": len(bounded) != len(text),
+            "failure-response-message-id": getattr(snapshot, "latest_assistant_id", None),
+            "failure-response-source": "gpt-auto-dom-latest-assistant",
+            "recovery-policy": policy,
+        }
 
     async def _refresh_after_response_correlation_conflict(self) -> bool:
         """Use the canonical bound-page refresh within the shared recovery budget."""
@@ -2802,6 +2912,7 @@ def _scope_response_snapshot(
     if (
         baseline_conversation_url
         and snapshot_conversation_url != baseline_conversation_url
+        and not same_chat_identity(baseline.url, snapshot.url)
     ):
         raise ProviderBindingIntegrityError(
             "provider conversation changed during response observation"
@@ -2849,7 +2960,7 @@ def _scope_response_snapshot(
                 and PromptFingerprint.from_text(latest_prompt_text).digest
                 == prompt_digest
             )
-            same_conversation = canonical_chat_url(snapshot.url) == canonical_chat_url(baseline.url)
+            same_conversation = same_chat_identity(snapshot.url, baseline.url)
             terminal_bound = (
                 snapshot.terminal_witness_assistant_id
                 == snapshot.latest_assistant_id
@@ -2943,7 +3054,7 @@ def _scope_response_snapshot(
             and not current_user_ids
             and snapshot.user_count == 0
         )
-        same_conversation = canonical_chat_url(snapshot.url) == canonical_chat_url(baseline.url)
+        same_conversation = same_chat_identity(snapshot.url, baseline.url)
         terminal_bound = snapshot.terminal_witness_assistant_id == snapshot.latest_assistant_id
         if (
             fresh_assistant
@@ -3039,8 +3150,11 @@ def _scope_response_snapshot(
     if response_ref is None:
         scoped_signals = set(snapshot.dom_signals)
         scoped_signals.discard("request-error-alert")
+        scoped_signals.discard("network-error-alert")
         if request_error_alert:
             scoped_signals.add("request-error-alert")
+            if "network-error-alert" in snapshot.dom_signals:
+                scoped_signals.add("network-error-alert")
         return (
             replace(
                 snapshot,
@@ -3060,10 +3174,14 @@ def _scope_response_snapshot(
         )
     dom_signals = snapshot.dom_signals
     dom_signals = frozenset(
-        signal for signal in dom_signals if signal != "request-error-alert"
+        signal
+        for signal in dom_signals
+        if signal not in {"request-error-alert", "network-error-alert"}
     )
     if request_error_alert:
         dom_signals = frozenset((*dom_signals, "request-error-alert"))
+        if "network-error-alert" in snapshot.dom_signals:
+            dom_signals = frozenset((*dom_signals, "network-error-alert"))
     if snapshot.terminal_witness_assistant_id != response_ref.message_id:
         dom_signals = frozenset(
             signal
