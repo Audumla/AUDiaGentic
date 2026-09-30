@@ -2116,6 +2116,66 @@ def test_error_alert_scope_ignores_stale_and_foreign_occurrences():
     assert "request-error-alert" not in _facts(baseline, baseline, scoped)
 
 
+def test_stream_cache_expired_scope_ignores_stale_document_signal():
+    baseline = snap(
+        users=1,
+        user="Request A",
+        user_id="prompt-a",
+        extra_signals=("stream-cache-expired",),
+    )
+    current = replace(baseline, dom_signals=frozenset({"stream-cache-expired"}))
+
+    scoped, _ = _scope_response_snapshot(
+        baseline,
+        current,
+        prompt_message_id="prompt-a",
+        prompt_text="Request A",
+    )
+
+    assert "stream-cache-expired" not in scoped.dom_signals
+    assert "stream-cache-expired" not in _facts(baseline, baseline, scoped)
+
+
+def test_stream_cache_expired_scope_accepts_new_signal_for_current_prompt():
+    baseline = snap(users=1, user="Earlier", user_id="prompt-old")
+    current = snap(
+        users=2,
+        user="Request A",
+        user_id="prompt-a",
+        extra_signals=("stream-cache-expired",),
+    )
+
+    scoped, _ = _scope_response_snapshot(
+        baseline,
+        current,
+        prompt_message_id="prompt-a",
+        prompt_text="Request A",
+    )
+
+    assert "stream-cache-expired" in scoped.dom_signals
+    assert "stream-cache-expired" in _facts(baseline, baseline, scoped)
+
+
+def test_stream_cache_expired_scope_ignores_new_signal_for_later_prompt():
+    baseline = snap(users=1, user="Request A", user_id="prompt-a")
+    current = snap(
+        users=2,
+        user="Later request",
+        user_id="prompt-b",
+        extra_signals=("stream-cache-expired",),
+    )
+
+    scoped, _ = _scope_response_snapshot(
+        baseline,
+        current,
+        prompt_message_id="prompt-a",
+        prompt_text="Request A",
+    )
+
+    assert "stream-cache-expired" not in scoped.dom_signals
+    assert "stream-cache-expired" not in _facts(baseline, baseline, scoped)
+
+
 def test_error_alert_scope_accepts_new_owned_or_unowned_occurrence():
     baseline = replace(
         snap(users=1, user="Request A", user_id="prompt-a"),
