@@ -13,10 +13,11 @@ from audiagentic.components.agents.gateway.session import sessions_store
 from audiagentic.components.agents.agents_paths import gateway_admitted_prompt_path
 
 
-def test_complete_execution_from_provider_persists_correlated_response(monkeypatch, tmp_path: Path):
+@pytest.mark.parametrize("initial_state", ["running", "failed", "cancelled"])
+def test_complete_execution_from_provider_persists_correlated_response(monkeypatch, tmp_path: Path, initial_state: str):
     record = {
         "request-id": "req_capture",
-        "state": "running",
+        "state": initial_state,
         "revision": 7,
         "session-id": "ses_capture",
         "resolved-provider-id": "gpt-auto",
@@ -36,7 +37,9 @@ def test_complete_execution_from_provider_persists_correlated_response(monkeypat
         latest_assistant_id="assistant-1",
         terminal_witness_assistant_id="assistant-1",
         generating=False,
-        dom_signals=frozenset({"completion-control", "more-actions-menu"}),
+        # Current ChatGPT project conversations expose the response Copy
+        # control but may omit the older response-level More actions menu.
+        dom_signals=frozenset({"completion-control"}),
     )
     artifact_ref = {
         "artifact-id": "final-response",
@@ -228,3 +231,33 @@ def test_operator_provider_capture_can_complete_bounded_interruption(tmp_path: P
     assert running["state"] == "running"
     assert completed["state"] == "completed"
     assert completed["response-artifact"]["artifact-id"] == "final-response"
+
+
+def test_operator_provider_capture_can_promote_failed_request(tmp_path: Path):
+    """A failed request remains recoverable when a provider response is proven."""
+    record = store.build_record(execution_profile_id="gpt-auto", prompt_body="request")
+    store.write_record(tmp_path, record)
+    running = store.transition_record(
+        tmp_path,
+        record["request-id"],
+        "running",
+        updates={"started-at": "2026-09-27T00:00:00Z"},
+    )
+    failed = store.transition_record(
+        tmp_path,
+        record["request-id"],
+        "failed",
+        updates={"error": {"code": "EXT-GPTAUTO-001", "message": "provider observation failed"}},
+    )
+
+    completed = store.transition_operator_terminal(
+        tmp_path,
+        record["request-id"],
+        expected_revision=failed["revision"],
+        updates={"__final-response-text": "captured answer"},
+    )
+
+    assert running["state"] == "running"
+    assert failed["state"] == "failed"
+    assert completed["state"] == "completed"
+    assert api.get_execution_response(tmp_path, record["request-id"]) == "captured answer"

@@ -168,7 +168,10 @@ class GptAutoProviderRuntime:
                     self._move(ProviderState.CONNECTING)
                 bridge = await self._connect_bridge()
                 self._bridge = bridge
-                self._gpt_browser = GptAutoCdpBrowserController(bridge)
+                self._gpt_browser = GptAutoCdpBrowserController(
+                    bridge,
+                    action_pause_seconds=self.config.workflow.recovery.action_pause_seconds,
+                )
                 self._move(ProviderState.AVAILABLE)
                 self._event_task = asyncio.create_task(self._route_events(bridge))
                 self._tab_reaper_task = asyncio.create_task(self._reap_idle_tabs(bridge))
@@ -190,7 +193,10 @@ class GptAutoProviderRuntime:
             try:
                 bridge = await self._connect_bridge()
                 self._bridge = bridge
-                self._gpt_browser = GptAutoCdpBrowserController(bridge)
+                self._gpt_browser = GptAutoCdpBrowserController(
+                    bridge,
+                    action_pause_seconds=self.config.workflow.recovery.action_pause_seconds,
+                )
                 self._move(ProviderState.AVAILABLE)
                 self._event_task = asyncio.create_task(self._route_events(bridge))
                 self._tab_reaper_task = asyncio.create_task(self._reap_idle_tabs(bridge))
@@ -431,12 +437,22 @@ class GptAutoProviderRuntime:
         matches = [
             page
             for page in pages
-            if self.page_belongs_to_dedicated_window(page)
-            and url_matches_provider_session(
+            if url_matches_provider_session(
                 str(page.get("url") or ""),
                 provider_session_id,
             )
         ]
+        # A gateway restart can recreate the managed window anchor while the
+        # browser keeps the original conversation tab in its prior window.
+        # For an exact durable provider-session URL, conversation identity is
+        # the stronger safety boundary: prefer the managed window, but fall
+        # back to an exact match in another CDP window rather than opening a
+        # duplicate conversation or declaring the request unrecoverable.
+        managed_matches = [
+            page for page in matches if self.page_belongs_to_dedicated_window(page)
+        ]
+        if managed_matches:
+            matches = managed_matches
         if len(matches) > 1:
             # Multiple tabs can genuinely display the same canonical
             # conversation (provider_session_id already proved that -- e.g.
