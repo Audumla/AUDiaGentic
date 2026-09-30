@@ -224,6 +224,36 @@ def test_recovery_runner_reads_session_checkpoint_for_resume_mode(
     assert runner.keywords["resume_existing"] is True
 
 
+def test_recovery_runner_preserves_project_name_for_gpt_auto_resume(tmp_path: Path, monkeypatch) -> None:
+    from audiagentic.components.agents.gateway.session import sessions_store
+
+    record = _record(tmp_path)
+    record.update(
+        {
+            "session-id": "ses-project-name",
+            "state": "running",
+            "recovery-required": True,
+            "resolved-provider-id": "gpt-auto",
+            "gateway-profile-runtime": {"provider-id": "gpt-auto", "params": {}},
+            "metadata": {"target": "bigcherry"},
+        }
+    )
+    monkeypatch.setattr(
+        sessions_store,
+        "read_session_record",
+        lambda *_args: {"session-id": "ses-project-name"},
+    )
+    monkeypatch.setattr(
+        sessions_store,
+        "session_provider_metadata",
+        lambda _record: {"unresolved-turn-pending": True},
+    )
+
+    runner = recovery.recovery_runner(record, project_root=tmp_path)
+
+    assert runner.keywords["project_name"] == "bigcherry"
+
+
 def test_cancel_acknowledgement_is_first_writer_wins(tmp_path: Path) -> None:
     record = _record(tmp_path)
     store.mark_cancel_requested(tmp_path, record["request-id"])

@@ -582,6 +582,7 @@ def dispatch_request(
     component_profile: str,
     provider_isolation_tier: str,
     worker_timeout_seconds: float,
+    project_name: str | None = None,
     session_start: Any | None = None,
     resume_existing: bool = False,
 ) -> dict[str, Any]:
@@ -653,6 +654,7 @@ def dispatch_request(
             dispatch_prompt=dispatch_prompt,
             preallocated_session_id=preallocated_session_id,
             context_fingerprint=context_fingerprint,
+            project_name=project_name,
             session_start=session_start,
             resume_existing=resume_existing,
         )
