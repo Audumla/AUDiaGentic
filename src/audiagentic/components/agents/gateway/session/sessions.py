@@ -306,7 +306,6 @@ class _SessionHandle:
     def quiescent(self) -> bool:
         """True when no turn is running and none are queued."""
         return not self.turn_lock.locked() and self.pending == 0
-
     def update_bounds(
         self,
         *,
@@ -333,6 +332,16 @@ class _SessionHandle:
             self.max_lifetime_seconds = _more_open_bound(
                 self.max_lifetime_seconds, max_lifetime_seconds
             )
+
+
+def _created_clock_from_durable_record(
+    record: dict[str, Any], current_clock: float
+) -> float:
+    """Map durable wall-clock age onto this process's monotonic clock."""
+    age = session_store.session_created_age_seconds(record)
+    if age is None:
+        return current_clock
+    return current_clock - age
 
 
 class SessionRuntime:
@@ -1212,7 +1221,14 @@ class SessionRuntime:
             )
             return session_store.read_session_record(project_root, session_id)
 
-        record = session_store.read_session_record(project_root, session_id)
+        record = session_store.expire_session_if_lifetime_exceeded(project_root, session_id)
+        if record.get("state") == "expired" and record.get("close-reason") == "max-lifetime":
+            raise AudiaGenticError(
+                code="CON-AGW-004",
+                kind="agents",
+                message="session exceeded its max lifetime and cannot be rehydrated",
+                details={"session-id": session_id},
+            )
         if record.get("state") != "active":
             raise AudiaGenticError(
                 code="RES-AGW-003",
@@ -1220,6 +1236,9 @@ class SessionRuntime:
                 message="session is not active and cannot be rehydrated",
                 details={"session-id": session_id, "state": record.get("state")},
             )
+        durable_max_lifetime = session_store.session_max_lifetime_seconds(record)
+        if durable_max_lifetime is not None:
+            max_lifetime_seconds = float(durable_max_lifetime)
         if record.get("execution-profile-id") != execution_profile_id:
             raise AudiaGenticError(
                 code="VAL-AGW-060",
@@ -1418,7 +1437,7 @@ class SessionRuntime:
             max_lifetime_seconds=max_lifetime_seconds,
             turn_timeout_seconds=turn_timeout_seconds,
             turn_silence_timeout_seconds=turn_silence_timeout_seconds,
-            created_clock=self._clock(),
+            created_clock=_created_clock_from_durable_record(record, self._clock()),
             correlation_id=correlation_id,
             surface_snapshot=getattr(prepared, "surface", None),
             request_runtime_root=request_runtime_root,

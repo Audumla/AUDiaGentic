@@ -17,6 +17,7 @@ import subprocess
 import sys
 import threading
 import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -1515,6 +1516,55 @@ def test_rehydrate_active_generation_reuses_provider_binding(tmp_path):
         assert transports[1].provider_session_ref == transports[0].provider_session_ref
         runtime.prompt_in_session(tmp_path, session_id, "second turn")
         assert transports[1].turns == ["second turn"]
+    finally:
+        runtime.shutdown()
+
+
+def test_rehydrated_generation_preserves_durable_max_lifetime(tmp_path):
+    """A gateway restart cannot reset the session's absolute lifetime."""
+    clock = _Clock()
+    transports: list[FakeAgentSessionTransport] = []
+
+    def fake_prepare(project_root, *, provider_id, surface_hint, model_id=None, **kwargs):
+        transport = FakeAgentSessionTransport()
+        transport.ag_session_id = kwargs["ag_session_id"]
+        transport.provider_session_ref = kwargs.get("resume_provider_ref") or "prov-durable"
+        transports.append(transport)
+        return _build_fake_prepared(transport)
+
+    runtime = SessionRuntime(clock=clock, provider_prepare_fn=fake_prepare)
+    try:
+        record = runtime.open_session(
+            tmp_path,
+            execution_profile_id="profile-1",
+            provider_id="opencode",
+            model_id="m1",
+            surface_hint=None,
+            max_lifetime_seconds=60,
+        )
+        session_id = record["session-id"]
+        old_created_at = (
+            datetime.now(timezone.utc) - timedelta(seconds=30)
+        ).isoformat().replace("+00:00", "Z")
+        stored = session_store.read_session_record(tmp_path, session_id)
+        stored["timing"]["created-at"] = old_created_at
+        session_store.write_session_record(tmp_path, stored)
+
+        async def drop_handle() -> None:
+            runtime._handles.pop(session_id, None)
+
+        runtime._call(drop_handle(), timeout=5)
+        runtime.rehydrate_session(
+            tmp_path,
+            session_id,
+            execution_profile_id="profile-1",
+            provider_id="opencode",
+            model_id="m1",
+            surface_hint=None,
+        )
+        clock.now += 31
+        with pytest.raises(AudiaGenticError, match="CON-AGW-004"):
+            runtime.prompt_in_session(tmp_path, session_id, "too late")
     finally:
         runtime.shutdown()
 
