@@ -137,6 +137,25 @@ def test_strict_config_is_typed_and_frozen():
         config.project_url = "changed"  # type: ignore[misc]
 
 
+def test_default_load_failure_signal_accepts_current_renderer_punctuation():
+    defaults_path = (
+        Path(__file__).parents[2]
+        / "src"
+        / "audiagentic"
+        / "components"
+        / "providers"
+        / "adapters"
+        / "gpt_auto"
+        / "gpt-auto-defaults.yaml"
+    )
+    defaults = yaml.safe_load(defaults_path.read_text(encoding="utf-8"))
+    variants = defaults["settings"]["workflow"]["dom-signals"]["conversation-load-failed"][
+        "text-contains-any"
+    ]
+    assert "Could not load this ChatGPT conversation" in variants
+    assert "Could not load this ChatGPT conversation." in variants
+
+
 def test_cdp_target_location_is_taken_from_configuration():
     data = valid_config()
     data["cdp"]["endpoint"] = "http://192.0.2.10:9222"
@@ -385,13 +404,15 @@ def _synthetic_snapshot(
     )
 
 
-def test_real_merged_config_response_complete_requires_both_witnesses_together() -> None:
-    """GP32 integration guard: exercises turn.py's real _facts() pipeline
+def test_real_merged_config_response_complete_requires_correlated_completion_facts() -> None:
+    """GP32/GP52 integration guard: exercises turn.py's real _facts() pipeline
     against the ACTUAL trimmed, merged .audiagentic/config/providers/
     gpt-auto.yaml (not the synthetic valid_config() fixture every other
     test in this file uses) -- the one file every other test's fixture
-    comment explicitly says it cannot protect. Neither witness alone may
-    satisfy response-complete; only the pair together may."""
+    comment explicitly says it cannot protect. The historical action-bar
+    pair remains valid, and the current renderer's Copy-message plus
+    not-generating variant is valid; a completion-control-only snapshot
+    while generation is active must remain rejected."""
     root = Path(__file__).resolve().parents[2]
     document = yaml.safe_load(
         (root / ".audiagentic/config/providers/gpt-auto.yaml").read_text(encoding="utf-8")
@@ -403,8 +424,19 @@ def test_real_merged_config_response_complete_requires_both_witnesses_together()
     both = _facts(baseline, baseline, _synthetic_snapshot(["completion-control", "more-actions-menu"]))
     assert policy.evaluate(both).satisfied
 
-    only_completion = _facts(baseline, baseline, _synthetic_snapshot(["completion-control"]))
-    assert not policy.evaluate(only_completion).satisfied
+    completion_after_generation = _facts(
+        baseline,
+        baseline,
+        _synthetic_snapshot(["completion-control"], generating=False),
+    )
+    assert policy.evaluate(completion_after_generation).satisfied
+
+    completion_while_generating = _facts(
+        baseline,
+        baseline,
+        _synthetic_snapshot(["completion-control"], generating=True),
+    )
+    assert not policy.evaluate(completion_while_generating).satisfied
 
     only_more_actions = _facts(baseline, baseline, _synthetic_snapshot(["more-actions-menu"]))
     assert not policy.evaluate(only_more_actions).satisfied
