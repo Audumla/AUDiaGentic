@@ -79,6 +79,20 @@
       "required": ["artifact-id", "request-id", "media-type", "bytes", "sha256"],
       "additionalProperties": false
     },
+    "failure-response-artifact": {
+      "type": ["object", "null"],
+      "properties": {
+        "artifact-id": {"const": "failure-response"},
+        "request-id": {"type": "string"},
+        "media-type": {"type": "string"},
+        "bytes": {"type": "integer", "minimum": 0},
+        "sha256": {"type": "string", "minLength": 1}
+      },
+      "required": ["artifact-id", "request-id", "media-type", "bytes", "sha256"],
+      "additionalProperties": false
+    },
+    "failure-response-preview": {"type": ["string", "null"]},
+    "failure-response-truncated": {"type": "boolean"},
     "output-preview": {"type": ["string", "null"]},
     "output-truncated": {"type": "boolean"},
     "prompt-body": {
@@ -382,10 +396,24 @@
         "from-owner-epoch": {"type": ["string", "null"]},
         "handoff-id": {"type": ["string", "null"]},
         "attempt": {"type": "integer", "minimum": 0},
-        "last-error": {"type": ["string", "null"], "maxLength": 256},
-        "phase": {"type": "string", "maxLength": 64},
-        "side-effect-state": {"type": "string", "maxLength": 64},
-        "next-retry-at": {"type": ["string", "null"]},
+          "last-error": {"type": ["string", "null"], "maxLength": 256},
+          "phase": {"type": "string", "maxLength": 64},
+          "side-effect-state": {"type": "string", "maxLength": 64},
+          "continuation": {
+            "type": "object",
+            "properties": {
+              "kind": {"type": "string", "enum": ["provider-followup"]},
+              "resume-existing": {"type": "boolean"},
+              "network-followup-attempts": {"type": "integer", "minimum": 0},
+              "provider-error-followup-attempts": {"type": "integer", "minimum": 0},
+              "default-recovery-attempt": {"type": "integer", "minimum": 0},
+              "followup-prompt-length": {"type": "integer", "minimum": 0, "maximum": 20000},
+              "followup-prompt-digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+            },
+            "required": ["kind", "resume-existing"],
+            "additionalProperties": false
+          },
+          "next-retry-at": {"type": ["string", "null"]},
         "retry-delay-seconds": {"type": "number", "minimum": 0}
       },
       "additionalProperties": false

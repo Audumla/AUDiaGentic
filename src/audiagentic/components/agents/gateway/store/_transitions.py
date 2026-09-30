@@ -634,6 +634,7 @@ def defer_owned_recovery(
     phase: str,
     side_effect_state: str,
     retry_delay_seconds: float,
+    continuation: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Persist a fenced, non-terminal recovery retry.
 
@@ -682,6 +683,16 @@ def defer_owned_recovery(
             "next-retry-at": retry_at,
             "retry-delay-seconds": retry_delay_seconds,
         }
+        # A provider follow-up can already have been submitted when the
+        # observer loses its handle.  Preserve its bounded continuation
+        # intent across the delayed retry and a gateway restart.  The
+        # continuation contains only counters/flags/digests; prompt text is
+        # kept in the request-owned private runtime area by the queue.
+        prior_continuation = previous.get("continuation")
+        if isinstance(continuation, Mapping):
+            recovery["continuation"] = dict(continuation)
+        elif isinstance(prior_continuation, Mapping):
+            recovery["continuation"] = dict(prior_continuation)
         updated = dict(record)
         updated.update({
             "recovery": recovery,
@@ -1507,6 +1518,7 @@ def update_owned_running_session(
     provider_metadata: dict[str, Any] | None = None,
     warnings: list[dict[str, Any]] | None = None,
     recovery_chat_url: str | None = None,
+    result_updates: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Attach the live session id to the current owned session attempt.
 
@@ -1540,7 +1552,12 @@ def update_owned_running_session(
                 "gateway request is not an active session attempt",
                 {"request-id": request_id, "state": record["state"]},
             )
-        if record.get("session-id") == session_id and provider_metadata is None and warnings is None:
+        if (
+            record.get("session-id") == session_id
+            and provider_metadata is None
+            and warnings is None
+            and not result_updates
+        ):
             return record
         updated = dict(record)
         updated["session-id"] = session_id
@@ -1553,6 +1570,13 @@ def update_owned_running_session(
             updated["metadata"] = metadata
         if provider_metadata is not None:
             updated["provider-metadata"] = dict(provider_metadata)
+        if result_updates:
+            for key, value in result_updates.items():
+                if key not in _shared._MUTABLE_RESULT_FIELDS:
+                    raise AudiaGenticError(
+                        "VAL-AGW-088", "agents", "invalid running result update", {"field": key}
+                    )
+                updated[key] = value
         updated["updated-at"] = now_iso_z()
         updated["revision"] = record["revision"] + 1
         write_record(project_root, updated)
@@ -1646,9 +1670,18 @@ def transition_operator_terminal(
             expected_worker_id=None,
             expected_attempt_epoch=None,
         )
-        if record["state"] in _shared.TERMINAL_STATES and record["state"] != "interrupted":
+        if record["state"] == "completed":
             return record
-        if record["state"] not in {"queued", "running", "interrupted"}:
+        if record["state"] not in {
+            "queued",
+            "running",
+            "interrupted",
+            "failed",
+            "cancelled",
+            "timed-out",
+            "expired",
+            "abandoned",
+        }:
             raise AudiaGenticError(code="CON-AGW-151", kind="agents", message="request is not operator-completable", details={})
         updated = dict(record)
         # Older v8 records may carry the transitional preview fields even
@@ -1672,6 +1705,7 @@ def transition_operator_terminal(
                 request_id,
                 str(final_response_text),
                 lock_held=True,
+                allow_terminal=True,
             )
             updates["response-artifact"] = {
                 key: artifact[key]

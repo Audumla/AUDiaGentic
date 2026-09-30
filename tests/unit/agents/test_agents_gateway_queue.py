@@ -17,6 +17,7 @@ from audiagentic.components.agents.agents_paths import gateway_timeline_path
 from audiagentic.components.agents.gateway import store as store
 from audiagentic.components.agents.gateway.queue import queue as queue_mod
 from audiagentic.components.agents.gateway.queue.recovery_control import RecoveryDeferred
+from audiagentic.components.agents.gateway.session import sessions_store
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.event import get_bus, reset_bus
 from audiagentic.foundation.io import load_ndjson
@@ -177,6 +178,272 @@ def test_recovery_deferred_is_bounded_and_interrupts_without_resubmit(tmp_path: 
     assert terminal["provider-metadata"]["submission-proven"] is True
     assert terminal["provider-metadata"]["chat-url"].endswith("/conversation")
     assert terminal["recovery"]["outcome"] == "bounded-recovery-exhausted"
+
+
+def test_durable_provider_identity_uses_authoritative_session_binding(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """A lagging request projection still inherits the durable provider identity."""
+    monkeypatch.setattr(
+        sessions_store,
+        "read_session_binding",
+        lambda _project_root, _session_id: {"provider-session-ref": "conversation-ref"},
+    )
+
+    assert queue_mod._has_durable_provider_identity(
+        tmp_path, {"session-id": "ses_authoritative", "provider-metadata": {}}
+    ) is True
+
+
+def test_durable_provider_recovery_is_not_interrupted_by_retry_bound(tmp_path: Path):
+    """A live provider conversation keeps retrying CDP reattachment."""
+    manager = queue_mod.GatewayQueueManager()
+    project = tmp_path / "project"
+    project.mkdir()
+    record = store.build_record(
+        execution_profile_id="recovery-provider-session",
+        prompt_body="x",
+        gateway_profile_id="recovery-provider-session",
+        gateway_profile_generation="gen_test123",
+        gateway_profile_config_digest="sha256:abcd1234",
+        resolved_provider_id="gpt-auto",
+        resolved_instance_ids=["gpt-auto"],
+    )
+    record.update(
+        {
+            "state": "running",
+            "provider-transport-kind": "provider-session",
+            "provider-metadata": {
+                "submission-proven": True,
+                "chat-url": "https://chatgpt.com/g/g-p-project/c/conversation",
+                "unresolved-turn-pending": True,
+            },
+            "recovery-required": True,
+            "worker-id": "recovery-worker",
+            "attempt-epoch": 1,
+            "dispatch-owner-epoch": "owner-epoch",
+        }
+    )
+    store.write_record(project, record)
+    calls = 0
+
+    def runner(_project_root: Path, _current: dict, **_kwargs) -> dict:
+        nonlocal calls
+        calls += 1
+        raise RecoveryDeferred(
+            AudiaGenticError(
+                code="EXT-AGW-118",
+                kind="agents",
+                message="provider reattach unavailable",
+            )
+        )
+
+    manager.enqueue_recovered_running(
+        project,
+        record,
+        {
+            "virtual-capacity": 1,
+            "provider-session-recovery-initial-delay-seconds": 0.01,
+            "provider-session-recovery-max-delay-seconds": 0.01,
+            "provider-session-recovery-max-attempts": 2,
+        },
+        runner,
+        dispatch_owner_epoch="owner-epoch",
+        dispatch_service_root=tmp_path,
+    )
+
+    deadline = time.monotonic() + 1.5
+    while time.monotonic() < deadline and calls < 2:
+        time.sleep(0.01)
+    current = store.read_record(project, record["request-id"])
+    assert calls >= 2
+    assert current["state"] == "running"
+    assert current["recovery-required"] is True
+    assert current["error"] is None
+
+    manager.cancel(project, "recovery-provider-session", record["request-id"])
+    terminal = manager.wait(project, record["request-id"], timeout_seconds=3)
+    assert terminal["state"] == "cancelled"
+
+
+def test_terminal_durable_session_does_not_keep_request_running_forever(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """A failed durable session stops restart recovery without resubmission."""
+    manager = queue_mod.GatewayQueueManager()
+    project = tmp_path / "project"
+    project.mkdir()
+    record = store.build_record(
+        execution_profile_id="recovery-terminal-session",
+        prompt_body="x",
+        gateway_profile_id="recovery-terminal-session",
+        gateway_profile_generation="gen_test123",
+        gateway_profile_config_digest="sha256:abcd1234",
+        resolved_provider_id="gpt-auto",
+        resolved_instance_ids=["gpt-auto"],
+        provider_transport_kind="provider-session",
+    )
+    record.update(
+        {
+            "state": "running",
+            "session-id": "ses_failed",
+            "provider-metadata": {
+                "submission-proven": True,
+                "chat-url": "https://chatgpt.com/g/g-p-project/c/conversation",
+                "unresolved-turn-pending": True,
+            },
+            "recovery-required": True,
+            "recovery": {"attempt": 100, "reason": "owner-loss", "outcome": "in-place"},
+            "worker-id": "recovery-worker",
+            "attempt-epoch": 1,
+            "dispatch-owner-epoch": "owner-epoch",
+        }
+    )
+    store.write_record(project, record)
+    monkeypatch.setattr(
+        sessions_store,
+        "read_session_record",
+        lambda _project_root, _session_id: {"state": "failed", "close-reason": "failed"},
+    )
+    calls = 0
+
+    def runner(_project_root: Path, _current: dict, **_kwargs) -> dict:
+        nonlocal calls
+        calls += 1
+        raise RecoveryDeferred(
+            AudiaGenticError(
+                code="EXT-AGW-118",
+                kind="agents",
+                message="provider reattach unavailable",
+            )
+        )
+
+    manager.enqueue_recovered_running(
+        project,
+        record,
+        {
+            "virtual-capacity": 1,
+            "provider-session-recovery-initial-delay-seconds": 0.01,
+            "provider-session-recovery-max-delay-seconds": 0.01,
+            "provider-session-recovery-max-attempts": 2,
+        },
+        runner,
+        dispatch_owner_epoch="owner-epoch",
+        dispatch_service_root=tmp_path,
+    )
+
+    terminal = manager.wait(project, record["request-id"], timeout_seconds=3)
+    assert terminal["state"] == "interrupted", {"calls": calls, "record": terminal}
+    assert calls == 1
+    assert terminal["error"]["code"] == "CON-AGW-084"
+    assert terminal["recovery"]["outcome"] == "bounded-recovery-exhausted"
+
+
+def test_presubmit_reconciliation_waits_past_generic_recovery_bound(tmp_path: Path):
+    """A proven-unsent successor remains queued until its predecessor clears."""
+    manager = queue_mod.GatewayQueueManager()
+    project = tmp_path / "project"
+    project.mkdir()
+    record = store.build_record(execution_profile_id="presubmit-reconcile", prompt_body="x")
+    store.write_record(project, record)
+    calls = 0
+
+    def runner(_project_root: Path, _current: dict, **_kwargs) -> dict:
+        nonlocal calls
+        calls += 1
+        if calls <= 3:
+            raise RecoveryDeferred(
+                AudiaGenticError(
+                    code="EXT-GPTAUTO-004",
+                    kind="providers",
+                    message="previous turn remains unresolved",
+                    details={"previous-turn-unresolved": True},
+                ),
+                phase="presubmit-reconcile",
+                side_effect_state="not-started",
+            )
+        return store.transition_record(
+            _project_root,
+            _current["request-id"],
+            "completed",
+            updates={"output": "reconciled", "finished-at": now_iso_z()},
+        )
+
+    manager.enqueue(
+        project,
+        record,
+        {
+            "virtual-capacity": 1,
+            "provider-session-recovery-initial-delay-seconds": 0.01,
+            "provider-session-recovery-max-delay-seconds": 0.01,
+            "provider-session-recovery-max-attempts": 2,
+        },
+        runner,
+    )
+
+    terminal = manager.wait(project, record["request-id"], timeout_seconds=3)
+    assert terminal["state"] == "completed"
+    assert calls == 4
+
+
+def test_followup_reconciliation_waits_past_generic_recovery_bound(tmp_path: Path):
+    """A submitted recovery prompt remains observable until outer policy ends it."""
+    manager = queue_mod.GatewayQueueManager()
+    project = tmp_path / "project"
+    project.mkdir()
+    record = store.build_record(execution_profile_id="followup-reconcile", prompt_body="x")
+    store.write_record(project, record)
+    calls = 0
+
+    seen_continuations: list[dict] = []
+
+    def runner(_project_root: Path, _current: dict, **_kwargs) -> dict:
+        nonlocal calls
+        calls += 1
+        recovery = _current.get("recovery")
+        if isinstance(recovery, dict) and isinstance(recovery.get("continuation"), dict):
+            seen_continuations.append(dict(recovery["continuation"]))
+        if calls <= 3:
+            raise RecoveryDeferred(
+                AudiaGenticError(
+                    code="EXT-GPTAUTO-003",
+                    kind="providers",
+                    message="follow-up still being observed",
+                ),
+                phase="followup-reconcile",
+                side_effect_state="may-have-started",
+                continuation={
+                    "kind": "provider-followup",
+                    "resume-existing": True,
+                    "network-followup-attempts": 1,
+                    "followup-prompt-digest": "a" * 64,
+                },
+            )
+        return store.transition_record(
+            _project_root,
+            _current["request-id"],
+            "completed",
+            updates={"output": "reconciled", "finished-at": now_iso_z()},
+        )
+
+    manager.enqueue(
+        project,
+        record,
+        {
+            "virtual-capacity": 1,
+            "provider-session-recovery-initial-delay-seconds": 0.01,
+            "provider-session-recovery-max-delay-seconds": 0.01,
+            "provider-session-recovery-max-attempts": 2,
+        },
+        runner,
+    )
+
+    terminal = manager.wait(project, record["request-id"], timeout_seconds=3)
+    assert terminal["state"] == "completed"
+    assert calls == 4
+    assert seen_continuations
+    assert all(item["resume-existing"] is True for item in seen_continuations)
+    assert all("followup-prompt-digest" in item for item in seen_continuations)
 
 
 def test_cancelled_recovery_backoff_is_not_stranded(tmp_path: Path):

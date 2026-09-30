@@ -70,6 +70,61 @@ _RECOVERY_RETRY_MAX_ATTEMPTS = 6
 _ENV_TEST_STALL_CLAIM_TO_START_MS = "AUDIAGENTIC_GATEWAY_TEST_STALL_CLAIM_TO_START_MS"
 
 
+def _has_durable_provider_identity(project_root: Path, record: dict[str, Any]) -> bool:
+    """Check the session record when the request projection lags provider metadata."""
+    provider_metadata = record.get("provider-metadata")
+    if isinstance(provider_metadata, dict) and (
+        provider_metadata.get("chat-url")
+        or provider_metadata.get("provider-session-id")
+        or record.get("provider-chat-url")
+    ):
+        return True
+    session_id = record.get("session-id")
+    if not isinstance(session_id, str) or not session_id:
+        return False
+    try:
+        from audiagentic.components.agents.gateway.session import sessions_store
+
+        binding = sessions_store.read_session_binding(project_root, session_id) or {}
+        provider_ref = binding.get("provider-session-ref")
+        if isinstance(provider_ref, str) and provider_ref.strip():
+            return True
+        session_record = sessions_store.read_session_record(project_root, session_id)
+        metadata = sessions_store.session_provider_metadata(session_record)
+        return isinstance(metadata, dict) and bool(
+            metadata.get("chat-url") or metadata.get("provider-session-id")
+        )
+    except Exception:  # noqa: BLE001 - recovery safety must fail closed
+        return False
+
+
+def _durable_provider_session_is_active(project_root: Path, record: dict[str, Any]) -> bool:
+    """Return whether the durable session may still be retried in place.
+
+    A provider identity is not enough to justify an unbounded recovery loop.
+    The session record is the lifecycle authority; once it is terminal, keep
+    the request's ambiguous provider outcome fail-closed instead of repeatedly
+    trying to rehydrate a session that cannot accept work. Missing or unreadable
+    records are not eligible for the unbounded durable-session exception; the
+    normal bounded recovery policy must decide their outcome.
+    """
+    session_id = record.get("session-id")
+    if not isinstance(session_id, str) or not session_id:
+        return False
+    try:
+        from audiagentic.components.agents.gateway.session import sessions_store
+
+        session_record = sessions_store.read_session_record(project_root, session_id)
+    except Exception:
+        logger.warning(
+            "could not read durable session lifecycle during recovery; using bounded retry",
+            extra={"session-id": session_id, "request-id": record.get("request-id")},
+            exc_info=True,
+        )
+        return False
+    return session_record.get("state") not in {"failed", "closed", "expired"}
+
+
 def _test_stall_claim_to_start() -> None:
     import os
 
@@ -952,7 +1007,9 @@ class GatewayQueueManager:
         also may not keep a durable request in ``running`` forever when the
         provider target has disappeared.  The bound is admission-scoped with
         the rest of the profile parameters so a request cannot be changed by
-        a later profile reload.
+        a later profile reload.  Proven-unsent pre-submit reconciliation is
+        intentionally handled separately by the caller: it is safe queued
+        work, not an ambiguous provider recovery attempt.
         """
         params = dict(entry.snapshot.execution_params)
         value = params.get("provider-session-recovery-max-attempts", _RECOVERY_RETRY_MAX_ATTEMPTS)
@@ -1443,7 +1500,41 @@ class GatewayQueueManager:
                 )
                 recovery_attempt = int((current.get("recovery") or {}).get("attempt", 0)) + 1
                 max_recovery_attempts = self._recovery_retry_max_attempts(entry)
-                if recovery_attempt >= max_recovery_attempts:
+                # A presubmit reconciliation is different from uncertain
+                # provider-side recovery: the current request has proven that
+                # Send was never reached, so retrying it cannot duplicate a
+                # prompt.  Keep it queued behind the unresolved predecessor
+                # until the session becomes admissible (or an explicit outer
+                # timeout/cancellation ends it).  Applying the generic finite
+                # recovery bound here incorrectly converted safe queued work
+                # into CON-AGW-084 after five observations.
+                wait_for_previous_turn = (
+                    deferred.phase == "presubmit-reconcile"
+                    and deferred.side_effect_state == "not-started"
+                )
+                followup_reconciliation = deferred.phase == "followup-reconcile"
+                # A durable provider-session has an independent provider
+                # execution that survives this gateway generation.  A CDP
+                # bridge restart, browser startup race, or tab reattachment
+                # delay must not turn that still-running provider work into
+                # an interrupted request merely because the generic retry
+                # budget elapsed.  The provider resume path remains
+                # observation-only and will still terminalize on a proven
+                # provider failure, cancellation, or the outer session
+                # lifetime/idle policy.  Keep the finite bound for workers
+                # that have no provider-session attach seam.
+                durable_provider_recovery = (
+                    recovered_running
+                    and current.get("provider-transport-kind") == "provider-session"
+                    and _has_durable_provider_identity(project_root, current)
+                    and _durable_provider_session_is_active(project_root, current)
+                )
+                if (
+                    recovery_attempt >= max_recovery_attempts
+                    and not wait_for_previous_turn
+                    and not followup_reconciliation
+                    and not durable_provider_recovery
+                ):
                     recovery_metadata = dict(current.get("recovery") or {})
                     recovery_metadata.update(
                         {
@@ -1506,6 +1597,7 @@ class GatewayQueueManager:
                         phase=deferred.phase,
                         side_effect_state=deferred.side_effect_state,
                         retry_delay_seconds=delay,
+                        continuation=deferred.continuation,
                     )
                 except AudiaGenticError:
                     latest = store.read_record(project_root, request_id)

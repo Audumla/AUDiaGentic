@@ -78,6 +78,11 @@ def gateway_final_response_path(project_root: Path, request_id: str) -> Path:
     return gateway_request_dir(project_root, request_id) / "output" / "final-response.txt"
 
 
+def gateway_failure_response_path(project_root: Path, request_id: str) -> Path:
+    """Return the separate best-effort provider failure response artifact path."""
+    return gateway_request_dir(project_root, request_id) / "output" / "failure-response.txt"
+
+
 def gateway_publication_path(project_root: Path, request_id: str, *, attempt_epoch: int = 1) -> Path:
     """Return the durable broker-publication intent for one request attempt."""
     return gateway_request_dir(project_root, request_id) / f"publication-{attempt_epoch}.json"
@@ -155,6 +160,17 @@ def gateway_session_resume_idempotency_path(project_root: Path, session_id: str)
 def gateway_session_resume_lock_path(project_root: Path, session_id: str) -> Path:
     """Return the lock path guarding a source session's resume-idempotency record."""
     return gateway_session_dir(project_root, session_id) / "resume-idempotency.lock"
+
+
+def gateway_session_resume_concurrency_lock_path(project_root: Path, session_id: str) -> Path:
+    """Return the lock serializing all successor creation for one source session.
+
+    This is deliberately separate from the idempotency-record lock.  The
+    resume operation holds this lock while it resolves the source and creates
+    the successor, then ``record_resume_attempt`` takes the record lock while
+    persisting the result.  Reusing the record lock here would deadlock.
+    """
+    return gateway_session_dir(project_root, session_id) / "resume-concurrency.lock"
 
 
 def gateway_session_control_idempotency_path(project_root: Path, session_id: str) -> Path:
