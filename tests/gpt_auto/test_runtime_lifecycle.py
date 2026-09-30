@@ -1867,7 +1867,10 @@ async def test_reconcile_replaces_retained_conversation_load_error_without_resub
     assert retained["pageHandle"] in released
     assert navigated == [chat_url]
     assert closed == []
-    assert chat._conversation_load_recovery_attempts == 0
+    # Deferred recovery keeps the consumed budget until the unresolved turn
+    # reaches terminal cleanup; a delayed provider load error must not reopen
+    # another full replacement budget after restart.
+    assert chat._conversation_load_recovery_attempts == 1
 
 
 @pytest.mark.asyncio
@@ -1930,6 +1933,139 @@ async def test_conversation_load_recovery_budget_survives_chat_reconstruction() 
     healthy = replace(failure, dom_signals=frozenset(), error_present=False)
     assert await second._replace_load_failed_page(healthy) is False
     assert second._conversation_load_recovery_attempts == 2
+
+
+@pytest.mark.asyncio
+async def test_deferred_recovery_budget_survives_delayed_load_error() -> None:
+    """A loadable replacement must not reset budget before a later error."""
+    config = GptAutoConfig.from_dict(valid_config())
+    chat_url = "https://chatgpt.com/g/g-p-project/c/provider-session"
+    checkpointed: list[dict[str, object]] = []
+    runtime = SimpleNamespace()
+
+    async def checkpoint(metadata: dict[str, object]) -> None:
+        checkpointed.append(dict(metadata))
+
+    chat = PersistentChat(
+        ag_session_id="session-delayed-load-error",
+        project_name="project",
+        project_url="https://chatgpt.com/g/g-p-project/project",
+        runtime=runtime,
+        config=config,
+        binding_sink=lambda _update: None,
+        checkpoint_sink=checkpoint,
+        provider_session_id="provider-session",
+        chat_url=chat_url,
+    )
+    chat.unresolved_turn_pending = True
+    chat.defer_unresolved_reconciliation()
+
+    healthy = ChatSnapshot(
+        url=chat_url,
+        composer_present=True,
+        composer_editable=True,
+        user_count=1,
+        assistant_count=0,
+        latest_assistant_id=None,
+        latest_user_text="prompt",
+        latest_assistant_text=None,
+        dom_signals=frozenset({"stop-control"}),
+        error_present=False,
+        generating=True,
+    )
+    failed = replace(
+        healthy,
+        composer_present=False,
+        composer_editable=False,
+        dom_signals=frozenset({"conversation-load-failed"}),
+        error_present=True,
+    )
+    replacement_calls = 0
+
+    async def create_recovery_page() -> str:
+        nonlocal replacement_calls
+        replacement_calls += 1
+        return f"replacement-{replacement_calls}"
+
+    async def navigate(*_args, **_kwargs) -> None:
+        return None
+
+    async def snapshot(*_args, **_kwargs) -> ChatSnapshot:
+        return healthy
+
+    chat._create_recovery_page = create_recovery_page  # type: ignore[method-assign]
+    chat.runtime.bridge = SimpleNamespace(call=navigate)
+    chat.snapshot = snapshot  # type: ignore[method-assign]
+    chat._claim_page = lambda _handle: True  # type: ignore[method-assign]
+
+    assert await chat._replace_load_failed_page(failed) is True
+    assert chat._conversation_load_recovery_attempts == 1
+    assert checkpointed[-1]["conversation-load-recovery-attempts"] == 1
+
+
+@pytest.mark.asyncio
+async def test_prefer_active_conversation_page_preserves_healthy_durable_target() -> None:
+    """DOM richness must not replace a healthy durable tab after restart."""
+    config = GptAutoConfig.from_dict(valid_config())
+    chat_url = "https://chatgpt.com/g/g-p-project/c/provider-session"
+    pages = [
+        {
+            "pageHandle": "managed-rich",
+            "targetId": "managed-target",
+            "windowId": 7,
+            "url": chat_url,
+        },
+        {
+            "pageHandle": "prior-durable",
+            "targetId": "durable-target",
+            "windowId": 3,
+            "url": chat_url,
+        },
+    ]
+
+    class _Browser:
+        async def page_by_handle(self, handle):
+            return SimpleNamespace(handle=handle)
+
+        async def snapshot(self, page, *, signals=None):
+            count = 4 if page.handle == "managed-rich" else 1
+            return {
+                "url": chat_url,
+                "composerPresent": True,
+                "userCount": count,
+                "assistantCount": count,
+                "domSignals": {},
+            }
+
+    class _Bridge:
+        async def call(self, method, params=None, **kwargs):
+            assert method == "list_pages"
+            return pages
+
+    runtime = SimpleNamespace(
+        gpt_browser=_Browser(),
+        bridge=_Bridge(),
+        _page_owners={"managed-rich": "other-session"},
+        claim_page=lambda _chat, _handle: True,
+        release_page=lambda _chat, _handle: None,
+    )
+    chat = PersistentChat(
+        ag_session_id="session-durable-preference",
+        project_name="project",
+        project_url="https://chatgpt.com/g/g-p-project/project",
+        runtime=runtime,
+        config=config,
+        binding_sink=lambda _update: None,
+        provider_session_id="provider-session",
+        chat_url=chat_url,
+    )
+    chat.page_handle = "prior-durable"
+    chat.target_id = "durable-target"
+
+    await chat._prefer_active_conversation_page()
+
+    assert chat.page_handle == "prior-durable"
+    assert chat.target_id == "durable-target"
 
 
 @pytest.mark.asyncio
@@ -2105,7 +2241,11 @@ async def test_find_conversation_page_ranks_healthy_tab_over_unknown_managed_tab
         async def snapshot(self, page, *, signals=None):
             if page.handle == "managed-unknown":
                 raise RuntimeError("stale CDP target")
-            return {"url": pages[1]["url"], "domSignals": {}}
+            return {
+                "url": pages[1]["url"],
+                "composerPresent": True,
+                "domSignals": {},
+            }
 
     runtime._bridge = _Bridge()  # type: ignore[assignment]
     runtime._gpt_browser = _Browser()  # type: ignore[assignment]
@@ -2144,7 +2284,11 @@ async def test_find_conversation_page_prefers_healthy_durable_target_across_wind
             return SimpleNamespace(handle=handle)
 
         async def snapshot(self, page, *, signals=None):
-            return {"url": pages[0]["url"], "domSignals": {}}
+            return {
+                "url": pages[0]["url"],
+                "composerPresent": True,
+                "domSignals": {},
+            }
 
     runtime._bridge = _Bridge()  # type: ignore[assignment]
     runtime._gpt_browser = _Browser()  # type: ignore[assignment]

@@ -21,7 +21,7 @@ from audiagentic.foundation.workflow import TransitionConfig, TransitionEngine
 from .cdp.client import CdpError
 from .config import GptAutoConfig
 from .prompt_fingerprint import PromptFingerprint, match_prompt
-from .runtime import GptAutoProviderRuntime
+from .runtime import GptAutoProviderRuntime, _snapshot_has_positive_conversation_evidence
 from .snapshot import ChatSnapshot
 from .urls import (
     canonical_chat_url,
@@ -892,9 +892,17 @@ class PersistentChat:
             # ordinary session opening still proves quiescence below.
             if not self.unresolved_turn_pending or not self._defer_unresolved_reconciliation:
                 await self._wait_ready()
-            self._conversation_load_recovery_attempts = 0
-            self._checkpoint_metadata["conversation-load-recovery-attempts"] = 0
-            await self._persist_checkpoint(self.unresolved_metadata())
+            # A deferred restart recovery is still observing an unresolved
+            # provider turn. The replacement may look merely loadable before
+            # ChatGPT surfaces a delayed conversation-load error, so retain
+            # the consumed replacement budget until stable reconciliation or
+            # explicit terminal cleanup.
+            if not (
+                self.unresolved_turn_pending and self._defer_unresolved_reconciliation
+            ):
+                self._conversation_load_recovery_attempts = 0
+                self._checkpoint_metadata["conversation-load-recovery-attempts"] = 0
+                await self._persist_checkpoint(self.unresolved_metadata())
             return True
         except Exception:
             if replacement_handle:
@@ -1670,15 +1678,18 @@ class PersistentChat:
         pages = await self.runtime.bridge.call("list_pages")
         if not isinstance(pages, list):
             return
-        belongs = getattr(self.runtime, "page_belongs_to_dedicated_window", lambda _: True)
+        owners = getattr(self.runtime, "_page_owners", {})
         candidates: list[tuple[tuple[int, int], dict, ChatSnapshot]] = []
         for record in pages:
             handle = str(record.get("pageHandle") or "")
             if (
                 not handle
-                or not belongs(record)
                 or not url_matches_provider_session(
                     str(record.get("url") or ""), self.provider_session_id
+                )
+                or (
+                    isinstance(owners, dict)
+                    and owners.get(handle) not in (None, self.ag_session_id)
                 )
             ):
                 continue
@@ -1691,9 +1702,44 @@ class PersistentChat:
                 )
             except Exception:  # noqa: BLE001 - retain existing binding if a tab is stale
                 continue
+            if "conversation-load-failed" in snapshot.dom_signals:
+                continue
             candidates.append(((snapshot.user_count, snapshot.assistant_count), record, snapshot))
         if not candidates:
             return
+
+        # Runtime lookup may have selected a healthy durable target in a prior
+        # browser window. Do not let this second-stage DOM richness pass hop
+        # back to a managed-window duplicate (or away from the current healthy
+        # binding) after restart.
+        for _score, record, snapshot in candidates:
+            if (
+                self.target_id
+                and str(record.get("targetId") or "") == self.target_id
+                and _snapshot_has_positive_conversation_evidence(snapshot)
+            ):
+                best_handle = str(record["pageHandle"])
+                if best_handle == self.page_handle:
+                    self._last_snapshot = snapshot
+                    self._last_url = snapshot.url
+                    return
+                if not self._claim_page(best_handle):
+                    continue
+                old_handle = self.page_handle
+                self._bind_page(record)
+                if old_handle:
+                    self.runtime.release_page(self, old_handle)
+                self._last_snapshot = snapshot
+                self._last_url = snapshot.url
+                return
+
+        positive = [
+            item
+            for item in candidates
+            if _snapshot_has_positive_conversation_evidence(item[2])
+        ]
+        if positive:
+            candidates = positive
         candidates.sort(key=lambda item: item[0], reverse=True)
         best_score, best_record, best_snapshot = candidates[0]
         if len(candidates) > 1 and candidates[1][0] == best_score:
