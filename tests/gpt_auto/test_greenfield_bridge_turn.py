@@ -54,6 +54,7 @@ def snap(
     user_id=None,
     generating=False,
     complete=False,
+    completion_signals=("completion-control", "more-actions-menu"),
     extra_signals=(),
     composer_editable=True,
     tool_activity_counts=(),
@@ -75,8 +76,7 @@ def snap(
         # deliberately not used: they can appear while output is still
         # streaming. Set the independently validated action-bar pair so
         # `complete=True` means "genuinely done" in happy-path fixtures.
-        signals.add("completion-control")
-        signals.add("more-actions-menu")
+        signals.update(completion_signals)
     resolved_user_id = user_id or (f"prompt-{users}" if users else None)
     resolved_assistant_id = assistant_id or (f"assistant-{assistants}" if assistants else None)
     # GP30: message_refs is the true-DOM-order sequence _await_response()'s
@@ -2808,6 +2808,54 @@ async def test_turn_completes_despite_stuck_stop_control_signal():
 
 
 @pytest.mark.asyncio
+async def test_turn_completes_with_current_copy_control_without_more_actions_menu():
+    """GP52: the current ChatGPT renderer exposes Copy message after a
+    completed response but omits the historical response-level More actions
+    control.  Stable request-correlated text plus not-generating must still
+    terminalize the turn."""
+    chat = _Chat()
+    chat._snapshots = iter(
+        [
+            snap(),
+            snap(users=1, user="Review AU01"),
+            snap(
+                users=1,
+                assistants=1,
+                user="Review AU01",
+                assistant="Looks sound",
+                complete=True,
+                completion_signals=("completion-control",),
+            ),
+            snap(
+                users=1,
+                assistants=1,
+                user="Review AU01",
+                assistant="Looks sound",
+                complete=True,
+                completion_signals=("completion-control",),
+            ),
+            snap(
+                users=1,
+                assistants=1,
+                user="Review AU01",
+                assistant="Looks sound",
+                complete=True,
+                completion_signals=("completion-control",),
+            ),
+        ]
+    )
+    turn = GptAutoTurn(
+        chat, SessionPrompt(turn_id="turn-copy-control-only", body="Review AU01"), lambda _: None
+    )
+
+    result = await turn.run()
+
+    assert result.stop_reason == "end-turn"
+    assert result.final_summary == "Looks sound"
+    assert turn.state is TurnState.COMPLETE
+
+
+@pytest.mark.asyncio
 async def test_response_completion_logs_the_deciding_observation_evidence(caplog):
     """GP46: two live incidents persisted truncated/mid-stream output with no
     trace of which indicators the tracker accepted as terminal. The tracker's
@@ -3224,6 +3272,43 @@ async def test_staged_timeout_only_clears_proven_unsent_turn(send_attempted):
     assert chat.state is (ChatState.FAILED if send_attempted else ChatState.READY)
     if not send_attempted:
         assert chat.checkpoint_updates[-1] == {"unresolved-turn-pending": False}
+
+
+@pytest.mark.asyncio
+async def test_loading_page_composer_failure_is_proven_unsent_and_clears_fence():
+    class Browser:
+        async def page_by_handle(self, handle):
+            return handle
+
+        async def submit(self, *args, **kwargs):
+            raise RuntimeError("composer not found")
+
+    chat = _Chat()
+    chat.runtime.gpt_browser = Browser()
+    chat.runtime.config.turn.submission_timeout_seconds = 0
+    chat._snapshots = iter([
+        replace(snap(), composer_present=False, composer_editable=False),
+    ])
+
+    turn = GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="turn-loading-page", body="Review recovery"),
+        lambda _observation: None,
+    )
+
+    with pytest.raises(AudiaGenticError) as captured:
+        await turn.run()
+
+    details = captured.value.details
+    assert details["failure-reason"] == "composer-not-found-before-submission"
+    assert details["failure-stage"] == "submission"
+    assert details["submission-state"] == "not_started"
+    assert details["submission-proven"] is False
+    assert details["submission-ambiguous"] is False
+    assert details["retryable-same-session"] is True
+    assert chat.state is ChatState.READY
+    assert chat.unresolved_turn_pending is False
+    assert chat.checkpoint_updates[-1] == {"unresolved-turn-pending": False}
 
 
 @pytest.mark.asyncio
