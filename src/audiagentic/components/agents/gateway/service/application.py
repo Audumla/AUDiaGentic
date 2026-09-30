@@ -353,6 +353,9 @@ class GatewayServiceApplication:
         if operation == "get_execution_response":
             _reject_unknown(arguments, {"request_id"})
             return self._application.get_execution_response(root, _required(arguments, "request_id"))
+        if operation == "get_execution_failure_response":
+            _reject_unknown(arguments, {"request_id"})
+            return self._application.get_execution_failure_response(root, _required(arguments, "request_id"))
         if operation == "focus_execution_chat":
             _reject_unknown(arguments, {"request_id"})
             return self._application.focus_execution_chat(root, _required(arguments, "request_id"))

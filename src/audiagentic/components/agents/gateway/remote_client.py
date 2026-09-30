@@ -183,6 +183,12 @@ class StandaloneGatewayClient:
             self._call("get_execution_response", project_root, {"request_id": request_id}),
         )
 
+    def get_execution_failure_response(self, project_root: Path, request_id: str) -> str:
+        return cast(
+            str,
+            self._call("get_execution_failure_response", project_root, {"request_id": request_id}),
+        )
+
     def focus_execution_chat(self, project_root: Path, request_id: str) -> dict[str, Any]:
         """Focus a retained provider conversation through the gateway API."""
         return cast(

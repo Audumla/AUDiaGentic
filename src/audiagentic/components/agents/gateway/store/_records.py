@@ -120,6 +120,10 @@ _GPT_AUTO_DETAIL_KEYS = frozenset(
         "typed-text-length",
         "typed-text-match",
         "cause-type",
+        "failure-response-available",
+        "failure-response-message-id",
+        "failure-response-source",
+        "failure-response-truncated",
     }
 )
 
@@ -713,6 +717,7 @@ def project_public_status(
     visible = (
         "contract-version", "request-id", "agent-id", "prompt-profile-id", "prompt-template-name", "prompt-template-digest", "prompt-definition-fingerprint", "execution-profile-id", "mode", "state",
         "response-artifact", "output-preview", "output-truncated",
+        "failure-response-artifact", "failure-response-preview", "failure-response-truncated",
         "cancel-requested", "revision", "dispatch-owner-epoch", "dispatch-claimed-at",
         "cancel-acknowledged-at", "cancel-acknowledged-by",
         "cancel-provenance",

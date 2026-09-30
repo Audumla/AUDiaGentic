@@ -37,6 +37,7 @@ class GatewayClient(Protocol):
     def get_execution_diagnostics(self, project_root: Path, request_id: str, *, limit: int = 25) -> dict[str, Any]: ...
     def recover_execution_request(self, project_root: Path, request_id: str, **kwargs: Any) -> dict[str, Any]: ...
     def get_execution_response(self, project_root: Path, request_id: str) -> str: ...
+    def get_execution_failure_response(self, project_root: Path, request_id: str) -> str: ...
     def focus_execution_chat(self, project_root: Path, request_id: str) -> dict[str, Any]: ...
     def complete_execution_from_provider(self, project_root: Path, request_id: str) -> dict[str, Any]: ...
     def wait_execution_request(
@@ -105,6 +106,9 @@ class EmbeddedGatewayClient:
 
     def get_execution_response(self, project_root: Path, request_id: str) -> str:
         return self._application.get_execution_response(project_root, request_id)
+
+    def get_execution_failure_response(self, project_root: Path, request_id: str) -> str:
+        return self._application.get_execution_failure_response(project_root, request_id)
 
     def focus_execution_chat(self, project_root: Path, request_id: str) -> dict[str, Any]:
         return self._application.focus_execution_chat(project_root, request_id)
@@ -365,6 +369,7 @@ _READ_ONLY_GATEWAY_METHODS = frozenset({
     "get_execution_request",
     "get_execution_diagnostics",
     "get_execution_response",
+    "get_execution_failure_response",
     "list_execution_requests",
     "gateway_overview",
     "list_execution_sessions",

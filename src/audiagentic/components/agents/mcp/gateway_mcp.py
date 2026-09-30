@@ -22,7 +22,7 @@ from audiagentic.foundation.mcp.component_server import (
     tool_boundary,
 )
 
-mcp = mcp_server(__name__)
+mcp = mcp_server(__name__, structured_output_only=True)
 
 _RESPONSE_PREVIEW_FIELDS = frozenset({"output-preview", "output-truncated"})
 
@@ -175,6 +175,21 @@ def agent_task_response(request_id: str) -> dict[str, Any]:
 
 @mcp.tool()
 @tool_boundary
+def agent_task_failure_response(request_id: str) -> dict[str, Any]:
+    """Return provider text captured as diagnostic evidence on a failed request."""
+    project_root = project_root_from_env()
+    text = call_gateway_method("get_execution_failure_response", project_root, request_id)
+    return {
+        "request-id": request_id,
+        "delivery": "inline",
+        "classification": "failure-diagnostic",
+        "text": text,
+        "bytes": len(text.encode("utf-8")),
+    }
+
+
+@mcp.tool()
+@tool_boundary
 def agent_task_complete_from_provider(request_id: str) -> dict[str, Any]:
     """Capture the request-owned current provider response and mark it completed; never send a prompt."""
     project_root = project_root_from_env()
@@ -217,10 +232,13 @@ def agent_task_gateway_overview() -> dict[str, Any]:
 
 @mcp.tool()
 @tool_boundary
-def agent_task_session_list(state: str | None = None) -> list[dict[str, Any]]:
-    """List sessions and whether each is live in this gateway process."""
+def agent_task_session_list(state: str | None = "active") -> list[dict[str, Any]]:
+    """List sessions, defaulting to active; pass a lifecycle state or ``all``."""
     project_root = project_root_from_env()
-    return _sparse(call_gateway_method("list_execution_sessions", project_root, state=state))
+    gateway_state = None if state == "all" else state
+    return _sparse(
+        call_gateway_method("list_execution_sessions", project_root, state=gateway_state)
+    )
 
 
 @mcp.tool()

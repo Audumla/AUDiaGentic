@@ -1028,6 +1028,16 @@ def get_execution_response(project_root: Path, request_id: str) -> str:
     return read_final_response(project_root, request_id, artifact)
 
 
+def get_execution_failure_response(project_root: Path, request_id: str) -> str:
+    """Return the latest provider DOM response captured on a failed request."""
+    record = store.read_record(project_root, request_id)
+    artifact = record.get("failure-response-artifact")
+    if not isinstance(artifact, dict):
+        raise AudiaGenticError(code="RES-AGW-143", kind="agents", message="gateway failure response artifact unavailable", details={})
+    from audiagentic.components.agents.gateway.output import read_failure_response
+    return read_failure_response(project_root, request_id, artifact)
+
+
 def focus_execution_chat(project_root: Path, request_id: str) -> dict[str, Any]:
     """Focus the existing provider conversation associated with a request.
 
@@ -1076,9 +1086,13 @@ def complete_execution_from_provider(project_root: Path, request_id: str) -> dic
     turn, and the structural completion witness before the request is closed.
     """
     record = store.read_record(project_root, request_id)
-    if record.get("state") in store.TERMINAL_STATES and record.get("state") != "interrupted":
-        raise AudiaGenticError(code="CON-AGW-151", kind="agents", message="request is already terminal", details={"request-id": request_id})
-    if record.get("state") not in {"running", "interrupted"}:
+    # A failed/cancelled request can still own a completed provider turn.  The
+    # operator capture below re-proves prompt/assistant identity, stable DOM
+    # completion, and the exact response before it is allowed to supersede the
+    # prior terminal outcome.  Rejected and queued requests remain ineligible:
+    # they do not prove that provider work was admitted.
+    operator_recoverable_states = {"running", "interrupted", "failed", "cancelled", "timed-out", "expired", "abandoned"}
+    if record.get("state") not in operator_recoverable_states:
         raise AudiaGenticError(code="CON-AGW-152", kind="agents", message="request is not operator-completable", details={"request-id": request_id})
     provider_id = record.get("resolved-provider-id") or record.get("provider-id")
     metadata = dict(record.get("provider-metadata") or {})
@@ -1142,7 +1156,13 @@ def complete_execution_from_provider(project_root: Path, request_id: str) -> dic
     before_assistant = metadata.get("assistant-before-message-id") or metadata.get("assistant-before-id")
     if not isinstance(text, str) or not text.strip() or getattr(snapshot, "generating", True):
         raise AudiaGenticError(code="CON-AGW-155", kind="agents", message="provider response is not terminal", details={"request-id": request_id})
-    if not ("completion-control" in getattr(snapshot, "dom_signals", frozenset()) and "more-actions-menu" in getattr(snapshot, "dom_signals", frozenset())):
+    # Manual operator capture has two stable snapshots plus exact prompt and
+    # assistant correlation below.  ChatGPT's current renderer may expose the
+    # response-level Copy/Regenerate control while omitting the older
+    # response-level More actions menu, so requiring both DOM controls here
+    # strands a visibly complete response.  This remains an explicit,
+    # request-scoped recovery action, separate from automatic turn policy.
+    if "completion-control" not in getattr(snapshot, "dom_signals", frozenset()):
         raise AudiaGenticError(code="CON-AGW-155", kind="agents", message="provider completion witness is missing", details={"request-id": request_id})
     if not latest_assistant_id or witness_id != latest_assistant_id:
         raise AudiaGenticError(code="CON-AGW-156", kind="agents", message="provider response is not request-owned", details={"request-id": request_id})
@@ -1458,7 +1478,7 @@ def _public_session_projection(record: dict[str, Any]) -> dict[str, Any]:
 def list_execution_sessions(
     project_root: Path,
     *,
-    state: str | None = None,
+    state: str | None = "active",
     _live_ids: set[str] | None = None,
 ) -> list[dict[str, Any]]:
     """List persisted gateway sessions in stable lifecycle/ID order, with a 'live' flag for
@@ -1478,6 +1498,8 @@ def list_execution_sessions(
     else:
         live_ids = set(_live_ids)
     records = session_store.list_session_records(project_root)
+    if state == "all":
+        state = None
     if state is not None:
         records = [r for r in records if r["state"] == state]
     # Keep non-terminal sessions first, then use the durable session id as a
@@ -1853,7 +1875,7 @@ def gateway_overview(project_root: Path) -> dict[str, Any]:
     ]
     runtime = peek_session_runtime()
     live_ids = set(runtime.live_session_ids()) if runtime is not None else set()
-    sessions = list_execution_sessions(project_root, _live_ids=live_ids)
+    sessions = list_execution_sessions(project_root, state="all", _live_ids=live_ids)
     machine_live_count = len(live_ids)
 
     # Provider descriptor load diagnostics
