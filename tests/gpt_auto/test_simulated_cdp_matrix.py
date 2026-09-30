@@ -802,7 +802,10 @@ async def test_gpt_provider_waits_for_composer_state_before_click(monkeypatch):
     monkeypatch.setattr(cdp.asyncio, "sleep", record_sleep)
     browser = GptAutoCdpBrowserController(_TransientSendFailureBridge(fail_attempts=5))  # type: ignore[arg-type]
     await browser.submit(CdpPageRef("page-1", "target-1"), "settle first")
-    assert delays == [GptAutoCdpBrowserController._SUBMIT_POLL_SECONDS] * 5
+    assert delays.count(GptAutoCdpBrowserController._SUBMIT_POLL_SECONDS) == 5
+    # insertion, send-button readiness, and the post-click render turn each
+    # get a short browser-action pause.
+    assert delays.count(GptAutoCdpBrowserController._ACTION_PAUSE_SECONDS) >= 3
 
 
 @pytest.mark.asyncio
