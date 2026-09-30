@@ -7,7 +7,7 @@ import hashlib
 import logging
 import time
 from enum import StrEnum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 from urllib.parse import urlparse
 
 from audiagentic.foundation.workflow import TransitionConfig, TransitionEngine
@@ -31,6 +31,8 @@ if TYPE_CHECKING:
 
 
 logger = logging.getLogger(__name__)
+
+PageHealth = Literal["healthy", "failed", "unknown"]
 
 # TEMPORARY GP31 debug instrumentation -- gateway subprocess stdout/stderr
 # are redirected to DEVNULL and no file log handler is configured, so
@@ -418,29 +420,30 @@ class GptAutoProviderRuntime:
         if self.config.browser.dedicated_window:
             await self.ensure_dedicated_window_anchor()
         pages = await self.bridge.call("list_pages")
+        def exact(page: dict) -> bool:
+            return url_matches_provider_session(
+                str(page.get("url") or ""),
+                provider_session_id,
+            )
+
         if preferred_target_id:
             preferred = next(
                 (
                     page
                     for page in pages
                     if str(page.get("targetId") or "") == preferred_target_id
-                    and self.page_belongs_to_dedicated_window(page)
-                    and url_matches_provider_session(
-                        str(page.get("url") or ""),
-                        provider_session_id,
-                    )
+                    and exact(page)
                 ),
                 None,
             )
-            if preferred is not None and not await self._page_has_load_failure(preferred):
+            if (
+                preferred is not None
+                and await self._page_health_state(preferred) == "healthy"
+            ):
                 return preferred
         matches = [
             page
-            for page in pages
-            if url_matches_provider_session(
-                str(page.get("url") or ""),
-                provider_session_id,
-            )
+            for page in pages if exact(page)
         ]
         # A gateway restart can recreate the managed window anchor while the
         # browser keeps the original conversation tab in its prior window.
@@ -449,32 +452,27 @@ class GptAutoProviderRuntime:
         # explicitly on the provider load-error page; only then prefer the
         # managed window among healthy candidates.  A failed managed tab must
         # not mask a healthy exact match in the prior window.
-        managed_matches = [
-            page for page in matches if self.page_belongs_to_dedicated_window(page)
-        ]
         if len(matches) > 1:
             # A browser can retain both the original failed renderer and a
-            # successfully reloaded tab for the same conversation. Prefer a
-            # tab whose DOM is not explicitly on ChatGPT's load-error page;
-            # otherwise a deterministic URL/handle choice can keep recovery
-            # bound to the broken tab forever. Unknown snapshot failures stay
-            # eligible because lack of observation is not proof of a bad tab.
-            healthy = [
-                page
+            # successfully reloaded tab for the same conversation.  Probe
+            # tri-state health: an exception is unknown, not healthy.  Rank
+            # positively healthy exact tabs first, then unknown tabs, and only
+            # use managed-window preference within the selected health tier.
+            health = {
+                str(page.get("pageHandle") or ""): await self._page_health_state(page)
                 for page in matches
-                if not await self._page_has_load_failure(page)
+            }
+            healthy = [
+                page for page in matches if health[str(page.get("pageHandle") or "")] == "healthy"
             ]
-            if healthy:
-                managed_healthy = [
-                    page
-                    for page in healthy
-                    if self.page_belongs_to_dedicated_window(page)
-                ]
-                matches = managed_healthy or healthy
-            elif managed_matches:
-                matches = managed_matches
-        elif managed_matches:
-            matches = managed_matches
+            unknown = [
+                page for page in matches if health[str(page.get("pageHandle") or "")] == "unknown"
+            ]
+            candidates = healthy or unknown or matches
+            managed_candidates = [
+                page for page in candidates if self.page_belongs_to_dedicated_window(page)
+            ]
+            matches = managed_candidates or candidates
         if len(matches) > 1:
             # Multiple tabs can genuinely display the same canonical
             # conversation (provider_session_id already proved that -- e.g.
@@ -495,14 +493,14 @@ class GptAutoProviderRuntime:
             return min(candidates, key=lambda page: str(page.get("pageHandle") or ""))
         return matches[0] if matches else None
 
-    async def _page_has_load_failure(self, page: dict) -> bool:
-        """Return true only for an observed provider conversation-load error."""
+    async def _page_health_state(self, page: dict) -> PageHealth:
+        """Classify an exact conversation tab without treating probe errors as healthy."""
         browser = self._gpt_browser
         if browser is None:
-            return False
+            return "unknown"
         handle = str(page.get("pageHandle") or "")
         if not handle:
-            return False
+            return "unknown"
         try:
             page_ref = await browser.page_by_handle(handle)
             snapshot = ChatSnapshot.from_bridge(
@@ -512,8 +510,16 @@ class GptAutoProviderRuntime:
                 )
             )
         except Exception:
-            return False
-        return "conversation-load-failed" in snapshot.dom_signals
+            return "unknown"
+        return (
+            "failed"
+            if "conversation-load-failed" in snapshot.dom_signals
+            else "healthy"
+        )
+
+    async def _page_has_load_failure(self, page: dict) -> bool:
+        """Return true only for an observed provider conversation-load error."""
+        return await self._page_health_state(page) == "failed"
 
     async def page_record(self, page_handle: str) -> dict | None:
         """Return the current bridge record for a handle without changing ownership."""

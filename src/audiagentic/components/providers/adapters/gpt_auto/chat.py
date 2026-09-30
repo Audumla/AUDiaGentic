@@ -272,6 +272,15 @@ class PersistentChat:
         # before mutating the in-memory marker so a failed write cannot expose
         # READY and then resurrect an unresolved lock after restart.
         metadata: dict[str, object] = {"unresolved-turn-pending": False}
+        # Explicit terminal cleanup only when this session actually carried a
+        # recovery budget.  The retry budget is intentionally not part of the
+        # generic pending=false removal set because idle session recovery can
+        # consume it without an unresolved turn.
+        if (
+            self._conversation_load_recovery_attempts
+            or "conversation-load-recovery-attempts" in self._checkpoint_metadata
+        ):
+            metadata["conversation-load-recovery-attempts"] = 0
         if self._submission_proven:
             metadata["submission-proven"] = True
             for key, value in (
@@ -284,6 +293,7 @@ class PersistentChat:
                     metadata[key] = value
         await self._persist_checkpoint(metadata)
         self._checkpoint_metadata = {}
+        self._conversation_load_recovery_attempts = 0
 
     def _claim_page(self, page_handle: str) -> bool:
         """Claim a page when the runtime exposes ownership tracking.

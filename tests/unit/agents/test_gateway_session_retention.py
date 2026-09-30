@@ -45,6 +45,7 @@ def test_provider_metadata_checkpoint_updates_and_clears_only_checkpoint_fields(
             "unresolved-turn-pending": True,
             "recovery-state": "side-effect-may-have-started",
             "unresolved-turn-id": "turn-1",
+            "conversation-load-recovery-attempts": 1,
         },
     )
     pending = read_session_record(tmp_path, "ses_checkpoint")
@@ -61,7 +62,19 @@ def test_provider_metadata_checkpoint_updates_and_clears_only_checkpoint_fields(
     assert cleared["provider"]["metadata"] == {
         "chat-url": "https://chatgpt.com/c/existing",
         "unresolved-turn-pending": False,
+        "conversation-load-recovery-attempts": 1,
     }
+
+    update_provider_metadata(
+        tmp_path,
+        "ses_checkpoint",
+        {
+            "unresolved-turn-pending": False,
+            "conversation-load-recovery-attempts": 0,
+        },
+    )
+    terminal = read_session_record(tmp_path, "ses_checkpoint")
+    assert terminal["provider"]["metadata"]["conversation-load-recovery-attempts"] == 0
 
 
 def test_durable_request_runtime_root_is_retention_pinned(tmp_path):

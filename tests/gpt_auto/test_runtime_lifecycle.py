@@ -2081,6 +2081,89 @@ async def test_find_conversation_page_does_not_mask_prior_window_healthy_tab(mon
 
 
 @pytest.mark.asyncio
+async def test_find_conversation_page_ranks_healthy_tab_over_unknown_managed_tab(monkeypatch) -> None:
+    """A failed CDP probe is unknown and cannot mask positive prior-window health."""
+    runtime = GptAutoProviderRuntime(GptAutoConfig.from_dict(valid_config()))
+    runtime.state = ProviderState.AVAILABLE
+    runtime._dedicated_window_id = 7
+    pages = [
+        {"pageHandle": "managed-unknown", "targetId": "managed-target", "windowId": 7,
+         "url": "https://chatgpt.com/g/g-p-project/c/provider-session"},
+        {"pageHandle": "prior-healthy", "targetId": "prior-target", "windowId": 3,
+         "url": "https://chatgpt.com/g/g-p-project/c/provider-session"},
+    ]
+
+    class _Bridge:
+        async def call(self, method, params=None):
+            assert method == "list_pages"
+            return pages
+
+    class _Browser:
+        async def page_by_handle(self, handle):
+            return SimpleNamespace(handle=handle)
+
+        async def snapshot(self, page, *, signals=None):
+            if page.handle == "managed-unknown":
+                raise RuntimeError("stale CDP target")
+            return {"url": pages[1]["url"], "domSignals": {}}
+
+    runtime._bridge = _Bridge()  # type: ignore[assignment]
+    runtime._gpt_browser = _Browser()  # type: ignore[assignment]
+    monkeypatch.setattr(
+        runtime,
+        "ensure_dedicated_window_anchor",
+        lambda: asyncio.sleep(0, result="anchor"),
+    )
+
+    selected = await runtime.find_conversation_page("provider-session")
+
+    assert selected is not None
+    assert selected["pageHandle"] == "prior-healthy"
+
+
+@pytest.mark.asyncio
+async def test_find_conversation_page_prefers_healthy_durable_target_across_windows(monkeypatch) -> None:
+    """A healthy durable target remains preferred even after window recreation."""
+    runtime = GptAutoProviderRuntime(GptAutoConfig.from_dict(valid_config()))
+    runtime.state = ProviderState.AVAILABLE
+    runtime._dedicated_window_id = 7
+    pages = [
+        {"pageHandle": "managed-duplicate", "targetId": "managed-target", "windowId": 7,
+         "url": "https://chatgpt.com/g/g-p-project/c/provider-session"},
+        {"pageHandle": "prior-durable", "targetId": "durable-target", "windowId": 3,
+         "url": "https://chatgpt.com/g/g-p-project/c/provider-session"},
+    ]
+
+    class _Bridge:
+        async def call(self, method, params=None):
+            assert method == "list_pages"
+            return pages
+
+    class _Browser:
+        async def page_by_handle(self, handle):
+            return SimpleNamespace(handle=handle)
+
+        async def snapshot(self, page, *, signals=None):
+            return {"url": pages[0]["url"], "domSignals": {}}
+
+    runtime._bridge = _Bridge()  # type: ignore[assignment]
+    runtime._gpt_browser = _Browser()  # type: ignore[assignment]
+    monkeypatch.setattr(
+        runtime,
+        "ensure_dedicated_window_anchor",
+        lambda: asyncio.sleep(0, result="anchor"),
+    )
+
+    selected = await runtime.find_conversation_page(
+        "provider-session",
+        preferred_target_id="durable-target",
+    )
+
+    assert selected is not None
+    assert selected["pageHandle"] == "prior-durable"
+
+
+@pytest.mark.asyncio
 async def test_ensure_ready_rebinds_when_external_cdp_close_invalidates_handle(monkeypatch) -> None:
     """An operator-side tab close must recover before a new prompt is sent."""
     config = GptAutoConfig.from_dict(valid_config())
