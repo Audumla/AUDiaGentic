@@ -871,7 +871,10 @@ class PersistentChat:
         # marker behind, that durable proof is stronger than another DOM poll:
         # keep the successor from retrying forever against an already-cleared
         # predecessor.
-        if _terminal_evidence_proves_checkpoint_clear(self._checkpoint_metadata):
+        if _terminal_evidence_proves_checkpoint_clear(
+            self._checkpoint_metadata,
+            unresolved_turn_id=self._checkpoint_metadata.get("unresolved-turn-id"),
+        ):
             await self.persist_unresolved_clear()
             self.clear_unresolved_turn()
             self._set_unresolved_recovery("stale-unresolved-marker-cleared")
@@ -2068,10 +2071,16 @@ def _reconciliation_completion_candidate(chat: PersistentChat, snapshot: ChatSna
     )
 
 
-def _terminal_evidence_proves_checkpoint_clear(metadata: dict[str, object]) -> bool:
+def _terminal_evidence_proves_checkpoint_clear(
+    metadata: dict[str, object], *, unresolved_turn_id: object
+) -> bool:
     """Return whether provider terminal metadata proves the fence was cleared."""
     evidence = metadata.get("terminal-evidence")
     if not isinstance(evidence, dict):
+        return False
+    if not isinstance(unresolved_turn_id, str) or not unresolved_turn_id:
+        return False
+    if evidence.get("turn-id") != unresolved_turn_id:
         return False
     if evidence.get("checkpoint-clear-persisted") is not True:
         return False
