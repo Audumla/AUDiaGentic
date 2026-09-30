@@ -256,11 +256,26 @@ class GptAutoSessionTransport:
                 and details.get("failure-reason") == "provider-failure-policy-matched"
                 and not self.chat.unresolved_metadata().get("unresolved-turn-pending")
             )
+            # A reconstructed observer can fail before it gets a typed
+            # provider result (for example while ChatGPT still shows the
+            # connection-interrupted banner).  If the durable unresolved
+            # checkpoint and provider binding are still present, this is
+            # recoverable observation loss, not proof that the session died.
+            # Keep the session alive so the queue can reattach and observe the
+            # same turn again; only a correlated provider rejection that also
+            # cleared the checkpoint is terminal.
+            unresolved = self.chat.unresolved_metadata()
+            durable_observation_recovery = bool(
+                not definitively_failed
+                and unresolved.get("unresolved-turn-pending")
+                and self.chat.provider_session_id
+                and self.chat.state not in {ChatState.FAILED, ChatState.CLOSED}
+            )
             self._turn_failure_disposition = (
                 SessionFailureDisposition.TERMINAL_FAILED
                 if definitively_failed
                 else SessionFailureDisposition.RETAIN
-                if retained
+                if retained or durable_observation_recovery
                 else SessionFailureDisposition.TERMINATE
             )
             raise

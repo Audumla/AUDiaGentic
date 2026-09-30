@@ -384,6 +384,43 @@ async def test_resume_existing_exposes_definitive_provider_failure_as_terminal(
 
 
 @pytest.mark.asyncio
+async def test_resume_existing_keeps_durable_session_after_untyped_observation_loss(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A transient recovery observation error must not fail the session."""
+    chat = _chat()
+    chat.provider_session_id = "provider-session-1"
+    chat._checkpoint_metadata["unresolved-turn-id"] = "req-1"
+
+    async def not_retained_by_legacy_classifier(_error) -> bool:
+        # This reproduces an untyped CDP/provider interruption that the old
+        # classifier treated as terminal even though the durable checkpoint
+        # and provider conversation are still present.
+        return False
+
+    chat.retain_after_turn_failure = not_retained_by_legacy_classifier  # type: ignore[method-assign]
+
+    class _InterruptedTurn:
+        def __init__(self, *_args) -> None:
+            pass
+
+        async def resume_existing(self):
+            raise RuntimeError("Connection interrupted")
+
+    monkeypatch.setattr(transport_module, "GptAutoTurn", _InterruptedTurn)
+    transport = GptAutoSessionTransport(chat)
+
+    with pytest.raises(RuntimeError, match="Connection interrupted"):
+        await transport.resume_existing(
+            SessionPrompt(turn_id="req-1", body="already submitted"),
+            lambda _observation: None,
+        )
+
+    assert transport.turn_failure_disposition() is SessionFailureDisposition.RETAIN
+    assert chat.state not in {ChatState.FAILED, ChatState.CLOSED}
+
+
+@pytest.mark.asyncio
 async def test_retain_releases_fence_after_stable_request_owned_provider_error() -> None:
     """A confirmed provider rejection must not poison a healthy chat."""
     chat = _chat(response_stability_seconds=0.001)
