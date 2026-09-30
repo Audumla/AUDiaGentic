@@ -8,6 +8,7 @@ import pytest
 
 from audiagentic.components.providers.adapters.gpt_auto import session_transport as transport_module
 from audiagentic.components.providers.adapters.gpt_auto.chat import ChatState, PersistentChat
+from audiagentic.components.providers.adapters.gpt_auto.cdp.client import CdpError
 from audiagentic.components.providers.adapters.gpt_auto.config import GptAutoConfig
 from audiagentic.components.providers.adapters.gpt_auto.session_transport import (
     GptAutoSessionTransport,
@@ -384,18 +385,17 @@ async def test_resume_existing_exposes_definitive_provider_failure_as_terminal(
 
 
 @pytest.mark.asyncio
-async def test_resume_existing_keeps_durable_session_after_untyped_observation_loss(
+async def test_resume_existing_keeps_durable_session_after_cdp_observation_loss(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A transient recovery observation error must not fail the session."""
+    """A typed CDP observation error must not fail the session."""
     chat = _chat()
     chat.provider_session_id = "provider-session-1"
     chat._checkpoint_metadata["unresolved-turn-id"] = "req-1"
 
     async def not_retained_by_legacy_classifier(_error) -> bool:
-        # This reproduces an untyped CDP/provider interruption that the old
-        # classifier treated as terminal even though the durable checkpoint
-        # and provider conversation are still present.
+        # The typed CDP boundary proves the observation channel was lost;
+        # it does not prove that the provider turn stopped.
         return False
 
     chat.retain_after_turn_failure = not_retained_by_legacy_classifier  # type: ignore[method-assign]
@@ -405,12 +405,12 @@ async def test_resume_existing_keeps_durable_session_after_untyped_observation_l
             pass
 
         async def resume_existing(self):
-            raise RuntimeError("Connection interrupted")
+            raise CdpError("CDP connection closed while observing")
 
     monkeypatch.setattr(transport_module, "GptAutoTurn", _InterruptedTurn)
     transport = GptAutoSessionTransport(chat)
 
-    with pytest.raises(RuntimeError, match="Connection interrupted"):
+    with pytest.raises(CdpError, match="CDP connection closed"):
         await transport.resume_existing(
             SessionPrompt(turn_id="req-1", body="already submitted"),
             lambda _observation: None,
@@ -418,6 +418,39 @@ async def test_resume_existing_keeps_durable_session_after_untyped_observation_l
 
     assert transport.turn_failure_disposition() is SessionFailureDisposition.RETAIN
     assert chat.state not in {ChatState.FAILED, ChatState.CLOSED}
+
+
+@pytest.mark.asyncio
+async def test_resume_existing_fails_closed_on_unclassified_observation_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A generic implementation error must not become durable recovery."""
+    chat = _chat()
+    chat.provider_session_id = "provider-session-1"
+    chat._checkpoint_metadata["unresolved-turn-id"] = "req-1"
+
+    async def not_retained_by_legacy_classifier(_error) -> bool:
+        return False
+
+    chat.retain_after_turn_failure = not_retained_by_legacy_classifier  # type: ignore[method-assign]
+
+    class _BrokenTurn:
+        def __init__(self, *_args) -> None:
+            pass
+
+        async def resume_existing(self):
+            raise RuntimeError("unexpected implementation fault")
+
+    monkeypatch.setattr(transport_module, "GptAutoTurn", _BrokenTurn)
+    transport = GptAutoSessionTransport(chat)
+
+    with pytest.raises(RuntimeError, match="unexpected implementation fault"):
+        await transport.resume_existing(
+            SessionPrompt(turn_id="req-1", body="already submitted"),
+            lambda _observation: None,
+        )
+
+    assert transport.turn_failure_disposition() is SessionFailureDisposition.TERMINATE
 
 
 @pytest.mark.asyncio
