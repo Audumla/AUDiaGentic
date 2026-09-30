@@ -1488,6 +1488,13 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                         text,
                     )
                     if sent is True:
+                        # Let the provider renderer process the synthetic click
+                        # before the caller takes its first submission-proof
+                        # snapshot.  This is deliberately a small, configurable
+                        # browser-action pause rather than a turn timeout: the
+                        # click has already happened, and the next DOM read
+                        # must not race React's route/message insertion.
+                        await asyncio.sleep(self._action_pause_seconds)
                         return {"actionComplete": True, "typedText": typed,
                                 "sendButtonClicked": True, "enterDispatched": False}
                     send_attempted = False
