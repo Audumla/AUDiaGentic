@@ -303,3 +303,7 @@ def test_every_gateway_service_composition_error_code_is_registered() -> None:
         PACKAGE_ROOT / "config" / "components" / "agents" / "error-resolutions.yaml"
     )
     assert "VAL-EXP-005" in resolutions
+    # Provider-session restart recovery raises this code.  Keep the error
+    # framework from replacing the intended recoverable error with an
+    # unregistered-code ValueError.
+    assert "CON-AGW-124" in resolutions
