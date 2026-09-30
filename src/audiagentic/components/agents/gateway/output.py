@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any
 
 from audiagentic.components.agents.agents_paths import (
+    gateway_failure_response_path,
     gateway_final_response_path,
     gateway_request_path,
 )
@@ -90,6 +91,7 @@ def persist_final_response(
     text: str,
     *,
     lock_held: bool = False,
+    allow_terminal: bool = False,
 ) -> dict[str, Any]:
     """Persist the exact terminal UTF-8 response before terminal record commit."""
     if not isinstance(text, str):
@@ -100,7 +102,7 @@ def persist_final_response(
         # A worker may finish unwinding after an operator has already won the
         # request CAS.  Do not let that late worker overwrite the winner's
         # request-owned artifact before its own fenced transition is rejected.
-        if _request_is_terminal(project_root, request_id):
+        if not allow_terminal and _request_is_terminal(project_root, request_id):
             return
         atomic_write_bytes(gateway_final_response_path(project_root, request_id), text.encode("utf-8"))
 
@@ -119,6 +121,34 @@ def read_final_response(project_root: Path, request_id: str, artifact: dict[str,
     raw = path.read_bytes()
     if len(raw) != artifact.get("bytes") or hashlib.sha256(raw).hexdigest() != artifact.get("sha256"):
         raise AudiaGenticError(code="CON-AGW-140", kind="agents", message="gateway response artifact integrity check failed", details={})
+    return raw.decode("utf-8")
+
+
+def persist_failure_response(project_root: Path, request_id: str, text: str) -> dict[str, Any]:
+    """Persist provider text separately from the successful response artifact."""
+    raw = str(text).encode("utf-8")
+    preview, truncated = _utf8_preview(str(text))
+    artifact = {
+        "artifact-id": "failure-response",
+        "request-id": request_id,
+        "media-type": "text/plain; charset=utf-8",
+        "bytes": len(raw),
+        "sha256": hashlib.sha256(raw).hexdigest(),
+        "output-preview": preview,
+        "output-truncated": truncated,
+    }
+    lock_path = gateway_request_path(project_root, request_id).with_name("mutation.lock")
+    with StartupLock(lock_path, timeout=10.0):
+        atomic_write_bytes(gateway_failure_response_path(project_root, request_id), raw)
+    return artifact
+
+
+def read_failure_response(project_root: Path, request_id: str, artifact: dict[str, Any]) -> str:
+    """Read and verify the separate response captured on provider failure."""
+    path = gateway_failure_response_path(project_root, request_id)
+    raw = path.read_bytes()
+    if len(raw) != artifact.get("bytes") or hashlib.sha256(raw).hexdigest() != artifact.get("sha256"):
+        raise AudiaGenticError(code="CON-AGW-142", kind="agents", message="gateway failure response artifact integrity check failed", details={})
     return raw.decode("utf-8")
 
 # ── Coded error constants ────────────────────────────────────────────────
