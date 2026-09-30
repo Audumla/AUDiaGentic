@@ -268,6 +268,44 @@ def test_dispatch_reloads_admitted_prompt_snapshot_when_fast_path_is_lost(
     assert captured["prompt-body"] == "frozen admitted prompt\r\nwith café"
 
 
+def test_restart_observation_does_not_require_prompt_snapshot(
+    tmp_path: Path, monkeypatch
+):
+    """Existing provider turns are observed without reconstructing a prompt."""
+    _make_profile(tmp_path, "default", "gpt-auto", model_id="chatgpt")
+    record = _record(tmp_path, "default")
+    record.update(
+        {
+            "state": "running",
+            "session-id": "ses-restart",
+            "provider-transport-kind": "provider-session",
+        }
+    )
+    captured: dict[str, object] = {}
+
+    def observe_existing(*args, **kwargs):
+        captured.update(kwargs)
+        return {"state": "completed", "output": "observed"}
+
+    monkeypatch.setattr(dispatch, "_dispatch_session_request", observe_existing)
+
+    result = dispatch.dispatch_request(
+        tmp_path,
+        record,
+        dispatch_prompt="",
+        manifest_id="mf_test",
+        context_fingerprint="0" * 64,
+        component_profile="",
+        provider_isolation_tier="none",
+        worker_timeout_seconds=10,
+        resume_existing=True,
+    )
+
+    assert result["state"] == "completed"
+    assert captured["dispatch_prompt"] == ""
+    assert captured["resume_existing"] is True
+
+
 def test_dispatch_uses_profile_stream_controls_and_ignores_metadata_working_root(
     tmp_path: Path, monkeypatch
 ):

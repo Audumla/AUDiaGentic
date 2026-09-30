@@ -1098,7 +1098,7 @@ def test_api_list_and_close_sessions(rig, monkeypatch):
 
     closed = api.close_execution_session(tmp_path, record["session-id"])
     assert closed["state"] == "closed"
-    assert api.list_execution_sessions(tmp_path)[0]["live"] is False
+    assert api.list_execution_sessions(tmp_path, state="all")[0]["live"] is False
     # Idempotent on an already-terminal session
     again = api.close_execution_session(tmp_path, record["session-id"])
     assert again["state"] == "closed"
@@ -1139,6 +1139,10 @@ def test_api_lists_active_sessions_before_newer_closed_sessions(tmp_path, monkey
         listed = api.list_execution_sessions(tmp_path)
 
         assert [row["session-id"] for row in listed] == [
+            "ses-active-a", "ses-active-z",
+        ]
+        listed_all = api.list_execution_sessions(tmp_path, state="all")
+        assert [row["session-id"] for row in listed_all] == [
             "ses-active-a", "ses-active-z", "ses-closed-a", "ses-closed-z",
         ]
     finally:
@@ -2126,7 +2130,7 @@ def test_stale_persisted_session_lists_not_live_no_runtime_started(tmp_path, mon
         stale_id = record["session-id"]
         session_store.write_session_record(tmp_path, record)
 
-        listed = api.list_execution_sessions(tmp_path)
+        listed = api.list_execution_sessions(tmp_path, state="all")
         row = [s for s in listed if s["session-id"] == stale_id][0]
         assert row["live"] is False
         # A stale persisted active session should carry a diagnostic flag.
@@ -2183,7 +2187,7 @@ def test_closing_session_not_in_runtime_is_stale(tmp_path, monkeypatch):
             "closing",
         )
 
-        listed = api.list_execution_sessions(tmp_path)
+        listed = api.list_execution_sessions(tmp_path, state="all")
         row = [s for s in listed if s["session-id"] == closing_id][0]
         assert row["live"] is False
         assert row.get("runtime-state") == "stale-non-live"

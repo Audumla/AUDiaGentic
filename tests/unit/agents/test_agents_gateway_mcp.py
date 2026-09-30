@@ -173,7 +173,7 @@ def test_agent_task_response_includes_provider_failure_code_with_full_output():
         "request-id": "req_x",
         "delivery": "inline",
         "text": "partial assistant output",
-        "bytes": len("partial assistant output".encode("utf-8")),
+        "bytes": len(b"partial assistant output"),
         "state": "failed",
         "error-code": "EXT-ACP-TOOL-001",
         "error-reason": "provider-cancelled-after-tool-failure",
@@ -229,6 +229,50 @@ def test_agent_task_session_control_delegates_to_gateway_client():
         turn_id="req_1",
         payload=None,
     )
+
+
+def test_agent_task_session_list_defaults_to_active_sessions():
+    with (
+        _patch_root(),
+        patch("audiagentic.components.agents.mcp.gateway_mcp.call_gateway_method") as mock_call,
+    ):
+        mock_call.return_value = [{"session-id": "ses_active", "state": "active"}]
+        result = agents_gateway_mcp.agent_task_session_list()
+
+    assert result == [{"session-id": "ses_active", "state": "active"}]
+    mock_call.assert_called_once_with("list_execution_sessions", _ROOT, state="active")
+
+
+def test_agent_task_session_list_all_removes_state_filter():
+    with (
+        _patch_root(),
+        patch("audiagentic.components.agents.mcp.gateway_mcp.call_gateway_method") as mock_call,
+    ):
+        mock_call.return_value = []
+        agents_gateway_mcp.agent_task_session_list(state="all")
+
+    mock_call.assert_called_once_with("list_execution_sessions", _ROOT, state=None)
+
+
+def test_gateway_mcp_returns_structured_content_without_text_duplicate():
+    from mcp.types import CallToolResult
+
+    async def invoke():
+        with (
+            _patch_root(),
+            patch(
+                "audiagentic.components.agents.mcp.gateway_mcp.call_gateway_method",
+                return_value=[{"session-id": "ses_active", "state": "active"}],
+            ),
+        ):
+            return await agents_gateway_mcp.mcp.call_tool("agent_task_session_list", {})
+
+    result = asyncio.run(invoke())
+    assert isinstance(result, CallToolResult)
+    assert result.content == []
+    assert result.structuredContent == {
+        "result": [{"session-id": "ses_active", "state": "active"}]
+    }
 
 
 def test_agent_task_list_requests_delegates():

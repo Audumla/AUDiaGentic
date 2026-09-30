@@ -1183,8 +1183,20 @@ _RETRY_DELIVERY_TIMEOUT_FN = r"""() => {
 class GptAutoCdpBrowserController(CdpBrowserController):
     """ChatGPT-specific selectors, composites, and conversation operations."""
 
-    def __init__(self, bridge: PythonCdpBridge) -> None:
+    _ACTION_PAUSE_SECONDS = 0.15  # compatibility default; resolved config overrides it
+
+    def __init__(
+        self, bridge: PythonCdpBridge, *, action_pause_seconds: float | None = None
+    ) -> None:
         super().__init__(bridge)
+        self._action_pause_seconds = max(
+            0.0,
+            float(
+                self._ACTION_PAUSE_SECONDS
+                if action_pause_seconds is None
+                else action_pause_seconds
+            ),
+        )
         # Project new-chat creation is a shared-window operation.  Without a
         # single critical section, two sessions can both observe the other's
         # newly-created target and adopt the wrong conversation.
@@ -1353,6 +1365,9 @@ class GptAutoCdpBrowserController(CdpBrowserController):
         return {"stopped": bool(stopped)}
 
     _SUBMIT_POLL_SECONDS = 0.1
+    # Give React's controlled composer a realistic render/input turn between
+    # insertion and the synthetic Send click.  Keeping this outside the DOM
+    # evaluator avoids batching both browser actions into one CDP task.
     _SUBMIT_DEFAULT_TIMEOUT_SECONDS = 15.0
 
     async def submit(
@@ -1379,6 +1394,7 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                     text,
                 )
                 await self.insert_text(page, text)
+                await asyncio.sleep(self._action_pause_seconds)
                 # The send-side DOM check below re-reads and compares the
                 # composer text.  Input.insertText has already delivered the
                 # exact caller text to the focused editor, so a second read
@@ -1390,6 +1406,7 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                     # a React navigation, and no Enter bypasses a disabled Send.
                     stage = "send-button"
                     send_attempted = True
+                    await asyncio.sleep(self._action_pause_seconds)
                     sent = await self.evaluate(
                         page,
                         r"""(text) => {
