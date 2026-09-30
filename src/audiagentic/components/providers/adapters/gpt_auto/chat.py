@@ -18,6 +18,7 @@ from audiagentic.foundation.transports.session_binding import (
 )
 from audiagentic.foundation.workflow import TransitionConfig, TransitionEngine
 
+from .cdp.client import CdpError
 from .config import GptAutoConfig
 from .prompt_fingerprint import PromptFingerprint, match_prompt
 from .runtime import GptAutoProviderRuntime
@@ -160,6 +161,11 @@ class PersistentChat:
         self._reconciliation_refresh_attempted = False
         self._reconciliation_delivery_retry_attempted = False
         self._defer_unresolved_reconciliation = False
+        # A retained exact-URL tab can survive a gateway restart while its
+        # renderer is stuck on ChatGPT's conversation-load error page.  Keep a
+        # small per-process replacement budget so recovery can attach a fresh
+        # tab without creating an unbounded trail of failed tabs.
+        self._conversation_load_recovery_attempts = 0
         self._checkpoint_metadata: dict[str, object] = {
             key: metadata[key]
             for key in (
@@ -369,7 +375,9 @@ class PersistentChat:
                 if not self._claim_page(str(page["pageHandle"])):
                     raise RuntimeError("gpt-auto retained conversation page is already owned")
                 self._bind_page(page)
-                await self._prefer_active_conversation_page()
+                retained = await self._retained_page_snapshot()
+                if not await self._replace_load_failed_page(retained):
+                    await self._prefer_active_conversation_page()
             elif not target:
                 # provider_session_id is set but neither a retained browser
                 # tab nor a durable chat-url is available. Creating a fresh
@@ -767,6 +775,98 @@ class PersistentChat:
 
     async def _wait_ready(self) -> None:
         await self.wait_quiescent(allow_recovering=True)
+
+    async def _retained_page_snapshot(self) -> ChatSnapshot | None:
+        """Read a retained page when the runtime exposes the rich browser API.
+
+        Small bridge-only test/runtime seams intentionally expose only
+        ``list_pages`` and navigation. They cannot prove a DOM load failure,
+        so retain their historical URL-binding behavior.
+        """
+        browser = self._gpt_browser()
+        if not all(
+            callable(getattr(browser, name, None))
+            for name in ("page_by_handle", "snapshot")
+        ):
+            return None
+        return await self.snapshot(allow_recovering=True)
+
+    def _conversation_load_recovery_allowed(self) -> bool:
+        workflow = getattr(self.config, "workflow", None)
+        recovery = getattr(workflow, "recovery", None)
+        return bool(
+            recovery is not None
+            and getattr(recovery, "conversation_load_failure_recovery_enabled", True)
+            and self.chat_url
+            and self._conversation_load_recovery_attempts
+            < max(
+                0,
+                int(getattr(recovery, "conversation_load_failure_max_attempts", 0)),
+            )
+        )
+
+    async def _replace_load_failed_page(self, snapshot: ChatSnapshot | None) -> bool:
+        """Attach a new exact conversation tab after a retained tab load error.
+
+        This is deliberately navigation-only.  It never submits the unresolved
+        prompt and it never closes the retained tab that may still contain the
+        provider-side turn.  A newly-created replacement that also fails to
+        load is closed so repeated recovery cannot leak tabs.
+        """
+        if snapshot is None or "conversation-load-failed" not in snapshot.dom_signals:
+            self._conversation_load_recovery_attempts = 0
+            return False
+        if not self._conversation_load_recovery_allowed():
+            return False
+        old_handle = self.page_handle
+        if old_handle:
+            self.page_handle = None
+            self.runtime.release_page(self, old_handle)
+        self._conversation_load_recovery_attempts += 1
+        replacement_handle: str | None = None
+        try:
+            replacement_handle = await self._create_recovery_page()
+            self.page_handle = replacement_handle
+            if not self._claim_page(replacement_handle):
+                raise RuntimeError("gpt-auto replacement conversation page is already owned")
+            page_record = getattr(self.runtime, "page_record", None)
+            if page_record is not None:
+                record = await page_record(replacement_handle)
+                if record is not None:
+                    self._bind_page(record)
+            await self.runtime.bridge.call(
+                "navigate",
+                {
+                    "pageHandle": replacement_handle,
+                    "url": self.chat_url,
+                    "timeoutMs": int(self.config.chat.navigation_timeout_seconds * 1000),
+                },
+                timeout=self.config.chat.navigation_timeout_seconds + 2,
+            )
+            replacement = await self.snapshot(allow_recovering=True)
+            if "conversation-load-failed" in replacement.dom_signals:
+                raise CdpError("gpt-auto replacement conversation still failed to load")
+            # During restart recovery the provider may still be generating. A
+            # request-owned resume turn must attach and observe immediately;
+            # ordinary session opening still proves quiescence below.
+            if not self.unresolved_turn_pending or not self._defer_unresolved_reconciliation:
+                await self._wait_ready()
+            self._conversation_load_recovery_attempts = 0
+            return True
+        except Exception:
+            if replacement_handle:
+                self.page_handle = None
+                self.runtime.release_page(self, replacement_handle)
+                try:
+                    await self.runtime.bridge.call(
+                        "close_page", {"pageHandle": replacement_handle}
+                    )
+                except Exception:
+                    logger.debug(
+                        "gpt-auto failed to close load-error replacement tab",
+                        exc_info=True,
+                    )
+            raise
 
     async def wait_quiescent(self, *, allow_recovering: bool = False) -> ChatSnapshot:
         """Prove the provider conversation is idle across two observations.
@@ -1886,7 +1986,9 @@ class PersistentChat:
             )
             if page is not None and self._claim_page(str(page["pageHandle"])):
                 self._bind_page(page)
-                await self._prefer_active_conversation_page()
+                retained = await self._retained_page_snapshot()
+                if not await self._replace_load_failed_page(retained):
+                    await self._prefer_active_conversation_page()
                 if self.active_turn_id:
                     self._move(ChatState.BUSY)
                 else:
