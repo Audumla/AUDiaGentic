@@ -210,7 +210,9 @@ settings:
         scope: document
         selectors: ['[role="alert"]']
         visible: true
-        text-contains-any: ['stream recovery polling timed out']
+        text-contains-any:
+          - 'stream recovery polling timed out'
+          - 'resume stream unavailable'
       auth-required:
         scope: document
         selectors: ['[data-testid="login-button"]', '[data-testid="signup-button"]', 'input[type="email"]']
