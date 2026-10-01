@@ -330,6 +330,54 @@ def test_conversation_load_failure_after_submission_never_replays_in_fresh_sessi
     assert len(transports) == 1
 
 
+def test_proven_unsent_conversation_load_failure_retries_in_new_session(rig, monkeypatch):
+    """A load failure before Send may safely move this request to a new session."""
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+    runtime, transports, root = rig
+    first = _dispatch(root, _running_record(root, session_keep_alive=True), dispatch_prompt="first")
+    original = runtime.prompt_in_session
+    original_prepare = runtime._provider_prepare_fn
+    calls: list[str] = []
+
+    def prepare(*args, **kwargs):
+        prepared = original_prepare(*args, **kwargs)
+        prepared.transport.provider_session_ref = "prov-ses-replacement"
+        return prepared
+
+    runtime._provider_prepare_fn = prepare
+
+    def prompt(*args, **kwargs):
+        calls.append(args[1])
+        if len(calls) == 1:
+            raise AudiaGenticError(
+                code="EXT-GPTAUTO-005",
+                kind="providers",
+                message="conversation could not be loaded after bounded recovery",
+                details={
+                    "failure-reason": "conversation-load-failed",
+                    "submission-proven": False,
+                    "submission-attempted": False,
+                    "submission-ambiguous": False,
+                    "failure-stage": "readiness",
+                    "submission-state": "not_started",
+                    "dom-signals": ["conversation-load-failed"],
+                },
+            )
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(runtime, "prompt_in_session", prompt)
+    record = _running_record(root, session_id=first["session-id"], session_keep_alive=True)
+    result = _dispatch(root, record, dispatch_prompt="retry-me")
+
+    assert result["state"] == "completed", result
+    assert calls[0] == first["session-id"]
+    assert calls[1] != calls[0]
+    assert result["session-id"] == calls[1]
+    assert len(transports) == 2
+    assert transports[1].turns == ["retry-me"]
+
+
 def test_conversation_load_failure_without_unsent_proof_never_replays(rig, monkeypatch):
     """An incomplete failure payload must fail closed instead of replaying."""
     from audiagentic.foundation.contracts.errors import AudiaGenticError
