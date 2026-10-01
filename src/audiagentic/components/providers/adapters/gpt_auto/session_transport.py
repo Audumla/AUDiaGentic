@@ -117,21 +117,42 @@ class GptAutoSessionTransport:
             metadata_fn = getattr(self.chat, "unresolved_metadata", None)
             metadata = metadata_fn() if callable(metadata_fn) else {}
             unresolved = bool(metadata.get("unresolved-turn-pending"))
-            failure = AudiaGenticError(
-                code="EXT-GPTAUTO-004",
-                kind="providers",
-                message="gpt-auto turn admission failed before provider submission",
-                details={
-                    "failure-stage": "readiness",
-                    "submission-state": "not_started",
-                    "retryable-same-session": False,
-                    "previous-turn-unresolved": unresolved,
-                    "cause-type": type(exc).__name__,
-                    "cause-message": _bounded_cause_message(exc),
-                    "request-id": request.turn_id,
-                    "session-id": getattr(self.chat, "ag_session_id", None),
-                },
-            )
+            # Preserve the typed load-error evidence emitted by
+            # PersistentChat.  The gateway's dispatch policy uses the
+            # explicit unsent/ambiguous fields to decide whether a fresh
+            # session replay is safe; wrapping this as generic EXT-004 would
+            # erase that distinction and make the guarded recovery path
+            # unreachable from normal prompt admission.
+            if isinstance(exc, AudiaGenticError) and exc.code == "EXT-GPTAUTO-005":
+                details = dict(exc.details or {})
+                details.setdefault("failure-stage", "readiness")
+                details.setdefault("submission-state", "not_started")
+                details.setdefault("retryable-same-session", False)
+                details.setdefault("previous-turn-unresolved", unresolved)
+                details.setdefault("request-id", request.turn_id)
+                details.setdefault("session-id", getattr(self.chat, "ag_session_id", None))
+                failure = AudiaGenticError(
+                    code=exc.code,
+                    kind=exc.kind,
+                    message=exc.message,
+                    details=details,
+                )
+            else:
+                failure = AudiaGenticError(
+                    code="EXT-GPTAUTO-004",
+                    kind="providers",
+                    message="gpt-auto turn admission failed before provider submission",
+                    details={
+                        "failure-stage": "readiness",
+                        "submission-state": "not_started",
+                        "retryable-same-session": False,
+                        "previous-turn-unresolved": unresolved,
+                        "cause-type": type(exc).__name__,
+                        "cause-message": _bounded_cause_message(exc),
+                        "request-id": request.turn_id,
+                        "session-id": getattr(self.chat, "ag_session_id", None),
+                    },
+                )
             retained = await self.chat.retain_after_turn_failure(failure)
             details = dict(failure.details or {})
             # A recovery helper may return True after it has performed best-
