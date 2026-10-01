@@ -397,6 +397,8 @@ class PersistentChat:
                 self._bind_page(page)
                 retained = await self._retained_page_snapshot()
                 if not await self._replace_load_failed_page(retained):
+                    if retained is not None and "conversation-load-failed" in retained.dom_signals:
+                        raise self._conversation_load_failure_error(retained)
                     await self._prefer_active_conversation_page()
             elif not target:
                 # provider_session_id is set but neither a retained browser
@@ -525,6 +527,21 @@ class PersistentChat:
         # ``unknown-or-closed-page`` error; recovery then rebinds by stable
         # target/provider URL and, if necessary, recreates the conversation tab.
         await self._validate_page_binding()
+        if (
+            self.provider_session_id
+            and self.page_handle
+            and self.state not in {ChatState.FAILED, ChatState.CLOSED}
+        ):
+            # A retained handle can remain valid while its document has been
+            # replaced by ChatGPT's "Could not load this conversation" page.
+            # Treat that DOM state as a binding failure before the deferred
+            # resume shortcut below. Otherwise resume_existing() repeatedly
+            # observes the same dead page, renews synthetic activity, and
+            # presents false progress to the external client.
+            retained = await self._retained_page_snapshot()
+            if retained is not None and "conversation-load-failed" in retained.dom_signals:
+                if not await self._replace_load_failed_page(retained):
+                    raise self._conversation_load_failure_error(retained)
         if self.provider_session_id and not self.page_handle:
             # AS125 may have reclaimed only the physical tab. Reopen the
             # exact retained provider conversation before admitting a turn;
@@ -825,7 +842,11 @@ class PersistentChat:
         ``list_pages`` and navigation. They cannot prove a DOM load failure,
         so retain their historical URL-binding behavior.
         """
-        browser = self._gpt_browser()
+        browser = getattr(self.runtime, "gpt_browser", None) or getattr(
+            self.runtime, "bridge", None
+        )
+        if browser is None:
+            return None
         if not all(
             callable(getattr(browser, name, None))
             for name in ("page_by_handle", "snapshot")
@@ -845,6 +866,46 @@ class PersistentChat:
                 0,
                 int(getattr(recovery, "conversation_load_failure_max_attempts", 0)),
             )
+        )
+
+    def _conversation_load_failure_error(
+        self, snapshot: ChatSnapshot | None = None
+    ) -> AudiaGenticError:
+        """Build the terminal error for an exhausted failed-page recovery."""
+        self._set_unresolved_recovery(
+            "conversation-load-recovery-exhausted",
+            attempts=self._conversation_load_recovery_attempts,
+            provider_session_id=self.provider_session_id,
+            chat_url=self.chat_url,
+        )
+        if self.state not in {ChatState.FAILED, ChatState.CLOSED}:
+            self._move(ChatState.FAILED)
+        details: dict[str, object] = {
+            "failure-reason": "conversation-load-failed",
+            "recovery-reason": "conversation-load-recovery-exhausted",
+            "conversation-load-recovery-attempts": self._conversation_load_recovery_attempts,
+            "submission-proven": self._submission_proven,
+            "submission-replay": False,
+            "provider-session-id": self.provider_session_id,
+            "chat-url": self.chat_url,
+            **self._unresolved_recovery_diagnostics(),
+        }
+        if snapshot is not None:
+            details.update(
+                {
+                    "dom-signals": sorted(snapshot.dom_signals),
+                    "observed-url": snapshot.url,
+                    "failure-response-available": bool(snapshot.latest_assistant_text),
+                }
+            )
+        return AudiaGenticError(
+            code="EXT-GPTAUTO-005",
+            kind="providers",
+            message=(
+                "gpt-auto could not load the durable ChatGPT conversation after "
+                "bounded recovery; the unresolved request was not replayed"
+            ),
+            details=details,
         )
 
     async def _replace_load_failed_page(self, snapshot: ChatSnapshot | None) -> bool:

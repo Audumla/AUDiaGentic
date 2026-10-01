@@ -1874,6 +1874,64 @@ async def test_reconcile_replaces_retained_conversation_load_error_without_resub
 
 
 @pytest.mark.asyncio
+async def test_ensure_ready_does_not_treat_repeated_load_error_inspection_as_progress() -> None:
+    """A bound load-error page becomes terminal when replacement budget is spent."""
+    config = GptAutoConfig.from_dict(valid_config())
+    chat_url = "https://chatgpt.com/g/g-p-project/c/provider-session"
+    failed = ChatSnapshot(
+        url=chat_url,
+        composer_present=False,
+        composer_editable=False,
+        user_count=0,
+        assistant_count=0,
+        latest_assistant_id=None,
+        latest_user_text=None,
+        latest_assistant_text=None,
+        dom_signals=frozenset({"conversation-load-failed"}),
+        error_present=True,
+    )
+    chat = PersistentChat(
+        ag_session_id="session-load-error-admission",
+        project_name="project",
+        project_url="https://chatgpt.com/g/g-p-project/project",
+        runtime=SimpleNamespace(),
+        config=config,
+        binding_sink=lambda _update: None,
+        provider_session_id="provider-session",
+        chat_url=chat_url,
+        resume_provider_metadata={"conversation-load-recovery-attempts": 2},
+    )
+    chat.page_handle = "retained-error"
+    chat.state = ChatState.RECOVERING
+    chat.unresolved_turn_pending = True
+    chat.defer_unresolved_reconciliation()
+    replacements: list[ChatSnapshot | None] = []
+
+    async def validate_binding() -> None:
+        return None
+
+    async def retained_snapshot() -> ChatSnapshot:
+        return failed
+
+    async def exhausted_replacement(snapshot: ChatSnapshot | None) -> bool:
+        replacements.append(snapshot)
+        return False
+
+    chat._validate_page_binding = validate_binding  # type: ignore[method-assign]
+    chat._retained_page_snapshot = retained_snapshot  # type: ignore[method-assign]
+    chat._replace_load_failed_page = exhausted_replacement  # type: ignore[method-assign]
+
+    with pytest.raises(AudiaGenticError) as raised:
+        await chat.ensure_ready()
+
+    assert raised.value.code == "EXT-GPTAUTO-005"
+    assert raised.value.details["failure-reason"] == "conversation-load-failed"
+    assert raised.value.details["submission-replay"] is False
+    assert replacements == [failed]
+    assert chat.state is ChatState.FAILED
+
+
+@pytest.mark.asyncio
 async def test_conversation_load_recovery_budget_survives_chat_reconstruction() -> None:
     """A failed replacement consumes durable budget across new chat objects."""
     config = GptAutoConfig.from_dict(valid_config())
