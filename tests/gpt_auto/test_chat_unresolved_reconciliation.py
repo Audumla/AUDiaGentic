@@ -106,6 +106,45 @@ async def test_readiness_failure_is_typed_as_not_started_and_retryable(
 
 
 @pytest.mark.asyncio
+async def test_load_error_readiness_preserves_safe_fresh_session_recovery_evidence() -> None:
+    chat = _chat(unresolved=False)
+    transport = GptAutoSessionTransport(chat)
+    typed = AudiaGenticError(
+        code="EXT-GPTAUTO-005",
+        kind="providers",
+        message="conversation could not be loaded after bounded recovery",
+        details={
+            "failure-reason": "conversation-load-failed",
+            "submission-proven": False,
+            "submission-attempted": False,
+            "submission-ambiguous": False,
+            "dom-signals": ["conversation-load-failed"],
+        },
+    )
+
+    async def fail_ready() -> None:
+        raise typed
+
+    chat.ensure_ready = fail_ready  # type: ignore[method-assign]
+    chat.retain_after_turn_failure = lambda _error: asyncio.sleep(0, result=False)  # type: ignore[method-assign]
+
+    with pytest.raises(AudiaGenticError) as raised:
+        await transport.prompt(
+            SessionPrompt(turn_id="req-load-error", body="hello"),
+            lambda _observation: None,
+        )
+
+    assert raised.value.code == "EXT-GPTAUTO-005"
+    assert raised.value.details["failure-reason"] == "conversation-load-failed"
+    assert raised.value.details["submission-proven"] is False
+    assert raised.value.details["submission-attempted"] is False
+    assert raised.value.details["submission-ambiguous"] is False
+    assert raised.value.details["failure-stage"] == "readiness"
+    assert raised.value.details["submission-state"] == "not_started"
+    assert transport.turn_failure_disposition() is SessionFailureDisposition.TERMINATE
+
+
+@pytest.mark.asyncio
 async def test_prompt_relays_provider_activity_before_slow_readiness(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

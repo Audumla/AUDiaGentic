@@ -885,6 +885,17 @@ class PersistentChat:
             "recovery-reason": "conversation-load-recovery-exhausted",
             "conversation-load-recovery-attempts": self._conversation_load_recovery_attempts,
             "submission-proven": self._submission_proven,
+            # ``ensure_ready`` runs before a new GptAutoTurn exists, but it is
+            # also used by restart observation.  Make the distinction
+            # explicit so dispatch can rotate only an actually-unsent request;
+            # a retained unresolved turn remains observation-only.
+            "submission-attempted": bool(self.active_turn_id),
+            "submission-ambiguous": bool(
+                self.active_turn_id or self.unresolved_turn_pending
+            ),
+            "previous-turn-unresolved": bool(self.unresolved_turn_pending),
+            "failure-stage": "readiness",
+            "submission-state": "not_started",
             "submission-replay": False,
             "provider-session-id": self.provider_session_id,
             "chat-url": self.chat_url,
