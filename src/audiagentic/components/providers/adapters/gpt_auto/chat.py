@@ -39,6 +39,14 @@ class ProviderBindingIntegrityError(RuntimeError):
     """A request-owned provider page no longer identifies the bound turn."""
 
 
+class _ConversationLoadFailure(CdpError):
+    """Carry the replacement tab's DOM proof to the admission boundary."""
+
+    def __init__(self, snapshot: ChatSnapshot) -> None:
+        super().__init__("gpt-auto replacement conversation still failed to load")
+        self.snapshot = snapshot
+
+
 class ChatState(StrEnum):
     OPENING = "opening"
     READY = "ready"
@@ -540,7 +548,15 @@ class PersistentChat:
             # presents false progress to the external client.
             retained = await self._retained_page_snapshot()
             if retained is not None and "conversation-load-failed" in retained.dom_signals:
-                if not await self._replace_load_failed_page(retained):
+                try:
+                    replaced = await self._replace_load_failed_page(retained)
+                except _ConversationLoadFailure as exc:
+                    # A replacement can render the same provider error even
+                    # though navigation itself succeeded. Preserve that DOM
+                    # witness instead of downgrading it to generic readiness
+                    # failure at the transport boundary.
+                    raise self._conversation_load_failure_error(exc.snapshot) from exc
+                if not replaced:
                     raise self._conversation_load_failure_error(retained)
         if self.provider_session_id and not self.page_handle:
             # AS125 may have reclaimed only the physical tab. Reopen the
@@ -970,7 +986,7 @@ class PersistentChat:
             )
             replacement = await self.snapshot(allow_recovering=True)
             if "conversation-load-failed" in replacement.dom_signals:
-                raise CdpError("gpt-auto replacement conversation still failed to load")
+                raise _ConversationLoadFailure(replacement)
             # During restart recovery the provider may still be generating. A
             # request-owned resume turn must attach and observe immediately;
             # ordinary session opening still proves quiescence below.

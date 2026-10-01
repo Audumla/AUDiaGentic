@@ -601,6 +601,30 @@ async def test_retry_delivery_timeout_clicks_plain_text_alert_button() -> None:
 
 
 @pytest.mark.asyncio
+async def test_retry_delivery_timeout_clicks_resume_stream_unavailable_button() -> None:
+    """The current provider wording uses the same request-owned Retry path."""
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            await page.set_content(
+                '<aside role="alert"><div>Resume stream unavailable</div>'
+                '<button type="button">Retry</button></aside>'
+            )
+            await page.evaluate(
+                "document.querySelector('button').addEventListener("
+                "'click', () => { document.querySelector('button').dataset.clicked = 'true'; })"
+            )
+
+            clicked = await page.evaluate(_RETRY_DELIVERY_TIMEOUT_FN)
+
+            assert clicked is True
+            assert await page.evaluate("document.querySelector('button').dataset.clicked") == "true"
+        finally:
+            await browser.close()
+
+
+@pytest.mark.asyncio
 async def test_retry_delivery_timeout_never_clicks_a_non_retry_button() -> None:
     """A visible, enabled button in an unrelated role="alert" whose text is
     not exactly "retry" must never be activated."""

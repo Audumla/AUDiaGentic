@@ -1268,9 +1268,14 @@ _RETRY_DELIVERY_TIMEOUT_FN = r"""() => {
     // meant Retry-labelled control, and the exact-text guard alone cannot
     // tell the two apart. Only the exact-text "retry" button inside this
     // specific, identified alert is ever clicked.
-    const knownAlert = Array.from(document.querySelectorAll('[role="alert"]')).find(
-      alert => normalize(alert.innerText || alert.textContent).includes('stream recovery polling timed out')
-    );
+    const knownDeliveryMessages = [
+      'stream recovery polling timed out',
+      'resume stream unavailable',
+    ];
+    const knownAlert = Array.from(document.querySelectorAll('[role="alert"]')).find(alert => {
+      const text = normalize(alert.innerText || alert.textContent);
+      return knownDeliveryMessages.some(message => text.includes(message));
+    });
     if (knownAlert) {
       button = Array.from(knownAlert.querySelectorAll('button')).find(isRetryButton);
     }

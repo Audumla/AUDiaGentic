@@ -11,6 +11,7 @@ from audiagentic.components.providers.adapters.gpt_auto.cdp.bridge import Bridge
 from audiagentic.components.providers.adapters.gpt_auto.chat import (
     ChatState,
     PersistentChat,
+    _ConversationLoadFailure,
     _unresolved_prompt_match,
     _unresolved_prompt_match_diagnostics,
 )
@@ -1928,6 +1929,60 @@ async def test_ensure_ready_does_not_treat_repeated_load_error_inspection_as_pro
     assert raised.value.details["failure-reason"] == "conversation-load-failed"
     assert raised.value.details["submission-replay"] is False
     assert replacements == [failed]
+    assert chat.state is ChatState.FAILED
+
+
+@pytest.mark.asyncio
+async def test_ensure_ready_preserves_replacement_load_error_dom_evidence() -> None:
+    """A replacement tab that also fails stays eligible for safe unsent retry."""
+    config = GptAutoConfig.from_dict(valid_config())
+    chat_url = "https://chatgpt.com/g/g-p-project/c/provider-session"
+    failed = ChatSnapshot(
+        url=chat_url,
+        composer_present=False,
+        composer_editable=False,
+        user_count=0,
+        assistant_count=0,
+        latest_assistant_id=None,
+        latest_user_text=None,
+        latest_assistant_text=None,
+        dom_signals=frozenset({"conversation-load-failed"}),
+        error_present=True,
+    )
+    chat = PersistentChat(
+        ag_session_id="session-load-error-replacement",
+        project_name="project",
+        project_url="https://chatgpt.com/g/g-p-project/project",
+        runtime=SimpleNamespace(),
+        config=config,
+        binding_sink=lambda _update: None,
+        provider_session_id="provider-session",
+        chat_url=chat_url,
+        resume_provider_metadata={"conversation-load-recovery-attempts": 0},
+    )
+    chat.page_handle = "retained-error"
+
+    async def validate_binding() -> None:
+        return None
+
+    async def retained_snapshot() -> ChatSnapshot:
+        return failed
+
+    async def failed_replacement(_snapshot: ChatSnapshot | None) -> bool:
+        raise _ConversationLoadFailure(failed)
+
+    chat._validate_page_binding = validate_binding  # type: ignore[method-assign]
+    chat._retained_page_snapshot = retained_snapshot  # type: ignore[method-assign]
+    chat._replace_load_failed_page = failed_replacement  # type: ignore[method-assign]
+
+    with pytest.raises(AudiaGenticError) as raised:
+        await chat.ensure_ready()
+
+    assert raised.value.code == "EXT-GPTAUTO-005"
+    assert raised.value.details["dom-signals"] == ["conversation-load-failed"]
+    assert raised.value.details["submission-proven"] is False
+    assert raised.value.details["submission-ambiguous"] is False
+    assert raised.value.details["submission-attempted"] is False
     assert chat.state is ChatState.FAILED
 
 
