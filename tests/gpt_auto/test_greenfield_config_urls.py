@@ -369,7 +369,8 @@ def test_live_workflow_declares_delivery_timeout_retry_signal() -> None:
     # instead of by button attributes -- see gpt-auto-defaults.yaml.
     assert signals["delivery-timeout-alert"]["selectors"] == ['[role="alert"]']
     assert signals["delivery-timeout-alert"]["textContainsAny"] == [
-        "stream recovery polling timed out"
+        "stream recovery polling timed out",
+        "resume stream unavailable",
     ]
 
 
