@@ -23,6 +23,7 @@ from audiagentic.foundation.system.managed_process import current_process_eviden
 from audiagentic.foundation.system.managed_service import ManagedServiceStore
 from audiagentic.foundation.system.managed_service_contracts import EndpointInfo, ServiceKey
 from audiagentic.foundation.system.managed_service_owner import ManagedServiceOwner
+from audiagentic.foundation.time import now_iso_z
 
 logger = logging.getLogger(__name__)
 GATEWAY_SERVICE_KEY = ServiceKey("agent-execution-gateway", "default")
@@ -425,6 +426,51 @@ class GatewayServiceHost:
         for project_root, record in registry.snapshot():
             updated = diagnose_activity_lease(project_root, record)
             registry.update(project_root, updated)
+            if (
+                updated.get("state") == "running"
+                and updated.get("cancel-requested") is True
+                and isinstance(updated.get("session-id"), str)
+            ):
+                session_id = str(updated["session-id"])
+                try:
+                    session = sessions_store.read_session_record(project_root, session_id)
+                except Exception:  # noqa: BLE001 - a missing record is not proof the turn stopped
+                    session = None
+                session_terminal = isinstance(session, dict) and session.get("state") in {
+                    "closed",
+                    "failed",
+                    "expired",
+                }
+                runtime_available = False
+                if runtime is not None:
+                    try:
+                        runtime_available = bool(
+                            runtime.session_runtime_status(session_id).get("available")
+                        )
+                    except Exception:  # noqa: BLE001 - retain the durable session fact
+                        runtime_available = False
+                if session_terminal and not runtime_available:
+                    try:
+                        updated = store.transition_owned_terminal(
+                            project_root,
+                            updated["request-id"],
+                            "cancelled",
+                            updates={
+                                "error": {
+                                    "code": "CON-AGW-CANCELLED",
+                                    "kind": "agents",
+                                    "message": "gateway request cancellation confirmed after session closure",
+                                },
+                                "finished-at": now_iso_z(),
+                            },
+                            owner_epoch=updated["dispatch-owner-epoch"],
+                            worker_id=updated["worker-id"],
+                            attempt_epoch=updated["attempt-epoch"],
+                            expected_revision=updated.get("revision"),
+                        )
+                    except Exception:  # noqa: BLE001 - a live worker or newer owner wins
+                        updated = store.read_record(project_root, updated["request-id"])
+                    registry.update(project_root, updated)
             updated = _retire_unbound_initial_timeout(updated)
             registry.update(project_root, updated)
             diagnostics = updated.get("diagnostics")

@@ -952,6 +952,17 @@ class PersistentChat:
             return False
         if not self._conversation_load_recovery_allowed():
             return False
+        # A prior recovery attempt (or a human opening the conversation) can
+        # leave several tabs with the same durable conversation URL.  Before
+        # creating yet another replacement, prefer an already-mounted healthy
+        # duplicate.  This is observation-only: no prompt is replayed and the
+        # failed retained tab remains available as provider evidence.
+        failed_handle = self.page_handle
+        await self._prefer_active_conversation_page()
+        if self.page_handle and self.page_handle != failed_handle:
+            alternate = await self.snapshot(allow_recovering=True)
+            if "conversation-load-failed" not in alternate.dom_signals:
+                return True
         old_handle = self.page_handle
         if old_handle:
             self.page_handle = None

@@ -205,6 +205,89 @@ def test_host_watchdog_retries_operator_requested_reconciliation(
     assert result == (diagnosed,)
 
 
+def test_host_watchdog_terminalizes_cancel_after_session_closes(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """A closed session must not leave an acknowledged cancel running forever."""
+    from audiagentic.components.agents.gateway.service.host import GatewayServiceHost
+
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    request = {
+        "request-id": "req-cancelled-session",
+        "state": "running",
+        "session-id": "ses-closed",
+        "revision": 9,
+        "cancel-requested": True,
+        "dispatch-owner-epoch": "owner-1",
+        "worker-id": "worker-1",
+        "attempt-epoch": 1,
+        "watchdog-state": "intervention",
+    }
+    terminal = {
+        **request,
+        "state": "cancelled",
+        "revision": 10,
+        "cancel-acknowledged-by": "recovery",
+    }
+
+    class Registry:
+        def __init__(self) -> None:
+            self.current = dict(request)
+            self.unregistered: list[str] = []
+
+        def snapshot(self):
+            return ((project_root.resolve(), dict(self.current)),)
+
+        def update(self, _root, record):
+            self.current = dict(record)
+
+        def unregister(self, _root, request_id):
+            self.unregistered.append(request_id)
+
+    class Runtime:
+        def session_runtime_status(self, session_id: str):
+            assert session_id == "ses-closed"
+            return {"available": False}
+
+    registry = Registry()
+    transition: dict = {}
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.queue.watchdog_registry.watchdog_registry",
+        lambda: registry,
+    )
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.queue.dispatch.diagnose_activity_lease",
+        lambda _root, record: dict(record),
+    )
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.session.sessions.peek_session_runtime",
+        lambda: Runtime(),
+    )
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.session.sessions_store.read_session_record",
+        lambda _root, _session_id: {"state": "closed"},
+    )
+
+    def terminalize(*_args, **kwargs):
+        transition.update(kwargs)
+        return dict(terminal)
+
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.store.transition_owned_terminal",
+        terminalize,
+    )
+
+    result = GatewayServiceHost.run_watchdog_pass(object.__new__(GatewayServiceHost))
+
+    assert result == (terminal,)
+    assert transition["expected_revision"] == 9
+    assert transition["owner_epoch"] == "owner-1"
+    assert transition["worker_id"] == "worker-1"
+    assert transition["attempt_epoch"] == 1
+    assert registry.unregistered == ["req-cancelled-session"]
+
+
 def test_host_watchdog_orphan_retirement_aborts_on_revision_race(
     tmp_path: Path, monkeypatch
 ) -> None:
