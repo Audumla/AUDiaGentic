@@ -14,6 +14,7 @@ from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from audiagentic.components.agents.gateway.mapping import normalize_chat_title
 
@@ -25,6 +26,21 @@ _ACTIVE_SESSION_STATES = frozenset({"active", "closing"})
 _FAILED_REQUEST_STATES = frozenset(
     {"failed", "rejected", "interrupted", "timed-out", "expired", "abandoned"}
 )
+
+
+def _safe_gpt_chat_url(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        parsed = urlsplit(value)
+    except ValueError:
+        return None
+    hostname = (parsed.hostname or "").lower().rstrip(".")
+    if parsed.scheme != "https" or parsed.username or parsed.password:
+        return None
+    if hostname not in {"chatgpt.com", "www.chatgpt.com", "chat.openai.com", "www.chat.openai.com"}:
+        return None
+    return value
 
 
 def recent_window_seconds(value: object | None = None) -> int:
@@ -233,10 +249,6 @@ def _request_row(
     # conversation URL.  The gateway-session identity is enough for the
     # provider's in-process live-page fallback; do not make the dashboard
     # wait for URL discovery before exposing the action.
-    row["focus-tab-available"] = bool(row.get("provider-chat-url")) or (
-        provider_id.startswith("gpt-auto")
-        and str(row.get("state") or "") in {"dispatching", "running", "active"}
-    )
     return row
 
 
@@ -259,6 +271,9 @@ def _session_row(record: dict[str, Any], live: dict[str, Any] | None) -> dict[st
         "turn-count": session_store.session_turn_count(record),
     }
     provider_metadata = session_store.session_provider_metadata(record)
+    chat_url = _safe_gpt_chat_url(provider_metadata.get("chat-url"))
+    if chat_url is not None:
+        row["provider-chat-url"] = chat_url
     chat_title = normalize_chat_title(provider_metadata.get("chat-title"))
     if chat_title is not None:
         row["provider-chat-title"] = chat_title
@@ -268,6 +283,9 @@ def _session_row(record: dict[str, Any], live: dict[str, Any] | None) -> dict[st
             "turn-active": live.get("turn-active", False),
             "current-request-id": live.get("current-request-id"),
         })
+    row["focus-tab-available"] = chat_url is not None or (
+        str(row.get("provider-id") or "").startswith("gpt-auto") and bool(live)
+    )
     return {key: value for key, value in row.items() if value is not None}
 
 
@@ -580,9 +598,9 @@ async function cancelRequest(button) {
   finally{button.disabled=false;}
  }
  async function completeFromProvider(button) { if(!window.confirm('Capture the current response from GPT and mark this request completed?'))return; button.disabled=true; const feedback=document.getElementById('request-action-feedback'); feedback.textContent='Capturing current GPT response…'; try { const response=await fetch(completeEndpoint,{method:'POST',headers:{'Content-Type':'application/json','X-AudiaGentic-Dashboard-Token':focusToken},body:JSON.stringify({'request-id':button.dataset.requestId}),signal:AbortSignal.timeout(30000)}); const body=await response.json(); if(!response.ok)throw new Error([body.error?.code,body.error?.message].filter(Boolean).join(': ')||'Provider response was not accepted'); feedback.textContent='Request completed from current GPT response'; await refresh(); } catch(error){ feedback.textContent=error.message||'Provider response could not be captured'; } finally { button.disabled=false; } }
-function chatLink(r) { if(!r['focus-tab-available']) return ''; return ` <button type="button" class="action-button icon-button icon-action focus-chat" data-request-id="${esc(r['request-id'])}" aria-label="Open or focus GPT tab" title="Open the retained GPT tab, or focus it if already open">${focusIcon}</button>`; }
+function sessionChatControl(session) { if(!session['focus-tab-available']) return ''; return ` <button type="button" class="action-button icon-button icon-action focus-chat" data-session-id="${esc(session['session-id'])}" aria-label="Open or focus GPT conversation" title="Open this session's retained GPT conversation, or focus it if already open">${focusIcon}</button>`; }
 function setFeedback(button, text) { button.classList.add('feedback'); button.title=text; button.setAttribute('aria-label',text); setTimeout(()=>button.classList.remove('feedback'),1800); }
-async function focusChat(button) { const id=button.dataset.requestId; button.disabled=true; try { const response=await fetch(focusEndpoint,{method:'POST',headers:{'Content-Type':'application/json','X-AudiaGentic-Dashboard-Token':focusToken},body:JSON.stringify({'request-id':id})}); const body=await response.json(); const result=body.result||{}; setFeedback(button,result.reason==='conversation-tab-opened'?'GPT tab opened':(result.outcome==='focused'?'GPT tab focused':(result.reason||result.outcome||'GPT tab unavailable'))); } catch(error) { setFeedback(button,'GPT tab unavailable'); } finally { setTimeout(()=>{button.disabled=false;},1200); } }
+async function focusChat(button) { const id=button.dataset.sessionId; button.disabled=true; try { const response=await fetch(focusEndpoint,{method:'POST',headers:{'Content-Type':'application/json','X-AudiaGentic-Dashboard-Token':focusToken},body:JSON.stringify({'session-id':id})}); const body=await response.json(); const result=body.result||{}; setFeedback(button,result.reason==='conversation-tab-opened'?'GPT tab opened':(result.outcome==='focused'?'GPT tab focused':(result.reason||result.outcome||'GPT tab unavailable'))); } catch(error) { setFeedback(button,'GPT tab unavailable'); } finally { setTimeout(()=>{button.disabled=false;},1200); } }
 async function purgeSession(button) { const id=button.dataset.sessionId; if(!window.confirm('Purge this session and all gateway request data? This cannot be undone.')) return; button.disabled=true; try { const response=await fetch(purgeEndpoint,{method:'POST',headers:{'Content-Type':'application/json','X-AudiaGentic-Dashboard-Token':focusToken},body:JSON.stringify({'session-id':id})}); const body=await response.json(); const result=body.result||{}; setFeedback(button,result.outcome==='purged'?'Session purged':(result.reason||result.outcome||'Purge unavailable')); if(result.outcome==='purged') setTimeout(refresh,400); } catch(error) { setFeedback(button,'Purge unavailable'); } finally { setTimeout(()=>{button.disabled=false;},1200); } }
  function bindFocusButtons() { document.querySelectorAll('.cancel-request').forEach(button=>button.addEventListener('click',()=>cancelRequest(button))); document.querySelectorAll('.complete-provider').forEach(button=>button.addEventListener('click',()=>completeFromProvider(button))); document.querySelectorAll('.focus-chat').forEach(button=>button.addEventListener('click',()=>focusChat(button))); document.querySelectorAll('.purge-session').forEach(button=>button.addEventListener('click',()=>purgeSession(button))); }
 function bindSessionToggles() { document.querySelectorAll('details.session[data-session-id] > summary').forEach(summary=>summary.addEventListener('click',event=>{if(event.target.closest('button,a'))return; event.preventDefault(); const session=summary.parentElement; const id=session.dataset.sessionId; const opening=!session.open; if(opening){collapsedSessionIds.delete(id);expandedSessionIds.add(id);}else{expandedSessionIds.delete(id);collapsedSessionIds.add(id);} persistCollapsedSessions(); try{localStorage.setItem(EXPANDED_SESSIONS_KEY,JSON.stringify([...expandedSessionIds].slice(-500)));}catch(_){} if(latest)draw(latest); })); }
@@ -599,7 +617,7 @@ function requestRows(rows, includeExecution=true) {
     const execution=includeExecution?executionSummary(r['execution-profile-id'],r['resolved-provider-id'],r['resolved-model-id']):'';
     const title=r.title||(includeExecution&&r['provider-chat-title']?r['provider-chat-title']:'');
     const diagnostic=requestDiagnostic(r);
-     return `<div class="request-row"><div class="request-identity">${clientIcon(r)}<code class="request-id">${esc(r['request-id'])}</code>${title?`<span class="request-title" title="${esc(title)}">${esc(title)}</span>`:''}${execution?`<span class="request-execution" title="${esc(execution)}">${esc(execution)}</span>`:''}</div><div class="request-state">${badge(r.state)}${sideEffectFlag(r)}</div><div class="request-meta">${activityLabel(r)}</div><div class="request-meta request-updated">${stamp(recent(r))}</div><div class="request-actions">${completeControl(r)}${cancelControl(r)}${chatLink(r)}</div>${diagnostic?`<div class="request-diagnostic" tabindex="0" title="${esc(diagnostic)}" aria-label="${esc(diagnostic)}">${esc(diagnostic)}</div>`:''}</div>`;
+     return `<div class="request-row"><div class="request-identity">${clientIcon(r)}<code class="request-id">${esc(r['request-id'])}</code>${title?`<span class="request-title" title="${esc(title)}">${esc(title)}</span>`:''}${execution?`<span class="request-execution" title="${esc(execution)}">${esc(execution)}</span>`:''}</div><div class="request-state">${badge(r.state)}${sideEffectFlag(r)}</div><div class="request-meta">${activityLabel(r)}</div><div class="request-meta request-updated">${stamp(recent(r))}</div><div class="request-actions">${completeControl(r)}${cancelControl(r)}</div>${diagnostic?`<div class="request-diagnostic" tabindex="0" title="${esc(diagnostic)}" aria-label="${esc(diagnostic)}">${esc(diagnostic)}</div>`:''}</div>`;
   }).join('');
 }
 function sessionActivitySummary(session) {
@@ -608,7 +626,7 @@ function sessionActivitySummary(session) {
 }
 function matchesState(session, rows) { const wanted=stateFilter.value; return wanted==='all'||session.state===wanted||rows.some(r=>r.state===wanted); }
 function matchesRequest(row) { return stateFilter.value==='all'||row.state===stateFilter.value; }
-function sessionCard(session, rows, empty=false, allRows=rows, project=null) { const sessionId=String(session['session-id']||''); const open=sessionShouldOpen(session,allRows)?' open':''; const purgeable=!allRows.some(r=>ACTIVE_REQUEST_STATES.has(r.state))&&!session['turn-active']&&!(session['pending-turns']>0); const purge=purgeable?`<button type="button" class="action-button icon-button purge-session" data-session-id="${esc(sessionId)}" aria-label="Purge session" title="Permanently remove this session and all gateway data">${purgeIcon}</button>`:''; const execution=executionSummary(esc(session['execution-profile-id']||''),esc(session['provider-id']||''),esc(session['model-id']||'')); const title=session['provider-chat-title']?`<div class="session-chat-title" title="${esc(session['provider-chat-title'])}">${esc(session['provider-chat-title'])}</div>`:''; return `<details class="session ${stateClass(session.state)}" data-session-id="${esc(sessionId)}"${open}><summary><div class="session-head"><div class="session-identity${project?' session-identity-with-icon':''}">${project?projectAvatar(project):''}<div class="session-text">${title}<div class="${title?'session-technical':'session-primary'}"><code>${esc(sessionId)}</code>${execution?` <span class="session-profile"> · ${execution}</span>`:''}</div></div></div><div class="session-actions">${badge(session.state)} <span class="muted">${esc(sessionActivitySummary(session))}</span>${purge}</div></div></summary><div class="session-body"><div class="request-grid">${empty?'<div class="muted">No matching requests</div>':requestRows(rows,false)}</div></div></details>`; }
+function sessionCard(session, rows, empty=false, allRows=rows, project=null) { const sessionId=String(session['session-id']||''); const open=sessionShouldOpen(session,allRows)?' open':''; const purgeable=!allRows.some(r=>ACTIVE_REQUEST_STATES.has(r.state))&&!session['turn-active']&&!(session['pending-turns']>0); const purge=purgeable?`<button type="button" class="action-button icon-button purge-session" data-session-id="${esc(sessionId)}" aria-label="Purge session" title="Permanently remove this session and all gateway data">${purgeIcon}</button>`:''; const execution=executionSummary(esc(session['execution-profile-id']||''),esc(session['provider-id']||''),esc(session['model-id']||'')); const title=session['provider-chat-title']?`<div class="session-chat-title" title="${esc(session['provider-chat-title'])}">${esc(session['provider-chat-title'])}</div>`:''; return `<details class="session ${stateClass(session.state)}" data-session-id="${esc(sessionId)}"${open}><summary><div class="session-head"><div class="session-identity${project?' session-identity-with-icon':''}">${project?projectAvatar(project):''}<div class="session-text">${title}<div class="${title?'session-technical':'session-primary'}"><code>${esc(sessionId)}</code>${execution?` <span class="session-profile"> · ${execution}</span>`:''}</div></div></div><div class="session-actions">${badge(session.state)} <span class="muted">${esc(sessionActivitySummary(session))}</span>${sessionChatControl(session)}${purge}</div></div></summary><div class="session-body"><div class="request-grid">${empty?'<div class="muted">No matching requests</div>':requestRows(rows,false)}</div></div></details>`; }
 function requestGroup(state) { if(ACTIVE_REQUEST_STATES.has(state)) return 'active'; if(FAILED_REQUEST_STATES.has(state)) return 'failed'; return 'completed'; }
 function projectView(project) {
   const grouped=new Map(); const requests=(project.requests||[]);
