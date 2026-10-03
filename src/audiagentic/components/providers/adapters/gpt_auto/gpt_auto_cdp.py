@@ -16,6 +16,7 @@ from .urls import parse_project_id
 logger = logging.getLogger(__name__)
 
 _CHATGPT_HOME_URL = "https://chatgpt.com/"
+_CHATGPT_PROJECTS_URL = "https://chatgpt.com/projects"
 
 _CLICK_PROJECTS_TAB_FN = r"""() => {
   const normalize = value => String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
@@ -1290,6 +1291,8 @@ class GptAutoCdpBrowserController(CdpBrowserController):
     """ChatGPT-specific selectors, composites, and conversation operations."""
 
     _ACTION_PAUSE_SECONDS = 0.15  # compatibility default; resolved config overrides it
+    _PAGE_READY_PAUSE_SECONDS = 1.0
+    _TYPED_PAUSE_SECONDS = 1.0
 
     def __init__(
         self, bridge: PythonCdpBridge, *, action_pause_seconds: float | None = None
@@ -1485,6 +1488,12 @@ class GptAutoCdpBrowserController(CdpBrowserController):
         stage = "composer-insertion"
         try:
             async with asyncio.timeout(timeout if timeout is not None else self._SUBMIT_DEFAULT_TIMEOUT_SECONDS):
+                # ChatGPT can expose an editable composer before the newly
+                # selected project chat has completed its React mount. Keep a
+                # human-scale boundary between page readiness and text input.
+                stage = "composer-readiness"
+                await asyncio.sleep(self._PAGE_READY_PAUSE_SECONDS)
+                stage = "composer-insertion"
                 await self.evaluate(
                     page,
                     r"""(text) => {
@@ -1500,7 +1509,10 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                     text,
                 )
                 await self.insert_text(page, text)
-                await asyncio.sleep(self._action_pause_seconds)
+                # Let controlled-editor input settle before the Send control
+                # is queried or clicked. This is deliberately independent of
+                # the shorter generic browser-action pause.
+                await asyncio.sleep(self._TYPED_PAUSE_SECONDS)
                 # The send-side DOM check below re-reads and compares the
                 # composer text.  Input.insertText has already delivered the
                 # exact caller text to the focused editor, so a second read
@@ -1628,21 +1640,64 @@ class GptAutoCdpBrowserController(CdpBrowserController):
         return {"url": str(result["url"]), "name": str(result.get("name") or project_name)}
 
     async def _open_projects_tab(self, page: CdpPageRef, *, timeout: float) -> bool:
-        """Use the current sidebar Explore hover menu when it is available."""
-        # Newly-created CDP targets are intentionally background targets.  The
-        # current ChatGPT renderer ignores the Explore hover/menu transition
-        # until that target is foregrounded, so activate it before probing the
-        # sidebar controls.
+        """Navigate directly to ChatGPT's complete Projects listing."""
         await self.bridge.call("keep_page_active", {"pageHandle": page.handle})
+        await self.navigate(page, _CHATGPT_PROJECTS_URL)
+        return await self._wait_for_projects_route(page, timeout=timeout)
+
+    async def _select_project_from_sidebar(
+        self, page: CdpPageRef, project_name: str, *, timeout: float
+    ) -> bool:
+        """Open one exact sidebar project without toggling it repeatedly.
+
+        Project rows can appear under either Projects or Pinned. A collapsed
+        project row is expanded at most once; if no exact visible project is
+        present, the caller falls back to the complete Projects listing.
+        """
         deadline = asyncio.get_running_loop().time() + max(0.1, timeout)
+        expanded_once = False
         while asyncio.get_running_loop().time() < deadline:
-            if await self.hover_text(page, "Explore"):
-                if await self.click_text(page, "Projects"):
-                    if await self._wait_for_projects_route(page, timeout=1.0):
-                        return True
-                if await self.evaluate(page, _CLICK_PROJECTS_TAB_FN):
-                    if await self._wait_for_projects_route(page, timeout=1.0):
-                        return True
+            action = await self.evaluate(
+                page,
+                r"""(name) => {
+                  const normalize = value => String(value || '').replace(/\s+/g, ' ').trim();
+                  const wanted = normalize(name).toLowerCase();
+                  const visible = element => element && element.getClientRects().length;
+                  const row = Array.from(document.querySelectorAll('[data-app-action-sidebar-project-row]')).find(
+                    candidate => visible(candidate) && normalize(
+                      candidate.getAttribute('data-app-action-sidebar-project-label')
+                    ).toLowerCase() === wanted
+                  );
+                  if (row) {
+                    const button = Array.from(row.querySelectorAll('button')).find(candidate =>
+                      visible(candidate) && normalize(candidate.getAttribute('aria-label')).toLowerCase() === `new chat in ${wanted}`
+                    );
+                    if (button) { button.click(); return 'selected'; }
+                    if (row.getAttribute('aria-expanded') !== 'true') {
+                      row.click();
+                      return 'expanded';
+                    }
+                    return 'waiting';
+                  }
+                  const sidebar = document.querySelector('nav') || document.querySelector('aside');
+                  const link = sidebar && Array.from(sidebar.querySelectorAll('a[href*="/g/g-p-"]')).find(candidate =>
+                    visible(candidate) && normalize(candidate.innerText || candidate.textContent).toLowerCase() === wanted
+                  );
+                  if (link) { link.click(); return 'selected'; }
+                  return 'missing';
+                }""",
+                project_name,
+            )
+            if action == "selected":
+                return True
+            if action == "missing":
+                return False
+            if action == "expanded":
+                if expanded_once:
+                    return False
+                expanded_once = True
+                await asyncio.sleep(self._PAGE_READY_PAUSE_SECONDS)
+                continue
             await asyncio.sleep(0.1)
         return False
 
@@ -1751,38 +1806,18 @@ class GptAutoCdpBrowserController(CdpBrowserController):
             async with asyncio.timeout(navigation_timeout):
                 page = await self.navigate(page, _CHATGPT_HOME_URL)
             known_targets = {candidate.target_id for candidate in await self.pages()}
-            projects_tab_opened = await self._open_projects_tab(page, timeout=navigation_timeout)
-            deadline = asyncio.get_running_loop().time() + navigation_timeout
-            clicked = False
-            if projects_tab_opened:
+            clicked = await self._select_project_from_sidebar(
+                page, project_name, timeout=min(3.0, navigation_timeout)
+            )
+            if not clicked:
+                projects_tab_opened = await self._open_projects_tab(
+                    page, timeout=navigation_timeout
+                )
+                if not projects_tab_opened:
+                    raise RuntimeError("ChatGPT Projects page did not become available")
                 clicked = await self._select_project_from_projects_page(
                     page, project_name, timeout=navigation_timeout
                 )
-            while asyncio.get_running_loop().time() < deadline:
-                if clicked:
-                    break
-                clicked = await self.evaluate(
-                    page,
-                    r"""(name) => {
-                       const normalize = value => String(value || '').replace(/\s+/g, ' ').trim();
-                       const wanted = normalize(name).toLowerCase();
-                       const row = Array.from(document.querySelectorAll('[data-app-action-sidebar-project-row]')).find(item =>
-                         normalize(item.getAttribute('data-app-action-sidebar-project-label')).toLowerCase() === wanted
-                       );
-                       if (!row) return false;
-                       if (row.getAttribute('aria-expanded') !== 'true') row.click();
-                       const button = Array.from(row.querySelectorAll('button')).find(candidate =>
-                         normalize(candidate.getAttribute('aria-label')).toLowerCase() === `new chat in ${wanted}`
-                           && candidate.getClientRects().length
-                       );
-                       if (button) { button.click(); return true; }
-                       return false;
-                     }""",
-                    project_name,
-                )
-                if clicked is True:
-                    break
-                await asyncio.sleep(0.1)
             if not clicked:
                 raise RuntimeError(f"ChatGPT project not found: {project_name}")
 
