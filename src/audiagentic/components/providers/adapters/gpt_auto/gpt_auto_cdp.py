@@ -1510,6 +1510,11 @@ class GptAutoCdpBrowserController(CdpBrowserController):
         return {"stopped": bool(stopped)}
 
     _SUBMIT_POLL_SECONDS = 0.1
+    # A successful Send click can navigate the ChatGPT SPA before CDP returns
+    # the Runtime.evaluate result. Do not let a lost acknowledgement consume
+    # the turn-scale submission timeout: the caller must reconcile the now
+    # ambiguous send against authoritative DOM state without clicking again.
+    _SEND_CLICK_ACK_TIMEOUT_SECONDS = 3.0
     # Give React's controlled composer a realistic render/input turn between
     # insertion and the synthetic Send click.  Keeping this outside the DOM
     # evaluator avoids batching both browser actions into one CDP task.
@@ -1561,9 +1566,10 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                     stage = "send-button"
                     send_attempted = True
                     await asyncio.sleep(self._action_pause_seconds)
-                    sent = await self.evaluate(
-                        page,
-                        r"""(text) => {
+                    async with asyncio.timeout(self._SEND_CLICK_ACK_TIMEOUT_SECONDS):
+                        sent = await self.evaluate(
+                            page,
+                            r"""(text) => {
                            // Read the editor's semantic DOM rather than innerText.
                            // ChatGPT's rich-link widget owns the presentation
                            // whitespace around its URL, so replace only that
@@ -1610,9 +1616,9 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                           const button = document.querySelector('[data-testid="send-button"], button[aria-label*="Send" i]');
                           if (!button || button.disabled || button.getAttribute('aria-disabled') === 'true' || !button.getClientRects().length) return false;
                           button.click(); return true;
-                        }""",
-                        text,
-                    )
+                            }""",
+                            text,
+                        )
                     if sent is True:
                         # Let the provider renderer process the synthetic click
                         # before the caller takes its first submission-proof
