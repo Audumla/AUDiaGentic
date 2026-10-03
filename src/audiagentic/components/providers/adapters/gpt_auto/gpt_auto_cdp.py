@@ -182,7 +182,7 @@ _SNAPSHOT_FN = r"""
   // `ChatGPT said:` label or assistant message id. Keep the block inventory
   // outside the message-id extraction so that the live block can be used as
   // the request-owned observation root during that gap.
-  const fallbackBlocks = usingFallbackMessages
+  let fallbackBlocks = usingFallbackMessages
     ? Array.from(document.querySelectorAll('.block-BQZwFn'))
         .map((block, domIndex) => ({
           block,
@@ -223,6 +223,26 @@ _SNAPSHOT_FN = r"""
       .filter(Boolean));
     return roles.size === 1 ? [...roles][0] : null;
   };
+  const fallbackTurnIdentity = block => {
+    const owner = block.closest('[data-content-search-turn-key]');
+    const value = owner?.getAttribute('data-content-search-turn-key');
+    return value ? String(value) : null;
+  };
+  // The virtualized renderer can expose both completed blocks with zero
+  // geometry and newest-first DOM order. In that black-and-white case the
+  // provider's shared content-turn key is stronger than either layout or DOM
+  // order: it explicitly pairs this prompt and assistant response.
+  fallbackBlocks = fallbackBlocks.slice().sort((left, right) => {
+    const leftTurn = fallbackTurnIdentity(left);
+    const rightTurn = fallbackTurnIdentity(right);
+    if (!leftTurn || leftTurn !== rightTurn) return 0;
+    const leftRole = fallbackBlockRole(left);
+    const rightRole = fallbackBlockRole(right);
+    if (leftRole === rightRole) return 0;
+    if (leftRole === 'user' && rightRole === 'assistant') return -1;
+    if (leftRole === 'assistant' && rightRole === 'user') return 1;
+    return 0;
+  });
   const latestFallbackUserBlock = usingFallbackMessages
     ? fallbackBlocks.slice().reverse().find(block => fallbackBlockRole(block) === 'user') || null
     : null;
