@@ -1498,6 +1498,20 @@ def list_execution_sessions(
     else:
         live_ids = set(_live_ids)
     records = session_store.list_session_records(project_root)
+    # The process-local reaper owns live transports.  Persisted sessions left
+    # non-live by a restart still need their independent durable idle policy
+    # applied; otherwise they remain "active" forever and pollute capacity and
+    # recovery decisions.  Listing is a regular dashboard/MCP sweep point and
+    # never expires a handle held by this process.
+    records = [
+        session_store.expire_session_if_policy_exceeded(
+            project_root, str(record["session-id"])
+        )
+        if record.get("state") not in session_store.SESSION_TERMINAL_STATES
+        and record.get("session-id") not in live_ids
+        else record
+        for record in records
+    ]
     if state == "all":
         state = None
     if state is not None:

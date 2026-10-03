@@ -1223,13 +1223,16 @@ class SessionRuntime:
             )
             return session_store.read_session_record(project_root, session_id)
 
-        record = session_store.expire_session_if_lifetime_exceeded(project_root, session_id)
-        if record.get("state") == "expired" and record.get("close-reason") == "max-lifetime":
+        record = session_store.expire_session_if_policy_exceeded(project_root, session_id)
+        if record.get("state") == "expired" and record.get("close-reason") in {
+            "max-lifetime",
+            "idle-timeout",
+        }:
             raise AudiaGenticError(
                 code="CON-AGW-004",
                 kind="agents",
-                message="session exceeded its max lifetime and cannot be rehydrated",
-                details={"session-id": session_id},
+                message="session exceeded its lifetime policy and cannot be rehydrated",
+                details={"session-id": session_id, "close-reason": record.get("close-reason")},
             )
         if record.get("state") != "active":
             raise AudiaGenticError(
