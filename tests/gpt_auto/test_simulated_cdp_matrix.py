@@ -393,6 +393,40 @@ async def test_sidebar_project_uses_trusted_pointer_for_exact_project(monkeypatc
 
 
 @pytest.mark.asyncio
+async def test_sidebar_occluded_new_chat_hovers_once_then_trusted_clicks(monkeypatch) -> None:
+    calls: list[tuple[str, object]] = []
+    actions = iter([
+        {"action": "hover", "x": 120.0, "y": 44.0},
+        {"action": "selected", "x": 277.6, "y": 44.0},
+    ])
+
+    class Bridge:
+        async def call(self, method, params=None, **_kwargs):
+            calls.append((method, params))
+            return {"ok": True}
+
+    browser = GptAutoCdpBrowserController(Bridge(), action_pause_seconds=0.0)
+    page = CdpPageRef("page-1", "target-1", 7, "https://chatgpt.com/", "")
+
+    async def evaluate(_page, function, value=None):
+        assert "button.contains(document.elementFromPoint" in function
+        assert value["expectedProjectId"] == "g-p-69cc"
+        return next(actions)
+
+    monkeypatch.setattr(browser, "evaluate", evaluate)
+
+    assert await browser._select_project_from_sidebar(
+        page, "AUDiaGentic", expected_project_id="g-p-69cc", timeout=2
+    ) is True
+    assert calls == [
+        ("keep_page_active", {"pageHandle": "page-1"}),
+        ("hover", {"pageHandle": "page-1", "x": 120.0, "y": 44.0}),
+        ("keep_page_active", {"pageHandle": "page-1"}),
+        ("click", {"pageHandle": "page-1", "x": 277.6, "y": 44.0}),
+    ]
+
+
+@pytest.mark.asyncio
 async def test_sidebar_project_rejects_wrong_exact_project_id(monkeypatch) -> None:
     calls: list[tuple[str, object]] = []
 
