@@ -783,7 +783,24 @@ class GptAutoTurn:
             if self._submission_proof_url and not parse_provider_session_id(baseline.url)
             else baseline
         )
-        final = await self._await_response(response_baseline, proof)
+        allow_empty_baseline_virtualized_assistant = (
+            self._composer_action_confirmed
+            and not self._recovered_existing_turn
+            and not parse_provider_session_id(baseline.url)
+            and baseline.user_count == 0
+            and baseline.assistant_count == 0
+            and not baseline.user_message_ids
+            and not baseline.assistant_message_ids
+            and self._submission_proof_url is not None
+            and same_chat_identity(response_baseline.url, self._submission_proof_url)
+        )
+        final = await self._await_response(
+            response_baseline,
+            proof,
+            allow_empty_baseline_virtualized_assistant=(
+                allow_empty_baseline_virtualized_assistant
+            ),
+        )
         if self.state is TurnState.CANCELLED:
             return self._result("cancelled")
         if final is None:
@@ -1498,6 +1515,7 @@ class GptAutoTurn:
         current: ChatSnapshot,
         *,
         allow_legacy_owned_error_alert: bool = False,
+        allow_empty_baseline_virtualized_assistant: bool = False,
     ) -> str | None:
         heartbeat = asyncio.create_task(self._response_observation_heartbeat())
         try:
@@ -1505,6 +1523,9 @@ class GptAutoTurn:
                 baseline,
                 current,
                 allow_legacy_owned_error_alert=allow_legacy_owned_error_alert,
+                allow_empty_baseline_virtualized_assistant=(
+                    allow_empty_baseline_virtualized_assistant
+                ),
             )
         finally:
             heartbeat.cancel()
@@ -1516,6 +1537,7 @@ class GptAutoTurn:
         current: ChatSnapshot,
         *,
         allow_legacy_owned_error_alert: bool = False,
+        allow_empty_baseline_virtualized_assistant: bool = False,
     ) -> str | None:
         """GP07: re-expresses the previously-bespoke start/stall/total timer
         loop through the shared observation engine. Closes a real latent
@@ -1809,6 +1831,9 @@ class GptAutoTurn:
                     virtualized_assistant_id=self._virtualized_assistant_id(),
                     bound_assistant_id=self._response_message_id,
                     allow_legacy_owned_error_alert=allow_legacy_owned_error_alert,
+                    allow_empty_baseline_virtualized_assistant=(
+                        allow_empty_baseline_virtualized_assistant
+                    ),
                 )
             else:
                 # Defensive fallback only -- _await_submission_proof() and
@@ -1878,6 +1903,9 @@ class GptAutoTurn:
                                     allow_virtualized_prompt=not self._recovered_existing_turn,
                                     virtualized_assistant_id=self._virtualized_assistant_id(),
                                     bound_assistant_id=self._response_message_id,
+                                    allow_empty_baseline_virtualized_assistant=(
+                                        allow_empty_baseline_virtualized_assistant
+                                    ),
                                 )
                             else:
                                 current, response_ref = raw_current, None
@@ -2329,6 +2357,9 @@ class GptAutoTurn:
                         allow_virtualized_prompt=not self._recovered_existing_turn,
                         virtualized_assistant_id=self._virtualized_assistant_id(),
                         bound_assistant_id=self._response_message_id,
+                        allow_empty_baseline_virtualized_assistant=(
+                            allow_empty_baseline_virtualized_assistant
+                        ),
                     )
                 else:
                     verify = raw_verify
@@ -2960,6 +2991,7 @@ def _scope_response_snapshot(
     virtualized_assistant_id: str | None = None,
     bound_assistant_id: str | None = None,
     allow_legacy_owned_error_alert: bool = False,
+    allow_empty_baseline_virtualized_assistant: bool = False,
 ) -> tuple[ChatSnapshot, ChatMessageRef | None]:
     """Project a raw snapshot onto this request's own response, not
     whatever is conversation-global-latest.
@@ -3126,12 +3158,32 @@ def _scope_response_snapshot(
         )
         same_conversation = same_chat_identity(snapshot.url, baseline.url)
         terminal_bound = snapshot.terminal_witness_assistant_id == snapshot.latest_assistant_id
+        assistant_refs = tuple(
+            ref for ref in snapshot.message_refs if ref.role == "assistant"
+        )
+        empty_baseline_first_assistant = (
+            allow_empty_baseline_virtualized_assistant
+            and bound_assistant_id is None
+            and baseline.user_count == 0
+            and baseline.assistant_count == 0
+            and not baseline.user_message_ids
+            and not baseline.assistant_message_ids
+            and baseline.latest_user_id is None
+            and baseline.latest_assistant_id is None
+            and snapshot.assistant_count == 1
+            and len(snapshot.assistant_message_ids) == 1
+            and len(assistant_refs) == 1
+            and assistant_refs[0].message_id == snapshot.latest_assistant_id
+            and snapshot.assistant_message_ids[0] == snapshot.latest_assistant_id
+            and _is_durable_assistant_message_id(snapshot.latest_assistant_id)
+        )
         if (
             fresh_assistant
             and prompt_unmounted
             and same_conversation
             and terminal_bound
             and virtualized_assistant_id is None
+            and not empty_baseline_first_assistant
         ):
             # A prompt-unmounted assistant is request-owned only when its
             # identity was pinned during submission proof. Without that
@@ -3149,7 +3201,13 @@ def _scope_response_snapshot(
             raise ProviderBindingIntegrityError(
                 "provider assistant identity changed during response observation"
             )
-        if fresh_assistant and prompt_unmounted and same_conversation and terminal_bound:
+        if (
+            fresh_assistant
+            and prompt_unmounted
+            and same_conversation
+            and terminal_bound
+            and (virtualized_assistant_id is not None or empty_baseline_first_assistant)
+        ):
             response_ref = ChatMessageRef(
                 role="assistant",
                 message_id=snapshot.latest_assistant_id,
