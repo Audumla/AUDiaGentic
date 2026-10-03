@@ -2128,6 +2128,164 @@ def test_scope_rejects_unpinned_prompt_unmounted_completion():
         )
 
 
+def test_scope_pins_first_terminal_assistant_after_empty_baseline_prompt_virtualization():
+    assistant_id = "76f09062-4cd7-4179-84f2-4da57cf8ac62"
+    baseline = snap()
+    raw = replace(
+        snap(
+            assistants=1,
+            assistant="Completed answer",
+            assistant_id=assistant_id,
+            complete=True,
+        ),
+        assistant_message_ids=(assistant_id,),
+        assistant_message_texts=("Completed answer",),
+    )
+
+    scoped, response_ref = _scope_response_snapshot(
+        baseline,
+        raw,
+        prompt_message_id="virtualized-prompt",
+        allow_virtualized_prompt=True,
+        allow_empty_baseline_virtualized_assistant=True,
+    )
+
+    assert response_ref is not None
+    assert response_ref.message_id == assistant_id
+    assert scoped.latest_assistant_id == assistant_id
+    assert scoped.latest_assistant_text == "Completed answer"
+
+
+@pytest.mark.parametrize(
+    ("baseline", "raw"),
+    (
+        pytest.param(
+            snap(users=1, user="Earlier prompt", user_id="earlier-prompt"),
+            replace(
+                snap(
+                    assistants=1,
+                    assistant="Answer",
+                    assistant_id="76f09062-4cd7-4179-84f2-4da57cf8ac62",
+                    complete=True,
+                ),
+                assistant_message_ids=("76f09062-4cd7-4179-84f2-4da57cf8ac62",),
+            ),
+            id="nonempty-baseline",
+        ),
+        pytest.param(
+            snap(),
+            replace(
+                snap(
+                    assistants=2,
+                    assistant="Newest answer",
+                    assistant_id="76f09062-4cd7-4179-84f2-4da57cf8ac62",
+                    complete=True,
+                ),
+                assistant_message_ids=(
+                    "4e6a06b1-ff8a-4ba7-9944-4d0edfeab521",
+                    "76f09062-4cd7-4179-84f2-4da57cf8ac62",
+                ),
+                message_refs=(
+                    ChatMessageRef(
+                        "assistant",
+                        "4e6a06b1-ff8a-4ba7-9944-4d0edfeab521",
+                        "Earlier answer",
+                        0,
+                    ),
+                    ChatMessageRef(
+                        "assistant",
+                        "76f09062-4cd7-4179-84f2-4da57cf8ac62",
+                        "Newest answer",
+                        1,
+                    ),
+                ),
+            ),
+            id="multiple-assistants",
+        ),
+        pytest.param(
+            snap(),
+            replace(
+                snap(
+                    assistants=1,
+                    assistant="Answer",
+                    assistant_id="fallback-assistant-0",
+                    complete=True,
+                ),
+                assistant_message_ids=("fallback-assistant-0",),
+            ),
+            id="nondurable-assistant",
+        ),
+    ),
+)
+def test_scope_rejects_ambiguous_empty_baseline_virtualized_assistant(baseline, raw):
+    with pytest.raises(
+        ProviderBindingIntegrityError,
+        match="unpinned after prompt virtualization",
+    ):
+        _scope_response_snapshot(
+            baseline,
+            raw,
+            prompt_message_id="virtualized-prompt",
+            allow_virtualized_prompt=True,
+            allow_empty_baseline_virtualized_assistant=True,
+        )
+
+
+def test_scope_rejects_empty_baseline_virtualized_assistant_route_drift():
+    assistant_id = "76f09062-4cd7-4179-84f2-4da57cf8ac62"
+    baseline = snap()
+    raw = replace(
+        snap(
+            assistants=1,
+            assistant="Answer",
+            assistant_id=assistant_id,
+            complete=True,
+            url="https://chatgpt.com/g/g-p-project/c/foreign-conversation",
+        ),
+        assistant_message_ids=(assistant_id,),
+    )
+
+    with pytest.raises(
+        ProviderBindingIntegrityError,
+        match="conversation changed",
+    ):
+        _scope_response_snapshot(
+            baseline,
+            raw,
+            prompt_message_id="virtualized-prompt",
+            allow_virtualized_prompt=True,
+            allow_empty_baseline_virtualized_assistant=True,
+        )
+
+
+def test_scope_does_not_correlate_across_later_user_boundary():
+    assistant_id = "76f09062-4cd7-4179-84f2-4da57cf8ac62"
+    raw = replace(
+        snap(
+            users=1,
+            assistants=1,
+            user="Later prompt",
+            user_id="later-prompt",
+            assistant="Answer",
+            assistant_id=assistant_id,
+            complete=True,
+        ),
+        assistant_message_ids=(assistant_id,),
+    )
+
+    scoped, response_ref = _scope_response_snapshot(
+        snap(),
+        raw,
+        prompt_message_id="virtualized-prompt",
+        allow_virtualized_prompt=True,
+        allow_empty_baseline_virtualized_assistant=True,
+    )
+
+    assert response_ref is None
+    assert scoped.latest_assistant_id is None
+    assert scoped.latest_assistant_text is None
+
+
 def test_scope_rejects_reused_fallback_assistant_after_virtualization():
     baseline = snap(users=1, user="Request A", user_id="prompt-a")
     raw = replace(
