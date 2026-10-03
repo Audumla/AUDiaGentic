@@ -116,11 +116,15 @@ _PROJECT_NEW_CHAT_POINT_FN = r"""(name) => {
   if (!row) return null;
   const button = Array.from(row.querySelectorAll('button')).find(
     candidate => normalize(candidate.getAttribute('aria-label')) === 'start new chat in project'
-      && visible(candidate)
   );
   if (!button) return null;
+  button.scrollIntoView({block: 'center', inline: 'nearest'});
+  if (!visible(button)) return null;
   const rect = button.getBoundingClientRect();
-  return {x: rect.x + rect.width / 2, y: rect.y + rect.height / 2};
+  const x = rect.x + rect.width / 2;
+  const y = rect.y + rect.height / 2;
+  if (x < 0 || y < 0 || x >= window.innerWidth || y >= window.innerHeight) return null;
+  return {x, y};
 }"""
 
 _COMPOSER_READY_FN = r"""() => {
@@ -1688,9 +1692,14 @@ class GptAutoCdpBrowserController(CdpBrowserController):
         return await self._wait_for_projects_route(page, timeout=timeout)
 
     async def _select_project_from_sidebar(
-        self, page: CdpPageRef, project_name: str, *, timeout: float
+        self,
+        page: CdpPageRef,
+        project_name: str,
+        *,
+        expected_project_id: str | None,
+        timeout: float,
     ) -> bool:
-        """Open one exact sidebar project without toggling it repeatedly.
+        """Open one exact sidebar project using trusted pointer input.
 
         Project rows can appear under either Projects or Pinned. A collapsed
         project row is expanded at most once; if no exact visible project is
@@ -1701,45 +1710,79 @@ class GptAutoCdpBrowserController(CdpBrowserController):
         while asyncio.get_running_loop().time() < deadline:
             action = await self.evaluate(
                 page,
-                r"""(name) => {
+                r"""(input) => {
                   const normalize = value => String(value || '').replace(/\s+/g, ' ').trim();
-                  const wanted = normalize(name).toLowerCase();
-                  const visible = element => element && element.getClientRects().length;
+                  const wanted = normalize(input.name).toLowerCase();
+                  const expectedProjectId = normalize(input.expectedProjectId);
+                  const visible = element => {
+                    if (!element || !element.getClientRects().length) return false;
+                    const rect = element.getBoundingClientRect();
+                    return rect.width > 0 && rect.height > 0;
+                  };
+                  const point = element => {
+                    const rect = element.getBoundingClientRect();
+                    const x = rect.x + rect.width / 2;
+                    const y = rect.y + rect.height / 2;
+                    if (x < 0 || y < 0 || x >= window.innerWidth || y >= window.innerHeight) return null;
+                    return {x, y};
+                  };
                   const row = Array.from(document.querySelectorAll('[data-app-action-sidebar-project-row]')).find(
                     candidate => visible(candidate) && normalize(
                       candidate.getAttribute('data-app-action-sidebar-project-label')
                     ).toLowerCase() === wanted
                   );
-                  if (row) {
-                    const button = Array.from(row.querySelectorAll('button')).find(candidate =>
-                      visible(candidate) && normalize(candidate.getAttribute('aria-label')).toLowerCase() === `new chat in ${wanted}`
-                    );
-                    if (button) { button.click(); return 'selected'; }
-                    if (row.getAttribute('aria-expanded') !== 'true') {
-                      row.click();
-                      return 'expanded';
-                    }
-                    return 'waiting';
-                  }
-                  const sidebar = document.querySelector('nav') || document.querySelector('aside');
-                  const link = sidebar && Array.from(sidebar.querySelectorAll('a[href*="/g/g-p-"]')).find(candidate =>
-                    visible(candidate) && normalize(candidate.innerText || candidate.textContent).toLowerCase() === wanted
+                  if (!row) return {action: 'missing'};
+                  const actualProjectId = normalize(
+                    row.getAttribute('data-app-action-sidebar-project-id')
                   );
-                  if (link) { link.click(); return 'selected'; }
-                  return 'missing';
+                  if (expectedProjectId && actualProjectId !== expectedProjectId) {
+                    return {action: 'project-id-mismatch', actualProjectId};
+                  }
+                  const button = Array.from(row.querySelectorAll('button')).find(candidate =>
+                    visible(candidate) && normalize(candidate.getAttribute('aria-label')).toLowerCase() === `new chat in ${wanted}`
+                  );
+                  if (button) {
+                    const clickPoint = point(button);
+                    return clickPoint ? {action: 'selected', ...clickPoint} : {action: 'waiting'};
+                  }
+                  if (row.getAttribute('aria-expanded') !== 'true') {
+                    const label = Array.from(row.querySelectorAll('span, div')).find(candidate =>
+                      visible(candidate) && normalize(candidate.textContent).toLowerCase() === wanted
+                        && !candidate.closest('button, a')
+                    );
+                    if (label) {
+                      const clickPoint = point(label);
+                      return clickPoint ? {action: 'expand', ...clickPoint} : {action: 'waiting'};
+                    }
+                    const rect = row.getBoundingClientRect();
+                    const x = rect.x + Math.min(Math.max(24, rect.width * 0.25), Math.max(1, rect.width - 48));
+                    const y = rect.y + rect.height / 2;
+                    if (x < 0 || y < 0 || x >= window.innerWidth || y >= window.innerHeight) {
+                      return {action: 'waiting'};
+                    }
+                    return {action: 'expand', x, y};
+                  }
+                  return {action: 'waiting'};
                 }""",
-                project_name,
+                {"name": project_name, "expectedProjectId": expected_project_id or ""},
             )
-            if action == "selected":
-                return True
-            if action == "missing":
-                return False
-            if action == "expanded":
-                if expanded_once:
+            action_name = action.get("action") if isinstance(action, dict) else None
+            if action_name in {"selected", "expand"}:
+                if action_name == "expand" and expanded_once:
                     return False
+                await self.bridge.call("keep_page_active", {"pageHandle": page.handle})
+                await asyncio.sleep(self._action_pause_seconds)
+                await self.bridge.call(
+                    "click",
+                    {"pageHandle": page.handle, "x": action["x"], "y": action["y"]},
+                )
+                if action_name == "selected":
+                    return True
                 expanded_once = True
-                await asyncio.sleep(self._PAGE_READY_PAUSE_SECONDS)
+                await asyncio.sleep(max(self._PAGE_READY_PAUSE_SECONDS, self._action_pause_seconds))
                 continue
+            if action_name in {"missing", "project-id-mismatch"}:
+                return False
             await asyncio.sleep(0.1)
         return False
 
@@ -1778,6 +1821,7 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                 # the trusted pointer event receives the same user-activation
                 # treatment as a visible browser press.
                 await self.bridge.call("keep_page_active", {"pageHandle": page.handle})
+                await asyncio.sleep(self._action_pause_seconds)
                 await self.bridge.call(
                     "click",
                     {"pageHandle": page.handle, "x": point["x"], "y": point["y"]},
@@ -1849,7 +1893,10 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                 page = await self.navigate(page, _CHATGPT_HOME_URL)
             known_targets = {candidate.target_id for candidate in await self.pages()}
             clicked = await self._select_project_from_sidebar(
-                page, project_name, timeout=min(3.0, navigation_timeout)
+                page,
+                project_name,
+                expected_project_id=expected_project_id,
+                timeout=min(3.0, navigation_timeout),
             )
             if not clicked:
                 projects_tab_opened = await self._open_projects_tab(
