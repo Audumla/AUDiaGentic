@@ -602,7 +602,7 @@ def test_dashboard_ordering_uses_lifecycle_then_session_and_request_ids():
     ]
 
 
-def test_dashboard_request_projection_exposes_focus_for_live_gpt_without_chat_url():
+def test_dashboard_request_projection_does_not_own_session_focus():
     row = _request_row(
         {
             "request-id": "req_live",
@@ -613,7 +613,37 @@ def test_dashboard_request_projection_exposes_focus_for_live_gpt_without_chat_ur
     )
 
     assert "provider-chat-url" not in row
-    assert row["focus-tab-available"] is True
+    assert "focus-tab-available" not in row
+
+
+def test_focus_execution_session_uses_durable_session_binding(tmp_path: Path, monkeypatch):
+    from audiagentic.components.agents.gateway.session import sessions, sessions_store
+
+    session = sessions_store.build_session_record(
+        execution_profile_id="gpt-auto", provider_id="gpt-auto"
+    )
+    session["provider"]["metadata"] = {
+        "chat-url": "https://chatgpt.com/g/g-p-example/c/c-session",
+        "provider-session-id": "c-session",
+        "project-url": "https://chatgpt.com/g/g-p-example/project",
+    }
+    sessions_store.write_session_record(tmp_path, session)
+
+    captured = {}
+
+    class Runtime:
+        def focus_existing_conversation(self, project_root, *, provider_id, locator):
+            captured.update(project_root=project_root, provider_id=provider_id, locator=locator)
+            return {"outcome": "focused"}
+
+    monkeypatch.setattr(sessions, "get_session_runtime", lambda: Runtime())
+
+    result = gateway.focus_execution_session(tmp_path, session["session-id"])
+
+    assert result == {"session-id": session["session-id"], "outcome": "focused"}
+    assert captured["provider_id"] == "gpt-auto"
+    assert captured["locator"].gateway_session_id == session["session-id"]
+    assert captured["locator"].chat_url.endswith("/c/c-session")
 
 
 def test_dashboard_session_request_projection_inherits_execution_from_session_header():
@@ -635,7 +665,7 @@ def test_dashboard_session_request_projection_inherits_execution_from_session_he
     assert "resolved-model-id" not in row
 
 
-def test_dashboard_session_request_keeps_gpt_focus_eligibility_without_execution_cells():
+def test_dashboard_session_request_does_not_duplicate_session_focus_control():
     row = _request_row(
         {
             "request-id": "req_session_gpt",
@@ -646,7 +676,7 @@ def test_dashboard_session_request_keeps_gpt_focus_eligibility_without_execution
         include_execution=False,
     )
 
-    assert row["focus-tab-available"] is True
+    assert "focus-tab-available" not in row
 
 
 def test_dashboard_terminal_request_does_not_render_historical_unresolved_marker():

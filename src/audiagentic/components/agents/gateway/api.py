@@ -1078,6 +1078,33 @@ def focus_execution_chat(project_root: Path, request_id: str) -> dict[str, Any]:
     return {"request-id": request_id, **result}
 
 
+def focus_execution_session(project_root: Path, session_id: str) -> dict[str, Any]:
+    """Focus the provider conversation owned by a durable gateway session."""
+    from audiagentic.components.agents.gateway.session import (
+        sessions_store as session_store,
+    )
+    from audiagentic.components.agents.gateway.session.sessions import get_session_runtime
+    from audiagentic.components.providers.contracts.conversation_focus import (
+        ConversationFocusLocator,
+    )
+
+    record = session_store.read_session_record(project_root, session_id)
+    provider_id = session_store.session_provider_id(record)
+    metadata = session_store.session_provider_metadata(record) or {}
+    if not provider_id:
+        return {"session-id": session_id, "outcome": "unavailable", "reason": "provider-identity-missing"}
+    locator = ConversationFocusLocator(
+        chat_url=metadata.get("chat-url"),
+        provider_session_id=metadata.get("provider-session-id"),
+        project_url=metadata.get("project-url"),
+        gateway_session_id=session_id,
+    )
+    result = get_session_runtime().focus_existing_conversation(
+        project_root, provider_id=str(provider_id), locator=locator
+    )
+    return {"session-id": session_id, **result}
+
+
 def complete_execution_from_provider(project_root: Path, request_id: str) -> dict[str, Any]:
     """Capture and commit the request-owned current GPT response.
 

@@ -4,7 +4,11 @@ import json
 
 import pytest
 
-from audiagentic.components.agents.gateway.service.dashboard import _request_row, render_dashboard_html
+from audiagentic.components.agents.gateway.service.dashboard import (
+    _request_row,
+    _session_row,
+    render_dashboard_html,
+)
 from audiagentic.components.agents.gateway.service.dashboard_images import image_path, save_image
 
 
@@ -21,6 +25,27 @@ def test_session_request_row_keeps_provider_identity_for_manual_capture() -> Non
     )
 
     assert row["provider-id"] == "gpt-auto"
+    assert "focus-tab-available" not in row
+
+
+def test_closed_session_retains_safe_conversation_focus() -> None:
+    record = {
+        "session-id": "ses_closed",
+        "state": "closed",
+        "provider": {
+            "provider-id": "gpt-auto",
+            "metadata": {
+                "chat-url": "https://chatgpt.com/g/g-p-example/c/c-closed",
+                "chat-title": "Closed conversation",
+            },
+        },
+    }
+
+    row = _session_row(record, None)
+
+    assert row["provider-chat-url"].endswith("/c/c-closed")
+    assert row["provider-chat-title"] == "Closed conversation"
+    assert row["focus-tab-available"] is True
 
 
 def test_dashboard_actions_activity_and_card_icons(tmp_path):
@@ -28,8 +53,8 @@ def test_dashboard_actions_activity_and_card_icons(tmp_path):
     stamp = "2026-09-05T04:30:00Z"
     projects = []
     for index, name in enumerate(["AUDiaGentic", "BigCherry"]):
-        session = {"session-id": f"ses_{index}abc1234567890", "state": "active", "turn-count": 2, "execution-profile-id": "gpt-dev", "provider-id": "gpt-auto", "model-id": "chatgpt", "provider-chat-title": "Review gateway dashboard layout"}
-        requests = [{"request-id": f"req_{index}{state}123456789", "session-id": session["session-id"], "state": state, "updated-at": stamp, "activity-type": "tool-progress", "activity-sequence": 13, "focus-tab-available": True, "provider-id": "gpt-auto"} for state in ["running", "completed"]]
+        session = {"session-id": f"ses_{index}abc1234567890", "state": "active", "turn-count": 2, "execution-profile-id": "gpt-dev", "provider-id": "gpt-auto", "model-id": "chatgpt", "provider-chat-title": "Review gateway dashboard layout", "focus-tab-available": True}
+        requests = [{"request-id": f"req_{index}{state}123456789", "session-id": session["session-id"], "state": state, "updated-at": stamp, "activity-type": "tool-progress", "activity-sequence": 13, "provider-id": "gpt-auto"} for state in ["running", "completed"]]
         projects.append({"name": name, "project-id": str(index)*64, "sessions": [session], "requests": requests, "queues": {}})
     snapshot = {"projects": projects, "counts": {"running": 2}, "dashboard": {"recent-window-seconds": 43200}}
     with playwright.sync_playwright() as pw:
@@ -80,9 +105,8 @@ def test_dashboard_actions_activity_and_card_icons(tmp_path):
             assert page.locator('.session').count() == 2
             assert page.locator(".work-section-active .cancel-request").count() == 2
             assert page.locator(".work-section-active .complete-provider").count() == 2
-            row = page.locator(".request-row").first
-            assert row.locator(".request-actions .focus-chat").count() == 1
-            assert row.locator(".focus-chat").bounding_box()["x"] > row.locator(".request-updated").bounding_box()["x"]
+            assert page.locator(".request-row .focus-chat").count() == 0
+            assert page.locator(".session-actions .focus-chat").count() == 2
             assert page.locator(".project").first.evaluate("e=>getComputedStyle(e).borderTopWidth") == "0px"
             png = page.evaluate("""()=>{const c=document.createElement('canvas');c.width=c.height=64;const x=c.getContext('2d');x.fillStyle='#a58bff';x.fillRect(8,8,48,48);return c.toDataURL('image/png').split(',')[1]}""")
             with page.expect_file_chooser() as chooser:
