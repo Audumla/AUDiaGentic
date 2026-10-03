@@ -1707,6 +1707,7 @@ class GptAutoCdpBrowserController(CdpBrowserController):
         """
         deadline = asyncio.get_running_loop().time() + max(0.1, timeout)
         expanded_once = False
+        hovered_once = False
         while asyncio.get_running_loop().time() < deadline:
             action = await self.evaluate(
                 page,
@@ -1722,6 +1723,18 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                   const point = element => {
                     const rect = element.getBoundingClientRect();
                     const x = rect.x + rect.width / 2;
+                    const y = rect.y + rect.height / 2;
+                    if (x < 0 || y < 0 || x >= window.innerWidth || y >= window.innerHeight) return null;
+                    return {x, y};
+                  };
+                  const safeRowPoint = row => {
+                    const label = Array.from(row.querySelectorAll('span, div')).find(candidate =>
+                      visible(candidate) && normalize(candidate.textContent).toLowerCase() === wanted
+                        && !candidate.closest('button, a')
+                    );
+                    if (label) return point(label);
+                    const rect = row.getBoundingClientRect();
+                    const x = rect.x + Math.min(Math.max(24, rect.width * 0.25), Math.max(1, rect.width - 48));
                     const y = rect.y + rect.height / 2;
                     if (x < 0 || y < 0 || x >= window.innerWidth || y >= window.innerHeight) return null;
                     return {x, y};
@@ -1743,30 +1756,32 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                   );
                   if (button) {
                     const clickPoint = point(button);
-                    return clickPoint ? {action: 'selected', ...clickPoint} : {action: 'waiting'};
+                    if (clickPoint && button.contains(document.elementFromPoint(clickPoint.x, clickPoint.y))) {
+                      return {action: 'selected', ...clickPoint};
+                    }
+                    const hoverPoint = safeRowPoint(row);
+                    return hoverPoint ? {action: 'hover', ...hoverPoint} : {action: 'waiting'};
                   }
                   if (row.getAttribute('aria-expanded') !== 'true') {
-                    const label = Array.from(row.querySelectorAll('span, div')).find(candidate =>
-                      visible(candidate) && normalize(candidate.textContent).toLowerCase() === wanted
-                        && !candidate.closest('button, a')
-                    );
-                    if (label) {
-                      const clickPoint = point(label);
-                      return clickPoint ? {action: 'expand', ...clickPoint} : {action: 'waiting'};
-                    }
-                    const rect = row.getBoundingClientRect();
-                    const x = rect.x + Math.min(Math.max(24, rect.width * 0.25), Math.max(1, rect.width - 48));
-                    const y = rect.y + rect.height / 2;
-                    if (x < 0 || y < 0 || x >= window.innerWidth || y >= window.innerHeight) {
-                      return {action: 'waiting'};
-                    }
-                    return {action: 'expand', x, y};
+                    const clickPoint = safeRowPoint(row);
+                    return clickPoint ? {action: 'expand', ...clickPoint} : {action: 'waiting'};
                   }
                   return {action: 'waiting'};
                 }""",
                 {"name": project_name, "expectedProjectId": expected_project_id or ""},
             )
             action_name = action.get("action") if isinstance(action, dict) else None
+            if action_name == "hover":
+                if hovered_once:
+                    return False
+                hovered_once = True
+                await self.bridge.call("keep_page_active", {"pageHandle": page.handle})
+                await self.bridge.call(
+                    "hover",
+                    {"pageHandle": page.handle, "x": action["x"], "y": action["y"]},
+                )
+                await asyncio.sleep(self._action_pause_seconds)
+                continue
             if action_name in {"selected", "expand"}:
                 if action_name == "expand" and expanded_once:
                     return False
