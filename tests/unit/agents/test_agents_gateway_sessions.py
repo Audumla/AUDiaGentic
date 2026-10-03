@@ -2201,6 +2201,51 @@ def test_stale_persisted_session_lists_not_live_no_runtime_started(tmp_path, mon
             sessions_module._SESSION_RUNTIME = saved_runtime  # type: ignore[attr-defined]
 
 
+def test_stale_non_live_session_is_expired_by_durable_idle_policy(tmp_path):
+    from audiagentic.components.agents.gateway import api as api
+
+    record = session_store.build_session_record(
+        execution_profile_id="profile-1", idle_timeout_seconds=60
+    )
+    session_id = record["session-id"]
+    old = (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat().replace(
+        "+00:00", "Z"
+    )
+    record["timing"]["last-activity-at"] = old
+    session_store.write_session_record(tmp_path, record)
+
+    listed = api.list_execution_sessions(tmp_path, state="all", _live_ids=set())
+    row = next(item for item in listed if item["session-id"] == session_id)
+
+    assert row["state"] == "expired"
+    assert row["close-reason"] == "idle-timeout"
+    assert "runtime-state" not in row
+    assert session_store.read_session_record(tmp_path, session_id)["state"] == "expired"
+
+
+def test_legacy_gpt_session_without_persisted_policy_uses_admission_default(tmp_path):
+    from audiagentic.components.agents.gateway import api as api
+
+    record = session_store.build_session_record(
+        execution_profile_id="gpt-auto", provider_id="gpt-auto"
+    )
+    session_id = record["session-id"]
+    old = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat().replace(
+        "+00:00", "Z"
+    )
+    record["timing"]["last-activity-at"] = old
+    session_store.write_session_record(tmp_path, record)
+
+    row = next(
+        item
+        for item in api.list_execution_sessions(tmp_path, state="all", _live_ids=set())
+        if item["session-id"] == session_id
+    )
+
+    assert row["state"] == "expired"
+    assert row["close-reason"] == "idle-timeout"
+
+
 def test_live_session_lists_without_stale_flag(rig, monkeypatch):
     """A live active session from the runtime lists as live=True and does NOT
     carry a stale diagnostic flag."""

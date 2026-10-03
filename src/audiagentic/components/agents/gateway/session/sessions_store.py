@@ -186,18 +186,58 @@ def session_lifetime_expired(
     return current.astimezone(timezone.utc) > expiry
 
 
-def expire_session_if_lifetime_exceeded(
+def session_idle_expired(
+    record: dict[str, Any], *, now: datetime | None = None
+) -> bool:
+    """Return whether a durable, non-live session exceeded its idle policy."""
+    value = session_idle_timeout_seconds(record)
+    if value is None:
+        # Legacy GPT-auto records predate persisted policy fields.  Their
+        # admission path used gpt_idle_grace's 30-minute default; interpreting
+        # the missing value as disabled leaves those records active forever.
+        provider_id = session_provider_id(record) or ""
+        if provider_id.startswith("gpt-auto"):
+            value = 1800.0
+    try:
+        cap = float(value) if value is not None else 0.0
+    except (TypeError, ValueError):
+        return False
+    if cap <= 0:
+        return False
+    timestamp = (record.get("timing") or {}).get("last-activity-at")
+    if not isinstance(timestamp, str) or not timestamp.strip():
+        return False
+    try:
+        activity = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return False
+    if activity.tzinfo is None:
+        activity = activity.replace(tzinfo=timezone.utc)
+    current = now or datetime.now(timezone.utc)
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=timezone.utc)
+    return (current.astimezone(timezone.utc) - activity.astimezone(timezone.utc)).total_seconds() > cap
+
+
+def expire_session_if_policy_exceeded(
     project_root: Path, session_id: str
 ) -> dict[str, Any]:
-    """Persist expiry before recovery can re-open an over-age session."""
+    """Apply durable max-lifetime and idle bounds before reuse or projection."""
     record = read_session_record(project_root, session_id)
-    if record.get("state") in SESSION_TERMINAL_STATES or not session_lifetime_expired(record):
+    if record.get("state") in SESSION_TERMINAL_STATES:
+        return record
+    reason = None
+    if session_lifetime_expired(record):
+        reason = "max-lifetime"
+    elif session_idle_expired(record):
+        reason = "idle-timeout"
+    if reason is None:
         return record
     expired = transition_session_record(
         project_root,
         session_id,
         "expired",
-        updates={"close-reason": "max-lifetime", "closed-at": now_iso_z()},
+        updates={"close-reason": reason, "closed-at": now_iso_z()},
     )
     bindings.retire_binding(project_root, expired, state="expired")
     try:
@@ -206,11 +246,21 @@ def expire_session_if_lifetime_exceeded(
             session_id,
             "session.expired",
             state="expired",
-            attributes={"close-reason": "max-lifetime"},
+            attributes={"close-reason": reason},
         )
     except Exception:  # noqa: BLE001 - expiry state is already authoritative
         logger.warning("failed to record durable session expiry timeline", exc_info=True)
     return expired
+
+
+def expire_session_if_lifetime_exceeded(
+    project_root: Path, session_id: str
+) -> dict[str, Any]:
+    """Persist expiry before recovery can re-open an over-age session."""
+    record = read_session_record(project_root, session_id)
+    if record.get("state") in SESSION_TERMINAL_STATES or not session_lifetime_expired(record):
+        return record
+    return expire_session_if_policy_exceeded(project_root, session_id)
 
 
 def record_session_timeline(

@@ -114,7 +114,7 @@ def _durable_provider_session_is_active(project_root: Path, record: dict[str, An
     try:
         from audiagentic.components.agents.gateway.session import sessions_store
 
-        session_record = sessions_store.expire_session_if_lifetime_exceeded(
+        session_record = sessions_store.expire_session_if_policy_exceeded(
             project_root, session_id
         )
     except Exception:
