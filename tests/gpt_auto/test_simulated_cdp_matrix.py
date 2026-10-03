@@ -643,7 +643,7 @@ async def test_new_session_adopts_ui_opened_target_and_closes_projects_tab(monke
     opened_page = CdpPageRef(
         "chat", "chat-target", 7,
         f"https://chatgpt.com/g/{project_id}-bigcherry/project", "BigCherry",
-        opener_id=projects_page.target_id,
+        opener_id=None,
     )
     foreign_page = CdpPageRef("personal", "personal-target", 7, opened_page.url, "Personal")
     closed: list[CdpPageRef] = []
@@ -676,7 +676,11 @@ async def test_new_session_adopts_ui_opened_target_and_closes_projects_tab(monke
     async def pages():
         nonlocal page_scans
         page_scans += 1
-        return (projects_page,) if page_scans == 1 else (projects_page, foreign_page, opened_page)
+        return (
+            (projects_page, foreign_page)
+            if page_scans == 1
+            else (projects_page, foreign_page, opened_page)
+        )
 
     async def page_by_handle(_handle):
         return CdpPageRef(
@@ -715,6 +719,61 @@ async def test_new_session_adopts_ui_opened_target_and_closes_projects_tab(monke
 
     assert result["page"] == opened_page
     assert closed == [projects_page]
+
+
+@pytest.mark.asyncio
+async def test_new_session_rejects_fresh_wrong_project_target_without_opener(monkeypatch) -> None:
+    browser = GptAutoCdpBrowserController(_NoopBridge())
+    projects_page = CdpPageRef("projects", "projects-target", 7, "about:blank", "")
+    configured_id = "g-p-configured"
+    wrong_page = CdpPageRef(
+        "chat", "chat-target", 7,
+        "https://chatgpt.com/g/g-p-wrong-project/project", "Wrong Project",
+        opener_id=None,
+    )
+    closed: list[CdpPageRef] = []
+    page_scans = 0
+
+    async def new_window():
+        return projects_page
+
+    async def navigate(_page, _url):
+        return projects_page
+
+    async def select_sidebar(_page, _name, *, timeout):
+        return True
+
+    async def pages():
+        nonlocal page_scans
+        page_scans += 1
+        return (projects_page,) if page_scans == 1 else (projects_page, wrong_page)
+
+    async def page_by_handle(_handle):
+        return CdpPageRef(
+            projects_page.handle, projects_page.target_id, projects_page.window_id,
+            "https://chatgpt.com/", "ChatGPT",
+        )
+
+    async def close(page):
+        closed.append(page)
+
+    monkeypatch.setattr(browser, "new_window", new_window)
+    monkeypatch.setattr(browser, "navigate", navigate)
+    monkeypatch.setattr(browser, "_select_project_from_sidebar", select_sidebar)
+    monkeypatch.setattr(browser, "pages", pages)
+    monkeypatch.setattr(browser, "page_by_handle", page_by_handle)
+    monkeypatch.setattr(browser, "close", close)
+
+    with pytest.raises(RuntimeError, match="does not match configured project identity"):
+        await browser.open_project_page(
+            project_name="BigCherry",
+            project_url=f"https://chatgpt.com/g/{configured_id}-bigcherry/project",
+            anchor_page=None,
+            navigation_timeout=0.01,
+            ready_timeout=4,
+        )
+
+    assert closed == [wrong_page, projects_page]
 
 
 @pytest.mark.asyncio
