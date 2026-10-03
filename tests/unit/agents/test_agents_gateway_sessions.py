@@ -2246,6 +2246,42 @@ def test_legacy_gpt_session_without_persisted_policy_uses_admission_default(tmp_
     assert row["close-reason"] == "idle-timeout"
 
 
+def test_durable_idle_sweep_never_expires_session_with_nonterminal_request(tmp_path):
+    from audiagentic.components.agents.gateway import api as api
+    from audiagentic.components.agents.gateway import store
+
+    session = session_store.build_session_record(
+        execution_profile_id="gpt-auto",
+        provider_id="gpt-auto",
+        idle_timeout_seconds=60,
+    )
+    session_id = session["session-id"]
+    old = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat().replace(
+        "+00:00", "Z"
+    )
+    session["timing"]["last-activity-at"] = old
+    session_store.write_session_record(tmp_path, session)
+    request = store.build_record(
+        request_id="req_protect_session",
+        execution_profile_id="gpt-auto",
+        prompt_body="x",
+        session_id=session_id,
+        session_keep_alive=True,
+    )
+    store.write_record(tmp_path, request)
+
+    row = next(
+        item
+        for item in api.list_execution_sessions(tmp_path, state="all", _live_ids=set())
+        if item["session-id"] == session_id
+    )
+
+    assert request["state"] == "queued"
+    assert row["state"] == "active"
+    assert row["runtime-state"] == "stale-non-live"
+    assert session_store.read_session_record(tmp_path, session_id)["state"] == "active"
+
+
 def test_live_session_lists_without_stale_flag(rig, monkeypatch):
     """A live active session from the runtime lists as live=True and does NOT
     carry a stale diagnostic flag."""
