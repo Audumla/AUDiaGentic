@@ -1878,12 +1878,15 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                     candidates.append(await self.page_by_handle(source_page.handle))
                 except Exception:
                     pass
-                candidates.extend(
+                fresh_candidates = [
                     candidate
                     for candidate in await self.pages()
                     if candidate.target_id not in known_targets
-                    and candidate.opener_id == source_page.target_id
+                ]
+                fresh_candidates.sort(
+                    key=lambda candidate: candidate.opener_id != source_page.target_id
                 )
+                candidates.extend(fresh_candidates)
                 for candidate in candidates:
                     candidate_project_id = parse_project_id(candidate.url)
                     if candidate_project_id is None:
