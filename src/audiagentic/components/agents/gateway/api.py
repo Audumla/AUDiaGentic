@@ -1498,6 +1498,17 @@ def list_execution_sessions(
     else:
         live_ids = set(_live_ids)
     records = session_store.list_session_records(project_root)
+    # A session carrying admitted work cannot be expired independently.  The
+    # request must first reach a terminal state or be rebound to an active
+    # successor session; otherwise the durable store would claim that a
+    # closed/expired session still owns queued or running work.
+    protected_session_ids = {
+        str(request["session-id"])
+        for request in store.list_records(project_root, include_output=False)
+        if request.get("state") not in store.TERMINAL_STATES
+        and isinstance(request.get("session-id"), str)
+        and request.get("session-id")
+    }
     # The process-local reaper owns live transports.  Persisted sessions left
     # non-live by a restart still need their independent durable idle policy
     # applied; otherwise they remain "active" forever and pollute capacity and
@@ -1509,6 +1520,7 @@ def list_execution_sessions(
         )
         if record.get("state") not in session_store.SESSION_TERMINAL_STATES
         and record.get("session-id") not in live_ids
+        and record.get("session-id") not in protected_session_ids
         else record
         for record in records
     ]
