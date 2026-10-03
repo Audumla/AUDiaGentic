@@ -2841,7 +2841,77 @@ async def test_completed_new_conversation_proves_submission_despite_prompt_rende
 
 
 @pytest.mark.asyncio
-async def test_submission_proof_rejects_same_project_conversation_route_drift():
+async def test_project_root_baseline_accepts_mounted_decisive_completion():
+    chat = _Chat()
+    completed = snap(
+        users=1,
+        user="Rendered prompt with provider whitespace drift",
+        assistants=1,
+        assistant_id="assistant-new",
+        assistant="Complete answer",
+        complete=True,
+        url="https://chatgpt.com/g/g-p-project/c/conversation-2",
+    )
+    landing = snap(url="https://chatgpt.com/g/g-p-project")
+
+    def snapshots():
+        yield landing
+        while True:
+            yield completed
+
+    chat._snapshots = snapshots()
+    turn = GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="turn-root-mounted-complete", body="Review AU01"),
+        lambda _: None,
+    )
+
+    result = await turn.run()
+
+    assert result.stop_reason == "end-turn"
+    assert result.final_summary == "Complete answer"
+    assert turn.submission_confirmed
+    assert chat.runtime.bridge.submit_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_project_root_baseline_accepts_prompt_unmounted_decisive_completion():
+    chat = _Chat()
+    completed = snap(
+        assistants=1,
+        assistant_id="assistant-new",
+        assistant="Complete answer",
+        complete=True,
+        url="https://chatgpt.com/g/g-p-project/c/conversation-2",
+    )
+    landing = snap(url="https://chatgpt.com/g/g-p-project")
+    chat._snapshots = iter([landing, completed, completed, completed, completed])
+
+    turn = GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="turn-root-unmounted-complete", body="Review AU01"),
+        lambda _: None,
+    )
+
+    result = await turn.run()
+
+    assert result.stop_reason == "end-turn"
+    assert result.final_summary == "Complete answer"
+    assert turn.submission_confirmed
+    assert chat.runtime.bridge.submit_calls == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "landing_url",
+    [
+        "https://chatgpt.com/g/g-p-project/project",
+        "https://chatgpt.com/g/g-p-project",
+    ],
+)
+async def test_submission_proof_rejects_same_project_conversation_route_drift(
+    landing_url,
+):
     """A new project turn must stay on its first durable conversation route."""
     chat = _Chat()
     working_a = snap(
@@ -2862,7 +2932,7 @@ async def test_submission_proof_rejects_same_project_conversation_route_drift():
     )
     chat._snapshots = iter(
         [
-            snap(url="https://chatgpt.com/g/g-p-project/project"),
+            snap(url=landing_url),
             working_a,
             completed_b,
         ]
@@ -2874,9 +2944,10 @@ async def test_submission_proof_rejects_same_project_conversation_route_drift():
     )
 
     with pytest.raises(ProviderBindingIntegrityError, match="conversation changed"):
-        await turn._await_submission_proof(
-            snap(url="https://chatgpt.com/g/g-p-project/project")
-        )
+        await turn._await_submission_proof(snap(url=landing_url))
+    assert turn._submission_proof_url == (
+        "https://chatgpt.com/g/g-p-project/c/conversation-a"
+    )
 
 
 @pytest.mark.asyncio
