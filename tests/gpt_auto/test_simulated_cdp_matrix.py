@@ -24,6 +24,7 @@ from audiagentic.components.providers.adapters.gpt_auto.cdp.cdp_browser import (
 from audiagentic.components.providers.adapters.gpt_auto.config import GptAutoConfig
 from audiagentic.components.providers.adapters.gpt_auto.gpt_auto_cdp import (
     _COMPOSER_READY_FN,
+    _PROJECT_NEW_CHAT_POINT_FN,
     _SNAPSHOT_FN,
     GptAutoCdpBrowserController,
 )
@@ -357,15 +358,95 @@ async def test_projects_new_chat_uses_trusted_cdp_pointer_click(monkeypatch) -> 
 
 
 @pytest.mark.asyncio
+async def test_sidebar_project_uses_trusted_pointer_for_exact_project(monkeypatch) -> None:
+    calls: list[tuple[str, object]] = []
+    inputs: list[object] = []
+
+    class Bridge:
+        async def call(self, method, params=None, **_kwargs):
+            calls.append((method, params))
+            return {"clicked": True}
+
+    browser = GptAutoCdpBrowserController(Bridge(), action_pause_seconds=0.0)
+    page = CdpPageRef("page-1", "target-1", 7, "https://chatgpt.com/", "")
+
+    async def evaluate(_page, _function, value=None):
+        inputs.append(value)
+        return {"action": "selected", "x": 101.5, "y": 202.5}
+
+    monkeypatch.setattr(browser, "evaluate", evaluate)
+
+    assert await browser._select_project_from_sidebar(
+        page,
+        "AUDiaGentic",
+        expected_project_id="g-p-69cc8c4cc7648191a009f358113d8dd2",
+        timeout=2,
+    ) is True
+    assert inputs == [{
+        "name": "AUDiaGentic",
+        "expectedProjectId": "g-p-69cc8c4cc7648191a009f358113d8dd2",
+    }]
+    assert calls == [
+        ("keep_page_active", {"pageHandle": "page-1"}),
+        ("click", {"pageHandle": "page-1", "x": 101.5, "y": 202.5}),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_sidebar_project_rejects_wrong_exact_project_id(monkeypatch) -> None:
+    calls: list[tuple[str, object]] = []
+
+    class Bridge:
+        async def call(self, method, params=None, **_kwargs):
+            calls.append((method, params))
+            return {}
+
+    browser = GptAutoCdpBrowserController(Bridge(), action_pause_seconds=0.0)
+    page = CdpPageRef("page-1", "target-1", 7, "https://chatgpt.com/", "")
+
+    async def evaluate(_page, function, value=None):
+        assert "data-app-action-sidebar-project-id" in function
+        assert value["expectedProjectId"] == "g-p-expected"
+        return {"action": "project-id-mismatch", "actualProjectId": "g-p-wrong"}
+
+    monkeypatch.setattr(browser, "evaluate", evaluate)
+
+    assert await browser._select_project_from_sidebar(
+        page, "AUDiaGentic", expected_project_id="g-p-expected", timeout=2
+    ) is False
+    assert calls == []
+
+
+def test_projects_new_chat_point_scrolls_before_viewport_validation() -> None:
+    scroll = _PROJECT_NEW_CHAT_POINT_FN.index("button.scrollIntoView")
+    rect = _PROJECT_NEW_CHAT_POINT_FN.index("button.getBoundingClientRect", scroll)
+    viewport = _PROJECT_NEW_CHAT_POINT_FN.index("window.innerWidth", rect)
+
+    assert scroll < rect < viewport
+    assert "x < 0 || y < 0" in _PROJECT_NEW_CHAT_POINT_FN
+
+
+@pytest.mark.asyncio
 async def test_sidebar_project_expands_once_before_selecting_new_chat(monkeypatch) -> None:
     import audiagentic.components.providers.adapters.gpt_auto.gpt_auto_cdp as cdp
 
-    browser = GptAutoCdpBrowserController(_NoopBridge())
+    calls: list[tuple[str, object]] = []
+
+    class Bridge:
+        async def call(self, method, params=None, **_kwargs):
+            calls.append((method, params))
+            return {"clicked": True}
+
+    browser = GptAutoCdpBrowserController(Bridge(), action_pause_seconds=0.0)
     page = CdpPageRef("page-1", "target-1", 7, "https://chatgpt.com/", "")
-    actions = iter(["expanded", "waiting", "selected"])
+    actions = iter([
+        {"action": "expand", "x": 20, "y": 30},
+        {"action": "waiting"},
+        {"action": "selected", "x": 40, "y": 50},
+    ])
     delays: list[float] = []
 
-    async def evaluate(_page, _function, _name=None):
+    async def evaluate(_page, _function, _value=None):
         return next(actions)
 
     async def record_sleep(delay):
@@ -374,8 +455,42 @@ async def test_sidebar_project_expands_once_before_selecting_new_chat(monkeypatc
     monkeypatch.setattr(browser, "evaluate", evaluate)
     monkeypatch.setattr(cdp.asyncio, "sleep", record_sleep)
 
-    assert await browser._select_project_from_sidebar(page, "BigCherry", timeout=2) is True
+    assert await browser._select_project_from_sidebar(
+        page, "BigCherry", expected_project_id="g-p-bigcherry", timeout=2
+    ) is True
     assert delays.count(browser._PAGE_READY_PAUSE_SECONDS) == 1
+    assert [method for method, _params in calls].count("click") == 2
+
+
+@pytest.mark.asyncio
+async def test_sidebar_project_never_repeats_expand_pointer(monkeypatch) -> None:
+    calls: list[tuple[str, object]] = []
+
+    class Bridge:
+        async def call(self, method, params=None, **_kwargs):
+            calls.append((method, params))
+            return {"clicked": True}
+
+    browser = GptAutoCdpBrowserController(Bridge(), action_pause_seconds=0.0)
+    page = CdpPageRef("page-1", "target-1", 7, "https://chatgpt.com/", "")
+    actions = iter([
+        {"action": "expand", "x": 20, "y": 30},
+        {"action": "expand", "x": 20, "y": 30},
+    ])
+
+    async def evaluate(_page, _function, _value=None):
+        return next(actions)
+
+    async def no_wait(_delay):
+        return None
+
+    monkeypatch.setattr(browser, "evaluate", evaluate)
+    monkeypatch.setattr(asyncio, "sleep", no_wait)
+
+    assert await browser._select_project_from_sidebar(
+        page, "BigCherry", expected_project_id="g-p-bigcherry", timeout=2
+    ) is False
+    assert [method for method, _params in calls].count("click") == 1
 
 
 @pytest.mark.asyncio
@@ -458,8 +573,8 @@ async def test_new_session_selects_exact_project_from_sidebar(monkeypatch) -> No
         calls.append(("find-project", name))
         return True
 
-    async def select_sidebar(_page, name, *, timeout):
-        calls.append(("select-sidebar", (name, timeout)))
+    async def select_sidebar(_page, name, *, expected_project_id, timeout):
+        calls.append(("select-sidebar", (name, expected_project_id, timeout)))
         return True
 
     page_after_click = CdpPageRef(page.handle, page.target_id, page.window_id, selected_url, "")
@@ -497,7 +612,7 @@ async def test_new_session_selects_exact_project_from_sidebar(monkeypatch) -> No
     assert calls == [
         ("new-tab", (anchor, None)),
         ("navigate", "https://chatgpt.com/"),
-        ("select-sidebar", ("BigCherry", 3.0)),
+        ("select-sidebar", ("BigCherry", project_id, 3.0)),
         ("composer", 4),
     ]
     assert opened["projectUrl"] == selected_url
@@ -521,8 +636,8 @@ async def test_new_session_uses_direct_projects_fallback_when_sidebar_has_no_pro
     async def pages():
         return (page,)
 
-    async def select_sidebar(_page, name, *, timeout):
-        calls.append(("select-sidebar", (name, timeout)))
+    async def select_sidebar(_page, name, *, expected_project_id, timeout):
+        calls.append(("select-sidebar", (name, expected_project_id, timeout)))
         return False
 
     async def wait_for_projects_route(_page, *, timeout):
@@ -559,7 +674,7 @@ async def test_new_session_uses_direct_projects_fallback_when_sidebar_has_no_pro
 
     assert calls == [
         ("navigate", "https://chatgpt.com/"),
-        ("select-sidebar", ("BigCherry", 3.0)),
+        ("select-sidebar", ("BigCherry", project_id, 3.0)),
         ("navigate", "https://chatgpt.com/projects"),
         ("projects-route", 3),
         ("select-project", ("BigCherry", 3)),
@@ -597,7 +712,7 @@ async def test_new_session_rejects_projects_ui_identity_mismatch(monkeypatch) ->
     async def select_project(_page, _name, *, timeout):
         return True
 
-    async def select_sidebar(_page, _name, *, timeout):
+    async def select_sidebar(_page, _name, *, expected_project_id, timeout):
         return True
 
     discovered = CdpPageRef(page.handle, page.target_id, page.window_id, discovered_url, "")
@@ -670,7 +785,7 @@ async def test_new_session_adopts_ui_opened_target_and_closes_projects_tab(monke
     async def select_project(_page, _name, *, timeout):
         return True
 
-    async def select_sidebar(_page, _name, *, timeout):
+    async def select_sidebar(_page, _name, *, expected_project_id, timeout):
         return True
 
     async def pages():
@@ -740,7 +855,7 @@ async def test_new_session_rejects_fresh_wrong_project_target_without_opener(mon
     async def navigate(_page, _url):
         return projects_page
 
-    async def select_sidebar(_page, _name, *, timeout):
+    async def select_sidebar(_page, _name, *, expected_project_id, timeout):
         return True
 
     async def pages():
