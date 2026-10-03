@@ -655,6 +655,61 @@ async def test_connection_interrupted_emits_synthetic_activity_until_completion(
 
 
 @pytest.mark.asyncio
+async def test_connection_interrupted_overrides_partial_completion_controls():
+    """A partial answer with Copy/Stop evidence must still enter recovery."""
+    chat = _Chat()
+    chat.runtime.config.turn.response_refresh_attempts = 6
+    chat.runtime.config.turn.response_no_activity_refresh_seconds = 240
+    chat.runtime.config.turn.response_interruption_activity_interval_seconds = 0
+    interrupted_partial = replace(
+        snap(
+            users=1,
+            assistants=1,
+            user="Review AU01",
+            assistant="Partial answer before connection loss",
+            complete=True,
+            generating=True,
+        ),
+        dom_signals=frozenset({"provider-interruption", "response-complete"}),
+    )
+    completed = snap(
+        users=1,
+        assistants=1,
+        user="Review AU01",
+        assistant="Recovered complete answer",
+        complete=True,
+    )
+    chat._snapshots = iter([interrupted_partial, completed, completed, completed])
+    refreshes: list[bool] = []
+    observations = []
+
+    async def refresh() -> bool:
+        refreshes.append(True)
+        return True
+
+    chat._refresh_for_response_recovery = refresh
+    turn = GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="turn-interrupted-partial", body="Review AU01"),
+        observations.append,
+    )
+    turn.state = TurnState.AWAITING_RESPONSE
+    turn._prompt_message_id = "prompt-1"
+
+    assert (
+        await turn._await_response(
+            snap(users=1, user="Review AU01"), interrupted_partial
+        )
+        == "Recovered complete answer"
+    )
+    assert refreshes == [True]
+    assert any(
+        observation.attributes.get("model_activity") == "connection-refreshing"
+        for observation in observations
+    )
+
+
+@pytest.mark.asyncio
 async def test_provider_busy_heartbeat_does_not_renew_real_session_activity():
     from unittest.mock import Mock
     chat = _Chat()
