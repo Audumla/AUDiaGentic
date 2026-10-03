@@ -25,6 +25,7 @@ class GatewayApplication(Protocol):
     def get_execution_response(self, project_root: Path, request_id: str) -> str: ...
     def get_execution_failure_response(self, project_root: Path, request_id: str) -> str: ...
     def focus_execution_chat(self, project_root: Path, request_id: str) -> dict[str, Any]: ...
+    def focus_execution_session(self, project_root: Path, session_id: str) -> dict[str, Any]: ...
     def complete_execution_from_provider(self, project_root: Path, request_id: str) -> dict[str, Any]: ...
     def wait_execution_request(
         self,
@@ -102,6 +103,9 @@ class InProcessGatewayApplication:
 
     def focus_execution_chat(self, project_root: Path, request_id: str) -> dict[str, Any]:
         return self._api().focus_execution_chat(project_root, request_id)
+
+    def focus_execution_session(self, project_root: Path, session_id: str) -> dict[str, Any]:
+        return self._api().focus_execution_session(project_root, session_id)
 
     def complete_execution_from_provider(self, project_root: Path, request_id: str) -> dict[str, Any]:
         return self._api().complete_execution_from_provider(project_root, request_id)

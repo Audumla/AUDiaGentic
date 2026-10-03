@@ -170,6 +170,17 @@ class GatewayServiceApplication:
             }
         return self._application.focus_execution_chat(matches[0], request_id)
 
+    def focus_dashboard_session(self, session_id: str) -> dict[str, Any]:
+        """Resolve a dashboard session id across known projects and focus it."""
+        matches = self._dashboard_session_projects(session_id)
+        if len(matches) != 1:
+            return {
+                "session-id": session_id,
+                "outcome": "not-found" if not matches else "ambiguous",
+                "reason": "session-project-not-found" if not matches else "session-id-not-unique",
+            }
+        return self._application.focus_execution_session(matches[0], session_id)
+
     def cancel_dashboard_request(self, request_id: str) -> dict[str, Any]:
         """Cancel through the canonical API; never accept a client-supplied root."""
         matches = self._dashboard_request_projects(request_id)
@@ -203,6 +214,16 @@ class GatewayServiceApplication:
 
     def purge_dashboard_session(self, session_id: str) -> dict[str, Any]:
         """Purge one dashboard session after resolving its owning project."""
+        matches = self._dashboard_session_projects(session_id)
+        if len(matches) != 1:
+            return {
+                "session-id": session_id,
+                "outcome": "not-found" if not matches else "ambiguous",
+                "reason": "session-project-not-found" if not matches else "session-id-not-unique",
+            }
+        return self._application.purge_execution_session(matches[0], session_id)
+
+    def _dashboard_session_projects(self, session_id: str) -> list[Path]:
         from audiagentic.components.agents.gateway.service.known_projects import load_known_projects
 
         matches = []
@@ -217,13 +238,7 @@ class GatewayServiceApplication:
             except Exception:  # noqa: BLE001 - skip projects without this session
                 continue
             matches.append(known.project_root)
-        if len(matches) != 1:
-            return {
-                "session-id": session_id,
-                "outcome": "not-found" if not matches else "ambiguous",
-                "reason": "session-project-not-found" if not matches else "session-id-not-unique",
-            }
-        return self._application.purge_execution_session(matches[0], session_id)
+        return matches
 
     def acquire_client(
         self,

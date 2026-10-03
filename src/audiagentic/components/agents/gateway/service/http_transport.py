@@ -141,9 +141,12 @@ class GatewayHTTPRequestHandler(BaseHTTPRequestHandler):
             if method == "POST" and parsed.path == self.server.dashboard_focus_path:
                 self._authenticate_dashboard_action()
                 body = self._read_body()
-                if set(body) != {"request-id"}:
-                    raise transport_error(22, "dashboard focus body must contain request-id only")
-                result = self.server.application.focus_dashboard_request(_string(body, "request-id"))
+                if set(body) == {"session-id"}:
+                    result = self.server.application.focus_dashboard_session(_string(body, "session-id"))
+                elif set(body) == {"request-id"}:
+                    result = self.server.application.focus_dashboard_request(_string(body, "request-id"))
+                else:
+                    raise transport_error(22, "dashboard focus body must contain session-id or request-id only")
                 self._write_json(200, {"contract-version": "v1", "ok": True, "result": result})
                 return
             if method == "POST" and parsed.path == self.server.dashboard_purge_session_path:
