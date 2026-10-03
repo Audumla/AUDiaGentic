@@ -58,6 +58,30 @@ def test_lease_store_survives_restart_without_regressing_activity(tmp_path):
     path.unlink()  # all transaction handles must be closed on Windows
 
 
+def test_tab_digest_ignores_process_local_dom_observer_state():
+    before = ChatSnapshot.from_bridge({
+        'url': URL,
+        'latestAssistantText': 'answer',
+        'domActivityDigest': 'observer-a',
+    })
+    after_restart = ChatSnapshot.from_bridge({
+        'url': URL,
+        'latestAssistantText': 'answer',
+        'domActivityDigest': 'observer-b',
+    })
+
+    assert GptAutoProviderRuntime._tab_digest(before) == GptAutoProviderRuntime._tab_digest(
+        after_restart
+    )
+
+
+def test_tab_digest_changes_for_meaningful_conversation_progress():
+    before = ChatSnapshot.from_bridge({'url': URL, 'latestAssistantText': 'partial'})
+    after = ChatSnapshot.from_bridge({'url': URL, 'latestAssistantText': 'complete'})
+
+    assert GptAutoProviderRuntime._tab_digest(before) != GptAutoProviderRuntime._tab_digest(after)
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize('condition', ['idle', 'changed', 'foreign', 'owned', 'absent'])
 async def test_restarted_reaper_closes_only_owned_unchanged_idle_target(tmp_path, condition):
@@ -89,3 +113,32 @@ async def test_restarted_reaper_closes_only_owned_unchanged_idle_target(tmp_path
     if condition == 'changed':
         assert store.entries()[0][3] > time.time() - 5
     assert runtime._detached_tab_closing == set()
+
+
+@pytest.mark.asyncio
+async def test_restarted_reaper_migrates_legacy_digest_without_renewing_idle_clock(tmp_path):
+    store = TabLeaseStore(tmp_path / 'tabs.sqlite3')
+    raw = {'url': URL, 'latestAssistantText': 'answer'}
+    old_activity = time.time() - 8000
+    store.observe('target', 'session', URL, old_activity, 'legacy-process-local-digest')
+    page = SimpleNamespace(target_id='target', handle='handle', url=URL)
+    browser = SimpleNamespace(
+        pages=AsyncMock(return_value=[page]),
+        snapshot=AsyncMock(return_value=raw),
+        page_by_handle=AsyncMock(return_value=page),
+        close=AsyncMock(),
+    )
+    runtime = object.__new__(GptAutoProviderRuntime)
+    runtime._tab_lease_store = TabLeaseStore(store.path)
+    runtime._tab_lease_cache = {}
+    runtime._tab_lease_unsafe_targets = set()
+    runtime._gpt_browser = browser
+    runtime._page_owners = {}
+    runtime._detached_tab_closing = set()
+    runtime._detached_tab_leases = {}
+    runtime.config = SimpleNamespace(workflow=SimpleNamespace(bridge_signals=lambda: []))
+
+    await runtime._reap_durable_tabs(7200)
+
+    browser.close.assert_awaited_once_with(page)
+    assert store.entries() == []
