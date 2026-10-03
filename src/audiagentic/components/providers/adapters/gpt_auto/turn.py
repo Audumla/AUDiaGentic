@@ -1131,9 +1131,12 @@ class GptAutoTurn:
         previous_assistant_id = baseline.latest_assistant_id
         previous_assistant_text = baseline.latest_assistant_text
         previous_dom_activity_digest = baseline.dom_activity_digest
-        baseline_is_project_landing = (
+        baseline_project_id = parse_project_id(baseline.url)
+        configured_project_id = parse_project_id(self.chat.project_url or "")
+        baseline_is_admitted_project_entry = (
             not parse_provider_session_id(baseline.url)
-            and urlsplit(baseline.url).path.rstrip("/").lower().endswith("/project")
+            and bool(baseline_project_id)
+            and baseline_project_id == configured_project_id
         )
         # Keep the local classification variable initialized even when the
         # first post-submit snapshot fails. Without this, the exhaustion
@@ -1171,11 +1174,11 @@ class GptAutoTurn:
                 continue
             last_observation_error = None
             self._remember_snapshot(snap)
-            # Once a new project session leaves /project, pin the first
-            # durable conversation route.  A later same-project route is not
-            # causal proof for this Send and must fail closed rather than
-            # allowing a foreign/human turn to be adopted.
-            if baseline_is_project_landing:
+            # Once an admitted project entry creates a conversation, pin the
+            # first durable route. A later same-project route is not causal
+            # proof for this Send and must fail closed rather than allowing a
+            # foreign/human turn to be adopted.
+            if baseline_is_admitted_project_entry:
                 observed_conversation_url = canonical_chat_url(snap.url)
                 if observed_conversation_url:
                     if (
@@ -1271,7 +1274,6 @@ class GptAutoTurn:
             # submit and never treats a generating or unbound response as
             # proof.
             baseline_provider_session = parse_provider_session_id(baseline.url)
-            exact_project_landing = urlsplit(baseline.url).path.rstrip("/").lower().endswith("/project")
             same_admitted_project = (
                 parse_project_id(snap.url) == parse_project_id(baseline.url)
                 and parse_project_id(snap.url) == parse_project_id(self.chat.project_url or snap.url)
@@ -1297,7 +1299,7 @@ class GptAutoTurn:
             mounted_completed_new_conversation = (
                 self._composer_action_confirmed
                 and not baseline_provider_session
-                and exact_project_landing
+                and same_admitted_project
                 and parse_provider_session_id(snap.url)
                 and new_msg
                 and snap.latest_user_id
@@ -1326,7 +1328,7 @@ class GptAutoTurn:
             prompt_unmounted_completion = (
                 self._composer_action_confirmed
                 and not baseline_provider_session
-                and exact_project_landing
+                and same_admitted_project
                 and parse_provider_session_id(snap.url)
                 and not snap.generating
                 and snap.latest_assistant_id
