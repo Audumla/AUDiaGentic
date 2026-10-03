@@ -184,6 +184,22 @@ _SNAPSHOT_FN = r"""
   // the request-owned observation root during that gap.
   const fallbackBlocks = usingFallbackMessages
     ? Array.from(document.querySelectorAll('.block-BQZwFn'))
+        .map((block, domIndex) => ({
+          block,
+          domIndex,
+          visualTop: block.getBoundingClientRect().top
+        }))
+        .sort((left, right) => {
+          // The current virtualized renderer keeps newest turns first in DOM
+          // order while laying them out in normal conversation order. Use
+          // visual order when it is available, retaining DOM order for
+          // detached/zero-layout fixtures and exact ties.
+          const delta = left.visualTop - right.visualTop;
+          return Number.isFinite(delta) && Math.abs(delta) > 0.5
+            ? delta
+            : left.domIndex - right.domIndex;
+        })
+        .map(entry => entry.block)
     : [];
   // Only an h4.sr-only owned by this exact block (not a nested .block-BQZwFn)
   // may label it -- otherwise an unlabelled outer wrapper around a labelled
