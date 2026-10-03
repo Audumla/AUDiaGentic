@@ -940,6 +940,47 @@ async def test_fallback_reverse_dom_order_uses_visual_conversation_order() -> No
 
 
 @pytest.mark.asyncio
+async def test_fallback_shared_turn_key_beats_zero_geometry_dom_order() -> None:
+    """A provider-paired completed turn is authoritative without layout."""
+    signals = [
+        dict(name='completion-control', scope='latest-assistant-turn', selectors=['button[aria-label="Copy"]'], visible=True),
+        dict(name='more-actions-menu', scope='latest-assistant-turn', selectors=['button[aria-label="More actions"]'], visible=True),
+    ]
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            await page.set_content(
+                """<div id="turn"><div>
+                  <div class="block-BQZwFn" data-content-search-turn-key="provider-turn-1">
+                    <h4 class="sr-only">ChatGPT said:</h4>
+                    <div data-chatgpt-search-message-ids="real-a"><p>answer</p></div></div>
+                  <div class="block-BQZwFn" data-content-search-turn-key="provider-turn-1">
+                    <h4 class="sr-only">You said:</h4>
+                    <div data-user-message-bubble="true"
+                         data-chatgpt-search-message-ids="real-u">prompt</div></div>
+                  </div><div class="turn-action-controls"><button aria-label="Copy">Copy</button>
+                  <button aria-label="More actions">More</button></div></div>"""
+            )
+            await page.evaluate(
+                """document.querySelectorAll('.block-BQZwFn').forEach(
+                  block => block.getBoundingClientRect = () => ({
+                    top: 0, bottom: 0, left: 0, right: 0, width: 0, height: 0
+                  })
+                )"""
+            )
+
+            snapshot = await page.evaluate(_SNAPSHOT_FN, signals)
+
+            assert [ref["role"] for ref in snapshot["messageRefs"]] == ["user", "assistant"]
+            assert snapshot["latestUserId"] == "real-u"
+            assert snapshot["latestAssistantId"] == "real-a"
+            assert snapshot["terminalWitnessAssistantId"] == "real-a"
+        finally:
+            await browser.close()
+
+
+@pytest.mark.asyncio
 async def test_fallback_nested_block_carrier_is_foreign_and_falls_back_to_synthetic() -> None:
     """A `data-chatgpt-search-message-ids` carrier whose nearest
     `.block-BQZwFn` ancestor is a different (nested) block belongs to that

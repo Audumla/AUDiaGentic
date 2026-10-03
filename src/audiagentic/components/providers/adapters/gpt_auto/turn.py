@@ -1285,6 +1285,44 @@ class GptAutoTurn:
                     else same_admitted_project
                 )
             )
+            proof_user_ref = snap.latest_user_ref()
+            proof_assistant_ref = next(
+                (
+                    ref
+                    for ref in reversed(snap.message_refs)
+                    if ref.role == "assistant"
+                ),
+                None,
+            )
+            mounted_completed_new_conversation = (
+                self._composer_action_confirmed
+                and not baseline_provider_session
+                and exact_project_landing
+                and parse_provider_session_id(snap.url)
+                and new_msg
+                and snap.latest_user_id
+                and not snap.latest_user_id.startswith("fallback-")
+                and snap.latest_assistant_id
+                and snap.latest_assistant_id != baseline.latest_assistant_id
+                and snap.latest_assistant_id not in baseline.assistant_message_ids
+                and _is_durable_assistant_message_id(snap.latest_assistant_id)
+                and snap.latest_assistant_text
+                and not snap.generating
+                and same_bound_conversation
+                and proof_user_ref is not None
+                and proof_assistant_ref is not None
+                and proof_user_ref.sequence < proof_assistant_ref.sequence
+                and snap.terminal_witness_assistant_id == snap.latest_assistant_id
+            )
+            if mounted_completed_new_conversation:
+                # A newly-created conversation with real prompt/assistant IDs,
+                # provider-paired ordering, and assistant-owned completion
+                # controls is decisive provider evidence. Do not strand the
+                # request on presentation-only prompt text normalization.
+                self._prompt_message_id = snap.latest_user_id
+                self._submission_proof_url = canonical_chat_url(snap.url)
+                self._submission_proof_assistant_id = snap.latest_assistant_id
+                return snap
             prompt_unmounted_completion = (
                 self._composer_action_confirmed
                 and not baseline_provider_session

@@ -2804,6 +2804,43 @@ async def test_completed_response_proves_submission_when_user_turn_is_unmounted(
 
 
 @pytest.mark.asyncio
+async def test_completed_new_conversation_proves_submission_despite_prompt_rendering_drift():
+    """Real provider-paired terminal IDs outrank presentation-only text drift."""
+    chat = _Chat()
+    completed = snap(
+        users=1,
+        user="Rendered prompt with provider whitespace drift",
+        assistants=1,
+        assistant_id="assistant-new",
+        assistant="Complete answer",
+        complete=True,
+        url="https://chatgpt.com/g/g-p-project/c/conversation-2",
+    )
+    landing = snap(url="https://chatgpt.com/g/g-p-project/project")
+
+    def snapshots():
+        yield landing
+        while True:
+            yield completed
+
+    chat._snapshots = snapshots()
+
+    turn = GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="turn-mounted-complete", body="Review AU01"),
+        lambda _: None,
+    )
+
+    result = await turn.run()
+
+    assert result.stop_reason == "end-turn"
+    assert result.final_summary == "Complete answer"
+    assert turn.state is TurnState.COMPLETE
+    assert turn.submission_confirmed
+    assert chat.runtime.bridge.submit_calls == 1
+
+
+@pytest.mark.asyncio
 async def test_submission_proof_rejects_same_project_conversation_route_drift():
     """A new project turn must stay on its first durable conversation route."""
     chat = _Chat()
