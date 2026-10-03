@@ -852,6 +852,13 @@ class _NavigationOnClickBridge(_GptOperationBridge):
         return await super().evaluate(page_handle, function, argument, **kwargs)
 
 
+class _HungClickAcknowledgementBridge(_GptOperationBridge):
+    async def evaluate(self, page_handle, function, argument=None, **kwargs):
+        if "send-button" in function:
+            await asyncio.Event().wait()
+        return await super().evaluate(page_handle, function, argument, **kwargs)
+
+
 @pytest.mark.asyncio
 async def test_gpt_provider_send_click_is_synchronous():
     bridge = _NavigationOnClickBridge()
@@ -863,6 +870,38 @@ async def test_gpt_provider_send_click_is_synchronous():
         "sendButtonClicked": True,
         "enterDispatched": False,
     }
+
+
+@pytest.mark.asyncio
+async def test_gpt_provider_hung_click_acknowledgement_exits_ambiguous_quickly(monkeypatch):
+    from audiagentic.components.providers.adapters.gpt_auto.gpt_auto_cdp import (
+        ComposerSubmissionTimeout,
+    )
+
+    monkeypatch.setattr(
+        GptAutoCdpBrowserController,
+        "_SEND_CLICK_ACK_TIMEOUT_SECONDS",
+        0.01,
+    )
+    monkeypatch.setattr(GptAutoCdpBrowserController, "_PAGE_READY_PAUSE_SECONDS", 0.0)
+    monkeypatch.setattr(GptAutoCdpBrowserController, "_TYPED_PAUSE_SECONDS", 0.0)
+    browser = GptAutoCdpBrowserController(
+        _HungClickAcknowledgementBridge(),  # type: ignore[arg-type]
+        action_pause_seconds=0.0,
+    )
+
+    with pytest.raises(ComposerSubmissionTimeout) as raised:
+        await asyncio.wait_for(
+            browser.submit(
+                CdpPageRef("page-1", "target-1"),
+                "ambiguous send",
+                timeout=120.0,
+            ),
+            timeout=0.5,
+        )
+
+    assert raised.value.send_attempted is True
+    assert raised.value.stage == "send-button"
 
 
 @pytest.mark.asyncio
