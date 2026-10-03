@@ -908,6 +908,38 @@ async def test_fallback_real_assistant_id_binds_terminal_witness() -> None:
 
 
 @pytest.mark.asyncio
+async def test_fallback_reverse_dom_order_uses_visual_conversation_order() -> None:
+    """A newest-first DOM must not make a completed response look unanswered."""
+    signals = [
+        dict(name='completion-control', scope='latest-assistant-turn', selectors=['button[aria-label="Copy"]'], visible=True),
+        dict(name='more-actions-menu', scope='latest-assistant-turn', selectors=['button[aria-label="More actions"]'], visible=True),
+    ]
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            await page.set_content(
+                """<div id="turn"><div style="display:flex;flex-direction:column-reverse">
+                  <div class="block-BQZwFn"><h4 class="sr-only">ChatGPT said:</h4>
+                    <div data-chatgpt-search-message-ids="real-a"><p>answer</p></div></div>
+                  <div class="block-BQZwFn"><h4 class="sr-only">You said:</h4>
+                    <div data-user-message-bubble="true"
+                         data-chatgpt-search-message-ids="real-u">prompt</div></div>
+                  </div><div class="turn-action-controls"><button aria-label="Copy">Copy</button>
+                  <button aria-label="More actions">More</button></div></div>"""
+            )
+
+            snapshot = await page.evaluate(_SNAPSHOT_FN, signals)
+
+            assert [ref["role"] for ref in snapshot["messageRefs"]] == ["user", "assistant"]
+            assert snapshot["latestUserId"] == "real-u"
+            assert snapshot["latestAssistantId"] == "real-a"
+            assert snapshot["terminalWitnessAssistantId"] == "real-a"
+        finally:
+            await browser.close()
+
+
+@pytest.mark.asyncio
 async def test_fallback_nested_block_carrier_is_foreign_and_falls_back_to_synthetic() -> None:
     """A `data-chatgpt-search-message-ids` carrier whose nearest
     `.block-BQZwFn` ancestor is a different (nested) block belongs to that
