@@ -2167,7 +2167,11 @@ class GptAutoTurn:
             if await _attempt_response_recovery(
                 now,
                 interruption_present=provider_interruption,
-                completion_candidate=completion_candidate,
+                # ChatGPT can mount Copy/completion-shaped controls around a
+                # partial answer while its connection-interrupted banner and
+                # Stop control remain live.  That structural partial must not
+                # suppress the interruption refresh/lease path.
+                completion_candidate=completion_candidate and not provider_interruption,
             ):
                 continue
             if (
