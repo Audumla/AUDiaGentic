@@ -1604,7 +1604,9 @@ class GatewayQueueManager:
                     entry,
                     int((current.get("recovery") or {}).get("attempt", 0)) + 1,
                 )
-                recovery_attempt = int((current.get("recovery") or {}).get("attempt", 0)) + 1
+                previous_recovery = current.get("recovery")
+                previous_recovery = previous_recovery if isinstance(previous_recovery, dict) else {}
+                recovery_attempt = int(previous_recovery.get("attempt", 0)) + 1
                 max_recovery_attempts = self._recovery_retry_max_attempts(entry)
                 # A presubmit reconciliation is different from uncertain
                 # provider-side recovery: the current request has proven that
@@ -1620,9 +1622,12 @@ class GatewayQueueManager:
                 )
                 followup_reconciliation = deferred.phase == "followup-reconcile"
                 followup_max_attempts = self._recovery_followup_max_attempts(entry)
+                followup_attempt = int(previous_recovery.get("followup-attempt", 0))
+                if followup_reconciliation:
+                    followup_attempt += 1
                 followup_recovery_exhausted = (
                     followup_reconciliation
-                    and recovery_attempt >= followup_max_attempts
+                    and followup_attempt >= followup_max_attempts
                 )
                 effective_recovery_max_attempts = (
                     followup_max_attempts if followup_reconciliation else max_recovery_attempts

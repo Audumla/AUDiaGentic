@@ -662,6 +662,9 @@ def defer_owned_recovery(
         previous = record.get("recovery")
         previous = previous if isinstance(previous, dict) else {}
         attempt = int(previous.get("attempt") or 0) + 1
+        followup_attempt = int(previous.get("followup-attempt") or 0)
+        if phase == "followup-reconcile":
+            followup_attempt += 1
         retry_at = add_seconds(timestamp, retry_delay_seconds)
         error_message = getattr(error, "message", None)
         if not isinstance(error_message, str) and isinstance(error, Mapping):
@@ -679,6 +682,7 @@ def defer_owned_recovery(
             "from-owner-epoch": previous.get("from-owner-epoch"),
             "handoff-id": previous.get("handoff-id"),
             "attempt": attempt,
+            "followup-attempt": followup_attempt,
             "last-error": error_message[:256],
             "last-error-code": bounded_error.get("code") if bounded_error else None,
             "last-error-type": bounded_error.get("type") if bounded_error else None,
@@ -720,6 +724,7 @@ def defer_owned_recovery(
             attributes={
                 "phase": phase,
                 "attempt": attempt,
+                "followup-attempt": followup_attempt,
                 "next-retry-at": retry_at,
                 "retry-delay-seconds": retry_delay_seconds,
                 "side-effect-state": side_effect_state,
