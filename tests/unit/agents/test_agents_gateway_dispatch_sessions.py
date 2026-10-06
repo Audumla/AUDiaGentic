@@ -573,6 +573,133 @@ def test_promptless_restart_resume_reaches_provider_observer(rig, monkeypatch):
     assert len(transports) == 1
     assert transports[0].turns == ["hello"]
 
+
+@pytest.mark.parametrize("close_reason", ["shutdown", "idle-timeout"])
+def test_promptless_restart_recovery_reopens_policy_closed_session(
+    resumable_rig, monkeypatch, close_reason
+):
+    """Restart recovery (resume_existing=True, no prompt to replay) against a
+    session closed by a resumable gateway resource-policy reason must reopen
+    the exact durable provider binding through the shared auto-resume path
+    and reach the provider's observation-only seam — instead of looping on
+    RES-AGW-003 until the bounded CON-AGW-084 interruption."""
+    runtime, transports, tmp_path = resumable_rig
+    first = _dispatch(
+        tmp_path, _running_record(tmp_path, session_keep_alive=True), dispatch_prompt="hello"
+    )
+    source_id = first["session-id"]
+    runtime.close_session(tmp_path, source_id, reason=close_reason)
+
+    # Simulate the restart: the prompt snapshot is gone, so recovery enters
+    # dispatch promptless with observation-only semantics.
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.api.complete_execution_from_provider",
+        lambda *_args, **_kwargs: None,
+    )
+    seen: dict[str, object] = {}
+    original_prompt = runtime.prompt_in_session
+
+    def capture_prompt(*args, **kwargs):
+        seen["prompt"] = args[2]
+        seen["resume-existing"] = kwargs.get("resume_existing")
+        return original_prompt(*args, **kwargs)
+
+    monkeypatch.setattr(runtime, "prompt_in_session", capture_prompt)
+
+    record = _running_record(tmp_path, session_id=source_id, session_keep_alive=True)
+    with pytest.raises(RecoveryDeferred) as exc:
+        _dispatch(tmp_path, record, dispatch_prompt="", resume_existing=True)
+
+    # The closed source was transparently resumed; the deferred error is the
+    # provider seam's observation refusal, NOT RES-AGW-003.
+    assert exc.value.error.code == "CON-AGW-124", exc.value.error
+    assert exc.value.phase == "observe-retry"
+    # The successor transport was opened and observed prompt-free: no second
+    # prompt was submitted to any transport.
+    assert len(transports) == 2
+    assert transports[0].turns == ["hello"]
+    assert transports[1].turns == []
+    assert seen["prompt"] == ""
+    assert seen["resume-existing"] is True
+
+    stored = store.read_record(tmp_path, record["request-id"])
+    assert stored["state"] == "running"
+    successor_id = stored["session-id"]
+    assert successor_id != source_id
+    successor = sessions_store.read_session_record(tmp_path, successor_id)
+    assert successor["binding"]["relation"] == "resumed-from"
+
+
+@pytest.mark.parametrize("close_reason", ["client-request", "post-turn-close"])
+def test_promptless_restart_recovery_refuses_ineligible_close_reason(
+    resumable_rig, monkeypatch, close_reason
+):
+    """A client-request or post-turn close is deliberate, not a resource
+    policy: promptless restart recovery must still surface the existing
+    RES-AGW-003 refusal (deferred for the queue) and must never reopen the
+    session."""
+    runtime, transports, tmp_path = resumable_rig
+    first = _dispatch(
+        tmp_path, _running_record(tmp_path, session_keep_alive=True), dispatch_prompt="hello"
+    )
+    source_id = first["session-id"]
+    runtime.close_session(tmp_path, source_id, reason=close_reason)
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.api.complete_execution_from_provider",
+        lambda *_args, **_kwargs: None,
+    )
+    record = _running_record(tmp_path, session_id=source_id, session_keep_alive=True)
+    with pytest.raises(RecoveryDeferred) as exc:
+        _dispatch(tmp_path, record, dispatch_prompt="", resume_existing=True)
+
+    assert exc.value.error.code == "RES-AGW-003", exc.value.error
+    assert exc.value.phase == "rehydrate-retry"
+    assert len(transports) == 1  # no successor transport was ever opened
+    stored = store.read_record(tmp_path, record["request-id"])
+    assert stored["session-id"] == source_id
+    assert stored["state"] == "running"
+
+
+def test_promptless_restart_recovery_refuses_source_without_durable_binding(
+    resumable_rig, monkeypatch
+):
+    """AS49 eligibility refusal (no usable provider binding) is fail-closed:
+    the source is never reopened and the caller sees the stable RES-AGW-003.
+    """
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+    runtime, transports, tmp_path = resumable_rig
+    first = _dispatch(
+        tmp_path, _running_record(tmp_path, session_keep_alive=True), dispatch_prompt="hello"
+    )
+    source_id = first["session-id"]
+    runtime.close_session(tmp_path, source_id, reason="shutdown")
+
+    def refuse(*args, **kwargs):
+        raise AudiaGenticError(
+            code="RES-AGW-111",
+            kind="agents",
+            message="source session has no usable provider binding",
+            details={},
+        )
+
+    monkeypatch.setattr(runtime, "resume_session", refuse)
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.api.complete_execution_from_provider",
+        lambda *_args, **_kwargs: None,
+    )
+    record = _running_record(tmp_path, session_id=source_id, session_keep_alive=True)
+    with pytest.raises(RecoveryDeferred) as exc:
+        _dispatch(tmp_path, record, dispatch_prompt="", resume_existing=True)
+
+    assert exc.value.error.code == "RES-AGW-003", exc.value.error
+    assert exc.value.error.details.get("auto-resume-attempted") is True
+    assert exc.value.error.details.get("auto-resume-refusal-code") == "RES-AGW-111"
+    assert len(transports) == 1
+    stored = store.read_record(tmp_path, record["request-id"])
+    assert stored["session-id"] == source_id
+
+
 def test_proven_unsent_submission_failure_is_deferred_after_safe_retry(rig, monkeypatch):
     """A composer failure before Send stays queued, never rotates the session."""
     from audiagentic.components.agents.gateway.queue.recovery_control import RecoveryDeferred

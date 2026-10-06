@@ -6,6 +6,7 @@ records. Imports _shared for constants — one-way edges only.
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -14,7 +15,7 @@ from audiagentic.components.agents.agents_paths import (
     gateway_root,
     gateway_timeline_path,
 )
-from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.foundation.contracts.errors import AudiaGenticError, redact_details
 from audiagentic.foundation.io import atomic_write_json, load_ndjson, read_text_with_retry
 from audiagentic.foundation.time import now_iso_z
 
@@ -56,6 +57,10 @@ def _redact_error(error: BaseException | dict[str, Any] | None) -> dict[str, Any
             details = _project_session_error_details(error.details)
             if details:
                 projected["details"] = details
+        elif error.code == "CON-AGW-084" and isinstance(error.details, dict):
+            details = _project_bounded_recovery_error_details(error.details)
+            if details:
+                projected["details"] = details
         return projected
     if isinstance(error, BaseException):
         # Preserve ordinary validation/configuration detail so operators can
@@ -64,7 +69,139 @@ def _redact_error(error: BaseException | dict[str, Any] | None) -> dict[str, Any
         if isinstance(error, ValueError) and str(error):
             return {"code": "VAL-AGW-999", "message": str(error), "kind": type(error).__name__}
         return {"code": "UNKNOWN", "message": "unexpected error (see server logs)", "kind": type(error).__name__}
-    return {k: v for k, v in error.items() if k in _shared._REDACTED_ERROR_KEYS}
+    projected = {k: v for k, v in error.items() if k in _shared._REDACTED_ERROR_KEYS}
+    if error.get("code") == "CON-AGW-084" and isinstance(error.get("details"), dict):
+        details = _project_bounded_recovery_error_details(error["details"])
+        if details:
+            projected["details"] = details
+    return projected
+
+
+_RECOVERY_ERROR_MAX_CODE = 128
+_RECOVERY_ERROR_MAX_KIND = 64
+_RECOVERY_ERROR_MAX_DETAIL_KEYS = 16
+_RECOVERY_ERROR_MAX_DETAIL_STR = 256
+_RECOVERY_ERROR_MAX_DETAIL_ITEMS = 8
+
+
+def _bounded_recovery_error_scalar(value: Any) -> Any:
+    """Flatten one error-detail value to a bounded, serializable scalar."""
+    if isinstance(value, str):
+        text = value.replace("\x00", "")
+        return text[:_RECOVERY_ERROR_MAX_DETAIL_STR] or None
+    if value is None or isinstance(value, (bool, int, float)):
+        return value
+    if isinstance(value, (list, tuple)):
+        items: list[Any] = []
+        for item in value[:_RECOVERY_ERROR_MAX_DETAIL_ITEMS]:
+            if isinstance(item, str):
+                items.append(item.replace("\x00", "")[:128])
+            elif item is None or isinstance(item, (bool, int, float)):
+                items.append(item)
+        return items or None
+    # Nested mappings/objects are deliberately dropped: the summary must
+    # stay flat and bounded, and unstructured payloads are where prompt or
+    # transport text would hide.
+    return None
+
+
+def bounded_recovery_error(
+    error: BaseException | Mapping[str, Any] | None,
+) -> dict[str, Any] | None:
+    """Project a recovery-deferred error to a bounded, prompt-free summary.
+
+    Retains only the root error's code, exception type, contract kind, and a
+    flattened, truncated slice of its already-redacted details. This is what
+    the durable recovery trail keeps (``defer_owned_recovery``) and what the
+    bounded CON-AGW-084 interruption exposes as ``root-recovery-error``, so an
+    operator can see why observation-only recovery exhausted without leaking
+    prompts, credentials, tracebacks, or unbounded payloads.
+    """
+    if error is None:
+        return None
+    if isinstance(error, AudiaGenticError):
+        code: Any = error.code
+        kind: Any = error.kind
+        details: Any = error.details
+        type_name: Any = "AudiaGenticError"
+        if not isinstance(code, str):
+            code = None
+    elif isinstance(error, Mapping):
+        code = error.get("code")
+        kind = error.get("kind")
+        details = error.get("details")
+        type_name = error.get("type") or "dict"
+    elif isinstance(error, BaseException):
+        code = getattr(error, "code", None)
+        kind = getattr(error, "kind", None)
+        details = getattr(error, "details", None)
+        type_name = type(error).__name__
+    else:
+        return None
+    projected: dict[str, Any] = {
+        "code": code[:_RECOVERY_ERROR_MAX_CODE] if isinstance(code, str) else None,
+        "type": type_name[:_RECOVERY_ERROR_MAX_CODE] if isinstance(type_name, str) else None,
+        "kind": kind[:_RECOVERY_ERROR_MAX_KIND] if isinstance(kind, str) else None,
+    }
+    bounded_details: dict[str, Any] = {}
+    if isinstance(details, Mapping):
+        for key, value in details.items():
+            if len(bounded_details) >= _RECOVERY_ERROR_MAX_DETAIL_KEYS:
+                break
+            key_text = str(key)[:_RECOVERY_ERROR_MAX_KIND]
+            bounded_value = _bounded_recovery_error_scalar(value)
+            if bounded_value is not None:
+                bounded_details[key_text] = bounded_value
+    if bounded_details:
+        projected["details"] = redact_details(bounded_details)
+    return projected
+
+
+_BOUNDED_RECOVERY_ERROR_SCALAR_KEYS = frozenset(
+    {"recovery-attempt", "recovery-max-attempts", "recovery-phase", "side-effect-state"}
+)
+
+
+def _project_bounded_recovery_error_details(details: dict[str, Any]) -> dict[str, Any]:
+    """Project the CON-AGW-084 interruption details to a safe public shape.
+
+    The interruption details are queue-owned and small: bounded retry-budget
+    counters plus the ``root-recovery-error`` summary produced by
+    :func:`bounded_recovery_error`.  Only those named fields survive; the
+    nested root summary is re-validated to its bounded shape so a malformed
+    producer cannot smuggle unbounded or sensitive payloads into the record.
+    """
+    projected: dict[str, Any] = {}
+    for key in _BOUNDED_RECOVERY_ERROR_SCALAR_KEYS:
+        value = details.get(key)
+        if value is None or isinstance(value, bool):
+            projected[key] = value
+        elif isinstance(value, int):
+            projected[key] = value
+        elif isinstance(value, str):
+            projected[key] = value[:_RECOVERY_ERROR_MAX_KIND]
+    if details.get("submission-proven") is not None:
+        projected["submission-proven"] = bool(details["submission-proven"])
+    root = details.get("root-recovery-error")
+    if isinstance(root, dict):
+        bounded_root: dict[str, Any] = {}
+        for key in ("code", "type", "kind"):
+            value = root.get(key)
+            if isinstance(value, str):
+                bounded_root[key] = value[:_RECOVERY_ERROR_MAX_CODE]
+        if isinstance(root.get("details"), dict):
+            bounded_details: dict[str, Any] = {}
+            for key, value in root["details"].items():
+                if len(bounded_details) >= _RECOVERY_ERROR_MAX_DETAIL_KEYS:
+                    break
+                bounded_value = _bounded_recovery_error_scalar(value)
+                if bounded_value is not None:
+                    bounded_details[str(key)[:_RECOVERY_ERROR_MAX_KIND]] = bounded_value
+            if bounded_details:
+                bounded_root["details"] = redact_details(bounded_details)
+        if bounded_root:
+            projected["root-recovery-error"] = bounded_root
+    return projected
 
 
 _GPT_AUTO_DETAIL_KEYS = frozenset(

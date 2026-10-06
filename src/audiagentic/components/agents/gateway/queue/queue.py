@@ -1686,6 +1686,11 @@ class GatewayQueueManager:
                                         (current.get("provider-metadata") or {}).get("submission-proven")
                                         is True
                                     ),
+                                    # Bounded root recovery error (code/type/kind/
+                                    # redacted details) so the interruption
+                                    # explains the underlying failure instead of
+                                    # only the exhausted retry budget.
+                                    "root-recovery-error": store.bounded_recovery_error(deferred.error),
                                 },
                             },
                             "finished-at": now_iso_z(),
