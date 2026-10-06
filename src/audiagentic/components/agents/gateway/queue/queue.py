@@ -136,6 +136,31 @@ def _durable_provider_session_is_active(project_root: Path, record: dict[str, An
     # recovery seam: the next attempt can create an exact-session successor
     # and observe the existing turn without replaying the prompt.  Do not
     # extend this exception to ordinary provider/session failures.
+    #
+    # The exception is still bounded by the request-owned provider activity
+    # lease. A durable session record can outlive its browser tab; once the
+    # last meaningful activity lease has expired, repeated rehydrate failures
+    # must fall through to bounded recovery instead of keeping the request
+    # running forever.
+    activity = record.get("activity")
+    provider_activity = activity.get("provider") if isinstance(activity, dict) else None
+    lease_expires_at = (
+        provider_activity.get("lease-expires-at")
+        if isinstance(provider_activity, dict)
+        else None
+    ) or record.get("activity-lease-expires-at")
+    if not isinstance(lease_expires_at, str) or not lease_expires_at:
+        return False
+    try:
+        from datetime import datetime, timezone
+
+        lease_expires = datetime.fromisoformat(lease_expires_at.replace("Z", "+00:00"))
+        if lease_expires.tzinfo is None:
+            lease_expires = lease_expires.replace(tzinfo=timezone.utc)
+        if lease_expires <= datetime.now(timezone.utc):
+            return False
+    except (TypeError, ValueError, OverflowError):
+        return False
     provider_metadata = record.get("provider-metadata")
     recovery = record.get("recovery")
     recovery_reason = recovery.get("reason") if isinstance(recovery, dict) else None

@@ -38,6 +38,14 @@ logger = logging.getLogger(__name__)
 _TURN_EVENT_SEMANTIC_STRENGTH = "unknown"
 _TURN_EVENT_VERIFICATION_TIER = "unknown"
 
+# These observations remain useful in the durable timeline and provider
+# activity diagnostics, but are synthetic observer/recovery edges rather than
+# evidence that the provider turn itself progressed. They must not reset the
+# session-level silence clock.
+_SESSION_CLOCK_EXCLUDED_ACTIVITY_LABELS = frozenset(
+    {"connection-refreshing", "response-observed"}
+)
+
 # Tool statuses that mean the tool finished; carried on the completed event so
 # observers can distinguish success from failure (RV679: failed was invisible).
 _TOOL_TERMINAL_STATUSES = {"completed", "failed"}
@@ -221,13 +229,22 @@ def _make_on_event_callback(
     projector = _TurnEventProjector()
 
     async def _on_event(obs: TransportObservation) -> None:
-        if activity_marker is not None and obs.kind != TransportObservationKind.TIMING:
+        activity_phase = (
+            obs.attributes.get("model_activity")
+            if isinstance(obs.attributes, Mapping)
+            else None
+        )
+        if not isinstance(activity_phase, str) or not activity_phase:
+            activity_phase = obs.kind.value if hasattr(obs.kind, "value") else str(obs.kind)
+        if (
+            activity_marker is not None
+            and obs.kind != TransportObservationKind.TIMING
+            and activity_phase.strip().lower().replace("_", "-").replace(" ", "-")
+            not in _SESSION_CLOCK_EXCLUDED_ACTIVITY_LABELS
+        ):
             activity_marker()
         if activity_relay is not None and obs.kind != TransportObservationKind.TIMING:
             try:
-                activity_phase = obs.attributes.get("model_activity") if isinstance(obs.attributes, Mapping) else None
-                if not isinstance(activity_phase, str) or not activity_phase:
-                    activity_phase = obs.kind.value if hasattr(obs.kind, "value") else str(obs.kind)
                 activity_relay.observe_provider(
                     source="session-transport",
                     source_instance=f"session:{session_id}:turn:{request_id or 'unknown'}",
