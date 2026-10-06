@@ -161,7 +161,10 @@ def _durable_provider_session_is_active(project_root: Path, record: dict[str, An
         return False
     if lifecycle_state == "active":
         return True
-    provider_metadata = record.get("provider-metadata")
+    # The request projection can lag or retain an older checkpoint across a
+    # gateway restart. The session record owns the unresolved-turn fence;
+    # never use request metadata to authorize an unbounded observation loop.
+    session_metadata = sessions_store.session_provider_metadata(session_record)
     recovery = record.get("recovery")
     recovery_reason = recovery.get("reason") if isinstance(recovery, dict) else None
     binding = sessions_store.read_session_binding(project_root, session_id) or {}
@@ -169,8 +172,7 @@ def _durable_provider_session_is_active(project_root: Path, record: dict[str, An
     return (
         isinstance(provider_ref, str)
         and bool(provider_ref.strip())
-        and isinstance(provider_metadata, dict)
-        and provider_metadata.get("unresolved-turn-pending") is True
+        and session_metadata.get("unresolved-turn-pending") is True
         and recovery_reason in {"gateway-restart", "owner-loss", "service-restart"}
     )
 
@@ -1071,6 +1073,23 @@ class GatewayQueueManager:
             return _RECOVERY_RETRY_MAX_ATTEMPTS
         return value if value > 0 else _RECOVERY_RETRY_MAX_ATTEMPTS
 
+    @staticmethod
+    def _recovery_followup_max_attempts(entry: QueuedDispatch) -> int:
+        """Bound follow-up reconciliation independently of the generic retry cap."""
+        params = dict(entry.snapshot.execution_params)
+        value = params.get(
+            "provider-session-followup-recovery-max-attempts",
+            max(_RECOVERY_RETRY_MAX_ATTEMPTS * 4, 24),
+        )
+        if isinstance(value, bool):
+            return max(_RECOVERY_RETRY_MAX_ATTEMPTS * 4, 24)
+        try:
+            value = int(value)
+        except (TypeError, ValueError):
+            return max(_RECOVERY_RETRY_MAX_ATTEMPTS * 4, 24)
+        return value if value > 0 else max(_RECOVERY_RETRY_MAX_ATTEMPTS * 4, 24)
+
+
     def _schedule_recovery_retry(
         self,
         pq: _RuntimeState,
@@ -1599,6 +1618,14 @@ class GatewayQueueManager:
                     and deferred.side_effect_state == "not-started"
                 )
                 followup_reconciliation = deferred.phase == "followup-reconcile"
+                followup_max_attempts = self._recovery_followup_max_attempts(entry)
+                followup_recovery_exhausted = (
+                    followup_reconciliation
+                    and recovery_attempt >= followup_max_attempts
+                )
+                effective_recovery_max_attempts = (
+                    followup_max_attempts if followup_reconciliation else max_recovery_attempts
+                )
                 conversation_load_reconciliation = (
                     deferred.phase == "conversation-load-reconcile"
                     and current.get("provider-transport-kind") == "provider-session"
@@ -1625,9 +1652,15 @@ class GatewayQueueManager:
                     getattr(deferred.error, "code", None) == "RES-AGW-004"
                     and deferred.phase == "rehydrate-retry"
                 )
-                if (                    recovery_attempt >= max_recovery_attempts
-                    and not wait_for_previous_turn
-                    and not followup_reconciliation
+                if (
+                    (
+                        (
+                            recovery_attempt >= max_recovery_attempts
+                            and not wait_for_previous_turn
+                            and not followup_reconciliation
+                        )
+                        or followup_recovery_exhausted
+                    )
                     and not conversation_load_reconciliation
                     and not (durable_provider_recovery and not prompt_unavailable_recovery)
                 ):
@@ -1697,7 +1730,7 @@ class GatewayQueueManager:
                                 ),
                                 "details": {
                                     "recovery-attempt": recovery_attempt,
-                                    "recovery-max-attempts": max_recovery_attempts,
+                                    "recovery-max-attempts": effective_recovery_max_attempts,
                                     "recovery-phase": deferred.phase,
                                     "side-effect-state": deferred.side_effect_state,
                                     "submission-proven": (
@@ -1725,7 +1758,7 @@ class GatewayQueueManager:
                         extra={
                             "request-id": request_id,
                             "recovery-attempts": recovery_attempt,
-                            "recovery-max-attempts": max_recovery_attempts,
+                            "recovery-max-attempts": effective_recovery_max_attempts,
                         },
                     )
                     return
