@@ -85,6 +85,7 @@ def test_non_gpt_does_not_bind(tmp_path):
 def test_proven_presubmit_failure_never_replaces_default(tmp_path):
     error = AudiaGenticError(code="EXT-GPTAUTO-004", kind="providers", message="timeout", details={
         "failure-stage": "readiness", "submission-state": "not_started",
+        "submission-proven": False, "submission-ambiguous": False,
         "retryable-same-session": True,
     })
     assert defaults.structured_presubmit_failure(error)
@@ -99,7 +100,12 @@ def test_proven_presubmit_failure_never_replaces_default(tmp_path):
 
 
 def test_presubmit_retry_requires_explicit_same_session_proof():
-    base = {"failure-stage": "readiness", "submission-state": "not_started"}
+    base = {
+        "failure-stage": "readiness",
+        "submission-state": "not_started",
+        "submission-proven": False,
+        "submission-ambiguous": False,
+    }
     assert not defaults.proven_same_session_presubmit_retryable_failure(
         AudiaGenticError("EXT-GPTAUTO-004", "providers", "blocked", {**base, "retryable-same-session": False})
     )
