@@ -144,6 +144,59 @@ def test_complete_execution_from_provider_allows_unresolved_turn_recovery(monkey
     assert getattr(caught.value, "code", None) == "CON-AGW-154"
 
 
+def test_complete_execution_from_provider_rejects_foreign_unresolved_turn(
+    monkeypatch, tmp_path: Path
+):
+    from audiagentic.components.providers.adapters.gpt_auto.prompt_fingerprint import PromptFingerprint
+
+    record = {
+        "request-id": "req_foreign_unresolved",
+        "state": "interrupted",
+        "revision": 4,
+        "session-id": "ses_capture",
+        "resolved-provider-id": "gpt-auto",
+        "provider-metadata": {
+            "project-url": "https://chatgpt.com/g/g-p-project/project",
+            "unresolved-turn-pending": True,
+            "prompt-text-digest": PromptFingerprint.from_text("request A").digest,
+            "unresolved-baseline-user-count": 1,
+            "unresolved-baseline-assistant-count": 1,
+        },
+    }
+    user_ref = SimpleNamespace(role="user", sequence=2, text="request B", correlation_text="request B")
+    assistant_ref = SimpleNamespace(role="assistant", sequence=3, text="foreign answer", correlation_text="foreign answer")
+    snapshot = SimpleNamespace(
+        latest_assistant_text="foreign answer",
+        latest_user_text="request B",
+        latest_user_id="foreign-user",
+        latest_assistant_id="foreign-assistant",
+        terminal_witness_assistant_id="foreign-assistant",
+        generating=False,
+        dom_signals=frozenset({"completion-control"}),
+        user_count=2,
+        assistant_count=2,
+        message_refs=(user_ref, assistant_ref),
+        latest_user_ref=lambda: user_ref,
+    )
+    monkeypatch.setattr(api.store, "read_record", lambda *_: record)
+    monkeypatch.setattr(sessions_store, "read_session_record", lambda *_: {"provider": {"metadata": {}}})
+    monkeypatch.setattr(sessions_store, "session_provider_metadata", lambda _: {})
+    monkeypatch.setattr(sessions_store, "session_provider_id", lambda _: "gpt-auto")
+    monkeypatch.setattr(
+        session_runtime_module,
+        "get_session_runtime",
+        lambda: SimpleNamespace(
+            capture_latest_response=lambda *_args, **_kwargs: {"outcome": "captured", "snapshot": snapshot}
+        ),
+    )
+
+    with pytest.raises(Exception) as caught:
+        api.complete_execution_from_provider(tmp_path, "req_foreign_unresolved")
+
+    assert getattr(caught.value, "code", None) == "CON-AGW-156"
+    assert caught.value.details["failure-reason"] == "prompt-digest-mismatch"
+
+
 def test_complete_execution_from_provider_uses_prompt_text_for_synthetic_ids(monkeypatch, tmp_path: Path):
     prompt = "synthetic prompt"
     request_id = "req_synthetic"
