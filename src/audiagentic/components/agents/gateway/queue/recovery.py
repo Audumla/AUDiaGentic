@@ -249,6 +249,20 @@ def recovery_runner(record: dict[str, Any], *, project_root: Path | None = None)
         if isinstance(candidate, str) and candidate.strip():
             project_name = candidate.strip()
 
+    recovery_metadata = record.get("recovery")
+    recovery_metadata = recovery_metadata if isinstance(recovery_metadata, dict) else {}
+    # A request can be durable-running while its own prompt is proven not to
+    # have reached Send yet: it may be waiting behind an unresolved predecessor
+    # in the same provider session. Restart recovery must reload that frozen
+    # prompt and let the normal presubmit-reconcile path continue it. Treating
+    # every running provider-session record as observation-only loses the only
+    # safe replay path and eventually turns the request into CON-AGW-084.
+    safe_presubmit_recovery = (
+        provider_session
+        and recovery_metadata.get("phase") in {"presubmit-reconcile", "presubmit-retry"}
+        and recovery_metadata.get("side-effect-state") == "not-started"
+    )
+
     return functools.partial(
         _dispatch.dispatch_request,
         dispatch_prompt="",
@@ -259,15 +273,16 @@ def recovery_runner(record: dict[str, Any], *, project_root: Path | None = None)
         provider_isolation_tier=_resolve_provider_isolation_tier(provider_id),
         worker_timeout_seconds=float(record.get("timeout-seconds") or 300.0),
         project_name=project_name,
-        # A stale provider-session turn is never replayed from a gateway
-        # process merely because the request projection lacks a checkpoint.
-        # The provider recovery seam can distinguish a durable pending turn;
-        # unsupported/no-checkpoint recovery stays nonterminal instead of
-        # risking a duplicate prompt. Worker-backed work is deferred above.
+        # A submitted/ambiguous provider-session turn is observation-only.
+        # The one exception is a durable presubmit reconciliation whose
+        # side-effect fence proves Send was not reached; dispatch then reloads
+        # the immutable admitted prompt and retries the same request safely.
+        # Worker-backed work is deferred above.
         resume_existing=(
             bool(record.get("recovery-required"))
             and provider_session
             and session_checkpoint_available
+            and not safe_presubmit_recovery
         ),
     )
 
