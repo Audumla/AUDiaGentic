@@ -274,11 +274,23 @@ def recovery_runner(record: dict[str, Any], *, project_root: Path | None = None)
         isinstance(session_metadata, dict)
         and session_metadata.get("recovery-state") == "side-effect-may-have-started"
     )
+    checkpoint_proves_current_turn_not_pending = (
+        isinstance(session_metadata, dict)
+        and (
+            session_metadata.get("unresolved-turn-pending") is False
+            or (
+                session_metadata.get("unresolved-turn-pending") is True
+                and isinstance(session_metadata.get("unresolved-turn-id"), str)
+                and session_metadata.get("unresolved-turn-id") != record.get("request-id")
+            )
+        )
+    )
     safe_presubmit_recovery = (
         provider_session
         and session_checkpoint_available
         and recovery_metadata.get("phase") in {"presubmit-reconcile", "presubmit-retry"}
         and recovery_metadata.get("side-effect-state") == "not-started"
+        and checkpoint_proves_current_turn_not_pending
         and not checkpoint_has_current_turn
         and not checkpoint_has_uncorrelated_pending_turn
         and not checkpoint_submission_proven
@@ -298,8 +310,8 @@ def recovery_runner(record: dict[str, Any], *, project_root: Path | None = None)
         # A submitted/ambiguous provider-session turn is observation-only.
         # The one exception is a durable presubmit reconciliation whose
         # side-effect fence proves Send was not reached and whose authoritative
-        # session checkpoint either has no pending turn or names a different
-        # predecessor. Missing/unreadable checkpoint evidence stays
+        # session checkpoint explicitly clears pending work or names a different
+        # predecessor. Missing/empty/unreadable checkpoint evidence stays
         # observation-only; it must never authorize prompt replay.
         # Worker-backed work is deferred above.
         resume_existing=(
