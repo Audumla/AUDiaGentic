@@ -127,6 +127,8 @@ class GptAutoSessionTransport:
                 details = dict(exc.details or {})
                 details.setdefault("failure-stage", "readiness")
                 details.setdefault("submission-state", "not_started")
+                details.setdefault("submission-proven", False)
+                details.setdefault("submission-ambiguous", False)
                 details.setdefault("retryable-same-session", False)
                 details.setdefault("previous-turn-unresolved", unresolved)
                 details.setdefault("request-id", request.turn_id)
@@ -145,6 +147,8 @@ class GptAutoSessionTransport:
                     details={
                         "failure-stage": "readiness",
                         "submission-state": "not_started",
+                        "submission-proven": False,
+                        "submission-ambiguous": False,
                         "retryable-same-session": False,
                         "previous-turn-unresolved": unresolved,
                         "cause-type": type(exc).__name__,

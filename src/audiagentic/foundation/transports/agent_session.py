@@ -112,10 +112,6 @@ _WORK_ACTIVITY_LABELS = frozenset({
     "dom-table",
     "dom-materialization",
     "dom-activity",
-    # Bounded recovery lease evidence.  This is intentionally distinct from
-    # GPT-auto's real recovery/physical-idle clock, but keeps an interrupted
-    # provider turn from being declared stale while recovery is active.
-    "connection-refreshing",
     "thinking",
     "searching-web",
     "searching-the-web",
@@ -127,7 +123,6 @@ _WORK_ACTIVITY_LABELS = frozenset({
     "tool-result",
     "tool-finished",
     "response-progress",
-    "response-observed",
     "response-started",
     "assistant-message",
     "thought",
