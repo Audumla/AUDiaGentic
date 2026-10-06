@@ -129,10 +129,26 @@ _PROJECT_NEW_CHAT_POINT_FN = r"""(input) => {
     return rect.width > 0 && rect.height > 0 &&
       style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
   };
+  // The Projects listing currently renders project rows without an id or
+  // project link. The sidebar row on the same page remains the provider-owned
+  // identity source, so use only an exact-name sidebar match as a fallback.
+  // If that identity cannot be proven, retain the fail-closed null result.
+  const sidebarProjectIdForName = () => {
+    const sidebarRow = Array.from(document.querySelectorAll('[data-app-action-sidebar-project-row]'))
+      .find(candidate => normalize(
+        candidate.getAttribute('data-app-action-sidebar-project-label')
+      ) === wanted);
+    return sidebarRow
+      ? canonicalProjectId(sidebarRow.getAttribute('data-app-action-sidebar-project-id'))
+      : '';
+  };
   const projectIdForRow = row => {
     const href = row.querySelector('a[href*="/g/g-p-"]')?.getAttribute('href') || '';
     const hrefMatch = href.match(/\/g\/(g-p-[^/?#]+)/);
-    return canonicalProjectId(row.getAttribute('data-project-id') || (hrefMatch ? hrefMatch[1] : ''));
+    return canonicalProjectId(
+      row.getAttribute('data-project-id') || (hrefMatch ? hrefMatch[1] : '') ||
+      sidebarProjectIdForName()
+    );
   };
   const candidates = Array.from(document.querySelectorAll('[data-project-row="true"]'))
     .filter(row => visible(row))
