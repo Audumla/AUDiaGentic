@@ -266,23 +266,44 @@ def recovery_runner(record: dict[str, Any], *, project_root: Path | None = None)
         and session_metadata.get("unresolved-turn-pending") is True
         and not isinstance(session_metadata.get("unresolved-turn-id"), str)
     )
-    checkpoint_submission_proven = (
+    checkpoint_turn_id = (
+        session_metadata.get("unresolved-turn-id")
+        if isinstance(session_metadata, dict)
+        else None
+    )
+    checkpoint_has_foreign_pending_turn = (
+        isinstance(session_metadata, dict)
+        and session_metadata.get("unresolved-turn-pending") is True
+        and isinstance(checkpoint_turn_id, str)
+        and checkpoint_turn_id != record.get("request-id")
+    )
+    checkpoint_submission_proven_for_current_turn = (
         isinstance(session_metadata, dict)
         and session_metadata.get("submission-proven") is True
+        and (
+            checkpoint_turn_id == record.get("request-id")
+            or (
+                session_metadata.get("unresolved-turn-pending") is True
+                and not isinstance(checkpoint_turn_id, str)
+            )
+        )
     )
-    checkpoint_side_effect_started = (
+    checkpoint_side_effect_started_for_current_turn = (
         isinstance(session_metadata, dict)
         and session_metadata.get("recovery-state") == "side-effect-may-have-started"
+        and (
+            checkpoint_turn_id == record.get("request-id")
+            or (
+                session_metadata.get("unresolved-turn-pending") is True
+                and not isinstance(checkpoint_turn_id, str)
+            )
+        )
     )
     checkpoint_proves_current_turn_not_pending = (
         isinstance(session_metadata, dict)
         and (
             session_metadata.get("unresolved-turn-pending") is False
-            or (
-                session_metadata.get("unresolved-turn-pending") is True
-                and isinstance(session_metadata.get("unresolved-turn-id"), str)
-                and session_metadata.get("unresolved-turn-id") != record.get("request-id")
-            )
+            or checkpoint_has_foreign_pending_turn
         )
     )
     safe_presubmit_recovery = (
@@ -293,8 +314,8 @@ def recovery_runner(record: dict[str, Any], *, project_root: Path | None = None)
         and checkpoint_proves_current_turn_not_pending
         and not checkpoint_has_current_turn
         and not checkpoint_has_uncorrelated_pending_turn
-        and not checkpoint_submission_proven
-        and not checkpoint_side_effect_started
+        and not checkpoint_submission_proven_for_current_turn
+        and not checkpoint_side_effect_started_for_current_turn
     )
 
     return functools.partial(
