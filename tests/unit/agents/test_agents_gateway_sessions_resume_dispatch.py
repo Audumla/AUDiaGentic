@@ -26,6 +26,10 @@ from audiagentic.components.agents.gateway.session.resume import (
 )
 from audiagentic.components.agents.gateway.session.sessions import SessionRuntime
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.foundation.transports.session_binding import (
+    ProviderSessionBindingUpdate,
+    ProviderSessionRef,
+)
 from audiagentic.foundation.transports.session_surface import PreparedSessionTransport
 
 from .test_agents_gateway_sessions import FakeAgentSessionTransport, _build_fake_prepared
@@ -213,6 +217,111 @@ class TestResumeSuccess:
         finally:
             runtime.shutdown()
 
+    def test_resume_buffers_provider_binding_update_until_successor_exists(
+        self, tmp_path: Path
+    ):
+        source = _write_terminal_source_session(tmp_path)
+        session_store.update_provider_metadata(
+            tmp_path,
+            source["session-id"],
+            {
+                "chat-url": "https://chatgpt.com/g/g-p-project/c/source-provider-ref-1",
+                "provider-session-id": "source-provider-ref-1",
+                "project-url": "https://chatgpt.com/g/g-p-project/project",
+            },
+        )
+        prepared_hints: list[dict[str, Any]] = []
+
+        def prepare(
+            project_root, *, provider_id, surface_hint, model_id=None,
+            resume_provider_ref=None, **ignored
+        ):
+            binding_sink = ignored["binding_sink"]
+            prepared_hints.append(dict(ignored["resume_provider_metadata"]))
+
+            class PublishingTransport(FakeAgentSessionTransport):
+                async def open(self):
+                    await binding_sink(
+                        ProviderSessionBindingUpdate(
+                            provider_session_ref=ProviderSessionRef(
+                                value=resume_provider_ref
+                            ),
+                            metadata={
+                                "chat-url": prepared_hints[-1]["chat-url"],
+                                "target-id": "target-rebound",
+                            },
+                        )
+                    )
+                    return await super().open()
+
+            transport = PublishingTransport()
+            transport.ag_session_id = ignored["ag_session_id"]
+            transport.provider_session_ref = resume_provider_ref or "x"
+            return _build_fake_prepared(transport)
+
+        runtime = _make_runtime(resume_prepare=prepare)
+        try:
+            resumed = runtime.resume_session(
+                tmp_path,
+                source["session-id"],
+                control_id="ctrl-binding-before-successor",
+                execution_context_fingerprint=_EXECUTION_FP,
+            )
+        finally:
+            runtime.shutdown()
+
+        assert prepared_hints[0]["chat-url"].endswith("/source-provider-ref-1")
+        assert resumed["provider"]["metadata"]["target-id"] == "target-rebound"
+        assert resumed["binding"]["provider-session-ref"] == "source-provider-ref-1"
+    def test_resume_rehydrates_canonical_active_provider_owner_before_persistence(
+        self, tmp_path: Path
+    ):
+        source = _write_terminal_source_session(tmp_path)
+        active = session_store.build_session_record(
+            execution_profile_id=source["execution-profile-id"],
+            provider_id=_PROVIDER_ID,
+            model_id="m1",
+            provider_session_ref="source-provider-ref-1",
+            surface_id=_SURFACE_ID,
+            idle_timeout_seconds=900,
+            max_lifetime_seconds=14_400,
+            provider_metadata={"chat-url": "https://chatgpt.com/g/g-p-project/c/source-provider-ref-1"},
+        )
+        active["binding"] = binding_store.resume_binding(
+            session_id=active["session-id"],
+            provider_id=_PROVIDER_ID,
+            surface_id=_SURFACE_ID,
+            provider_ref="source-provider-ref-1",
+            predecessor_binding_id="different-intermediate-generation",
+            ref_namespace=source["binding"].get("ref-namespace"),
+            identity_context_fingerprint=source["binding"].get(
+                "identity-context-fingerprint"
+            ),
+            execution_context_fingerprint=source["binding"].get(
+                "execution-context-fingerprint"
+            ),
+        )
+        session_store.write_session_record(tmp_path, active)
+        binding_store.register_open_binding(tmp_path, active)
+
+        runtime = _make_runtime()
+        try:
+            resumed = runtime.resume_session(
+                tmp_path,
+                source["session-id"],
+                control_id="ctrl-canonical-active-owner",
+                execution_context_fingerprint=_EXECUTION_FP,
+            )
+            persisted = session_store.read_session_record(
+                tmp_path, active["session-id"]
+            )
+        finally:
+            runtime.shutdown()
+
+        assert resumed["session-id"] == active["session-id"]
+        assert resumed["state"] == "active"
+        assert resumed["binding"]["binding-id"] == active["binding"]["binding-id"]
+        assert persisted["state"] == "active"
     def test_idempotent_replay_returns_same_new_session(self, tmp_path: Path):
         source = _write_terminal_source_session(tmp_path)
         call_count = 0
@@ -244,6 +353,41 @@ class TestResumeSuccess:
         finally:
             runtime.shutdown()
 
+    def test_resume_persistence_failure_terminalizes_provisional_successor(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        source = _write_terminal_source_session(tmp_path)
+
+        def fail_register(*_args, **_kwargs):
+            raise AudiaGenticError(
+                code="CON-AGW-096",
+                kind="agents",
+                message="duplicate owned provider session binding",
+                details={},
+            )
+
+        monkeypatch.setattr(binding_store, "register_open_binding", fail_register)
+        runtime = _make_runtime()
+        try:
+            with pytest.raises(AudiaGenticError) as exc:
+                runtime.resume_session(
+                    tmp_path,
+                    source["session-id"],
+                    control_id="ctrl-persistence-failure-rolls-back",
+                    execution_context_fingerprint=_EXECUTION_FP,
+                )
+            assert exc.value.code == "IO-AGW-119"
+            records = session_store.list_session_records(tmp_path)
+            successors = [
+                item
+                for item in records
+                if item["session-id"] != source["session-id"]
+            ]
+            assert successors
+            assert all(item["state"] == "failed" for item in successors)
+            assert runtime.live_session_ids() == []
+        finally:
+            runtime.shutdown()
     def test_resume_rehydrates_existing_successor_after_prior_persistence_failure(
         self, tmp_path: Path
     ):
@@ -280,6 +424,50 @@ class TestResumeSuccess:
             )
             assert resumed["session-id"] == existing["session-id"]
             assert runtime.live_session_ids() == [existing["session-id"]]
+        finally:
+            runtime.shutdown()
+
+
+    def test_resume_reconstructs_missing_binding_from_durable_provider_metadata(
+        self, tmp_path: Path
+    ):
+        record = session_store.build_session_record(
+            execution_profile_id="profile-1",
+            provider_id=_PROVIDER_ID,
+            model_id="m1",
+            provider_session_ref=None,
+            surface_id=_SURFACE_ID,
+            idle_timeout_seconds=900,
+            max_lifetime_seconds=14_400,
+            provider_metadata={
+                "chat-url": "https://chatgpt.com/g/g-p-project/c/source-provider-ref-1",
+                "provider-session-id": "source-provider-ref-1",
+                "surface-id": _SURFACE_ID,
+                "ref-namespace": "provider-session-ref",
+                "identity-context-fingerprint": _IDENTITY_FP,
+                "execution-context-fingerprint": _EXECUTION_FP,
+            },
+        )
+        session_store.write_session_record(tmp_path, record)
+        closed = session_store.transition_session_record(
+            tmp_path,
+            record["session-id"],
+            "failed",
+            updates={"close-reason": "failed"},
+        )
+        # The provider metadata survived, but the initial binding never did.
+        session_store.write_session_record(tmp_path, closed)
+
+        runtime = _make_runtime()
+        try:
+            resumed = runtime.resume_session(
+                tmp_path,
+                closed["session-id"],
+                control_id="ctrl-metadata-recovery",
+                execution_context_fingerprint=_EXECUTION_FP,
+            )
+            assert resumed["binding"]["provider-session-ref"] == "source-provider-ref-1"
+            assert resumed["binding"]["relation"] == "resumed-from"
         finally:
             runtime.shutdown()
 

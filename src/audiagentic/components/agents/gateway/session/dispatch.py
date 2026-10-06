@@ -58,6 +58,78 @@ def _merge_provider_metadata(
     return merged
 
 
+_UNRESOLVED_CHECKPOINT_KEYS = (
+    "unresolved-turn-id",
+    "prompt-message-id",
+    "assistant-message-id",
+    "assistant-before-message-id",
+    "assistant-before-id",
+    "prompt-text-digest",
+    "submission-proven",
+    "terminal-evidence",
+)
+
+
+def _clear_terminal_predecessor_fence(
+    project_root: Path,
+    record: dict[str, Any],
+    *,
+    session_store: Any,
+) -> dict[str, Any] | None:
+    """Clear only a proven stale predecessor fence before a new prompt."""
+    metadata = record.get("provider-metadata")
+    if not isinstance(metadata, dict) or metadata.get("unresolved-turn-pending") is not True:
+        return None
+    predecessor_id = metadata.get("unresolved-turn-id")
+    if not isinstance(predecessor_id, str) or not predecessor_id or predecessor_id == record.get("request-id"):
+        return None
+    try:
+        predecessor = store.read_record(project_root, predecessor_id)
+    except AudiaGenticError:
+        return None
+    if predecessor.get("state") not in {"failed", "cancelled", "interrupted", "completed"}:
+        return None
+    error = predecessor.get("error")
+    details = error.get("details") if isinstance(error, dict) else None
+    if not isinstance(details, dict):
+        return None
+    dom_signals = set(details.get("dom-signals") or ())
+    if not details.get("failure-response-available") or "completion-control" not in dom_signals:
+        return None
+    session_id = record.get("session-id")
+    if not isinstance(session_id, str) or not session_id:
+        return None
+    cleared = dict(metadata)
+    cleared["unresolved-turn-pending"] = False
+    cleared["recovery-state"] = "stale-predecessor-fence-cleared"
+    cleared["stale-predecessor-request-id"] = predecessor_id
+    for key in _UNRESOLVED_CHECKPOINT_KEYS:
+        cleared.pop(key, None)
+    session_store.update_provider_metadata(
+        project_root, session_id,
+        {"unresolved-turn-pending": False, "recovery-state": "stale-predecessor-fence-cleared", "stale-predecessor-request-id": predecessor_id},
+        remove_keys=_UNRESOLVED_CHECKPOINT_KEYS,
+    )
+    updated = store.update_owned_running_session(
+        project_root, record["request-id"],
+        owner_epoch=record["dispatch-owner-epoch"],
+        worker_id=record["worker-id"],
+        attempt_epoch=record["attempt-epoch"],
+        session_id=session_id,
+        provider_metadata=cleared,
+    )
+    store.record_gateway_timeline(
+        project_root, record["request-id"],
+        "provider.unresolved-fence-cleared",
+        state=updated["state"],
+        attributes={
+            "predecessor-request-id": predecessor_id,
+            "predecessor-state": predecessor.get("state"),
+            "reason": "terminal-predecessor-with-completion-control-and-failure-response",
+        },
+    )
+    return updated
+
 def _terminal_session_diagnostics(session_id: str, record: dict[str, Any]) -> dict[str, Any]:
     """Return sparse facts needed to repair a continuation rejection.
 
@@ -529,6 +601,39 @@ def _dispatch_session_request(
     guard_held = True
     runtime_invoked = False
     try:
+        if not isinstance(dispatch_prompt, str) or not dispatch_prompt.strip():
+            # A restart can lose the private admitted-prompt snapshot after
+            # the provider has already answered. Before retaining the
+            # request in an endless rehydrate retry, use the same
+            # evidence-gated DOM capture exposed to operators. It can only
+            # terminalize after proving a stable, request-owned response, so
+            # an incomplete or ambiguous turn remains in observation-only
+            # recovery and is never replayed.
+            if resume_existing:
+                try:
+                    from audiagentic.components.agents.gateway.api import (
+                        complete_execution_from_provider,
+                    )
+                    captured = complete_execution_from_provider(project_root, request_id)
+                except Exception:  # noqa: BLE001 - incomplete turns remain recoverable
+                    captured = None
+                if isinstance(captured, dict) and captured.get("state") in {
+                    "completed",
+                    "failed",
+                    "cancelled",
+                    "interrupted",
+                }:
+                    return store.read_record(project_root, request_id)
+            raise AudiaGenticError(
+                code="RES-AGW-004",
+                kind="agents",
+                message="admitted request has no recoverable dispatch prompt",
+                details={
+                    "failure-reason": "dispatch-prompt-unavailable",
+                    "resume-existing": resume_existing,
+                    "request-id": request_id,
+                },
+            )
         if not resume_existing:
             record = client_defaults.redirect_if_replaced(project_root, record)
         session_id = record.get("session-id")
@@ -977,7 +1082,28 @@ def _dispatch_session_request(
             and (exc.details or {}).get("previous-turn-unresolved") is True
             and not cancelled
         ):
-            # The current prompt was never submitted, but the preceding
+            # A terminal predecessor with captured completion evidence cannot
+            # keep the session fenced forever. Clear only that proven stale
+            # checkpoint; live or ambiguous predecessors remain queued safely.
+            cleared = _clear_terminal_predecessor_fence(
+                project_root,
+                store.read_record(project_root, request_id),
+                session_store=session_store,
+            )
+            if cleared is not None:
+                return _dispatch_session_request(
+                    project_root,
+                    cleared,
+                    dispatch_prompt=dispatch_prompt,
+                    context_fingerprint=context_fingerprint,
+                    _default_recovery_attempt=_default_recovery_attempt,
+                    _network_followup_attempts=_network_followup_attempts,
+                    _provider_error_followup_attempts=_provider_error_followup_attempts,
+                    _unsent_retry_used=_unsent_retry_used,
+                    session_start=session_start,
+                    project_name=project_name,
+                    resume_existing=False,
+                )            # The current prompt was never submitted, but the preceding
             # provider turn still has an unresolved Send fence.  Keep this
             # request queued on the same session until reconciliation proves
             # the session safe; never replay it or rotate the client's default.
@@ -1395,6 +1521,27 @@ def _dispatch_session_request(
     except BaseException as exc:
         if guard_held:
             preparation_guard.release()
+        if resume_existing and "unresolved turn does not belong to the recovered request" in str(exc):
+            current = store.read_record(project_root, request_id)
+            cleared = _clear_terminal_predecessor_fence(
+                project_root,
+                current,
+                session_store=session_store,
+            )
+            if cleared is not None:
+                return _dispatch_session_request(
+                    project_root,
+                    cleared,
+                    dispatch_prompt=dispatch_prompt,
+                    context_fingerprint=context_fingerprint,
+                    _default_recovery_attempt=_default_recovery_attempt,
+                    _network_followup_attempts=_network_followup_attempts,
+                    _provider_error_followup_attempts=_provider_error_followup_attempts,
+                    _unsent_retry_used=_unsent_retry_used,
+                    session_start=session_start,
+                    project_name=project_name,
+                    resume_existing=False,
+                )
         if resume_existing:
             cause = repr(exc) or f"<{type(exc).__name__}>"
             wrapped = AudiaGenticError(

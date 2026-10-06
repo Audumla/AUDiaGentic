@@ -197,6 +197,118 @@ def test_complete_execution_from_provider_uses_prompt_text_for_synthetic_ids(mon
     assert calls["updates"]["__final-response-text"] == "answer"
 
 
+def test_complete_execution_from_provider_reports_missing_admitted_snapshot(monkeypatch, tmp_path: Path):
+    request_id = "req_missing_snapshot"
+    record = {
+        "request-id": request_id,
+        "state": "running",
+        "revision": 2,
+        "session-id": "ses_capture",
+        "resolved-provider-id": "gpt-auto",
+        "prompt-template-digest": "missing",
+        "provider-metadata": {
+            "chat-url": "https://chatgpt.com/g/g-p-project/c/conversation",
+            "provider-session-id": "conversation",
+            "prompt-message-id": "fallback-user-0",
+            "submission-proven": True,
+        },
+    }
+    snapshot = SimpleNamespace(
+        latest_assistant_text="answer",
+        latest_user_text="prompt",
+        latest_user_id="fallback-user-0",
+        latest_assistant_id="fallback-assistant-1",
+        terminal_witness_assistant_id="fallback-assistant-1",
+        generating=False,
+        dom_signals=frozenset({"completion-control"}),
+        message_refs=(),
+    )
+    monkeypatch.setattr(api.store, "read_record", lambda *_: record)
+    monkeypatch.setattr(sessions_store, "read_session_record", lambda *_: {"provider": {"metadata": {}}})
+    monkeypatch.setattr(sessions_store, "session_provider_metadata", lambda _: {})
+    monkeypatch.setattr(sessions_store, "session_provider_id", lambda _: "gpt-auto")
+    monkeypatch.setattr(
+        session_runtime_module,
+        "get_session_runtime",
+        lambda: SimpleNamespace(
+            capture_latest_response=lambda *args, **kwargs: {
+                "outcome": "captured",
+                "snapshot": snapshot,
+            }
+        ),
+    )
+
+    with pytest.raises(Exception) as caught:
+        api.complete_execution_from_provider(tmp_path, request_id)
+
+    assert getattr(caught.value, "code", None) == "RES-AGW-112"
+
+
+def test_reconcile_executes_capture_and_reports_completion(monkeypatch, tmp_path: Path):
+    record = {
+        "request-id": "req_reconcile",
+        "state": "interrupted",
+        "revision": 4,
+        "diagnostics": {"resolution-state": "unresolved"},
+    }
+    updated = {
+        **record,
+        "revision": 5,
+        "diagnostics": {"resolution-state": "reconciliation-requested"},
+    }
+    monkeypatch.setattr(api.store, "read_record", lambda *_: record)
+    monkeypatch.setattr(api.store, "update_diagnostics", lambda *_args, **_kwargs: updated)
+    monkeypatch.setattr(
+        api,
+        "complete_execution_from_provider",
+        lambda *_: {
+            "state": "completed",
+            "revision": 6,
+            "response-artifact": {"artifact-id": "final-response"},
+        },
+    )
+
+    result = api.recover_execution_request(
+        tmp_path, "req_reconcile", action="reconcile", expected_revision=4
+    )
+
+    assert result["state"] == "completed"
+    assert result["reconciliation"] == {"outcome": "completed"}
+
+
+def test_reconcile_preserves_failed_request_when_provider_dom_is_unresolved(monkeypatch, tmp_path: Path):
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+    record = {
+        "request-id": "req_failed",
+        "state": "failed",
+        "revision": 8,
+        "diagnostics": {"resolution-state": "unresolved"},
+    }
+    updated = {
+        **record,
+        "revision": 9,
+        "diagnostics": {"resolution-state": "reconciliation-requested"},
+    }
+    monkeypatch.setattr(api.store, "read_record", lambda *_: record)
+    monkeypatch.setattr(api.store, "update_diagnostics", lambda *_args, **_kwargs: updated)
+
+    def unresolved(*_args, **_kwargs):
+        raise AudiaGenticError(
+            code="CON-AGW-154",
+            kind="agents",
+            message="provider response could not be captured",
+            details={"reason": "provider-error-page"},
+        )
+
+    monkeypatch.setattr(api, "complete_execution_from_provider", unresolved)
+    result = api.recover_execution_request(tmp_path, "req_failed", action="reconcile")
+
+    assert result["state"] == "failed"
+    assert result["reconciliation"] == {
+        "outcome": "unresolved",
+        "reason": "CON-AGW-154",
+    }
 def test_operator_provider_capture_can_complete_bounded_interruption(tmp_path: Path):
     """An interrupted recovery remains eligible for a verified operator capture."""
     record = store.build_record(execution_profile_id="gpt-auto", prompt_body="request")

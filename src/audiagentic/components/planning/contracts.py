@@ -10,6 +10,8 @@ from typing import Annotated, Any, Literal
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
+from audiagentic.foundation.contracts.errors import AudiaGenticError
+
 NonEmptyString = Annotated[str, Field(min_length=1)]
 ItemState = Literal["pending", "in_progress", "completed", "superseded", "deprecated"]
 ItemStateFilter = Literal[
@@ -24,8 +26,16 @@ PageLimit = Annotated[int, Field(ge=1, le=100)]
 Offset = Annotated[int, Field(ge=0)]
 
 
-class PlanningIntegrityError(ValueError):
-    """Persisted planning data violates a cross-record invariant."""
+class PlanningIntegrityError(AudiaGenticError):
+    """Persisted planning data violates an invariant, with repair guidance."""
+
+    def __init__(self, message: str, details: dict[str, Any] | None = None) -> None:
+        super().__init__(
+            code="VAL-PLN-040",
+            kind="validation",
+            message=message,
+            details=details,
+        )
 
 
 class _PlanningModel(BaseModel):

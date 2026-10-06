@@ -329,7 +329,10 @@ class GatewayServiceHost:
         the ordinary activity relay must still prove that the turn resumed.
         """
         from audiagentic.components.agents.gateway import store
-        from audiagentic.components.agents.gateway.api import recover_execution_request
+        from audiagentic.components.agents.gateway.api import (
+            complete_execution_from_provider,
+            recover_execution_request,
+        )
         from audiagentic.components.agents.gateway.queue.dispatch import diagnose_activity_lease
         from audiagentic.components.agents.gateway.queue.watchdog_policy import load_watchdog_policy
         from audiagentic.components.agents.gateway.queue.watchdog_registry import watchdog_registry
@@ -449,7 +452,10 @@ class GatewayServiceHost:
                         )
                     except Exception:  # noqa: BLE001 - retain the durable session fact
                         runtime_available = False
-                if session_terminal and not runtime_available:
+                # Cancellation is terminal intent. Once the owning runtime is
+                # gone, do not require the detached session record to close
+                # first or the request can remain running forever.
+                if not runtime_available:
                     try:
                         updated = store.transition_owned_terminal(
                             project_root,
@@ -475,32 +481,58 @@ class GatewayServiceHost:
             registry.update(project_root, updated)
             diagnostics = updated.get("diagnostics")
             if (
-                runtime is not None
-                and updated.get("watchdog-state") == "intervention"
+                updated.get("watchdog-state") == "intervention"
                 and isinstance(updated.get("session-id"), str)
                 and isinstance(diagnostics, dict)
                 and diagnostics.get("resolution-state")
                 in {"unresolved", "reconciliation-requested"}
             ):
-                outcome = runtime.reconcile_active_transport(
-                    updated["session-id"], updated["request-id"]
-                )
-                if outcome.get("status") == "reconciled":
+                # A quiet provider turn can already be complete even when its
+                # activity observer died. Reconcile the durable request from
+                # the provider DOM before merely refreshing the transport;
+                # otherwise the old running record keeps the session fence
+                # and every later request waits forever behind it.
+                try:
+                    captured = complete_execution_from_provider(
+                        project_root, updated["request-id"]
+                    )
+                except Exception:  # noqa: BLE001 - an incomplete turn remains recoverable
+                    captured = None
+                if isinstance(captured, dict) and captured.get("state") in {
+                    "completed",
+                    "failed",
+                    "cancelled",
+                    "interrupted",
+                }:
                     try:
-                        recover_execution_request(
-                            project_root,
-                            updated["request-id"],
-                            action="reconcile",
-                            expected_revision=updated.get("revision"),
-                        )
                         updated = store.read_record(project_root, updated["request-id"])
                         registry.update(project_root, updated)
                     except Exception:  # noqa: BLE001 - watchdog recovery is advisory
                         logger.warning(
-                            "automatic transport reconciliation could not persist intent",
+                            "automatic provider completion could not refresh durable state",
                             extra={"request-id": updated.get("request-id")},
                             exc_info=True,
                         )
+                elif runtime is not None:
+                    outcome = runtime.reconcile_active_transport(
+                        updated["session-id"], updated["request-id"]
+                    )
+                    if outcome.get("status") == "reconciled":
+                        try:
+                            recover_execution_request(
+                                project_root,
+                                updated["request-id"],
+                                action="reconcile",
+                                expected_revision=updated.get("revision"),
+                            )
+                            updated = store.read_record(project_root, updated["request-id"])
+                            registry.update(project_root, updated)
+                        except Exception:  # noqa: BLE001 - watchdog recovery is advisory
+                            logger.warning(
+                                "automatic transport reconciliation could not persist intent",
+                                extra={"request-id": updated.get("request-id")},
+                                exc_info=True,
+                            )
             results.append(updated)
             if updated.get("state") in {"completed", "failed", "cancelled", "interrupted"}:
                 registry.unregister(project_root, str(updated.get("request-id", "")))

@@ -63,11 +63,11 @@ from typing import Any
 
 import pytest
 
+from audiagentic.components.project.project_api import resolve_project_name
 from audiagentic.components.providers.adapters.gpt_auto.config import GptAutoConfig
 from audiagentic.components.providers.adapters.gpt_auto.session_transport import (
     build_session_transport,
 )
-from audiagentic.components.project.project_api import resolve_project_name
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.io import load_yaml_file
 from audiagentic.foundation.transports.agent_session import (

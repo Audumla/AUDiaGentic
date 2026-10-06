@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import logging
 from collections import Counter
 from dataclasses import dataclass, replace
@@ -329,6 +330,7 @@ class GptAutoTurn:
         self._response_recovery_last_refresh_at: float | None = None
         self._response_recovery_final_grace_started_at: float | None = None
         self._dropped_observations = 0
+        self._last_response_decision_diagnostics: dict[str, Any] | None = None
 
     def _move(self, target: TurnState) -> None:
         failure = _ENGINE.check(self.state.value, target.value)
@@ -379,6 +381,34 @@ class GptAutoTurn:
         if asyncio.iscoroutine(result):
             await result
         self._delivered += 1
+
+    async def _log_response_decision_diagnostics(
+        self, diagnostics: dict[str, Any]
+    ) -> None:
+        """Log content-free response gates only when their state changes."""
+        if diagnostics == self._last_response_decision_diagnostics:
+            return
+        self._last_response_decision_diagnostics = diagnostics
+        encoded = json.dumps(
+            diagnostics,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        logger.info(
+            "gpt-auto response decision gates=%s",
+            diagnostics,
+            extra={"turn-id": self.request.turn_id},
+        )
+        await self._emit(
+            TransportObservationKind.TIMING,
+            {
+                "timing-event": "response-decision",
+                "diagnostic-signature": hashlib.sha256(
+                    encoded.encode("utf-8")
+                ).hexdigest()[:16],
+                "diagnostic-details": encoded,
+            },
+        )
 
     async def _emit_timing(self, event: str) -> None:
         """Record a one-shot timing milestone without liveness semantics."""
@@ -769,6 +799,28 @@ class GptAutoTurn:
         if self.chat.provider_session_id is None:
             proof = await self.chat.acquire_provider_identity(proof)
         self._require_admitted_project(proof, phase="post-submission")
+        proven_conversation_url = canonical_chat_url(proof.url)
+        proven_provider_session_id = parse_provider_session_id(proof.url)
+        if (
+            proven_conversation_url is None
+            or proven_provider_session_id is None
+            or not self.chat.provider_session_id
+            or not url_matches_provider_session(
+                proven_conversation_url,
+                self.chat.provider_session_id,
+            )
+        ):
+            raise ProviderBindingIntegrityError(
+                "post-submit provider conversation identity is unavailable"
+            )
+        if (
+            self._submission_proof_url is not None
+            and self._submission_proof_url != proven_conversation_url
+        ):
+            raise ProviderBindingIntegrityError(
+                "post-submit provider conversation changed after proof"
+            )
+        self._submission_proof_url = proven_conversation_url
         await self._publish_message_ids(strict=True)
         if self.state is TurnState.CANCELLED:
             return self._result("cancelled")
@@ -779,7 +831,7 @@ class GptAutoTurn:
         # that post-submit conversation identity for response scoping while
         # retaining the original baseline's message IDs.
         response_baseline = (
-            replace(baseline, url=proof.url)
+            replace(baseline, url=self._submission_proof_url)
             if self._submission_proof_url and not parse_provider_session_id(baseline.url)
             else baseline
         )
@@ -1585,6 +1637,49 @@ class GptAutoTurn:
         request_activity_response_text = (
             initial_response_ref.text if initial_response_ref is not None else None
         )
+        async def _scope_observation(
+            raw: ChatSnapshot,
+            *,
+            allow_legacy_error: bool = False,
+        ) -> tuple[ChatSnapshot, ChatMessageRef | None]:
+            try:
+                return _scope_response_snapshot(
+                    baseline,
+                    raw,
+                    prompt_message_id=prompt_message_id or "",
+                    prompt_text=self.request.body,
+                    allow_virtualized_prompt=not self._recovered_existing_turn,
+                    virtualized_assistant_id=self._virtualized_assistant_id(),
+                    bound_assistant_id=self._response_message_id,
+                    allow_legacy_owned_error_alert=allow_legacy_error,
+                    allow_empty_baseline_virtualized_assistant=(
+                        allow_empty_baseline_virtualized_assistant
+                    ),
+                )
+            except ProviderBindingIntegrityError as exc:
+                await self._log_response_decision_diagnostics(
+                    _response_decision_diagnostics(
+                        baseline,
+                        raw,
+                        None,
+                        prompt_message_id=prompt_message_id,
+                        response_ref=None,
+                        bound_assistant_id=self._response_message_id,
+                        virtualized_assistant_id=self._virtualized_assistant_id(),
+                        allow_empty_baseline_virtualized_assistant=(
+                            allow_empty_baseline_virtualized_assistant
+                        ),
+                        chat_url=self.chat.chat_url,
+                        provider_session_id=self.chat.provider_session_id,
+                        page_handle=getattr(self.chat, "page_handle", None),
+                        facts=None,
+                        completion_satisfied=False,
+                        completion_matched=(),
+                        correlation_error=str(exc),
+                    )
+                )
+                raise
+
         def _replacement_proven(raw: ChatSnapshot, new_id: str) -> bool:
             """Require both the ordered turn boundary and bound conversation."""
             old_id = self._response_message_id
@@ -1822,18 +1917,9 @@ class GptAutoTurn:
                         exc_info=True,
                     )
             if prompt_message_id:
-                current, response_ref = _scope_response_snapshot(
-                    baseline,
+                current, response_ref = await _scope_observation(
                     raw_current,
-                    prompt_message_id=prompt_message_id,
-                    prompt_text=self.request.body,
-                    allow_virtualized_prompt=not self._recovered_existing_turn,
-                    virtualized_assistant_id=self._virtualized_assistant_id(),
-                    bound_assistant_id=self._response_message_id,
-                    allow_legacy_owned_error_alert=allow_legacy_owned_error_alert,
-                    allow_empty_baseline_virtualized_assistant=(
-                        allow_empty_baseline_virtualized_assistant
-                    ),
+                    allow_legacy_error=allow_legacy_owned_error_alert,
                 )
             else:
                 # Defensive fallback only -- _await_submission_proof() and
@@ -1895,18 +1981,7 @@ class GptAutoTurn:
                             # pre-materialization snapshot and consume an extra
                             # browser observation before seeing completion.
                             if prompt_message_id:
-                                current, response_ref = _scope_response_snapshot(
-                                    baseline,
-                                    raw_current,
-                                    prompt_message_id=prompt_message_id,
-                                    prompt_text=self.request.body,
-                                    allow_virtualized_prompt=not self._recovered_existing_turn,
-                                    virtualized_assistant_id=self._virtualized_assistant_id(),
-                                    bound_assistant_id=self._response_message_id,
-                                    allow_empty_baseline_virtualized_assistant=(
-                                        allow_empty_baseline_virtualized_assistant
-                                    ),
-                                )
+                                current, response_ref = await _scope_observation(raw_current)
                             else:
                                 current, response_ref = raw_current, None
                         except ProviderBindingIntegrityError:
@@ -1976,6 +2051,27 @@ class GptAutoTurn:
             # answer that already satisfies the request-owned completion
             # witness.
             complete = self.chat.config.workflow.policy("response-complete").evaluate(facts)
+            await self._log_response_decision_diagnostics(
+                _response_decision_diagnostics(
+                    baseline,
+                    raw_current,
+                    current,
+                    prompt_message_id=prompt_message_id,
+                    response_ref=response_ref,
+                    bound_assistant_id=self._response_message_id,
+                    virtualized_assistant_id=self._virtualized_assistant_id(),
+                    allow_empty_baseline_virtualized_assistant=(
+                        allow_empty_baseline_virtualized_assistant
+                    ),
+                    chat_url=self.chat.chat_url,
+                    provider_session_id=self.chat.provider_session_id,
+                    page_handle=getattr(self.chat, "page_handle", None),
+                    facts=facts,
+                    completion_satisfied=complete.satisfied,
+                    completion_matched=complete.matched,
+                    correlation_error=None,
+                )
+            )
             id_only_replacement = (
                 adopted_same_slot_replacement
                 and current.latest_assistant_text == previous.latest_assistant_text
@@ -2349,18 +2445,7 @@ class GptAutoTurn:
                     continue
                 self._remember_snapshot(raw_verify)
                 if prompt_message_id:
-                    verify, verify_ref = _scope_response_snapshot(
-                        baseline,
-                        raw_verify,
-                        prompt_message_id=prompt_message_id,
-                        prompt_text=self.request.body,
-                        allow_virtualized_prompt=not self._recovered_existing_turn,
-                        virtualized_assistant_id=self._virtualized_assistant_id(),
-                        bound_assistant_id=self._response_message_id,
-                        allow_empty_baseline_virtualized_assistant=(
-                            allow_empty_baseline_virtualized_assistant
-                        ),
-                    )
+                    verify, verify_ref = await _scope_observation(raw_verify)
                 else:
                     verify = raw_verify
                     verify_ref = None
@@ -3079,6 +3164,12 @@ def _scope_response_snapshot(
         prompt_message_id=prompt_message_id,
         matched_prompt_message_id=matched_prompt_id,
         prompt_text=prompt_text,
+        allow_virtualized_prompt=allow_virtualized_prompt,
+        request_owned_assistant_present=bool(
+            response_ref is not None
+            or bound_assistant_id is not None
+            or virtualized_assistant_id is not None
+        ),
     )
     if response_ref is None and bound_assistant_id:
         # A later user turn creates a hard ownership boundary. If the
@@ -3346,6 +3437,8 @@ def _document_signal_is_owned(
     prompt_message_id: str,
     matched_prompt_message_id: str,
     prompt_text: str | None,
+    allow_virtualized_prompt: bool,
+    request_owned_assistant_present: bool,
 ) -> bool:
     """Accept a document-scoped signal only on a request-owned post-submit edge.
 
@@ -3356,19 +3449,34 @@ def _document_signal_is_owned(
     deliberately narrow: the signal must be absent at the request baseline
     and the current latest user node must still identify this prompt (by the
     durable id or the exact prompt fingerprint when the renderer replaces a
-    fallback ordinal).
+    fallback ordinal). A freshly submitted turn may subsequently virtualize
+    every user node before its document-scoped failure mounts. That case is
+    accepted only when submission proof explicitly authorizes virtualization,
+    the exact conversation remains bound, no user boundary is mounted, and no
+    request-owned assistant response exists yet.
     """
     if signal not in snapshot.dom_signals or signal in baseline.dom_signals:
         return False
     current_user_id = snapshot.latest_user_id
     if current_user_id in {prompt_message_id, matched_prompt_message_id}:
         return True
-    if not prompt_text:
+    if prompt_text:
+        current_text = snapshot.latest_user_correlation_text()
+        if (
+            current_text
+            and PromptFingerprint.from_text(prompt_text).matches_text(current_text)
+        ):
+            return True
+    if not allow_virtualized_prompt or request_owned_assistant_present:
         return False
-    current_text = snapshot.latest_user_correlation_text()
+    baseline_conversation_url = canonical_chat_url(baseline.url)
+    snapshot_conversation_url = canonical_chat_url(snapshot.url)
     return bool(
-        current_text
-        and PromptFingerprint.from_text(prompt_text).matches_text(current_text)
+        baseline_conversation_url
+        and snapshot_conversation_url == baseline_conversation_url
+        and snapshot.latest_user_id is None
+        and not snapshot.user_message_ids
+        and not snapshot.user_prompt_refs()
     )
 
 
@@ -3465,6 +3573,150 @@ def _facts(
         }
     )
     return facts
+
+
+def _response_decision_diagnostics(
+    baseline: ChatSnapshot,
+    raw: ChatSnapshot,
+    scoped: ChatSnapshot | None,
+    *,
+    prompt_message_id: str | None,
+    response_ref: ChatMessageRef | None,
+    bound_assistant_id: str | None,
+    virtualized_assistant_id: str | None,
+    allow_empty_baseline_virtualized_assistant: bool,
+    chat_url: str | None,
+    provider_session_id: str | None,
+    page_handle: object | None,
+    facts: dict[str, bool] | None,
+    completion_satisfied: bool,
+    completion_matched: object,
+    correlation_error: str | None,
+) -> dict[str, Any]:
+    """Return content-free correlation and completion gates for one poll.
+
+    This intentionally logs cardinalities, booleans, and bounded digests
+    only. It is detailed enough to distinguish a stale/wrong CDP target from
+    an ownership or response-policy miss without retaining prompt or response
+    bodies in gateway logs.
+    """
+    raw_assistant_refs = tuple(ref for ref in raw.message_refs if ref.role == "assistant")
+    raw_user_refs = tuple(ref for ref in raw.message_refs if ref.role == "user")
+    terminal_id = raw.terminal_witness_assistant_id
+    latest_id = raw.latest_assistant_id
+    response_id = response_ref.message_id if response_ref is not None else None
+    baseline_assistant_ids = set(baseline.assistant_message_ids)
+    prompt_unmounted = (
+        raw.user_count == 0
+        and not raw.user_message_ids
+        and not raw_user_refs
+        and raw.latest_user_id is None
+    )
+    same_conversation = same_chat_identity(raw.url, baseline.url)
+    terminal_bound_to_latest = bool(terminal_id and terminal_id == latest_id)
+    allowance_predicates = {
+        "explicitly-allowed": allow_empty_baseline_virtualized_assistant,
+        "bound-assistant-absent": bound_assistant_id is None,
+        "baseline-user-count-zero": baseline.user_count == 0,
+        "baseline-assistant-count-zero": baseline.assistant_count == 0,
+        "baseline-user-ids-empty": not baseline.user_message_ids,
+        "baseline-assistant-ids-empty": not baseline.assistant_message_ids,
+        "baseline-latest-user-absent": baseline.latest_user_id is None,
+        "baseline-latest-assistant-absent": baseline.latest_assistant_id is None,
+        "raw-assistant-count-one": raw.assistant_count == 1,
+        "raw-assistant-id-count-one": len(raw.assistant_message_ids) == 1,
+        "raw-assistant-ref-count-one": len(raw_assistant_refs) == 1,
+        "assistant-id-array-matches-latest": bool(
+            len(raw.assistant_message_ids) == 1
+            and raw.assistant_message_ids[0] == latest_id
+        ),
+        "assistant-ref-matches-latest": bool(
+            len(raw_assistant_refs) == 1
+            and raw_assistant_refs[0].message_id == latest_id
+        ),
+        "latest-assistant-durable": _is_durable_assistant_message_id(latest_id),
+        "latest-assistant-text-present": bool(raw.latest_assistant_text),
+        "latest-assistant-fresh-vs-baseline": bool(
+            latest_id
+            and latest_id not in baseline_assistant_ids
+            and latest_id != baseline.latest_assistant_id
+        ),
+        "prompt-unmounted": prompt_unmounted,
+        "same-baseline-conversation": same_conversation,
+        "terminal-witness-bound-to-latest": terminal_bound_to_latest,
+        "virtualized-assistant-pin-absent": virtualized_assistant_id is None,
+        "virtualized-assistant-pin-matches-latest": bool(
+            virtualized_assistant_id and virtualized_assistant_id == latest_id
+        ),
+    }
+    gate_names = (
+        "assistant-fresh",
+        "text-present",
+        "completion-control",
+        "more-actions-menu",
+        "not-generating",
+        "canvas-edit-control",
+        "canvas-open-editor-control",
+        "streaming-indicator",
+        "thinking-indicator",
+        "auth-required",
+    )
+    return {
+        "page-handle-digest": _text_digest(str(page_handle)) if page_handle is not None else None,
+        "raw-url-digest": _text_digest(canonical_chat_url(raw.url) or raw.url),
+        "baseline-url-digest": _text_digest(
+            canonical_chat_url(baseline.url) or baseline.url
+        ),
+        "bound-url-digest": _text_digest(canonical_chat_url(chat_url or "") or chat_url),
+        "raw-same-baseline-conversation": same_chat_identity(raw.url, baseline.url),
+        "raw-same-bound-conversation": bool(
+            chat_url and same_chat_identity(raw.url, chat_url)
+        ),
+        "raw-matches-provider-session": bool(
+            provider_session_id
+            and url_matches_provider_session(raw.url, provider_session_id)
+        ),
+        "empty-baseline-allowance": allow_empty_baseline_virtualized_assistant,
+        "baseline-user-count": baseline.user_count,
+        "baseline-assistant-count": baseline.assistant_count,
+        "raw-user-count": raw.user_count,
+        "raw-assistant-count": raw.assistant_count,
+        "raw-user-id-count": len(raw.user_message_ids),
+        "raw-assistant-id-count": len(raw.assistant_message_ids),
+        "raw-user-ref-count": len(raw_user_refs),
+        "raw-assistant-ref-count": len(raw_assistant_refs),
+        "prompt-ref-present": bool(
+            prompt_message_id
+            and any(ref.message_id == prompt_message_id for ref in raw_user_refs)
+        ),
+        "prompt-unmounted": prompt_unmounted,
+        "latest-assistant-durable": _is_durable_assistant_message_id(latest_id),
+        "response-ref-present": response_ref is not None,
+        "response-ref-is-latest": bool(response_id and response_id == latest_id),
+        "response-ref-is-bound": bool(
+            response_id and bound_assistant_id and response_id == bound_assistant_id
+        ),
+        "response-ref-is-virtualized-pin": bool(
+            response_id
+            and virtualized_assistant_id
+            and response_id == virtualized_assistant_id
+        ),
+        "terminal-witness-present": terminal_id is not None,
+        "terminal-witness-is-latest": bool(terminal_id and terminal_id == latest_id),
+        "terminal-witness-is-response": bool(terminal_id and terminal_id == response_id),
+        "raw-generating": raw.generating,
+        "raw-text-length": len(raw.latest_assistant_text or ""),
+        "scoped-text-length": len(scoped.latest_assistant_text or "") if scoped else 0,
+        "allowance-predicates": allowance_predicates,
+        "completion-gates": {
+            name: bool(facts and facts.get(name)) for name in gate_names
+        },
+        "completion-satisfied": completion_satisfied,
+        "completion-matched": tuple(sorted(str(item) for item in completion_matched)),
+        "correlation-error": correlation_error,
+        "raw-dom-signals": tuple(sorted(raw.dom_signals)),
+        "scoped-dom-signals": tuple(sorted(scoped.dom_signals)) if scoped else (),
+    }
 
 
 def _message_ids(turn: GptAutoTurn) -> dict[str, str]:

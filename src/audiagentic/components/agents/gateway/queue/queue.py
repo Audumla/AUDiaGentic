@@ -1560,12 +1560,15 @@ class GatewayQueueManager:
                     and _has_durable_provider_identity(project_root, current)
                     and _durable_provider_session_is_active(project_root, current)
                 )
-                if (
-                    recovery_attempt >= max_recovery_attempts
+                prompt_unavailable_recovery = (
+                    getattr(deferred.error, "code", None) == "RES-AGW-004"
+                    and deferred.phase == "rehydrate-retry"
+                )
+                if (                    recovery_attempt >= max_recovery_attempts
                     and not wait_for_previous_turn
                     and not followup_reconciliation
                     and not conversation_load_reconciliation
-                    and not durable_provider_recovery
+                    and not (durable_provider_recovery and not prompt_unavailable_recovery)
                 ):
                     recovery_metadata = dict(current.get("recovery") or {})
                     recovery_metadata.update(
@@ -1577,6 +1580,48 @@ class GatewayQueueManager:
                             "retry-delay-seconds": 0,
                         }
                     )
+                    if prompt_unavailable_recovery and current.get("session-id"):
+                        # The provider turn was not safely recoverable after
+                        # the bounded observation window. Release only this
+                        # stale session fence so later queued work cannot be
+                        # held behind an owner that no longer exists; the
+                        # interrupted request remains explicitly ambiguous
+                        # and is never replayed automatically.
+                        try:
+                            from audiagentic.components.agents.gateway.session import sessions_store
+
+                            sessions_store.update_provider_metadata(
+                                project_root,
+                                str(current["session-id"]),
+                                {
+                                    "unresolved-turn-pending": False,
+                                    "recovery-state": "bounded-recovery-exhausted",
+                                    "stale-predecessor-request-id": request_id,
+                                },
+                                remove_keys=(
+                                    "unresolved-turn-id",
+                                    "prompt-message-id",
+                                    "assistant-message-id",
+                                    "assistant-before-message-id",
+                                    "assistant-before-id",
+                                    "prompt-text-digest",
+                                    "submission-proven",
+                                    "terminal-evidence",
+                                ),
+                            )
+                            store.record_gateway_timeline(
+                                project_root,
+                                request_id,
+                                "provider.unresolved-fence-cleared",
+                                state="running",
+                                attributes={"reason": "bounded-promptless-recovery-exhausted"},
+                            )
+                        except Exception:  # noqa: BLE001 - terminal request state remains authoritative
+                            logger.warning(
+                                "could not clear exhausted provider fence",
+                                extra={"request-id": request_id, "session-id": current.get("session-id")},
+                                exc_info=True,
+                            )
                     interrupted = store.transition_owned_terminal(
                         project_root,
                         request_id,

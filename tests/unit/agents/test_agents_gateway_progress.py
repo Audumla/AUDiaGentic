@@ -7,12 +7,12 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
-from audiagentic.components.agents.gateway import api as gateway
-from audiagentic.components.agents.gateway import store as store
-from audiagentic.components.agents.gateway.queue import progress as progress_mod
 from audiagentic.components.agents.configuration.management import (
     create_execution_profile,
 )
+from audiagentic.components.agents.gateway import api as gateway
+from audiagentic.components.agents.gateway import store as store
+from audiagentic.components.agents.gateway.queue import progress as progress_mod
 from audiagentic.foundation.features.base import ImplementationState
 from audiagentic.foundation.features.state import set_implementation_state
 
