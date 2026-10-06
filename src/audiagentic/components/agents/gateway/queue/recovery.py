@@ -288,16 +288,10 @@ def recovery_runner(record: dict[str, Any], *, project_root: Path | None = None)
             )
         )
     )
-    checkpoint_side_effect_started_for_current_turn = (
+    checkpoint_side_effect_started_without_foreign_predecessor = (
         isinstance(session_metadata, dict)
         and session_metadata.get("recovery-state") == "side-effect-may-have-started"
-        and (
-            checkpoint_turn_id == record.get("request-id")
-            or (
-                session_metadata.get("unresolved-turn-pending") is True
-                and not isinstance(checkpoint_turn_id, str)
-            )
-        )
+        and not checkpoint_has_foreign_pending_turn
     )
     checkpoint_proves_current_turn_not_pending = (
         isinstance(session_metadata, dict)
@@ -315,7 +309,7 @@ def recovery_runner(record: dict[str, Any], *, project_root: Path | None = None)
         and not checkpoint_has_current_turn
         and not checkpoint_has_uncorrelated_pending_turn
         and not checkpoint_submission_proven_for_current_turn
-        and not checkpoint_side_effect_started_for_current_turn
+        and not checkpoint_side_effect_started_without_foreign_predecessor
     )
 
     return functools.partial(
