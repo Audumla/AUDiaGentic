@@ -255,7 +255,7 @@ def test_recovery_runner_reloads_prompt_for_proven_presubmit_restart(
     monkeypatch.setattr(
         sessions_store,
         "session_provider_metadata",
-        lambda _record: {"unresolved-turn-pending": True, "unresolved-turn-id": "req-prior"},
+        lambda _record: {"unresolved-turn-pending": True, "unresolved-turn-id": "req-prior", "submission-proven": True, "recovery-state": "side-effect-may-have-started"},
     )
 
     runner = recovery.recovery_runner(record, project_root=tmp_path)
@@ -358,7 +358,7 @@ def test_recovery_runner_preserves_project_name_for_gpt_auto_resume(tmp_path: Pa
     monkeypatch.setattr(
         sessions_store,
         "session_provider_metadata",
-        lambda _record: {"unresolved-turn-pending": True, "unresolved-turn-id": "req-prior"},
+        lambda _record: {"unresolved-turn-pending": True, "unresolved-turn-id": "req-prior", "submission-proven": True, "recovery-state": "side-effect-may-have-started"},
     )
 
     runner = recovery.recovery_runner(record, project_root=tmp_path)
