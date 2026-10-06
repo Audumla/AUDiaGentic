@@ -1322,6 +1322,30 @@ def complete_execution_from_provider(project_root: Path, request_id: str) -> dic
     if prompt_is_real:
         if latest_user_id != prompt_id:
             raise AudiaGenticError(code="CON-AGW-156", kind="agents", message="provider prompt identity does not match request", details={"request-id": request_id})
+    if not prompt_is_real and metadata.get("unresolved-turn-pending") is True:
+        # A count/order advance is not enough for an unresolved pre-ID turn:
+        # a later foreign prompt in the same conversation could satisfy it.
+        # Require the durable normalized prompt fingerprint before automatic
+        # or operator capture can terminalize the visible assistant response.
+        from audiagentic.components.providers.adapters.gpt_auto.prompt_fingerprint import PromptFingerprint
+        expected_prompt_digest = (
+            locator_metadata.get("prompt-text-digest")
+            or metadata.get("prompt-text-digest")
+        )
+        if not isinstance(expected_prompt_digest, str) or not expected_prompt_digest:
+            raise AudiaGenticError(
+                code="CON-AGW-156",
+                kind="agents",
+                message="provider prompt correlation fingerprint is unavailable",
+                details={"request-id": request_id, "failure-reason": "prompt-digest-unavailable"},
+            )
+        if not isinstance(latest_user, str) or PromptFingerprint.from_text(latest_user).digest != expected_prompt_digest:
+            raise AudiaGenticError(
+                code="CON-AGW-156",
+                kind="agents",
+                message="provider prompt does not match the unresolved request",
+                details={"request-id": request_id, "failure-reason": "prompt-digest-mismatch"},
+            )
     if not prompt_is_real and metadata.get("unresolved-turn-pending") is not True:
         from audiagentic.components.agents.agents_paths import gateway_admitted_prompt_path
         from audiagentic.foundation.io import read_bytes_with_retry

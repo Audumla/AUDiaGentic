@@ -1360,9 +1360,10 @@ class SessionRuntime:
                     "assistant-message-id",
                     "assistant-before-message-id",
                     "assistant-before-id",
-                    "prompt-text-digest",
                     "terminal-evidence",
                 )
+            if not pending or not metadata.get("prompt-text-digest"):
+                remove += ("prompt-text-digest",)
             session_store.update_provider_metadata(
                 project_root, session_id, metadata, remove_keys=remove
             )
@@ -1571,9 +1572,10 @@ class SessionRuntime:
                     "assistant-message-id",
                     "assistant-before-message-id",
                     "assistant-before-id",
-                    "prompt-text-digest",
                     "terminal-evidence",
                 )
+            if not pending or not metadata.get("prompt-text-digest"):
+                remove += ("prompt-text-digest",)
             session_store.update_provider_metadata(
                 project_root,
                 allocated_session_id,
