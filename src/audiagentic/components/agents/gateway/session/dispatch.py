@@ -865,7 +865,8 @@ def _dispatch_session_request(
             # the exact provider binding before applying continuation policy.
             if not runtime.session_runtime_status(session_id).get("available"):
                 if (
-                    session_record.get("state") in {"closed", "expired"}
+                    (not resume_existing or not dispatch_prompt.strip())
+                    and session_record.get("state") in {"closed", "expired"}
                     and session_record.get("close-reason") in _AUTO_RESUMABLE_CLOSE_REASONS
                 ):
                     # A gateway resource-policy close (shutdown/idle-timeout)

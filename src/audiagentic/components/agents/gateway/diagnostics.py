@@ -228,11 +228,19 @@ def classify_error(
             details = raw_details
     code = _text(code, _MAX_ID)
     reason = _text(details.get("failure-reason") or details.get("reason-code"), _MAX_ID)
+    root_recovery_error = details.get("root-recovery-error")
+    root_code = _text(
+        root_recovery_error.get("code")
+        if isinstance(root_recovery_error, Mapping)
+        else None,
+        _MAX_ID,
+    )
     if code == "CON-AGW-084" and reason is None:
-        # Recovery emits this code when the owning gateway generation has
-        # disappeared (normally a service restart). Keep the cause explicit
-        # even though the recovery error has no provider detail payload.
-        reason = "service-restart"
+        # A bounded provider root error is more specific than the outer
+        # restart interruption. Preserve the outer failure code while using
+        # the root code as the diagnostic reason; otherwise retain the
+        # historical service-restart fallback.
+        reason = root_code or "service-restart"
     attempted = bool(
         details.get("submission-attempted")
         or details.get("side-effect-attempted")
@@ -243,7 +251,13 @@ def classify_error(
         "side-effect-attempted",
         "submission-ambiguous",
     }
-    if code == "CON-AGW-084" and reason == "service-restart":
+    if code == "CON-AGW-084" and root_code and root_code.startswith("EXT-"):
+        classification = FailureClass.PROVIDER_ERROR
+        certainty = EvidenceCertainty.STRONG
+        recovery = RecoveryDisposition.RECONCILE_REQUIRED
+        default_phase = ObservationPhase.RECONCILIATION
+        default_side_effect = SideEffectState.MAY_HAVE_STARTED
+    elif code == "CON-AGW-084" and reason == "service-restart":
         classification = FailureClass.GATEWAY_RESTART
         certainty = EvidenceCertainty.DEFINITIVE
         recovery = RecoveryDisposition.RECONCILE_REQUIRED

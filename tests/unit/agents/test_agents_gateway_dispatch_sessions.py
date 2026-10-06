@@ -574,6 +574,36 @@ def test_promptless_restart_resume_reaches_provider_observer(rig, monkeypatch):
     assert transports[0].turns == ["hello"]
 
 
+def test_promptful_resume_existing_does_not_auto_reopen_policy_closed_session(
+    resumable_rig, monkeypatch
+):
+    """Only prompt-free resume_existing dispatch may reopen a policy-closed
+    session; a promptful continuation remains fail-closed to avoid silently
+    changing the meaning of an observation-only recovery."""
+    runtime, transports, tmp_path = resumable_rig
+    first = _dispatch(
+        tmp_path, _running_record(tmp_path, session_keep_alive=True), dispatch_prompt="hello"
+    )
+    source_id = first["session-id"]
+    runtime.close_session(tmp_path, source_id, reason="shutdown")
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.api.complete_execution_from_provider",
+        lambda *_args, **_kwargs: None,
+    )
+    record = _running_record(tmp_path, session_id=source_id, session_keep_alive=True)
+    with pytest.raises(RecoveryDeferred) as exc:
+        _dispatch(
+            tmp_path,
+            record,
+            dispatch_prompt="new prompt",
+            resume_existing=True,
+        )
+
+    assert exc.value.error.code == "RES-AGW-003"
+    assert exc.value.phase == "rehydrate-retry"
+    assert len(transports) == 1
+
+
 @pytest.mark.parametrize("close_reason", ["shutdown", "idle-timeout"])
 def test_promptless_restart_recovery_reopens_policy_closed_session(
     resumable_rig, monkeypatch, close_reason
