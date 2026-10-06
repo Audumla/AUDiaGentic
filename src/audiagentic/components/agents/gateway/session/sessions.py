@@ -38,7 +38,7 @@ import inspect
 import logging
 import threading
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from pathlib import Path
 from typing import Any, cast
 
@@ -2001,6 +2001,54 @@ class SessionRuntime:
             _record_failure(exc)
             raise
         source_binding = session_store.read_session_binding(project_root, source_session_id)
+        if source_binding is None:
+            # A provider can have admitted a prompt and persisted its durable
+            # conversation metadata before the gateway got far enough to
+            # install the v2 binding. Recover only from the provider's
+            # project-scoped identity; never reconstruct from a prompt.
+            provider_metadata = session_store.session_provider_metadata(source_record)
+            provider_id_hint = session_store.session_provider_id(source_record)
+            provider_ref_hint = provider_metadata.get("provider-session-id")
+            chat_url_hint = provider_metadata.get("chat-url")
+            surface_id_hint = provider_metadata.get("surface-id")
+            if (
+                provider_id_hint == "gpt-auto"
+                and isinstance(provider_ref_hint, str)
+                and provider_ref_hint.strip()
+                and isinstance(chat_url_hint, str)
+                and chat_url_hint.strip()
+                and not surface_id_hint
+            ):
+                surface_id_hint = "gpt-auto-cdp"
+            if (
+                isinstance(provider_id_hint, str)
+                and provider_id_hint.strip()
+                and isinstance(provider_ref_hint, str)
+                and provider_ref_hint.strip()
+                and isinstance(chat_url_hint, str)
+                and chat_url_hint.strip()
+                and isinstance(surface_id_hint, str)
+                and surface_id_hint.strip()
+            ):
+                source_binding = binding_store.build_binding(
+                    provider_id=provider_id_hint,
+                    provider_session_ref=provider_ref_hint,
+                    surface_id=surface_id_hint,
+                    ref_namespace=provider_metadata.get("ref-namespace"),
+                    identity_context_fingerprint=provider_metadata.get(
+                        "identity-context-fingerprint"
+                    ),
+                    execution_context_fingerprint=provider_metadata.get(
+                        "execution-context-fingerprint"
+                    ),
+                    context_id=context_id,
+                    agent_definition_id=agent_definition_id,
+                    agent_definition_digest=agent_definition_digest,
+                    role_ids=role_ids,
+                    role_set_digest=role_set_digest,
+                    execution_profile_digest=execution_profile_digest,
+                    effective_capability_digest=effective_capability_digest,
+                )
         requested_composition = {
             "context-id": context_id,
             "agent-definition-id": agent_definition_id,
@@ -2066,23 +2114,35 @@ class SessionRuntime:
         # generation while persistence failed after the provider was opened.
         # Rehydrate the newest matching successor instead of creating a
         # second owned binding for the same provider conversation.
+        # The provider-ref key, not only the immediate predecessor id, is the
+        # canonical ownership identity.  A caller may resume an older closed
+        # generation after a newer successor already owns the same retained
+        # ChatGPT conversation.  Rehydrate that active owner instead of
+        # opening the provider and then failing registration as a duplicate.
         existing_successors = [
             candidate
             for candidate in session_store.list_session_records(project_root)
             if candidate.get("state") == "active"
             and candidate.get("session-id") != source_session_id
             and isinstance(candidate.get("binding"), dict)
-            and candidate["binding"].get("provider-session-ref")
-            == source_binding["provider-session-ref"]
-            and candidate["binding"].get("predecessor-binding-id")
-            == source_binding.get("binding-id")
+            and candidate["binding"].get("provider-ref-key")
+            == source_binding.get("provider-ref-key")
+            and candidate["binding"].get("ownership", "owned") == "owned"
         ]
-        existing_successors.sort(
-            key=lambda candidate: str(
-                (candidate.get("timing") or {}).get("created-at") or ""
+        if len(existing_successors) > 1:
+            exc = AudiaGenticError(
+                code="CON-AGW-096",
+                kind="agents",
+                message="duplicate owned provider session binding",
+                details={
+                    "provider-ref-key-prefix": str(
+                        source_binding.get("provider-ref-key") or ""
+                    )[:12]
+                },
             )
-        )
-        existing_successor = existing_successors[-1] if existing_successors else None
+            _record_failure(exc)
+            raise exc
+        existing_successor = existing_successors[0] if existing_successors else None
         successor_session_id = (
             existing_successor["session-id"]
             if existing_successor is not None
@@ -2091,11 +2151,14 @@ class SessionRuntime:
         if existing_successor is not None and successor_session_id in self._handles:
             return existing_successor
 
+        pending_resume_metadata: dict[str, Any] = {}
+
         async def resume_binding_sink(update: Any) -> None:
-            # The successor record is created before a resumed GPT-auto turn
-            # can publish prompt/assistant message IDs.  Reusing the immutable
-            # provider ref makes this an idempotent metadata refresh rather
-            # than a new binding generation.
+            # GPT-auto proves/rebinds the exact durable conversation while
+            # transport.open() is still running.  A fresh successor record is
+            # intentionally persisted only after open() succeeds, so buffer
+            # this metadata until that record exists.  The immutable provider
+            # ref is still validated here; no prompt is submitted by this path.
             if not getattr(update, "provider_session_ref", None):
                 raise AudiaGenticError(
                     code="CON-AGW-122",
@@ -2110,31 +2173,7 @@ class SessionRuntime:
                     message="resumed transport attempted to replace its provider binding",
                     details={"session-id": successor_session_id},
                 )
-            # The successor was already written and registered before the
-            # resumed transport was handed to the turn.  Calling
-            # install_initial_provider_binding here attempts to register the
-            # same provider-ref under a second active session on every
-            # message-id checkpoint, which correctly fails closed as a
-            # duplicate owned binding.  A checkpoint is only a metadata
-            # refresh; keep the immutable binding/index untouched.
-            successor = session_store.read_session_record(
-                project_root, successor_session_id
-            )
-            successor_binding = successor.get("binding")
-            if not isinstance(successor_binding, dict) or successor_binding.get(
-                "provider-session-ref"
-            ) != update.provider_session_ref.value:
-                raise AudiaGenticError(
-                    code="CON-AGW-120",
-                    kind="agents",
-                    message="resumed transport binding does not match successor record",
-                    details={"session-id": successor_session_id},
-                )
-            session_store.update_provider_metadata(
-                project_root,
-                successor_session_id,
-                dict(update.metadata),
-            )
+            pending_resume_metadata.update(dict(update.metadata))
 
         # AS49: reuse the ORIGINAL request's runtime root, where a provider's
         # own durable session state was preserved on close (see
@@ -2262,12 +2301,16 @@ class SessionRuntime:
             raise exc
 
         # ── Build or rehydrate the generation's record ──
+        provider_metadata = {
+            **dict(open_result.metadata),
+            **pending_resume_metadata,
+        }
         rehydrating_successor = existing_successor is not None
         if rehydrating_successor:
             record = session_store.update_provider_metadata(
                 project_root,
                 successor_session_id,
-                dict(open_result.metadata),
+                provider_metadata,
             )
             session_id = successor_session_id
         else:
@@ -2280,7 +2323,7 @@ class SessionRuntime:
                 surface_id=surface_id,
                 idle_timeout_seconds=idle_timeout_seconds,
                 max_lifetime_seconds=max_lifetime_seconds,
-                provider_metadata=dict(open_result.metadata),
+                provider_metadata=provider_metadata,
                 context_id=source_binding.get("context-id"),
                 agent_definition_id=source_binding.get("agent-definition-id"),
                 agent_definition_digest=source_binding.get("agent-definition-digest"),
@@ -2312,25 +2355,71 @@ class SessionRuntime:
             # destroy that record merely because its metadata refresh failed.
             await _close_failed_transport(transport)
             if not rehydrating_successor:
+                failed_record = None
                 try:
                     failed_record = session_store.transition_session_record(
                         project_root,
                         session_id,
                         "failed",
-                        updates={"close-reason": "resume-persistence-failed", "closed-at": now_iso_z()},
+                        updates={
+                            "close-reason": "failed",
+                            "closed-at": now_iso_z(),
+                            "error": {
+                                "code": "IO-AGW-119",
+                                "kind": "agents",
+                                "message": "resume successor persistence failed",
+                            },
+                        },
                     )
-                    binding_store.retire_binding(project_root, failed_record, state="failed")
                 except Exception:  # noqa: BLE001 - preserve the original persistence failure
+                    # The first persistence operation may have written an active
+                    # record before the binding/index operation failed.  A
+                    # second best-effort transition can itself fail on a
+                    # partially-written record, so force a schema-valid
+                    # terminal record from the already-built immutable record.
                     logger.warning(
-                        "failed to roll back resumed session record",
+                        "failed to transition resumed session record after persistence failure",
                         extra={"session-id": session_id},
                         exc_info=True,
                     )
+                    try:
+                        failed_record = dict(record)
+                        failed_record["state"] = "failed"
+                        failed_record["close-reason"] = "resume-persistence-failed"
+                        failed_record["error"] = {
+                            "code": "IO-AGW-119",
+                            "kind": "agents",
+                            "message": "resume successor persistence failed",
+                        }
+                        timing = dict(failed_record.get("timing") or {})
+                        timing["closed-at"] = now_iso_z()
+                        timing["updated-at"] = timing["closed-at"]
+                        failed_record["timing"] = timing
+                        session_store.write_session_record(project_root, failed_record)
+                    except Exception:  # noqa: BLE001 - preserve the original persistence failure
+                        logger.warning(
+                            "failed to force terminal resumed session record",
+                            extra={"session-id": session_id},
+                            exc_info=True,
+                        )
+                if failed_record is not None:
+                    try:
+                        binding_store.retire_binding(project_root, failed_record, state="failed")
+                    except Exception:  # noqa: BLE001 - preserve the original persistence failure
+                        logger.warning(
+                            "failed to retire resumed session binding",
+                            extra={"session-id": session_id},
+                            exc_info=True,
+                        )
             wrapped = AudiaGenticError(
                 code="IO-AGW-119",
                 kind="agents",
                 message="resume succeeded at the provider but persisting the new session record failed",
-                details={"source-session-id": source_session_id},
+                details={
+                    "source-session-id": source_session_id,
+                    "error-type": type(exc).__name__,
+                    "error-message": str(exc).strip(),
+                },
             )
             _record_failure(wrapped)
             raise wrapped from exc
@@ -2683,13 +2772,25 @@ class SessionRuntime:
                     await result
                 if request_id is not None:
                     kind = getattr(getattr(obs, "kind", None), "value", None) or getattr(obs, "kind", "unknown")
-                    self._console_trace.progress(
-                        request_id=request_id,
-                        session_id=session_id,
-                        kind=str(kind),
-                        sequence=getattr(obs, "sequence", None),
-                        started=trace_started,
+                    attributes = getattr(obs, "attributes", {})
+                    decision_rendered = (
+                        kind == "timing"
+                        and isinstance(attributes, Mapping)
+                        and self._console_trace.response_decision_observed(
+                            request_id=request_id,
+                            session_id=session_id,
+                            attributes=attributes,
+                            started=trace_started,
+                        )
                     )
+                    if not decision_rendered:
+                        self._console_trace.progress(
+                            request_id=request_id,
+                            session_id=session_id,
+                            kind=str(kind),
+                            sequence=getattr(obs, "sequence", None),
+                            started=trace_started,
+                        )
 
             # AS28 slice 4b-A: call transport.prompt() with the neutral contract.
             # Include cancel_token so the transport can check it for cancellation.

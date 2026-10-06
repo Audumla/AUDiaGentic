@@ -739,6 +739,18 @@ def project_public_status(
     )
     status = {field: record.get(field) for field in visible}
     status["activity"] = record.get("activity")
+    recovery = record.get("recovery")
+    if isinstance(recovery, dict) and record.get("state") in {"queued", "running"}:
+        # ``state`` is the durable request lifecycle; this derived field tells
+        # clients whether a live provider turn is actually being observed.
+        status["execution-status"] = "recovering"
+        status["recovery-phase"] = recovery.get("phase")
+        status["recovery-attempt"] = recovery.get("attempt")
+        status["recovery-next-retry-at"] = recovery.get("next-retry-at")
+    elif record.get("state") == "running":
+        status["execution-status"] = "active"
+    else:
+        status["execution-status"] = record.get("state")
     # Provider metadata is deliberately not exposed wholesale.  This one
     # boolean is safe and essential for interpreting a running request:
     # ``True`` means the provider may still be completing the submitted turn,

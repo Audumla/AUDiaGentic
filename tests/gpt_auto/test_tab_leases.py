@@ -142,3 +142,31 @@ async def test_restarted_reaper_migrates_legacy_digest_without_renewing_idle_clo
 
     browser.close.assert_awaited_once_with(page)
     assert store.entries() == []
+@pytest.mark.asyncio
+async def test_restarted_reaper_preserves_protected_unresolved_tab(tmp_path):
+    store = TabLeaseStore(tmp_path / 'tabs.sqlite3')
+    raw = {'url': URL, 'latestAssistantText': 'partial'}
+    digest = GptAutoProviderRuntime._tab_digest(ChatSnapshot.from_bridge(raw))
+    store.observe('target', 'session', URL, time.time() - 8000, digest)
+    page = SimpleNamespace(target_id='target', handle='handle', url=URL)
+    browser = SimpleNamespace(
+        pages=AsyncMock(return_value=[page]),
+        snapshot=AsyncMock(return_value=raw),
+        page_by_handle=AsyncMock(return_value=page),
+        close=AsyncMock(),
+    )
+    runtime = object.__new__(GptAutoProviderRuntime)
+    runtime._tab_lease_store = TabLeaseStore(store.path)
+    runtime._tab_lease_cache = {}
+    runtime._tab_lease_unsafe_targets = set()
+    runtime._gpt_browser = browser
+    runtime._page_owners = {}
+    runtime._detached_tab_protected = {'handle'}
+    runtime._detached_tab_closing = set()
+    runtime._detached_tab_leases = {}
+    runtime.config = SimpleNamespace(workflow=SimpleNamespace(bridge_signals=lambda: []))
+
+    await runtime._reap_durable_tabs(7200)
+
+    browser.close.assert_not_awaited()
+    assert store.entries()

@@ -15,8 +15,8 @@ from .base import (
     HarnessInstruction,
     McpServerDeclaration,
 )
-from .hooks import initialize_lifecycle_hook_dispatch
 from .context import context_namespace, sanitize_context_section
+from .hooks import initialize_lifecycle_hook_dispatch
 from .registry import (
     all_descriptors,
     get_descriptor,

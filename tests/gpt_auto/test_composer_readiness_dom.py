@@ -2,10 +2,11 @@
 import pytest
 from playwright.async_api import async_playwright
 
-from audiagentic.components.providers.adapters.gpt_auto.gpt_auto_cdp import (
-    ComposerSubmissionTimeout, GptAutoCdpBrowserController,
-)
 from audiagentic.components.providers.adapters.gpt_auto.cdp.cdp_browser import CdpPageRef
+from audiagentic.components.providers.adapters.gpt_auto.gpt_auto_cdp import (
+    ComposerSubmissionTimeout,
+    GptAutoCdpBrowserController,
+)
 
 
 @pytest.mark.asyncio

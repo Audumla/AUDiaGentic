@@ -1832,6 +1832,59 @@ def test_intra_turn_events_wired_to_eventbus(rig, monkeypatch):
     runtime.close_session(tmp_path, session_id)
 
 
+def test_response_decision_timing_observation_reaches_console_trace(rig):
+    """Exercise the real SessionRuntime observation callback timing branch."""
+    from io import StringIO
+
+    from audiagentic.components.agents.gateway.session.console_trace import (
+        GatewayConsoleTrace,
+    )
+    from audiagentic.foundation.transports.agent_session import (
+        TransportObservation,
+        TransportObservationKind,
+    )
+
+    runtime, clock, transports, tmp_path = rig
+    stream = StringIO()
+    runtime._console_trace = GatewayConsoleTrace(stream=stream, clock=lambda: 10.0)
+
+    async def _emit_response_decision(obs_sink, session_id):
+        observation = TransportObservation(
+            ag_session_id=session_id,
+            turn_id="req_decision",
+            sequence=1,
+            kind=TransportObservationKind.TIMING,
+            observed_at="2025-01-01T00:00:00Z",
+            correlation_quality=CorrelationQuality.REQUEST_SCOPED,
+            attributes={
+                "timing-event": "response-decision",
+                "diagnostic-signature": "0123456789abcdef",
+                "diagnostic-details": '{"completion-satisfied":false}',
+            },
+        )
+        result = obs_sink(observation)
+        if result is not None:
+            await result
+
+    record = _open(runtime, tmp_path)
+    transports[0].on_event_emitter = _emit_response_decision
+    session_id = record["session-id"]
+
+    result = runtime.prompt_in_session(
+        tmp_path,
+        session_id,
+        "hello",
+        request_id="req_decision",
+    )
+
+    assert result.stop_reason == "end_turn"
+    rendered = stream.getvalue()
+    assert "DECISION" in rendered
+    assert "request=req_decision" in rendered
+    assert "signature=0123456789abcdef" in rendered
+    runtime.close_session(tmp_path, session_id)
+
+
 def test_turn_event_publish_failure_does_not_break_prompt(rig, monkeypatch):
     """AS18 — publish failure in on_event callback does not break the prompt."""
     runtime, clock, transports, tmp_path = rig

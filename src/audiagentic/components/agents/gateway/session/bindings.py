@@ -340,6 +340,23 @@ def register_open_binding(project_root: Path, session_record: dict[str, Any]) ->
                 and entry.get("state") == "active"
                 and incoming_ownership == "owned"
             ):
+                # The index is a derived projection and can retain an active
+                # entry when a prior resume wrote the session record before
+                # failing during binding registration. Reconcile the durable
+                # session record before treating the entry as an ownership
+                # conflict; terminal records must never block a successor.
+                try:
+                    from . import sessions_store
+
+                    indexed_record = sessions_store.read_session_record(
+                        project_root, str(entry.get("session-id") or "")
+                    )
+                except Exception:  # noqa: BLE001 - fail closed on unreadable identity
+                    indexed_record = None
+                if indexed_record is not None and indexed_record.get("state") != "active":
+                    entry["state"] = indexed_record.get("state")
+                    entry["retired-at"] = now_iso_z()
+                    continue
                 raise AudiaGenticError(
                     code="CON-AGW-096",
                     kind="agents",

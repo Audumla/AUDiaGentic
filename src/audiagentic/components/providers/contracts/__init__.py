@@ -1,11 +1,11 @@
 """Typed provider family contracts."""
 
-from .harness_status_observer import HarnessStatusObserverCapability
 from .conversation_focus import (
     ConversationFocusLocator,
     ConversationFocusOutcome,
     ConversationFocusResult,
 )
+from .harness_status_observer import HarnessStatusObserverCapability
 from .language_server_projection import (
     LanguageServerEntry,
     LanguageServerProjectionMode,

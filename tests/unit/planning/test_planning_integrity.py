@@ -304,8 +304,21 @@ def test_public_item_read_rejects_state_placement_corruption(tmp_path: Path) -> 
     completed.parent.mkdir(parents=True, exist_ok=True)
     completed.write_text(path.read_text(encoding="utf-8"), encoding="utf-8")
     path.unlink()
-    with pytest.raises(PlanningIntegrityError, match="canonical placement"):
+    with pytest.raises(PlanningIntegrityError, match="canonical placement") as exc_info:
         planning_api.get_item(tmp_path, "TST01")
+    assert exc_info.value.code == "VAL-PLN-040"
+    assert exc_info.value.details["repair"]["tool"] == "plan_set_state"
+
+
+def test_state_transition_repairs_misplaced_item(tmp_path: Path) -> None:
+    path = _item(tmp_path)
+    text = path.read_text(encoding="utf-8").replace("state: pending", "state: completed")
+    path.write_text(text + "\n## Validation\nAlready validated.\n\n## Acceptance Criteria\nAlready accepted.\n", encoding="utf-8")
+
+    result = planning_api.set_state(tmp_path, "TST01", "completed")
+
+    assert Path(result["path"]) == Path("docs/planning/completed/test-plan/TST01.md")
+    assert (tmp_path / result["path"]).exists()
 
 
 def test_exact_item_lookup_skips_unrelated_legacy_corruption(tmp_path: Path) -> None:

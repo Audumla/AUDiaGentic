@@ -7,9 +7,8 @@ from dataclasses import asdict
 from typing import cast
 
 from audiagentic.foundation.cli_io import print_json, print_message
-from audiagentic.runtime.rig.embedded.process import build_command
-
 from audiagentic.foundation.config.local_runtime import DEFAULT_LOCAL_HOST, DEFAULT_RIG_PORT
+from audiagentic.runtime.rig.embedded.process import build_command
 
 DEFAULT_HOST = DEFAULT_LOCAL_HOST
 DEFAULT_PORT = DEFAULT_RIG_PORT

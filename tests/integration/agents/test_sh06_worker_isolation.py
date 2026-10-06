@@ -10,6 +10,9 @@ from pathlib import Path
 
 import pytest
 
+from audiagentic.components.agents.configuration.management import (
+    create_execution_profile,
+)
 from audiagentic.components.agents.contracts.worker_protocol import (
     WorkerExecutionIdentity,
 )
@@ -17,9 +20,6 @@ from audiagentic.components.agents.gateway import api as gateway
 from audiagentic.components.agents.gateway.queue import worker as worker_module
 from audiagentic.components.agents.gateway.queue.worker import (
     execute_isolated_provider_turn,
-)
-from audiagentic.components.agents.configuration.management import (
-    create_execution_profile,
 )
 from audiagentic.components.providers.providers_api import ProviderExecutionRequest
 from audiagentic.foundation.contracts.errors import AudiaGenticError

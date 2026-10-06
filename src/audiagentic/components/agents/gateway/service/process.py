@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import argparse
 import os
-import sys
 import subprocess
+import sys
 from pathlib import Path
 
 from audiagentic.components.agents.gateway.service.host import GatewayServiceHost

@@ -110,11 +110,11 @@ mcp-servers:
         closed are placed in completed/.
     tool-descriptions:
       plan_list_standards: List configured planning standards.
-      plan_create_item: "Create an item (required: plan, title; optional: id, work, skill, order, and content sections)."
-      plan_list_groups: "List plan groups; filter by state/plan and paginate with limit/offset."
+      plan_create_item: "Create an item; required: plan, title. Omit id to auto-generate it; pass id only when importing or preserving an existing ID."
+      plan_list_groups: "List plan groups; filter by state/plan and paginate. Integrity errors include the repair tool and retry arguments."
       plan_list_items: "List items; provide plan or id_prefix. Default state is active; paginate with limit/offset."
       plan_get_item: Read an item; set include_history=true for change history.
-      plan_set_state: Transition to pending, in_progress, completed, superseded, or deprecated.
+      plan_set_state: "Set an item's state and move it to canonical active/completed placement; retry with the current state to repair misplaced items."
       plan_update_item: Update item fields; use append for sections to append.
       plan_delete_item: Permanently delete a plan item by ID.
       plan_create_review: "Create a review; required: review-of and title."

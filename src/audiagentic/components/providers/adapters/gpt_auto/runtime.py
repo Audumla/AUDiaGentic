@@ -119,6 +119,9 @@ class GptAutoProviderRuntime:
         # is intentionally retained for resume. Keep such tabs under the
         # reaper's ownership until they are claimed again or become idle.
         self._detached_tab_leases: dict[str, tuple[str, float]] = {}
+        # Retained tabs carrying an unresolved provider turn are protected from
+        # physical idle cleanup until reconciliation or explicit terminalization.
+        self._detached_tab_protected: set[str] = set()
         self._detached_tab_closing: set[str] = set()
         self._tab_lease_store: TabLeaseStore | None = None
         self._tab_lease_cache: dict[str, tuple[object, ...]] = {}
@@ -632,16 +635,29 @@ class GptAutoProviderRuntime:
             return False
         owner = self._page_owners.get(page_handle)
         if owner is not None and owner != chat.ag_session_id:
-            return False
+            prior = self._chats.get(owner)
+            if prior is None or _chat_terminal(prior):
+                # A failed/closed transport can leave the in-memory page
+                # ownership projection behind while the browser tab remains
+                # valid. Reclaim only when the prior chat is explicitly
+                # terminal; an unknown owner remains a hard conflict.
+                self._page_owners.pop(page_handle, None)
+            else:
+                return False
         self._page_owners[page_handle] = chat.ag_session_id
         self._detached_tab_leases.pop(page_handle, None)
         return True
 
     def retain_detached_page(
-        self, chat: PersistentChat, page_handle: str, last_activity: float
+        self, chat: PersistentChat, page_handle: str, last_activity: float, *,
+        protected: bool = False,
     ) -> None:
         """Keep a retained session tab eligible for independent idle reaping."""
         self._detached_tab_leases[page_handle] = (chat.ag_session_id, float(last_activity))
+        if protected:
+            self._detached_tab_protected.add(page_handle)
+        else:
+            getattr(self, "_detached_tab_protected", set()).discard(page_handle)
 
     def remember_tab_activity(self, chat: PersistentChat) -> None:
         """Persist only an explicitly owned target with durable conversation identity."""
@@ -727,6 +743,10 @@ class GptAutoProviderRuntime:
             if page is None or not same_chat_identity(page.url, url):
                 # Missing/repurposed targets are not ours to recreate or close.
                 store.forget(target)
+                continue
+            if page.handle in getattr(self, "_detached_tab_protected", set()):
+                # The logical session is detached but its provider turn is
+                # unresolved; preserve the tab for dashboard recovery.
                 continue
             if page.handle in self._page_owners:
                 continue
@@ -882,6 +902,7 @@ class GptAutoProviderRuntime:
                     else:
                         if self._detached_tab_leases.get(page_handle) == lease:
                             self._detached_tab_leases.pop(page_handle, None)
+                            getattr(self, "_detached_tab_protected", set()).discard(page_handle)
                     finally:
                         self._detached_tab_closing.discard(page_handle)
         except asyncio.CancelledError:

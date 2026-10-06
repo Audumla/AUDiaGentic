@@ -35,3 +35,4 @@ VAL-PLN-037: "A plan item cannot be deleted while linked reviews exist. Delete t
 VAL-PLN-038: "The resolved planning path escapes the configured planning root. Check plan and record identities and configured paths."
 VAL-PLN-039: "The active planning implementation could not be resolved unambiguously. Check implementation registration, defaults, and project selection state."
 VAL-PLN-041: "A plan item cannot be completed while it has open reviews. Resolve or close the reviews first."
+VAL-PLN-040: "A planning record is valid but stored in the wrong lifecycle directory. Retry the indicated state-transition tool with the record's current state; it will move the record to canonical placement."

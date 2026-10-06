@@ -14,6 +14,11 @@ import pytest
 from audiagentic.components.agents.capabilities.contracts import CapabilityRequirementId
 from audiagentic.components.agents.configuration.management import (
     create_execution_profile,
+    create_role,
+    delete_role,
+    get_role,
+    list_roles,
+    update_role,
 )
 from audiagentic.components.agents.models.role import (
     Role,
@@ -21,13 +26,6 @@ from audiagentic.components.agents.models.role import (
     role_from_dict,
     role_to_dict,
     validate_role,
-)
-from audiagentic.components.agents.configuration.management import (
-    create_role,
-    delete_role,
-    get_role,
-    list_roles,
-    update_role,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 

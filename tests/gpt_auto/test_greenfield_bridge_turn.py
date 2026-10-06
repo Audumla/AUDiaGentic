@@ -31,6 +31,9 @@ from audiagentic.components.providers.adapters.gpt_auto.turn import (
     _same_response_slot_replacement,
     _scope_response_snapshot,
 )
+from audiagentic.components.providers.adapters.gpt_auto.urls import (
+    parse_provider_session_id,
+)
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.transports.agent_session import (
     ControlDisposition,
@@ -244,7 +247,7 @@ class _Chat:
         return next(self._snapshots)
 
     async def acquire_provider_identity(self, initial):
-        self.provider_session_id = "conversation-1"
+        self.provider_session_id = parse_provider_session_id(initial.url)
         self.chat_url = initial.url
         self.state = ChatState.BUSY
         return initial
@@ -2343,6 +2346,7 @@ def test_stream_cache_expired_scope_ignores_stale_document_signal():
         current,
         prompt_message_id="prompt-a",
         prompt_text="Request A",
+        allow_virtualized_prompt=True,
     )
 
     assert "stream-cache-expired" not in scoped.dom_signals
@@ -2369,6 +2373,58 @@ def test_stream_cache_expired_scope_accepts_new_signal_for_current_prompt():
     assert "stream-cache-expired" in _facts(baseline, baseline, scoped)
 
 
+def test_stream_cache_expired_scope_accepts_fresh_virtualized_prompt():
+    conversation_url = "https://chatgpt.com/g/g-p-project/c/conversation-a"
+    baseline = snap(
+        users=1,
+        user="Request A",
+        user_id="prompt-a",
+        url=conversation_url,
+    )
+    current = snap(
+        url=conversation_url,
+        extra_signals=("stream-cache-expired",),
+    )
+
+    scoped, response_ref = _scope_response_snapshot(
+        baseline,
+        current,
+        prompt_message_id="prompt-a",
+        prompt_text="Request A",
+        allow_virtualized_prompt=True,
+    )
+
+    assert response_ref is None
+    assert "stream-cache-expired" in scoped.dom_signals
+    assert "stream-cache-expired" in _facts(baseline, baseline, scoped)
+
+
+def test_stream_cache_expired_scope_rejects_virtualized_prompt_for_recovered_turn():
+    conversation_url = "https://chatgpt.com/g/g-p-project/c/conversation-a"
+    baseline = snap(
+        users=1,
+        user="Request A",
+        user_id="prompt-a",
+        url=conversation_url,
+    )
+    current = snap(
+        url=conversation_url,
+        extra_signals=("stream-cache-expired",),
+    )
+
+    scoped, response_ref = _scope_response_snapshot(
+        baseline,
+        current,
+        prompt_message_id="prompt-a",
+        prompt_text="Request A",
+        allow_virtualized_prompt=False,
+    )
+
+    assert response_ref is None
+    assert "stream-cache-expired" not in scoped.dom_signals
+    assert "stream-cache-expired" not in _facts(baseline, baseline, scoped)
+
+
 def test_stream_cache_expired_scope_ignores_new_signal_for_later_prompt():
     baseline = snap(users=1, user="Request A", user_id="prompt-a")
     current = snap(
@@ -2383,6 +2439,7 @@ def test_stream_cache_expired_scope_ignores_new_signal_for_later_prompt():
         current,
         prompt_message_id="prompt-a",
         prompt_text="Request A",
+        allow_virtualized_prompt=True,
     )
 
     assert "stream-cache-expired" not in scoped.dom_signals
@@ -2959,6 +3016,376 @@ async def test_completed_response_proves_submission_when_user_turn_is_unmounted(
     assert result.final_summary == "Complete answer"
     assert turn.state is TurnState.COMPLETE
     assert chat.runtime.bridge.submit_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_full_turn_correlates_first_assistant_after_prompt_virtualizes_post_acceptance():
+    """A fresh conversation may unmount its prompt after TURN_ACCEPTED.
+
+    Submission proof owns the real user identity, but the first response
+    observation contains only the one terminal assistant.  The full turn
+    must carry explicit fresh-conversation intent into every response
+    projection and complete without entering refresh recovery.
+    """
+    chat = _Chat()
+    landing = snap(url="https://chatgpt.com/g/g-p-project/project")
+    conversation_url = "https://chatgpt.com/g/g-p-project/c/conversation-fresh"
+    prompt_id = "8c813b3d-f6b9-4f04-91a5-7d827ad7c599"
+    assistant_id = "76f09062-4cd7-4179-84f2-4da57cf8ac62"
+    proof = replace(
+        snap(
+            users=1,
+            user="Review AU01",
+            user_id=prompt_id,
+            url=conversation_url,
+        ),
+        user_message_ids=(prompt_id,),
+        user_message_texts=("Review AU01",),
+    )
+    completed = replace(
+        snap(
+            assistants=1,
+            assistant="Fresh virtualized response",
+            assistant_id=assistant_id,
+            complete=True,
+            url=conversation_url,
+        ),
+        assistant_message_ids=(assistant_id,),
+        assistant_message_texts=("Fresh virtualized response",),
+        message_refs=(
+            ChatMessageRef(
+                "assistant",
+                assistant_id,
+                "Fresh virtualized response",
+                0,
+            ),
+        ),
+    )
+
+    def snapshots():
+        yield landing
+        yield proof
+        yield proof
+        while True:
+            yield completed
+
+    recovery_calls = []
+
+    async def refresh_bound_conversation(**kwargs):
+        recovery_calls.append(kwargs)
+        raise AssertionError("completed fresh response must not enter recovery")
+
+    chat._snapshots = snapshots()
+    chat.refresh_bound_conversation = refresh_bound_conversation
+    turn = GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="turn-post-accept-prompt-virtualized", body="Review AU01"),
+        lambda _: None,
+    )
+
+    result = await asyncio.wait_for(turn.run(), timeout=1.0)
+
+    assert result.stop_reason == "end-turn"
+    assert result.final_summary == "Fresh virtualized response"
+    assert result.metadata["prompt-message-id"] == prompt_id
+    assert result.metadata["assistant-message-id"] == assistant_id
+    assert turn.state is TurnState.COMPLETE
+    assert turn.submission_confirmed
+    assert chat.runtime.bridge.submit_calls == 1
+    assert recovery_calls == []
+
+
+@pytest.mark.asyncio
+async def test_post_submission_identity_pins_conversation_when_proof_path_did_not():
+    """A valid proof snapshot may return before its URL was turn-locally pinned."""
+    chat = _Chat()
+    landing = snap(url="https://chatgpt.com/g/g-p-project/project")
+    conversation_url = "https://chatgpt.com/g/g-p-project/c/conversation-unpinned"
+    prompt_id = "8c813b3d-f6b9-4f04-91a5-7d827ad7c599"
+    assistant_id = "76f09062-4cd7-4179-84f2-4da57cf8ac62"
+    proof = replace(
+        snap(
+            users=1,
+            user="Review AU01",
+            user_id=prompt_id,
+            url=conversation_url,
+        ),
+        user_message_ids=(prompt_id,),
+        user_message_texts=("Review AU01",),
+    )
+    completed = replace(
+        snap(
+            assistants=1,
+            assistant="Pinned boundary response",
+            assistant_id=assistant_id,
+            complete=True,
+            url=conversation_url,
+        ),
+        assistant_message_ids=(assistant_id,),
+        assistant_message_texts=("Pinned boundary response",),
+        message_refs=(
+            ChatMessageRef("assistant", assistant_id, "Pinned boundary response", 0),
+        ),
+    )
+
+    def snapshots():
+        yield landing
+        while True:
+            yield completed
+
+    chat._snapshots = snapshots()
+    turn = GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="turn-post-submit-pin", body="Review AU01"),
+        lambda _: None,
+    )
+
+    async def proof_without_url_pin(_baseline):
+        turn._prompt_message_id = prompt_id
+        assert turn._submission_proof_url is None
+        return proof
+
+    turn._await_submission_proof = proof_without_url_pin
+
+    result = await asyncio.wait_for(turn.run(), timeout=1.0)
+
+    assert result.stop_reason == "end-turn"
+    assert result.final_summary == "Pinned boundary response"
+    assert turn._submission_proof_url == conversation_url
+    assert result.metadata["assistant-message-id"] == assistant_id
+
+
+@pytest.mark.asyncio
+async def test_post_submission_identity_rejects_conflicting_existing_conversation_pin():
+    chat = _Chat()
+    landing = snap(url="https://chatgpt.com/g/g-p-project/project")
+    proof = snap(
+        users=1,
+        user="Review AU01",
+        user_id="8c813b3d-f6b9-4f04-91a5-7d827ad7c599",
+        url="https://chatgpt.com/g/g-p-project/c/conversation-proven",
+    )
+    chat._snapshots = iter([landing])
+    turn = GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="turn-post-submit-pin-conflict", body="Review AU01"),
+        lambda _: None,
+    )
+    turn._submission_proof_url = (
+        "https://chatgpt.com/g/g-p-project/c/conversation-conflicting"
+    )
+
+    async def conflicting_proof(_baseline):
+        turn._prompt_message_id = proof.latest_user_id
+        return proof
+
+    turn._await_submission_proof = conflicting_proof
+
+    with pytest.raises(
+        AudiaGenticError,
+        match="conversation changed after proof",
+    ) as raised:
+        await turn.run()
+    assert raised.value.code == "EXT-GPTAUTO-004"
+    assert raised.value.details["cause-type"] == "ProviderBindingIntegrityError"
+
+
+@pytest.mark.asyncio
+async def test_full_turn_diagnostics_expose_worker_dom_change_after_refresh(caplog):
+    """Model the live 240-second shape with a shortened refresh threshold.
+
+    The bound target sees the request-owned assistant text but not its
+    terminal controls until refresh. This is one possible explanation, not
+    the presumed live root cause: diagnostics must distinguish this DOM
+    mismatch from a correlation rejection without logging content.
+    """
+    chat = _Chat()
+    chat.config.turn.response_no_activity_refresh_seconds = 0.001
+    chat.config.turn.response_refresh_attempts = 1
+    chat.config.turn.response_refresh_final_grace_seconds = 0
+    landing = snap(url="https://chatgpt.com/g/g-p-project/project")
+    conversation_url = "https://chatgpt.com/g/g-p-project/c/conversation-1"
+    prompt_id = "8c813b3d-f6b9-4f04-91a5-7d827ad7c599"
+    assistant_id = "76f09062-4cd7-4179-84f2-4da57cf8ac62"
+    proof = replace(
+        snap(
+            users=1,
+            user="Review AU01",
+            user_id=prompt_id,
+            url=conversation_url,
+        ),
+        user_message_ids=(prompt_id,),
+        user_message_texts=("Review AU01",),
+    )
+    stale = replace(
+        snap(
+            users=1,
+            assistants=1,
+            user="Review AU01",
+            user_id=prompt_id,
+            assistant="Terminal answer hidden behind stale target DOM",
+            assistant_id=assistant_id,
+            url=conversation_url,
+        ),
+        user_message_ids=(prompt_id,),
+        user_message_texts=("Review AU01",),
+        assistant_message_ids=(assistant_id,),
+        assistant_message_texts=("Terminal answer hidden behind stale target DOM",),
+    )
+    completed = replace(
+        stale,
+        dom_signals=frozenset({"completion-control", "more-actions-menu"}),
+        terminal_witness_assistant_id=assistant_id,
+    )
+
+    def initial_snapshots():
+        yield landing
+        yield proof
+        yield proof
+        while True:
+            yield stale
+
+    def completed_snapshots():
+        while True:
+            yield completed
+
+    recovery_calls = []
+    observations = []
+
+    async def refresh_bound_conversation(**kwargs):
+        recovery_calls.append(kwargs)
+        chat._snapshots = completed_snapshots()
+        return True
+
+    chat._snapshots = initial_snapshots()
+    chat.refresh_bound_conversation = refresh_bound_conversation
+    turn = GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="turn-stale-target-diagnostics", body="Review AU01"),
+        observations.append,
+    )
+    caplog.set_level(
+        "INFO",
+        logger="audiagentic.components.providers.adapters.gpt_auto.turn",
+    )
+
+    result = await asyncio.wait_for(turn.run(), timeout=1.0)
+
+    assert result.stop_reason == "end-turn"
+    assert result.final_summary == "Terminal answer hidden behind stale target DOM"
+    assert len(recovery_calls) == 1
+    decision_records = [
+        record
+        for record in caplog.records
+        if record.msg == "gpt-auto response decision gates=%s"
+    ]
+    assert len(decision_records) == 2
+    decisions = [record.args for record in decision_records]
+    stale_decision = next(
+        decision
+        for decision in decisions
+        if decision["response-ref-present"] and not decision["completion-satisfied"]
+    )
+    assert stale_decision["raw-same-bound-conversation"] is True
+    assert stale_decision["raw-matches-provider-session"] is True
+    assert stale_decision["terminal-witness-present"] is False
+    assert stale_decision["completion-gates"]["completion-control"] is False
+    assert stale_decision["completion-gates"]["not-generating"] is True
+    assert stale_decision["raw-text-length"] > 0
+    assert "Terminal answer" not in str(stale_decision)
+    assert stale_decision["allowance-predicates"]["explicitly-allowed"] is True
+    assert (
+        stale_decision["allowance-predicates"]["baseline-assistant-count-zero"]
+        is True
+    )
+    completed_decision = next(
+        decision for decision in decisions if decision["completion-satisfied"]
+    )
+    assert completed_decision["terminal-witness-is-response"] is True
+    assert completed_decision["completion-gates"]["completion-control"] is True
+    assert completed_decision["completion-gates"]["more-actions-menu"] is True
+    decision_observations = [
+        observation
+        for observation in observations
+        if observation.kind is TransportObservationKind.TIMING
+        and observation.attributes.get("timing-event") == "response-decision"
+    ]
+    assert len(decision_observations) == 2
+    assert all(
+        len(observation.attributes["diagnostic-signature"]) == 16
+        for observation in decision_observations
+    )
+    assert all(
+        "Terminal answer hidden behind stale target DOM"
+        not in observation.attributes["diagnostic-details"]
+        for observation in decision_observations
+    )
+
+
+@pytest.mark.asyncio
+async def test_response_diagnostics_expose_empty_baseline_correlation_rejection(caplog):
+    chat = _Chat()
+    conversation_url = "https://chatgpt.com/g/g-p-project/c/conversation-1"
+    prompt_id = "8c813b3d-f6b9-4f04-91a5-7d827ad7c599"
+    assistant_id = "76f09062-4cd7-4179-84f2-4da57cf8ac62"
+    baseline = snap(url=conversation_url)
+    proof = replace(
+        snap(
+            users=1,
+            user="Review AU01",
+            user_id=prompt_id,
+            url=conversation_url,
+        ),
+        user_message_ids=(prompt_id,),
+    )
+    unpinned = snap(
+        assistants=1,
+        assistant="Completed but structurally ambiguous",
+        assistant_id=assistant_id,
+        complete=True,
+        url=conversation_url,
+    )
+    chat.provider_session_id = "conversation-1"
+    chat.chat_url = conversation_url
+    chat._snapshots = iter([unpinned])
+    turn = GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="turn-correlation-rejection-diagnostics", body="Review AU01"),
+        lambda _: None,
+    )
+    turn.state = TurnState.AWAITING_RESPONSE
+    turn._prompt_message_id = prompt_id
+    caplog.set_level(
+        "INFO",
+        logger="audiagentic.components.providers.adapters.gpt_auto.turn",
+    )
+
+    with pytest.raises(
+        ProviderBindingIntegrityError,
+        match="unpinned after prompt virtualization",
+    ):
+        await turn._await_response(
+            baseline,
+            proof,
+            allow_empty_baseline_virtualized_assistant=True,
+        )
+
+    decision = next(
+        record.args
+        for record in caplog.records
+        if record.msg == "gpt-auto response decision gates=%s"
+    )
+    assert decision["correlation-error"] == (
+        "provider assistant identity is unpinned after prompt virtualization"
+    )
+    assert decision["completion-satisfied"] is False
+    assert decision["terminal-witness-is-latest"] is True
+    assert (
+        decision["allowance-predicates"]["raw-assistant-id-count-one"]
+        is False
+    )
+    assert decision["allowance-predicates"]["raw-assistant-ref-count-one"] is True
+    assert "Completed but structurally ambiguous" not in str(decision)
 
 
 @pytest.mark.asyncio

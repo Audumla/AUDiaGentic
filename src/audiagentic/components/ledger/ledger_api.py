@@ -99,8 +99,8 @@ def archive_for_release(project_root: Path, release_id: str) -> dict[str, Any]:
     # overlapping retry from absorbing events that arrived for the next
     # release after the first retry archived its snapshot.
     from audiagentic.components.ledger.archive import (
-        _archive_identity,
         _archive_current_ledger_locked,
+        _archive_identity,
         _merge_historical_events,
         _purge_fragments,
     )

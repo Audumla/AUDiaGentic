@@ -1,7 +1,13 @@
 from concurrent.futures import ThreadPoolExecutor
 
-from audiagentic.components.agents.gateway.service.client_icons import assign_client_icon, read_client_icon
-from audiagentic.components.agents.gateway.service.dashboard import _request_row, render_dashboard_html
+from audiagentic.components.agents.gateway.service.client_icons import (
+    assign_client_icon,
+    read_client_icon,
+)
+from audiagentic.components.agents.gateway.service.dashboard import (
+    _request_row,
+    render_dashboard_html,
+)
 
 
 def test_cycle_and_stable_assignment(tmp_path):

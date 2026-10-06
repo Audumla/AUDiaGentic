@@ -83,6 +83,48 @@ def test_trace_can_be_disabled(monkeypatch):
     assert stream.getvalue() == ""
 
 
+def test_response_decision_trace_renders_only_whitelisted_bounded_fields(monkeypatch):
+    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_CONSOLE_TRACE", "summary")
+    stream = StringIO()
+    trace = GatewayConsoleTrace(stream=stream, clock=lambda: 9.0)
+
+    trace.response_decision(
+        request_id="req_1",
+        session_id="ses_1",
+        signature="0123456789abcdef",
+        details='{"completion-satisfied":false,"raw-text-length":31}',
+        started=1.0,
+    )
+
+    rendered = stream.getvalue()
+    assert "DECISION" in rendered
+    assert "request=req_1" in rendered
+    assert "session=ses_1" in rendered
+    assert "signature=0123456789abcdef" in rendered
+    assert "completion-satisfied" in rendered
+    assert "elapsed=8.0s" in rendered
+
+
+def test_response_decision_observation_rejects_non_whitelisted_timing_event(monkeypatch):
+    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_CONSOLE_TRACE", "summary")
+    stream = StringIO()
+    trace = GatewayConsoleTrace(stream=stream, clock=lambda: 9.0)
+
+    rendered = trace.response_decision_observed(
+        request_id="req_1",
+        session_id="ses_1",
+        attributes={
+            "timing-event": "attempt-start",
+            "diagnostic-signature": "0123456789abcdef",
+            "diagnostic-details": '{"should":"not render"}',
+        },
+        started=1.0,
+    )
+
+    assert rendered is False
+    assert stream.getvalue() == ""
+
+
 def test_default_trace_sink_is_shared_gateway_log(monkeypatch, tmp_path):
     import audiagentic.components.agents.gateway.session.console_trace as module
 

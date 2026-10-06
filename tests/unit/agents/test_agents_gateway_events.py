@@ -9,11 +9,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from audiagentic.components.agents.gateway import events as events
-from audiagentic.components.agents.gateway import store as store
 from audiagentic.components.agents.configuration.management import (
     create_execution_profile,
 )
+from audiagentic.components.agents.gateway import events as events
+from audiagentic.components.agents.gateway import store as store
 from audiagentic.foundation.event import get_bus, reset_bus
 from audiagentic.foundation.event.event_bus import DeliveryMode
 from audiagentic.foundation.features.base import ImplementationState

@@ -4,7 +4,11 @@ import zlib
 
 import pytest
 
-from audiagentic.components.agents.gateway.service.dashboard_images import image_path, project_image_id, save_image
+from audiagentic.components.agents.gateway.service.dashboard_images import (
+    image_path,
+    project_image_id,
+    save_image,
+)
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 

@@ -249,3 +249,115 @@ def test_focus_existing_conversation_opens_retained_url_when_tab_is_missing(monk
         "pageHandle": "new-page",
         "url": "https://chatgpt.com/g/g-p-x/c/s1",
     }
+
+
+def test_capture_reopens_exact_conversation_and_requires_terminal_dom(monkeypatch, tmp_path):
+    calls = []
+    snapshot = type(
+        "Snapshot",
+        (),
+        {
+            "url": "https://chatgpt.com/g/g-p-x/c/s1",
+            "error_present": False,
+            "generating": False,
+            "latest_assistant_text": "finished",
+            "latest_assistant_id": "assistant-1",
+            "terminal_witness_assistant_id": "assistant-1",
+            "dom_signals": frozenset({"completion-control"}),
+        },
+    )()
+
+    class FakePage:
+        target_id = "target-new"
+
+    class FakeBrowser:
+        async def page_by_handle(self, handle):
+            assert handle == "new-page"
+            return FakePage()
+
+        async def materialize_latest_assistant_turn(self, page):
+            calls.append(("materialize", page.target_id))
+
+        async def snapshot(self, page, *, signals):
+            return snapshot
+
+    class FakeBridge:
+        async def call(self, method, params=None):
+            calls.append((method, params))
+            if method == "list_pages":
+                return []
+            return {"ok": True}
+
+    class FakeRuntime:
+        bridge = FakeBridge()
+        gpt_browser = FakeBrowser()
+        config = type("Config", (), {"workflow": type("Workflow", (), {"bridge_signals": lambda self: ()})()})()
+
+        async def connect_existing(self):
+            return True
+
+        def adopt_existing_dedicated_window(self, pages):
+            return None
+
+        def page_belongs_to_dedicated_window(self, page):
+            return True
+
+        async def create_chat_page(self):
+            calls.append(("create_chat_page", None))
+            return "new-page"
+
+    monkeypatch.setattr(conversation_focus, "load_provider_config", lambda _: {"providers": {"gpt-auto": {}}})
+    monkeypatch.setattr(conversation_focus, "get_runtime", lambda *_: FakeRuntime())
+    monkeypatch.setattr(conversation_focus.ChatSnapshot, "from_bridge", lambda value: value)
+
+    result = asyncio.run(
+        conversation_focus.capture_latest_response(
+            tmp_path,
+            provider_id="gpt-auto",
+            locator=_locator("https://chatgpt.com/g/g-p-x/c/s1", "s1"),
+        )
+    )
+
+    assert result["outcome"] == "captured"
+    assert result["binding"]["target-id"] == "target-new"
+    assert not any(method in {"type", "submit", "press"} for method, _ in calls if isinstance(method, str))
+
+
+def test_capture_missing_tab_without_durable_url_never_opens_or_submits(monkeypatch, tmp_path):
+    calls = []
+
+    class FakeBridge:
+        async def call(self, method, params=None):
+            calls.append((method, params))
+            if method == "list_pages":
+                return []
+            return {"ok": True}
+
+    class FakeRuntime:
+        bridge = FakeBridge()
+
+        async def connect_existing(self):
+            return True
+
+        def adopt_existing_dedicated_window(self, pages):
+            return None
+
+        def page_belongs_to_dedicated_window(self, page):
+            return True
+
+        async def create_chat_page(self):
+            raise AssertionError("no durable conversation URL must not create a tab")
+
+    monkeypatch.setattr(conversation_focus, "load_provider_config", lambda _: {"providers": {"gpt-auto": {}}})
+    monkeypatch.setattr(conversation_focus, "get_runtime", lambda *_: FakeRuntime())
+
+    result = asyncio.run(
+        conversation_focus.capture_latest_response(
+            tmp_path,
+            provider_id="gpt-auto",
+            locator=ConversationFocusLocator(project_url="https://chatgpt.com/g/g-p-x"),
+        )
+    )
+
+    assert result == {"outcome": "unavailable", "reason": "conversation-tab-not-found"}
+    assert calls == [("list_pages", None)]

@@ -14,13 +14,13 @@ from types import SimpleNamespace
 import pytest
 
 from audiagentic.components.agents.agents_paths import gateway_request_path
+from audiagentic.components.agents.configuration.management import (
+    create_execution_profile,
+)
 from audiagentic.components.agents.contracts.execution_context import (
     compute_prompt_digest,
 )
 from audiagentic.components.agents.gateway import api as gateway
-from audiagentic.components.agents.configuration.management import (
-    create_execution_profile,
-)
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.features.base import ImplementationState
 from audiagentic.foundation.features.state import set_implementation_state

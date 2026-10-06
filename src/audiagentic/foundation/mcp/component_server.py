@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import functools
+import inspect
 import json
 import logging
 import queue
@@ -28,15 +29,16 @@ from audiagentic.foundation.logging.redaction import (
     redact_error_envelope,
     redact_text,
 )
-
 try:
     from mcp.server.fastmcp import FastMCP
     from mcp.server.fastmcp.exceptions import ToolError
     from mcp.server.fastmcp.server import Context
+    from mcp.types import CallToolResult
 except ImportError:  # pragma: no cover
     FastMCP = Any  # type: ignore[misc, assignment]
     Context = Any  # type: ignore[misc, assignment]
     ToolError = RuntimeError  # type: ignore[misc, assignment]
+    CallToolResult = Any  # type: ignore[misc, assignment]
 
 T = TypeVar("T")
 logger = logging.getLogger(__name__)
@@ -251,9 +253,16 @@ class _AutoDescFastMCP(FastMCP):  # type: ignore[misc,valid-type]
     Falls back to *none* (not the docstring) when no YAML description exists.
     """
 
-    def __init__(self, module_name: str, *args: Any, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        module_name: str,
+        *args: Any,
+        structured_output_only: bool = False,
+        **kwargs: Any,
+    ) -> None:
         super().__init__(*args, **kwargs)
         self._module_name = module_name
+        self._structured_output_only = structured_output_only
         # Cache resolved declaration to avoid repeated registry lookups.
         self._decl: Any = None
 
@@ -304,15 +313,59 @@ class _AutoDescFastMCP(FastMCP):  # type: ignore[misc,valid-type]
 
         return super().tool(*args, **kwargs)
 
+    def add_tool(self, fn: Any, *args: Any, **kwargs: Any) -> None:
+        """Register an MCP tool with one canonical structured result channel.
 
-def mcp_server(module_name: str, instructions: str = "") -> FastMCP:
+        FastMCP's compatibility serializer emits both a text content block and
+        structuredContent for typed return annotations.  Component servers that
+        opt in here already expose machine-readable schemas, so retaining the
+        compatibility text is redundant and needlessly increases client work.
+        """
+        if self._structured_output_only:
+            fn = _structured_output_only_wrapper(fn)
+        super().add_tool(fn, *args, **kwargs)
+
+
+def _structured_output_only_wrapper(fn: Any) -> Any:
+    """Make a typed FastMCP tool return structuredContent without text shadow data."""
+    if inspect.iscoroutinefunction(fn):
+        @functools.wraps(fn)
+        async def _async(*args: Any, **kwargs: Any) -> Any:
+            return _as_structured_only(await fn(*args, **kwargs))
+
+        return _async
+
+    @functools.wraps(fn)
+    def _sync(*args: Any, **kwargs: Any) -> Any:
+        return _as_structured_only(fn(*args, **kwargs))
+
+    return _sync
+
+
+def _as_structured_only(value: Any) -> Any:
+    if isinstance(value, CallToolResult):
+        return value
+    return CallToolResult(content=[], structuredContent={"result": value})
+
+
+def mcp_server(
+    module_name: str,
+    instructions: str = "",
+    *,
+    structured_output_only: bool = False,
+) -> FastMCP:
     """Create a FastMCP instance whose name is resolved from component config.
 
     Tools registered via ``@mcp.tool()`` (no explicit description) automatically
     pick up their description from the server's ``tool-descriptions`` YAML block.
     """
     name = _resolve_mcp_server_name(module_name)
-    return _AutoDescFastMCP(module_name, name, instructions=instructions)  # type: ignore[return-value]
+    return _AutoDescFastMCP(
+        module_name,
+        name,
+        instructions=instructions,
+        structured_output_only=structured_output_only,
+    )  # type: ignore[return-value]
 
 
 def run_mcp_server(server: FastMCP, bootstrap_name: str) -> None:

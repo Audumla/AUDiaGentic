@@ -17,6 +17,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from collections.abc import Mapping
 from typing import Any, TextIO
 
 from audiagentic.foundation.paths.home import global_log_dir
@@ -173,6 +174,49 @@ class GatewayConsoleTrace:
             sequence=sequence,
             elapsed=f"{now - started:.1f}s",
         )
+
+    def response_decision(
+        self,
+        *,
+        request_id: str,
+        session_id: str,
+        signature: str,
+        details: str,
+        started: float,
+    ) -> None:
+        """Persist one whitelisted, provider-neutral response gate snapshot."""
+        self._write(
+            "DECISION",
+            request=request_id,
+            session=session_id,
+            signature=signature,
+            details=details,
+            elapsed=f"{self.clock() - started:.1f}s",
+        )
+
+    def response_decision_observed(
+        self,
+        *,
+        request_id: str,
+        session_id: str,
+        attributes: Mapping[str, Any],
+        started: float,
+    ) -> bool:
+        """Render only the explicitly whitelisted response-decision event."""
+        if attributes.get("timing-event") != "response-decision":
+            return False
+        signature = attributes.get("diagnostic-signature")
+        details = attributes.get("diagnostic-details")
+        if not isinstance(signature, str) or not isinstance(details, str):
+            return False
+        self.response_decision(
+            request_id=request_id,
+            session_id=session_id,
+            signature=signature,
+            details=details,
+            started=started,
+        )
+        return True
 
     def finished(
         self,

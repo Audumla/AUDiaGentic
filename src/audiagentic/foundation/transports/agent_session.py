@@ -198,7 +198,13 @@ _ALLOWED_ATTRIBUTE_KEYS: Mapping[TransportObservationKind, frozenset[str]] = {
             "model_activity",  # e.g. "generating", "thinking" — proven only
         }
     ),
-    TransportObservationKind.TIMING: frozenset({"timing-event"}),
+    TransportObservationKind.TIMING: frozenset(
+        {
+            "timing-event",
+            "diagnostic-signature",
+            "diagnostic-details",
+        }
+    ),
     TransportObservationKind.TERMINAL: frozenset({"stop_reason", "error_code"}),
     TransportObservationKind.TRANSPORT_ERROR: frozenset({"error_code", "reason"}),
     TransportObservationKind.TRANSPORT_CLOSED: frozenset({}),

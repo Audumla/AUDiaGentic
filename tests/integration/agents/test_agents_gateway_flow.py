@@ -10,10 +10,10 @@ from pathlib import Path
 
 import pytest
 
-from audiagentic.components.agents.gateway import api as gateway
 from audiagentic.components.agents.configuration.management import (
     create_execution_profile,
 )
+from audiagentic.components.agents.gateway import api as gateway
 from audiagentic.components.providers.providers_api import ProviderExecutionResult
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.event import get_bus

@@ -1,8 +1,9 @@
 """Resolve a ChatGPT URL to its existing gateway queue before admission."""
 from pathlib import Path
 
-from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.components.providers.adapters.gpt_auto.urls import parse_provider_session_id
+from audiagentic.foundation.contracts.errors import AudiaGenticError
+
 from . import sessions_store
 
 
