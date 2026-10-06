@@ -19,9 +19,10 @@ class GatewayApplication(Protocol):
     """Operations owned by the gateway control plane."""
 
     def submit_execution_request(self, project_root: Path, **kwargs: Any) -> dict[str, Any]: ...
-    def get_execution_request(self, project_root: Path, request_id: str) -> dict[str, Any]: ...
+    def get_execution_request(self, project_root: Path, request_id: str, *, include_response: bool = False) -> dict[str, Any]: ...
     def get_execution_diagnostics(self, project_root: Path, request_id: str, *, limit: int = 25) -> dict[str, Any]: ...
     def recover_execution_request(self, project_root: Path, request_id: str, **kwargs: Any) -> dict[str, Any]: ...
+    def get_execution_response_payload(self, project_root: Path, request_id: str) -> dict[str, Any]: ...
     def get_execution_response(self, project_root: Path, request_id: str) -> str: ...
     def get_execution_failure_response(self, project_root: Path, request_id: str) -> str: ...
     def focus_execution_chat(self, project_root: Path, request_id: str) -> dict[str, Any]: ...
@@ -86,14 +87,17 @@ class InProcessGatewayApplication:
             **kwargs,
         )
 
-    def get_execution_request(self, project_root: Path, request_id: str) -> dict[str, Any]:
-        return self._api().get_execution_request(project_root, request_id)
+    def get_execution_request(self, project_root: Path, request_id: str, *, include_response: bool = False) -> dict[str, Any]:
+        return self._api().get_execution_request(project_root, request_id, include_response=include_response)
 
     def get_execution_diagnostics(self, project_root: Path, request_id: str, *, limit: int = 25) -> dict[str, Any]:
         return self._api().get_execution_diagnostics(project_root, request_id, limit=limit)
 
     def recover_execution_request(self, project_root: Path, request_id: str, **kwargs: Any) -> dict[str, Any]:
         return self._api().recover_execution_request(project_root, request_id, **kwargs)
+
+    def get_execution_response_payload(self, project_root: Path, request_id: str) -> dict[str, Any]:
+        return self._api().get_execution_response_payload(project_root, request_id)
 
     def get_execution_response(self, project_root: Path, request_id: str) -> str:
         return self._api().get_execution_response(project_root, request_id)

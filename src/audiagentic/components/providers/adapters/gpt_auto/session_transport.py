@@ -100,7 +100,7 @@ class GptAutoSessionTransport:
         # request-scoped provider observation before entering that path so the
         # durable gateway activity lease does not remain at sequence zero while
         # the provider adapter is actively inspecting the browser.
-        await self._emit_activity(sink, request, "inspected")
+        await self._emit_activity(sink, request, "preflight-inspected")
         # Admission can fail before a GptAutoTurn exists (for example an
         # unresolved prior send).  Route that failure through the same
         # provider recovery disposition as failures raised by turn.run();
@@ -112,7 +112,7 @@ class GptAutoSessionTransport:
             # A successful readiness pass is a second meaningful provider
             # observation even when the first post-submit DOM snapshot has not
             # materialized a new user/assistant node yet.
-            await self._emit_activity(sink, request, "evaluated")
+            await self._emit_activity(sink, request, "preflight-evaluated")
         except Exception as exc:
             metadata_fn = getattr(self.chat, "unresolved_metadata", None)
             metadata = metadata_fn() if callable(metadata_fn) else {}
@@ -215,6 +215,8 @@ class GptAutoSessionTransport:
             "provider-busy",
             "response-observing",
             "recovery-observing",
+            "preflight-inspected",
+            "preflight-evaluated",
         }:
             mark_activity()
         observation = TransportObservation(

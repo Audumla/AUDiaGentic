@@ -53,6 +53,7 @@ class ChatMessageRef:
     message_id: str | None
     text: str | None
     sequence: int
+    markdown: str | None = None
     # Provider-private correlation representation.  ChatGPT can render
     # structural Markdown (for example a thematic break) as an element that
     # contributes no innerText.  Keep that reconstruction separate from the
@@ -189,6 +190,7 @@ class ChatSnapshot:
                     role=str(item.get("role") or ""),
                     message_id=_text(item.get("messageId")),
                     text=_text(item.get("text")),
+                    markdown=_text(item.get("markdown")),
                     sequence=int(item.get("sequence") or 0),
                     correlation_text=_text(item.get("correlationText")),
                     structural_hr_count=(

@@ -84,6 +84,9 @@ _NON_WORK_ACTIVITY_LABELS = frozenset({
     "worker-heartbeat",
     "process-heartbeat",
     "provider-turn-pending",
+    # Readiness inspection is not proof that the request was submitted.
+    "preflight-inspected",
+    "preflight-evaluated",
     # Response polling keeps the owner lease alive, but is not proof that the
     # provider DOM or response has changed.
     "response-observing",
@@ -498,8 +501,8 @@ class SessionTurnResult:
     """Bounded result of one prompt turn.
 
     Carries only the terminal stop reason, observed correlation quality, and
-    counts — no raw events, output text, or provider-native details. Output
-    delivery is the responsibility of the observation sink (AS21).
+    counts. A bounded terminal result may also carry canonical assistant text
+    plus its media type, but never raw provider events or native payloads.
     """
 
     turn_id: str
@@ -509,6 +512,7 @@ class SessionTurnResult:
     correlation_quality: CorrelationQuality = CorrelationQuality.REQUEST_SCOPED
     error_code: str | None = None
     final_summary: str | None = None
+    final_media_type: str | None = None
     metadata: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
