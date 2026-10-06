@@ -11,6 +11,7 @@ from typing import Any
 from audiagentic.components.agents.gateway import store as store
 from audiagentic.components.agents.gateway.queue import work_index as work_index
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.foundation.time import now_iso_z
 
 logger = logging.getLogger(__name__)
 
@@ -83,15 +84,61 @@ def _takeover_stale_request(
         record["state"] == "running"
         and record.get("provider-transport-kind") != "provider-session"
     ):
-        # An isolated worker has no attach/resume seam.  Re-running its frozen
-        # prompt after a gateway crash could duplicate an already-started
-        # external side effect, so leave the request running and its original
-        # ownership marker intact for explicit evidence-based recovery.
+        # An isolated worker has no attach/resume seam. Once its owning
+        # gateway generation is gone, keeping the durable request in
+        # running would make clients believe a live worker still exists.
+        # Take ownership only long enough to record an explicit interruption;
+        # preserve ambiguous side-effect evidence and never replay the
+        # frozen prompt automatically.
+        worker_id = f"recovery_{uuid.uuid4().hex[:16]}"
+        updated = store.takeover_nonterminal_owner(
+            project_root,
+            request_id,
+            expected_owner_epoch=record_epoch,
+            new_owner_epoch=live_owner_epoch,
+            new_worker_id=worker_id,
+            handoff_id=(record.get("recovery") or {}).get("handoff-id")
+            if isinstance(record.get("recovery"), dict)
+            else None,
+        )
+        interrupted = store.transition_owned_terminal(
+            project_root,
+            request_id,
+            "interrupted",
+            updates={
+                "error": {
+                    "code": "CON-AGW-084",
+                    "kind": "agents",
+                    "message": "worker-backed request interrupted because its gateway owner was lost",
+                    "details": {
+                        "recovery-phase": "restart-unreattachable-worker",
+                        "side-effect-state": "may-have-started",
+                        "provider-transport-kind": record.get("provider-transport-kind") or "worker",
+                        "submission-proven": (
+                            (record.get("provider-metadata") or {}).get("submission-proven") is True
+                        ),
+                    },
+                },
+                "recovery": {
+                    "reason": "owner-loss",
+                    "outcome": "manual-review-required",
+                    "phase": "restart-unreattachable-worker",
+                    "side-effect-state": "may-have-started",
+                },
+                "finished-at": now_iso_z(),
+            },
+            owner_epoch=updated.get("dispatch-owner-epoch") or live_owner_epoch,
+            worker_id=str(updated.get("worker-id") or worker_id),
+            attempt_epoch=int(updated.get("attempt-epoch") or 0),
+        )
+        from audiagentic.components.agents.gateway.queue.queue import _publish_lifecycle_event
+
+        _publish_lifecycle_event("interrupted", interrupted)
         logger.warning(
-            "deferring stale worker request recovery because execution cannot be reattached",
+            "interrupted stale worker request because execution cannot be reattached",
             extra={"request-id": request_id},
         )
-        return "deferred", (project_root, request_id)
+        return "interrupted", (project_root, request_id)
     worker_id = f"recovery_{uuid.uuid4().hex[:16]}" if record["state"] == "running" else None
     try:
         updated = store.takeover_nonterminal_owner(
@@ -153,6 +200,7 @@ def recovery_runner(record: dict[str, Any], *, project_root: Path | None = None)
     if not isinstance(provider_id, str) or not provider_id:
         raise ValueError("recovered request has no resolved provider")
     session_metadata: dict[str, Any] | None = None
+    session_checkpoint_available = False
     if project_root is not None and isinstance(record.get("session-id"), str):
         # GPT checkpoint metadata is owned by the durable session record. The
         # request projection may not have received the last provider update
@@ -167,6 +215,7 @@ def recovery_runner(record: dict[str, Any], *, project_root: Path | None = None)
         except Exception:  # noqa: BLE001 - recovery will fail closed later
             session_record = None
         if session_record is not None:
+            session_checkpoint_available = True
             # The session record owns the pre-Send side-effect fence.  The
             # request-level provider metadata is only a best-effort relay and
             # may be stale or absent when the gateway generation ends.
@@ -218,7 +267,7 @@ def recovery_runner(record: dict[str, Any], *, project_root: Path | None = None)
         resume_existing=(
             bool(record.get("recovery-required"))
             and provider_session
-            and isinstance(session_metadata, dict)
+            and session_checkpoint_available
         ),
     )
 
@@ -289,6 +338,8 @@ def recover_gateway_requests(service_root: Path, *, live_owner_epoch: str) -> Re
                     recovered_queued.append(item)
                 elif state == "running":
                     recovered_running.append(item)
+                elif state == "interrupted":
+                    interrupted += 1
                 else:
                     deferred.append(item)
 
@@ -346,6 +397,8 @@ def recover_gateway_requests(service_root: Path, *, live_owner_epoch: str) -> Re
                 recovered_queued.append(item)
             elif state == "running":
                 recovered_running.append(item)
+            elif state == "interrupted":
+                interrupted += 1
             else:
                 deferred.append(item)
 
