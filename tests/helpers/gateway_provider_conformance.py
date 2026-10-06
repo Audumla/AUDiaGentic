@@ -5,11 +5,11 @@ import threading
 from pathlib import Path
 from typing import Any
 
-from audiagentic.components.agents.gateway import api as gateway
-from audiagentic.components.agents.gateway.session import sessions as sessions_module
 from audiagentic.components.agents.configuration.management import (
     create_execution_profile,
 )
+from audiagentic.components.agents.gateway import api as gateway
+from audiagentic.components.agents.gateway.session import sessions as sessions_module
 from audiagentic.components.providers.contracts.provider_execution import (
     ProviderAcpLaunchResult,
     ProviderExecutionResult,

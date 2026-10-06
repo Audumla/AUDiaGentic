@@ -28,6 +28,19 @@ def test_session_request_row_keeps_provider_identity_for_manual_capture() -> Non
     assert "focus-tab-available" not in row
 
 
+def test_request_row_uses_observed_heartbeat_sequence_for_dashboard() -> None:
+    row = _request_row(
+        {
+            "request-id": "req_progress",
+            "state": "running",
+            "activity-sequence": 5,
+            "activity": {
+                "provider": {"source-sequence": 49},
+                "owner": {"source-sequence": 51},
+            },
+        }
+    )
+    assert row["activity-sequence"] == 51
 def test_closed_session_retains_safe_conversation_focus() -> None:
     record = {
         "session-id": "ses_closed",
@@ -149,6 +162,7 @@ def test_dashboard_actions_activity_and_card_icons(tmp_path):
                     request['updated-at'] = '2020-01-01T00:00:00Z'
                     request['error'] = {'code': 'EXT-TEST-001', 'message': 'Full diagnostic ' * 40}
             page.evaluate('s=>draw(s)', old_snapshot)
+            assert page.locator('.work-section-closed .complete-provider').count() == 4
             assert page.locator('.work-section-closed .section-toggle').first.get_attribute('aria-expanded') == 'false'
             page.locator('.work-section-closed .section-toggle').first.click()
             assert not page.locator('.session').first.evaluate('e=>e.open')

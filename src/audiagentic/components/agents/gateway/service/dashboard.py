@@ -231,6 +231,22 @@ def _request_row(
         or ""
     )
     row = {key: status.get(key) for key in visible if status.get(key) is not None}
+    # Keep display-only observed progress separate from the provider/watchdog
+    # sequence: owner heartbeats must not renew provider liveness, but the
+    # dashboard should still show that the long-running turn is moving.
+    activity = status.get("activity")
+    observed_sequences = []
+    if isinstance(activity, dict):
+        for bucket_name in ("provider", "owner"):
+            bucket = activity.get(bucket_name)
+            source_sequence = bucket.get("source-sequence") if isinstance(bucket, dict) else None
+            if isinstance(source_sequence, int) and not isinstance(source_sequence, bool) and source_sequence >= 0:
+                observed_sequences.append(source_sequence)
+    aggregate_sequence = status.get("activity-sequence")
+    if isinstance(aggregate_sequence, int) and not isinstance(aggregate_sequence, bool) and aggregate_sequence >= 0:
+        observed_sequences.append(aggregate_sequence)
+    if observed_sequences:
+        row["activity-sequence"] = max(observed_sequences)
     if provider_id:
         # Session-backed request rows omit execution fields, but the provider
         # identity is still required to expose GPT's manual response-capture
@@ -422,15 +438,15 @@ input,textarea,[contenteditable=true] { caret-color:auto }
 .session-body .request-row::after { content:"│\\A│\\A│\\A│\\A│\\A│\\A│\\A│\\A│\\A│\\A│\\A│\\A│\\A│\\A│\\A│"; position:absolute; left:-10px; top:0; bottom:-4px; width:1ch; overflow:hidden; white-space:pre; font:16px/8px monospace; color:#47627c; pointer-events:none }
 .session-body .request-row:last-child::before { content:"└─" }
 .session-body .request-row:last-child::after { bottom:50% }
-.session-actions { display:grid; grid-template-columns:minmax(74px,auto) auto auto; align-items:center; gap:12px }
+.session-actions { display:grid; grid-template-columns:minmax(74px,auto) minmax(0,1fr) auto auto; align-items:center; gap:12px; white-space:nowrap }
 .session-actions > .badge { justify-self:center; margin:0 }
 .session-identity-with-icon { display:flex; align-items:center; gap:10px }
 .session-identity-with-icon > .session-text { min-width:0 }
 .layout-rows .session .project-avatar { width:30px; height:30px; flex-basis:30px }
 .layout-rows .session-head { grid-template-columns:minmax(0,1fr) 340px }
-.layout-rows .session-actions { width:340px; grid-template-columns:86px minmax(0,1fr) 24px; justify-content:initial }
+.layout-rows .session-actions { width:340px; grid-template-columns:86px minmax(0,1fr) 24px 24px; justify-content:initial }
 .layout-rows .session-actions > .muted { overflow-wrap:anywhere }
-@media (max-width:700px) { .layout-rows .session-head { grid-template-columns:1fr } .layout-rows .session-actions { width:100%; grid-template-columns:86px minmax(0,1fr) 24px } }
+@media (max-width:700px) { .layout-rows .session-head { grid-template-columns:1fr } .layout-rows .session-actions { width:100%; grid-template-columns:86px minmax(0,1fr) 24px 24px } }
 .badge,.pill,.activity-badge,.section-count,.flag { display:inline-flex; align-items:center; justify-content:center; min-height:24px; padding:2px 8px; border:1px solid #22384d; border-radius:999px; font-size:11px; font-weight:500; line-height:18px; background:#142a40; white-space:nowrap; vertical-align:middle }
 .badge.state-completed,.pill.state-completed { background:#0c302f; border-color:#153c38 }
 .badge.state-running,.badge.state-active,.badge.state-queued,.badge.state-dispatching,.pill.state-running,.pill.state-active { background:#303021; border-color:#3b3b2a }
@@ -581,7 +597,7 @@ document.addEventListener('click',event=>{
  const cancelIcon='<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8 8 8 8m0-8-8 8"/></svg>';
  const completeIcon='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>';
  function cancelControl(r) { return ACTIVE_REQUEST_STATES.has(r.state)?` <button type="button" class="action-button icon-button cancel-request" data-request-id="${esc(r['request-id'])}" aria-label="Cancel request" title="Cancel request">${cancelIcon}</button>`:''; }
- function providerCaptureEligible(r) { const provider=String(r['resolved-provider-id']||r['provider-id']||''); return (r.state==='running'||r.state==='interrupted') && provider.startsWith('gpt-auto') && !!r['session-id']; }
+ const PROVIDER_CAPTURE_STATES=new Set(['running','interrupted','failed','cancelled','timed-out','expired','abandoned']);\n function providerCaptureEligible(r) { const provider=String(r['resolved-provider-id']||r['provider-id']||''); return PROVIDER_CAPTURE_STATES.has(r.state) && provider.startsWith('gpt-auto') && !!r['session-id']; }
  function completeControl(r) { return providerCaptureEligible(r)?` <button type="button" class="action-button icon-button complete-provider" data-request-id="${esc(r['request-id'])}" aria-label="Complete from current GPT response" title="Capture the current GPT response and mark completed">${completeIcon}</button>`:''; }
 async function cancelRequest(button) {
   if(!window.confirm('Cancel this request? Its history will be retained.'))return;

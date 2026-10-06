@@ -177,11 +177,13 @@ settings:
         text-contains-any: ['error', 'failed', 'went wrong', 'try again', 'retry', 'rate limit', 'too many requests']
       provider-interruption:
         # Provider interruption is a recovery trigger, not a generic
-        # terminal error. Match the exact user-visible interruption text.
+        # terminal error. Current project chats render this text in ordinary
+        # document content rather than role="alert"; keep the alert match for
+        # older renderers and inspect body text for the current renderer.
         scope: document
-        selectors: ['[role="alert"]']
+        selectors: ['[role="alert"]', 'body']
         visible: true
-        text-equals-any: ['Connection interrupted. Waiting for the complete answer']
+        text-contains-any: ['Connection interrupted. Waiting for the complete answer']
       delivery-timeout-retry:
         # Conversation-scoped delivery timeout; never a generic error click.
         scope: document

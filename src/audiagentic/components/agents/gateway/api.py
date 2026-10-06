@@ -1008,6 +1008,42 @@ def recover_execution_request(
         # handled above as one atomic cancellation+diagnostic operation.
         expected_revision=record.get("revision"),
     )
+    if action == "reconcile":
+        try:
+            completed = complete_execution_from_provider(project_root, request_id)
+        except AudiaGenticError as exc:
+            if exc.code not in {
+                "CON-AGW-152",
+                "CON-AGW-153",
+                "CON-AGW-154",
+                "CON-AGW-155",
+                "CON-AGW-156",
+                "CON-AGW-157",
+                "RES-AGW-112",
+                "VAL-AGW-112",
+            }:
+                raise
+            return {
+                "request-id": request_id,
+                "action": action,
+                "disposition": "accepted",
+                "state": updated.get("state"),
+                "revision": updated.get("revision"),
+                "diagnostics": updated.get("diagnostics"),
+                "reconciliation": {
+                    "outcome": "unresolved",
+                    "reason": exc.code,
+                },
+            }
+        return {
+            "request-id": request_id,
+            "action": action,
+            "disposition": "accepted",
+            "state": completed.get("state"),
+            "revision": completed.get("revision"),
+            "response-artifact": completed.get("response-artifact"),
+            "reconciliation": {"outcome": "completed"},
+        }
     return {
         "request-id": request_id,
         "action": action,
@@ -1223,11 +1259,21 @@ def complete_execution_from_provider(project_root: Path, request_id: str) -> dic
     if prompt_is_real:
         if latest_user_id != prompt_id:
             raise AudiaGenticError(code="CON-AGW-156", kind="agents", message="provider prompt identity does not match request", details={"request-id": request_id})
-    if not prompt_is_real:
+    if not prompt_is_real and metadata.get("unresolved-turn-pending") is not True:
         from audiagentic.components.agents.agents_paths import gateway_admitted_prompt_path
         from audiagentic.foundation.io import read_bytes_with_retry
         import hashlib
-        prompt = read_bytes_with_retry(gateway_admitted_prompt_path(project_root, request_id)).decode("utf-8")
+        try:
+            prompt = read_bytes_with_retry(
+                gateway_admitted_prompt_path(project_root, request_id)
+            ).decode("utf-8")
+        except OSError as exc:
+            raise AudiaGenticError(
+                code="RES-AGW-112",
+                kind="agents",
+                message="admitted prompt snapshot is unavailable",
+                details={"request-id": request_id},
+            ) from exc
         prompt_digest = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
         # The admitted file contains the materialized agent prompt, whose
         # digest is persisted as prompt-template-digest. prompt-digest is the
@@ -1248,6 +1294,19 @@ def complete_execution_from_provider(project_root: Path, request_id: str) -> dic
             raise AudiaGenticError(code="CON-AGW-156", kind="agents", message="provider response ordering does not follow the request prompt", details={"request-id": request_id})
         if not isinstance(latest_user, str) or latest_user.strip() != prompt.strip() or (latest_user_ref is not None and (latest_user_ref.correlation_text or latest_user_ref.text or "").strip() != prompt.strip()):
             raise AudiaGenticError(code="CON-AGW-156", kind="agents", message="provider prompt text does not match request", details={"request-id": request_id})
+    recovered_binding = confirmed.get("binding")
+    if isinstance(recovered_binding, dict):
+        from audiagentic.components.agents.gateway.session import sessions_store as session_store
+
+        session_store.update_provider_metadata(
+            project_root,
+            str(session_id),
+            {
+                str(key): value
+                for key, value in recovered_binding.items()
+                if value is not None
+            },
+        )
     updated = store.transition_operator_terminal(
         project_root, request_id, expected_revision=int(record.get("revision", 0)),
         updates={"__final-response-text": text, "error": None, "completion": {"source": "operator-provider-capture", "provider-message-id": latest_assistant_id}},

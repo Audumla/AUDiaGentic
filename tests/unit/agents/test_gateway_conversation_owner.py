@@ -1,6 +1,10 @@
 from unittest.mock import patch
+
 import pytest
-from audiagentic.components.agents.gateway.session.conversation_owner import resolve_conversation_owner
+
+from audiagentic.components.agents.gateway.session.conversation_owner import (
+    resolve_conversation_owner,
+)
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 URL = "https://chatgpt.com/g/g-p-project-slug/c/conversation"

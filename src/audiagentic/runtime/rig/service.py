@@ -11,6 +11,7 @@ import threading
 import uuid
 from dataclasses import dataclass, field
 
+from audiagentic.foundation.config.local_runtime import local_rig_host
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.system.managed_process import (
     DetachedLaunch,
@@ -25,7 +26,6 @@ from audiagentic.foundation.system.managed_service_lifecycle import (
     ManagedServiceLifecycle,
     ServiceHandshake,
 )
-from audiagentic.foundation.config.local_runtime import local_rig_host
 from audiagentic.runtime.rig.embedded.launch import prepare_launch
 from audiagentic.runtime.rig.embedded.process import build_command
 from audiagentic.runtime.rig.http import probe_models_endpoint

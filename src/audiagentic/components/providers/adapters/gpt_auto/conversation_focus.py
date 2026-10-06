@@ -180,10 +180,11 @@ async def capture_latest_response(
     provider_id: str,
     locator: ConversationFocusLocator,
 ) -> dict[str, object]:
-    """Read the current rendered response from one exact retained GPT tab.
+    """Read a proven terminal response from one exact GPT conversation.
 
-    This is deliberately read-only: it never opens a tab, navigates, types, or
-    submits.  The caller still owns request correlation and terminalization.
+    Missing retained tabs may be reopened at the durable conversation URL.
+    This remains observation-only: it never types or submits a prompt, and
+    the caller still owns request correlation and terminalization.
     """
     document = load_provider_config(project_root)
     provider_cfg = (document.get("providers") or {}).get(provider_id)
@@ -198,22 +199,83 @@ async def capture_latest_response(
     runtime.adopt_existing_dedicated_window(pages)
     scoped = [p for p in pages if runtime.page_belongs_to_dedicated_window(p)]
     selected, result = select_focus_page(scoped, locator)
-    if selected is None and result is not None and result.outcome is ConversationFocusOutcome.NOT_FOUND and scoped != pages:
+    if (
+        selected is None
+        and result is not None
+        and result.outcome is ConversationFocusOutcome.NOT_FOUND
+        and scoped != pages
+    ):
         selected, result = select_focus_page(pages, locator)
+    if (
+        selected is None
+        and result is not None
+        and result.outcome is ConversationFocusOutcome.NOT_FOUND
+    ):
+        chat_url = canonical_chat_url(locator.chat_url or "")
+        if chat_url is not None:
+            try:
+                handle = await runtime.create_chat_page()
+                await runtime.bridge.call(
+                    "navigate", {"pageHandle": handle, "url": chat_url}
+                )
+                selected = {"pageHandle": handle, "url": chat_url, "type": "page"}
+                result = None
+            except Exception:
+                return {
+                    "outcome": "unavailable",
+                    "reason": "conversation-tab-open-failed",
+                }
     if selected is None:
-        return {"outcome": "unavailable", "reason": (result.reason if result else "conversation-tab-not-found")}
+        return {
+            "outcome": "unavailable",
+            "reason": result.reason if result else "conversation-tab-not-found",
+        }
     handle = str(selected.get("pageHandle") or "")
     if not handle:
         return {"outcome": "unavailable", "reason": "target-handle-missing"}
+    await runtime.bridge.call("activate_target", {"pageHandle": handle})
+    await runtime.bridge.call("keep_page_active", {"pageHandle": handle})
     page = await runtime.gpt_browser.page_by_handle(handle)
     await runtime.gpt_browser.materialize_latest_assistant_turn(page)
     snapshot = ChatSnapshot.from_bridge(
-        await runtime.gpt_browser.snapshot(page, signals=runtime.config.workflow.bridge_signals())
+        await runtime.gpt_browser.snapshot(
+            page,
+            signals=runtime.config.workflow.bridge_signals(),
+        )
     )
+    expected_chat_url = canonical_chat_url(locator.chat_url or "")
+    if expected_chat_url and canonical_chat_url(snapshot.url) != expected_chat_url:
+        return {
+            "outcome": "unavailable",
+            "reason": "conversation-identity-mismatch",
+        }
+    failure_signals = {
+        "auth-required",
+        "conversation-load-failed",
+        "error-page",
+    }
+    if snapshot.error_present or snapshot.dom_signals.intersection(failure_signals):
+        return {"outcome": "unavailable", "reason": "provider-error-page"}
+    if (
+        snapshot.generating
+        or not snapshot.latest_assistant_text
+        or not snapshot.latest_assistant_text.strip()
+        or not snapshot.latest_assistant_id
+        or snapshot.terminal_witness_assistant_id != snapshot.latest_assistant_id
+        or "completion-control" not in snapshot.dom_signals
+    ):
+        return {
+            "outcome": "unavailable",
+            "reason": "terminal-response-not-proven",
+        }
     return {
         "outcome": "captured",
         "snapshot": snapshot,
+        "binding": {
+            "chat-url": canonical_chat_url(snapshot.url),
+            "provider-session-id": parse_provider_session_id(snapshot.url),
+            "target-id": str(getattr(page, "target_id", "") or "") or None,
+        },
     }
-
 
 __all__ = ["capture_latest_response", "focus_existing_conversation", "select_focus_page"]

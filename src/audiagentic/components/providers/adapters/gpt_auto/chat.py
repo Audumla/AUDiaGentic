@@ -2323,7 +2323,16 @@ class PersistentChat:
         if handle and not close_on_session_close:
             retain = getattr(self.runtime, "retain_detached_page", None)
             if callable(retain):
-                retain(self, handle, self._last_validated_activity_monotonic)
+                try:
+                    retain(
+                        self,
+                        handle,
+                        self._last_validated_activity_monotonic,
+                        protected=(self.active_turn_id is not None or self.unresolved_turn_pending),
+                    )
+                except TypeError:
+                    # Preserve compatibility with lightweight runtime doubles.
+                    retain(self, handle, self._last_validated_activity_monotonic)
         self.runtime.release_page(self, handle)
         self._move(ChatState.CLOSED)
         self.runtime.unregister_chat(self)

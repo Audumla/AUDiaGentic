@@ -319,9 +319,10 @@ mcp-servers:
         plus active work. Long-running requests remain non-terminal while
         providers work; watchdog diagnostics are observations, not completion.
       agent_task_session_list: >
-        List persisted gateway sessions in stable lifecycle/ID order. Each entry carries a
-        "live" flag: true when this process holds the session's agent process
-        (only live sessions can accept new turns).
+        List persisted gateway sessions in stable lifecycle/ID order. Defaults to active
+        sessions; pass a lifecycle state to filter, or state=all to include every state.
+        Each entry carries a "live" flag: true when this process holds the session's
+        agent process (only live sessions can accept new turns).
       agent_task_session_close: >
         Close a live agent session (terminates its agent process). Idempotent —
         an already-closed or orphaned session returns its final record.
@@ -433,4 +434,3 @@ contributions:
         `workflow-profile`, and `component-profile` — three distinct
         "profile" concepts already exist in this project; a role is a fourth,
         separate axis and must not collapse into any of them by accident.
-
