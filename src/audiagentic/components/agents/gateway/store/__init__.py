@@ -31,6 +31,7 @@ from audiagentic.components.agents.gateway.store._admission import (
 )
 from audiagentic.components.agents.gateway.store._records import (
     _redact_error,
+    bounded_recovery_error,
     build_record,
     latest_transition_projection,
     list_records,
@@ -89,6 +90,7 @@ __all__ = [
     "record_gateway_timeline",
     # _records
     "_redact_error",
+    "bounded_recovery_error",
     "build_record",
     "latest_transition_projection",
     "list_records",

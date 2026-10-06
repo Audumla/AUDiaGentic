@@ -41,6 +41,7 @@ from ._admission import (
 from ._records import (
     _read_record_locked,
     _redact_error,
+    bounded_recovery_error,
     write_record,
 )
 from ._shared import (
@@ -667,6 +668,11 @@ def defer_owned_recovery(
             error_message = error.get("message")
         if not isinstance(error_message, str):
             error_message = str(error) if error is not None else "recovery retry deferred"
+        # Bounded root-error summary (code/type/kind/details): the message
+        # alone cannot explain why observation-only recovery keeps deferring
+        # or eventually exhausts into CON-AGW-084. The projection is flat,
+        # truncated, redacted, and never carries prompt text.
+        bounded_error = bounded_recovery_error(error)
         recovery = {
             "reason": previous.get("reason") or "gateway-restart",
             "outcome": "in-place",
@@ -674,6 +680,10 @@ def defer_owned_recovery(
             "handoff-id": previous.get("handoff-id"),
             "attempt": attempt,
             "last-error": error_message[:256],
+            "last-error-code": bounded_error.get("code") if bounded_error else None,
+            "last-error-type": bounded_error.get("type") if bounded_error else None,
+            "last-error-kind": bounded_error.get("kind") if bounded_error else None,
+            "last-error-details": bounded_error.get("details") if bounded_error else None,
             "phase": phase,
             "side-effect-state": side_effect_state,
             "next-retry-at": retry_at,

@@ -865,15 +865,22 @@ def _dispatch_session_request(
             # the exact provider binding before applying continuation policy.
             if not runtime.session_runtime_status(session_id).get("available"):
                 if (
-                    not resume_existing
-                    and session_record.get("state") in {"closed", "expired"}
+                    session_record.get("state") in {"closed", "expired"}
                     and session_record.get("close-reason") in _AUTO_RESUMABLE_CLOSE_REASONS
                 ):
-                    # A gateway resource-policy close retains the durable
-                    # provider binding. Resume creates one linked successor
-                    # with a live transport, so no active-state rehydrate is
-                    # needed here. Intentional close and failure reasons are
-                    # deliberately excluded from this automatic path.
+                    # A gateway resource-policy close (shutdown/idle-timeout)
+                    # retains the durable provider binding. Resume creates one
+                    # linked successor with a live transport, so no
+                    # active-state rehydrate is needed here. Intentional close
+                    # (client-request) and failure reasons are deliberately
+                    # excluded from this automatic path. Observation-only
+                    # restart recovery (resume_existing=True) uses the SAME
+                    # reopen gate: the successor is reattached and the
+                    # unresolved turn is observed prompt-free instead of
+                    # looping on RES-AGW-003 until the bounded CON-AGW-084
+                    # interruption. A source without a durable binding is
+                    # refused by AS49 eligibility validation (RES-AGW-111) and
+                    # falls back to RES-AGW-003 — it is never reopened.
                     session_id, session_record, record = _auto_resume_reopenable_closed_session(
                         project_root,
                         runtime,

@@ -1433,3 +1433,91 @@ def test_owned_terminal_persists_absolute_safety_ceiling_classification(tmp_path
         updates={"error": {"code": "TO-AGW-077", "details": {"watchdog-classification": "absolute-safety-ceiling"}}},
     )
     assert terminal["terminal-classification"] == "absolute-safety-ceiling"
+
+
+def test_defer_owned_recovery_retains_bounded_root_error_summary(tmp_path: Path) -> None:
+    """Recovery persistence retains the bounded root error code/type/kind and
+    a flattened, truncated, redacted slice of its details — never prompt or
+    credential text, never unbounded payloads."""
+    record = store.build_record(
+        execution_profile_id="recovery-diag",
+        prompt_body="hello",
+        session_id="ses-1",
+        provider_transport_kind="provider-session",
+    )
+    store.write_record(tmp_path, record)
+    claimed = store.claim_dispatch(
+        tmp_path, record["request-id"], owner_epoch="owner-1", expected_revision=0
+    )
+    started = store.start_owned_attempt(
+        tmp_path,
+        record["request-id"],
+        owner_epoch="owner-1",
+        worker_id="worker-1",
+        expected_revision=claimed["revision"],
+    )
+    assert started["state"] == "running"
+
+    error = AudiaGenticError(
+        code="EXT-AGW-118",
+        kind="agents",
+        message="provider reattach unavailable",
+        details={
+            "session-id": "ses-1",
+            "dom-signals": ["network-error-alert", "error-alert"],
+            "nested": {"opaque": "dropped"},
+            "note": "x" * 500,
+            "token": "Bearer abcd1234-5678",
+        },
+    )
+    deferred = store.defer_owned_recovery(
+        tmp_path,
+        record["request-id"],
+        owner_epoch="owner-1",
+        worker_id="worker-1",
+        attempt_epoch=started["attempt-epoch"],
+        error=error,
+        phase="rehydrate-retry",
+        side_effect_state="may-have-started",
+        retry_delay_seconds=1,
+    )
+    recovery = deferred["recovery"]
+    assert recovery["attempt"] == 1
+    assert recovery["last-error"] == "provider reattach unavailable"
+    assert recovery["last-error-code"] == "EXT-AGW-118"
+    assert recovery["last-error-type"] == "AudiaGenticError"
+    assert recovery["last-error-kind"] == "agents"
+    details = recovery["last-error-details"]
+    assert details["session-id"] == "ses-1"
+    assert details["dom-signals"] == ["network-error-alert", "error-alert"]
+    assert details["note"] == "x" * 256  # truncated
+    assert "nested" not in details  # nested mappings stay out
+    assert details["token"] == "[REDACTED]"  # credentials never persist
+
+    # The persisted (on-disk) record carries the same bounded summary and
+    # still satisfies the record schema.
+    reread = store.read_record(tmp_path, record["request-id"])
+    assert reread["recovery"]["last-error-code"] == "EXT-AGW-118"
+    assert reread["recovery"]["last-error-details"]["dom-signals"] == [
+        "network-error-alert",
+        "error-alert",
+    ]
+
+
+def test_bounded_recovery_error_handles_plain_and_mapping_errors() -> None:
+    """The projection is total: exceptions without a contract envelope and
+    mapping-shaped errors are bounded instead of raising."""
+    bounded = store.bounded_recovery_error(ValueError("boom"))
+    assert bounded == {"code": None, "type": "ValueError", "kind": None}
+
+    mapping_error = {
+        "code": "EXT-AGW-118",
+        "kind": "agents",
+        "message": "provider reattach unavailable",
+        "details": {"dom-signals": ["network-error-alert"], "blob": "y" * 500},
+    }
+    bounded = store.bounded_recovery_error(mapping_error)
+    assert bounded["code"] == "EXT-AGW-118"
+    assert bounded["kind"] == "agents"
+    assert bounded["details"]["blob"] == "y" * 256
+    assert store.bounded_recovery_error(None) is None

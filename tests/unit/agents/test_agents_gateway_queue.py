@@ -2483,3 +2483,54 @@ def test_project_queue_depths_redacted(tmp_path: Path):
     # Keys are lane public ids — no project paths
     assert "overview-profile" in depths
 
+
+
+def test_bounded_interruption_includes_root_recovery_error(tmp_path: Path):
+    """When bounded recovery exhausts into CON-AGW-084, the interruption
+    exposes the bounded root recovery error (code/type/kind/redacted details)
+    and the durable recovery trail retains the same summary."""
+    manager = queue_mod.GatewayQueueManager()
+    project = tmp_path / "project"
+    project.mkdir()
+    record = store.build_record(execution_profile_id="recovery-root-diag", prompt_body="x")
+    store.write_record(project, record)
+
+    def runner(_project_root: Path, _current: dict, **_kwargs) -> dict:
+        raise RecoveryDeferred(
+            AudiaGenticError(
+                code="EXT-AGW-118",
+                kind="agents",
+                message="provider reattach unavailable",
+                details={"session-id": "ses-1", "dom-signals": ["network-error-alert"]},
+            ),
+            phase="rehydrate-retry",
+            side_effect_state="may-have-started",
+        )
+
+    manager.enqueue(
+        project,
+        record,
+        {
+            "virtual-capacity": 1,
+            "provider-session-recovery-initial-delay-seconds": 0.01,
+            "provider-session-recovery-max-delay-seconds": 0.01,
+            "provider-session-recovery-max-attempts": 2,
+        },
+        runner,
+    )
+
+    terminal = manager.wait(project, record["request-id"], timeout_seconds=3)
+    assert terminal["state"] == "interrupted"
+    assert terminal["error"]["code"] == "CON-AGW-084"
+
+    root = terminal["error"]["details"]["root-recovery-error"]
+    assert root["code"] == "EXT-AGW-118"
+    assert root["type"] == "AudiaGenticError"
+    assert root["kind"] == "agents"
+    assert root["details"]["session-id"] == "ses-1"
+    assert root["details"]["dom-signals"] == ["network-error-alert"]
+
+    # The bounded root summary is also retained on the durable recovery trail.
+    assert terminal["recovery"]["last-error-code"] == "EXT-AGW-118"
+    assert terminal["recovery"]["last-error-kind"] == "agents"
+    assert terminal["recovery"]["last-error-details"]["session-id"] == "ses-1"
