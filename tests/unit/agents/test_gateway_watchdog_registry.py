@@ -506,3 +506,51 @@ def test_operations_poller_survives_operation_and_watchdog_exceptions(monkeypatc
     assert not host._operations_thread.is_alive()
     assert pump.calls >= 3
     assert watchdog_calls >= 2
+
+def test_operations_poller_starts_after_startup_scan_exception(monkeypatch) -> None:
+    """A startup scan failure must not prevent later watchdog passes."""
+    import threading
+
+    from audiagentic.components.agents.gateway.service.host import GatewayServiceHost
+
+    host = object.__new__(GatewayServiceHost)
+    host._application = object()
+    host.service_store = type("Store", (), {"root": Path(".")})()
+    host.owner_epoch = "epoch-1"
+    host._operations_stop = threading.Event()
+    host._operations_thread = None
+
+    class Pump:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def run_once(self, *, owner_epoch: str) -> None:
+            assert owner_epoch == "epoch-1"
+            self.calls += 1
+            if self.calls == 1:
+                raise RuntimeError("one malformed startup operation")
+
+    pump = Pump()
+    import audiagentic.components.agents.gateway.operations as operations
+
+    monkeypatch.setattr(operations, "ManagementOperationStore", lambda _root: object())
+    monkeypatch.setattr(operations, "GatewayOperationExecutor", lambda _app: object())
+    monkeypatch.setattr(operations, "ManagementOperationPump", lambda *_args: pump)
+
+    watchdog_calls = 0
+
+    def watchdog_pass() -> tuple[dict, ...]:
+        nonlocal watchdog_calls
+        watchdog_calls += 1
+        host._operations_stop.set()
+        return ()
+
+    monkeypatch.setattr(host, "run_watchdog_pass", watchdog_pass)
+    host._start_operations_poller(interval_seconds=0.001)
+    assert host._operations_thread is not None
+    host._operations_thread.join(timeout=1.0)
+    host._operations_stop.set()
+
+    assert not host._operations_thread.is_alive()
+    assert pump.calls >= 2
+    assert watchdog_calls >= 1
