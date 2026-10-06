@@ -1524,6 +1524,59 @@ def test_rehydrate_active_generation_reuses_provider_binding(tmp_path):
         runtime.shutdown()
 
 
+def test_rehydrate_checkpoint_preserves_pending_prompt_digest(tmp_path):
+    """A pre-ID unresolved turn keeps its normalized prompt fingerprint
+    across the gateway session checkpoint sink."""
+    transports: list[FakeAgentSessionTransport] = []
+    checkpoint_sinks: list[Any] = []
+
+    def fake_prepare(project_root, *, provider_id, surface_hint, model_id=None, **kwargs):
+        checkpoint_sinks.append(kwargs["checkpoint_sink"])
+        transport = FakeAgentSessionTransport()
+        transport.ag_session_id = kwargs["ag_session_id"]
+        transport.provider_session_ref = kwargs.get("resume_provider_ref") or "prov-durable"
+        transports.append(transport)
+        return _build_fake_prepared(transport)
+
+    runtime = SessionRuntime(provider_prepare_fn=fake_prepare)
+    try:
+        record = session_store.build_session_record(
+            session_id="ses_digest",
+            execution_profile_id="profile-1",
+            provider_id="opencode",
+            model_id="m1",
+            provider_session_ref="prov-durable",
+            surface_id="opencode-acp",
+        )
+        session_store.write_session_record(tmp_path, record)
+        session_store.update_provider_metadata(
+            tmp_path, "ses_digest", {"prompt-text-digest": "old-digest"}
+        )
+        runtime.rehydrate_session(
+            tmp_path,
+            "ses_digest",
+            execution_profile_id="profile-1",
+            provider_id="opencode",
+            model_id="m1",
+            surface_hint=None,
+        )
+
+        async def apply_checkpoint() -> None:
+            await checkpoint_sinks[0](
+                {
+                    "unresolved-turn-pending": True,
+                    "submission-proven": False,
+                    "prompt-text-digest": "new-digest",
+                }
+            )
+
+        runtime._call(apply_checkpoint(), timeout=5)
+        stored = session_store.read_session_record(tmp_path, "ses_digest")
+        assert stored["provider"]["metadata"]["prompt-text-digest"] == "new-digest"
+    finally:
+        runtime.shutdown()
+
+
 def test_rehydrated_generation_preserves_durable_max_lifetime(tmp_path):
     """A gateway restart cannot reset the session's absolute lifetime."""
     clock = _Clock()
