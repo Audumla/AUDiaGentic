@@ -13,6 +13,20 @@ from .cdp.cdp_browser import CdpBrowserController, CdpPageRef, CdpWindowBounds
 from .cdp.client import CdpError
 from .urls import parse_project_id
 
+
+def _canonical_project_id(value: object) -> str | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    return parse_project_id(f"https://chatgpt.com/g/{value.strip()}/project")
+
+
+def _selection_project_id(selection: object, expected_project_id: str | None) -> str | None:
+    if isinstance(selection, dict):
+        return _canonical_project_id(selection.get("projectId"))
+    if selection is True and expected_project_id:
+        return expected_project_id
+    return None
+
 logger = logging.getLogger(__name__)
 
 _CHATGPT_HOME_URL = "https://chatgpt.com/"
@@ -99,23 +113,42 @@ _CLICK_PROJECT_NEW_CHAT_FN = r"""(name) => {
   return true;
 }"""
 
-_PROJECT_NEW_CHAT_POINT_FN = r"""(name) => {
+_PROJECT_NEW_CHAT_POINT_FN = r"""(input) => {
   const normalize = value => String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
-  const wanted = normalize(name);
+  const canonicalProjectId = value => {
+    const raw = String(value || '').trim();
+    const match = raw.match(/^(g-p-[0-9a-f]{32})(?:-.*)?$/i);
+    return match ? match[1].toLowerCase() : raw;
+  };
+  const wanted = normalize(input.name);
+  const expectedProjectId = canonicalProjectId(input.expectedProjectId);
   const visible = element => {
+    if (!element || !element.getClientRects().length) return false;
     const rect = element.getBoundingClientRect();
     const style = getComputedStyle(element);
     return rect.width > 0 && rect.height > 0 &&
       style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
   };
-  const row = Array.from(document.querySelectorAll('[data-project-row="true"]')).find(
-    candidate => Array.from(candidate.querySelectorAll('span')).some(
-      element => normalize(element.textContent) === wanted
-    )
-  );
-  if (!row) return null;
+  const projectIdForRow = row => {
+    const href = row.querySelector('a[href*="/g/g-p-"]')?.getAttribute('href') || '';
+    const hrefMatch = href.match(/\/g\/(g-p-[^/?#]+)/);
+    return canonicalProjectId(row.getAttribute('data-project-id') || (hrefMatch ? hrefMatch[1] : ''));
+  };
+  const candidates = Array.from(document.querySelectorAll('[data-project-row="true"]'))
+    .filter(row => visible(row))
+    .filter(row => Array.from(row.querySelectorAll('span')).some(
+      element => visible(element) && normalize(element.textContent) === wanted
+    ))
+    .map(row => ({row, projectId: projectIdForRow(row)}))
+    .filter(candidate => candidate.projectId);
+  const matching = expectedProjectId
+    ? candidates.filter(candidate => candidate.projectId === expectedProjectId)
+    : candidates;
+  if (matching.length !== 1) return null;
+  const {row, projectId} = matching[0];
   const button = Array.from(row.querySelectorAll('button')).find(
-    candidate => normalize(candidate.getAttribute('aria-label')) === 'start new chat in project'
+    candidate => visible(candidate) &&
+      normalize(candidate.getAttribute('aria-label')) === 'start new chat in project'
   );
   if (!button) return null;
   button.scrollIntoView({block: 'center', inline: 'nearest'});
@@ -124,12 +157,8 @@ _PROJECT_NEW_CHAT_POINT_FN = r"""(name) => {
   const x = rect.x + rect.width / 2;
   const y = rect.y + rect.height / 2;
   if (x < 0 || y < 0 || x >= window.innerWidth || y >= window.innerHeight) return null;
-  const href = row.querySelector('a[href*="/g/g-p-"]')?.getAttribute('href') || '';
-  const hrefMatch = href.match(/\/g\/(g-p-[^/?#]+)/);
-  const projectId = row.getAttribute('data-project-id') || (hrefMatch ? hrefMatch[1] : '');
   return {x, y, projectId};
 }"""
-
 _COMPOSER_READY_FN = r"""() => {
   const composer = document.querySelector("#prompt-textarea") || Array.from(
     document.querySelectorAll('[contenteditable="true"]')
@@ -1432,14 +1461,8 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                 else action_pause_seconds
             ),
         )
-        # Project new-chat creation is a shared-window operation.  Without a
-        # single critical section, two sessions can both observe the other's
-        # newly-created target and adopt the wrong conversation.
+
         self._project_open_lock = asyncio.Lock()
-        # The Projects-page fallback has no configured URL for some projects.
-        # Retain the exact row identity so a generic /project route cannot
-        # silently bind another project (for example gpt-t1) to the session.
-        self._last_projects_selected_project_id: str | None = None
 
     async def wait_for_composer(self, page: CdpPageRef, *, timeout: float) -> dict[str, Any]:
         deadline = asyncio.get_running_loop().time() + timeout
@@ -1730,59 +1753,29 @@ class GptAutoCdpBrowserController(CdpBrowserController):
             raise ComposerSubmissionTimeout(send_attempted=send_attempted, stage=stage) from exc
 
     async def find_project_url(self, page: CdpPageRef, project_name: str) -> dict[str, str]:
-        projects_tab_opened = await self._open_projects_tab(page, timeout=12.0)
-        if projects_tab_opened:
-            clicked = await self._select_project_from_projects_page(
-                page, project_name, timeout=12.0
-            )
-            if clicked:
-                selected_project_id = self._last_projects_selected_project_id
-                for _ in range(120):
-                    current = await self.page_by_handle(page.handle)
-                    current_project_id = parse_project_id(current.url)
-                    if (
-                        re.match(r"^/g/g-p-[^/]+/project/?$", urlsplit(current.url).path)
-                        and (
-                            not selected_project_id
-                            or current_project_id == selected_project_id
-                        )
-                    ):
-                        return {"url": current.url, "name": project_name}
-                    await asyncio.sleep(0.1)
-        result = await self.evaluate(
-            page,
-            r"""async (name) => {
-              const normalize = value => String(value || '').replace(/\s+/g, ' ').trim();
-              const wanted = normalize(name).toLowerCase();
-              const matchingProjectRow = () => Array.from(
-                document.querySelectorAll('[data-app-action-sidebar-project-row]')
-              ).find(row => normalize(row.getAttribute('data-app-action-sidebar-project-label')).toLowerCase() === wanted);
-              for (let i = 0; i < 120; i++) {
-                const row = matchingProjectRow();
-                if (row) {
-                  if (row.getAttribute('aria-expanded') !== 'true') row.click();
-                  const button = Array.from(row.querySelectorAll('button')).find(candidate =>
-                    normalize(candidate.getAttribute('aria-label')).toLowerCase() === `new chat in ${wanted}`
-                      && candidate.getClientRects().length
-                  );
-                  if (button) button.click();
-                  if (button) {
-                    for (let j = 0; j < 120; j++) {
-                      if (/\/g\/g-p-[^/]+\/project\/?$/.test(location.pathname)) {
-                        return {url: location.href, name};
-                      }
-                      await new Promise(r => setTimeout(r, 100));
-                    }
-                  }
-                }
-                await new Promise(r => setTimeout(r, 100));
-              }
-              throw new Error(`ChatGPT project not found: ${name}`);
-            }""",
-            project_name,
+        """Discover a project URL only after proving the selected row identity."""
+        await self._open_projects_tab(page, timeout=12.0)
+        selection = await self._select_project_from_projects_page(
+            page, project_name, timeout=12.0
         )
-        return {"url": str(result["url"]), "name": str(result.get("name") or project_name)}
-
+        selected_project_id = _selection_project_id(selection, None)
+        if not selected_project_id:
+            selection = await self._select_project_from_sidebar(
+                page, project_name, expected_project_id=None, timeout=12.0
+            )
+            selected_project_id = _selection_project_id(selection, None)
+        if not selected_project_id:
+            raise RuntimeError(f"ChatGPT project identity could not be proven: {project_name}")
+        for _ in range(120):
+            current = await self.page_by_handle(page.handle)
+            current_project_id = parse_project_id(current.url)
+            if (
+                re.match(r"^/g/g-p-[^/]+/project/?$", urlsplit(current.url).path)
+                and current_project_id == selected_project_id
+            ):
+                return {"url": current.url, "name": project_name}
+            await asyncio.sleep(0.1)
+        raise RuntimeError(f"ChatGPT project selection did not open the selected project: {project_name}")
     async def _open_projects_tab(self, page: CdpPageRef, *, timeout: float) -> bool:
         """Navigate directly to ChatGPT's complete Projects listing."""
         await self.bridge.call("keep_page_active", {"pageHandle": page.handle})
@@ -1812,7 +1805,8 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                 r"""(input) => {
                   const normalize = value => String(value || '').replace(/\s+/g, ' ').trim();
                   const wanted = normalize(input.name).toLowerCase();
-                  const expectedProjectId = normalize(input.expectedProjectId);
+                  const canonicalProjectId = value => { const raw = normalize(value); const match = raw.match(/^(g-p-[0-9a-f]{32})(?:-.*)?$/i); return match ? match[1].toLowerCase() : raw; };
+                  const expectedProjectId = canonicalProjectId(input.expectedProjectId);
                   const visible = element => {
                     if (!element || !element.getClientRects().length) return false;
                     const rect = element.getBoundingClientRect();
@@ -1837,25 +1831,34 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                     if (x < 0 || y < 0 || x >= window.innerWidth || y >= window.innerHeight) return null;
                     return {x, y};
                   };
-                  const row = Array.from(document.querySelectorAll('[data-app-action-sidebar-project-row]')).find(
-                    candidate => visible(candidate) && normalize(
-                      candidate.getAttribute('data-app-action-sidebar-project-label')
-                    ).toLowerCase() === wanted
-                  );
-                  if (!row) return {action: 'missing'};
-                  const actualProjectId = normalize(
-                    row.getAttribute('data-app-action-sidebar-project-id')
-                  );
-                  if (expectedProjectId && actualProjectId !== expectedProjectId) {
-                    return {action: 'project-id-mismatch', actualProjectId};
-                  }
-                  const button = Array.from(row.querySelectorAll('button')).find(candidate =>
+                   const rows = Array.from(document.querySelectorAll('[data-app-action-sidebar-project-row]'))
+                     .filter(candidate => visible(candidate) && normalize(
+                       candidate.getAttribute('data-app-action-sidebar-project-label')
+                     ).toLowerCase() === wanted);
+                   if (!rows.length) return {action: 'missing'};
+                   const matchingRows = expectedProjectId
+                     ? rows.filter(candidate => canonicalProjectId(
+                         candidate.getAttribute('data-app-action-sidebar-project-id')
+                       ) === expectedProjectId)
+                     : rows;
+                   if (matchingRows.length !== 1) {
+                     return {action: expectedProjectId ? 'project-id-mismatch' : 'ambiguous'};
+                   }
+                   const row = matchingRows[0];
+                   const actualProjectId = canonicalProjectId(
+                     row.getAttribute('data-app-action-sidebar-project-id')
+                   );
+                   if (!actualProjectId) return {action: 'project-id-missing'};
+                   if (expectedProjectId && actualProjectId !== expectedProjectId) {
+                     return {action: 'project-id-mismatch', actualProjectId};
+                   }
+                   const button = Array.from(row.querySelectorAll('button')).find(candidate =>
                     visible(candidate) && normalize(candidate.getAttribute('aria-label')).toLowerCase() === `new chat in ${wanted}`
                   );
                   if (button) {
                     const clickPoint = point(button);
                     if (clickPoint && button.contains(document.elementFromPoint(clickPoint.x, clickPoint.y))) {
-                      return {action: 'selected', ...clickPoint};
+                      return {action: 'selected', projectId: actualProjectId, ...clickPoint};
                     }
                     const hoverPoint = safeRowPoint(row);
                     return hoverPoint ? {action: 'hover', ...hoverPoint} : {action: 'waiting'};
@@ -1871,7 +1874,7 @@ class GptAutoCdpBrowserController(CdpBrowserController):
             action_name = action.get("action") if isinstance(action, dict) else None
             if action_name == "hover":
                 if hovered_once:
-                    return False
+                    return None
                 hovered_once = True
                 await self.bridge.call("keep_page_active", {"pageHandle": page.handle})
                 await self.bridge.call(
@@ -1882,7 +1885,7 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                 continue
             if action_name in {"selected", "expand"}:
                 if action_name == "expand" and expanded_once:
-                    return False
+                    return None
                 await self.bridge.call("keep_page_active", {"pageHandle": page.handle})
                 await asyncio.sleep(self._action_pause_seconds)
                 await self.bridge.call(
@@ -1890,14 +1893,14 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                     {"pageHandle": page.handle, "x": action["x"], "y": action["y"]},
                 )
                 if action_name == "selected":
-                    return True
+                    return {"clicked": True, "projectId": _canonical_project_id(action.get("projectId"))}
                 expanded_once = True
                 await asyncio.sleep(max(self._PAGE_READY_PAUSE_SECONDS, self._action_pause_seconds))
                 continue
-            if action_name in {"missing", "project-id-mismatch"}:
-                return False
+            if action_name in {"missing", "project-id-mismatch", "project-id-missing", "ambiguous"}:
+                return None
             await asyncio.sleep(0.1)
-        return False
+        return None
 
     async def _wait_for_projects_route(self, page: CdpPageRef, *, timeout: float) -> bool:
         deadline = asyncio.get_running_loop().time() + max(0.1, timeout)
@@ -1912,42 +1915,38 @@ class GptAutoCdpBrowserController(CdpBrowserController):
         return False
 
     async def _select_project_from_projects_page(
-        self, page: CdpPageRef, project_name: str, *, timeout: float
-    ) -> bool:
-        """Select a project using its project-page new-chat control.
-
-        The current Projects page renders project names as non-link text. The
-        action that actually creates a project-scoped chat is the
-        ``Start new chat in project`` button inside that exact project row.
-        """
-        self._last_projects_selected_project_id = None
+        self,
+        page: CdpPageRef,
+        project_name: str,
+        *,
+        expected_project_id: str | None = None,
+        timeout: float,
+    ) -> dict[str, Any] | None:
+        """Select a project and return the canonical identity of its DOM row."""
         deadline = asyncio.get_running_loop().time() + max(0.1, timeout)
         while asyncio.get_running_loop().time() < deadline:
-            # ChatGPT's Projects page currently ignores the page-JavaScript
-            # ``button.click()`` path for this control: it returns success but
-            # does not create/navigate the project chat. Use the same trusted
-            # CDP pointer path as the Explore -> Projects navigation instead.
-            point = await self.evaluate(page, _PROJECT_NEW_CHAT_POINT_FN, project_name)
-            if isinstance(point, dict) and isinstance(point.get("x"), (int, float)) and isinstance(point.get("y"), (int, float)):
-                selected_project_id = point.get("projectId")
-                self._last_projects_selected_project_id = (
-                    str(selected_project_id).strip() if selected_project_id else None
-                )
-                # CDP mouse input is delivered to the target renderer, but
-                # ChatGPT ignores route-changing presses when the target is a
-                # background tab.  Foreground the Projects target first so
-                # the trusted pointer event receives the same user-activation
-                # treatment as a visible browser press.
+            point = await self.evaluate(
+                page,
+                _PROJECT_NEW_CHAT_POINT_FN,
+                {"name": project_name, "expectedProjectId": expected_project_id or ""},
+            )
+            if (
+                isinstance(point, dict)
+                and isinstance(point.get("x"), (int, float))
+                and isinstance(point.get("y"), (int, float))
+            ):
+                project_id = _canonical_project_id(point.get("projectId"))
+                if not project_id:
+                    return None
                 await self.bridge.call("keep_page_active", {"pageHandle": page.handle})
                 await asyncio.sleep(self._action_pause_seconds)
                 await self.bridge.call(
                     "click",
                     {"pageHandle": page.handle, "x": point["x"], "y": point["y"]},
                 )
-                return True
+                return {"clicked": True, "projectId": project_id}
             await asyncio.sleep(0.1)
-        return False
-
+        return None
     async def open_project_page(
         self,
         *,
@@ -1982,7 +1981,6 @@ class GptAutoCdpBrowserController(CdpBrowserController):
         their persisted /c/ URL and never enter this method.
         """
         expected_project_id = parse_project_id(project_url or "")
-        self._last_projects_selected_project_id = None
         anchor_target_ids: set[str] | None = None
         if anchor_page:
             try:
@@ -2011,23 +2009,30 @@ class GptAutoCdpBrowserController(CdpBrowserController):
             async with asyncio.timeout(navigation_timeout):
                 page = await self.navigate(page, _CHATGPT_HOME_URL)
             known_targets = {candidate.target_id for candidate in await self.pages()}
-            clicked = await self._select_project_from_sidebar(
+            selection = await self._select_project_from_sidebar(
                 page,
                 project_name,
                 expected_project_id=expected_project_id,
                 timeout=min(3.0, navigation_timeout),
             )
-            if not clicked:
+            selected_project_id = _selection_project_id(selection, expected_project_id)
+            if not selected_project_id:
                 projects_tab_opened = await self._open_projects_tab(
                     page, timeout=navigation_timeout
                 )
                 if not projects_tab_opened:
                     raise RuntimeError("ChatGPT Projects page did not become available")
-                clicked = await self._select_project_from_projects_page(
-                    page, project_name, timeout=navigation_timeout
+                selection = await self._select_project_from_projects_page(
+                    page,
+                    project_name,
+                    expected_project_id=expected_project_id,
+                    timeout=navigation_timeout,
                 )
-            if not clicked:
-                raise RuntimeError(f"ChatGPT project not found: {project_name}")
+                selected_project_id = _selection_project_id(selection, expected_project_id)
+            if not selected_project_id:
+                raise RuntimeError(f"ChatGPT project identity could not be proven: {project_name}")
+            if expected_project_id and selected_project_id != expected_project_id:
+                raise RuntimeError("selected ChatGPT Project does not match configured project identity or selected row")
 
             # ChatGPT may navigate the sidebar-selected project in-place or
             # briefly reuse the home route. Adopt whichever target the UI
@@ -2055,11 +2060,16 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                 candidates.extend(fresh_candidates)
                 for candidate in candidates:
                     candidate_project_id = parse_project_id(candidate.url)
-                    if candidate_project_id is None:
+                    candidate_path = urlsplit(candidate.url).path
+                    if (
+                        candidate_project_id is None
+                        or not re.match(r"^/g/g-p-[^/]+/project/?$", candidate_path)
+                    ):
                         continue
-                    selected_project_id = self._last_projects_selected_project_id
-                    if ((expected_project_id and candidate_project_id != expected_project_id)
-                            or (selected_project_id and candidate_project_id != selected_project_id)):
+                    if (
+                        candidate_project_id != selected_project_id
+                        or (expected_project_id and candidate_project_id != expected_project_id)
+                    ):
                         observed_wrong_project = True
                         if candidate.target_id != source_page.target_id:
                             wrong_project_pages[candidate.handle] = candidate
@@ -2073,7 +2083,7 @@ class GptAutoCdpBrowserController(CdpBrowserController):
             if not selected_url:
                 if observed_wrong_project:
                     raise RuntimeError(
-                        "selected ChatGPT Project does not match configured project identity"
+                        "selected ChatGPT Project does not match configured project identity or selected row"
                     )
                 raise TimeoutError("ChatGPT project selection did not open a project page")
             if page.target_id != source_page.target_id:

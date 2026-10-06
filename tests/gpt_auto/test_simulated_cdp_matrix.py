@@ -350,8 +350,7 @@ async def test_projects_new_chat_uses_trusted_cdp_pointer_click(monkeypatch) -> 
 
     monkeypatch.setattr(browser, "evaluate", evaluate)
 
-    assert await browser._select_project_from_projects_page(page, "AUDiaGentic", timeout=1) is True
-    assert browser._last_projects_selected_project_id == "g-p-audiagentic"
+    assert await browser._select_project_from_projects_page(page, "AUDiaGentic", timeout=1) == {"clicked": True, "projectId": "g-p-audiagentic"}
     assert calls == [
         ("keep_page_active", {"pageHandle": "page-1"}),
         ("click", {"pageHandle": "page-1", "x": 123.5, "y": 456.5}),
@@ -373,7 +372,7 @@ async def test_sidebar_project_uses_trusted_pointer_for_exact_project(monkeypatc
 
     async def evaluate(_page, _function, value=None):
         inputs.append(value)
-        return {"action": "selected", "x": 101.5, "y": 202.5}
+        return {"action": "selected", "projectId": "g-p-69cc8c4cc7648191a009f358113d8dd2", "x": 101.5, "y": 202.5}
 
     monkeypatch.setattr(browser, "evaluate", evaluate)
 
@@ -382,7 +381,7 @@ async def test_sidebar_project_uses_trusted_pointer_for_exact_project(monkeypatc
         "AUDiaGentic",
         expected_project_id="g-p-69cc8c4cc7648191a009f358113d8dd2",
         timeout=2,
-    ) is True
+    ) == {"clicked": True, "projectId": "g-p-69cc8c4cc7648191a009f358113d8dd2"}
     assert inputs == [{
         "name": "AUDiaGentic",
         "expectedProjectId": "g-p-69cc8c4cc7648191a009f358113d8dd2",
@@ -398,7 +397,7 @@ async def test_sidebar_occluded_new_chat_hovers_once_then_trusted_clicks(monkeyp
     calls: list[tuple[str, object]] = []
     actions = iter([
         {"action": "hover", "x": 120.0, "y": 44.0},
-        {"action": "selected", "x": 277.6, "y": 44.0},
+        {"action": "selected", "projectId": "g-p-69cc", "x": 277.6, "y": 44.0},
     ])
 
     class Bridge:
@@ -418,7 +417,7 @@ async def test_sidebar_occluded_new_chat_hovers_once_then_trusted_clicks(monkeyp
 
     assert await browser._select_project_from_sidebar(
         page, "AUDiaGentic", expected_project_id="g-p-69cc", timeout=2
-    ) is True
+    ) == {"clicked": True, "projectId": "g-p-69cc"}
     assert calls == [
         ("keep_page_active", {"pageHandle": "page-1"}),
         ("hover", {"pageHandle": "page-1", "x": 120.0, "y": 44.0}),
@@ -448,7 +447,7 @@ async def test_sidebar_project_rejects_wrong_exact_project_id(monkeypatch) -> No
 
     assert await browser._select_project_from_sidebar(
         page, "AUDiaGentic", expected_project_id="g-p-expected", timeout=2
-    ) is False
+    ) is None
     assert calls == []
 
 
@@ -459,6 +458,8 @@ def test_projects_new_chat_point_scrolls_before_viewport_validation() -> None:
 
     assert scroll < rect < viewport
     assert "x < 0 || y < 0" in _PROJECT_NEW_CHAT_POINT_FN
+    assert "matching.length !== 1" in _PROJECT_NEW_CHAT_POINT_FN
+    assert "canonicalProjectId" in _PROJECT_NEW_CHAT_POINT_FN
 
 
 @pytest.mark.asyncio
@@ -477,7 +478,7 @@ async def test_sidebar_project_expands_once_before_selecting_new_chat(monkeypatc
     actions = iter([
         {"action": "expand", "x": 20, "y": 30},
         {"action": "waiting"},
-        {"action": "selected", "x": 40, "y": 50},
+        {"action": "selected", "projectId": "g-p-bigcherry", "x": 40, "y": 50},
     ])
     delays: list[float] = []
 
@@ -492,7 +493,7 @@ async def test_sidebar_project_expands_once_before_selecting_new_chat(monkeypatc
 
     assert await browser._select_project_from_sidebar(
         page, "BigCherry", expected_project_id="g-p-bigcherry", timeout=2
-    ) is True
+    ) == {"clicked": True, "projectId": "g-p-bigcherry"}
     assert delays.count(browser._PAGE_READY_PAUSE_SECONDS) == 1
     assert [method for method, _params in calls].count("click") == 2
 
@@ -524,7 +525,7 @@ async def test_sidebar_project_never_repeats_expand_pointer(monkeypatch) -> None
 
     assert await browser._select_project_from_sidebar(
         page, "BigCherry", expected_project_id="g-p-bigcherry", timeout=2
-    ) is False
+    ) is None
     assert [method for method, _params in calls].count("click") == 1
 
 
@@ -679,7 +680,7 @@ async def test_new_session_uses_direct_projects_fallback_when_sidebar_has_no_pro
         calls.append(("projects-route", timeout))
         return True
 
-    async def select_project(_page, name, *, timeout):
+    async def select_project(_page, name, *, expected_project_id=None, timeout):
         calls.append(("select-project", (name, timeout)))
         return True
 
@@ -744,7 +745,7 @@ async def test_new_session_rejects_projects_ui_identity_mismatch(monkeypatch) ->
     async def wait_for_projects_route(_page, *, timeout):
         return True
 
-    async def select_project(_page, _name, *, timeout):
+    async def select_project(_page, _name, *, expected_project_id=None, timeout):
         return True
 
     async def select_sidebar(_page, _name, *, expected_project_id, timeout):
@@ -772,7 +773,6 @@ async def test_new_session_rejects_projects_ui_identity_mismatch(monkeypatch) ->
     monkeypatch.setattr(browser, "pages", pages)
     monkeypatch.setattr(browser, "page_by_handle", page_by_handle)
     monkeypatch.setattr(browser, "close", close)
-
     with pytest.raises(RuntimeError, match="does not match configured project identity"):
         await browser.open_project_page(
             project_name="BigCherry",
@@ -809,9 +809,8 @@ async def test_new_session_rejects_wrong_projects_fallback_target_without_config
     async def open_projects(_page, *, timeout):
         return True
 
-    async def select_project(_page, _name, *, timeout):
-        browser._last_projects_selected_project_id = "g-p-bigcherry"
-        return True
+    async def select_project(_page, _name, *, expected_project_id=None, timeout):
+        return {"clicked": True, "projectId": "g-p-bigcherry"}
 
     async def pages():
         nonlocal page_scans
@@ -835,7 +834,6 @@ async def test_new_session_rejects_wrong_projects_fallback_target_without_config
     monkeypatch.setattr(browser, "pages", pages)
     monkeypatch.setattr(browser, "page_by_handle", page_by_handle)
     monkeypatch.setattr(browser, "close", close)
-
     with pytest.raises(RuntimeError, match="does not match configured project identity"):
         await browser.open_project_page(
             project_name="BigCherry",
@@ -879,7 +877,7 @@ async def test_new_session_adopts_ui_opened_target_and_closes_projects_tab(monke
     async def wait_for_projects_route(_page, *, timeout):
         return True
 
-    async def select_project(_page, _name, *, timeout):
+    async def select_project(_page, _name, *, expected_project_id=None, timeout):
         return True
 
     async def select_sidebar(_page, _name, *, expected_project_id, timeout):
@@ -975,7 +973,6 @@ async def test_new_session_rejects_fresh_wrong_project_target_without_opener(mon
     monkeypatch.setattr(browser, "pages", pages)
     monkeypatch.setattr(browser, "page_by_handle", page_by_handle)
     monkeypatch.setattr(browser, "close", close)
-
     with pytest.raises(RuntimeError, match="does not match configured project identity"):
         await browser.open_project_page(
             project_name="BigCherry",
@@ -1307,3 +1304,24 @@ async def test_gpt_provider_rejects_blank_prompt_and_reports_no_stop_control():
     with pytest.raises(ValueError, match="non-empty"):
         await browser.submit(page, "   ")
     assert (await browser.stop_generation(page))["stopped"] is False
+@pytest.mark.asyncio
+async def test_projects_new_chat_rejects_identityless_dom_pointer(monkeypatch) -> None:
+    calls: list[tuple[str, object]] = []
+
+    class Bridge:
+        async def call(self, method, params=None, **_kwargs):
+            calls.append((method, params))
+            return {"clicked": True}
+
+    browser = GptAutoCdpBrowserController(Bridge(), action_pause_seconds=0.0)
+    page = CdpPageRef("page-1", "target-1", 7, "https://chatgpt.com/projects", "")
+
+    async def evaluate(_page, _function, _value=None):
+        return {"x": 123.5, "y": 456.5}
+
+    monkeypatch.setattr(browser, "evaluate", evaluate)
+
+    assert await browser._select_project_from_projects_page(
+        page, "BigCherry", timeout=0.05
+    ) is None
+    assert calls == []
