@@ -1291,10 +1291,26 @@ def _dispatch_session_request(
                         session_start=session_start,
                         resume_existing=False,
                     )
+            network_followup_enabled = bool(
+                recovery_policy.get("network-error-followup-enabled", True)
+            )
+            network_observation_only = (
+                "network-error-alert" in dom_signals
+                and runtime_invoked
+                and (
+                    not network_followup_enabled
+                    or _network_followup_attempts >= network_followup_max_attempts
+                )
+            )
             if (
                 "network-error-alert" in dom_signals
-                and bool(recovery_policy.get("network-error-followup-enabled", True))
-                and _network_followup_attempts < network_followup_max_attempts
+                and (
+                    (
+                        network_followup_enabled
+                        and _network_followup_attempts < network_followup_max_attempts
+                    )
+                    or network_observation_only
+                )
                 and runtime_invoked
                 and runtime.session_failure_disposition(session_id)
                 is not SessionFailureDisposition.TERMINAL_FAILED
@@ -1323,6 +1339,9 @@ def _dispatch_session_request(
                         "same-session": True,
                         "original-prompt-length": len(dispatch_prompt),
                         "followup-attempt": _network_followup_attempts + 1,
+                        "recovery-mode": (
+                            "observation-only" if network_observation_only else "followup-reconcile"
+                        ),
                         "failure-response-available": bool(failure_updates),
                         "dom-signals": sorted(str(item) for item in (failure_details.get("dom-signals") or ())),
                         "observed-assistant-id": failure_details.get("failure-response-message-id"),
@@ -1350,11 +1369,27 @@ def _dispatch_session_request(
                     {"request-error-alert", "error-alert", "stream-cache-expired"}
                 )
             )
+            provider_followup_enabled = bool(
+                recovery_policy.get("provider-error-followup-enabled", True)
+            )
+            provider_observation_only = (
+                provider_error_alert
+                and runtime_invoked
+                and (
+                    not provider_followup_enabled
+                    or _provider_error_followup_attempts >= provider_error_followup_max_attempts
+                )
+            )
             if (
                 provider_error_alert
                 and "network-error-alert" not in error_evidence
-                and bool(recovery_policy.get("provider-error-followup-enabled", True))
-                and _provider_error_followup_attempts < provider_error_followup_max_attempts
+                and (
+                    (
+                        provider_followup_enabled
+                        and _provider_error_followup_attempts < provider_error_followup_max_attempts
+                    )
+                    or provider_observation_only
+                )
                 and runtime_invoked
                 and runtime.session_failure_disposition(session_id)
                 is not SessionFailureDisposition.TERMINAL_FAILED
@@ -1383,6 +1418,9 @@ def _dispatch_session_request(
                         "same-session": True,
                         "original-prompt-length": len(dispatch_prompt),
                         "followup-attempt": _provider_error_followup_attempts + 1,
+                        "recovery-mode": (
+                            "observation-only" if provider_observation_only else "followup-reconcile"
+                        ),
                         "failure-response-available": bool(failure_updates),
                         "dom-signals": sorted(error_evidence),
                     },
