@@ -541,6 +541,38 @@ def test_stale_active_rehydrate_failure_is_deferred_for_retry(rig, monkeypatch):
     assert exc.value.phase == "rehydrate-retry"
     assert exc.value.side_effect_state == "may-have-started"
 
+def test_promptless_restart_resume_reaches_provider_observer(rig, monkeypatch):
+    """A recovered running turn must not fail before observation-only resume."""
+    runtime, transports, tmp_path = rig
+    first = _dispatch(
+        tmp_path,
+        _running_record(tmp_path, session_keep_alive=True),
+        dispatch_prompt="hello",
+    )
+    session_id = first["session-id"]
+    record = _running_record(
+        tmp_path,
+        session_id=session_id,
+        session_keep_alive=True,
+    )
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.api.complete_execution_from_provider",
+        lambda *_args, **_kwargs: None,
+    )
+    with pytest.raises(RecoveryDeferred, match="cannot recover an existing turn"):
+        _dispatch(
+            tmp_path,
+            record,
+            dispatch_prompt="",
+            resume_existing=True,
+        )
+
+    # The fake transport has no existing-turn implementation, but the call
+    # reached that provider seam. It did not fail at the prompt-availability
+    # guard or replay the original prompt.
+    assert len(transports) == 1
+    assert transports[0].turns == ["hello"]
+
 def test_proven_unsent_submission_failure_is_deferred_after_safe_retry(rig, monkeypatch):
     """A composer failure before Send stays queued, never rotates the session."""
     from audiagentic.components.agents.gateway.queue.recovery_control import RecoveryDeferred

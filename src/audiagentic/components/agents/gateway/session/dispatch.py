@@ -628,16 +628,22 @@ def _dispatch_session_request(
                     "interrupted",
                 }:
                     return store.read_record(project_root, request_id)
-            raise AudiaGenticError(
-                code="RES-AGW-004",
-                kind="agents",
-                message="admitted request has no recoverable dispatch prompt",
-                details={
-                    "failure-reason": "dispatch-prompt-unavailable",
-                    "resume-existing": resume_existing,
-                    "request-id": request_id,
-                },
-            )
+                # Restart recovery deliberately has no prompt to replay. If
+                # the current provider DOM was not already terminal, continue
+                # into the observation-only resume_existing path below. The
+                # provider transport owns the durable unresolved-turn
+                # checkpoint and must be allowed to reattach it.
+            else:
+                raise AudiaGenticError(
+                    code="RES-AGW-004",
+                    kind="agents",
+                    message="admitted request has no recoverable dispatch prompt",
+                    details={
+                        "failure-reason": "dispatch-prompt-unavailable",
+                        "resume-existing": resume_existing,
+                        "request-id": request_id,
+                    },
+                )
         if not resume_existing:
             record = client_defaults.redirect_if_replaced(project_root, record)
         session_id = record.get("session-id")
