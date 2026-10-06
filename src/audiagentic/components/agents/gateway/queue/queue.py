@@ -125,8 +125,6 @@ def _durable_provider_session_is_active(project_root: Path, record: dict[str, An
         )
         return False
     lifecycle_state = session_record.get("state")
-    if lifecycle_state not in {"failed", "closed", "expired"}:
-        return True
     if lifecycle_state == "expired":
         return False
 
@@ -137,11 +135,11 @@ def _durable_provider_session_is_active(project_root: Path, record: dict[str, An
     # and observe the existing turn without replaying the prompt.  Do not
     # extend this exception to ordinary provider/session failures.
     #
-    # The exception is still bounded by the request-owned provider activity
-    # lease. A durable session record can outlive its browser tab; once the
-    # last meaningful activity lease has expired, repeated rehydrate failures
-    # must fall through to bounded recovery instead of keeping the request
-    # running forever.
+    # The exception is bounded by the request-owned provider activity lease
+    # for every non-terminal session state. An active durable session can
+    # outlive its browser tab too; once the last meaningful activity lease has
+    # expired, repeated rehydrate failures must fall through to bounded
+    # recovery instead of keeping the request running forever.
     activity = record.get("activity")
     provider_activity = activity.get("provider") if isinstance(activity, dict) else None
     lease_expires_at = (
@@ -161,6 +159,8 @@ def _durable_provider_session_is_active(project_root: Path, record: dict[str, An
             return False
     except (TypeError, ValueError, OverflowError):
         return False
+    if lifecycle_state == "active":
+        return True
     provider_metadata = record.get("provider-metadata")
     recovery = record.get("recovery")
     recovery_reason = recovery.get("reason") if isinstance(recovery, dict) else None
