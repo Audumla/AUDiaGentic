@@ -25,6 +25,7 @@ from audiagentic.components.agents.gateway.mapping import normalize_chat_title
 from audiagentic.components.agents.gateway.queue import dispatch as dispatch
 from audiagentic.components.agents.gateway.queue import queue as queue_mod
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.foundation.time import now_iso_z
 
 # A blocking wait with no requested timeout still needs a bound so it cannot
 # hang forever; callers that want longer pass an explicit timeout_seconds.
@@ -1050,6 +1051,47 @@ def recover_execution_request(
             diagnostics=updated_diagnostics,
             expected_revision=record.get("revision"),
         )
+        if updated.get("state") == "running":
+            # A restart can leave a worker-backed request with no live queue
+            # worker to consume the cancellation flag. If the durable session
+            # is already terminal, finish the explicit operator disposition
+            # instead of leaving the request cancelling indefinitely.
+            session_id = updated.get("session-id")
+            session_terminal = False
+            if isinstance(session_id, str) and session_id:
+                try:
+                    from audiagentic.components.agents.gateway.session import sessions_store
+
+                    session = sessions_store.read_session_record(project_root, session_id)
+                    session_terminal = session.get("state") in {"failed", "closed", "expired"}
+                except Exception:  # noqa: BLE001 - preserve best-effort cancellation semantics
+                    session_terminal = False
+            if session_terminal:
+                updated = store.transition_owned_terminal(
+                    project_root,
+                    request_id,
+                    "cancelled",
+                    updates={
+                        "diagnostics": updated_diagnostics,
+                        "error": {
+                            "code": "CON-AGW-CANCELLED",
+                            "kind": "agents",
+                            "message": "request cancelled after its provider session became unavailable",
+                            "details": {
+                                "provider-cancellation-delivered": False,
+                                "side-effect-state": (
+                                    (updated.get("diagnostics") or {}).get("side-effect-state")
+                                    if isinstance(updated.get("diagnostics"), dict)
+                                    else "may-have-started"
+                                ),
+                            },
+                        },
+                        "finished-at": now_iso_z(),
+                    },
+                    owner_epoch=updated.get("dispatch-owner-epoch") or "",
+                    worker_id=str(updated.get("worker-id") or ""),
+                    attempt_epoch=int(updated.get("attempt-epoch") or 0),
+                )
         return {
             "request-id": request_id,
             "action": action,
