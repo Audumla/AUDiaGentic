@@ -1299,21 +1299,9 @@ def _dispatch_session_request(
                 and runtime.session_failure_disposition(session_id)
                 is not SessionFailureDisposition.TERMINAL_FAILED
             ):
-                # ChatGPT's generic network error is not the provider Retry
-                # control. Keep the validated session, preserve the failed
-                # attempt/evidence, and ask explicitly for completion once.
-                followup_template = str(
-                    recovery_policy.get("network-error-followup-prompt-template", "")
-                )
-                if "{original_request}" not in followup_template:
-                    followup_template = (
-                        "Complete the previous request. The previous response was interrupted by a "
-                        "network error. Continue from the work already done and provide the complete "
-                        "answer.\n\nOriginal request:\n{original_request}"
-                    )
-                followup_prompt = followup_template.replace(
-                    "{original_request}", dispatch_prompt[:20000]
-                )
+                # The original Send may have reached the provider. Preserve
+                # the evidence and defer to observation or explicit recovery;
+                # never submit a second prompt from an ambiguous failure.
                 failure_updates = _failure_response_updates(project_root, request_id, exc)
                 if failure_updates:
                     record = store.update_owned_running_session(
@@ -1341,23 +1329,18 @@ def _dispatch_session_request(
                         "activity-sequence": failure_details.get("activity-sequence"),
                     },
                 )
-                store.record_gateway_timeline(
-                    project_root,
-                    request_id,
-                    "provider.followup.submitted",
-                    state="running",
-                    attributes={"reason": "network-error-alert", "same-session": True},
-                )
-                return _dispatch_session_request(
-                    project_root,
-                    record,
-                    dispatch_prompt=followup_prompt,
-                    context_fingerprint=context_fingerprint,
-                    _default_recovery_attempt=_default_recovery_attempt,
-                    _network_followup_attempts=_network_followup_attempts + 1,
-                    session_start=session_start,
-                    resume_existing=False,
-                )
+                raise RecoveryDeferred(
+                    exc,
+                    phase="followup-reconcile",
+                    side_effect_state="may-have-started",
+                    continuation={
+                        "kind": "network-error-observation",
+                        "resume-existing": True,
+                        "network-followup-attempts": _network_followup_attempts,
+                        "default-recovery-attempt": _default_recovery_attempt,
+                        "failure-response-available": bool(failure_updates),
+                    },
+                ) from exc
             error_evidence = {
                 str(signal)
                 for signal in (*dom_signals, *(failure_details.get("evidence") or ()))
@@ -1376,21 +1359,9 @@ def _dispatch_session_request(
                 and runtime.session_failure_disposition(session_id)
                 is not SessionFailureDisposition.TERMINAL_FAILED
             ):
-                # A generic ChatGPT request error is not proof that Send was
-                # never reached. Preserve the failed attempt and continue only
-                # on the validated durable session, once.
-                followup_template = str(
-                    recovery_policy.get("provider-error-followup-prompt-template", "")
-                )
-                if "{original_request}" not in followup_template:
-                    followup_template = (
-                        "Complete the previous request. ChatGPT reported a temporary request error. "
-                        "Continue from the work already done and provide the complete answer.\n\n"
-                        "Original request:\n{original_request}"
-                    )
-                followup_prompt = followup_template.replace(
-                    "{original_request}", dispatch_prompt[:20000]
-                )
+                # A provider alert is not proof that Send was never reached.
+                # Preserve the failed attempt and require observation or an
+                # explicit recovery action before any new provider prompt.
                 failure_updates = _failure_response_updates(project_root, request_id, exc)
                 if failure_updates:
                     record = store.update_owned_running_session(
@@ -1416,23 +1387,18 @@ def _dispatch_session_request(
                         "dom-signals": sorted(error_evidence),
                     },
                 )
-                store.record_gateway_timeline(
-                    project_root,
-                    request_id,
-                    "provider.followup.submitted",
-                    state="running",
-                    attributes={"reason": "provider-error-alert", "same-session": True},
-                )
-                return _dispatch_session_request(
-                    project_root,
-                    record,
-                    dispatch_prompt=followup_prompt,
-                    context_fingerprint=context_fingerprint,
-                    _default_recovery_attempt=_default_recovery_attempt,
-                    _provider_error_followup_attempts=_provider_error_followup_attempts + 1,
-                    session_start=session_start,
-                    resume_existing=False,
-                )
+                raise RecoveryDeferred(
+                    exc,
+                    phase="followup-reconcile",
+                    side_effect_state="may-have-started",
+                    continuation={
+                        "kind": "provider-error-observation",
+                        "resume-existing": True,
+                        "provider-error-followup-attempts": _provider_error_followup_attempts,
+                        "default-recovery-attempt": _default_recovery_attempt,
+                        "failure-response-available": bool(failure_updates),
+                    },
+                ) from exc
             if (
                 not cancelled
                 and runtime_invoked

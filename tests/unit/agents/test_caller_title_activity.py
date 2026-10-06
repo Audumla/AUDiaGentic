@@ -104,3 +104,16 @@ def test_response_observing_renews_owner_lease_without_provider_activity(tmp_pat
     record.assert_called_once()
     assert record.call_args.kwargs["kind"] == "owner-heartbeat"
     assert record.call_args.kwargs["phase"] is None
+
+
+def test_preflight_activity_renews_owner_without_provider_activity(tmp_path):
+    relay = RequestActivityRelay(
+        tmp_path, "req_test", owner_epoch="owner", worker_id="worker", attempt_epoch=1
+    )
+    with patch("audiagentic.components.agents.gateway.activity.store.record_owned_activity") as record:
+        relay.observe_provider(source_sequence=1, source_instance="turn", phase="preflight-inspected")
+        relay.observe_provider(source_sequence=2, source_instance="turn", phase="preflight-evaluated")
+
+    assert record.call_count == 1
+    assert {call.kwargs["kind"] for call in record.call_args_list} == {"owner-heartbeat"}
+    assert all(call.kwargs["phase"] is None for call in record.call_args_list)
