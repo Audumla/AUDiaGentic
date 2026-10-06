@@ -1412,6 +1412,21 @@ def request_runtime_status(project_root: Path, request_id: str) -> dict[str, Any
     elif slot is not None:
         queue_state = "running" if slot in {"active", "idle"} else "queued"
         profile_slot = slot
+    elif state == "running" and record.get("recovery-required") is True:
+        # A durable recovery request has no current provider observer; do
+        # not project it as active merely because its lifecycle is running.
+        queue_state = "recovery-required"
+        profile_slot = None
+    elif (
+        state == "running"
+        and slot is None
+        and record.get("dispatch-owner-epoch")
+        and record.get("provider-transport-kind") != "provider-session"
+    ):
+        # Worker-backed work has no safe reattach seam. It remains durable
+        # for explicit reconciliation, but is not live execution.
+        queue_state = "orphaned"
+        profile_slot = None
     elif state == "running":
         queue_state = "running"
         profile_slot = "active"
