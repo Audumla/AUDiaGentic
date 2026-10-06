@@ -1501,6 +1501,13 @@ class GatewayQueueManager:
                     # must win over another recovery retry; otherwise a
                     # non-live session can leave a cancelled request in
                     # running/cancelling indefinitely.
+                    prior_recovery = current.get("recovery")
+                    prior_recovery = prior_recovery if isinstance(prior_recovery, dict) else {}
+                    prior_diagnosis = {
+                        key: prior_recovery.get(key)
+                        for key in ("last-error-code", "last-error", "phase", "side-effect-state", "attempt")
+                        if prior_recovery.get(key) is not None
+                    }
                     cancelled = store.transition_owned_terminal(
                         project_root,
                         request_id,
@@ -1510,6 +1517,7 @@ class GatewayQueueManager:
                                 "code": "CON-AGW-CANCELLED",
                                 "kind": "agents",
                                 "message": "gateway request cancelled during recovery",
+                                "details": {"recovery-diagnosis": prior_diagnosis, "side-effect-state": deferred.side_effect_state, "recovery-phase": deferred.phase},
                             },
                             "finished-at": now_iso_z(),
                         },

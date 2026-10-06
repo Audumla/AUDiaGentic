@@ -344,8 +344,11 @@ class GatewayServiceApplication:
                 _dispatch_service_root=str(self._service_store.root),
             )
         if operation == "get_execution_request":
-            _reject_unknown(arguments, {"request_id"})
-            return self._application.get_execution_request(root, _required(arguments, "request_id"))
+            _reject_unknown(arguments, {"request_id", "include_response"})
+            include_response = arguments.get("include_response", False)
+            if not isinstance(include_response, bool):
+                raise service_validation_error(35, "include_response must be a boolean")
+            return self._application.get_execution_request(root, _required(arguments, "request_id"), include_response=include_response)
         if operation == "get_execution_diagnostics":
             _reject_unknown(arguments, {"request_id", "limit"})
             limit = arguments.get("limit", 25)
@@ -368,6 +371,9 @@ class GatewayServiceApplication:
         if operation == "get_execution_response":
             _reject_unknown(arguments, {"request_id"})
             return self._application.get_execution_response(root, _required(arguments, "request_id"))
+        if operation == "get_execution_response_payload":
+            _reject_unknown(arguments, {"request_id"})
+            return self._application.get_execution_response_payload(root, _required(arguments, "request_id"))
         if operation == "get_execution_failure_response":
             _reject_unknown(arguments, {"request_id"})
             return self._application.get_execution_failure_response(root, _required(arguments, "request_id"))

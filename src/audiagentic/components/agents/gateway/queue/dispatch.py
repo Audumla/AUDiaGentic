@@ -680,7 +680,7 @@ def dispatch_request(
         error = exc
     else:
         from audiagentic.components.agents.gateway.output import persist_final_response
-        artifact = persist_final_response(project_root, record["request-id"], str(outcome.get("output") or ""))
+        artifact = persist_final_response(project_root, record["request-id"], str(outcome.get("output") or ""), media_type=(outcome.get("final_media_type") if isinstance(outcome.get("final_media_type"), str) and outcome.get("final_media_type") else "text/plain; charset=utf-8"))
         artifact_ref = {key: artifact[key] for key in ("artifact-id", "request-id", "media-type", "bytes", "sha256")}
         provider_metadata = outcome.get("provider-metadata")
         metadata_update = (

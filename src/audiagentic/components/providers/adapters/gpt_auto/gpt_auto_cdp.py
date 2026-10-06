@@ -1235,10 +1235,93 @@ _SNAPSHOT_FN = r"""
     clone.querySelectorAll('h4.sr-only').forEach(el => el.remove());
     return boundedText(clone);
   };
+  const MARKDOWN_MAX_CHARS = 200000;
+  const longestRun = (value, character) => {
+    let longest = 0, current = 0;
+    for (const ch of String(value || "")) {
+      if (ch === character) { current += 1; longest = Math.max(longest, current); }
+      else current = 0;
+    }
+    return longest;
+  };
+  const normalizeInlineText = value => String(value || "").replace(/\u00a0/g, " ").replace(/[ \t\r\n\f\v]+/g, " ");
+  const escapeMarkdownText = value => normalizeInlineText(value).replace(/\\/g, "\\\\").replace(/([*_~\[\]#>])/g, "\\$1");
+  const safeHref = raw => {
+    const href = String(raw || "").trim();
+    return href && !/^(?:javascript|data|vbscript):/i.test(href) ? href : null;
+  };
+  const codeFence = code => "`".repeat(Math.max(3, longestRun(code, "`") + 1));
+  const inlineCode = code => {
+    const raw = String(code || ""), delimiter = "`".repeat(Math.max(1, longestRun(raw, "`") + 1));
+    const pad = raw.startsWith("`") || raw.endsWith("`") ? " " : "";
+    return delimiter + pad + raw + pad + delimiter;
+  };
+  const blockTag = tag => new Set(["P","H1","H2","H3","H4","H5","H6","PRE","UL","OL","BLOCKQUOTE","HR","TABLE"]).has(tag);
+  const directChildren = (element, tag) => Array.from(element.children).filter(child => child.tagName === tag);
+  const languageForPre = pre => {
+    const code = pre.querySelector("code"), candidates = [code?.getAttribute("data-language"), pre.getAttribute("data-language"), ...Array.from(code?.classList || []).filter(n => n.startsWith("language-")).map(n => n.slice(9))];
+    const language = candidates.find(v => /^[A-Za-z0-9_+.#-]{1,64}$/.test(String(v || "")));
+    return language ? String(language) : "";
+  };
+  const normalizeMarkdown = value => String(value || "").split("\n").map(line => line.replace(/[ \t]+$/g, "")).join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  const assistantMarkdown = element => {
+    if (!element) return null;
+    try {
+      const root = element.cloneNode(true);
+      root.querySelectorAll('h4.sr-only, button, [role="button"], [data-markdown-copy="exclude"]').forEach(node => node.remove());
+      root.querySelectorAll('[aria-hidden="true"]').forEach(node => { if (String(node.innerText || node.textContent || "").trim() === "…") node.remove(); });
+      let renderList, renderChildren;
+      const renderInline = node => {
+        if (node.nodeType === Node.TEXT_NODE) return escapeMarkdownText(node.nodeValue || "");
+        if (node.nodeType !== Node.ELEMENT_NODE) return "";
+        const el = node, tag = el.tagName;
+        if (tag === "BR") return "\n";
+        if (tag === "CODE" && el.parentElement?.tagName !== "PRE") return inlineCode(el.textContent || "");
+        const inner = Array.from(el.childNodes).map(renderInline).join("");
+        if (tag === "STRONG" || tag === "B") return inner ? "**" + inner + "**" : "";
+        if (tag === "EM" || tag === "I") return inner ? "*" + inner + "*" : "";
+        if (tag === "DEL" || tag === "S") return inner ? "~~" + inner + "~~" : "";
+        if (tag === "A") { const href = safeHref(el.getAttribute("href")); const label = normalizeMarkdown(inner) || (href || ""); return href ? "[" + label + "](" + href + ")" : label; }
+        return inner;
+      };
+      const renderListItem = (li, ordered, index, depth) => {
+        const nested = Array.from(li.children).filter(child => child.tagName === "UL" || child.tagName === "OL"), clone = li.cloneNode(true);
+        Array.from(clone.children).forEach(child => { if (child.tagName === "UL" || child.tagName === "OL") child.remove(); });
+        const head = normalizeMarkdown(Array.from(clone.childNodes).map(renderInline).join("")), prefix = ordered ? String(index + 1) + ". " : "- ", lines = ["  ".repeat(depth) + prefix + head];
+        for (const child of nested) lines.push(renderList(child, depth + 1));
+        return lines.filter(Boolean).join("\n");
+      };
+      renderList = (list, depth = 0) => (list.tagName === "OL" ? directChildren(list, "LI") : directChildren(list, "LI")).map((li, index) => renderListItem(li, list.tagName === "OL", index, depth)).filter(Boolean).join("\n");
+      const renderTable = table => {
+        const rows = Array.from(table.querySelectorAll("tr")); if (!rows.length) return "";
+        const cells = row => Array.from(row.querySelectorAll(":scope > th, :scope > td")).map(cell => normalizeMarkdown(Array.from(cell.childNodes).map(renderInline).join("")).replace(/\n+/g, " ").replace(/\|/g, "\\|"));
+        const headRow = table.querySelector("thead tr") || rows[0], head = cells(headRow); if (!head.length) return "";
+        const body = rows.filter(row => row !== headRow && !row.closest("thead")), fit = values => Array.from({length: head.length}, (_, i) => values[i] || "");
+        return ["| " + fit(head).join(" | ") + " |", "| " + Array(head.length).fill("---").join(" | ") + " |", ...body.map(row => "| " + fit(cells(row)).join(" | ") + " |")].join("\n");
+      };
+      const renderBlock = node => {
+        if (node.nodeType === Node.TEXT_NODE) return normalizeMarkdown(renderInline(node));
+        if (node.nodeType !== Node.ELEMENT_NODE) return "";
+        const el = node, tag = el.tagName;
+        if (/^H[1-6]$/.test(tag)) return "#".repeat(Number(tag[1])) + " " + normalizeMarkdown(Array.from(el.childNodes).map(renderInline).join(""));
+        if (tag === "P") return normalizeMarkdown(Array.from(el.childNodes).map(renderInline).join(""));
+        if (tag === "PRE") { const code = el.querySelector("code")?.textContent ?? el.textContent ?? "", fence = codeFence(code); return fence + languageForPre(el) + "\n" + code.replace(/\n$/, "") + "\n" + fence; }
+        if (tag === "UL" || tag === "OL") return renderList(el);
+        if (tag === "BLOCKQUOTE") return renderChildren(el).split("\n").map(line => line ? "> " + line : ">").join("\n");
+        if (tag === "HR") return "---";
+        if (tag === "TABLE") return renderTable(el);
+        return renderChildren(el);
+      };
+      renderChildren = parent => { const parts = [], flush = () => { const normalized = normalizeMarkdown(inline); if (normalized) parts.push(normalized); inline = ""; }; let inline = ""; for (const child of parent.childNodes) { if (child.nodeType === Node.ELEMENT_NODE && blockTag(child.tagName)) { flush(); const block = normalizeMarkdown(renderBlock(child)); if (block) parts.push(block); } else inline += renderInline(child); } flush(); return parts.join("\n\n"); };
+      const markdown = normalizeMarkdown(renderChildren(root));
+      return markdown && markdown.length <= MARKDOWN_MAX_CHARS ? markdown : null;
+    } catch (_) { return null; }
+  };
   const messageRefs = messageEntries.map((m, sequence) => ({
     role: m.role,
     messageId: m.messageId,
     text: m.role === "user" ? userText(m.el) : assistantText(m.el),
+    ...(m.role === "assistant" ? {markdown: assistantMarkdown(m.el)} : {}),
     ...(m.role === "user" ? (() => {
       const correlation = userCorrelation(m.el);
       return correlation.text ? {

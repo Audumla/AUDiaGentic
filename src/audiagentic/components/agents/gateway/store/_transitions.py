@@ -153,12 +153,7 @@ def transition_record(
                 )
         if new_state in _shared.TERMINAL_STATES:
             updated["recovery-required"] = False
-            recovery = updated.get("recovery")
-            if isinstance(recovery, dict):
-                recovery = dict(recovery)
-                recovery["next-retry-at"] = None
-                recovery["retry-delay-seconds"] = 0
-                updated["recovery"] = recovery
+
         write_record(project_root, updated)
         record_gateway_timeline(
             project_root,
@@ -667,6 +662,7 @@ def defer_owned_recovery(
         previous = previous if isinstance(previous, dict) else {}
         attempt = int(previous.get("attempt") or 0) + 1
         retry_at = add_seconds(timestamp, retry_delay_seconds)
+        error_code = getattr(error, "code", None)
         error_message = getattr(error, "message", None)
         if not isinstance(error_message, str) and isinstance(error, Mapping):
             error_message = error.get("message")
@@ -679,6 +675,7 @@ def defer_owned_recovery(
             "handoff-id": previous.get("handoff-id"),
             "attempt": attempt,
             "last-error": error_message[:256],
+            "last-error-code": error_code if isinstance(error_code, str) else None,
             "phase": phase,
             "side-effect-state": side_effect_state,
             "next-retry-at": retry_at,
