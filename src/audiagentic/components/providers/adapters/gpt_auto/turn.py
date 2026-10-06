@@ -574,6 +574,12 @@ class GptAutoTurn:
                 self._move(TurnState.SUBMITTING)
                 self._move(TurnState.SIDE_EFFECT_ATTEMPTED)
                 return await self._cancelled_result()
+            # Recovered observation starts at PREPARING, but the durable
+            # checkpoint proves the provider-side Send may already have run.
+            # Advance through the same lifecycle states as normal submission
+            # without calling the browser composer or sending the prompt.
+            self._move(TurnState.SUBMITTING)
+            self._move(TurnState.SIDE_EFFECT_ATTEMPTED)
             current = await self._snapshot_for_observation()
             persisted_alerts = checkpoint.get(
                 "unresolved-baseline-error-alert-occurrences"
