@@ -273,6 +273,43 @@ async def test_pre_readiness_activity_reaches_real_relay_path(
 
 
 @pytest.mark.asyncio
+async def test_synthetic_observations_do_not_reset_session_silence_clock(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    marker_calls: list[bool] = []
+    monkeypatch.setattr(
+        turn_events.session_store,
+        "record_session_timeline",
+        lambda *args, **kwargs: {},
+    )
+    callback = turn_events._make_on_event_callback(
+        "ses-1",
+        tmp_path,
+        "req-1",
+        "profile-1",
+        "corr-1",
+        activity_marker=lambda: marker_calls.append(True),
+    )
+    for sequence, label in enumerate(
+        ("connection-refreshing", "response-observed"),
+        start=1,
+    ):
+        await callback(
+            TransportObservation(
+                ag_session_id="ag-s-1",
+                turn_id="req-1",
+                sequence=sequence,
+                kind=TransportObservationKind.ACTIVITY,
+                observed_at=f"2026-09-04T00:00:0{sequence}Z",
+                correlation_quality=CorrelationQuality.REQUEST_SCOPED,
+                attributes={"model_activity": label},
+            )
+        )
+
+    assert marker_calls == []
+
+@pytest.mark.asyncio
 async def test_timing_milestones_are_timeline_only_not_activity(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

@@ -396,10 +396,10 @@ def test_terminal_durable_session_does_not_keep_request_running_forever(
     assert terminal["recovery"]["outcome"] == "bounded-recovery-exhausted"
 
 
-def test_failed_local_session_with_restart_binding_keeps_provider_recovery_running(
+def test_failed_local_session_without_activity_lease_is_bounded(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
-    """A restart-failed local observer may still own a durable provider turn."""
+    """A stale binding cannot keep recovery running without provider activity."""
     manager = queue_mod.GatewayQueueManager()
     project = tmp_path / "project"
     project.mkdir()
@@ -444,18 +444,16 @@ def test_failed_local_session_with_restart_binding_keeps_provider_recovery_runni
         "read_session_binding",
         lambda _project_root, _session_id: {"provider-session-ref": "conversation-ref"},
     )
-    assert queue_mod._durable_provider_session_is_active(project, record) is True
+    assert queue_mod._durable_provider_session_is_active(project, record) is False
     calls = 0
 
     def runner(_project_root: Path, _current: dict, **_kwargs) -> dict:
         nonlocal calls
         calls += 1
-        if calls >= 2:
-            manager.cancel(project, "recovery-restart-session", record["request-id"])
         raise RecoveryDeferred(
             AudiaGenticError(
                 code="EXT-AGW-118",
-                kind="agents",
+                kind="providers",
                 message="provider reattach unavailable",
             )
         )
@@ -474,14 +472,11 @@ def test_failed_local_session_with_restart_binding_keeps_provider_recovery_runni
         dispatch_service_root=tmp_path,
     )
 
-    time.sleep(0.2)
-    current = store.read_record(project, record["request-id"])
-    assert current["state"] == "running"
-    assert current["error"] is None
-    manager.cancel(project, "recovery-restart-session", record["request-id"])
-    assert store.read_record(project, record["request-id"])["cancel-requested"] is True
-    manager.shutdown()
-
+    terminal = manager.wait(project, record["request-id"], timeout_seconds=3)
+    assert terminal["state"] == "interrupted", {"calls": calls, "record": terminal}
+    assert terminal["error"]["code"] == "CON-AGW-084"
+    assert terminal["recovery"]["outcome"] == "bounded-recovery-exhausted"
+    assert calls == 1
 
 def test_durable_recovery_expires_session_at_absolute_max_lifetime(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch

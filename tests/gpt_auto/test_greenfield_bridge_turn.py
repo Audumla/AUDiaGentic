@@ -934,6 +934,36 @@ async def test_fresh_request_error_overrides_copy_regenerate_completion_shape():
 
 
 @pytest.mark.asyncio
+async def test_body_only_network_error_overrides_copy_regenerate_completion_shape():
+    """A document-level network error must remain request-owned with partial text."""
+    chat = _Chat()
+    baseline = snap(users=1, user="Review AU01", user_id="prompt-1")
+    failed_partial = snap(
+        users=1,
+        assistants=1,
+        user="Review AU01",
+        user_id="prompt-1",
+        assistant="Partial answer before network failure",
+        assistant_id="assistant-1",
+        complete=True,
+        extra_signals=("network-error-alert",),
+    )
+    chat._snapshots = iter([failed_partial])
+    turn = GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="turn-body-network-error", body="Review AU01"),
+        lambda _: None,
+    )
+    turn.state = TurnState.AWAITING_RESPONSE
+    turn._prompt_message_id = "prompt-1"
+
+    with pytest.raises(AudiaGenticError) as caught:
+        await turn._await_response(baseline, baseline)
+
+    assert caught.value.details["failure-reason"] == "provider-failure-policy-matched"
+    assert "network-error-alert" in caught.value.details["evidence"]
+
+@pytest.mark.asyncio
 async def test_watchdog_revalidates_but_does_not_refresh_active_turn():
     """The watchdog must not create a second active-turn refresh authority."""
     chat = _Chat()

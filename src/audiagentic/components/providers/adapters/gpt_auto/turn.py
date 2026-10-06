@@ -3229,6 +3229,20 @@ def _scope_response_snapshot(
                     text=snapshot.latest_assistant_text,
                     sequence=len(snapshot.message_refs),
                 )
+    network_error_alert = _document_signal_is_owned(
+        baseline,
+        snapshot,
+        "network-error-alert",
+        prompt_message_id=prompt_message_id,
+        matched_prompt_message_id=matched_prompt_id,
+        prompt_text=prompt_text,
+        allow_virtualized_prompt=allow_virtualized_prompt,
+        request_owned_assistant_present=bool(
+            response_ref is not None
+            or bound_assistant_id is not None
+            or virtualized_assistant_id is not None
+        ),
+    )
     stream_cache_expired = _document_signal_is_owned(
         baseline,
         snapshot,
@@ -3453,8 +3467,8 @@ def _scope_response_snapshot(
         )
         if request_error_alert:
             scoped_signals.add("request-error-alert")
-            if "network-error-alert" in snapshot.dom_signals:
-                scoped_signals.add("network-error-alert")
+        if network_error_alert:
+            scoped_signals.add("network-error-alert")
         if stream_cache_expired:
             scoped_signals.add("stream-cache-expired")
         return (
@@ -3482,8 +3496,8 @@ def _scope_response_snapshot(
     )
     if request_error_alert:
         dom_signals = frozenset((*dom_signals, "request-error-alert"))
-        if "network-error-alert" in snapshot.dom_signals:
-            dom_signals = frozenset((*dom_signals, "network-error-alert"))
+    if network_error_alert:
+        dom_signals = frozenset((*dom_signals, "network-error-alert"))
     if stream_cache_expired:
         dom_signals = frozenset((*dom_signals, "stream-cache-expired"))
     if snapshot.terminal_witness_assistant_id != response_ref.message_id:
