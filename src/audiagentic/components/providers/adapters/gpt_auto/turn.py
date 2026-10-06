@@ -2860,6 +2860,7 @@ class GptAutoTurn:
         if (
             verify_ref is not None
             and verify_ref.message_id == self._response_message_id
+            and verify_ref.text == plain_text
             and isinstance(verify_ref.markdown, str)
             and verify_ref.markdown.strip()
         ):

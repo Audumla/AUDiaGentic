@@ -149,6 +149,7 @@ CON-AGW-145: "The request has no durable diagnostic evidence that can support re
 CON-AGW-146: "Clear-not-submitted is allowed only when the gateway has proven that no provider side effect occurred."
 VAL-AGW-147: "The requested gateway public response version is unsupported or malformed."
 VAL-AGW-149: "The gateway final response media type is unsupported; use text/plain or text/markdown with UTF-8."
+CON-AGW-148: "The gateway response artifact media type is invalid or corrupt."
 CON-AGW-147: "The request's durable state and canonical status snapshot contradict; status V4 cannot be emitted."
 RES-AGW-141: "The gateway response artifact is unavailable for this request."
 RES-AGW-143: "The captured provider failure-response artifact is unavailable for this request."
