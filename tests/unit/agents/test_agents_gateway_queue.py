@@ -381,6 +381,80 @@ def test_durable_provider_recovery_is_not_interrupted_by_retry_bound(tmp_path: P
     assert terminal["state"] == "cancelled"
 
 
+def test_followup_bound_overrides_durable_provider_exception(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """Follow-up recovery remains bounded even while the provider lease is live."""
+    manager = queue_mod.GatewayQueueManager()
+    project = tmp_path / "project"
+    project.mkdir()
+    record = store.build_record(
+        execution_profile_id="followup-durable-bound",
+        prompt_body="x",
+        gateway_profile_id="followup-durable-bound",
+        gateway_profile_generation="gen_test123",
+        gateway_profile_config_digest="sha256:abcd1234",
+        resolved_provider_id="gpt-auto",
+        resolved_instance_ids=["gpt-auto"],
+        provider_transport_kind="provider-session",
+        session_id="ses_followup_durable_bound",
+    )
+    record.update(
+        {
+            "state": "running",
+            "provider-metadata": {
+                "submission-proven": True,
+                "chat-url": "https://chatgpt.com/g/g-p-project/c/conversation",
+                "unresolved-turn-pending": True,
+            },
+            "recovery-required": True,
+            "recovery": {"reason": "gateway-restart", "outcome": "in-place"},
+            "worker-id": "recovery-worker",
+            "attempt-epoch": 1,
+            "dispatch-owner-epoch": "owner-epoch",
+            "gateway-profile-runtime": {"params": {"provider-session-followup-recovery-max-attempts": 2}},
+        }
+    )
+    store.write_record(project, record)
+    monkeypatch.setattr(queue_mod, "_durable_provider_session_is_active", lambda *_args: True)
+
+    calls = 0
+
+    def runner(_project_root: Path, _current: dict, **_kwargs) -> dict:
+        nonlocal calls
+        calls += 1
+        raise RecoveryDeferred(
+            AudiaGenticError(
+                code="EXT-GPTAUTO-003",
+                kind="providers",
+                message="follow-up still being observed",
+            ),
+            phase="followup-reconcile",
+            side_effect_state="may-have-started",
+            continuation={"kind": "provider-followup", "resume-existing": True},
+        )
+
+    manager.enqueue_recovered_running(
+        project,
+        record,
+        {
+            "virtual-capacity": 1,
+            "provider-session-recovery-initial-delay-seconds": 0.01,
+            "provider-session-recovery-max-delay-seconds": 0.01,
+            "provider-session-recovery-max-attempts": 100,
+            "provider-session-followup-recovery-max-attempts": 2,
+        },
+        runner,
+        dispatch_owner_epoch="owner-epoch",
+        dispatch_service_root=tmp_path,
+    )
+
+    terminal = manager.wait(project, record["request-id"], timeout_seconds=3)
+    assert terminal["state"] == "interrupted", {"calls": calls, "record": terminal}
+    assert calls == 2
+    assert terminal["error"]["details"]["recovery-max-attempts"] == 2
+    assert terminal["error"]["details"]["session-fence-state"] == "manual-reconcile-required"
+
 def test_terminal_durable_session_does_not_keep_request_running_forever(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):

@@ -158,7 +158,7 @@ def bounded_recovery_error(
 
 
 _BOUNDED_RECOVERY_ERROR_SCALAR_KEYS = frozenset(
-    {"recovery-attempt", "recovery-max-attempts", "recovery-phase", "side-effect-state"}
+    {"recovery-attempt", "recovery-max-attempts", "recovery-phase", "side-effect-state", "session-fence-state"}
 )
 
 
