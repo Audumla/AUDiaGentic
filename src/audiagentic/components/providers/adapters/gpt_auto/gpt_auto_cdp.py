@@ -124,7 +124,10 @@ _PROJECT_NEW_CHAT_POINT_FN = r"""(name) => {
   const x = rect.x + rect.width / 2;
   const y = rect.y + rect.height / 2;
   if (x < 0 || y < 0 || x >= window.innerWidth || y >= window.innerHeight) return null;
-  return {x, y};
+  const href = row.querySelector('a[href*="/g/g-p-"]')?.getAttribute('href') || '';
+  const hrefMatch = href.match(/\/g\/(g-p-[^/?#]+)/);
+  const projectId = row.getAttribute('data-project-id') || (hrefMatch ? hrefMatch[1] : '');
+  return {x, y, projectId};
 }"""
 
 _COMPOSER_READY_FN = r"""() => {
@@ -1433,6 +1436,10 @@ class GptAutoCdpBrowserController(CdpBrowserController):
         # single critical section, two sessions can both observe the other's
         # newly-created target and adopt the wrong conversation.
         self._project_open_lock = asyncio.Lock()
+        # The Projects-page fallback has no configured URL for some projects.
+        # Retain the exact row identity so a generic /project route cannot
+        # silently bind another project (for example gpt-t1) to the session.
+        self._last_projects_selected_project_id: str | None = None
 
     async def wait_for_composer(self, page: CdpPageRef, *, timeout: float) -> dict[str, Any]:
         deadline = asyncio.get_running_loop().time() + timeout
@@ -1729,9 +1736,17 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                 page, project_name, timeout=12.0
             )
             if clicked:
+                selected_project_id = self._last_projects_selected_project_id
                 for _ in range(120):
                     current = await self.page_by_handle(page.handle)
-                    if re.match(r"^/g/g-p-[^/]+/project/?$", urlsplit(current.url).path):
+                    current_project_id = parse_project_id(current.url)
+                    if (
+                        re.match(r"^/g/g-p-[^/]+/project/?$", urlsplit(current.url).path)
+                        and (
+                            not selected_project_id
+                            or current_project_id == selected_project_id
+                        )
+                    ):
                         return {"url": current.url, "name": project_name}
                     await asyncio.sleep(0.1)
         result = await self.evaluate(
@@ -1905,6 +1920,7 @@ class GptAutoCdpBrowserController(CdpBrowserController):
         action that actually creates a project-scoped chat is the
         ``Start new chat in project`` button inside that exact project row.
         """
+        self._last_projects_selected_project_id = None
         deadline = asyncio.get_running_loop().time() + max(0.1, timeout)
         while asyncio.get_running_loop().time() < deadline:
             # ChatGPT's Projects page currently ignores the page-JavaScript
@@ -1913,6 +1929,10 @@ class GptAutoCdpBrowserController(CdpBrowserController):
             # CDP pointer path as the Explore -> Projects navigation instead.
             point = await self.evaluate(page, _PROJECT_NEW_CHAT_POINT_FN, project_name)
             if isinstance(point, dict) and isinstance(point.get("x"), (int, float)) and isinstance(point.get("y"), (int, float)):
+                selected_project_id = point.get("projectId")
+                self._last_projects_selected_project_id = (
+                    str(selected_project_id).strip() if selected_project_id else None
+                )
                 # CDP mouse input is delivered to the target renderer, but
                 # ChatGPT ignores route-changing presses when the target is a
                 # background tab.  Foreground the Projects target first so
@@ -1962,6 +1982,7 @@ class GptAutoCdpBrowserController(CdpBrowserController):
         their persisted /c/ URL and never enter this method.
         """
         expected_project_id = parse_project_id(project_url or "")
+        self._last_projects_selected_project_id = None
         anchor_target_ids: set[str] | None = None
         if anchor_page:
             try:
@@ -2036,7 +2057,9 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                     candidate_project_id = parse_project_id(candidate.url)
                     if candidate_project_id is None:
                         continue
-                    if expected_project_id and candidate_project_id != expected_project_id:
+                    selected_project_id = self._last_projects_selected_project_id
+                    if ((expected_project_id and candidate_project_id != expected_project_id)
+                            or (selected_project_id and candidate_project_id != selected_project_id)):
                         observed_wrong_project = True
                         if candidate.target_id != source_page.target_id:
                             wrong_project_pages[candidate.handle] = candidate
