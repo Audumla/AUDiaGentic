@@ -152,6 +152,10 @@ def transition_record(
                     record.get("diagnostics"),
                     classify_error(updates.get("error")),
                 )
+            # An explicit diagnostics update carries the gateway-owned
+            # disposition and must win over error-derived classification.
+            if "diagnostics" in updates:
+                updated["diagnostics"] = updates["diagnostics"]
         if new_state in _shared.TERMINAL_STATES:
             updated["recovery-required"] = False
 

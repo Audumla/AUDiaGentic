@@ -342,6 +342,44 @@ def test_mark_cancel_requested_preserves_unresolved_side_effect_diagnostics(tmp_
     assert cancelled["diagnostics"]["resolution-state"] == "unresolved"
 
 
+def test_abandon_terminalizes_running_request_with_failed_session(tmp_path, monkeypatch) -> None:
+    from audiagentic.components.agents.gateway.session import sessions_store
+
+    record = store.build_record(
+        execution_profile_id="orphaned-abandon",
+        prompt_body="abandon",
+        provider_transport_kind="provider-session",
+        session_id="ses-orphaned",
+    )
+    record.update(
+        {
+            "state": "running",
+            "diagnostics": classify_error(
+                {
+                    "code": "EXT-GPTAUTO-003",
+                    "details": {"submission-ambiguous": True},
+                }
+            ),
+            "dispatch-owner-epoch": "owner-1",
+            "worker-id": "worker-1",
+            "attempt-epoch": 1,
+        }
+    )
+    store.write_record(tmp_path, record)
+    monkeypatch.setattr(
+        sessions_store,
+        "read_session_record",
+        lambda _root, _session_id: {"state": "failed"},
+    )
+
+    result = recover_execution_request(tmp_path, record["request-id"], action="abandon")
+
+    assert result["state"] == "cancelled"
+    assert result["diagnostics"]["resolution-state"] == "abandon-requested"
+    terminal = store.read_record(tmp_path, record["request-id"])
+    assert terminal["state"] == "cancelled"
+    assert terminal["error"]["code"] == "CON-AGW-CANCELLED"
+
 def test_abandon_recovery_is_single_cas_operation(tmp_path) -> None:
     record = store.build_record(execution_profile_id="default", prompt_body="abandon")
     store.write_record(tmp_path, record)
