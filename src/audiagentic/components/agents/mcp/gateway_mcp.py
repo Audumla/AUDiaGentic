@@ -89,14 +89,10 @@ def agent_task_list_definitions() -> list[dict[str, Any]]:
 
 @mcp.tool()
 @tool_boundary
-def agent_task_status(request_id: str) -> dict[str, Any]:
+def agent_task_status(request_id: str, include_response: bool = True) -> dict[str, Any]:
     """Poll compact lifecycle status; use diagnostics or response for terminal detail."""
     project_root = project_root_from_env()
-    status = call_gateway_method(
-        "get_execution_request",
-        project_root,
-        request_id,
-    )
+    status = call_gateway_method("get_execution_request", project_root, request_id, include_response=include_response)
     # V4 is a fixed-shape contract: its inactive axes are explicitly null and
     # must not be removed by the generic sparse projection.
     return _status_without_response_preview(status)
@@ -136,42 +132,27 @@ def agent_task_recover(
 
 @mcp.tool()
 @tool_boundary
+@mcp.tool()
+@tool_boundary
 def agent_task_response(request_id: str) -> dict[str, Any]:
-    """Return the exact verified terminal response; call only after terminal status."""
+    """Return the exact verified terminal response."""
     project_root = project_root_from_env()
-    text = call_gateway_method("get_execution_response", project_root, request_id)
-    raw_bytes = len(text.encode("utf-8"))
+    payload = call_gateway_method("get_execution_response_payload", project_root, request_id)
     result: dict[str, Any] = {
         "request-id": request_id,
         "delivery": "inline",
-        "text": text,
-        "bytes": raw_bytes,
+        "text": payload["text"],
+        "bytes": payload["bytes"],
+        "format": payload["format"],
+        "media-type": payload["media_type"],
     }
-
-    # A full response may belong to a failed terminal attempt (for example,
-    # an ACP provider cancelling after a failed tool call).  Keep the response
-    # operation self-describing with only the bounded terminal outcome and
-    # failure code; the detailed evidence remains on agent_task_diagnostics.
-    try:
-        diagnostics = call_gateway_method(
-            "get_execution_diagnostics", project_root, request_id, limit=1
-        )
-    except Exception:
-        diagnostics = None
-    if isinstance(diagnostics, dict):
-        state = diagnostics.get("state")
-        if isinstance(state, str) and state:
-            result["state"] = state
-        rollup = diagnostics.get("diagnostics")
-        if isinstance(rollup, dict):
-            failure_code = rollup.get("failure-code")
-            reason_code = rollup.get("reason-code")
-            if isinstance(failure_code, str) and failure_code:
-                result["error-code"] = failure_code
-            if isinstance(reason_code, str) and reason_code:
-                result["error-reason"] = reason_code
+    state = payload.get("state")
+    if isinstance(state, str) and state: result["state"] = state
+    error_code = payload.get("error_code")
+    if isinstance(error_code, str) and error_code: result["error-code"] = error_code
+    error_reason = payload.get("error_reason")
+    if isinstance(error_reason, str) and error_reason: result["error-reason"] = error_reason
     return result
-
 
 @mcp.tool()
 @tool_boundary

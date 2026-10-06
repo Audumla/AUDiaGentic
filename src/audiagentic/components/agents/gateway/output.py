@@ -46,6 +46,10 @@ from audiagentic.foundation.transports.session_surface import (
 logger = logging.getLogger(__name__)
 
 FINAL_RESPONSE_PREVIEW_BYTES = 4096
+_FINAL_RESPONSE_MEDIA_TYPES = frozenset({
+    "text/plain; charset=utf-8",
+    "text/markdown; charset=utf-8",
+})
 
 
 def _utf8_preview(text: str, limit: int = FINAL_RESPONSE_PREVIEW_BYTES) -> tuple[str, bool]:
@@ -60,13 +64,20 @@ def _utf8_preview(text: str, limit: int = FINAL_RESPONSE_PREVIEW_BYTES) -> tuple
     return preview, True
 
 
-def _final_response_artifact(text: str, request_id: str) -> dict[str, Any]:
+def _validated_final_media_type(value: str) -> str:
+    if value not in _FINAL_RESPONSE_MEDIA_TYPES:
+        raise AudiaGenticError(code="VAL-AGW-149", kind="agents", message="gateway final response media type is unsupported", details={"media-type": str(value)[:128]})
+    return value
+
+
+def _final_response_artifact(text: str, request_id: str, *, media_type: str = "text/plain; charset=utf-8") -> dict[str, Any]:
+    media_type = _validated_final_media_type(media_type)
     raw = text.encode("utf-8")
     preview, truncated = _utf8_preview(text)
     return {
         "artifact-id": "final-response",
         "request-id": request_id,
-        "media-type": "text/plain; charset=utf-8",
+        "media-type": media_type,
         "bytes": len(raw),
         "sha256": hashlib.sha256(raw).hexdigest(),
         "output-preview": preview,
@@ -90,13 +101,14 @@ def persist_final_response(
     request_id: str,
     text: str,
     *,
+    media_type: str = "text/plain; charset=utf-8",
     lock_held: bool = False,
     allow_terminal: bool = False,
 ) -> dict[str, Any]:
     """Persist the exact terminal UTF-8 response before terminal record commit."""
     if not isinstance(text, str):
         text = str(text)
-    artifact = _final_response_artifact(text, request_id)
+    artifact = _final_response_artifact(text, request_id, media_type=media_type)
 
     def write_if_owned() -> None:
         # A worker may finish unwinding after an operator has already won the

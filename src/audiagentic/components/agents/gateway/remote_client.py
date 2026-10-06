@@ -158,12 +158,9 @@ class StandaloneGatewayClient:
         kwargs.setdefault("logical_client_id", self._logical_client_id)
         return cast(dict[str, Any], self._call("submit_execution_request", project_root, kwargs))
 
-    def get_execution_request(self, project_root: Path, request_id: str) -> dict[str, Any]:
-        params: dict[str, Any] = {"request_id": request_id}
-        return cast(
-            dict[str, Any],
-            self._call("get_execution_request", project_root, params),
-        )
+    def get_execution_request(self, project_root: Path, request_id: str, *, include_response: bool = False) -> dict[str, Any]:
+        params: dict[str, Any] = {"request_id": request_id, "include_response": include_response}
+        return cast(dict[str, Any], self._call("get_execution_request", project_root, params))
 
     def get_execution_diagnostics(self, project_root: Path, request_id: str, *, limit: int = 25) -> dict[str, Any]:
         return cast(
@@ -176,6 +173,9 @@ class StandaloneGatewayClient:
             dict[str, Any],
             self._call("recover_execution_request", project_root, {"request_id": request_id, **kwargs}),
         )
+
+    def get_execution_response_payload(self, project_root: Path, request_id: str) -> dict[str, Any]:
+        return cast(dict[str, Any], self._call("get_execution_response_payload", project_root, {"request_id": request_id}))
 
     def get_execution_response(self, project_root: Path, request_id: str) -> str:
         return cast(

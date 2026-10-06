@@ -888,14 +888,77 @@ def submit_execution_request(
     return dict(record)
 
 
+def _response_representation(media_type: str) -> str:
+    if media_type == "text/markdown; charset=utf-8":
+        return "markdown"
+    if media_type == "text/plain; charset=utf-8":
+        return "text"
+    raise AudiaGenticError(code="CON-AGW-148", kind="agents", message="gateway response artifact media type is invalid", details={"media-type": str(media_type)[:128]})
+
+
+def _bounded_terminal_error_fields(record: dict[str, Any]) -> dict[str, str]:
+    result: dict[str, str] = {}
+    diagnostics = record.get("diagnostics")
+    if isinstance(diagnostics, dict):
+        failure_code = diagnostics.get("failure-code")
+        reason_code = diagnostics.get("reason-code")
+        if isinstance(failure_code, str) and failure_code:
+            result["error_code"] = failure_code[:256]
+        if isinstance(reason_code, str) and reason_code:
+            result["error_reason"] = reason_code[:256]
+    if "error_code" not in result:
+        error = record.get("error")
+        if isinstance(error, dict):
+            code = error.get("code")
+            if isinstance(code, str) and code:
+                result["error_code"] = code[:256]
+    return result
+
+
+def get_execution_response_payload(project_root: Path, request_id: str) -> dict[str, Any]:
+    record = store.read_record(project_root, request_id, include_output=False)
+    artifact = record.get("response-artifact")
+    if record.get("state") not in store.TERMINAL_STATES or not isinstance(artifact, dict):
+        raise AudiaGenticError(code="RES-AGW-141", kind="agents", message="gateway response artifact unavailable", details={})
+    from audiagentic.components.agents.gateway.output import read_final_response
+    text = read_final_response(project_root, request_id, artifact)
+    media_type = artifact.get("media-type") if isinstance(artifact.get("media-type"), str) else ""
+    payload: dict[str, Any] = {
+        "text": text,
+        "bytes": len(text.encode("utf-8")),
+        "format": _response_representation(media_type),
+        "media_type": media_type,
+        "state": str(record.get("state") or ""),
+    }
+    payload.update(_bounded_terminal_error_fields(record))
+    return payload
+
 def get_execution_request(
     project_root: Path,
     request_id: str,
+    *,
+    include_response: bool = False,
 ) -> dict[str, Any]:
-    """Return the compact public V4 task status."""
+    """Return compact V4 status, optionally with verified terminal response."""
     record = store.read_public_status(project_root, request_id)
-    return _attach_agent_status(record, project_root)
-
+    status = _attach_agent_status(record, project_root)
+    if not include_response or status.get("lifecycle") != "terminal":
+        return status
+    try:
+        response = get_execution_response_payload(project_root, request_id)
+    except AudiaGenticError as exc:
+        if exc.code == "RES-AGW-141":
+            return status
+        raise
+    return {
+        **status,
+        "response": {
+            "text": response["text"],
+            "bytes": response["bytes"],
+            "format": response["format"],
+            "media_type": response["media_type"],
+        },
+    }
 
 def get_execution_diagnostics(
     project_root: Path, request_id: str, *, limit: int = 25

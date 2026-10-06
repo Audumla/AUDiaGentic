@@ -307,6 +307,7 @@ class GptAutoTurn:
         self._baseline_snapshot: ChatSnapshot | None = None
         self._submission_recovery_proof: ChatSnapshot | None = None
         self._terminal_evidence: dict[str, Any] = {}
+        self._final_media_type: str | None = None
         # ChatGPT may virtualize the tail of a long conversation.  Keep one
         # bounded attempt per turn to mount the latest assistant action bar;
         # repeated scrolling would be noisy and could fight the operator's
@@ -650,7 +651,7 @@ class GptAutoTurn:
             self._move(TurnState.COMPLETE)
             await self._emit(TransportObservationKind.TERMINAL, {"stop_reason": "end-turn"})
             result = self._result("end-turn")
-            return SessionTurnResult(**{**result.__dict__, "final_summary": final})
+            return SessionTurnResult(**{**result.__dict__, "final_summary": final, "final_media_type": self._final_media_type})
         except asyncio.CancelledError:
             if not _ENGINE.is_terminal(self.state.value):
                 self._move(TurnState.CANCELLED)
@@ -898,7 +899,7 @@ class GptAutoTurn:
                 extra={"turn-id": self.request.turn_id},
             )
         result = self._result("end-turn")
-        return SessionTurnResult(**{**result.__dict__, "final_summary": final})
+        return SessionTurnResult(**{**result.__dict__, "final_summary": final, "final_media_type": self._final_media_type})
 
     def _require_admitted_project(self, snapshot: ChatSnapshot, *, phase: str) -> None:
         """Fence every browser side effect to the admitted ChatGPT Project."""
@@ -2567,7 +2568,7 @@ class GptAutoTurn:
                 mark_activity = getattr(self.chat, "mark_validated_activity", None)
                 if callable(mark_activity):
                     mark_activity()
-                return response_text
+                return self._canonical_verified_response(plain_text=response_text, verify_ref=verify_ref if "verify_ref" in locals() else None, candidate_ref=response_ref)
             if outcome is not None:
                 tracker = ObservationTracker(policy=policy, now=loop.time())
             previous = verify if verification_replacement_adopted else current
@@ -2848,6 +2849,34 @@ class GptAutoTurn:
             )
             return False
 
+    def _canonical_verified_response(
+        self,
+        *,
+        plain_text: str,
+        verify_ref: ChatMessageRef | None,
+        candidate_ref: ChatMessageRef | None,
+    ) -> str:
+        markdown: str | None = None
+        if (
+            verify_ref is not None
+            and verify_ref.message_id == self._response_message_id
+            and isinstance(verify_ref.markdown, str)
+            and verify_ref.markdown.strip()
+        ):
+            markdown = verify_ref.markdown
+        elif (
+            candidate_ref is not None
+            and candidate_ref.message_id == self._response_message_id
+            and candidate_ref.text == plain_text
+            and isinstance(candidate_ref.markdown, str)
+            and candidate_ref.markdown.strip()
+        ):
+            markdown = candidate_ref.markdown
+        if markdown is not None:
+            self._final_media_type = "text/markdown; charset=utf-8"
+            return markdown
+        self._final_media_type = "text/plain; charset=utf-8"
+        return plain_text
     def _result(self, reason: str) -> SessionTurnResult:
         metadata: dict[str, Any] = {"project-url": self.chat.project_url}
         if self.chat.provider_session_id:

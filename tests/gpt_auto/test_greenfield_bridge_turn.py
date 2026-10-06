@@ -53,6 +53,7 @@ def snap(
     assistants=0,
     user=None,
     assistant=None,
+    assistant_markdown=None,
     assistant_id=None,
     user_id=None,
     generating=False,
@@ -102,7 +103,13 @@ def snap(
         )
     if assistants and resolved_assistant_id:
         message_refs.append(
-            ChatMessageRef(role="assistant", message_id=resolved_assistant_id, text=assistant, sequence=1)
+            ChatMessageRef(
+                role="assistant",
+                message_id=resolved_assistant_id,
+                text=assistant,
+                sequence=1,
+                markdown=assistant_markdown,
+            )
         )
     if progress_blocks is None:
         progress_blocks = tuple(
@@ -2953,7 +2960,7 @@ async def test_completed_response_rescues_submission_proof_after_dom_mismatch():
             assistants=1,
             user="Review AU01 rendered with presentation spacing",
             assistant="Complete answer",
-            complete=True,
+           complete=True,
         )
         # Let the proof tracker reach unresolved-stall, then make the final
         # snapshot the correctly correlated, already-completed response.
@@ -3013,7 +3020,8 @@ async def test_completed_response_proves_submission_when_user_turn_is_unmounted(
     result = await turn.run()
 
     assert result.stop_reason == "end-turn"
-    assert result.final_summary == "Complete answer"
+    assert result.final_summary == "# Complete answer\n\nRendered **answer**."
+    assert result.final_media_type == "text/markdown; charset=utf-8"
     assert turn.state is TurnState.COMPLETE
     assert chat.runtime.bridge.submit_calls == 1
 
@@ -3398,7 +3406,8 @@ async def test_completed_new_conversation_proves_submission_despite_prompt_rende
         assistants=1,
         assistant_id="assistant-new",
         assistant="Complete answer",
-        complete=True,
+        assistant_markdown="# Complete answer\n\nRendered **answer**.",
+       complete=True,
         url="https://chatgpt.com/g/g-p-project/c/conversation-2",
     )
     landing = snap(url="https://chatgpt.com/g/g-p-project/project")
@@ -3419,7 +3428,8 @@ async def test_completed_new_conversation_proves_submission_despite_prompt_rende
     result = await turn.run()
 
     assert result.stop_reason == "end-turn"
-    assert result.final_summary == "Complete answer"
+    assert result.final_summary == "# Complete answer\n\nRendered **answer**."
+    assert result.final_media_type == "text/markdown; charset=utf-8"
     assert turn.state is TurnState.COMPLETE
     assert turn.submission_confirmed
     assert chat.runtime.bridge.submit_calls == 1

@@ -436,6 +436,10 @@ def _admitted_project_name(record: dict[str, Any]) -> str | None:
     return name.strip() if isinstance(name, str) and name.strip() else None
 
 
+def _session_output_media_type(result: Any) -> str:
+    value = getattr(result, "final_media_type", None)
+    return value if isinstance(value, str) and value else "text/plain; charset=utf-8"
+
 def _session_output_from_result(result: Any) -> str | None:
     """Read the bounded final summary from a SessionTurnResult.
 
@@ -1673,7 +1677,7 @@ def _dispatch_session_request(
         if isinstance(output_text, str) and output_text.strip():
             from audiagentic.components.agents.gateway.output import persist_final_response
 
-            artifact = persist_final_response(project_root, request_id, output_text)
+            artifact = persist_final_response(project_root, request_id, output_text, media_type=_session_output_media_type(result))
             artifact_ref = {
                 key: artifact[key]
                 for key in ("artifact-id", "request-id", "media-type", "bytes", "sha256")
@@ -1776,7 +1780,7 @@ def _dispatch_session_request(
             },
         )
     from audiagentic.components.agents.gateway.output import persist_final_response
-    artifact = persist_final_response(project_root, request_id, output_text)
+    artifact = persist_final_response(project_root, request_id, output_text, media_type=_session_output_media_type(result))
     artifact_ref = {key: artifact[key] for key in ("artifact-id", "request-id", "media-type", "bytes", "sha256")}
     store.append_owned_attempt(
         project_root,

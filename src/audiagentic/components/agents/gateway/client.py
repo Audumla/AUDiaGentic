@@ -33,9 +33,11 @@ class GatewayClient(Protocol):
     """Requester-facing gateway operations, independent of inbound transport."""
 
     def submit_execution_request(self, project_root: Path, **kwargs: Any) -> dict[str, Any]: ...
-    def get_execution_request(self, project_root: Path, request_id: str) -> dict[str, Any]: ...
+    def get_execution_request(self, project_root: Path, request_id: str, *, include_response: bool = False) -> dict[str, Any]: ...
     def get_execution_diagnostics(self, project_root: Path, request_id: str, *, limit: int = 25) -> dict[str, Any]: ...
     def recover_execution_request(self, project_root: Path, request_id: str, **kwargs: Any) -> dict[str, Any]: ...
+
+    def get_execution_response_payload(self, project_root: Path, request_id: str) -> dict[str, Any]: ...
     def get_execution_response(self, project_root: Path, request_id: str) -> str: ...
     def get_execution_failure_response(self, project_root: Path, request_id: str) -> str: ...
     def focus_execution_chat(self, project_root: Path, request_id: str) -> dict[str, Any]: ...
@@ -95,14 +97,17 @@ class EmbeddedGatewayClient:
             kwargs.setdefault("logical_client_id", self._logical_client_id)
         return self._application.submit_execution_request(project_root, **kwargs)
 
-    def get_execution_request(self, project_root: Path, request_id: str) -> dict[str, Any]:
-        return self._application.get_execution_request(project_root, request_id)
+    def get_execution_request(self, project_root: Path, request_id: str, *, include_response: bool = False) -> dict[str, Any]:
+        return self._application.get_execution_request(project_root, request_id, include_response=include_response)
 
     def get_execution_diagnostics(self, project_root: Path, request_id: str, *, limit: int = 25) -> dict[str, Any]:
         return self._application.get_execution_diagnostics(project_root, request_id, limit=limit)
 
     def recover_execution_request(self, project_root: Path, request_id: str, **kwargs: Any) -> dict[str, Any]:
         return self._application.recover_execution_request(project_root, request_id, **kwargs)
+
+    def get_execution_response_payload(self, project_root: Path, request_id: str) -> dict[str, Any]:
+        return self._application.get_execution_response_payload(project_root, request_id)
 
     def get_execution_response(self, project_root: Path, request_id: str) -> str:
         return self._application.get_execution_response(project_root, request_id)
@@ -369,6 +374,7 @@ _READ_ONLY_GATEWAY_METHODS = frozenset({
     "get_execution_request",
     "get_execution_diagnostics",
     "get_execution_response",
+    "get_execution_response_payload",
     "get_execution_failure_response",
     "list_execution_requests",
     "gateway_overview",

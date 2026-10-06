@@ -181,10 +181,10 @@ async def test_prompt_relays_provider_activity_before_slow_readiness(
         TransportObservationKind.ACTIVITY,
     ]
     assert [item.attributes["model_activity"] for item in observations] == [
-        "inspected",
-        "evaluated",
+        "preflight-inspected",
+        "preflight-evaluated",
     ]
-    assert chat._validated_activity_generation == 2
+    assert chat._validated_activity_generation == 0
 
 
 @pytest.mark.asyncio

@@ -21,6 +21,7 @@ from audiagentic.components.agents.gateway.output import (
     read_final_response,
     read_request_output,
 )
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.transports.agent_output import (
     AgentOutputEvent,
     AgentOutputKind,
@@ -144,3 +145,25 @@ def test_late_terminal_writer_does_not_overwrite_winner_artifact(tmp_path: Path)
 
     assert gateway_final_response_path(tmp_path, request_id).read_text(encoding="utf-8") == winner
     assert late["sha256"] == hashlib.sha256("late worker response".encode()).hexdigest()
+
+
+def test_final_response_artifact_preserves_markdown_media_type(tmp_path: Path) -> None:
+    text = "# Heading\n\nA **rich** answer."
+    artifact = persist_final_response(
+        tmp_path,
+        "request",
+        text,
+        media_type="text/markdown; charset=utf-8",
+    )
+
+    assert artifact["media-type"] == "text/markdown; charset=utf-8"
+    assert read_final_response(tmp_path, "request", artifact) == text
+
+
+
+def test_final_response_artifact_rejects_unsupported_media_type(tmp_path: Path) -> None:
+    with pytest.raises(AudiaGenticError) as exc_info:
+        persist_final_response(tmp_path, "request", "answer", media_type="text/html; charset=utf-8")
+
+    assert exc_info.value.code == "VAL-AGW-149"
+    assert not gateway_final_response_path(tmp_path, "request").exists()
