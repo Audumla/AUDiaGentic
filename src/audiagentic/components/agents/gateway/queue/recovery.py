@@ -257,10 +257,32 @@ def recovery_runner(record: dict[str, Any], *, project_root: Path | None = None)
     # prompt and let the normal presubmit-reconcile path continue it. Treating
     # every running provider-session record as observation-only loses the only
     # safe replay path and eventually turns the request into CON-AGW-084.
+    checkpoint_has_current_turn = (
+        isinstance(session_metadata, dict)
+        and session_metadata.get("unresolved-turn-id") == record.get("request-id")
+    )
+    checkpoint_has_uncorrelated_pending_turn = (
+        isinstance(session_metadata, dict)
+        and session_metadata.get("unresolved-turn-pending") is True
+        and not isinstance(session_metadata.get("unresolved-turn-id"), str)
+    )
+    checkpoint_submission_proven = (
+        isinstance(session_metadata, dict)
+        and session_metadata.get("submission-proven") is True
+    )
+    checkpoint_side_effect_started = (
+        isinstance(session_metadata, dict)
+        and session_metadata.get("recovery-state") == "side-effect-may-have-started"
+    )
     safe_presubmit_recovery = (
         provider_session
+        and session_checkpoint_available
         and recovery_metadata.get("phase") in {"presubmit-reconcile", "presubmit-retry"}
         and recovery_metadata.get("side-effect-state") == "not-started"
+        and not checkpoint_has_current_turn
+        and not checkpoint_has_uncorrelated_pending_turn
+        and not checkpoint_submission_proven
+        and not checkpoint_side_effect_started
     )
 
     return functools.partial(
@@ -275,14 +297,18 @@ def recovery_runner(record: dict[str, Any], *, project_root: Path | None = None)
         project_name=project_name,
         # A submitted/ambiguous provider-session turn is observation-only.
         # The one exception is a durable presubmit reconciliation whose
-        # side-effect fence proves Send was not reached; dispatch then reloads
-        # the immutable admitted prompt and retries the same request safely.
+        # side-effect fence proves Send was not reached and whose authoritative
+        # session checkpoint either has no pending turn or names a different
+        # predecessor. Missing/unreadable checkpoint evidence stays
+        # observation-only; it must never authorize prompt replay.
         # Worker-backed work is deferred above.
         resume_existing=(
             bool(record.get("recovery-required"))
             and provider_session
-            and session_checkpoint_available
-            and not safe_presubmit_recovery
+            and (
+                not session_checkpoint_available
+                or not safe_presubmit_recovery
+            )
         ),
     )
 
