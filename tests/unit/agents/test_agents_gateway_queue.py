@@ -536,6 +536,47 @@ def test_failed_local_session_without_activity_lease_is_bounded(
     assert terminal["recovery"]["outcome"] == "bounded-recovery-exhausted"
     assert calls == 1
 
+def test_recovery_uses_authoritative_session_checkpoint(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """A stale request projection cannot suppress a durable pending-turn fence."""
+    project = tmp_path / "project"
+    project.mkdir()
+    record = store.build_record(
+        execution_profile_id="authoritative-session-checkpoint",
+        prompt_body="x",
+        provider_transport_kind="provider-session",
+        session_id="ses_authoritative_checkpoint",
+    )
+    record.update(
+        {
+            "state": "running",
+            "provider-metadata": {
+                "chat-url": "https://chatgpt.com/g/g-p-project/c/conversation",
+                "unresolved-turn-pending": False,
+            },
+            "recovery": {"reason": "gateway-restart"},
+            "activity": {
+                "provider": {"lease-expires-at": "2999-01-01T00:00:00Z"}
+            },
+        }
+    )
+    monkeypatch.setattr(
+        sessions_store,
+        "expire_session_if_policy_exceeded",
+        lambda _project_root, _session_id: {
+            "state": "failed",
+            "provider": {"metadata": {"unresolved-turn-pending": True}},
+        },
+    )
+    monkeypatch.setattr(
+        sessions_store,
+        "read_session_binding",
+        lambda _project_root, _session_id: {"provider-session-ref": "conversation-ref"},
+    )
+
+    assert queue_mod._durable_provider_session_is_active(project, record) is True
+
 def test_active_local_session_with_expired_activity_lease_is_bounded(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
@@ -777,6 +818,44 @@ def test_followup_reconciliation_waits_past_generic_recovery_bound(tmp_path: Pat
     assert seen_continuations
     assert all(item["resume-existing"] is True for item in seen_continuations)
     assert all("followup-prompt-digest" in item for item in seen_continuations)
+
+
+def test_followup_reconciliation_has_independent_bound(tmp_path: Path):
+    manager = queue_mod.GatewayQueueManager()
+    project = tmp_path / "project"
+    project.mkdir()
+    record = store.build_record(execution_profile_id="followup-bound", prompt_body="x")
+    store.write_record(project, record)
+
+    def runner(_project_root: Path, _current: dict) -> dict:
+        raise RecoveryDeferred(
+            AudiaGenticError(
+                code="EXT-GPTAUTO-003",
+                kind="providers",
+                message="follow-up still being observed",
+            ),
+            phase="followup-reconcile",
+            side_effect_state="may-have-started",
+            continuation={"kind": "provider-followup", "resume-existing": True},
+        )
+
+    manager.enqueue(
+        project,
+        record,
+        {
+            "virtual-capacity": 1,
+            "provider-session-recovery-initial-delay-seconds": 0.01,
+            "provider-session-recovery-max-delay-seconds": 0.01,
+            "provider-session-recovery-max-attempts": 100,
+            "provider-session-followup-recovery-max-attempts": 2,
+        },
+        runner,
+    )
+
+    terminal = manager.wait(project, record["request-id"], timeout_seconds=3)
+    assert terminal["state"] == "interrupted"
+    assert terminal["error"]["code"] == "CON-AGW-084"
+    assert terminal["recovery"]["outcome"] == "bounded-recovery-exhausted"
 
 
 def test_conversation_load_reconciliation_waits_past_generic_recovery_bound(
