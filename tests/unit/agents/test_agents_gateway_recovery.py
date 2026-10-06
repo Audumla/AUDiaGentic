@@ -226,6 +226,45 @@ def test_recovery_runner_reads_session_checkpoint_for_resume_mode(
     assert runner.keywords["resume_existing"] is True
 
 
+def test_recovery_runner_reloads_prompt_for_proven_presubmit_restart(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """A Send-never-reached turn must resume through normal prompt dispatch."""
+    from audiagentic.components.agents.gateway.session import sessions_store
+
+    record = _record(tmp_path)
+    record.update(
+        {
+            "request-id": "req-presubmit-recovery",
+            "session-id": "ses-presubmit-recovery",
+            "state": "running",
+            "recovery-required": True,
+            "resolved-provider-id": "gpt-auto",
+            "gateway-profile-runtime": {"provider-id": "gpt-auto", "params": {}},
+            "recovery": {
+                "phase": "presubmit-reconcile",
+                "side-effect-state": "not-started",
+            },
+        }
+    )
+    monkeypatch.setattr(
+        sessions_store,
+        "read_session_record",
+        lambda *_args: {"session-id": "ses-presubmit-recovery"},
+    )
+    monkeypatch.setattr(
+        sessions_store,
+        "session_provider_metadata",
+        lambda _record: {"unresolved-turn-pending": True},
+    )
+
+    runner = recovery.recovery_runner(record, project_root=tmp_path)
+
+    # dispatch_request will reload the immutable admitted-prompt.txt artifact
+    # when resume_existing is false; it can then safely wait for the preceding
+    # turn and submit this prompt without replaying an ambiguous Send.
+    assert runner.keywords["resume_existing"] is False
+
 def test_recovery_runner_fails_closed_when_session_checkpoint_unavailable(tmp_path: Path, monkeypatch) -> None:
     from audiagentic.components.agents.gateway.session import sessions_store
 
