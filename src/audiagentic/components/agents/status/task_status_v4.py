@@ -118,10 +118,13 @@ def _validate_snapshot(
 def project_task_status_v4(
     record: Mapping[str, Any],
     canonical_snapshot: AgentStatusSnapshot | Any | None = None,
+    *,
+    queue_state: str | None = None,
 ) -> dict[str, object]:
     """Project one request into the fixed V4 polling contract.
 
-    Inapplicable axes are omitted rather than represented by JSON ``null``.
+    Inapplicable axes are omitted rather than represented by JSON `
+ull``.
     Durable terminal state wins; recognized durable
     ``queued``/``dispatching``/``running`` states refine an ``unknown`` AS92
     snapshot without exposing the richer internal snapshot contract.
@@ -183,7 +186,9 @@ def project_task_status_v4(
     if state in {"dispatching", "running"}:
         if snapshot_lifecycle is not None and snapshot_lifecycle not in _ACTIVE_SNAPSHOT_LIFECYCLES:
             raise TaskStatusContractError("durable active state has irreconcilable snapshot lifecycle")
-        if record.get("cancel-requested") is True:
+        if queue_state in {"recovery-required", "orphaned"}:
+            activity = queue_state
+        elif record.get("cancel-requested") is True:
             activity = "cancelling"
         elif snapshot_lifecycle == AgentLifecycle.WAITING:
             activity = "waiting"

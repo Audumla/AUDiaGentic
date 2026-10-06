@@ -135,12 +135,14 @@ def test_recovery_defers_stale_worker_without_replaying_side_effect(tmp_path: Pa
 
     report = recovery.recover_gateway_requests(service_root, live_owner_epoch="new-epoch")
 
+    assert report.interrupted == 1
     assert report.running == ()
-    assert report.deferred == ((project_root, record["request-id"]),)
+    assert report.deferred == ()
     recovered = store.read_record(project_root, record["request-id"])
-    assert recovered["state"] == "running"
-    assert recovered["dispatch-owner-epoch"] == "old-epoch"
-    assert store.active_work_path(service_root, record["request-id"]).exists()
+    assert recovered["state"] == "interrupted"
+    assert recovered["error"]["code"] == "CON-AGW-084"
+    assert recovered["recovery"]["outcome"] == "manual-review-required"
+    assert not store.active_work_path(service_root, record["request-id"]).exists()
 
 
 def test_recovery_repairs_index_after_request_takeover_race(tmp_path: Path, monkeypatch) -> None:
@@ -223,6 +225,23 @@ def test_recovery_runner_reads_session_checkpoint_for_resume_mode(
     # missing/cleared checkpoint evidence must not authorize a replay.
     assert runner.keywords["resume_existing"] is True
 
+
+def test_recovery_runner_fails_closed_when_session_checkpoint_unavailable(tmp_path: Path, monkeypatch) -> None:
+    from audiagentic.components.agents.gateway.session import sessions_store
+
+    record = _record(tmp_path)
+    record.update({
+        "session-id": "ses-missing-checkpoint",
+        "state": "running",
+        "recovery-required": True,
+        "resolved-provider-id": "gpt-auto",
+        "gateway-profile-runtime": {"provider-id": "gpt-auto", "params": {}},
+    })
+    monkeypatch.setattr(sessions_store, "read_session_record", lambda *_args: (_ for _ in ()).throw(OSError("missing")))
+
+    runner = recovery.recovery_runner(record, project_root=tmp_path)
+
+    assert runner.keywords["resume_existing"] is False
 
 def test_recovery_runner_preserves_project_name_for_gpt_auto_resume(tmp_path: Path, monkeypatch) -> None:
     from audiagentic.components.agents.gateway.session import sessions_store

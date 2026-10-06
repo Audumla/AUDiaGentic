@@ -154,7 +154,7 @@ def _record(project_root: Path, prompt: str = "hello") -> dict:
 class TestRecoveryOwnershipTakeover:
     """Gateway generation loss preserves non-terminal request ownership safely."""
 
-    def test_recovery_defers_unreattachable_worker(self, tmp_path: Path) -> None:
+    def test_recovery_interrupts_unreattachable_worker(self, tmp_path: Path) -> None:
         service_root = tmp_path / "service"
         project_root = tmp_path / "project"
         record = _record(project_root)
@@ -175,11 +175,13 @@ class TestRecoveryOwnershipTakeover:
 
         from audiagentic.components.agents.gateway.queue import recovery as recovery
         report = recovery.recover_gateway_requests(service_root, live_owner_epoch="new-epoch")
-        assert report.deferred == ((project_root, record["request-id"]),)
+        assert report.interrupted == 1
+        assert report.deferred == ()
         recovered = store.read_record(project_root, record["request-id"])
-        assert recovered["state"] == "running"
-        assert recovered["dispatch-owner-epoch"] == "old-epoch"
-        assert recovered["recovery-required"] is False
+        assert recovered["state"] == "interrupted"
+        assert recovered["error"]["code"] == "CON-AGW-084"
+        assert recovered["recovery"]["outcome"] == "manual-review-required"
+        assert not store.active_work_path(service_root, record["request-id"]).exists()
 
     def test_duplicate_recovery_does_not_republish(self, tmp_path: Path) -> None:
         """Second recovery pass on already-interrupted request publishes nothing."""
@@ -204,8 +206,9 @@ class TestRecoveryOwnershipTakeover:
         from audiagentic.components.agents.gateway.queue import recovery as recovery
         report1 = recovery.recover_gateway_requests(service_root, live_owner_epoch="new-epoch")
         report2 = recovery.recover_gateway_requests(service_root, live_owner_epoch="new-epoch")
-        assert report1.deferred == ((project_root, record["request-id"]),)
-        assert report2.deferred == ((project_root, record["request-id"]),)
+        assert report1.interrupted == 1
+        assert report2.deferred == ()
+        assert report2.interrupted == 0
         assert report2.skipped_live == 0
         assert not report2.running
 
@@ -246,8 +249,8 @@ class TestRecoveryOwnershipTakeover:
         report = recovery.recover_gateway_requests(service_root, live_owner_epoch="new-epoch")
         assert report.queued == ((project_root, record["request-id"]),)
 
-    def test_recovery_running_worker_is_deferred(self, tmp_path: Path) -> None:
-        """End-to-end: running recovery → resubmit-required outcome → event replay_required=False."""
+    def test_recovery_running_worker_is_interrupted(self, tmp_path: Path) -> None:
+        """End-to-end: unreattachable running recovery → interrupted outcome."""
         service_root = tmp_path / "service"
         project_root = tmp_path / "project"
         record = _record(project_root)
@@ -268,7 +271,7 @@ class TestRecoveryOwnershipTakeover:
 
         from audiagentic.components.agents.gateway.queue import recovery as recovery
         report = recovery.recover_gateway_requests(service_root, live_owner_epoch="new-epoch")
-        assert report.deferred == ((project_root, record["request-id"]),)
+        assert report.interrupted == 1
 
 
 # ---------------------------------------------------------------------------
