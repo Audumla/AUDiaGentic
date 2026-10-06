@@ -150,6 +150,8 @@ def structured_presubmit_failure(error: Exception) -> bool:
         isinstance(details, dict)
         and details.get("failure-stage") in _PRESUBMIT_STAGES
         and details.get("submission-state") == "not_started"
+        and details.get("submission-proven") is False
+        and details.get("submission-ambiguous") is False
     )
 
 

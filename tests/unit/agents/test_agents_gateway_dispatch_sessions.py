@@ -240,6 +240,7 @@ def test_composer_retry_preserves_session_and_is_bounded(rig, monkeypatch, ambig
         if always_fail or len(calls) == 1:
             raise AudiaGenticError(code="EXT-GPTAUTO-004", kind="providers", message="composer timeout", details={
                 "failure-stage": "readiness", "submission-state": "not_started",
+                "submission-proven": False, "submission-ambiguous": ambiguous,
                 "retryable-same-session": not ambiguous,
             })
         return original(*args, **kwargs)
