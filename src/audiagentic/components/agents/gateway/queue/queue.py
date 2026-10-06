@@ -60,6 +60,7 @@ _WAIT_MAX_BACKOFF_SECONDS = 0.5
 _RECOVERY_RETRY_INITIAL_SECONDS = 0.5
 _RECOVERY_RETRY_MAX_SECONDS = 15.0
 _RECOVERY_RETRY_MAX_ATTEMPTS = 6
+_FOLLOWUP_RECOVERY_DEFAULT_MAX_ATTEMPTS = max(_RECOVERY_RETRY_MAX_ATTEMPTS * 4, 24)
 
 # SH07 crash-matrix test-only hook: widens the claim-to-start control-plane
 # window so a real OS process kill can be observed landing inside it (the
@@ -1079,7 +1080,7 @@ class GatewayQueueManager:
         params = dict(entry.snapshot.execution_params)
         value = params.get(
             "provider-session-followup-recovery-max-attempts",
-            max(_RECOVERY_RETRY_MAX_ATTEMPTS * 4, 24),
+            _FOLLOWUP_RECOVERY_DEFAULT_MAX_ATTEMPTS,
         )
         if isinstance(value, bool):
             return max(_RECOVERY_RETRY_MAX_ATTEMPTS * 4, 24)
@@ -1662,7 +1663,11 @@ class GatewayQueueManager:
                         or followup_recovery_exhausted
                     )
                     and not conversation_load_reconciliation
-                    and not (durable_provider_recovery and not prompt_unavailable_recovery)
+                    and not (
+                        durable_provider_recovery
+                        and not prompt_unavailable_recovery
+                        and not followup_recovery_exhausted
+                    )
                 ):
                     recovery_metadata = dict(current.get("recovery") or {})
                     recovery_metadata.update(
@@ -1716,6 +1721,31 @@ class GatewayQueueManager:
                                 extra={"request-id": request_id, "session-id": current.get("session-id")},
                                 exc_info=True,
                             )
+                    session_fence_state = None
+                    if followup_reconciliation and current.get("session-id"):
+                        # The provider outcome is still ambiguous after the
+                        # observation-only follow-up bound. Keep the fence so
+                        # later prompts cannot duplicate the unresolved turn,
+                        # but make the required operator action explicit.
+                        session_fence_state = "manual-reconcile-required"
+                        try:
+                            from audiagentic.components.agents.gateway.session import sessions_store
+
+                            sessions_store.update_provider_metadata(
+                                project_root,
+                                str(current["session-id"]),
+                                {"recovery-state": session_fence_state},
+                            )
+                        except Exception:  # noqa: BLE001 - terminal request state remains authoritative
+                            logger.warning(
+                                "could not persist manual-reconcile fence state",
+                                extra={
+                                    "request-id": request_id,
+                                    "session-id": current.get("session-id"),
+                                },
+                                exc_info=True,
+                            )
+
                     interrupted = store.transition_owned_terminal(
                         project_root,
                         request_id,
@@ -1733,6 +1763,7 @@ class GatewayQueueManager:
                                     "recovery-max-attempts": effective_recovery_max_attempts,
                                     "recovery-phase": deferred.phase,
                                     "side-effect-state": deferred.side_effect_state,
+                                    "session-fence-state": session_fence_state,
                                     "submission-proven": (
                                         (current.get("provider-metadata") or {}).get("submission-proven")
                                         is True
