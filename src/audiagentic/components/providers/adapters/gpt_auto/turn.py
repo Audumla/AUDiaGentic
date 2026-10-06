@@ -1518,6 +1518,19 @@ class GptAutoTurn:
     _SOFT_LIVENESS_SIGNALS = frozenset(
         {"stop-control", "streaming-indicator", "thinking-indicator", "busy-indicator"}
     )
+    # A stale/visible provider error can coexist with old renderer widgets.
+    # Those widgets are not evidence that the request is still progressing.
+    _SOFT_LIVENESS_FAILURE_SIGNALS = frozenset(
+        {
+            "error-page",
+            "error-alert",
+            "request-error-alert",
+            "network-error-alert",
+            "stream-cache-expired",
+            "conversation-load-failed",
+            "auth-required",
+        }
+    )
     # Renderer-position DOM markers (data-is-last-node/data-is-only-node)
     # describe the last node rendered so far, not the end of the provider
     # turn. They have appeared while substantial output was still streaming,
@@ -2355,10 +2368,26 @@ class GptAutoTurn:
                 or current.dom_signals != previous.dom_signals
             ):
                 last_progress_at = now
-            current_soft = current.dom_signals & self._SOFT_LIVENESS_SIGNALS
+            failure_present = bool(
+                current.dom_signals & self._SOFT_LIVENESS_FAILURE_SIGNALS
+            )
+            current_soft = (
+                current.dom_signals & self._SOFT_LIVENESS_SIGNALS
+                if not failure_present
+                else frozenset()
+            )
             previous_soft = previous.dom_signals & self._SOFT_LIVENESS_SIGNALS
-            soft_edge = current_soft != previous_soft or current.generating != previous.generating
-            soft_present = bool(current_soft) or current.generating
+            soft_edge = (
+                not failure_present
+                and (
+                    current_soft != previous_soft
+                    or current.generating != previous.generating
+                )
+            )
+            soft_present = (
+                not failure_present
+                and (bool(current_soft) or current.generating)
+            )
             caps = EvidenceCapability.NONE
             if response_started and progress_edge:
                 caps |= EvidenceCapability.PROGRESS
