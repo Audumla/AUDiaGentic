@@ -396,6 +396,7 @@
         "from-owner-epoch": {"type": ["string", "null"]},
         "handoff-id": {"type": ["string", "null"]},
         "attempt": {"type": "integer", "minimum": 0},
+        "followup-attempt": {"type": "integer", "minimum": 0},
           "last-error": {"type": ["string", "null"], "maxLength": 256},
           "last-error-code": {"type": ["string", "null"], "maxLength": 128},
           "last-error-type": {"type": ["string", "null"], "maxLength": 128},
