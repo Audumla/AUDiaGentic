@@ -1135,6 +1135,24 @@ class GatewayQueueManager:
                     with pq.lock:
                         pq.running.discard(entry.request_id)
                     self._active_requests.pop(entry.request_id, None)
+                    # Timer bookkeeping is removed before launch. If a
+                    # transient scheduler/store/capacity exception occurs
+                    # here, restore a delayed retry or the durable request
+                    # can remain running forever with no pending timer.
+                    if not self._shutdown_event.is_set():
+                        try:
+                            self._schedule_recovery_retry(
+                                pq,
+                                entry,
+                                max(0.1, delay_seconds),
+                                worker_id=worker_id,
+                                attempt_epoch=attempt_epoch,
+                            )
+                        except Exception:  # noqa: BLE001 - preserve the original failure
+                            logger.exception(
+                                "could not reschedule gateway recovery retry",
+                                extra={"request-id": entry.request_id},
+                            )
             finally:
                 if not entered_worker and bound is not None:
                     self._release_reservation(bound)

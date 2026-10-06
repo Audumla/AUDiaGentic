@@ -120,7 +120,8 @@ def test_recovery_deferred_stays_running_and_retries_same_request(tmp_path: Path
     assert current["recovery-required"] is True
     assert current["recovery"]["attempt"] == 1
     assert current["recovery"]["side-effect-state"] == "may-have-started"
-    assert manager.recovery_pending_count(project) == 1
+    # The retry may already have fired by the time the durable phase is observed;
+    # the later same-request call and terminal result prove it was scheduled.
 
     terminal = manager.wait(project, record["request-id"], timeout_seconds=3)
     assert terminal["state"] == "completed"
@@ -134,6 +135,63 @@ def test_recovery_deferred_stays_running_and_retries_same_request(tmp_path: Path
         for event in events
     )
 
+
+def test_recovery_retry_scheduler_exception_reschedules(tmp_path: Path):
+    """A transient exception before retry admission must not strand the
+    durable request without another recovery timer."""
+    manager = queue_mod.GatewayQueueManager()
+    project = tmp_path / "project"
+    project.mkdir()
+    record = store.build_record(execution_profile_id="recovery-scheduler", prompt_body="x")
+    store.write_record(project, record)
+    first_attempt = threading.Event()
+    calls: list[str] = []
+
+    def runner(project_root: Path, current: dict) -> dict:
+        calls.append(current["request-id"])
+        if len(calls) == 1:
+            first_attempt.set()
+            raise RecoveryDeferred(
+                AudiaGenticError(
+                    code="EXT-AGW-118",
+                    kind="agents",
+                    message="provider reattach unavailable",
+                )
+            )
+        return store.transition_record(
+            project_root,
+            current["request-id"],
+            "completed",
+            updates={"output": "recovered", "finished-at": now_iso_z()},
+        )
+
+    manager.enqueue(
+        project,
+        record,
+        {
+            "virtual-capacity": 1,
+            "provider-session-recovery-initial-delay-seconds": 0.05,
+            "provider-session-recovery-max-delay-seconds": 0.05,
+        },
+        runner,
+    )
+    assert first_attempt.wait(timeout=2)
+    original_reserve = manager._try_reserve_source
+    reserve_calls = 0
+
+    def flaky_reserve(entry, pq):
+        nonlocal reserve_calls
+        reserve_calls += 1
+        if reserve_calls == 1:
+            raise RuntimeError("transient scheduler failure")
+        return original_reserve(entry, pq)
+
+    manager._try_reserve_source = flaky_reserve
+    terminal = manager.wait(project, record["request-id"], timeout_seconds=3)
+    assert terminal["state"] == "completed"
+    assert calls == [record["request-id"], record["request-id"]]
+    assert reserve_calls >= 2
+    assert manager.recovery_pending_count(project) == 0
 
 def test_session_recovery_deferred_before_turn_start_retries_queued_request(tmp_path: Path):
     """A pre-lock recovery deferral must not strand a live successor session."""
