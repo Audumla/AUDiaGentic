@@ -157,7 +157,9 @@ def test_snapshot_preserves_structural_hr_for_user_prompt_correlation() -> None:
     """A rendered thematic break must be recoverable only for correlation."""
     assert "const userCorrelation = (element)" in _SNAPSHOT_FN
     assert "querySelectorAll('hr')" in _SNAPSHOT_FN
-    assert 'document.createTextNode("\\n---\\n")' in _SNAPSHOT_FN
+    assert 'document.createTextNode("\
+---\
+")' in _SNAPSHOT_FN
     assert "correlationText" in _SNAPSHOT_FN
     assert "structuralHrCount" in _SNAPSHOT_FN
 
@@ -460,6 +462,8 @@ def test_projects_new_chat_point_scrolls_before_viewport_validation() -> None:
     assert "x < 0 || y < 0" in _PROJECT_NEW_CHAT_POINT_FN
     assert "matching.length !== 1" in _PROJECT_NEW_CHAT_POINT_FN
     assert "canonicalProjectId" in _PROJECT_NEW_CHAT_POINT_FN
+    assert "data-app-action-sidebar-project-row" in _PROJECT_NEW_CHAT_POINT_FN
+    assert "sidebarProjectIdForName" in _PROJECT_NEW_CHAT_POINT_FN
 
 
 @pytest.mark.asyncio
