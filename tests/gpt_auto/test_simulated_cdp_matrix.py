@@ -157,9 +157,7 @@ def test_snapshot_preserves_structural_hr_for_user_prompt_correlation() -> None:
     """A rendered thematic break must be recoverable only for correlation."""
     assert "const userCorrelation = (element)" in _SNAPSHOT_FN
     assert "querySelectorAll('hr')" in _SNAPSHOT_FN
-    assert 'document.createTextNode("\
----\
-")' in _SNAPSHOT_FN
+    assert 'document.createTextNode("\\n---\\n")' in _SNAPSHOT_FN
     assert "correlationText" in _SNAPSHOT_FN
     assert "structuralHrCount" in _SNAPSHOT_FN
 

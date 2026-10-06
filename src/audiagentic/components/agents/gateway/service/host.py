@@ -325,8 +325,13 @@ class GatewayServiceHost:
                 except Exception:  # noqa: BLE001 - keep the poller alive
                     logger.exception("gateway watchdog pass failed")
 
-        # Startup scan makes notifier loss and host restart harmless.
-        pump.run_once(owner_epoch=self.owner_epoch)
+        # Startup scan makes notifier loss and host restart harmless. It is
+        # best-effort: a malformed old operation must not prevent the poller
+        # from starting and retrying on the next cadence.
+        try:
+            pump.run_once(owner_epoch=self.owner_epoch)
+        except Exception:  # noqa: BLE001 - keep the poller available
+            logger.exception("gateway startup operation scan failed")
         self._operations_thread = threading.Thread(
             target=_poll, name="gateway-operations-poller", daemon=True
         )

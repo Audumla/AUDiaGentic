@@ -133,14 +133,23 @@ _PROJECT_NEW_CHAT_POINT_FN = r"""(input) => {
   // project link. The sidebar row on the same page remains the provider-owned
   // identity source, so use only an exact-name sidebar match as a fallback.
   // If that identity cannot be proven, retain the fail-closed null result.
-  const sidebarProjectIdForName = () => {
-    const sidebarRow = Array.from(document.querySelectorAll('[data-app-action-sidebar-project-row]'))
-      .find(candidate => normalize(
+  const sidebarProjectIdsForName = () => Array.from(
+    new Set(Array.from(document.querySelectorAll('[data-app-action-sidebar-project-row]'))
+      .filter(candidate => normalize(
         candidate.getAttribute('data-app-action-sidebar-project-label')
-      ) === wanted);
-    return sidebarRow
-      ? canonicalProjectId(sidebarRow.getAttribute('data-app-action-sidebar-project-id'))
-      : '';
+      ) === wanted)
+      .map(candidate => canonicalProjectId(
+        candidate.getAttribute('data-app-action-sidebar-project-id')
+      ))
+      .filter(Boolean))
+  );
+  const sidebarProjectIdForName = () => {
+    const ids = sidebarProjectIdsForName();
+    if (expectedProjectId) {
+      const matchingExpected = ids.filter(id => id === expectedProjectId);
+      return matchingExpected.length === 1 ? matchingExpected[0] : '';
+    }
+    return ids.length === 1 ? ids[0] : '';
   };
   const projectIdForRow = row => {
     const href = row.querySelector('a[href*="/g/g-p-"]')?.getAttribute('href') || '';
