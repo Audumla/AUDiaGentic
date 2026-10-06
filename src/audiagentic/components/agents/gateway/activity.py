@@ -63,6 +63,16 @@ class RequestActivityRelay:
                 force=force,
             )
             return
+        if normalized_phase in {"preflight-inspected", "preflight-evaluated"}:
+            # Readiness inspection is useful owner progress, but it is not
+            # provider work and must not reset the provider inactivity clock.
+            self.observe_owner(
+                source=source,
+                source_instance=source_instance,
+                source_sequence=source_sequence,
+                force=force,
+            )
+            return
         if not is_meaningful_activity(source, phase):
             return
         self._observe("provider", source, source_instance, source_sequence, phase, force)

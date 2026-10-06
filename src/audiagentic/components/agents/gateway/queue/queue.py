@@ -1508,6 +1508,16 @@ class GatewayQueueManager:
                         for key in ("last-error-code", "last-error", "phase", "side-effect-state", "attempt")
                         if prior_recovery.get(key) is not None
                     }
+                    fresh_diagnosis = {
+                        "last-error-code": getattr(deferred.error, "code", None),
+                        "last-error": str(getattr(deferred.error, "message", deferred.error))[:512],
+                        "phase": deferred.phase,
+                        "side-effect-state": deferred.side_effect_state,
+                    }
+                    fresh_diagnosis = {key: value for key, value in fresh_diagnosis.items() if value is not None}
+                    recovery_diagnosis = dict(fresh_diagnosis)
+                    if prior_diagnosis:
+                        recovery_diagnosis["prior-recovery"] = prior_diagnosis
                     cancelled = store.transition_owned_terminal(
                         project_root,
                         request_id,
@@ -1517,7 +1527,7 @@ class GatewayQueueManager:
                                 "code": "CON-AGW-CANCELLED",
                                 "kind": "agents",
                                 "message": "gateway request cancelled during recovery",
-                                "details": {"recovery-diagnosis": prior_diagnosis, "side-effect-state": deferred.side_effect_state, "recovery-phase": deferred.phase},
+                                "details": {"recovery-diagnosis": recovery_diagnosis, "side-effect-state": deferred.side_effect_state, "recovery-phase": deferred.phase},
                             },
                             "finished-at": now_iso_z(),
                         },
