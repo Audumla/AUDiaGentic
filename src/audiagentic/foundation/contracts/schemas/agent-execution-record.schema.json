@@ -397,6 +397,10 @@
         "handoff-id": {"type": ["string", "null"]},
         "attempt": {"type": "integer", "minimum": 0},
           "last-error": {"type": ["string", "null"], "maxLength": 256},
+          "last-error-code": {"type": ["string", "null"], "maxLength": 128},
+          "last-error-type": {"type": ["string", "null"], "maxLength": 128},
+          "last-error-kind": {"type": ["string", "null"], "maxLength": 64},
+          "last-error-details": {"type": ["object", "null"]},
           "phase": {"type": "string", "maxLength": 64},
           "side-effect-state": {"type": "string", "maxLength": 64},
           "continuation": {
