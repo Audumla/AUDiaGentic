@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from playwright.async_api import async_playwright
+from playwright.async_api import Error as PlaywrightError, async_playwright
 
 from audiagentic.components.providers.adapters.gpt_auto.gpt_auto_cdp import (
     _PROJECT_NEW_CHAT_POINT_FN,
@@ -52,7 +52,10 @@ async def test_projects_selector_proves_identity_from_sidebar_dom(
 ) -> None:
     """The selector must execute against the DOM rather than source-string mocks."""
     async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch(headless=True)
+        try:
+            browser = await playwright.chromium.launch(headless=True)
+        except PlaywrightError as error:
+            pytest.skip(f"headless Chromium unavailable: {error}")
         try:
             page = await browser.new_page(viewport={"width": 1200, "height": 900})
             await page.set_content(_markup(sidebar_ids))
