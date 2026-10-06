@@ -522,6 +522,44 @@ def test_request_runtime_status_includes_progress(tmp_path: Path, monkeypatch) -
     assert "phase" in status["progress"]
 
 
+def test_request_runtime_status_exposes_recovery_required_not_active(tmp_path: Path, monkeypatch) -> None:
+    record = store.build_record(execution_profile_id="recovery", prompt_body="x")
+    record.update({"state": "running", "recovery-required": True, "recovery": {"reason": "gateway-restart", "outcome": "in-place", "phase": "rehydrate-retry"}})
+    store.write_record(tmp_path, record)
+    monkeypatch.setattr(
+        gateway,
+        "get_queue_manager",
+        lambda: SimpleNamespace(request_slot_status=lambda *_args: None),
+    )
+
+    status = gateway.request_runtime_status(tmp_path, record["request-id"])
+
+    assert status["state"] == "running"
+    assert status["queue-state"] == "recovery-required"
+    assert status["profile-slot"] is None
+
+
+def test_request_runtime_status_exposes_orphaned_worker_not_active(tmp_path: Path, monkeypatch) -> None:
+    record = store.build_record(execution_profile_id="worker", prompt_body="x")
+    record.update({
+        "state": "running",
+        "dispatch-owner-epoch": "old-owner",
+        "provider-transport-kind": "worker",
+    })
+    store.write_record(tmp_path, record)
+    monkeypatch.setattr(
+        gateway,
+        "get_queue_manager",
+        lambda: SimpleNamespace(request_slot_status=lambda *_args: None),
+    )
+
+    status = gateway.request_runtime_status(tmp_path, record["request-id"])
+
+    assert status["state"] == "running"
+    assert status["queue-state"] == "orphaned"
+    assert status["profile-slot"] is None
+
+
 def test_wait_timeout_marker_on_non_terminal(tmp_path: Path, monkeypatch) -> None:
     _make_profile(tmp_path, "default", "local-openai")
     import threading
