@@ -2178,7 +2178,17 @@ class GptAutoTurn:
             # stale marker must not pre-empt durable completion evidence.
             provider_interruption = "provider-interruption" in current.dom_signals
             failed = self.chat.config.workflow.policy("response-failed").evaluate(facts)
-            if failed.satisfied and not completion_evidence_present:
+            fresh_failure_signals = failed.matched.intersection(
+                {
+                    "request-error-alert",
+                    "network-error-alert",
+                    "stream-cache-expired",
+                    "conversation-load-failed",
+                }
+            )
+            if failed.satisfied and (
+                not completion_evidence_present or fresh_failure_signals
+            ):
                 logger.warning(
                     "gpt-auto response failure policy matched",
                     extra={"turn-id": self.request.turn_id, "evidence": sorted(failed.matched)},
@@ -2388,7 +2398,10 @@ class GptAutoTurn:
             terminal_verified_ok = False
             response_message_id = current.latest_assistant_id
             response_text = current.latest_assistant_text
-            if terminal_candidate and tracker.state.value != "candidate-terminal":
+            terminal_candidate_entering = (
+                terminal_candidate and tracker.state.value != "candidate-terminal"
+            )
+            if terminal_candidate_entering:
                 logger.info(
                     "gpt-auto response terminal-candidate evidence=%s text_len=%d "
                     "text_digest=%s generating=%s required_stability=%s dom_signals=%s",
@@ -2404,7 +2417,7 @@ class GptAutoTurn:
                     sorted(current.dom_signals),
                     extra={"turn-id": self.request.turn_id},
                 )
-            if terminal_candidate and not emitted:
+            if terminal_candidate_entering and not emitted:
                 await self._emit(
                     TransportObservationKind.ACTIVITY, {"model_activity": "response-observed"}
                 )
@@ -3334,6 +3347,14 @@ def _scope_response_snapshot(
                 message_id=snapshot.latest_assistant_id,
                 text=snapshot.latest_assistant_text,
                 sequence=len(snapshot.message_refs),
+                markdown=next(
+                    (
+                        ref.markdown
+                        for ref in assistant_refs
+                        if ref.message_id == snapshot.latest_assistant_id
+                    ),
+                    None,
+                ),
             )
     if response_ref is None and virtualized_assistant_id:
         unpinned_fresh_assistant = any(

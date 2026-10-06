@@ -463,12 +463,21 @@ async def test_turn_proves_submission_once_and_completes_from_atomic_snapshots()
         for observation in observations
         if observation.kind is TransportObservationKind.TIMING
     ]
-    assert [observation.attributes["timing-event"] for observation in timing] == [
-        "attempt-start",
-        "submit-confirmed",
-        "first-assistant-text",
-    ]
-    assert all(set(observation.attributes) == {"timing-event"} for observation in timing)
+    timing_events = [observation.attributes["timing-event"] for observation in timing]
+    assert timing_events[:2] == ["attempt-start", "submit-confirmed"]
+    assert timing_events.count("first-assistant-text") == 1
+    assert "response-decision" in timing_events
+    assert all(
+        set(observation.attributes) == {"timing-event"}
+        for observation in timing
+        if observation.attributes["timing-event"] != "response-decision"
+    )
+    assert all(
+        {"timing-event", "diagnostic-signature", "diagnostic-details"}
+        <= set(observation.attributes)
+        for observation in timing
+        if observation.attributes["timing-event"] == "response-decision"
+    )
 
 
 @pytest.mark.asyncio
@@ -889,6 +898,39 @@ async def test_interruption_does_not_mask_terminal_provider_error(error_signal):
 
     assert caught.value.details["failure-reason"] == "provider-failure-policy-matched"
     assert error_signal in caught.value.details["evidence"]
+
+@pytest.mark.asyncio
+async def test_fresh_request_error_overrides_copy_regenerate_completion_shape():
+    """A fresh request-owned provider error must not be returned as success
+    merely because a partial answer exposes Copy/Regenerate controls."""
+    chat = _Chat()
+    baseline = snap(users=1, user="Review AU01", user_id="prompt-1")
+    failed_partial = snap(
+        users=1,
+        assistants=1,
+        user="Review AU01",
+        user_id="prompt-1",
+        assistant="Partial answer before provider failure",
+        assistant_id="assistant-1",
+        complete=True,
+        extra_signals=("error-alert", "request-error-alert"),
+        error_alert_occurrences=(("fresh-error", "prompt-1"),),
+    )
+    chat._snapshots = iter([failed_partial])
+    turn = GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="turn-fresh-error", body="Review AU01"),
+        lambda _: None,
+    )
+    turn.state = TurnState.AWAITING_RESPONSE
+    turn._prompt_message_id = "prompt-1"
+
+    with pytest.raises(AudiaGenticError) as caught:
+        await turn._await_response(baseline, baseline)
+
+    assert caught.value.details["failure-reason"] == "provider-failure-policy-matched"
+    assert "request-error-alert" in caught.value.details["evidence"]
+
 
 
 @pytest.mark.asyncio
@@ -3005,6 +3047,7 @@ async def test_completed_response_proves_submission_when_user_turn_is_unmounted(
         assistants=1,
         assistant_id="assistant-new",
         assistant="Complete answer",
+        assistant_markdown="# Complete answer\n\nRendered **answer**.",
         complete=True,
         url="https://chatgpt.com/g/g-p-project/c/conversation-2",
     )
@@ -3636,6 +3679,30 @@ async def test_turn_completes_with_current_copy_control_without_more_actions_men
         [
             snap(),
             snap(users=1, user="Review AU01"),
+            snap(
+                users=1,
+                assistants=1,
+                user="Review AU01",
+                assistant="Looks sound",
+                complete=True,
+                completion_signals=("completion-control",),
+            ),
+            snap(
+                users=1,
+                assistants=1,
+                user="Review AU01",
+                assistant="Looks sound",
+                complete=True,
+                completion_signals=("completion-control",),
+            ),
+            snap(
+                users=1,
+                assistants=1,
+                user="Review AU01",
+                assistant="Looks sound",
+                complete=True,
+                completion_signals=("completion-control",),
+            ),
             snap(
                 users=1,
                 assistants=1,

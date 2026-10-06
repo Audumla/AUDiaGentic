@@ -15,6 +15,8 @@ def test_meaningful_activity_vocabulary_excludes_heartbeat_and_context_flags() -
     assert not is_meaningful_activity_label("recovery-observing")
     assert not is_meaningful_activity_label("response-observing")
     assert not is_meaningful_activity_label("transport-unknown")
+    assert not is_meaningful_activity_label("connection-refreshing")
+    assert not is_meaningful_activity_label("response-observed")
     for label in (
         "thinking",
         "searching the web",
@@ -32,7 +34,6 @@ def test_meaningful_activity_vocabulary_excludes_heartbeat_and_context_flags() -
         "dom-citation",
         "dom-table",
         "dom-materialization",
-        "connection-refreshing",
         "soft-liveness",
         "delivery-timeout-retry",
     ):

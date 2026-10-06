@@ -119,11 +119,21 @@ def valid_config() -> dict:
                     "all-of": ["assistant-fresh", "text-present"],
                     "any-of-groups": [
                         ["completion-control", "more-actions-menu"],
+                        ["completion-control", "not-generating"],
                         ["canvas-edit-control", "canvas-open-editor-control", "not-generating"],
                     ],
             "none-of": [],
                 },
-                "response-failed": {"any-of": ["error-page", "error-alert"]},
+                "response-failed": {
+                    "any-of": [
+                        "error-page",
+                        "error-alert",
+                        "request-error-alert",
+                        "network-error-alert",
+                        "stream-cache-expired",
+                        "conversation-load-failed",
+                    ]
+                },
             },
         },
     }
