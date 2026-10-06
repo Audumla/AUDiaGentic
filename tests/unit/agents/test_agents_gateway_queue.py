@@ -478,6 +478,50 @@ def test_failed_local_session_without_activity_lease_is_bounded(
     assert terminal["recovery"]["outcome"] == "bounded-recovery-exhausted"
     assert calls == 1
 
+def test_active_local_session_with_expired_activity_lease_is_bounded(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """An active durable session cannot outlive its request activity lease."""
+    project = tmp_path / "project"
+    project.mkdir()
+    session_id = "ses_active_expired_lease"
+    record = store.build_record(
+        execution_profile_id="active-expired-lease",
+        prompt_body="x",
+        gateway_profile_id="active-expired-lease",
+        gateway_profile_generation="gen_test123",
+        gateway_profile_config_digest="sha256:abcd1234",
+        resolved_provider_id="gpt-auto",
+        resolved_instance_ids=["gpt-auto"],
+        provider_transport_kind="provider-session",
+        session_id=session_id,
+    )
+    record.update(
+        {
+            "state": "running",
+            "provider-metadata": {
+                "submission-proven": True,
+                "chat-url": "https://chatgpt.com/g/g-p-project/c/conversation",
+                "unresolved-turn-pending": True,
+            },
+            "recovery": {"attempt": 100, "reason": "owner-loss", "outcome": "in-place"},
+            "activity": {
+                "provider": {"lease-expires-at": "2020-01-01T00:00:00Z"}
+            },
+        }
+    )
+    monkeypatch.setattr(
+        sessions_store,
+        "expire_session_if_policy_exceeded",
+        lambda _project_root, _session_id: {"state": "active"},
+    )
+    monkeypatch.setattr(
+        sessions_store,
+        "read_session_binding",
+        lambda _project_root, _session_id: {"provider-session-ref": "conversation-ref"},
+    )
+    assert queue_mod._durable_provider_session_is_active(project, record) is False
+
 def test_durable_recovery_expires_session_at_absolute_max_lifetime(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
