@@ -301,6 +301,24 @@ def test_recovery_runner_keeps_presubmit_observation_only_when_checkpoint_names_
 
     assert runner.keywords["resume_existing"] is True
 
+def test_recovery_runner_fails_closed_when_session_checkpoint_is_empty(tmp_path: Path, monkeypatch) -> None:
+    from audiagentic.components.agents.gateway.session import sessions_store
+
+    record = _record(tmp_path)
+    record.update({
+        "session-id": "ses-empty-checkpoint",
+        "state": "running",
+        "recovery-required": True,
+        "resolved-provider-id": "gpt-auto",
+        "gateway-profile-runtime": {"provider-id": "gpt-auto", "params": {}},
+        "recovery": {"phase": "presubmit-reconcile", "side-effect-state": "not-started"},
+    })
+    monkeypatch.setattr(sessions_store, "read_session_record", lambda *_args: {"session-id": "ses-empty-checkpoint"})
+    monkeypatch.setattr(sessions_store, "session_provider_metadata", lambda _record: {})
+
+    runner = recovery.recovery_runner(record, project_root=tmp_path)
+
+    assert runner.keywords["resume_existing"] is True
 def test_recovery_runner_fails_closed_when_session_checkpoint_unavailable(tmp_path: Path, monkeypatch) -> None:
     from audiagentic.components.agents.gateway.session import sessions_store
 
