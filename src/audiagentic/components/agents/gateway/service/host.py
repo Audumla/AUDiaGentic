@@ -311,8 +311,19 @@ class GatewayServiceHost:
 
         def _poll() -> None:
             while not self._operations_stop.wait(interval_seconds):
-                pump.run_once(owner_epoch=self.owner_epoch)
-                self.run_watchdog_pass()
+                # A malformed management operation or one unexpected watchdog
+                # record must not kill the service's only operations thread.
+                # If this thread exits, durable requests can remain visibly
+                # running without receiving either recovery or terminal-state
+                # evaluation until the next gateway restart.
+                try:
+                    pump.run_once(owner_epoch=self.owner_epoch)
+                except Exception:  # noqa: BLE001 - keep the poller alive
+                    logger.exception("gateway management operation poll failed")
+                try:
+                    self.run_watchdog_pass()
+                except Exception:  # noqa: BLE001 - keep the poller alive
+                    logger.exception("gateway watchdog pass failed")
 
         # Startup scan makes notifier loss and host restart harmless.
         pump.run_once(owner_epoch=self.owner_epoch)
