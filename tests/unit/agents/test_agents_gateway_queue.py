@@ -385,9 +385,26 @@ def test_followup_bound_overrides_durable_provider_exception(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
     """Follow-up recovery remains bounded even while the provider lease is live."""
+    monkeypatch.setattr(
+        queue_mod.GatewayQueueManager,
+        "_recovery_retry_delay",
+        staticmethod(lambda _entry, _attempt: 0.01),
+    )
     manager = queue_mod.GatewayQueueManager()
     project = tmp_path / "project"
     project.mkdir()
+    session = sessions_store.build_session_record(
+        session_id="ses_followup_durable_bound",
+        execution_profile_id="followup-durable-bound",
+        provider_transport_kind="provider-session",
+        provider_id="gpt-auto",
+        provider_session_ref="provider-conversation",
+        surface_id="gpt-auto-cdp",
+        provider_metadata={"unresolved-turn-pending": True},
+        idle_timeout_seconds=0,
+        max_lifetime_seconds=0,
+    )
+    sessions_store.write_session_record(project, session)
     record = store.build_record(
         execution_profile_id="followup-durable-bound",
         prompt_body="x",
@@ -408,7 +425,7 @@ def test_followup_bound_overrides_durable_provider_exception(
                 "unresolved-turn-pending": True,
             },
             "recovery-required": True,
-            "recovery": {"reason": "gateway-restart", "outcome": "in-place"},
+            "recovery": {"reason": "gateway-restart", "outcome": "in-place", "attempt": 100, "followup-attempt": 0},
             "worker-id": "recovery-worker",
             "attempt-epoch": 1,
             "dispatch-owner-epoch": "owner-epoch",
@@ -454,6 +471,10 @@ def test_followup_bound_overrides_durable_provider_exception(
     assert calls == 2
     assert terminal["error"]["details"]["recovery-max-attempts"] == 2
     assert terminal["error"]["details"]["session-fence-state"] == "manual-reconcile-required"
+    session_after = sessions_store.read_session_record(project, "ses_followup_durable_bound")
+    session_metadata = sessions_store.session_provider_metadata(session_after)
+    assert session_metadata["unresolved-turn-pending"] is True
+    assert session_metadata["recovery-state"] == "manual-reconcile-required"
 
 def test_terminal_durable_session_does_not_keep_request_running_forever(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
