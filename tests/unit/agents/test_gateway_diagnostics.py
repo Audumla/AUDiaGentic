@@ -67,6 +67,25 @@ def test_gateway_restart_interruption_is_explicitly_classified() -> None:
     assert result["recovery"]["disposition"] == "reconcile-required"
 
 
+def test_bounded_restart_interruption_uses_provider_root_classification() -> None:
+    result = classify_error(
+        {
+            "code": "CON-AGW-084",
+            "details": {
+                "root-recovery-error": {
+                    "code": "EXT-AGW-118",
+                    "type": "AudiaGenticError",
+                    "kind": "agents",
+                }
+            },
+        }
+    )
+    assert result["failure-code"] == "CON-AGW-084"
+    assert result["reason-code"] == "EXT-AGW-118"
+    assert result["classification"] == "provider-error"
+    assert result["recovery"]["disposition"] == "reconcile-required"
+
+
 def test_diagnostics_side_effect_state_never_regresses() -> None:
     previous = classify_error(
         {
