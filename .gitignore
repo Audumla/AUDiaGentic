@@ -28,6 +28,15 @@
 /.aider*
 /.caveman-mode
 /.tmp/
+# --- Local test / CDP scratch output ---
+/.pytest-*
+/.test-temp-*
+/.tmp-*
+/.tmp_cdp_*
+/.lock
+/CACHEDIR.TAG
+/interpreter-v*/
+/sdists-v*/
 
 # --- Generated agent config files ---
 /.mcp.json
