@@ -195,10 +195,11 @@ class TestCrashWindowD_RunningNotTerminal:
         )
 
         recovered = store.read_record(project_root, record["request-id"])
-        assert recovered["state"] == "running"
-        assert recovered["recovery-required"] is False
-        assert recovered["dispatch-owner-epoch"] == "old-epoch"
-        assert report.deferred == ((project_root, record["request-id"]),)
+        assert recovered["state"] == "interrupted"
+        assert recovered["error"]["code"] == "CON-AGW-084"
+        assert recovered["recovery"]["outcome"] == "manual-review-required"
+        assert report.interrupted == 1
+        assert report.deferred == ()
 
 # ---------------------------------------------------------------------------
 # Crash window E: terminal transition succeeds but index cleanup fails
@@ -617,8 +618,8 @@ class TestRecoveryIdempotency:
             service_root, live_owner_epoch="new-epoch",
         )
 
-        assert first.deferred == ((project_root, record["request-id"]),)
-        assert second.deferred == ((project_root, record["request-id"]),)
+        assert first.interrupted == 1
+        assert second.deferred == ()
         assert second.skipped_live == 0
         assert second.replay_required == 0
         assert second.interrupted == 0

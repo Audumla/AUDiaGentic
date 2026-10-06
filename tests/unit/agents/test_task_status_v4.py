@@ -66,6 +66,26 @@ def test_running_is_active_running_without_provider_details() -> None:
     }
 
 
+def test_running_recovery_required_is_not_reported_as_running_activity() -> None:
+    record = _record("running", **{"recovery-required": True})
+    result = project_task_status_v4(
+        record, _snapshot(record, AgentLifecycle.ACTIVE), queue_state="recovery-required"
+    )
+
+    assert result["lifecycle"] == "active"
+    assert result["activity"] == "recovery-required"
+
+
+def test_running_orphaned_worker_is_not_reported_as_running_activity() -> None:
+    record = _record("running", **{"provider-transport-kind": "worker"})
+    result = project_task_status_v4(
+        record, _snapshot(record, AgentLifecycle.ACTIVE), queue_state="orphaned"
+    )
+
+    assert result["lifecycle"] == "active"
+    assert result["activity"] == "orphaned"
+
+
 def test_running_cancel_request_is_active_cancelling() -> None:
     record = _record("running", **{"cancel-requested": True})
     result = project_task_status_v4(record, _snapshot(record, AgentLifecycle.ACTIVE))

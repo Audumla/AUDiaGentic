@@ -82,7 +82,7 @@ class TestC11RecoveryEventPropagation:
         )
         # Active-work entry now exists
 
-        # Worker-backed recovery is deferred, not replayed or terminalized.
+        # Worker-backed recovery is terminalized as interrupted because it has no attach seam.
         events: list[dict] = []
 
         def on_interrupted(event_type: str, payload: dict, metadata: dict) -> None:
@@ -90,7 +90,7 @@ class TestC11RecoveryEventPropagation:
 
         handle = get_bus().subscribe(EXECUTION_INTERRUPTED_TOPIC, on_interrupted)
         try:
-            # Recovery with a new epoch should defer the stale running request
+            # Recovery with a new epoch should interrupt the stale running request
             report = recovery.recover_gateway_requests(
                 service_root, live_owner_epoch="new-epoch"
             )
@@ -98,14 +98,14 @@ class TestC11RecoveryEventPropagation:
             get_bus().unsubscribe(handle)
 
         # Verify recovery outcome
-        assert report.deferred == ((project_root, request_id),)
-        assert report.interrupted == 0
+        assert report.interrupted == 1
+        assert report.deferred == ()
         recovered = store.read_record(project_root, request_id)
-        assert recovered["state"] == "running"
-        assert recovered["dispatch-owner-epoch"] == "old-epoch"
-        assert recovered["recovery-required"] is False
-        assert store.active_work_path(service_root, request_id).exists()
-        assert events == []
+        assert recovered["state"] == "interrupted"
+        assert recovered["error"]["code"] == "CON-AGW-084"
+        assert recovered["recovery"]["outcome"] == "manual-review-required"
+        assert not store.active_work_path(service_root, request_id).exists()
+        assert len(events) == 1
 
     def test_stale_queued_request_is_requeued_in_place(
         self, tmp_path: Path,
@@ -221,10 +221,11 @@ class TestC11RecoveryEventPropagation:
         finally:
             get_bus().unsubscribe(handle)
 
-        assert first_report.deferred == ((project_root, request_id),)
-        assert second_report.deferred == ((project_root, request_id),)
+        assert first_report.interrupted == 1
+        assert second_report.deferred == ()
+        assert second_report.interrupted == 0
         assert second_report.skipped_live == 0
-        assert events == []
+        assert len(events) == 1
 
     def test_agent_jobs_outcome_map_handles_interrupted(
         self, tmp_path: Path,

@@ -221,6 +221,31 @@ def _runtime_fingerprint() -> dict[str, str]:
     return result
 
 
+def _request_queue_state(record: dict[str, Any], slot: str | None) -> str:
+    """Project scheduler attachment truth for compact request status."""
+    state = record.get("state")
+    if state in store.TERMINAL_STATES:
+        return "terminal"
+    if slot in {"active", "idle"}:
+        return "running"
+    if state == "queued":
+        return "queued"
+    if state in {"dispatching", "running"}:
+        if record.get("recovery-required") is True:
+            return "recovery-required"
+        if slot is None:
+            # A provider-session may still be alive outside this gateway
+            # generation; a worker-backed request cannot be observed or
+            # reattached once its owner is gone.
+            return (
+                "recovery-required"
+                if record.get("provider-transport-kind") == "provider-session"
+                else "orphaned"
+            )
+        return "running"
+    return str(state or "unknown")
+
+
 def _attach_agent_status(
     result: dict[str, Any],
     project_root: Path,
@@ -246,6 +271,10 @@ def _attach_agent_status(
         if runtime is not None:
             decision = runtime.latest_lifecycle_decision(session_id, result["request-id"])
 
+    slot = get_queue_manager().request_slot_status(
+        result.get("execution-profile-id"), result.get("request-id")
+    )
+    queue_state = _request_queue_state(result, slot)
     snapshot = snapshot_for_request(result, decision=decision)
     from audiagentic.components.agents.status.task_status_v4 import (
         TaskStatusContractError,
@@ -253,7 +282,7 @@ def _attach_agent_status(
     )
 
     try:
-        return project_task_status_v4(result, snapshot)
+        return project_task_status_v4(result, snapshot, queue_state=queue_state)
     except TaskStatusContractError as exc:
         raise AudiaGenticError(
             code="CON-AGW-147",
@@ -1448,36 +1477,15 @@ def request_runtime_status(project_root: Path, request_id: str) -> dict[str, Any
     record = store.read_public_status(project_root, request_id)
     state = record["state"]
     slot = get_queue_manager().request_slot_status(record["execution-profile-id"], request_id)
-    if state in store.TERMINAL_STATES:
-        queue_state = "terminal"
+    queue_state = _request_queue_state(record, slot)
+    if queue_state == "terminal":
         profile_slot = None
-    elif slot is not None:
-        queue_state = "running" if slot in {"active", "idle"} else "queued"
-        profile_slot = slot
-    elif state == "running" and record.get("recovery-required") is True:
-        # A durable recovery request has no current provider observer; do
-        # not project it as active merely because its lifecycle is running.
-        queue_state = "recovery-required"
+    elif queue_state in {"recovery-required", "orphaned"}:
         profile_slot = None
-    elif (
-        state == "running"
-        and slot is None
-        and record.get("dispatch-owner-epoch")
-        and record.get("provider-transport-kind") != "provider-session"
-    ):
-        # Worker-backed work has no safe reattach seam. It remains durable
-        # for explicit reconciliation, but is not live execution.
-        queue_state = "orphaned"
-        profile_slot = None
-    elif state == "running":
-        queue_state = "running"
-        profile_slot = "active"
-    elif state == "queued" and record.get("dispatch-owner-epoch"):
-        queue_state = "queued"
-        profile_slot = "pending"
+    elif state == "queued":
+        profile_slot = slot or "pending"
     else:
-        queue_state = state
-        profile_slot = None
+        profile_slot = slot or "active"
 
     session_status: dict[str, Any] = {"available": False}
     session_id = record.get("session-id")

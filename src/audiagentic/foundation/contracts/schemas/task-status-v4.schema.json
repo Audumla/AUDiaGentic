@@ -24,7 +24,7 @@
     },
     "activity": {
       "type": "string",
-      "enum": ["waiting", "running", "cancelling", "completing"]
+      "enum": ["waiting", "running", "cancelling", "completing", "recovery-required", "orphaned"]
     },
     "activity_type": {
       "type": "string",

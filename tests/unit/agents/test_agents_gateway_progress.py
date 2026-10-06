@@ -560,6 +560,38 @@ def test_request_runtime_status_exposes_orphaned_worker_not_active(tmp_path: Pat
     assert status["profile-slot"] is None
 
 
+def test_compact_status_exposes_orphaned_worker_activity(tmp_path: Path, monkeypatch) -> None:
+    record = store.build_record(execution_profile_id="worker", prompt_body="x")
+    record.update({"state": "running", "provider-transport-kind": "worker"})
+    store.write_record(tmp_path, record)
+    monkeypatch.setattr(
+        gateway,
+        "get_queue_manager",
+        lambda: SimpleNamespace(request_slot_status=lambda *_args: None),
+    )
+
+    status = gateway.get_execution_request(tmp_path, record["request-id"])
+
+    assert status["lifecycle"] == "active"
+    assert status["activity"] == "orphaned"
+
+
+def test_compact_status_exposes_provider_recovery_activity(tmp_path: Path, monkeypatch) -> None:
+    record = store.build_record(execution_profile_id="session", prompt_body="x")
+    record.update({"state": "running", "recovery-required": True, "provider-transport-kind": "provider-session"})
+    store.write_record(tmp_path, record)
+    monkeypatch.setattr(
+        gateway,
+        "get_queue_manager",
+        lambda: SimpleNamespace(request_slot_status=lambda *_args: None),
+    )
+
+    status = gateway.get_execution_request(tmp_path, record["request-id"])
+
+    assert status["lifecycle"] == "active"
+    assert status["activity"] == "recovery-required"
+
+
 def test_wait_timeout_marker_on_non_terminal(tmp_path: Path, monkeypatch) -> None:
     _make_profile(tmp_path, "default", "local-openai")
     import threading
