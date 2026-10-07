@@ -1865,19 +1865,19 @@ async def test_reconcile_replaces_retained_conversation_load_error_without_resub
 
     await chat.reconcile([retained])
 
-    assert chat.page_handle == replacement["pageHandle"]
-    assert retained["pageHandle"] in released
-    assert navigated == [chat_url]
+    assert chat.page_handle == retained["pageHandle"]
+    assert retained["pageHandle"] not in released
+    assert navigated == []
     assert closed == []
     # Deferred recovery keeps the consumed budget until the unresolved turn
     # reaches terminal cleanup; a delayed provider load error must not reopen
     # another full replacement budget after restart.
-    assert chat._conversation_load_recovery_attempts == 1
+    assert chat._conversation_load_recovery_attempts == 0
 
 
 @pytest.mark.asyncio
 async def test_ensure_ready_does_not_treat_repeated_load_error_inspection_as_progress() -> None:
-    """A bound load-error page becomes terminal when replacement budget is spent."""
+    """A bound submitted load-error page remains observation-only."""
     config = GptAutoConfig.from_dict(valid_config())
     chat_url = "https://chatgpt.com/g/g-p-project/c/provider-session"
     failed = ChatSnapshot(
@@ -1923,14 +1923,10 @@ async def test_ensure_ready_does_not_treat_repeated_load_error_inspection_as_pro
     chat._retained_page_snapshot = retained_snapshot  # type: ignore[method-assign]
     chat._replace_load_failed_page = exhausted_replacement  # type: ignore[method-assign]
 
-    with pytest.raises(AudiaGenticError) as raised:
-        await chat.ensure_ready()
+    await chat.ensure_ready()
 
-    assert raised.value.code == "EXT-GPTAUTO-005"
-    assert raised.value.details["failure-reason"] == "conversation-load-failed"
-    assert raised.value.details["submission-replay"] is False
     assert replacements == [failed]
-    assert chat.state is ChatState.FAILED
+    assert chat.state is ChatState.READY
 
 
 @pytest.mark.asyncio
@@ -2113,8 +2109,8 @@ async def test_deferred_recovery_budget_survives_delayed_load_error() -> None:
     chat._claim_page = lambda _handle: True  # type: ignore[method-assign]
 
     assert await chat._replace_load_failed_page(failed) is True
-    assert chat._conversation_load_recovery_attempts == 1
-    assert checkpointed[-1]["conversation-load-recovery-attempts"] == 1
+    assert chat._conversation_load_recovery_attempts == 0
+    assert not checkpointed or checkpointed[-1].get("conversation-load-recovery-attempts", 0) == 0
 
 
 @pytest.mark.asyncio
