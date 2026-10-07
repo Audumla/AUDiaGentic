@@ -1487,15 +1487,24 @@ _RETRY_DELIVERY_TIMEOUT_FN = r"""() => {
 
 _RETRY_CONVERSATION_LOAD_FN = r"""() => {
   const normalize = value => String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
-  const bodyText = normalize(document.body && (document.body.innerText || document.body.textContent));
-  if (!bodyText.includes('could not load this chatgpt conversation')) return false;
-  const button = Array.from(document.querySelectorAll('button')).find(candidate => {
+  const loadText = 'could not load this chatgpt conversation';
+  const structuralRoots = Array.from(document.querySelectorAll(
+    '.error-page, [role="alert"], [data-testid*="error"]'
+  )).filter(root => root.getClientRects().length);
+  const errorRoots = structuralRoots.filter(root => {
+    const text = normalize(root.innerText || root.textContent);
+    return text.includes(loadText);
+  });
+  // Require one unambiguous provider error root. A transcript/body-wide match
+  // is unsafe because old response text can contain the same words.
+  if (errorRoots.length !== 1) return false;
+  const buttons = Array.from(errorRoots[0].querySelectorAll('button')).filter(candidate => {
     if (candidate.disabled || !candidate.getClientRects().length) return false;
     const text = normalize(candidate.innerText || candidate.textContent || candidate.getAttribute('aria-label'));
     return text === 'retry';
   });
-  if (!button) return false;
-  button.click();
+  if (buttons.length !== 1) return false;
+  buttons[0].click();
   return true;
 }"""
 
