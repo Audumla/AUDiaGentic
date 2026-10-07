@@ -731,6 +731,60 @@ async def test_new_session_uses_direct_projects_fallback_when_sidebar_has_no_pro
 
 
 @pytest.mark.asyncio
+async def test_new_session_maps_composer_timeout_to_project_readiness(monkeypatch) -> None:
+    from audiagentic.components.providers.adapters.gpt_auto.gpt_auto_cdp import (
+        ProjectReadinessError,
+    )
+
+    browser = GptAutoCdpBrowserController(_NoopBridge())
+    page = CdpPageRef("page-1", "target-1", 7, "about:blank", "")
+    project_id = "g-p-6a7bbf85d06c8191835b0d64958b4d7a"
+    selected_url = f"https://chatgpt.com/g/{project_id}-bigcherry/project"
+    selected_page = CdpPageRef("selected", "target-2", 7, selected_url, "")
+
+    async def new_window():
+        return page
+
+    async def navigate(_page, _url):
+        return page
+
+    async def select_sidebar(_page, _name, *, expected_project_id, timeout):
+        return True
+
+    async def pages():
+        return (selected_page,)
+
+    async def page_by_handle(_handle):
+        return selected_page
+
+    async def wait_for_composer(_page, *, timeout):
+        raise TimeoutError("composer did not mount")
+
+    async def close(_page):
+        return None
+
+    monkeypatch.setattr(browser, "new_window", new_window)
+    monkeypatch.setattr(browser, "navigate", navigate)
+    monkeypatch.setattr(browser, "_select_project_from_sidebar", select_sidebar)
+    monkeypatch.setattr(browser, "pages", pages)
+    monkeypatch.setattr(browser, "page_by_handle", page_by_handle)
+    monkeypatch.setattr(browser, "wait_for_composer", wait_for_composer)
+    monkeypatch.setattr(browser, "close", close)
+
+    with pytest.raises(ProjectReadinessError) as raised:
+        await browser.open_project_page(
+            project_name="BigCherry",
+            project_url=f"https://chatgpt.com/g/{project_id}-bigcherry/project",
+            anchor_page=None,
+            navigation_timeout=3,
+            ready_timeout=4,
+        )
+
+    assert raised.value.details["reason"] == "composer-not-ready"
+    assert raised.value.details["failure-stage"] == "readiness"
+
+
+@pytest.mark.asyncio
 async def test_new_session_rejects_projects_ui_identity_mismatch(monkeypatch) -> None:
     browser = GptAutoCdpBrowserController(_NoopBridge())
     page = CdpPageRef("page-1", "target-1", 7, "about:blank", "")
