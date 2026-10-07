@@ -1860,7 +1860,13 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                      .filter(candidate => visible(candidate) && normalize(
                        candidate.getAttribute('data-app-action-sidebar-project-label')
                      ).toLowerCase() === wanted);
-                   if (!rows.length) return {action: 'missing'};
+                   // A newly opened tab can expose the home shell before the
+                   // authenticated sidebar has hydrated. Treat that as a
+                   // transient render state and keep polling until the caller's
+                   // bounded timeout; otherwise a slow but healthy project is
+                   // falsely reported as not found and the request never gets
+                   // as far as prompt submission.
+                   if (!rows.length) return {action: 'waiting'};
                    const matchingRows = expectedProjectId
                      ? rows.filter(candidate => canonicalProjectId(
                          candidate.getAttribute('data-app-action-sidebar-project-id')
@@ -2038,10 +2044,22 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                 page,
                 project_name,
                 expected_project_id=expected_project_id,
-                timeout=min(3.0, navigation_timeout),
+                # A fresh authenticated tab can take several seconds to hydrate
+                # the sidebar. Keep this bounded by navigation_timeout, but do
+                # not turn normal DOM startup latency into project-not-found.
+                timeout=min(12.0, navigation_timeout),
             )
             selected_project_id = _selection_project_id(selection, expected_project_id)
+            sidebar_selection = selection
             if not selected_project_id:
+                # New-window CDP targets can inherit a compact browser window.
+                # ChatGPT's full Projects page places its trusted New Chat
+                # control at the far right, so ensure the fallback has a usable
+                # viewport before asking the DOM for pointer coordinates.
+                try:
+                    await self.set_bounds(page, CdpWindowBounds(window_state="maximized"))
+                except Exception:  # noqa: BLE001 - selection remains fail-closed
+                    logger.debug("gpt-auto could not maximize project fallback window", exc_info=True)
                 projects_tab_opened = await self._open_projects_tab(
                     page, timeout=navigation_timeout
                 )
@@ -2055,7 +2073,13 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                 )
                 selected_project_id = _selection_project_id(selection, expected_project_id)
             if not selected_project_id:
-                raise RuntimeError(f"ChatGPT project identity could not be proven: {project_name}")
+                raise RuntimeError(
+                    f"ChatGPT project identity could not be proven: {project_name}; "
+                    f"sidebar-selection={sidebar_selection!r}; "
+                    f"projects-page-opened={projects_tab_opened!r}; "
+                    f"projects-selection={selection!r}; "
+                    f"page-url={page.url!r}"
+                )
             if expected_project_id and selected_project_id != expected_project_id:
                 raise RuntimeError("selected ChatGPT Project does not match configured project identity or selected row")
 

@@ -427,6 +427,32 @@ async def test_sidebar_occluded_new_chat_hovers_once_then_trusted_clicks(monkeyp
 
 
 @pytest.mark.asyncio
+async def test_sidebar_project_waits_for_slow_authenticated_sidebar(monkeypatch) -> None:
+    class Bridge:
+        async def call(self, method, params=None, **_kwargs):
+            return {"clicked": True}
+
+    browser = GptAutoCdpBrowserController(Bridge(), action_pause_seconds=0.0)
+    page = CdpPageRef("page-1", "target-1", 7, "https://chatgpt.com/", "")
+    actions = iter([
+        {"action": "waiting"},
+        {"action": "selected", "projectId": "g-p-audiagentic", "x": 40, "y": 50},
+    ])
+
+    async def evaluate(_page, _function, _value=None):
+        return next(actions)
+
+    async def no_wait(_delay):
+        return None
+
+    monkeypatch.setattr(browser, "evaluate", evaluate)
+    monkeypatch.setattr(asyncio, "sleep", no_wait)
+
+    assert await browser._select_project_from_sidebar(
+        page, "AUDiaGentic", expected_project_id="g-p-audiagentic", timeout=2
+    ) == {"clicked": True, "projectId": "g-p-audiagentic"}
+
+@pytest.mark.asyncio
 async def test_sidebar_project_rejects_wrong_exact_project_id(monkeypatch) -> None:
     calls: list[tuple[str, object]] = []
 
