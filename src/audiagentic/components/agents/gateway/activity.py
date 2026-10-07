@@ -16,18 +16,17 @@ from audiagentic.foundation.transports.agent_session import is_meaningful_activi
 
 def frozen_activity_lease_seconds(record: dict[str, object]) -> float:
     """Return the admission-time watchdog lease for a provider-session relay."""
-    from audiagentic.components.agents.gateway.queue.watchdog_policy import load_watchdog_policy
 
-    fallback = float(load_watchdog_policy().activity_lease_seconds)
     persisted = record.get("watchdog-policy")
-    if isinstance(persisted, dict):
-        try:
-            value = float(persisted["activity-lease-seconds"])
-            if value > 0:
-                return value
-        except (KeyError, TypeError, ValueError):
-            pass
-    return fallback
+    if not isinstance(persisted, dict):
+        raise ValueError("provider-session request has no frozen watchdog policy")
+    try:
+        value = float(persisted["activity-lease-seconds"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError("provider-session request has an invalid frozen watchdog policy") from exc
+    if value <= 0:
+        raise ValueError("provider-session request has a non-positive frozen watchdog lease")
+    return value
 
 
 class RequestActivityRelay:

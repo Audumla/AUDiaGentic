@@ -2766,3 +2766,51 @@ def test_bounded_interruption_includes_root_recovery_error(tmp_path: Path):
     assert terminal["recovery"]["last-error-code"] == "EXT-AGW-118"
     assert terminal["recovery"]["last-error-kind"] == "agents"
     assert terminal["recovery"]["last-error-details"]["session-id"] == "ses-1"
+
+
+def test_recovered_provider_session_stays_watchdog_visible_during_retry_backoff(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from audiagentic.components.agents.gateway.queue.watchdog_registry import watchdog_registry
+
+    manager = queue_mod.GatewayQueueManager()
+    project = tmp_path / "project"
+    project.mkdir()
+    record = store.build_record(
+        execution_profile_id="recovery-backoff-visible",
+        prompt_body="x",
+        gateway_profile_id="recovery-backoff-visible",
+        gateway_profile_generation="gen_test123",
+        gateway_profile_config_digest="sha256:abcd1234",
+        resolved_provider_id="gpt-auto",
+        resolved_instance_ids=["gpt-auto"],
+        provider_transport_kind="provider-session",
+    )
+    record.update(
+        {
+            "state": "running",
+            "recovery": {"reason": "owner-loss", "outcome": "in-place", "next-retry-at": "2999-01-01T00:00:00Z"},
+            "worker-id": "recovery-worker",
+            "attempt-epoch": 1,
+            "dispatch-owner-epoch": "owner-epoch",
+        }
+    )
+    store.write_record(project, record)
+    monkeypatch.setattr(manager, "_schedule_recovery_retry", lambda *args, **kwargs: None)
+
+    manager.enqueue_recovered_running(
+        project,
+        record,
+        {},
+        lambda *_args, **_kwargs: {},
+        dispatch_owner_epoch="owner-epoch",
+        dispatch_service_root=tmp_path,
+    )
+
+    try:
+        assert any(
+            root == project.resolve() and item.get("request-id") == record["request-id"]
+            for root, item in watchdog_registry().snapshot()
+        )
+    finally:
+        watchdog_registry().unregister(project, record["request-id"])

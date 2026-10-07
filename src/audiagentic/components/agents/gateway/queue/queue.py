@@ -808,6 +808,11 @@ class GatewayQueueManager:
             ),
         )
         pq = self._runtime_state(snapshot)
+        # Keep recovered provider sessions visible even while a bounded retry
+        # is waiting; the watchdog must continue to observe cancellation and
+        # stale transport state during the backoff window.
+        if record.get("provider-transport-kind") == "provider-session":
+            watchdog_registry().register(project_root, record)
         recovery = record.get("recovery")
         next_retry_at = recovery.get("next-retry-at") if isinstance(recovery, dict) else None
         if isinstance(next_retry_at, str) and next_retry_at:
@@ -1922,7 +1927,17 @@ class GatewayQueueManager:
                     )
                     _publish_lifecycle_event("failed", failed)
         finally:
-            watchdog_registry().unregister(project_root, request_id)
+            if retry_plan is not None and record.get("provider-transport-kind") == "provider-session":
+                try:
+                    retained = store.read_record(project_root, request_id)
+                except Exception:  # noqa: BLE001 - keep the last fenced observation
+                    retained = record
+                if retained.get("state") == "running":
+                    watchdog_registry().register(project_root, retained)
+                else:
+                    watchdog_registry().unregister(project_root, request_id)
+            else:
+                watchdog_registry().unregister(project_root, request_id)
             if bound is not None:
                 self._release_reservation(bound)
             with pq.lock:
