@@ -1053,6 +1053,12 @@ def recover_execution_request(
             code="CON-AGW-143", kind="agents", message="diagnostic recovery revision is stale", details={"request-id": request_id}
         )
     diagnostics = record.get("diagnostics")
+    if not isinstance(diagnostics, dict) and action == "reconcile":
+        from audiagentic.components.agents.gateway.queue.recovery import (
+            recoverable_reconcile_diagnostics,
+        )
+
+        diagnostics = recoverable_reconcile_diagnostics(project_root, record)
     if not isinstance(diagnostics, dict):
         raise AudiaGenticError(
             code="CON-AGW-145", kind="agents", message="request has no recoverable diagnostic evidence", details={"request-id": request_id}
@@ -1293,21 +1299,27 @@ def complete_execution_from_provider(project_root: Path, request_id: str) -> dic
         raise AudiaGenticError(code="CON-AGW-152", kind="agents", message="request is not operator-completable", details={"request-id": request_id})
     provider_id = record.get("resolved-provider-id") or record.get("provider-id")
     metadata = dict(record.get("provider-metadata") or {})
-    # A provider can reach a terminal DOM response after the turn checkpoint
-    # has recorded an unresolved turn but before the provider-specific prompt
-    # identity checkpoint is durable. Operator capture is precisely the
-    # recovery path for that state. The later snapshot checks still require
-    # the admitted prompt text, assistant witness, completion controls, and
-    # stable repeated capture before any terminal transition is allowed.
-    if metadata.get("submission-proven") is not True and metadata.get("unresolved-turn-pending") is not True:
-        raise AudiaGenticError(code="CON-AGW-157", kind="agents", message="request prompt submission is not proven", details={"request-id": request_id})
     locator_metadata = dict(metadata)
+    effective_metadata = dict(metadata)
     session_id = record.get("session-id")
     if session_id:
         from audiagentic.components.agents.gateway.session import sessions_store as session_store
-        session_record = session_store.read_session_record(project_root, str(session_id))
-        locator_metadata = {**session_store.session_provider_metadata(session_record), **metadata}
+        from audiagentic.components.agents.gateway.queue.recovery import (
+            resolve_effective_turn_evidence,
+        )
+
+        try:
+            session_record = session_store.read_session_record(project_root, str(session_id))
+        except Exception:
+            if metadata.get("submission-proven") is not True and metadata.get("unresolved-turn-pending") is not True:
+                raise AudiaGenticError(code="CON-AGW-157", kind="agents", message="request prompt submission is not proven", details={"request-id": request_id})
+            raise
+        session_metadata = session_store.session_provider_metadata(session_record)
+        locator_metadata = {**session_metadata, **metadata}
+        effective_metadata = resolve_effective_turn_evidence(record, session_metadata)
         provider_id = provider_id or session_store.session_provider_id(session_record)
+    if effective_metadata.get("submission-proven") is not True and effective_metadata.get("unresolved-turn-pending") is not True:
+        raise AudiaGenticError(code="CON-AGW-157", kind="agents", message="request prompt submission is not proven", details={"request-id": request_id})
     if not provider_id or not session_id:
         raise AudiaGenticError(code="CON-AGW-153", kind="agents", message="request provider session is unavailable", details={"request-id": request_id})
     from audiagentic.components.providers.contracts.conversation_focus import ConversationFocusLocator
@@ -1348,9 +1360,9 @@ def complete_execution_from_provider(project_root: Path, request_id: str) -> dic
     latest_user_id = getattr(snapshot, "latest_user_id", None)
     latest_assistant_id = getattr(snapshot, "latest_assistant_id", None)
     witness_id = getattr(snapshot, "terminal_witness_assistant_id", None)
-    prompt_id = metadata.get("prompt-message-id")
-    expected_assistant = metadata.get("assistant-message-id")
-    before_assistant = metadata.get("assistant-before-message-id") or metadata.get("assistant-before-id")
+    prompt_id = effective_metadata.get("prompt-message-id")
+    expected_assistant = effective_metadata.get("assistant-message-id")
+    before_assistant = effective_metadata.get("assistant-before-message-id") or effective_metadata.get("assistant-before-id")
     if not isinstance(text, str) or not text.strip() or getattr(snapshot, "generating", True):
         raise AudiaGenticError(code="CON-AGW-155", kind="agents", message="provider response is not terminal", details={"request-id": request_id})
     # Manual operator capture has two stable snapshots plus exact prompt and
@@ -1363,9 +1375,9 @@ def complete_execution_from_provider(project_root: Path, request_id: str) -> dic
         raise AudiaGenticError(code="CON-AGW-155", kind="agents", message="provider completion witness is missing", details={"request-id": request_id})
     if not latest_assistant_id or witness_id != latest_assistant_id:
         raise AudiaGenticError(code="CON-AGW-156", kind="agents", message="provider response is not request-owned", details={"request-id": request_id})
-    if metadata.get("submission-proven") is not True:
-        baseline_user_count = metadata.get("unresolved-baseline-user-count")
-        baseline_assistant_count = metadata.get("unresolved-baseline-assistant-count")
+    if effective_metadata.get("submission-proven") is not True:
+        baseline_user_count = effective_metadata.get("unresolved-baseline-user-count")
+        baseline_assistant_count = effective_metadata.get("unresolved-baseline-assistant-count")
         latest_user_ref = snapshot.latest_user_ref() if hasattr(snapshot, "latest_user_ref") else None
         latest_assistant_ref = next(
             (ref for ref in reversed(getattr(snapshot, "message_refs", ())) if getattr(ref, "role", None) == "assistant"),
@@ -1393,16 +1405,13 @@ def complete_execution_from_provider(project_root: Path, request_id: str) -> dic
     if prompt_is_real:
         if latest_user_id != prompt_id:
             raise AudiaGenticError(code="CON-AGW-156", kind="agents", message="provider prompt identity does not match request", details={"request-id": request_id})
-    if not prompt_is_real and metadata.get("unresolved-turn-pending") is True:
+    if not prompt_is_real and effective_metadata.get("unresolved-turn-pending") is True:
         # A count/order advance is not enough for an unresolved pre-ID turn:
         # a later foreign prompt in the same conversation could satisfy it.
         # Require the durable normalized prompt fingerprint before automatic
         # or operator capture can terminalize the visible assistant response.
         from audiagentic.components.providers.adapters.gpt_auto.prompt_fingerprint import PromptFingerprint
-        expected_prompt_digest = (
-            locator_metadata.get("prompt-text-digest")
-            or metadata.get("prompt-text-digest")
-        )
+        expected_prompt_digest = effective_metadata.get("prompt-text-digest")
         if not isinstance(expected_prompt_digest, str) or not expected_prompt_digest:
             raise AudiaGenticError(
                 code="CON-AGW-156",
@@ -1417,7 +1426,7 @@ def complete_execution_from_provider(project_root: Path, request_id: str) -> dic
                 message="provider prompt does not match the unresolved request",
                 details={"request-id": request_id, "failure-reason": "prompt-digest-mismatch"},
             )
-    if not prompt_is_real and metadata.get("unresolved-turn-pending") is not True:
+    if not prompt_is_real and effective_metadata.get("unresolved-turn-pending") is not True:
         from audiagentic.components.agents.agents_paths import gateway_admitted_prompt_path
         from audiagentic.foundation.io import read_bytes_with_retry
         import hashlib
@@ -2189,4 +2198,3 @@ def gateway_overview(project_root: Path) -> dict[str, Any]:
         "runtime-fingerprint": _runtime_fingerprint(),
         "diagnostics": provider_diagnostics,
     }
-

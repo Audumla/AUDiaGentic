@@ -708,6 +708,15 @@ def defer_owned_recovery(
         elif isinstance(prior_continuation, Mapping):
             recovery["continuation"] = dict(prior_continuation)
         updated = dict(record)
+        if (
+            not isinstance(record.get("diagnostics"), dict)
+            and side_effect_state != "not-started"
+        ):
+            updated["diagnostics"] = stale_progress_diagnostic(
+                phase="reconciliation",
+                side_effect_state=side_effect_state,
+                reason_code=phase,
+            )
         queued_recovery = record["state"] == "queued"
         updated.update({
             "recovery": recovery,
