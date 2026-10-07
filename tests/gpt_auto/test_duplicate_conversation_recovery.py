@@ -12,7 +12,9 @@ from audiagentic.components.providers.adapters.gpt_auto.chat import PersistentCh
 async def test_load_failure_reuses_healthy_exact_url_duplicate_before_creating_tab() -> None:
     chat = object.__new__(PersistentChat)
     chat.page_handle = "failed-tab"
+    chat.chat_url = "https://chatgpt.com/g/g-p-project/c/provider-session"
     chat._conversation_load_recovery_allowed = lambda: True
+    chat.config = SimpleNamespace(workflow=SimpleNamespace(recovery=SimpleNamespace(conversation_load_failure_recovery_enabled=True)))
 
     async def prefer_healthy_duplicate() -> None:
         chat.page_handle = "healthy-tab"
@@ -38,6 +40,7 @@ async def test_load_failure_reuses_healthy_exact_url_duplicate_before_creating_t
 async def test_load_failure_retries_retained_tab_before_replacement() -> None:
     chat = object.__new__(PersistentChat)
     chat.page_handle = "failed-tab"
+    chat.chat_url = "https://chatgpt.com/g/g-p-project/c/provider-session"
     chat.config = SimpleNamespace(
         chat=SimpleNamespace(ready_timeout_seconds=1.0),
         turn=SimpleNamespace(poll_interval_seconds=0.01),
