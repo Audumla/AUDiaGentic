@@ -83,7 +83,10 @@ def _disposition(record: dict[str, Any]) -> tuple[ProgressDisposition, Interrupt
             Interruptibility.NOT_SAFE,
             "provider-turn-unresolved-live-attempt",
         )
-    if provider_seen or record.get("watchdog-reason") == "verified-activity-renewed":
+    # Historical watchdog disposition is not current provider evidence.
+    # Synthetic owner/client liveness may have produced the old reason while
+    # the provider activity sequence remained unchanged.
+    if provider_seen:
         return (
             ProgressDisposition.PROCESSING_VERIFIED,
             Interruptibility.NOT_SAFE,

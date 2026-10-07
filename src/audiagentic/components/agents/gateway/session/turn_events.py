@@ -43,7 +43,14 @@ _TURN_EVENT_VERIFICATION_TIER = "unknown"
 # evidence that the provider turn itself progressed. They must not reset the
 # session-level silence clock.
 _SESSION_CLOCK_EXCLUDED_ACTIVITY_LABELS = frozenset(
-    {"connection-refreshing", "response-observed"}
+    {
+        "connection-refreshing",
+        "provider-busy",
+        "response-observing",
+        "recovery-observing",
+        "soft-liveness",
+        "response-observed",
+    }
 )
 
 # Tool statuses that mean the tool finished; carried on the completed event so
