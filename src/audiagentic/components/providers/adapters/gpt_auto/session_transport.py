@@ -33,6 +33,7 @@ from audiagentic.foundation.transports.session_binding import (
 from .chat import ChatState, PersistentChat
 from .cdp.client import CdpError
 from .config import GptAutoConfig
+from .gpt_auto_cdp import ProjectReadinessError
 from .runtime_registry import get_runtime
 from .turn import GptAutoTurn
 from .urls import (
@@ -60,7 +61,30 @@ class GptAutoSessionTransport:
         self.chat.set_request_metadata_sink(sink)
 
     async def open(self) -> SessionOpenResult:
-        await self.chat.open()
+        try:
+            await self.chat.open()
+        except ProjectReadinessError as exc:
+            details = dict(getattr(exc, "details", {}) or {})
+            details.update(
+                {
+                    "failure-stage": "readiness",
+                    "failure-reason": "project-readiness-failed",
+                    "submission-state": "not_started",
+                    "submission-proven": False,
+                    "submission-attempted": False,
+                    "submission-ambiguous": False,
+                    "retryable-same-session": False,
+                    "cause-type": type(exc).__name__,
+                    "cause-message": str(exc),
+                    "session-id": self.chat.ag_session_id,
+                }
+            )
+            raise AudiaGenticError(
+                code="EXT-GPTAUTO-004",
+                kind="providers",
+                message="gpt-auto project readiness did not complete",
+                details=details,
+            ) from exc
         metadata: dict[str, Any] = {"project-url": self.chat.project_url}
         metadata.update(self.chat.unresolved_metadata())
         ref = None
