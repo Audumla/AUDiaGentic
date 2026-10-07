@@ -1523,14 +1523,24 @@ _RETRY_CONVERSATION_LOAD_FN = r"""() => {
     const transcriptMatch = messageNodes.some(node =>
       normalize(node.innerText || node.textContent).includes(loadText)
     );
-    const directBodyButtons = Array.from(document.body.querySelectorAll('button')).filter(
-      candidate => candidate.parentElement === document.body
-        && !candidate.disabled
-        && candidate.getClientRects().length
-        && normalize(candidate.innerText || candidate.textContent || candidate.getAttribute('aria-label')) === 'retry'
+    const conversationButtons = Array.from(document.body.querySelectorAll('button')).filter(
+      candidate => {
+        if (candidate.disabled || !candidate.getClientRects().length) return false;
+        const text = normalize(candidate.innerText || candidate.textContent || candidate.getAttribute('aria-label'));
+        if (text !== 'retry') return false;
+        // Walk only non-body ancestors. This distinguishes the conversation
+        // Retry nested under the exact load error from unrelated sidebar
+        // Retry controls whose only matching ancestor is document.body.
+        for (let ancestor = candidate.parentElement; ancestor && ancestor !== document.body; ancestor = ancestor.parentElement) {
+          const ancestorText = normalize(ancestor.innerText || ancestor.textContent);
+          if (ancestorText.includes(loadText)) return true;
+        }
+        return false;
+      }
     );
-    if (occurrences === 1 && !transcriptMatch && directBodyButtons.length === 1) {
-      retryRoot = document.body;
+    if (occurrences === 1 && !transcriptMatch && conversationButtons.length === 1) {
+      conversationButtons[0].click();
+      return true;
     }
   }
   if (!retryRoot) return false;

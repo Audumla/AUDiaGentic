@@ -607,6 +607,36 @@ async def test_retry_conversation_load_clicks_only_exact_provider_retry() -> Non
 
 
 @pytest.mark.asyncio
+async def test_retry_conversation_load_finds_nested_generic_renderer_button() -> None:
+    """The current renderer nests the conversation Retry in generic divs."""
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            await page.set_content(
+                '<div role="status">Unable to load history'
+                '<button type="button">Retry</button></div>'
+                '<div class="flex w-full max-w-xl">'
+                '<div>Could not load this ChatGPT conversation'
+                '<div><button type="button">Retry</button></div>'
+                '</div></div>'
+            )
+            await page.evaluate(
+                """for (const button of document.querySelectorAll('button')) {
+                    button.addEventListener('click', () => { button.dataset.clicked = 'true'; });
+                }"""
+            )
+
+            clicked = await page.evaluate(_RETRY_CONVERSATION_LOAD_FN)
+
+            assert clicked is True
+            assert await page.evaluate("document.querySelectorAll('button')[0].dataset.clicked") is None
+            assert await page.evaluate("document.querySelectorAll('button')[1].dataset.clicked") == "true"
+        finally:
+            await browser.close()
+
+
+@pytest.mark.asyncio
 async def test_retry_conversation_load_ignores_retry_without_load_error() -> None:
     async with async_playwright() as pw:
         browser = await pw.chromium.launch(headless=True)
