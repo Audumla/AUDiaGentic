@@ -1221,6 +1221,10 @@ class GatewayQueueManager:
         """Finish a cancelled provider-less recovery before waiting for capacity."""
         if current.get("state") != "running" or not current.get("cancel-requested"):
             return False
+        if current.get("provider-transport-kind") == "provider-session":
+            # A provider-side turn may still exist after the gateway/session
+            # wrapper disappears. Let session recovery prove cancellation.
+            return False
         cancelled = store.transition_owned_terminal(
             entry.project_root,
             entry.request_id,
@@ -1280,7 +1284,11 @@ class GatewayQueueManager:
                 and current.get("recovery-required") is True
                 and current.get("dispatch-owner-epoch") == owner_epoch
             )
-            if recovered_running and current.get("cancel-requested"):
+            if (
+                recovered_running
+                and current.get("cancel-requested")
+                and current.get("provider-transport-kind") != "provider-session"
+            ):
                 # A recovered provider-session request may be waiting on a
                 # delayed reattach retry.  Cancellation must be terminalized
                 # before invoking the runner; otherwise a non-live session
@@ -1574,7 +1582,11 @@ class GatewayQueueManager:
                 # Send is non-terminal.  Keep the same request and session
                 # in durable recovery and retry only the observation path.
                 current = store.read_record(project_root, request_id)
-                if current.get("cancel-requested") and current.get("state") == "running":
+                if (
+                    current.get("cancel-requested")
+                    and current.get("state") == "running"
+                    and current.get("provider-transport-kind") != "provider-session"
+                ):
                     # Cancellation is an explicit client disposition.  It
                     # must win over another recovery retry; otherwise a
                     # non-live session can leave a cancelled request in
