@@ -1488,6 +1488,7 @@ _RETRY_DELIVERY_TIMEOUT_FN = r"""() => {
 _RETRY_CONVERSATION_LOAD_FN = r"""() => {
   const normalize = value => String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
   const loadText = 'could not load this chatgpt conversation';
+  const bodyText = normalize(document.body && (document.body.innerText || document.body.textContent));
   const structuralRoots = Array.from(document.querySelectorAll(
     '.error-page, [role="alert"], [data-testid*="error"]'
   )).filter(root => root.getClientRects().length);
@@ -1495,10 +1496,25 @@ _RETRY_CONVERSATION_LOAD_FN = r"""() => {
     const text = normalize(root.innerText || root.textContent);
     return text.includes(loadText);
   });
-  // Require one unambiguous provider error root. A transcript/body-wide match
-  // is unsafe because old response text can contain the same words.
-  if (errorRoots.length !== 1) return false;
-  const buttons = Array.from(errorRoots[0].querySelectorAll('button')).filter(candidate => {
+  let retryRoot = null;
+  if (errorRoots.length === 1) {
+    retryRoot = errorRoots[0];
+  } else if (errorRoots.length === 0) {
+    // Some current renderer revisions expose only body text. Allow that
+    // fallback only when the exact provider message occurs once and no
+    // conversation-message node owns the text; never use a generic body-wide
+    // match when transcript content could be the source.
+    const occurrences = bodyText.split(loadText).length - 1;
+    const messageNodes = Array.from(document.querySelectorAll(
+      '[data-message-author-role], [data-testid*="conversation-turn"], article, main'
+    ));
+    const transcriptMatch = messageNodes.some(node =>
+      normalize(node.innerText || node.textContent).includes(loadText)
+    );
+    if (occurrences === 1 && !transcriptMatch) retryRoot = document.body;
+  }
+  if (!retryRoot) return false;
+  const buttons = Array.from(retryRoot.querySelectorAll('button')).filter(candidate => {
     if (candidate.disabled || !candidate.getClientRects().length) return false;
     const text = normalize(candidate.innerText || candidate.textContent || candidate.getAttribute('aria-label'));
     return text === 'retry';
