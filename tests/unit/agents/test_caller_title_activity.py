@@ -113,6 +113,16 @@ def test_response_observing_renews_owner_lease_without_provider_activity(tmp_pat
     assert record.call_args.kwargs["phase"] is None
 
 
+def test_soft_liveness_uses_client_activity_kind(tmp_path):
+    relay = RequestActivityRelay(tmp_path, "req_test", owner_epoch="owner", worker_id="worker", attempt_epoch=1)
+    with patch("audiagentic.components.agents.gateway.activity.store.record_owned_activity") as record:
+        relay.observe_provider(source_sequence=1, source_instance="turn", phase="soft-liveness")
+
+    record.assert_called_once()
+    assert record.call_args.kwargs["kind"] == "client-liveness"
+    assert record.call_args.kwargs["phase"] == "soft-liveness"
+
+
 def test_preflight_activity_renews_owner_without_provider_activity(tmp_path):
     relay = RequestActivityRelay(
         tmp_path, "req_test", owner_epoch="owner", worker_id="worker", attempt_epoch=1

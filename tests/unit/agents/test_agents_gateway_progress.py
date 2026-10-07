@@ -228,6 +228,21 @@ def test_deterministic_multi_project_soak_has_no_cross_record_state() -> None:
     assert sum(bool(item["stale-progress"]) for item in projections) == 16
 
 
+def test_client_liveness_does_not_clear_provider_stale_progress() -> None:
+    record = store.build_record(execution_profile_id="default", prompt_body="soft")
+    record["state"] = "running"
+    record["started-at"] = "2026-01-01T00:00:00Z"
+    record["activity-sequence"] = 1
+    record["last-activity-at"] = "2026-01-01T00:09:55Z"
+    record["activity"]["owner"]["source-sequence"] = 1
+
+    now = datetime.datetime(2026, 1, 1, 0, 10, 0, tzinfo=datetime.timezone.utc)
+    projection = progress_mod.project_request_progress(record, now=now)
+
+    assert projection["stale-progress"] is True
+    assert projection["last-progress-source"] == "request-transition"
+
+
 def test_source_loss_then_progress_event_recovers_without_terminalizing() -> None:
     record = store.build_record(execution_profile_id="mcp-a2a", prompt_body="recover")
     record["state"] = "running"

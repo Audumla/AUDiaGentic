@@ -192,6 +192,8 @@ def project_request_progress(
     """
     now = now or _now_utc()
     state = record.get("state")
+    activity = record.get("activity") if isinstance(record.get("activity"), dict) else {}
+    provider_activity = activity.get("provider") if isinstance(activity.get("provider"), dict) else {}
 
     # --- derive phase ---
     if isinstance(state, str) and state in _TERMINAL_STATE_TO_PHASE:
@@ -262,13 +264,25 @@ def project_request_progress(
             safe_session_event = {"kind": kind, "timestamp": latest_session_event.get("timestamp")}
 
     # --- last-progress-at / source ---
-    # The durable gateway relay is the sole freshness authority.  Its
-    # activity-sequence is advanced only after provider-neutral filtering, so
-    # synthetic heartbeats, timing events, and provider-specific context cannot
-    # make a stalled request appear active in the operator dashboard.
+    # The durable gateway relay is the freshness authority for provider
+    # progress. The public activity sequence may include synthetic client
+    # liveness, so stale-progress diagnosis must use the provider bucket.
     gateway_activity_ts = None
     activity_sequence = record.get("activity-sequence", 0)
-    if isinstance(activity_sequence, int) and not isinstance(activity_sequence, bool) and activity_sequence > 0:
+    provider_activity_ts = _parse_ts(provider_activity.get("last-at"))
+    owner_activity = activity.get("owner") if isinstance(activity.get("owner"), dict) else {}
+    owner_sequence = owner_activity.get("source-sequence", 0)
+    if provider_activity_ts:
+        gateway_activity_ts = provider_activity_ts
+    elif (
+        isinstance(activity_sequence, int)
+        and not isinstance(activity_sequence, bool)
+        and activity_sequence > 0
+        and owner_sequence == 0
+    ):
+        # Pre-client-liveness records used the aggregate timestamp for
+        # provider progress. Preserve that legacy interpretation only when the
+        # owner bucket cannot prove a synthetic client activity edge.
         gateway_activity_ts = _parse_ts(record.get("last-activity-at"))
 
     last_progress_at = None
