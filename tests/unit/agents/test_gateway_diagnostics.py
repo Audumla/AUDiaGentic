@@ -260,6 +260,37 @@ def test_initial_zero_activity_gets_non_terminal_reconciliation_diagnostic(tmp_p
     assert diagnosed["diagnostic-evidence"][-1]["kind"] == "initial-activity-timeout"
 
 
+def test_deferred_ambiguous_recovery_creates_reconcile_diagnostics(tmp_path) -> None:
+    record = store.build_record(execution_profile_id="gpt-auto", prompt_body="inspect")
+    store.write_record(tmp_path, record)
+    claimed = store.claim_dispatch(tmp_path, record["request-id"], owner_epoch="service", expected_revision=0)
+    running = store.start_owned_attempt(
+        tmp_path,
+        record["request-id"],
+        owner_epoch="service",
+        worker_id="worker",
+        expected_revision=claimed["revision"],
+    )
+
+    deferred = store.defer_owned_recovery(
+        tmp_path,
+        record["request-id"],
+        owner_epoch="service",
+        worker_id="worker",
+        attempt_epoch=running["attempt-epoch"],
+        error=None,
+        phase="conversation-load-reconcile",
+        side_effect_state="may-have-started",
+        retry_delay_seconds=1.0,
+    )
+
+    assert deferred["diagnostics"]["side-effect-state"] == "may-have-started"
+    assert deferred["diagnostics"]["recovery"]["allowed-actions"] == [
+        "reconcile",
+        "abandon",
+    ]
+
+
 def test_cancellation_provenance_is_durable(tmp_path) -> None:
     record = store.build_record(execution_profile_id="default", prompt_body="cancel")
     store.write_record(tmp_path, record)

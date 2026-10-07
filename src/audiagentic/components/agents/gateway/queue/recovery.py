@@ -186,6 +186,124 @@ def _takeover_stale_request(
     return updated["state"], (project_root, request_id)
 
 
+_TURN_EVIDENCE_KEYS = (
+    "unresolved-turn-pending",
+    "unresolved-turn-id",
+    "unresolved-baseline-user-id",
+    "unresolved-baseline-assistant-id",
+    "unresolved-baseline-user-count",
+    "unresolved-baseline-assistant-count",
+    "submission-proven",
+    "prompt-message-id",
+    "assistant-message-id",
+    "assistant-before-message-id",
+    "assistant-before-id",
+    "prompt-text-digest",
+    "terminal-evidence",
+    "recovery-state",
+)
+
+_RECOVERABLE_SIDE_EFFECTS = {
+    "may-have-started": 1,
+    "submission-proven": 2,
+    "terminal-evidence-seen": 3,
+}
+
+
+def resolve_effective_turn_evidence(
+    record: dict[str, Any],
+    session_metadata: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Use session turn evidence only when it explicitly owns this request."""
+    effective = dict(record.get("provider-metadata") or {})
+    if (
+        not isinstance(session_metadata, dict)
+        or session_metadata.get("unresolved-turn-id") != record.get("request-id")
+    ):
+        return effective
+    for key in _TURN_EVIDENCE_KEYS:
+        effective.pop(key, None)
+    for key in _TURN_EVIDENCE_KEYS:
+        if key in session_metadata:
+            effective[key] = session_metadata[key]
+    return effective
+
+
+def recoverable_reconcile_diagnostics(
+    project_root: Path,
+    record: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Recover a reconcile-only rollup from existing durable evidence."""
+    request_id = record.get("request-id")
+    strongest: str | None = None
+
+    def consider(value: Any) -> None:
+        nonlocal strongest
+        if value not in _RECOVERABLE_SIDE_EFFECTS:
+            return
+        if strongest is None or _RECOVERABLE_SIDE_EFFECTS[value] > _RECOVERABLE_SIDE_EFFECTS[strongest]:
+            strongest = value
+
+    recovery = record.get("recovery")
+    if isinstance(recovery, dict) and isinstance(recovery.get("phase"), str) and recovery.get("phase"):
+        consider(recovery.get("side-effect-state"))
+
+    evidence_count = 0
+    evidence = record.get("diagnostic-evidence")
+    if isinstance(evidence, list):
+        for item in evidence:
+            if not isinstance(item, dict):
+                continue
+            if item.get("request-id") not in (None, request_id):
+                continue
+            if item.get("certainty") not in {"strong", "definitive"}:
+                continue
+            if item.get("side-effect-state") in _RECOVERABLE_SIDE_EFFECTS:
+                evidence_count += 1
+                consider(item.get("side-effect-state"))
+
+    session_id = record.get("session-id")
+    if isinstance(session_id, str) and session_id:
+        from audiagentic.components.agents.gateway.session import sessions_store
+        try:
+            session_record = sessions_store.read_session_record(project_root, session_id)
+            session_metadata = sessions_store.session_provider_metadata(session_record)
+        except Exception:  # noqa: BLE001
+            session_metadata = None
+        if (
+            isinstance(session_metadata, dict)
+            and session_metadata.get("unresolved-turn-id") == request_id
+            and session_metadata.get("unresolved-turn-pending") is True
+        ):
+            consider(
+                "terminal-evidence-seen"
+                if session_metadata.get("terminal-evidence")
+                else "submission-proven"
+                if session_metadata.get("submission-proven") is True
+                else "may-have-started"
+            )
+
+    if strongest is None:
+        return None
+    return {
+        "version": 1,
+        "classification": "ambiguous-side-effect",
+        "certainty": "strong",
+        "phase": "reconciliation",
+        "side-effect-state": strongest,
+        "resolution-state": "unresolved",
+        "failure-code": None,
+        "reason-code": "durable-recovery-evidence",
+        "provider-signals": [],
+        "evidence-count": max(1, evidence_count),
+        "coalesced-observation-count": 0,
+        "recovery": {
+            "disposition": "reconcile-required",
+            "allowed-actions": ["reconcile", "abandon"],
+        },
+    }
+
+
 def recovery_runner(record: dict[str, Any], *, project_root: Path | None = None):
     """Rebuild the immutable runner from admission-time record facts."""
     import functools
