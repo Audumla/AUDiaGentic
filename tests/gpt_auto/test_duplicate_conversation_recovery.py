@@ -48,9 +48,20 @@ async def test_load_failure_retries_retained_tab_before_replacement() -> None:
     )
     chat._conversation_load_recovery_allowed = lambda: True
     chat._conversation_load_recovery_attempts = 0
+    chat.unresolved_turn_pending = False
+    chat._defer_unresolved_reconciliation = False
     chat._unresolved_recovery_reason = None
     chat._unresolved_recovery_details = {}
+    chat._checkpoint_metadata = {}
+    chat._submission_proven = False
+    chat.target_id = None
+    chat.unresolved_prompt_message_id = None
+    chat.unresolved_assistant_message_id = None
+    chat.unresolved_assistant_before_id = None
+    chat.unresolved_prompt_text_digest = None
+    chat._persist_checkpoint = AsyncMock()
     chat._set_unresolved_recovery = PersistentChat._set_unresolved_recovery.__get__(chat)
+    chat._replacement_snapshot_is_positive = lambda _snapshot: True
     chat._prefer_active_conversation_page = AsyncMock()
     chat.retry_conversation_load = AsyncMock(return_value=True)
     chat.snapshot = AsyncMock(
