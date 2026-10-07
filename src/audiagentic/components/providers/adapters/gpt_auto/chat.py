@@ -1988,8 +1988,12 @@ class PersistentChat:
             for item in candidates
             if _snapshot_has_positive_conversation_evidence(item[2])
         ]
-        if positive:
-            candidates = positive
+        # Never mutate the binding to a merely non-error or blank duplicate.
+        # A failed retained page remains the only safe Retry target until a
+        # candidate proves the exact durable conversation is mounted.
+        if not positive:
+            return
+        candidates = positive
         candidates.sort(key=lambda item: item[0], reverse=True)
         best_score, best_record, best_snapshot = candidates[0]
         if len(candidates) > 1 and candidates[1][0] == best_score:
