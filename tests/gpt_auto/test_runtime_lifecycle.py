@@ -542,6 +542,32 @@ async def test_rehydrated_transport_refreshes_target_binding_without_prompt() ->
     assert updates[0].metadata["target-id"] == "target-fallback"
 
 
+@pytest.mark.asyncio
+async def test_transport_maps_project_readiness_timeout_to_structured_provider_error() -> None:
+    from audiagentic.components.providers.adapters.gpt_auto.gpt_auto_cdp import (
+        ProjectReadinessError,
+    )
+
+    readiness = ProjectReadinessError("project route did not materialize")
+    readiness.details = {
+        "reason": "project-route-not-materialized",
+        "expected-project-id": "g-p-project",
+    }
+
+    async def open_chat() -> None:
+        raise readiness
+
+    chat = SimpleNamespace(open=open_chat, ag_session_id="session-project-readiness")
+
+    with pytest.raises(AudiaGenticError) as raised:
+        await GptAutoSessionTransport(chat).open()
+
+    assert raised.value.code == "EXT-GPTAUTO-004"
+    assert raised.value.details["failure-stage"] == "readiness"
+    assert raised.value.details["submission-proven"] is False
+    assert raised.value.details["reason"] == "project-route-not-materialized"
+
+
 class _EventBridge:
     def __init__(self) -> None:
         self.events: asyncio.Queue[BridgeEvent] = asyncio.Queue()
