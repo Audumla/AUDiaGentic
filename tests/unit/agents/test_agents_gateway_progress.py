@@ -1233,3 +1233,25 @@ def test_request_runtime_status_includes_sh15_progress_summary(tmp_path: Path, m
 
     hold.set()
     gateway.wait_execution_request(tmp_path, req_id, timeout_seconds=5)
+
+def test_phase_less_synthetic_activity_does_not_prove_progress() -> None:
+    record = store.build_record(execution_profile_id="gpt-auto", prompt_body="hello")
+    record.update({
+        "state": "running",
+        "started-at": "2026-01-01T00:00:00Z",
+        "activity-sequence": 4,
+        "last-activity-at": "2026-01-01T00:09:55Z",
+        "activity-source": "delivery-timeout-retry",
+        "activity": {
+            "provider": {
+                "source": "delivery-timeout-retry",
+                "last-at": "2026-01-01T00:09:55Z",
+                "lease-expires-at": "2999-01-01T00:00:00Z",
+            }
+        },
+    })
+    projection = progress_mod.project_request_progress(
+        record, now=datetime.datetime(2026, 1, 1, 0, 10, tzinfo=datetime.timezone.utc)
+    )
+    assert projection["stale-progress"] is True
+    assert projection["last-progress-source"] == "request-transition"

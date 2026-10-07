@@ -1505,8 +1505,8 @@ def mark_watchdog_intervention_if_expired(
         # forever. This is non-terminal and never proves provider failure.
         provider_phase = provider.get("phase")
         provider_activity_is_real = (
-            not isinstance(provider_phase, str)
-            or is_meaningful_activity(provider_phase, provider_phase)
+            (provider_phase is None and not provider.get("source"))
+            or is_meaningful_activity(provider.get("source"), provider_phase)
         )
         first_activity = (
             provider.get("first-at") or provider.get("last-at")
@@ -1571,9 +1571,10 @@ def mark_watchdog_intervention_if_expired(
         )
         if provider.get("capability") == "unsupported" and not initial_observation_expired:
             return record
-        if not initial_observation_expired and (not isinstance(expiry, str) or not expiry):
-            return record
         if initial_observation_expired:
+            expired = True
+        elif not isinstance(expiry, str) or not expiry.strip():
+            # Missing/corrupt persisted leases must not keep work alive.
             expired = True
         else:
             try:
@@ -1583,8 +1584,9 @@ def mark_watchdog_intervention_if_expired(
                 if parsed_expiry.tzinfo is None:
                     parsed_expiry = parsed_expiry.replace(tzinfo=timezone.utc)
                 expired = parsed_expiry <= datetime.now(timezone.utc)
-            except (TypeError, ValueError, OverflowError):
-                expired = False
+            except (TypeError, ValueError, OverflowError, AttributeError):
+                # A malformed lease is diagnostic evidence, not liveness.
+                expired = True
         if not expired or record.get("watchdog-state") == "intervention":
             return record
         timestamp = now_iso_z()

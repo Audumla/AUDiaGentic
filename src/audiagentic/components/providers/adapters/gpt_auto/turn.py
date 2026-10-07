@@ -63,8 +63,10 @@ def _fallback_prompt_anchor_is_stable(
     baseline: ChatSnapshot,
     snapshot: ChatSnapshot,
     prompt_message_id: str,
+    *,
+    prompt_text: str | None = None,
 ) -> bool:
-    """Reject fallback ordinal reuse once another visible user turn exists."""
+    """Prove a fallback user ordinal remains the requested logical turn."""
     if not prompt_message_id.startswith("fallback-user-"):
         return True
     prompt_refs = [
@@ -72,8 +74,25 @@ def _fallback_prompt_anchor_is_stable(
         for ref in snapshot.message_refs
         if ref.role == "user" and ref.message_id == prompt_message_id
     ]
-    return snapshot.user_count == baseline.user_count + 1 and len(prompt_refs) == 1
-
+    if len(prompt_refs) != 1 or snapshot.latest_user_id != prompt_message_id:
+        return False
+    current_text = prompt_refs[0].correlation_text or prompt_refs[0].text or ""
+    if prompt_text and not PromptFingerprint.from_text(prompt_text).matches_text(current_text):
+        return False
+    baseline_refs = [
+        ref
+        for ref in baseline.message_refs
+        if ref.role == "user" and ref.message_id == prompt_message_id
+    ]
+    if baseline.user_count == snapshot.user_count:
+        # Restart recovery already has the prompt in its baseline. Require
+        # the same ordinal and text to remain the only latest turn.
+        if len(baseline_refs) != 1:
+            return False
+        baseline_text = baseline_refs[0].correlation_text or baseline_refs[0].text or ""
+        return PromptFingerprint.from_text(baseline_text).matches_text(current_text)
+    # Fresh submission: the requested prompt must be the one new user turn.
+    return snapshot.user_count == baseline.user_count + 1 and not baseline_refs
 
 def _is_durable_assistant_message_id(message_id: str | None) -> bool:
     """Return whether an assistant ID can survive renderer virtualization."""
@@ -1731,7 +1750,7 @@ class GptAutoTurn:
                 return False
             return (
                 _fallback_prompt_anchor_is_stable(
-                    baseline, raw, prompt_message_id
+                    baseline, raw, prompt_message_id, prompt_text=self.request.body
                 )
                 and _is_fallback_assistant_message_id(old_id)
                 and _is_fallback_assistant_message_id(new_id)
@@ -3210,7 +3229,7 @@ def _scope_response_snapshot(
     if (
         response_ref is not None
         and not _fallback_prompt_anchor_is_stable(
-            baseline, snapshot, prompt_message_id
+            baseline, snapshot, prompt_message_id, prompt_text=prompt_text
         )
     ):
         # A fallback user ordinal is not a durable turn identity. Once the
@@ -3246,6 +3265,10 @@ def _scope_response_snapshot(
         if len(prompt_refs) == 1:
             matched_prompt_id = prompt_refs[0].message_id
             response_ref = _response_ref_for_prompt(snapshot, matched_prompt_id)
+            if response_ref is not None and not _fallback_prompt_anchor_is_stable(
+                baseline, snapshot, matched_prompt_id, prompt_text=prompt_text
+            ):
+                response_ref = None
         if response_ref is None:
             # Some renderer revisions expose the latest prompt/assistant
             # fields but omit one or both nodes from message_refs while the
@@ -3265,7 +3288,10 @@ def _scope_response_snapshot(
                 == snapshot.latest_assistant_id
             )
             if (
-                prompt_matches
+                _fallback_prompt_anchor_is_stable(
+                    baseline, snapshot, prompt_message_id, prompt_text=prompt_text
+                )
+                and prompt_matches
                 and same_conversation
                 and terminal_bound
                 and snapshot.latest_assistant_id
@@ -3469,7 +3495,7 @@ def _scope_response_snapshot(
         # identity changes remain fail-closed.
         if not (
             _fallback_prompt_anchor_is_stable(
-                baseline, snapshot, matched_prompt_id
+                baseline, snapshot, matched_prompt_id, prompt_text=prompt_text
             )
             and _is_fallback_assistant_message_id(virtualized_assistant_id)
             and _is_fallback_assistant_message_id(response_ref.message_id)

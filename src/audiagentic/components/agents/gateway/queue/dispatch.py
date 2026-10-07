@@ -406,7 +406,7 @@ def _renew_activity(
             attempt_epoch=activity.identity.attempt_epoch,
             kind=(
                 "client-liveness"
-                if normalized_source == "soft-liveness"
+                if normalized_source in {"soft-liveness", "delivery-timeout-retry"}
                 else "provider"
                 if meaningful
                 else "owner-heartbeat"
