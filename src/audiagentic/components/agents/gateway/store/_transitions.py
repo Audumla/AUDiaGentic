@@ -1260,13 +1260,20 @@ def renew_owned_activity(
         raise AudiaGenticError("VAL-AGW-088", "agents", "activity source is required", {})
     if isinstance(activity_lease_seconds, bool) or activity_lease_seconds <= 0:
         raise AudiaGenticError("VAL-AGW-088", "agents", "activity lease seconds must be positive", {})
+    normalized_source = activity_source.strip().lower().replace("_", "-").replace(" ", "-")
     return record_owned_activity(
         project_root,
         request_id,
         owner_epoch=owner_epoch,
         worker_id=worker_id,
         attempt_epoch=attempt_epoch,
-        kind=("provider" if is_meaningful_activity(activity_source, activity_source) else "owner-heartbeat"),
+        kind=(
+            "client-liveness"
+            if normalized_source == "soft-liveness"
+            else "provider"
+            if is_meaningful_activity(activity_source, activity_source)
+            else "owner-heartbeat"
+        ),
         source=activity_source,
         source_instance=worker_id,
         source_sequence=activity_seq,
@@ -1298,7 +1305,7 @@ def record_owned_activity(
     source namespace and can restart on a new worker/session attempt.
     """
     _require_owned_identity(owner_epoch, worker_id, attempt_epoch)
-    if kind not in {"provider", "owner-heartbeat"}:
+    if kind not in {"provider", "owner-heartbeat", "client-liveness"}:
         raise AudiaGenticError("VAL-AGW-088", "agents", "unknown activity kind", {"kind": kind})
     if not isinstance(source, str) or not source:
         raise AudiaGenticError("VAL-AGW-088", "agents", "activity source is required", {})
@@ -1353,6 +1360,37 @@ def record_owned_activity(
                 "activity.owner-heartbeat",
                 state="running",
                 attributes={"activity-source": source, "activity-kind": kind},
+            )
+            return updated
+        if kind == "client-liveness":
+            # Advance the public activity count without touching the provider
+            # bucket or its watchdog lease. Synthetic activity must not mask a
+            # stalled provider turn.
+            activity["owner"] = bucket
+            activity.update({"sequence": aggregate, "last-at": received_at, "last-source": source})
+            updated = dict(record)
+            updated.update(
+                {
+                    "last-activity-at": received_at,
+                    "activity-sequence": aggregate,
+                    "activity-source": source,
+                    "activity": activity,
+                    "updated-at": received_at,
+                    "revision": record["revision"] + 1,
+                }
+            )
+            write_record(project_root, updated)
+            record_gateway_timeline(
+                project_root,
+                request_id,
+                "activity.client-liveness",
+                state="running",
+                attributes={
+                    "activity-sequence": aggregate,
+                    "activity-source": source,
+                    "activity-kind": kind,
+                    "activity-label": normalize_activity_label(phase) or phase,
+                },
             )
             return updated
         normalized_label: str | None = None
@@ -1421,7 +1459,7 @@ def record_owned_activity(
                         "activity-label": normalized_label,
                         "activity-group": activity_group(normalized_label),
                     }
-                    if kind == "provider" and normalized_label
+                    if kind in {"provider", "client-liveness"} and normalized_label
                     else {}
                 ),
             },

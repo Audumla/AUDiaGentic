@@ -118,6 +118,48 @@ def test_relay_persists_dom_edge_activity_labels(tmp_path: Path) -> None:
     assert persisted["activity"]["provider"]["phase"] == "delivery-timeout-retry"
 
 
+
+def test_soft_liveness_advances_public_activity_without_provider_lease(tmp_path: Path) -> None:
+    record = store.build_record(execution_profile_id="default", prompt_body="hello")
+    store.write_record(tmp_path, record)
+    claimed = store.claim_dispatch(
+        tmp_path, record["request-id"], owner_epoch="service-a", expected_revision=0
+    )
+    running = store.start_owned_attempt(
+        tmp_path,
+        record["request-id"],
+        owner_epoch="service-a",
+        worker_id="worker-a",
+        expected_revision=claimed["revision"],
+    )
+    relay = RequestActivityRelay(
+        tmp_path,
+        record["request-id"],
+        owner_epoch="service-a",
+        worker_id="worker-a",
+        attempt_epoch=running["attempt-epoch"],
+        min_interval_seconds=0.0,
+    )
+
+    relay.observe_provider(
+        source="session-transport",
+        source_instance="session:ses-1:turn:req-1",
+        source_sequence=1,
+        phase="soft-liveness",
+    )
+
+    persisted = store.read_record(tmp_path, record["request-id"])
+    assert persisted["activity-sequence"] == 1
+    assert persisted["last-activity-at"] is not None
+    assert persisted["activity"]["provider"]["last-at"] is None
+    assert persisted["activity"]["provider"]["lease-expires-at"] is None
+    assert persisted["activity-lease-expires-at"] is None
+    assert persisted["activity"]["owner"]["source-sequence"] == 1
+    timeline = load_ndjson(gateway_timeline_path(tmp_path, record["request-id"]))
+    assert [entry["event"] for entry in timeline if entry["event"] == "activity.client-liveness"] == [
+        "activity.client-liveness"
+    ]
+
 def test_response_observing_renews_owner_lease_without_progress_sequence(
     tmp_path: Path,
 ) -> None:

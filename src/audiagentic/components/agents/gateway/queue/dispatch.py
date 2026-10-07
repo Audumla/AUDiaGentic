@@ -393,6 +393,7 @@ def _renew_activity(
     if activity.identity.worker_id != record.get("worker-id") or activity.identity.attempt_epoch != record.get("attempt-epoch"):
         return
     try:
+        normalized_source = activity.activity_source.strip().lower().replace("_", "-").replace(" ", "-")
         meaningful = is_meaningful_activity(
             activity.activity_source,
             activity.activity_source,
@@ -403,7 +404,13 @@ def _renew_activity(
             owner_epoch=record["dispatch-owner-epoch"],
             worker_id=activity.identity.worker_id,
             attempt_epoch=activity.identity.attempt_epoch,
-            kind="provider" if meaningful else "owner-heartbeat",
+            kind=(
+                "client-liveness"
+                if normalized_source == "soft-liveness"
+                else "provider"
+                if meaningful
+                else "owner-heartbeat"
+            ),
             source=activity.activity_source,
             source_instance=activity.identity.worker_id,
             source_sequence=activity.activity_seq,
