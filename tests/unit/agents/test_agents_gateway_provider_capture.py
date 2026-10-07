@@ -101,6 +101,81 @@ def test_complete_execution_from_provider_rejects_queued_request(monkeypatch, tm
     assert getattr(caught.value, "code", None) == "CON-AGW-152"
 
 
+def test_complete_from_provider_uses_same_request_session_turn_evidence(
+    monkeypatch, tmp_path: Path
+):
+    request_id = "req_lagged_projection"
+    record = {
+        "request-id": request_id,
+        "state": "running",
+        "revision": 3,
+        "session-id": "ses_capture",
+        "resolved-provider-id": "gpt-auto",
+        "provider-metadata": {
+            "chat-url": "https://chatgpt.com/g/g-p-project/c/conversation",
+            "project-url": "https://chatgpt.com/g/g-p-project/project",
+            "provider-session-id": "conversation",
+            "unresolved-turn-pending": True,
+            "prompt-message-id": "stale-request-user",
+            "submission-proven": True,
+        },
+    }
+    checkpoint = {
+        "chat-url": "https://chatgpt.com/g/g-p-project/c/conversation",
+        "project-url": "https://chatgpt.com/g/g-p-project/project",
+        "provider-session-id": "conversation",
+        "unresolved-turn-pending": True,
+        "unresolved-turn-id": request_id,
+        "prompt-message-id": "provider-user-2",
+        "submission-proven": True,
+    }
+    snapshot = SimpleNamespace(
+        latest_assistant_text="captured answer",
+        latest_user_text="request",
+        latest_user_id="provider-user-2",
+        latest_assistant_id="provider-assistant-2",
+        terminal_witness_assistant_id="provider-assistant-2",
+        generating=False,
+        dom_signals=frozenset({"completion-control"}),
+    )
+    artifact_ref = {
+        "artifact-id": "final-response",
+        "request-id": request_id,
+        "media-type": "text/plain",
+        "bytes": 15,
+        "sha256": "hash",
+    }
+    monkeypatch.setattr(api.store, "read_record", lambda *_: record)
+    monkeypatch.setattr(sessions_store, "read_session_record", lambda *_: {})
+    monkeypatch.setattr(sessions_store, "session_provider_metadata", lambda _: checkpoint)
+    monkeypatch.setattr(sessions_store, "session_provider_id", lambda _: "gpt-auto")
+    monkeypatch.setattr(
+        session_runtime_module,
+        "get_session_runtime",
+        lambda: SimpleNamespace(
+            capture_latest_response=lambda *_args, **_kwargs: {
+                "outcome": "captured",
+                "snapshot": snapshot,
+            }
+        ),
+    )
+    monkeypatch.setattr(
+        api.store,
+        "transition_operator_terminal",
+        lambda *_args, **_kwargs: {
+            **record,
+            "state": "completed",
+            "revision": 4,
+            "response-artifact": artifact_ref,
+        },
+    )
+
+    result = api.complete_execution_from_provider(tmp_path, request_id)
+
+    assert result["state"] == "completed"
+    assert result["response-artifact"] == artifact_ref
+
+
 def test_complete_execution_from_provider_requires_request_submission_proof(monkeypatch, tmp_path: Path):
     record = {
         "request-id": "req_unsubmitted",
