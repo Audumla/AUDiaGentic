@@ -356,6 +356,7 @@ class GptAutoTurn:
         self._completion_materialization_succeeded = False
         self._delivery_timeout_retry_attempted = False
         self._delivery_timeout_retry_probe_failed = False
+        self._conversation_load_retry_attempts = 0
         self._timing_events: set[str] = set()
         self._initial_refresh_attempted = False
         self._initial_refresh_succeeded: bool | None = None
@@ -2402,6 +2403,33 @@ class GptAutoTurn:
                 mark_activity = getattr(self.chat, "mark_validated_activity", None)
                 if callable(mark_activity):
                     mark_activity()
+            conversation_load_failed = "conversation-load-failed" in current.dom_signals
+            if conversation_load_failed and (
+                self.side_effect_attempted
+                or self.submission_confirmed
+                or self._recovered_existing_turn
+            ):
+                # A transient load failure is not proof that the provider
+                # turn failed. Retry only the provider-owned control in this
+                # conversation; never replace the session or replay the text.
+                retry = getattr(self.chat, "retry_conversation_load", None)
+                retried = bool(await retry()) if callable(retry) else False
+                self._conversation_load_retry_attempts += int(retried)
+                await self._emit_timing(
+                    "conversation-load-retry-clicked"
+                    if retried
+                    else "conversation-load-observation-deferred"
+                )
+                delay = min(
+                    5.0,
+                    max(
+                        self.chat.config.turn.poll_interval_seconds,
+                        0.25 * (2 ** max(0, self._conversation_load_retry_attempts - 1)),
+                    ),
+                )
+                await asyncio.sleep(delay)
+                previous = current
+                continue
             if await _attempt_response_recovery(
                 now,
                 interruption_present=provider_interruption,

@@ -406,7 +406,22 @@ class PersistentChat:
                 retained = await self._retained_page_snapshot()
                 if not await self._replace_load_failed_page(retained):
                     if retained is not None and "conversation-load-failed" in retained.dom_signals:
-                        raise self._conversation_load_failure_error(retained)
+                        # A retained unresolved turn is still owned by the
+                        # provider. A load-error page is not evidence that
+                        # the turn failed; the request observer retains the
+                        # exact conversation until its outer timeout.
+                        if (
+                            self.unresolved_turn_pending
+                            or self._submission_proven
+                            or self.active_turn_id is not None
+                        ):
+                            self._set_unresolved_recovery(
+                                "conversation-load-observation-deferred",
+                                observed_url=retained.url,
+                                dom_signals=sorted(retained.dom_signals),
+                            )
+                        else:
+                            raise self._conversation_load_failure_error(retained)
                     await self._prefer_active_conversation_page()
             elif not target:
                 # provider_session_id is set but neither a retained browser
@@ -557,7 +572,18 @@ class PersistentChat:
                     # failure at the transport boundary.
                     raise self._conversation_load_failure_error(exc.snapshot) from exc
                 if not replaced:
-                    raise self._conversation_load_failure_error(retained)
+                    if (
+                        self.unresolved_turn_pending
+                        or self._submission_proven
+                        or self.active_turn_id is not None
+                    ):
+                        self._set_unresolved_recovery(
+                            "conversation-load-observation-deferred",
+                            observed_url=retained.url,
+                            dom_signals=sorted(retained.dom_signals),
+                        )
+                    else:
+                        raise self._conversation_load_failure_error(retained)
         if self.provider_session_id and not self.page_handle:
             # AS125 may have reclaimed only the physical tab. Reopen the
             # exact retained provider conversation before admitting a turn;
@@ -903,10 +929,19 @@ class PersistentChat:
             )
         )
 
+    def _load_failure_requires_retained_observation(self) -> bool:
+        """Return whether load recovery must stay on the exact conversation."""
+        return bool(
+            getattr(self, "unresolved_turn_pending", False)
+            or getattr(self, "_submission_proven", False)
+            or getattr(self, "active_turn_id", None) is not None
+        )
+
     def _conversation_load_failure_error(
         self, snapshot: ChatSnapshot | None = None
     ) -> AudiaGenticError:
         """Build the terminal error for an exhausted failed-page recovery."""
+        retained_observation = self._load_failure_requires_retained_observation()
         self._set_unresolved_recovery(
             "conversation-load-recovery-exhausted",
             attempts=self._conversation_load_recovery_attempts,
@@ -914,7 +949,7 @@ class PersistentChat:
             chat_url=self.chat_url,
         )
         if self.state not in {ChatState.FAILED, ChatState.CLOSED}:
-            self._move(ChatState.FAILED)
+            self._move(ChatState.RECOVERING if retained_observation else ChatState.FAILED)
         details: dict[str, object] = {
             "failure-reason": "conversation-load-failed",
             "recovery-reason": "conversation-load-recovery-exhausted",
@@ -930,7 +965,7 @@ class PersistentChat:
             ),
             "previous-turn-unresolved": bool(self.unresolved_turn_pending),
             "failure-stage": "readiness",
-            "submission-state": "not_started",
+            "submission-state": "ambiguous" if retained_observation else "not_started",
             "submission-replay": False,
             "provider-session-id": self.provider_session_id,
             "chat-url": self.chat_url,
@@ -997,7 +1032,11 @@ class PersistentChat:
         )
         failed_handle = self.page_handle
         remaining = retry_deadline - asyncio.get_running_loop().time()
-        if remaining > 0:
+        # Duplicate-tab discovery is safe only before the browser-side
+        # submission boundary. Once a turn is submitted or ambiguous, even an
+        # exact-URL alternate can be a stale renderer and must not displace
+        # the provider conversation being observed.
+        if remaining > 0 and not self._load_failure_requires_retained_observation():
             try:
                 async with asyncio.timeout(remaining):
                     await self._prefer_active_conversation_page()
@@ -1102,6 +1141,17 @@ class PersistentChat:
             retry_delay = min(retry_delay * 2.0, 8.0)
 
         # Same-tab Retry is independent of replacement-tab budget.
+        # Replacement is unsafe once a turn was submitted or is ambiguous:
+        # the provider may still own the original work. Keep this exact tab
+        # bound and let the request observer retry its visible control.
+        if self._load_failure_requires_retained_observation():
+            self._set_unresolved_recovery(
+                "conversation-load-observation-deferred",
+                attempts=retry_attempts,
+                observed_url=snapshot.url,
+                dom_signals=sorted(snapshot.dom_signals),
+            )
+            return True
         if not self._conversation_load_recovery_allowed():
             return False
         old_handle = self.page_handle
