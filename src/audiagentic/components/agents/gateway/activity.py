@@ -78,7 +78,7 @@ class RequestActivityRelay:
             # renew the internal watchdog lease.
             self._observe("client-liveness", source, source_instance, source_sequence, phase, force)
             return
-        if normalized_phase == "response-observing":
+        if normalized_phase in {"response-observing", "provider-busy", "recovery-observing"}:
             # The response observer is a synthetic owner heartbeat. Keep the
             # worker/session lease alive without advancing provider activity or
             # making a stalled DOM look like real progress.
