@@ -586,9 +586,10 @@ async def test_retry_conversation_load_clicks_only_exact_provider_retry() -> Non
         try:
             page = await browser.new_page()
             await page.set_content(
-                '<main>Could not load this ChatGPT conversation</main>'
+                '<div class="error-page">Could not load this ChatGPT conversation'
                 '<button type="button">Retry</button>'
                 '<button type="button">Retry upload</button>'
+                '</div>'
             )
             await page.evaluate(
                 """for (const button of document.querySelectorAll('button')) {
@@ -617,6 +618,25 @@ async def test_retry_conversation_load_ignores_retry_without_load_error() -> Non
         finally:
             await browser.close()
 
+
+@pytest.mark.asyncio
+async def test_retry_conversation_load_rejects_transcript_text_and_ambiguous_buttons() -> None:
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            await page.set_content(
+                '<main>Could not load this ChatGPT conversation'
+                '<button type="button">Retry</button></main>'
+            )
+            assert await page.evaluate(_RETRY_CONVERSATION_LOAD_FN) is False
+            await page.set_content(
+                '<div class="error-page">Could not load this ChatGPT conversation'
+                '<button type="button">Retry</button><button type="button">Retry</button></div>'
+            )
+            assert await page.evaluate(_RETRY_CONVERSATION_LOAD_FN) is False
+        finally:
+            await browser.close()
 
 @pytest.mark.asyncio
 async def test_retry_delivery_timeout_clicks_plain_text_alert_button() -> None:

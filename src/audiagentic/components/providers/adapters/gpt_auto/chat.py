@@ -989,8 +989,18 @@ class PersistentChat:
         )
         retry_attempts = 0
         while asyncio.get_running_loop().time() < retry_deadline:
+            remaining = retry_deadline - asyncio.get_running_loop().time()
+            if remaining <= 0:
+                break
             try:
-                clicked = await self.retry_conversation_load()
+                async with asyncio.timeout(remaining):
+                    clicked = await self.retry_conversation_load()
+            except TimeoutError:
+                self._set_unresolved_recovery(
+                    "conversation-load-retry-deadline",
+                    attempts=retry_attempts,
+                )
+                break
             except Exception as exc:  # noqa: BLE001 - preserve observation evidence
                 self._set_unresolved_recovery(
                     "conversation-load-retry-failed",
@@ -1011,8 +1021,18 @@ class PersistentChat:
             if remaining <= 0:
                 break
             await asyncio.sleep(min(retry_delay, remaining))
+            remaining = retry_deadline - asyncio.get_running_loop().time()
+            if remaining <= 0:
+                break
             try:
-                retried_snapshot = await self.snapshot(allow_recovering=True)
+                async with asyncio.timeout(remaining):
+                    retried_snapshot = await self.snapshot(allow_recovering=True)
+            except TimeoutError:
+                self._set_unresolved_recovery(
+                    "conversation-load-retry-observation-deadline",
+                    attempts=retry_attempts,
+                )
+                break
             except Exception as exc:  # noqa: BLE001 - preserve observation evidence
                 self._set_unresolved_recovery(
                     "conversation-load-retry-observation-failed",
@@ -1022,6 +1042,21 @@ class PersistentChat:
                 )
                 break
             if "conversation-load-failed" not in retried_snapshot.dom_signals:
+                if not self._replacement_snapshot_is_positive(retried_snapshot):
+                    self._set_unresolved_recovery(
+                        "conversation-load-retry-unproven",
+                        attempts=retry_attempts,
+                    )
+                    break
+                if not (
+                    self.unresolved_turn_pending
+                    and self._defer_unresolved_reconciliation
+                ):
+                    self._conversation_load_recovery_attempts = 0
+                    self._checkpoint_metadata[
+                        "conversation-load-recovery-attempts"
+                    ] = 0
+                    await self._persist_checkpoint(self.unresolved_metadata())
                 self._set_unresolved_recovery(
                     "conversation-load-retry-recovered",
                     attempts=retry_attempts,
