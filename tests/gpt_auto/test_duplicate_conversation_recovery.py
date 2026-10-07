@@ -13,13 +13,20 @@ async def test_load_failure_reuses_healthy_exact_url_duplicate_before_creating_t
     chat = object.__new__(PersistentChat)
     chat.page_handle = "failed-tab"
     chat.chat_url = "https://chatgpt.com/g/g-p-project/c/provider-session"
+    chat.provider_session_id = None
     chat._conversation_load_recovery_allowed = lambda: True
-    chat.config = SimpleNamespace(workflow=SimpleNamespace(recovery=SimpleNamespace(conversation_load_failure_recovery_enabled=True)))
+    chat.config = SimpleNamespace(
+        chat=SimpleNamespace(ready_timeout_seconds=1.0),
+        turn=SimpleNamespace(poll_interval_seconds=0.01),
+        workflow=SimpleNamespace(recovery=SimpleNamespace(conversation_load_failure_recovery_enabled=True, action_pause_seconds=0.01)),
+    )
 
     async def prefer_healthy_duplicate() -> None:
         chat.page_handle = "healthy-tab"
 
     chat._prefer_active_conversation_page = prefer_healthy_duplicate
+    chat._replacement_snapshot_is_positive = lambda _snapshot: True
+    chat._reset_load_recovery_budget_after_positive_snapshot = AsyncMock()
     chat.snapshot = AsyncMock(
         return_value=SimpleNamespace(dom_signals=frozenset({"response-complete"}))
     )
