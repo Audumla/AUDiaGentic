@@ -23,7 +23,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from audiagentic.foundation.transports.agent_session import is_meaningful_activity_label
+from audiagentic.foundation.transports.agent_session import is_meaningful_activity
 
 from audiagentic.components.agents.agents_paths import gateway_request_path
 from audiagentic.components.agents.gateway import profiles as profiles_mod
@@ -151,8 +151,8 @@ def _durable_provider_session_is_active(project_root: Path, record: dict[str, An
         else None
     )
     provider_activity_is_real = (
-        not isinstance(provider_phase, str)
-        or is_meaningful_activity_label(provider_phase)
+        (provider_phase is None and not provider_activity.get("source"))
+        or is_meaningful_activity(provider_activity.get("source"), provider_phase)
     )
     if record.get("provider-transport-kind") == "provider-session":
         # Provider-session recovery must be fenced by current provider work.
