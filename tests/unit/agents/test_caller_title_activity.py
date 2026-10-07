@@ -124,3 +124,16 @@ def test_preflight_activity_renews_owner_without_provider_activity(tmp_path):
     assert record.call_count == 1
     assert {call.kwargs["kind"] for call in record.call_args_list} == {"owner-heartbeat"}
     assert all(call.kwargs["phase"] is None for call in record.call_args_list)
+
+
+def test_provider_session_lease_uses_admission_snapshot() -> None:
+    from audiagentic.components.agents.gateway.activity import frozen_activity_lease_seconds
+
+    assert frozen_activity_lease_seconds({"watchdog-policy": {"activity-lease-seconds": 123}}) == 123
+
+
+def test_provider_session_lease_fails_closed_without_snapshot() -> None:
+    from audiagentic.components.agents.gateway.activity import frozen_activity_lease_seconds
+
+    with pytest.raises(ValueError, match="frozen watchdog policy"):
+        frozen_activity_lease_seconds({})
