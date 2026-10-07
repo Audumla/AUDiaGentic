@@ -979,6 +979,43 @@ def test_expired_activity_only_marks_diagnostic_intervention(tmp_path: Path) -> 
     assert diagnosed["watchdog-reason"] == "activity-lease-expired-diagnostic"
 
 
+def test_watchdog_normalizes_naive_provider_lease_timestamp(tmp_path: Path) -> None:
+    record = store.build_record(
+        execution_profile_id="gpt-auto",
+        prompt_body="hello",
+        provider_transport_kind="provider-session",
+    )
+    store.write_record(tmp_path, record)
+    claimed = store.claim_dispatch(
+        tmp_path, record["request-id"], owner_epoch="service-a", expected_revision=0
+    )
+    running = store.start_owned_attempt(
+        tmp_path,
+        record["request-id"],
+        owner_epoch="service-a",
+        worker_id="worker-a",
+        expected_revision=claimed["revision"],
+    )
+    running["activity"]["provider"].update({
+        "capability": "supported",
+        "phase": "provider-progress",
+        "first-at": "2026-01-01T00:00:00",
+        "last-at": "2026-01-01T00:00:00",
+        "lease-expires-at": "2000-01-01T00:00:00",
+    })
+    store.write_record(tmp_path, running)
+
+    diagnosed = store.mark_watchdog_intervention_if_expired(
+        tmp_path,
+        record["request-id"],
+        owner_epoch="service-a",
+        worker_id="worker-a",
+        attempt_epoch=running["attempt-epoch"],
+    )
+
+    assert diagnosed["watchdog-state"] == "intervention"
+    assert diagnosed["watchdog-reason"] == "activity-lease-expired-diagnostic"
+
 def test_owned_dispatch_fences_reject_stale_owner_worker_and_attempt(tmp_path: Path) -> None:
     record = store.build_record(execution_profile_id="default", prompt_body="hello")
     store.write_record(tmp_path, record)

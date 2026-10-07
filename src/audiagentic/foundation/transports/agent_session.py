@@ -90,6 +90,7 @@ _NON_WORK_ACTIVITY_LABELS = frozenset({
     # Response polling keeps the owner lease alive, but is not proof that the
     # provider DOM or response has changed.
     "response-observing",
+    "delivery-timeout-retry",
     "transport-unknown",
     # Recovery attempts are owner/observer liveness, not provider progress.
     # In particular, reconstructed observers may emit this for an unchanged
@@ -129,11 +130,11 @@ _WORK_ACTIVITY_LABELS = frozenset({
     "in-progress",
     # soft-liveness is an observer/client-lease signal. It is retained
     # in the activity timeline, but is deliberately not provider-work proof.
-    "delivery-timeout-retry",
     # Provider-neutral tool progress used by ACP and other adapters.
     "tool-progress",
     "provider-progress",
     "acp-progress",
+    "mcp-a2a-progress",
 })
 
 

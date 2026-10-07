@@ -146,6 +146,29 @@ def test_historical_verified_watchdog_reason_does_not_prove_provider_activity() 
     assert projection["progress-disposition"] == "processing-unverified"
     assert projection["progress-disposition-reason"] == "owned-attempt-awaiting-provider-evidence"
 
+def test_legacy_synthetic_provider_bucket_is_not_current_progress() -> None:
+    record = store.build_record(execution_profile_id="gpt-auto", prompt_body="review")
+    record.update(
+        {
+            "state": "running",
+            "worker-id": "worker-1",
+            "activity": {
+                "provider": {
+                    "capability": "supported",
+                    "phase": "soft-liveness",
+                    "last-at": "2026-01-01T00:00:00Z",
+                    "lease-expires-at": "2999-01-01T00:00:00Z",
+                }
+            },
+        }
+    )
+
+    projection = progress_mod.project_request_progress(record)
+
+    assert projection["progress-disposition"] == "processing-unverified"
+    assert projection["progress-disposition-reason"] == "owned-attempt-awaiting-provider-evidence"
+    assert projection["last-progress-source"] != "provider"
+
 def test_cancel_requested_running_request_is_not_terminal() -> None:
     record = store.build_record(execution_profile_id="gpt-auto", prompt_body="review")
     record.update({"state": "running", "worker-id": "worker-1", "cancel-requested": True})

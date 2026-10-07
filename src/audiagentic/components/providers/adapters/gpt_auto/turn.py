@@ -59,6 +59,22 @@ def _is_fallback_assistant_message_id(message_id: str | None) -> bool:
     return bool(message_id and message_id.startswith("fallback-assistant-"))
 
 
+def _fallback_prompt_anchor_is_stable(
+    baseline: ChatSnapshot,
+    snapshot: ChatSnapshot,
+    prompt_message_id: str,
+) -> bool:
+    """Reject fallback ordinal reuse once another visible user turn exists."""
+    if not prompt_message_id.startswith("fallback-user-"):
+        return True
+    prompt_refs = [
+        ref
+        for ref in snapshot.message_refs
+        if ref.role == "user" and ref.message_id == prompt_message_id
+    ]
+    return snapshot.user_count == baseline.user_count + 1 and len(prompt_refs) == 1
+
+
 def _is_durable_assistant_message_id(message_id: str | None) -> bool:
     """Return whether an assistant ID can survive renderer virtualization."""
     return bool(message_id and not message_id.startswith("fallback-assistant-"))
@@ -370,6 +386,7 @@ class GptAutoTurn:
             "response-observing",
             "recovery-observing",
             "soft-liveness",
+            "delivery-timeout-retry",
             "preflight-inspected",
             "preflight-evaluated",
         }:
@@ -1713,7 +1730,10 @@ class GptAutoTurn:
             ):
                 return False
             return (
-                _is_fallback_assistant_message_id(old_id)
+                _fallback_prompt_anchor_is_stable(
+                    baseline, raw, prompt_message_id
+                )
+                and _is_fallback_assistant_message_id(old_id)
                 and _is_fallback_assistant_message_id(new_id)
                 and _same_response_slot_replacement(
                     raw,
@@ -2061,15 +2081,12 @@ class GptAutoTurn:
             )
             request_owned_activity = bool(progress_labels) or dom_activity_changed
             if response_ref is not None:
+                # A fallback-ID remount is not provider progress by itself.
+                # Only changed request-owned content counts as real response
+                # activity; otherwise ordinal churn can defer recovery forever.
                 request_owned_activity = request_owned_activity or bool(
-                    (
-                        response_ref.message_id
-                        and response_ref.message_id != request_activity_response_id
-                    )
-                    or (
-                        response_ref.text
-                        and response_ref.text != request_activity_response_text
-                    )
+                    response_ref.text
+                    and response_ref.text != request_activity_response_text
                 )
                 request_activity_response_id = response_ref.message_id
                 request_activity_response_text = response_ref.text
@@ -3190,6 +3207,16 @@ def _scope_response_snapshot(
             "provider conversation changed during response observation"
         )
     response_ref = _response_ref_for_prompt(snapshot, prompt_message_id)
+    if (
+        response_ref is not None
+        and not _fallback_prompt_anchor_is_stable(
+            baseline, snapshot, prompt_message_id
+        )
+    ):
+        # A fallback user ordinal is not a durable turn identity. Once the
+        # visible user-turn anchor advances, do not correlate a later
+        # response even when its text is identical.
+        response_ref = None
     request_error_alert = _request_error_alert_is_owned(
         baseline,
         snapshot,
@@ -3441,7 +3468,10 @@ def _scope_response_snapshot(
         # prompt-owned slot remains the only assistant in the span. Durable
         # identity changes remain fail-closed.
         if not (
-            _is_fallback_assistant_message_id(virtualized_assistant_id)
+            _fallback_prompt_anchor_is_stable(
+                baseline, snapshot, matched_prompt_id
+            )
+            and _is_fallback_assistant_message_id(virtualized_assistant_id)
             and _is_fallback_assistant_message_id(response_ref.message_id)
             and _same_response_slot_replacement(
                 snapshot,

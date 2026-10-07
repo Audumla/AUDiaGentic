@@ -222,6 +222,7 @@ class GptAutoSessionTransport:
             "preflight-inspected",
             "preflight-evaluated",
             "soft-liveness",
+            "delivery-timeout-retry",
         }:
             mark_activity()
         observation = TransportObservation(
