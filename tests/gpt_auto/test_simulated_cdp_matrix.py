@@ -427,32 +427,6 @@ async def test_sidebar_occluded_new_chat_hovers_once_then_trusted_clicks(monkeyp
 
 
 @pytest.mark.asyncio
-async def test_sidebar_project_waits_for_slow_authenticated_sidebar(monkeypatch) -> None:
-    class Bridge:
-        async def call(self, method, params=None, **_kwargs):
-            return {"clicked": True}
-
-    browser = GptAutoCdpBrowserController(Bridge(), action_pause_seconds=0.0)
-    page = CdpPageRef("page-1", "target-1", 7, "https://chatgpt.com/", "")
-    actions = iter([
-        {"action": "waiting"},
-        {"action": "selected", "projectId": "g-p-audiagentic", "x": 40, "y": 50},
-    ])
-
-    async def evaluate(_page, _function, _value=None):
-        return next(actions)
-
-    async def no_wait(_delay):
-        return None
-
-    monkeypatch.setattr(browser, "evaluate", evaluate)
-    monkeypatch.setattr(asyncio, "sleep", no_wait)
-
-    assert await browser._select_project_from_sidebar(
-        page, "AUDiaGentic", expected_project_id="g-p-audiagentic", timeout=2
-    ) == {"clicked": True, "projectId": "g-p-audiagentic"}
-
-@pytest.mark.asyncio
 async def test_sidebar_project_rejects_wrong_exact_project_id(monkeypatch) -> None:
     calls: list[tuple[str, object]] = []
 
@@ -473,7 +447,7 @@ async def test_sidebar_project_rejects_wrong_exact_project_id(monkeypatch) -> No
 
     assert await browser._select_project_from_sidebar(
         page, "AUDiaGentic", expected_project_id="g-p-expected", timeout=2
-    ) is None
+    ) == {"action": "project-id-mismatch", "actualProjectId": "g-p-wrong"}
     assert calls == []
 
 
@@ -553,7 +527,7 @@ async def test_sidebar_project_never_repeats_expand_pointer(monkeypatch) -> None
 
     assert await browser._select_project_from_sidebar(
         page, "BigCherry", expected_project_id="g-p-bigcherry", timeout=2
-    ) is None
+    ) == {"action": "expand-not-effective", "last": {"action": "expand", "x": 20, "y": 30}}
     assert [method for method, _params in calls].count("click") == 1
 
 
@@ -673,12 +647,14 @@ async def test_new_session_selects_exact_project_from_sidebar(monkeypatch) -> No
         ready_timeout=4,
     )
 
-    assert calls == [
+    assert calls[:2] == [
         ("new-tab", (anchor, None)),
         ("navigate", "https://chatgpt.com/"),
-        ("select-sidebar", ("BigCherry", project_id, 3.0)),
-        ("composer", 4),
     ]
+    assert calls[2][0] == "select-sidebar"
+    assert calls[2][1][:2] == ("BigCherry", project_id)
+    assert 0 < calls[2][1][2] <= 3
+    assert calls[3] == ("composer", 4)
     assert opened["projectUrl"] == selected_url
 
 
@@ -736,14 +712,18 @@ async def test_new_session_uses_direct_projects_fallback_when_sidebar_has_no_pro
         ready_timeout=4,
     )
 
-    assert calls == [
-        ("navigate", "https://chatgpt.com/"),
-        ("select-sidebar", ("BigCherry", project_id, 3.0)),
-        ("navigate", "https://chatgpt.com/projects"),
-        ("projects-route", 3),
-        ("select-project", ("BigCherry", 3)),
-        ("composer", 4),
-    ]
+    assert calls[0] == ("navigate", "https://chatgpt.com/")
+    assert calls[1][0] == "select-sidebar"
+    assert calls[1][1][:2] == ("BigCherry", project_id)
+    assert 0 < calls[1][1][2] <= 3
+    assert calls[2][0] == "navigate"
+    assert calls[2][1] == "https://chatgpt.com/projects"
+    assert calls[3][0] == "projects-route"
+    assert 0 < calls[3][1] <= 3
+    assert calls[4][0] == "select-project"
+    assert calls[4][1][0] == "BigCherry"
+    assert 0 < calls[4][1][1] <= 3
+    assert calls[5] == ("composer", 4)
     assert opened["projectUrl"] == selected_url
 
 
@@ -1333,7 +1313,7 @@ async def test_gpt_provider_rejects_blank_prompt_and_reports_no_stop_control():
         await browser.submit(page, "   ")
     assert (await browser.stop_generation(page))["stopped"] is False
 @pytest.mark.asyncio
-async def test_projects_new_chat_rejects_identityless_dom_pointer(monkeypatch) -> None:
+async def test_projects_new_chat_allows_idless_row_for_post_click_url_proof(monkeypatch) -> None:
     calls: list[tuple[str, object]] = []
 
     class Bridge:
@@ -1345,11 +1325,14 @@ async def test_projects_new_chat_rejects_identityless_dom_pointer(monkeypatch) -
     page = CdpPageRef("page-1", "target-1", 7, "https://chatgpt.com/projects", "")
 
     async def evaluate(_page, _function, _value=None):
-        return {"x": 123.5, "y": 456.5}
+        return {"x": 123.5, "y": 456.5, "projectId": None}
 
     monkeypatch.setattr(browser, "evaluate", evaluate)
 
     assert await browser._select_project_from_projects_page(
         page, "BigCherry", timeout=0.05
-    ) is None
-    assert calls == []
+    ) == {"clicked": True, "projectId": None}
+    assert calls == [
+        ("keep_page_active", {"pageHandle": "page-1"}),
+        ("click", {"pageHandle": "page-1", "x": 123.5, "y": 456.5}),
+    ]

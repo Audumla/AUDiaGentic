@@ -41,11 +41,12 @@ def _markup(sidebar_ids: list[str]) -> str:
     [
         ([_PROJECT_ID], "", _PROJECT_ID),
         ([], "", None),
+        ([], _PROJECT_ID, None),
         ([_PROJECT_ID, _OTHER_PROJECT_ID], "", None),
         ([_PROJECT_ID, _OTHER_PROJECT_ID], _PROJECT_ID, _PROJECT_ID),
         ([_OTHER_PROJECT_ID], _PROJECT_ID, None),
     ],
-    ids=["unique", "missing", "ambiguous", "configured-disambiguation", "configured-miss"],
+    ids=["unique", "missing", "configured-idless", "ambiguous", "configured-disambiguation", "configured-miss"],
 )
 async def test_projects_selector_proves_identity_from_sidebar_dom(
     sidebar_ids: list[str], expected_id: str, project_id: str | None
@@ -63,11 +64,34 @@ async def test_projects_selector_proves_identity_from_sidebar_dom(
                 _PROJECT_NEW_CHAT_POINT_FN,
                 {"name": "AUDiaGentic", "expectedProjectId": expected_id},
             )
-            if project_id is None:
+            if project_id is None and sidebar_ids:
                 assert result is None
             else:
+                assert result is not None
                 assert result["projectId"] == project_id
                 assert isinstance(result["x"], (int, float))
                 assert isinstance(result["y"], (int, float))
+                if not sidebar_ids:
+                    assert result["identitySource"] == "row-action"
+        finally:
+            await browser.close()
+
+@pytest.mark.asyncio
+async def test_projects_selector_rejects_occluded_trusted_button() -> None:
+    """A reflow/overlay between discovery and dispatch must fail closed."""
+    async with async_playwright() as playwright:
+        try:
+            browser = await playwright.chromium.launch(headless=True)
+        except PlaywrightError as error:
+            pytest.skip(f"headless Chromium unavailable: {error}")
+        try:
+            page = await browser.new_page(viewport={"width": 1200, "height": 900})
+            await page.set_content(_markup([_PROJECT_ID]) +
+                '<div style="position:fixed;left:0;top:0;width:200px;height:200px;z-index:99"></div>')
+            result = await page.evaluate(
+                _PROJECT_NEW_CHAT_POINT_FN,
+                {"name": "AUDiaGentic", "expectedProjectId": _PROJECT_ID},
+            )
+            assert result is None
         finally:
             await browser.close()

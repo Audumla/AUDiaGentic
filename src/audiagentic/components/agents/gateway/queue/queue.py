@@ -1541,6 +1541,15 @@ class GatewayQueueManager:
                 self._drain_all()
             # Every non-session dispatch has a source reservation from the
             # common capacity authority; there is no ungated semaphore path.
+            # A cancellation can linearize after the recovery worker claims
+            # and starts its retry but before the runner call. Re-read the
+            # durable record at this final side-effect boundary so a cancelled
+            # provider-less recovery is terminalized instead of re-entering
+            # the provider runner.
+            if not is_session and record.get("recovery-required") is True:
+                latest_before_runner = store.read_record(project_root, request_id)
+                if self._terminalize_recovered_cancel(entry, latest_before_runner):
+                    return
 
             try:
                 if is_session:

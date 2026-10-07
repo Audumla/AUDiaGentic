@@ -130,9 +130,9 @@ _PROJECT_NEW_CHAT_POINT_FN = r"""(input) => {
       style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
   };
   // The Projects listing currently renders project rows without an id or
-  // project link. The sidebar row on the same page remains the provider-owned
-  // identity source, so use only an exact-name sidebar match as a fallback.
-  // If that identity cannot be proven, retain the fail-closed null result.
+  // project link. Do not manufacture an identity from the display name. A
+  // unique exact-name row is still a provider-owned selection witness; the
+  // resulting project landing URL is the authoritative source of the id.
   const sidebarProjectIdsForName = () => Array.from(
     new Set(Array.from(document.querySelectorAll('[data-app-action-sidebar-project-row]'))
       .filter(candidate => normalize(
@@ -159,16 +159,28 @@ _PROJECT_NEW_CHAT_POINT_FN = r"""(input) => {
       sidebarProjectIdForName()
     );
   };
+  const sidebarIds = sidebarProjectIdsForName();
+  // A visible sidebar identity that is ambiguous or contradicts the
+  // configured identity is a hard failure, not permission to fall back to a
+  // display-name-only row.
+  if ((!expectedProjectId && sidebarIds.length > 1) ||
+      (expectedProjectId && sidebarIds.length && !sidebarIds.includes(expectedProjectId))) return null;
   const candidates = Array.from(document.querySelectorAll('[data-project-row="true"]'))
     .filter(row => visible(row))
     .filter(row => Array.from(row.querySelectorAll('span')).some(
       element => visible(element) && normalize(element.textContent) === wanted
     ))
-    .map(row => ({row, projectId: projectIdForRow(row)}))
-    .filter(candidate => candidate.projectId);
-  const matching = expectedProjectId
-    ? candidates.filter(candidate => candidate.projectId === expectedProjectId)
-    : candidates;
+    .map(row => ({row, projectId: projectIdForRow(row)}));
+  let matching = candidates;
+  if (expectedProjectId) {
+    const known = candidates.filter(candidate => candidate.projectId);
+    // If the provider exposes row ids, require the configured id now. When
+    // every exact-name row omits identity, allow the unique row-action witness
+    // and defer the authoritative check to the resulting landing URL.
+    matching = known.length
+      ? known.filter(candidate => candidate.projectId === expectedProjectId)
+      : candidates;
+  }
   if (matching.length !== 1) return null;
   const {row, projectId} = matching[0];
   const button = Array.from(row.querySelectorAll('button')).find(
@@ -182,7 +194,13 @@ _PROJECT_NEW_CHAT_POINT_FN = r"""(input) => {
   const x = rect.x + rect.width / 2;
   const y = rect.y + rect.height / 2;
   if (x < 0 || y < 0 || x >= window.innerWidth || y >= window.innerHeight) return null;
-  return {x, y, projectId};
+  // Re-check the trusted hit target after scrolling. React can reflow the
+  // page between discovery and the native pointer dispatch; accepting an
+  // occluded point would report a click that never reached the provider
+  // action.
+  const hit = document.elementFromPoint(x, y);
+  if (!hit || !(hit === button || button.contains(hit))) return null;
+  return {x, y, projectId: projectId || null, identitySource: projectId ? 'row' : 'row-action'};
 }"""
 _COMPOSER_READY_FN = r"""() => {
   const composer = document.querySelector("#prompt-textarea") || Array.from(
@@ -1779,7 +1797,9 @@ class GptAutoCdpBrowserController(CdpBrowserController):
 
     async def find_project_url(self, page: CdpPageRef, project_name: str) -> dict[str, str]:
         """Discover a project URL only after proving the selected row identity."""
-        await self._open_projects_tab(page, timeout=12.0)
+        projects_page = await self._open_projects_tab(page, timeout=12.0)
+        if projects_page is not None:
+            page = projects_page
         selection = await self._select_project_from_projects_page(
             page, project_name, timeout=12.0
         )
@@ -1801,8 +1821,13 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                 return {"url": current.url, "name": project_name}
             await asyncio.sleep(0.1)
         raise RuntimeError(f"ChatGPT project selection did not open the selected project: {project_name}")
-    async def _open_projects_tab(self, page: CdpPageRef, *, timeout: float) -> bool:
-        """Navigate directly to ChatGPT's complete Projects listing."""
+    async def _open_projects_tab(self, page: CdpPageRef, *, timeout: float) -> CdpPageRef | None:
+        """Navigate directly to ChatGPT's complete Projects listing.
+
+        Return the refreshed immutable page reference. The bridge may keep the
+        same target handle while replacing its URL, so callers must not retain
+        the pre-navigation ``CdpPageRef`` for diagnostics or later selection.
+        """
         await self.bridge.call("keep_page_active", {"pageHandle": page.handle})
         await self.navigate(page, _CHATGPT_PROJECTS_URL)
         return await self._wait_for_projects_route(page, timeout=timeout)
@@ -1824,6 +1849,7 @@ class GptAutoCdpBrowserController(CdpBrowserController):
         deadline = asyncio.get_running_loop().time() + max(0.1, timeout)
         expanded_once = False
         hovered_once = False
+        last_observation: dict[str, Any] = {"action": "not-hydrated"}
         while asyncio.get_running_loop().time() < deadline:
             action = await self.evaluate(
                 page,
@@ -1903,9 +1929,11 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                 {"name": project_name, "expectedProjectId": expected_project_id or ""},
             )
             action_name = action.get("action") if isinstance(action, dict) else None
+            if isinstance(action, dict):
+                last_observation = dict(action)
             if action_name == "hover":
                 if hovered_once:
-                    return None
+                    return {"action": "occluded", "last": last_observation}
                 hovered_once = True
                 await self.bridge.call("keep_page_active", {"pageHandle": page.handle})
                 await self.bridge.call(
@@ -1916,7 +1944,7 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                 continue
             if action_name in {"selected", "expand"}:
                 if action_name == "expand" and expanded_once:
-                    return None
+                    return {"action": "expand-not-effective", "last": last_observation}
                 await self.bridge.call("keep_page_active", {"pageHandle": page.handle})
                 await asyncio.sleep(self._action_pause_seconds)
                 await self.bridge.call(
@@ -1929,11 +1957,11 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                 await asyncio.sleep(max(self._PAGE_READY_PAUSE_SECONDS, self._action_pause_seconds))
                 continue
             if action_name in {"missing", "project-id-mismatch", "project-id-missing", "ambiguous"}:
-                return None
+                return {"action": action_name, **({k: v for k, v in action.items() if k != "action"} if isinstance(action, dict) else {})}
             await asyncio.sleep(0.1)
-        return None
+        return {"action": "timeout", "last": last_observation}
 
-    async def _wait_for_projects_route(self, page: CdpPageRef, *, timeout: float) -> bool:
+    async def _wait_for_projects_route(self, page: CdpPageRef, *, timeout: float) -> CdpPageRef | None:
         deadline = asyncio.get_running_loop().time() + max(0.1, timeout)
         while asyncio.get_running_loop().time() < deadline:
             try:
@@ -1941,9 +1969,9 @@ class GptAutoCdpBrowserController(CdpBrowserController):
             except Exception:  # noqa: BLE001 - navigation may replace the target briefly
                 current = page
             if urlsplit(current.url).path.rstrip("/") == "/projects":
-                return True
+                return current
             await asyncio.sleep(0.1)
-        return False
+        return None
 
     async def _select_project_from_projects_page(
         self,
@@ -1967,8 +1995,6 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                 and isinstance(point.get("y"), (int, float))
             ):
                 project_id = _canonical_project_id(point.get("projectId"))
-                if not project_id:
-                    return None
                 await self.bridge.call("keep_page_active", {"pageHandle": page.handle})
                 await asyncio.sleep(self._action_pause_seconds)
                 await self.bridge.call(
@@ -2037,50 +2063,76 @@ class GptAutoCdpBrowserController(CdpBrowserController):
         else:
             page = await self.new_window()
         try:
-            async with asyncio.timeout(navigation_timeout):
+            startup_deadline = asyncio.get_running_loop().time() + max(0.1, navigation_timeout)
+            remaining_startup = lambda: max(0.1, startup_deadline - asyncio.get_running_loop().time())
+            async with asyncio.timeout(remaining_startup()):
                 page = await self.navigate(page, _CHATGPT_HOME_URL)
             known_targets = {candidate.target_id for candidate in await self.pages()}
-            selection = await self._select_project_from_sidebar(
+            fallback_bounds = "not-attempted"
+            sidebar_selection = await self._select_project_from_sidebar(
                 page,
                 project_name,
                 expected_project_id=expected_project_id,
-                # A fresh authenticated tab can take several seconds to hydrate
-                # the sidebar. Keep this bounded by navigation_timeout, but do
-                # not turn normal DOM startup latency into project-not-found.
-                timeout=min(12.0, navigation_timeout),
+                # Sidebar hydration, route navigation, and Projects-row
+                # selection share one startup budget. A hydrated-but-absent
+                # project must fall back promptly instead of paying three
+                # independent full timeouts.
+                timeout=remaining_startup(),
             )
+            selection = sidebar_selection
             selected_project_id = _selection_project_id(selection, expected_project_id)
-            sidebar_selection = selection
-            if not selected_project_id:
+            projects_tab_opened = False
+            selection_clicked = selection is True or (
+                isinstance(selection, dict) and selection.get("clicked") is True
+            )
+            if not selection_clicked:
                 # New-window CDP targets can inherit a compact browser window.
                 # ChatGPT's full Projects page places its trusted New Chat
                 # control at the far right, so ensure the fallback has a usable
                 # viewport before asking the DOM for pointer coordinates.
                 try:
                     await self.set_bounds(page, CdpWindowBounds(window_state="maximized"))
-                except Exception:  # noqa: BLE001 - selection remains fail-closed
+                    fallback_bounds = "succeeded"
+                except Exception as exc:  # noqa: BLE001 - selection remains fail-closed
+                    fallback_bounds = f"failed:{type(exc).__name__}"
                     logger.debug("gpt-auto could not maximize project fallback window", exc_info=True)
-                projects_tab_opened = await self._open_projects_tab(
-                    page, timeout=navigation_timeout
+                projects_page_result = await self._open_projects_tab(
+                    page, timeout=remaining_startup()
                 )
-                if not projects_tab_opened:
+                # Keep compatibility with test doubles and older bridge
+                # implementations that returned only a boolean. Production
+                # returns a refreshed CdpPageRef so diagnostics retain the
+                # actual /projects URL.
+                if isinstance(projects_page_result, CdpPageRef):
+                    projects_page = projects_page_result
+                elif projects_page_result is True:
+                    projects_page = page
+                else:
+                    projects_page = None
+                projects_tab_opened = projects_page is not None
+                if not projects_page:
                     raise RuntimeError("ChatGPT Projects page did not become available")
+                page = projects_page
                 selection = await self._select_project_from_projects_page(
                     page,
                     project_name,
                     expected_project_id=expected_project_id,
-                    timeout=navigation_timeout,
+                    timeout=remaining_startup(),
                 )
                 selected_project_id = _selection_project_id(selection, expected_project_id)
-            if not selected_project_id:
+            selection_clicked = selection is True or (
+                isinstance(selection, dict) and selection.get("clicked") is True
+            )
+            if not selection_clicked:
                 raise RuntimeError(
                     f"ChatGPT project identity could not be proven: {project_name}; "
                     f"sidebar-selection={sidebar_selection!r}; "
                     f"projects-page-opened={projects_tab_opened!r}; "
                     f"projects-selection={selection!r}; "
+                    f"fallback-bounds={fallback_bounds!r}; "
                     f"page-url={page.url!r}"
                 )
-            if expected_project_id and selected_project_id != expected_project_id:
+            if expected_project_id and selected_project_id and selected_project_id != expected_project_id:
                 raise RuntimeError("selected ChatGPT Project does not match configured project identity or selected row")
 
             # ChatGPT may navigate the sidebar-selected project in-place or
@@ -2116,13 +2168,19 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                     ):
                         continue
                     if (
-                        candidate_project_id != selected_project_id
+                        (selected_project_id and candidate_project_id != selected_project_id)
                         or (expected_project_id and candidate_project_id != expected_project_id)
                     ):
                         observed_wrong_project = True
                         if candidate.target_id != source_page.target_id:
                             wrong_project_pages[candidate.handle] = candidate
                         continue
+                    # A Projects row may have no id/link at all. The
+                    # provider-owned landing URL is the first authoritative
+                    # identity witness in that case; never derive the id from
+                    # the display name.
+                    if selected_project_id is None:
+                        selected_project_id = candidate_project_id
                     page = candidate
                     selected_url = candidate.url
                     break
