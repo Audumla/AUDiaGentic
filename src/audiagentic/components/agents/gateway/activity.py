@@ -6,6 +6,8 @@ the store allocates the aggregate sequence under the request lock.
 """
 from __future__ import annotations
 
+import math
+
 import threading
 import time
 from pathlib import Path
@@ -20,11 +22,14 @@ def frozen_activity_lease_seconds(record: dict[str, object]) -> float:
     persisted = record.get("watchdog-policy")
     if not isinstance(persisted, dict):
         raise ValueError("provider-session request has no frozen watchdog policy")
+    raw_value = persisted.get("activity-lease-seconds")
+    if isinstance(raw_value, bool):
+        raise ValueError("provider-session request has an invalid frozen watchdog policy")
     try:
-        value = float(persisted["activity-lease-seconds"])
-    except (KeyError, TypeError, ValueError) as exc:
+        value = float(raw_value)
+    except (TypeError, ValueError) as exc:
         raise ValueError("provider-session request has an invalid frozen watchdog policy") from exc
-    if value <= 0:
+    if not math.isfinite(value) or value <= 0:
         raise ValueError("provider-session request has a non-positive frozen watchdog lease")
     return value
 

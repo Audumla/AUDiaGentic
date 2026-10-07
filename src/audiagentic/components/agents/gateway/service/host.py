@@ -479,7 +479,8 @@ class GatewayServiceHost:
                     # Cancellation is terminal intent. Once the owning runtime is
                     # gone, do not require the detached session record to close
                     # first or the request can remain running forever.
-                    if session_terminal and not runtime_available:
+                    provider_session = updated.get("provider-transport-kind") == "provider-session"
+                    if session_terminal and not runtime_available and not provider_session:
                         try:
                             updated = store.transition_owned_terminal(
                                 project_root,

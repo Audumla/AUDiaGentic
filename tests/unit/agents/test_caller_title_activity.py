@@ -137,3 +137,9 @@ def test_provider_session_lease_fails_closed_without_snapshot() -> None:
 
     with pytest.raises(ValueError, match="frozen watchdog policy"):
         frozen_activity_lease_seconds({})
+@pytest.mark.parametrize("value", [True, float("nan"), float("inf"), -float("inf")])
+def test_provider_session_lease_rejects_non_finite_or_boolean_snapshot(value) -> None:
+    from audiagentic.components.agents.gateway.activity import frozen_activity_lease_seconds
+
+    with pytest.raises(ValueError, match="frozen watchdog policy|non-positive"):
+        frozen_activity_lease_seconds({"watchdog-policy": {"activity-lease-seconds": value}})
