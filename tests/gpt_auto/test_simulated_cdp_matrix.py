@@ -596,7 +596,10 @@ async def test_new_session_selects_exact_project_from_sidebar(monkeypatch) -> No
     anchor = CdpPageRef("anchor", "anchor-target", 7, "http://127.0.0.1:8765/dashboard", "")
     page = CdpPageRef("page-1", "target-1", 7, "about:blank", "")
     project_id = "g-p-6a7bbf85d06c8191835b0d64958b4d7a"
-    selected_url = f"https://chatgpt.com/g/{project_id}-bigcherry/project"
+    # The current ChatGPT sidebar New Chat action can land directly in a
+    # project-scoped conversation rather than the project landing route.
+    selected_url = f"https://chatgpt.com/g/{project_id}-bigcherry/c/new-chat"
+    expected_project_url = f"https://chatgpt.com/g/{project_id}-bigcherry/project"
     calls: list[tuple[str, object]] = []
 
     async def new_tab(*, in_window=None, url=None):
@@ -655,7 +658,7 @@ async def test_new_session_selects_exact_project_from_sidebar(monkeypatch) -> No
     assert calls[2][1][:2] == ("BigCherry", project_id)
     assert 0 < calls[2][1][2] <= 3
     assert calls[3] == ("composer", 4)
-    assert opened["projectUrl"] == selected_url
+    assert opened["projectUrl"] == expected_project_url
 
 
 @pytest.mark.asyncio
