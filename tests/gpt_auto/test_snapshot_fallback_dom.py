@@ -639,6 +639,20 @@ async def test_retry_conversation_load_rejects_transcript_text_and_ambiguous_but
             await browser.close()
 
 @pytest.mark.asyncio
+async def test_retry_conversation_load_rejects_renderer_transcript_retry() -> None:
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            await page.set_content(
+                '<div class="block-BQZwFn">Could not load this ChatGPT conversation</div>'
+                '<div role="alert"><button type="button">Retry</button></div>'
+            )
+            assert await page.evaluate(_RETRY_CONVERSATION_LOAD_FN) is False
+        finally:
+            await browser.close()
+
+@pytest.mark.asyncio
 async def test_retry_delivery_timeout_clicks_plain_text_alert_button() -> None:
     """The actual click function (module-level _RETRY_DELIVERY_TIMEOUT_FN,
     the same code retry_delivery_timeout() evaluates) must find and click

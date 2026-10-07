@@ -1506,7 +1506,7 @@ _RETRY_CONVERSATION_LOAD_FN = r"""() => {
     // match when transcript content could be the source.
     const occurrences = bodyText.split(loadText).length - 1;
     const messageNodes = Array.from(document.querySelectorAll(
-      '[data-message-author-role], [data-testid*="conversation-turn"], article, main'
+      '[data-message-author-role], [data-testid*="conversation-turn"], .block-BQZwFn, article, main'
     ));
     const transcriptMatch = messageNodes.some(node =>
       normalize(node.innerText || node.textContent).includes(loadText)
