@@ -954,6 +954,24 @@ class PersistentChat:
             details=details,
         )
 
+    async def _restore_page_binding(self, page_handle: str | None) -> bool:
+        """Restore the retained page after an unproven duplicate candidate."""
+        if not page_handle:
+            return False
+        if self.page_handle == page_handle:
+            return True
+        if not self._claim_page(page_handle):
+            return False
+        previous = self.page_handle
+        self.page_handle = page_handle
+        page_record = getattr(self.runtime, "page_record", None)
+        if callable(page_record):
+            record = await page_record(page_handle)
+            if record is not None:
+                self._bind_page(record)
+        if previous and previous != page_handle:
+            self.runtime.release_page(self, previous)
+        return True
     async def _replace_load_failed_page(self, snapshot: ChatSnapshot | None) -> bool:
         """Attach a new exact conversation tab after a retained tab load error.
 
@@ -993,7 +1011,9 @@ class PersistentChat:
                                 "conversation-load-duplicate-recovered"
                             )
                             return True
+                        await self._restore_page_binding(failed_handle)
             except TimeoutError:
+                await self._restore_page_binding(failed_handle)
                 self._set_unresolved_recovery(
                     "conversation-load-duplicate-observation-deadline"
                 )
