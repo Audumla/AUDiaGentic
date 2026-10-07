@@ -11,7 +11,7 @@ from urllib.parse import urlsplit
 from .cdp.bridge import PythonCdpBridge
 from .cdp.cdp_browser import CdpBrowserController, CdpPageRef, CdpWindowBounds
 from .cdp.client import CdpError
-from .urls import parse_project_id
+from .urls import canonical_project_url, parse_project_id
 
 
 def _canonical_project_id(value: object) -> str | None:
@@ -31,6 +31,15 @@ logger = logging.getLogger(__name__)
 
 _CHATGPT_HOME_URL = "https://chatgpt.com/"
 _CHATGPT_PROJECTS_URL = "https://chatgpt.com/projects"
+
+
+def _is_project_scoped_route(url: str) -> bool:
+    """Accept the landing page or a conversation opened from a project row."""
+    path = urlsplit(url).path.rstrip("/")
+    return bool(
+        re.match(r"^/g/g-p-[^/]+/project$", path)
+        or re.match(r"^/g/g-p-[^/]+/c/[^/]+$", path)
+    )
 
 _CLICK_PROJECTS_TAB_FN = r"""() => {
   const normalize = value => String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
@@ -1867,7 +1876,7 @@ class GptAutoCdpBrowserController(CdpBrowserController):
             current = await self.page_by_handle(page.handle)
             current_project_id = parse_project_id(current.url)
             if (
-                re.match(r"^/g/g-p-[^/]+/project/?$", urlsplit(current.url).path)
+                _is_project_scoped_route(current.url)
                 and current_project_id == selected_project_id
             ):
                 return {"url": current.url, "name": project_name}
@@ -2213,10 +2222,9 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                 candidates.extend(fresh_candidates)
                 for candidate in candidates:
                     candidate_project_id = parse_project_id(candidate.url)
-                    candidate_path = urlsplit(candidate.url).path
                     if (
                         candidate_project_id is None
-                        or not re.match(r"^/g/g-p-[^/]+/project/?$", candidate_path)
+                        or not _is_project_scoped_route(candidate.url)
                     ):
                         continue
                     if (
@@ -2248,8 +2256,15 @@ class GptAutoCdpBrowserController(CdpBrowserController):
             if page.target_id != source_page.target_id:
                 await self.close(source_page)
             await self.wait_for_composer(page, timeout=ready_timeout)
-            parts = urlsplit(selected_url)
-            project_landing_url = f"https://chatgpt.com{parts.path.rstrip('/')}"
+            route_match = re.match(
+                r"^(/g/g-p-[^/]+)(?:/project|/c/[^/]+)$",
+                urlsplit(selected_url).path.rstrip("/"),
+            )
+            project_landing_url = (
+                f"https://chatgpt.com{route_match.group(1)}/project"
+                if route_match
+                else f"{canonical_project_url(selected_url)}/project"
+            )
             return {"page": page, "projectUrl": project_landing_url}
         except Exception as exc:
             wrong_pages = (
