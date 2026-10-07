@@ -14,6 +14,22 @@ from audiagentic.components.agents.gateway import store
 from audiagentic.foundation.transports.agent_session import is_meaningful_activity
 
 
+def frozen_activity_lease_seconds(record: dict[str, object]) -> float:
+    """Return the admission-time watchdog lease for a provider-session relay."""
+    from audiagentic.components.agents.gateway.queue.watchdog_policy import load_watchdog_policy
+
+    fallback = float(load_watchdog_policy().activity_lease_seconds)
+    persisted = record.get("watchdog-policy")
+    if isinstance(persisted, dict):
+        try:
+            value = float(persisted["activity-lease-seconds"])
+            if value > 0:
+                return value
+        except (KeyError, TypeError, ValueError):
+            pass
+    return fallback
+
+
 class RequestActivityRelay:
     def __init__(
         self,
@@ -143,4 +159,4 @@ class RequestActivityRelay:
                 self._last_phase = phase
 
 
-__all__ = ["RequestActivityRelay"]
+__all__ = ["RequestActivityRelay", "frozen_activity_lease_seconds"]

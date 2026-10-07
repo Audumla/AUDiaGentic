@@ -443,12 +443,7 @@ class GptAutoTurn:
             proven_unsent = self._proven_unsent_submission_boundary(exc)
             if proven_unsent:
                 try:
-                    clear_unresolved = getattr(self.chat, "clear_unresolved_turn", None)
-                    if clear_unresolved is not None:
-                        clear_unresolved()
-                    persist_clear = getattr(self.chat, "persist_unresolved_clear", None)
-                    if persist_clear is not None:
-                        await persist_clear()
+                    await self._persist_and_clear_unresolved()
                 except Exception:  # noqa: BLE001 - fail closed if the fence cannot persist
                     proven_unsent = False
                     logger.exception(
@@ -648,12 +643,7 @@ class GptAutoTurn:
             if final is None:
                 raise RuntimeError("recovered response observation ended without a result")
             await self._publish_message_ids(strict=False)
-            persist_clear = getattr(self.chat, "persist_unresolved_clear", None)
-            if persist_clear is not None:
-                await persist_clear()
-            clear_unresolved = getattr(self.chat, "clear_unresolved_turn", None)
-            if clear_unresolved is not None:
-                clear_unresolved()
+            await self._persist_and_clear_unresolved()
             self._move(TurnState.COMPLETE)
             await self._emit(TransportObservationKind.TERMINAL, {"stop_reason": "end-turn"})
             result = self._result("end-turn")
@@ -1109,12 +1099,7 @@ class GptAutoTurn:
                 return
             if proven_unsent:
                 self.side_effect_attempted = False
-                clear_unresolved = getattr(self.chat, "clear_unresolved_turn", None)
-                if clear_unresolved is not None:
-                    clear_unresolved()
-                persist_clear = getattr(self.chat, "persist_unresolved_clear", None)
-                if persist_clear is not None:
-                    await persist_clear()
+                await self._persist_and_clear_unresolved()
                 await self._publish_message_ids(strict=True)
             raise AudiaGenticError(
                 code="EXT-GPTAUTO-003",
@@ -1124,6 +1109,8 @@ class GptAutoTurn:
                     "turn-id": self.request.turn_id,
                     "failure-reason": "composer-operation-timeout",
                     "submission-ambiguous": not proven_unsent,
+                    "submission-state": "not_started" if proven_unsent else "ambiguous",
+                    "submission-proven": False,
                     "submission-stage": exc.stage if isinstance(exc, ComposerSubmissionTimeout) else "unknown",
                     **self._diagnostics(expected_prompt=self.request.body),
                 },
@@ -1134,13 +1121,11 @@ class GptAutoTurn:
         action_complete = result.get("actionComplete") if isinstance(result, dict) else None
         if action_complete is not True:
             enter_dispatched = bool(result.get("enterDispatched")) if isinstance(result, dict) else False
-            clear_unresolved = getattr(self.chat, "clear_unresolved_turn", None)
-            if clear_unresolved is not None and not enter_dispatched:
+            if not enter_dispatched:
                 # The browser only entered the text or attempted Enter; it
-                # did not attempt a provider submission.  Do not strand the
-                # session as unresolved when no provider message could have
-                # been sent.
-                clear_unresolved()
+                # did not attempt a provider submission. Persist the clear
+                # before releasing the in-memory unresolved fence.
+                await self._persist_and_clear_unresolved()
             raise AudiaGenticError(
                 code="EXT-GPTAUTO-003",
                 kind="providers",
@@ -1149,6 +1134,9 @@ class GptAutoTurn:
                     "turn-id": self.request.turn_id,
                     "failure-reason": "composer-action-not-confirmed",
                     "action-complete": action_complete,
+                    "submission-ambiguous": enter_dispatched,
+                    "submission-state": "ambiguous" if enter_dispatched else "not_started",
+                    "submission-proven": False,
                     "send-button-clicked": result.get("sendButtonClicked")
                     if isinstance(result, dict)
                     else None,
@@ -2720,9 +2708,7 @@ class GptAutoTurn:
             if not stopped:
                 raise RuntimeError("provider stop control was not confirmed")
             await self.chat.wait_quiescent()
-            clear_unresolved = getattr(self.chat, "clear_unresolved_turn", None)
-            if clear_unresolved is not None:
-                clear_unresolved()
+            await self._persist_and_clear_unresolved()
         except Exception:  # noqa: BLE001 - uncertainty must block the next prompt
             if self.chat.state not in {ChatState.CLOSED, ChatState.FAILED, ChatState.RECOVERING}:
                 self._set_chat_state(ChatState.RECOVERING)
@@ -2730,6 +2716,15 @@ class GptAutoTurn:
                 "gpt-auto cancellation did not prove provider quiescence",
                 extra={"turn-id": self.request.turn_id, "stop-executed": stopped},
             )
+
+    async def _persist_and_clear_unresolved(self) -> None:
+        """Persist removal of the recovery fence before clearing memory."""
+        persist_clear = getattr(self.chat, "persist_unresolved_clear", None)
+        if persist_clear is not None:
+            await persist_clear()
+        clear_unresolved = getattr(self.chat, "clear_unresolved_turn", None)
+        if clear_unresolved is not None:
+            clear_unresolved()
 
     def _set_chat_state(self, state: ChatState) -> None:
         move = getattr(self.chat, "_move", None)
