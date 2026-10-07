@@ -221,6 +221,7 @@ class GptAutoSessionTransport:
             "recovery-observing",
             "preflight-inspected",
             "preflight-evaluated",
+            "soft-liveness",
         }:
             mark_activity()
         observation = TransportObservation(

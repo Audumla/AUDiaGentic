@@ -741,6 +741,27 @@ async def test_provider_busy_heartbeat_does_not_renew_real_session_activity():
 
 
 @pytest.mark.asyncio
+async def test_soft_liveness_does_not_renew_physical_tab_activity():
+    from unittest.mock import Mock
+
+    chat = _Chat()
+    chat.mark_validated_activity = Mock()
+    observations = []
+    turn = GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="soft-lease", body="prompt"),
+        observations.append,
+    )
+
+    await turn._emit(
+        TransportObservationKind.ACTIVITY,
+        {"model_activity": "soft-liveness"},
+    )
+
+    chat.mark_validated_activity.assert_not_called()
+    assert observations[-1].attributes["model_activity"] == "soft-liveness"
+
+@pytest.mark.asyncio
 async def test_response_observer_emits_busy_lease_for_current_prompt():
     chat = _Chat()
     busy = snap(users=1, user="Review AU01", generating=True)
@@ -1404,6 +1425,54 @@ def test_same_response_slot_replacement_requires_one_prompt_owned_assistant() ->
         new_assistant_id="assistant-new",
     )
 
+
+def test_fallback_assistant_remount_is_accepted_only_for_same_prompt_slot() -> None:
+    baseline = replace(
+        snap(
+            users=1,
+            assistants=1,
+            user="Review AU01",
+            assistant="partial",
+            assistant_id="fallback-assistant-0",
+        ),
+        latest_user_id="prompt-1",
+        message_refs=(
+            ChatMessageRef(role="user", message_id="prompt-1", text="Review AU01", sequence=0),
+            ChatMessageRef(
+                role="assistant",
+                message_id="fallback-assistant-0",
+                text="partial",
+                sequence=1,
+            ),
+        ),
+    )
+    current = replace(
+        baseline,
+        latest_assistant_id="fallback-assistant-1",
+        latest_assistant_text="final",
+        message_refs=(
+            baseline.message_refs[0],
+            ChatMessageRef(
+                role="assistant",
+                message_id="fallback-assistant-1",
+                text="final",
+                sequence=1,
+            ),
+        ),
+    )
+
+    scoped, response_ref = _scope_response_snapshot(
+        baseline,
+        current,
+        prompt_message_id="prompt-1",
+        prompt_text="Review AU01",
+        virtualized_assistant_id="fallback-assistant-0",
+        bound_assistant_id="fallback-assistant-0",
+    )
+
+    assert scoped.latest_assistant_id == "fallback-assistant-1"
+    assert response_ref is not None
+    assert response_ref.message_id == "fallback-assistant-1"
 
 @pytest.mark.asyncio
 async def test_repeated_id_only_replacements_cannot_bypass_recovery() -> None:

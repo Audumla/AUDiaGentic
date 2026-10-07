@@ -54,6 +54,11 @@ from .urls import (
 logger = logging.getLogger(__name__)
 
 
+def _is_fallback_assistant_message_id(message_id: str | None) -> bool:
+    """Return whether an assistant ID is a renderer-local fallback ordinal."""
+    return bool(message_id and message_id.startswith("fallback-assistant-"))
+
+
 def _is_durable_assistant_message_id(message_id: str | None) -> bool:
     """Return whether an assistant ID can survive renderer virtualization."""
     return bool(message_id and not message_id.startswith("fallback-assistant-"))
@@ -364,6 +369,9 @@ class GptAutoTurn:
             "provider-busy",
             "response-observing",
             "recovery-observing",
+            "soft-liveness",
+            "preflight-inspected",
+            "preflight-evaluated",
         }:
             mark_activity = getattr(self.chat, "mark_validated_activity", None)
             if callable(mark_activity):
@@ -1704,11 +1712,15 @@ class GptAutoTurn:
                 or parse_project_id(raw.url) != parse_project_id(self.chat.chat_url or "")
             ):
                 return False
-            return _same_response_slot_replacement(
-                raw,
-                prompt_message_id=prompt_message_id,
-                old_assistant_id=old_id,
-                new_assistant_id=new_id,
+            return (
+                _is_fallback_assistant_message_id(old_id)
+                and _is_fallback_assistant_message_id(new_id)
+                and _same_response_slot_replacement(
+                    raw,
+                    prompt_message_id=prompt_message_id,
+                    old_assistant_id=old_id,
+                    new_assistant_id=new_id,
+                )
             )
 
         seen_progress_blocks: Counter[ChatProgressBlock] = Counter()
@@ -2023,9 +2035,17 @@ class GptAutoTurn:
                         mark_assistant(response_ref.message_id)
                     await self._publish_message_ids(strict=True)
                 elif self._response_message_id != response_ref.message_id:
-                    raise ProviderBindingIntegrityError(
-                        "provider assistant identity changed during response observation"
-                    )
+                    if _replacement_proven(raw_current, response_ref.message_id):
+                        adopted_same_slot_replacement = True
+                        self._response_message_id = response_ref.message_id
+                        mark_assistant = getattr(self.chat, "mark_assistant_observed", None)
+                        if mark_assistant is not None:
+                            mark_assistant(response_ref.message_id)
+                        await self._publish_message_ids(strict=True)
+                    else:
+                        raise ProviderBindingIntegrityError(
+                            "provider assistant identity changed during response observation"
+                        )
                 if response_ref.text:
                     await self._emit_timing("first-assistant-text")
             # Recovery clocks are reset only by evidence correlated to this
@@ -3417,11 +3437,22 @@ def _scope_response_snapshot(
         and response_ref.message_id != virtualized_assistant_id
     ):
         # Prompt-text rebinding runs before the virtualized-prompt fallback.
-        # Do not let that earlier branch bypass the request-owned assistant
-        # identity pinned during submission proof after a renderer remount.
-        raise ProviderBindingIntegrityError(
-            "provider assistant identity changed during response observation"
-        )
+        # A renderer-local fallback ordinal may be replaced when the same
+        # prompt-owned slot remains the only assistant in the span. Durable
+        # identity changes remain fail-closed.
+        if not (
+            _is_fallback_assistant_message_id(virtualized_assistant_id)
+            and _is_fallback_assistant_message_id(response_ref.message_id)
+            and _same_response_slot_replacement(
+                snapshot,
+                prompt_message_id=matched_prompt_id,
+                old_assistant_id=virtualized_assistant_id,
+                new_assistant_id=response_ref.message_id,
+            )
+        ):
+            raise ProviderBindingIntegrityError(
+                "provider assistant identity changed during response observation"
+            )
     if (
         response_ref is not None
         and response_ref.message_id == baseline.latest_assistant_id

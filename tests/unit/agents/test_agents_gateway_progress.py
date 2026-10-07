@@ -123,6 +123,29 @@ def test_activity_lease_diagnostic_remains_visible_after_prior_provider_activity
     assert projection["interruptibility"] == "diagnostic-only"
 
 
+def test_historical_verified_watchdog_reason_does_not_prove_provider_activity() -> None:
+    record = store.build_record(execution_profile_id="gpt-auto", prompt_body="review")
+    record.update(
+        {
+            "state": "running",
+            "worker-id": "worker-1",
+            "watchdog-state": "active",
+            "watchdog-reason": "verified-activity-renewed",
+            "activity": {
+                "provider": {
+                    "capability": "supported",
+                    "last-at": None,
+                    "lease-expires-at": None,
+                }
+            },
+        }
+    )
+
+    projection = progress_mod.project_request_progress(record)
+
+    assert projection["progress-disposition"] == "processing-unverified"
+    assert projection["progress-disposition-reason"] == "owned-attempt-awaiting-provider-evidence"
+
 def test_cancel_requested_running_request_is_not_terminal() -> None:
     record = store.build_record(execution_profile_id="gpt-auto", prompt_body="review")
     record.update({"state": "running", "worker-id": "worker-1", "cancel-requested": True})

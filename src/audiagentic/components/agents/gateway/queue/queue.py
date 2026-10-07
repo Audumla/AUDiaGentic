@@ -143,11 +143,20 @@ def _durable_provider_session_is_active(project_root: Path, record: dict[str, An
     # recovery instead of keeping the request running forever.
     activity = record.get("activity")
     provider_activity = activity.get("provider") if isinstance(activity, dict) else None
-    lease_expires_at = (
-        provider_activity.get("lease-expires-at")
-        if isinstance(provider_activity, dict)
-        else None
-    ) or record.get("activity-lease-expires-at")
+    if record.get("provider-transport-kind") == "provider-session":
+        # Provider-session recovery must be fenced by provider-owned activity.
+        # The aggregate lease may contain owner/client liveness only.
+        lease_expires_at = (
+            provider_activity.get("lease-expires-at")
+            if isinstance(provider_activity, dict)
+            else None
+        )
+    else:
+        lease_expires_at = (
+            provider_activity.get("lease-expires-at")
+            if isinstance(provider_activity, dict)
+            else None
+        ) or record.get("activity-lease-expires-at")
     if not isinstance(lease_expires_at, str) or not lease_expires_at:
         return False
     try:

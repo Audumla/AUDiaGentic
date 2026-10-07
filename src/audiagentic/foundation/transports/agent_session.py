@@ -127,28 +127,29 @@ _WORK_ACTIVITY_LABELS = frozenset({
     "assistant-message",
     "thought",
     "in-progress",
-    # These are emitted by the GPT-auto response loop when the DOM shows
-    # continued request-owned work without a new semantic tool/text label.
-    # They are real observation edges, not transport heartbeats.
-    "soft-liveness",
+    # soft-liveness is an observer/client-lease signal. It is retained
+    # in the activity timeline, but is deliberately not provider-work proof.
     "delivery-timeout-retry",
+    # Provider-neutral tool progress used by ACP and other adapters.
+    "tool-progress",
+    "provider-progress",
+    "acp-progress",
 })
 
 
 def is_meaningful_activity_label(value: str | None) -> bool:
     """Return whether *value* is evidence of actual provider work.
 
-    Heartbeats and contextual flags deliberately do not renew execution
-    liveness.  Progress labels are extensible by suffix so provider-neutral
-    values such as ``acp-progress`` remain valid without importing a provider
-    vocabulary into Foundation.
+    Heartbeats, contextual flags, and synthetic observer signals deliberately
+    do not renew execution liveness. The allowlist is intentionally explicit:
+    an arbitrary *-progress label must not become proof of provider work.
     """
     if not isinstance(value, str) or not value.strip():
         return False
     label = value.strip().lower().replace("_", "-").replace(" ", "-")
     if label in _NON_WORK_ACTIVITY_LABELS:
         return False
-    return label in _WORK_ACTIVITY_LABELS or label.endswith("-progress")
+    return label in _WORK_ACTIVITY_LABELS
 
 
 def is_meaningful_activity(source: str | None, phase: str | None = None) -> bool:
