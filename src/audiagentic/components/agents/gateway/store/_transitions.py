@@ -1523,11 +1523,22 @@ def mark_watchdog_intervention_if_expired(
                 initial_observation_expired = datetime.now(timezone.utc) >= started_at + timedelta(seconds=initial_grace)
             except (TypeError, ValueError):
                 initial_observation_expired = False
-        expiry = None if initial_observation_expired else (
-            provider.get("lease-expires-at")
-            if provider.get("capability") == "supported" and provider.get("last-at")
-            else record.get("activity-lease-expires-at")
-        )
+        if initial_observation_expired:
+            expiry = None
+        elif record.get("provider-transport-kind") == "provider-session":
+            # Provider-session watchdog decisions must use provider-owned
+            # activity only; aggregate liveness may be synthetic.
+            expiry = (
+                provider.get("lease-expires-at")
+                if provider.get("capability") == "supported" and provider.get("last-at")
+                else None
+            )
+        else:
+            expiry = (
+                provider.get("lease-expires-at")
+                if provider.get("capability") == "supported" and provider.get("last-at")
+                else record.get("activity-lease-expires-at")
+            )
         reason_code = (
             "initial-activity-observation-expired"
             if initial_observation_expired
