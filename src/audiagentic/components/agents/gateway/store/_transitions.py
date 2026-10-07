@@ -1269,7 +1269,7 @@ def renew_owned_activity(
         attempt_epoch=attempt_epoch,
         kind=(
             "client-liveness"
-            if normalized_source == "soft-liveness"
+            if normalized_source in {"soft-liveness", "delivery-timeout-retry"}
             else "provider"
             if is_meaningful_activity(activity_source, activity_source)
             else "owner-heartbeat"
@@ -1503,7 +1503,14 @@ def mark_watchdog_intervention_if_expired(
         # watcher that has lost its DOM observation path gets one diagnostic
         # reconciliation opportunity rather than remaining at sequence zero
         # forever. This is non-terminal and never proves provider failure.
-        first_activity = provider.get("first-at") or provider.get("last-at")
+        provider_phase = provider.get("phase")
+        provider_activity_is_real = (
+            not isinstance(provider_phase, str)
+            or is_meaningful_activity(provider_phase, provider_phase)
+        )
+        first_activity = (
+            provider.get("first-at") or provider.get("last-at")
+        ) if provider_activity_is_real else None
         policy = record.get("watchdog-policy")
         initial_grace = 30.0
         if isinstance(policy, dict):
@@ -1530,13 +1537,21 @@ def mark_watchdog_intervention_if_expired(
             # activity only; aggregate liveness may be synthetic.
             expiry = (
                 provider.get("lease-expires-at")
-                if provider.get("capability") == "supported" and provider.get("last-at")
+                if (
+                    provider_activity_is_real
+                    and provider.get("capability") == "supported"
+                    and provider.get("last-at")
+                )
                 else None
             )
         else:
             expiry = (
                 provider.get("lease-expires-at")
-                if provider.get("capability") == "supported" and provider.get("last-at")
+                if (
+                    provider_activity_is_real
+                    and provider.get("capability") == "supported"
+                    and provider.get("last-at")
+                )
                 else record.get("activity-lease-expires-at")
             )
         reason_code = (
@@ -1562,8 +1577,13 @@ def mark_watchdog_intervention_if_expired(
             expired = True
         else:
             try:
-                expired = datetime.fromisoformat(expiry.replace("Z", "+00:00")) <= datetime.now(timezone.utc)
-            except ValueError:
+                parsed_expiry = datetime.fromisoformat(
+                    expiry.replace("Z", "+00:00")
+                )
+                if parsed_expiry.tzinfo is None:
+                    parsed_expiry = parsed_expiry.replace(tzinfo=timezone.utc)
+                expired = parsed_expiry <= datetime.now(timezone.utc)
+            except (TypeError, ValueError, OverflowError):
                 expired = False
         if not expired or record.get("watchdog-state") == "intervention":
             return record

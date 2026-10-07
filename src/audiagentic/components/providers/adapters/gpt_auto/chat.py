@@ -1789,8 +1789,11 @@ class PersistentChat:
         """Bind the matching tab with the richest mounted conversation DOM."""
         if not self.provider_session_id:
             return
+        bridge = getattr(self.runtime, "bridge", None)
+        if bridge is None:
+            return
         browser = self._gpt_browser()
-        pages = await self.runtime.bridge.call("list_pages")
+        pages = await bridge.call("list_pages")
         if not isinstance(pages, list):
             return
         owners = getattr(self.runtime, "_page_owners", {})

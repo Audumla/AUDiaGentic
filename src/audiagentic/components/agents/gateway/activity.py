@@ -72,9 +72,10 @@ class RequestActivityRelay:
         # contextual flags remain useful ownership evidence, but cannot mask
         # a stalled provider turn.
         normalized_phase = (phase or "").strip().lower().replace("_", "-").replace(" ", "-")
-        if normalized_phase == "soft-liveness":
-            # Synthetic DOM liveness is public client activity, not provider
-            # progress. It must not renew the internal watchdog lease.
+        if normalized_phase in {"soft-liveness", "delivery-timeout-retry"}:
+            # Synthetic DOM liveness and client-side delivery recovery are
+            # public client activity, not provider progress. They must not
+            # renew the internal watchdog lease.
             self._observe("client-liveness", source, source_instance, source_sequence, phase, force)
             return
         if normalized_phase == "response-observing":

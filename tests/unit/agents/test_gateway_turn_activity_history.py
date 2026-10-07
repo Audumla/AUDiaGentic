@@ -97,7 +97,7 @@ def test_relay_persists_dom_edge_activity_labels(tmp_path: Path) -> None:
         owner_epoch="service-a",
         worker_id="worker-a",
         attempt_epoch=running["attempt-epoch"],
-        min_interval_seconds=999.0,
+        min_interval_seconds=0.0,
     )
 
     relay.observe_provider(
@@ -115,7 +115,11 @@ def test_relay_persists_dom_edge_activity_labels(tmp_path: Path) -> None:
 
     persisted = store.read_record(tmp_path, record["request-id"])
     assert persisted["activity-sequence"] == 2
-    assert persisted["activity"]["provider"]["phase"] == "delivery-timeout-retry"
+    assert persisted["activity"]["provider"].get("phase") is None
+    timeline = load_ndjson(gateway_timeline_path(tmp_path, record["request-id"]))
+    assert [
+        entry["event"] for entry in timeline if entry["event"] == "activity.client-liveness"
+    ] == ["activity.client-liveness", "activity.client-liveness"]
 
 
 
