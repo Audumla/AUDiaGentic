@@ -1485,6 +1485,20 @@ _RETRY_DELIVERY_TIMEOUT_FN = r"""() => {
 }"""
 
 
+_RETRY_CONVERSATION_LOAD_FN = r"""() => {
+  const normalize = value => String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
+  const bodyText = normalize(document.body && (document.body.innerText || document.body.textContent));
+  if (!bodyText.includes('could not load this chatgpt conversation')) return false;
+  const button = Array.from(document.querySelectorAll('button')).find(candidate => {
+    if (candidate.disabled || !candidate.getClientRects().length) return false;
+    const text = normalize(candidate.innerText || candidate.textContent || candidate.getAttribute('aria-label'));
+    return text === 'retry';
+  });
+  if (!button) return false;
+  button.click();
+  return true;
+}"""
+
 class GptAutoCdpBrowserController(CdpBrowserController):
     """ChatGPT-specific selectors, composites, and conversation operations."""
 
@@ -1558,6 +1572,11 @@ class GptAutoCdpBrowserController(CdpBrowserController):
         provider-owned recovery control for a visible delivery timeout.
         """
         result = await self.evaluate(page, _RETRY_DELIVERY_TIMEOUT_FN)
+        return bool(result)
+
+    async def retry_conversation_load(self, page: CdpPageRef) -> bool:
+        """Click the provider conversation-load Retry control only."""
+        result = await self.evaluate(page, _RETRY_CONVERSATION_LOAD_FN)
         return bool(result)
 
     async def materialize_latest_assistant_turn(self, page: CdpPageRef) -> bool:

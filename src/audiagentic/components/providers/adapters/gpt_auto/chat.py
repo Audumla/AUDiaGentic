@@ -952,6 +952,7 @@ class PersistentChat:
             return False
         if not self._conversation_load_recovery_allowed():
             return False
+
         # A prior recovery attempt (or a human opening the conversation) can
         # leave several tabs with the same durable conversation URL.  Before
         # creating yet another replacement, prefer an already-mounted healthy
@@ -963,6 +964,63 @@ class PersistentChat:
             alternate = await self.snapshot(allow_recovering=True)
             if "conversation-load-failed" not in alternate.dom_signals:
                 return True
+        # Prefer the provider's own Retry control on the retained conversation
+        # before creating another tab.  This is observation recovery only: the
+        # original prompt may already have executed, so no prompt is replayed.
+        # Retry attempts are bounded by the normal readiness window and use
+        # increasing delays so a transient renderer load failure can recover
+        # without turning synthetic activity into an internal lease renewal.
+        retry_deadline = asyncio.get_running_loop().time() + max(
+            0.0, float(self.config.chat.ready_timeout_seconds)
+        )
+        retry_delay = max(
+            0.5,
+            float(self.config.turn.poll_interval_seconds),
+            float(getattr(self.config.workflow.recovery, "action_pause_seconds", 0.0)),
+        )
+        retry_attempts = 0
+        while asyncio.get_running_loop().time() < retry_deadline:
+            try:
+                clicked = await self.retry_conversation_load()
+            except Exception as exc:  # noqa: BLE001 - preserve observation evidence
+                self._set_unresolved_recovery(
+                    "conversation-load-retry-failed",
+                    exception_type=type(exc).__name__,
+                    exception=str(exc),
+                    attempts=retry_attempts,
+                )
+                break
+            if not clicked:
+                break
+            retry_attempts += 1
+            self._set_unresolved_recovery(
+                "conversation-load-retry-clicked",
+                attempts=retry_attempts,
+                delay_seconds=retry_delay,
+            )
+            remaining = retry_deadline - asyncio.get_running_loop().time()
+            if remaining <= 0:
+                break
+            await asyncio.sleep(min(retry_delay, remaining))
+            try:
+                retried_snapshot = await self.snapshot(allow_recovering=True)
+            except Exception as exc:  # noqa: BLE001 - preserve observation evidence
+                self._set_unresolved_recovery(
+                    "conversation-load-retry-observation-failed",
+                    exception_type=type(exc).__name__,
+                    exception=str(exc),
+                    attempts=retry_attempts,
+                )
+                break
+            if "conversation-load-failed" not in retried_snapshot.dom_signals:
+                self._set_unresolved_recovery(
+                    "conversation-load-retry-recovered",
+                    attempts=retry_attempts,
+                )
+                return True
+            retry_delay = min(retry_delay * 2.0, 8.0)
+
+        # A prior recovery attempt
         old_handle = self.page_handle
         if old_handle:
             self.page_handle = None
@@ -1128,6 +1186,17 @@ class PersistentChat:
             return False
         browser = self._gpt_browser()
         retry = getattr(browser, "retry_delivery_timeout", None)
+        if not callable(retry):
+            return False
+        page = await browser.page_by_handle(self.page_handle)
+        return bool(await retry(page))
+
+    async def retry_conversation_load(self) -> bool:
+        """Click the same-conversation load Retry control; never resubmit."""
+        if not self.page_handle:
+            return False
+        browser = self._gpt_browser()
+        retry = getattr(browser, "retry_conversation_load", None)
         if not callable(retry):
             return False
         page = await browser.page_by_handle(self.page_handle)

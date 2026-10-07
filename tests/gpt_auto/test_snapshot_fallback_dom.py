@@ -4,6 +4,7 @@ import pytest
 from playwright.async_api import async_playwright
 
 from audiagentic.components.providers.adapters.gpt_auto.gpt_auto_cdp import (
+    _RETRY_CONVERSATION_LOAD_FN,
     _RETRY_DELIVERY_TIMEOUT_FN,
     _SNAPSHOT_FN,
 )
@@ -573,6 +574,46 @@ async def test_delivery_timeout_alert_signal_ignores_unrelated_alert_with_retry_
 
             assert snapshot["domSignals"]["delivery-timeout-retry"] is False
             assert snapshot["domSignals"]["delivery-timeout-alert"] is False
+        finally:
+            await browser.close()
+
+
+@pytest.mark.asyncio
+async def test_retry_conversation_load_clicks_only_exact_provider_retry() -> None:
+    """Conversation-load recovery clicks the same-chat Retry control only."""
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            await page.set_content(
+                '<main>Could not load this ChatGPT conversation</main>'
+                '<button type="button">Retry</button>'
+                '<button type="button">Retry upload</button>'
+            )
+            await page.evaluate(
+                """for (const button of document.querySelectorAll('button')) {
+                    button.addEventListener('click', () => { button.dataset.clicked = 'true'; });
+                }"""
+            )
+
+            clicked = await page.evaluate(_RETRY_CONVERSATION_LOAD_FN)
+
+            assert clicked is True
+            assert await page.evaluate("document.querySelectorAll('button')[0].dataset.clicked") == "true"
+            assert await page.evaluate("document.querySelectorAll('button')[1].dataset.clicked") is None
+        finally:
+            await browser.close()
+
+
+@pytest.mark.asyncio
+async def test_retry_conversation_load_ignores_retry_without_load_error() -> None:
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            await page.set_content('<main>Ready</main><button type="button">Retry</button>')
+            clicked = await page.evaluate(_RETRY_CONVERSATION_LOAD_FN)
+            assert clicked is False
         finally:
             await browser.close()
 
