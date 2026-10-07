@@ -1497,8 +1497,14 @@ _RETRY_DELIVERY_TIMEOUT_FN = r"""() => {
 }"""
 
 
-_RETRY_CONVERSATION_LOAD_FN = r"""() => {
+_RETRY_CONVERSATION_LOAD_FN = r"""(input = {}) => {
+  input = input || {};
   const normalize = value => String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
+  const expectedPath = normalize(input.expectedPath).replace(/\/$/, '');
+  const currentPath = normalize(new URL(location.href).pathname).replace(/\/$/, '');
+  // Revalidate the durable conversation in the same CDP evaluation as the
+  // click. A page handle can be reused after navigation between snapshots.
+  if (expectedPath && currentPath !== expectedPath) return false;
   const loadText = 'could not load this chatgpt conversation';
   const bodyText = normalize(document.body && (document.body.innerText || document.body.textContent));
   const structuralRoots = Array.from(document.querySelectorAll(
@@ -1530,7 +1536,14 @@ _RETRY_CONVERSATION_LOAD_FN = r"""() => {
         // Retry controls whose only matching ancestor is document.body.
         for (let ancestor = candidate.parentElement; ancestor && ancestor !== document.body; ancestor = ancestor.parentElement) {
           const ancestorText = normalize(ancestor.innerText || ancestor.textContent);
-          if (ancestorText.includes(loadText)) return !isTranscriptContainer(ancestor);
+          if (ancestorText.includes(loadText)) {
+            // A shared application shell can contain both the sidebar's
+            // history error and the conversation error. Only a bounded local
+            // panel is an ownership witness; the shell is not.
+            return !isTranscriptContainer(ancestor)
+              && ancestorText.length <= 500
+              && !ancestorText.includes('unable to load history');
+          }
         }
         return false;
       }
@@ -1626,9 +1639,15 @@ class GptAutoCdpBrowserController(CdpBrowserController):
         result = await self.evaluate(page, _RETRY_DELIVERY_TIMEOUT_FN)
         return bool(result)
 
-    async def retry_conversation_load(self, page: CdpPageRef) -> bool:
+    async def retry_conversation_load(
+        self, page: CdpPageRef, *, expected_path: str | None = None
+    ) -> bool:
         """Click the provider conversation-load Retry control only."""
-        result = await self.evaluate(page, _RETRY_CONVERSATION_LOAD_FN)
+        result = await self.evaluate(
+            page,
+            _RETRY_CONVERSATION_LOAD_FN,
+            {"expectedPath": expected_path or ""},
+        )
         return bool(result)
 
     async def materialize_latest_assistant_turn(self, page: CdpPageRef) -> bool:
@@ -2182,7 +2201,16 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                     projects_page = None
                 projects_tab_opened = projects_page is not None
                 if not projects_page:
-                    raise RuntimeError("ChatGPT Projects page did not become available")
+                    error = ProjectReadinessError(
+                        "ChatGPT Projects page did not become available"
+                    )
+                    error.details = {
+                        "failure-stage": "readiness",
+                        "reason": "projects-route-not-materialized",
+                        "expected-route": "/projects",
+                        "project-name": project_name,
+                    }
+                    raise error
                 page = projects_page
                 selection = await self._select_project_from_projects_page(
                     page,
@@ -2195,14 +2223,22 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                 isinstance(selection, dict) and selection.get("clicked") is True
             )
             if not selection_clicked:
-                raise RuntimeError(
-                    f"ChatGPT project identity could not be proven: {project_name}; "
-                    f"sidebar-selection={sidebar_selection!r}; "
-                    f"projects-page-opened={projects_tab_opened!r}; "
-                    f"projects-selection={selection!r}; "
-                    f"fallback-bounds={fallback_bounds!r}; "
-                    f"page-url={page.url!r}"
+                error = ProjectReadinessError(
+                    f"ChatGPT project identity could not be proven: {project_name}"
                 )
+                error.details = {
+                    "failure-stage": "readiness",
+                    "reason": "project-row-not-materialized",
+                    "project-name": project_name,
+                    "sidebar-selection": repr(sidebar_selection),
+                    "projects-page-opened": projects_tab_opened,
+                    "projects-selection": repr(selection),
+                    "fallback-bounds": fallback_bounds,
+                    "page-url": page.url,
+                    "expected-project-id": expected_project_id,
+                    "selected-project-id": selected_project_id,
+                }
+                raise error
             if expected_project_id and selected_project_id and selected_project_id != expected_project_id:
                 raise RuntimeError("selected ChatGPT Project does not match configured project identity or selected row")
 
@@ -2285,7 +2321,22 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                 raise error
             if page.target_id != source_page.target_id:
                 await self.close(source_page)
-            await self.wait_for_composer(page, timeout=ready_timeout)
+            try:
+                await self.wait_for_composer(page, timeout=ready_timeout)
+            except TimeoutError as exc:
+                error = ProjectReadinessError(
+                    "ChatGPT project composer did not become ready"
+                )
+                error.details = {
+                    "failure-stage": "readiness",
+                    "reason": "composer-not-ready",
+                    "project-name": project_name,
+                    "selected-project-id": selected_project_id,
+                    "expected-project-id": expected_project_id,
+                    "selected-url": selected_url,
+                    "ready-timeout-seconds": ready_timeout,
+                }
+                raise error from exc
             route_match = re.match(
                 r"^(/g/g-p-[^/]+)(?:/project|/c/[^/]+)$",
                 urlsplit(selected_url).path.rstrip("/"),
@@ -2316,6 +2367,16 @@ class GptAutoCdpBrowserController(CdpBrowserController):
             await self.close(page)
             if isinstance(exc, ProjectReadinessError):
                 raise
+            if isinstance(exc, TimeoutError):
+                error = ProjectReadinessError("ChatGPT project readiness timed out")
+                error.details = {
+                    "failure-stage": "readiness",
+                    "reason": "project-readiness-timeout",
+                    "project-name": project_name,
+                    "expected-project-id": expected_project_id,
+                    "ready-timeout-seconds": ready_timeout,
+                }
+                raise error from exc
             raise RuntimeError(
                 f"gpt-auto project page open failed: {type(exc).__name__}: {exc}"
             ) from exc

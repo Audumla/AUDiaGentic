@@ -8,6 +8,7 @@ import logging
 import time
 from dataclasses import replace
 from enum import StrEnum
+from urllib.parse import urlsplit
 
 from audiagentic.components.agents.gateway.mapping import normalize_chat_title
 from audiagentic.foundation.contracts.errors import AudiaGenticError
@@ -1333,7 +1334,13 @@ class PersistentChat:
         if not callable(retry):
             return False
         page = await browser.page_by_handle(self.page_handle)
-        return bool(await retry(page))
+        expected_path = urlsplit(self.chat_url or "").path.rstrip("/") or None
+        try:
+            return bool(await retry(page, expected_path=expected_path))
+        except TypeError:
+            # Compatibility for older test doubles; production controllers
+            # perform the identity check inside the same evaluation as click.
+            return bool(await retry(page))
 
     async def release_focus_emulation(self) -> None:
         """Release provider focus emulation after the watcher snapshots."""
