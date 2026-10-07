@@ -1335,12 +1335,10 @@ class PersistentChat:
             return False
         page = await browser.page_by_handle(self.page_handle)
         expected_path = urlsplit(self.chat_url or "").path.rstrip("/") or None
-        try:
-            return bool(await retry(page, expected_path=expected_path))
-        except TypeError:
-            # Compatibility for older test doubles; production controllers
-            # perform the identity check inside the same evaluation as click.
-            return bool(await retry(page))
+        # Do not catch TypeError here. An internal provider/CDP TypeError must
+        # remain visible; retrying without expected_path would bypass the
+        # same-evaluation conversation identity fence after page reuse.
+        return bool(await retry(page, expected_path=expected_path))
 
     async def release_focus_emulation(self) -> None:
         """Release provider focus emulation after the watcher snapshots."""

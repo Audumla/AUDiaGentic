@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
 
 from audiagentic.components.providers.adapters.gpt_auto.turn import GptAutoTurn, TurnState
+from audiagentic.components.providers.adapters.gpt_auto.chat import PersistentChat
 from audiagentic.foundation.transports.agent_session import SessionPrompt
 
 from .test_greenfield_bridge_turn import _Chat, snap
@@ -63,3 +65,26 @@ async def test_submitted_load_error_retries_same_conversation_before_completion(
         in {"conversation-load-retry-clicked", "conversation-load-observation-deferred"}
         for item in observations
     )
+
+
+@pytest.mark.asyncio
+async def test_retry_type_error_is_not_reinvoked_without_identity_fence() -> None:
+    calls = []
+
+    class _Browser:
+        async def page_by_handle(self, handle):
+            return SimpleNamespace(handle=handle)
+
+        async def retry_conversation_load(self, page, *, expected_path):
+            calls.append((page.handle, expected_path))
+            raise TypeError("provider evaluation failed")
+
+    chat = object.__new__(PersistentChat)
+    chat.page_handle = "page-1"
+    chat.chat_url = "https://chatgpt.com/g/g-p-project/c/conversation-1"
+    chat.runtime = SimpleNamespace(gpt_browser=_Browser())
+
+    with pytest.raises(TypeError, match="provider evaluation failed"):
+        await chat.retry_conversation_load()
+
+    assert calls == [("page-1", "/g/g-p-project/c/conversation-1")]
