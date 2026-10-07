@@ -49,6 +49,7 @@ _SESSION_CLOCK_EXCLUDED_ACTIVITY_LABELS = frozenset(
         "response-observing",
         "recovery-observing",
         "soft-liveness",
+        "delivery-timeout-retry",
         "response-observed",
     }
 )

@@ -23,6 +23,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from audiagentic.foundation.transports.agent_session import is_meaningful_activity_label
+
 from audiagentic.components.agents.agents_paths import gateway_request_path
 from audiagentic.components.agents.gateway import profiles as profiles_mod
 from audiagentic.components.agents.gateway import store as store
@@ -143,12 +145,21 @@ def _durable_provider_session_is_active(project_root: Path, record: dict[str, An
     # recovery instead of keeping the request running forever.
     activity = record.get("activity")
     provider_activity = activity.get("provider") if isinstance(activity, dict) else None
+    provider_phase = (
+        provider_activity.get("phase")
+        if isinstance(provider_activity, dict)
+        else None
+    )
+    provider_activity_is_real = (
+        not isinstance(provider_phase, str)
+        or is_meaningful_activity_label(provider_phase)
+    )
     if record.get("provider-transport-kind") == "provider-session":
-        # Provider-session recovery must be fenced by provider-owned activity.
-        # The aggregate lease may contain owner/client liveness only.
+        # Provider-session recovery must be fenced by current provider work.
+        # Legacy synthetic phases cannot keep the session retryable.
         lease_expires_at = (
             provider_activity.get("lease-expires-at")
-            if isinstance(provider_activity, dict)
+            if provider_activity_is_real and isinstance(provider_activity, dict)
             else None
         )
     else:

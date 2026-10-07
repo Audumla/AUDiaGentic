@@ -863,6 +863,7 @@ async def test_unresolved_recovery_reports_missing_completion_evidence() -> None
     assert error.value.details["recovery-reason"] == "completion-evidence-missing"
     assert error.value.details["recovery-details"]["required-signal"] == (
         "completion-control+more-actions-menu"
+        "-or-completion-control+not-generating"
         "-or-canvas-edit-control+canvas-open-editor-control+not-generating"
     )
 

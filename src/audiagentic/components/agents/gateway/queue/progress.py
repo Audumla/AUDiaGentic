@@ -9,6 +9,8 @@ import datetime
 from enum import Enum
 from typing import Any
 
+from audiagentic.foundation.transports.agent_session import is_meaningful_activity_label
+
 STALE_PROGRESS_THRESHOLD_SECONDS = 300
 
 
@@ -62,7 +64,12 @@ def _disposition(record: dict[str, Any]) -> tuple[ProgressDisposition, Interrupt
         )
     activity = record.get("activity") if isinstance(record.get("activity"), dict) else {}
     provider_activity = activity.get("provider") if isinstance(activity.get("provider"), dict) else {}
-    provider_seen = bool(provider_activity.get("last-at"))
+    provider_phase = provider_activity.get("phase")
+    provider_activity_is_real = (
+        not isinstance(provider_phase, str)
+        or is_meaningful_activity_label(provider_phase)
+    )
+    provider_seen = bool(provider_activity.get("last-at")) and provider_activity_is_real
     provider_capability = provider_activity.get("capability", "unknown")
     if (
         record.get("watchdog-state") == "intervention"
@@ -197,6 +204,11 @@ def project_request_progress(
     state = record.get("state")
     activity = record.get("activity") if isinstance(record.get("activity"), dict) else {}
     provider_activity = activity.get("provider") if isinstance(activity.get("provider"), dict) else {}
+    provider_phase = provider_activity.get("phase")
+    provider_activity_is_real = (
+        not isinstance(provider_phase, str)
+        or is_meaningful_activity_label(provider_phase)
+    )
 
     # --- derive phase ---
     if isinstance(state, str) and state in _TERMINAL_STATE_TO_PHASE:
@@ -272,7 +284,11 @@ def project_request_progress(
     # liveness, so stale-progress diagnosis must use the provider bucket.
     gateway_activity_ts = None
     activity_sequence = record.get("activity-sequence", 0)
-    provider_activity_ts = _parse_ts(provider_activity.get("last-at"))
+    provider_activity_ts = (
+        _parse_ts(provider_activity.get("last-at"))
+        if provider_activity_is_real
+        else None
+    )
     owner_activity = activity.get("owner") if isinstance(activity.get("owner"), dict) else {}
     owner_sequence = owner_activity.get("source-sequence", 0)
     if provider_activity_ts:
