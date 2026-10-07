@@ -1517,11 +1517,8 @@ _RETRY_CONVERSATION_LOAD_FN = r"""() => {
     // conversation-message node owns the text; never use a generic body-wide
     // match when transcript content could be the source.
     const occurrences = bodyText.split(loadText).length - 1;
-    const messageNodes = Array.from(document.querySelectorAll(
+    const isTranscriptContainer = node => node.matches(
       '[data-message-author-role], [data-testid*="conversation-turn"], .block-BQZwFn, article, main'
-    ));
-    const transcriptMatch = messageNodes.some(node =>
-      normalize(node.innerText || node.textContent).includes(loadText)
     );
     const conversationButtons = Array.from(document.body.querySelectorAll('button')).filter(
       candidate => {
@@ -1533,12 +1530,12 @@ _RETRY_CONVERSATION_LOAD_FN = r"""() => {
         // Retry controls whose only matching ancestor is document.body.
         for (let ancestor = candidate.parentElement; ancestor && ancestor !== document.body; ancestor = ancestor.parentElement) {
           const ancestorText = normalize(ancestor.innerText || ancestor.textContent);
-          if (ancestorText.includes(loadText)) return true;
+          if (ancestorText.includes(loadText)) return !isTranscriptContainer(ancestor);
         }
         return false;
       }
     );
-    if (occurrences === 1 && !transcriptMatch && conversationButtons.length === 1) {
+    if (occurrences === 1 && conversationButtons.length === 1) {
       conversationButtons[0].click();
       return true;
     }
