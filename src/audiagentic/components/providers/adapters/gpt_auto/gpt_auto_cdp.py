@@ -29,6 +29,9 @@ def _selection_project_id(selection: object, expected_project_id: str | None) ->
 
 logger = logging.getLogger(__name__)
 
+class ProjectReadinessError(RuntimeError):
+    pass
+
 _CHATGPT_HOME_URL = "https://chatgpt.com/"
 _CHATGPT_PROJECTS_URL = "https://chatgpt.com/projects"
 
@@ -2204,6 +2207,7 @@ class GptAutoCdpBrowserController(CdpBrowserController):
             deadline = asyncio.get_running_loop().time() + navigation_timeout
             selected_url = ""
             observed_wrong_project = False
+            observed_candidates: list[dict[str, str | None]] = []
             wrong_project_pages: dict[str, CdpPageRef] = {}
             while asyncio.get_running_loop().time() < deadline:
                 candidates: list[CdpPageRef] = []
@@ -2222,6 +2226,14 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                 candidates.extend(fresh_candidates)
                 for candidate in candidates:
                     candidate_project_id = parse_project_id(candidate.url)
+                    observed_candidates.append(
+                        {
+                            "target-id": candidate.target_id,
+                            "page-handle": candidate.handle,
+                            "url": candidate.url,
+                            "project-id": candidate_project_id,
+                        }
+                    )
                     if (
                         candidate_project_id is None
                         or not _is_project_scoped_route(candidate.url)
@@ -2252,7 +2264,18 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                     raise RuntimeError(
                         "selected ChatGPT Project does not match configured project identity or selected row"
                     )
-                raise TimeoutError("ChatGPT project selection did not open a project page")
+                error = ProjectReadinessError(
+                    "ChatGPT project selection did not open a project page"
+                )
+                error.details = {
+                    "failure-stage": "readiness",
+                    "reason": "project-route-not-materialized",
+                    "expected-project-id": expected_project_id,
+                    "selected-project-id": selected_project_id,
+                    "source-target-id": source_page.target_id,
+                    "observed-candidates": observed_candidates[-16:],
+                }
+                raise error
             if page.target_id != source_page.target_id:
                 await self.close(source_page)
             await self.wait_for_composer(page, timeout=ready_timeout)
@@ -2284,6 +2307,8 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                         exc_info=True,
                     )
             await self.close(page)
+            if isinstance(exc, ProjectReadinessError):
+                raise
             raise RuntimeError(
                 f"gpt-auto project page open failed: {type(exc).__name__}: {exc}"
             ) from exc
