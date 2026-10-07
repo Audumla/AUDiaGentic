@@ -1511,7 +1511,15 @@ _RETRY_CONVERSATION_LOAD_FN = r"""() => {
     const transcriptMatch = messageNodes.some(node =>
       normalize(node.innerText || node.textContent).includes(loadText)
     );
-    if (occurrences === 1 && !transcriptMatch) retryRoot = document.body;
+    const directBodyButtons = Array.from(document.body.querySelectorAll('button')).filter(
+      candidate => candidate.parentElement === document.body
+        && !candidate.disabled
+        && candidate.getClientRects().length
+        && normalize(candidate.innerText || candidate.textContent || candidate.getAttribute('aria-label')) === 'retry'
+    );
+    if (occurrences === 1 && !transcriptMatch && directBodyButtons.length === 1) {
+      retryRoot = document.body;
+    }
   }
   if (!retryRoot) return false;
   const buttons = Array.from(retryRoot.querySelectorAll('button')).filter(candidate => {
