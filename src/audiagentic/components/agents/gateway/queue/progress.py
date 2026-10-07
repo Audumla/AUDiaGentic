@@ -9,7 +9,7 @@ import datetime
 from enum import Enum
 from typing import Any
 
-from audiagentic.foundation.transports.agent_session import is_meaningful_activity_label
+from audiagentic.foundation.transports.agent_session import is_meaningful_activity
 
 STALE_PROGRESS_THRESHOLD_SECONDS = 300
 
@@ -66,8 +66,8 @@ def _disposition(record: dict[str, Any]) -> tuple[ProgressDisposition, Interrupt
     provider_activity = activity.get("provider") if isinstance(activity.get("provider"), dict) else {}
     provider_phase = provider_activity.get("phase")
     provider_activity_is_real = (
-        not isinstance(provider_phase, str)
-        or is_meaningful_activity_label(provider_phase)
+        (provider_phase is None and not provider_activity.get("source"))
+        or is_meaningful_activity(provider_activity.get("source"), provider_phase)
     )
     provider_seen = bool(provider_activity.get("last-at")) and provider_activity_is_real
     provider_capability = provider_activity.get("capability", "unknown")
@@ -206,8 +206,8 @@ def project_request_progress(
     provider_activity = activity.get("provider") if isinstance(activity.get("provider"), dict) else {}
     provider_phase = provider_activity.get("phase")
     provider_activity_is_real = (
-        not isinstance(provider_phase, str)
-        or is_meaningful_activity_label(provider_phase)
+        (provider_phase is None and not provider_activity.get("source"))
+        or is_meaningful_activity(provider_activity.get("source"), provider_phase)
     )
 
     # --- derive phase ---
@@ -298,6 +298,12 @@ def project_request_progress(
         and not isinstance(activity_sequence, bool)
         and activity_sequence > 0
         and owner_sequence == 0
+        and (
+            not (activity.get("last-source") or record.get("activity-source"))
+            or is_meaningful_activity(
+                activity.get("last-source") or record.get("activity-source"), None
+            )
+        )
     ):
         # Pre-client-liveness records used the aggregate timestamp for
         # provider progress. Preserve that legacy interpretation only when the

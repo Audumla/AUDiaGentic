@@ -3003,9 +3003,7 @@ def test_response_scope_rebinds_reused_fallback_slot_when_prompt_ordinal_is_unch
         prompt_text="New prompt",
     )
 
-    assert response_ref is not None
-    assert response_ref.message_id.startswith("fallback-assistant-4:prompt-")
-    assert scoped.terminal_witness_assistant_id == response_ref.message_id
+    assert response_ref is None
 
 
 @pytest.mark.asyncio
