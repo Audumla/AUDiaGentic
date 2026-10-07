@@ -357,6 +357,9 @@ class GptAutoTurn:
         self._delivery_timeout_retry_attempted = False
         self._delivery_timeout_retry_probe_failed = False
         self._conversation_load_retry_attempts = 0
+        self._conversation_load_retry_clicks = 0
+        self._conversation_load_retry_last_error: str | None = None
+        self._conversation_load_retry_last_delay: float | None = None
         self._timing_events: set[str] = set()
         self._initial_refresh_attempted = False
         self._initial_refresh_succeeded: bool | None = None
@@ -1754,7 +1757,10 @@ class GptAutoTurn:
                     baseline, raw, prompt_message_id, prompt_text=self.request.body
                 )
                 and _is_fallback_assistant_message_id(old_id)
-                and _is_fallback_assistant_message_id(new_id)
+                and (
+                    _is_fallback_assistant_message_id(new_id)
+                    or _is_durable_assistant_message_id(new_id)
+                )
                 and _same_response_slot_replacement(
                     raw,
                     prompt_message_id=prompt_message_id,
@@ -2236,6 +2242,68 @@ class GptAutoTurn:
                         self._delivery_timeout_retry_probe_failed = True
                         await asyncio.sleep(self.chat.config.turn.poll_interval_seconds)
                         continue
+            conversation_load_failed = "conversation-load-failed" in current.dom_signals
+            if not conversation_load_failed:
+                self._conversation_load_retry_attempts = 0
+                self._conversation_load_retry_last_error = None
+                self._conversation_load_retry_last_delay = None
+            if (
+                conversation_load_failed
+                and not completion_candidate
+                and (
+                    self.side_effect_attempted
+                    or self.submission_confirmed
+                    or self._recovered_existing_turn
+                )
+            ):
+                # A load page is readiness loss, not prompt-owned failure.
+                # Retry only the provider-owned control in this conversation;
+                # never replace the session or replay the prompt.
+                self._conversation_load_retry_attempts += 1
+                retry = getattr(self.chat, "retry_conversation_load", None)
+                retried = False
+                try:
+                    retried = bool(await retry()) if callable(retry) else False
+                    if retried:
+                        self._conversation_load_retry_clicks += 1
+                        self._conversation_load_retry_last_error = None
+                except Exception as exc:  # noqa: BLE001 - observation remains non-terminal
+                    self._conversation_load_retry_last_error = (
+                        f"{type(exc).__name__}: {exc}"
+                    )
+                delay = min(
+                    5.0,
+                    max(
+                        self.chat.config.turn.poll_interval_seconds,
+                        0.25
+                        * (2 ** max(0, self._conversation_load_retry_attempts - 1)),
+                    ),
+                )
+                self._conversation_load_retry_last_delay = delay
+                try:
+                    await self._emit(
+                        TransportObservationKind.TIMING,
+                        {
+                            "timing-event": (
+                                "conversation-load-retry-clicked"
+                                if retried
+                                else "conversation-load-observation-deferred"
+                            ),
+                            "attempt": self._conversation_load_retry_attempts,
+                            "clicks": self._conversation_load_retry_clicks,
+                            "delay-seconds": delay,
+                            "error": self._conversation_load_retry_last_error,
+                        },
+                    )
+                except Exception:  # noqa: BLE001 - diagnostics are advisory
+                    logger.debug(
+                        "gpt-auto conversation-load retry telemetry failed",
+                        extra={"turn-id": self.request.turn_id},
+                        exc_info=True,
+                    )
+                await asyncio.sleep(delay)
+                previous = current
+                continue
             # Evaluate completion before provider failure.  ChatGPT can leave
             # a delivery-timeout/error panel in the DOM after a retry has
             # already produced a fresh, structurally complete answer.  That
@@ -2247,7 +2315,6 @@ class GptAutoTurn:
                     "request-error-alert",
                     "network-error-alert",
                     "stream-cache-expired",
-                    "conversation-load-failed",
                 }
             )
             if failed.satisfied and (
@@ -2403,33 +2470,6 @@ class GptAutoTurn:
                 mark_activity = getattr(self.chat, "mark_validated_activity", None)
                 if callable(mark_activity):
                     mark_activity()
-            conversation_load_failed = "conversation-load-failed" in current.dom_signals
-            if conversation_load_failed and (
-                self.side_effect_attempted
-                or self.submission_confirmed
-                or self._recovered_existing_turn
-            ):
-                # A transient load failure is not proof that the provider
-                # turn failed. Retry only the provider-owned control in this
-                # conversation; never replace the session or replay the text.
-                retry = getattr(self.chat, "retry_conversation_load", None)
-                retried = bool(await retry()) if callable(retry) else False
-                self._conversation_load_retry_attempts += int(retried)
-                await self._emit_timing(
-                    "conversation-load-retry-clicked"
-                    if retried
-                    else "conversation-load-observation-deferred"
-                )
-                delay = min(
-                    5.0,
-                    max(
-                        self.chat.config.turn.poll_interval_seconds,
-                        0.25 * (2 ** max(0, self._conversation_load_retry_attempts - 1)),
-                    ),
-                )
-                await asyncio.sleep(delay)
-                previous = current
-                continue
             if await _attempt_response_recovery(
                 now,
                 interruption_present=provider_interruption,
@@ -2605,9 +2645,16 @@ class GptAutoTurn:
                     and verify_message_id
                     and verify_message_id != self._response_message_id
                 ):
-                    raise ProviderBindingIntegrityError(
-                        "provider assistant identity changed during response verification"
-                    )
+                    if _replacement_proven(verify, verify_message_id):
+                        self._response_message_id = verify_message_id
+                        mark_assistant = getattr(self.chat, "mark_assistant_observed", None)
+                        if mark_assistant is not None:
+                            mark_assistant(verify_message_id)
+                        await self._publish_message_ids(strict=True)
+                    else:
+                        raise ProviderBindingIntegrityError(
+                            "provider assistant identity changed during response verification"
+                        )
                 terminal_verified_ok = (
                     verified.satisfied
                     and verify_message_id is not None
@@ -2862,6 +2909,10 @@ class GptAutoTurn:
             "completion-materialization-attempted": self._completion_materialization_attempted,
             "completion-materialization-succeeded": self._completion_materialization_succeeded,
             "delivery-timeout-retry-attempted": self._delivery_timeout_retry_attempted,
+            "conversation-load-retry-attempts": self._conversation_load_retry_attempts,
+            "conversation-load-retry-clicks": self._conversation_load_retry_clicks,
+            "conversation-load-retry-last-error": self._conversation_load_retry_last_error,
+            "conversation-load-retry-last-delay": self._conversation_load_retry_last_delay,
             "initial-refresh-attempted": self._initial_refresh_attempted,
             "initial-refresh-succeeded": self._initial_refresh_succeeded,
             "stale-progress-focus-attempted": self._stale_progress_focus_attempted,
