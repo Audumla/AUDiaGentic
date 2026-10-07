@@ -1013,7 +1013,10 @@ def _dispatch_session_request(
                 "max-attempts": 1,
             },
         )
-        from audiagentic.components.agents.gateway.activity import RequestActivityRelay
+        from audiagentic.components.agents.gateway.activity import (
+            RequestActivityRelay,
+            frozen_activity_lease_seconds,
+        )
         activity_relay = RequestActivityRelay(
             project_root,
             request_id,
@@ -1021,6 +1024,7 @@ def _dispatch_session_request(
             worker_id=record["worker-id"],
             attempt_epoch=record["attempt-epoch"],
             provider_capability="supported" if str(provider_id).startswith("gpt-auto") else "unknown",
+            lease_seconds=frozen_activity_lease_seconds(record),
         )
         client_defaults.remember(project_root, record)
         if guard_held:

@@ -827,6 +827,12 @@ class GatewayQueueManager:
                     attempt_epoch=int(record.get("attempt-epoch") or 0),
                 )
                 return
+        # Recovery bypasses the normal queued -> running/session-attempt
+        # transition. Register the durable running record immediately so the
+        # host watchdog can observe an attached session before the recovery
+        # worker reaches its first provider callback.
+        if record.get("provider-transport-kind") == "provider-session":
+            watchdog_registry().register(project_root, record)
         with pq.lock:
             pq.running.add(entry.request_id)
             self._active_requests[entry.request_id] = (
@@ -850,6 +856,8 @@ class GatewayQueueManager:
                 if self._shutdown_event.is_set():
                     return
                 entered_worker = True
+                if current.get("provider-transport-kind") == "provider-session":
+                    watchdog_registry().register(entry.project_root, current)
                 self._run_one(pq, entry, bound)
             except Exception:  # noqa: BLE001 - recovery must not kill the service
                 logger.exception(
@@ -1145,6 +1153,8 @@ class GatewayQueueManager:
                 if self._shutdown_event.is_set():
                     return
                 entered_worker = True
+                if current.get("provider-transport-kind") == "provider-session":
+                    watchdog_registry().register(entry.project_root, current)
                 self._run_one(pq, entry, bound)
             except Exception:  # noqa: BLE001 - recovery must not kill the service
                 logger.exception(

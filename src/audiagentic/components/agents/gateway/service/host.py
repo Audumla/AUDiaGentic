@@ -443,8 +443,15 @@ class GatewayServiceHost:
         runtime = peek_session_runtime()
         results: list[dict[str, Any]] = []
         for project_root, record in registry.snapshot():
-            updated = diagnose_activity_lease(project_root, record)
-            registry.update(project_root, updated)
+            try:
+                updated = diagnose_activity_lease(project_root, record)
+                registry.update(project_root, updated)
+            except Exception:  # noqa: BLE001 - one malformed record must not starve later requests
+                logger.exception(
+                    "gateway watchdog record diagnosis failed; continuing",
+                    extra={"request-id": record.get("request-id")},
+                )
+                continue
             if (
                 updated.get("state") == "running"
                 and updated.get("cancel-requested") is True
@@ -530,9 +537,16 @@ class GatewayServiceHost:
                             exc_info=True,
                         )
                 elif runtime is not None:
-                    outcome = runtime.reconcile_active_transport(
-                        updated["session-id"], updated["request-id"]
-                    )
+                    try:
+                        outcome = runtime.reconcile_active_transport(
+                            updated["session-id"], updated["request-id"]
+                        )
+                    except Exception:  # noqa: BLE001 - isolate one provider transport
+                        logger.exception(
+                            "gateway watchdog transport reconciliation failed",
+                            extra={"request-id": updated.get("request-id")},
+                        )
+                        outcome = {}
                     if outcome.get("status") == "reconciled":
                         try:
                             recover_execution_request(
