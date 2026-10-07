@@ -2281,6 +2281,16 @@ class GptAutoTurn:
                 )
                 self._conversation_load_retry_last_delay = delay
                 try:
+                    retry_details = json.dumps(
+                        {
+                            "attempt": self._conversation_load_retry_attempts,
+                            "clicks": self._conversation_load_retry_clicks,
+                            "delay-seconds": delay,
+                            "error": self._conversation_load_retry_last_error,
+                        },
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    )
                     await self._emit(
                         TransportObservationKind.TIMING,
                         {
@@ -2289,10 +2299,10 @@ class GptAutoTurn:
                                 if retried
                                 else "conversation-load-observation-deferred"
                             ),
-                            "attempt": self._conversation_load_retry_attempts,
-                            "clicks": self._conversation_load_retry_clicks,
-                            "delay-seconds": delay,
-                            "error": self._conversation_load_retry_last_error,
+                            "diagnostic-signature": hashlib.sha256(
+                                retry_details.encode("utf-8")
+                            ).hexdigest()[:16],
+                            "diagnostic-details": retry_details,
                         },
                     )
                 except Exception:  # noqa: BLE001 - diagnostics are advisory
