@@ -696,6 +696,25 @@ async def test_retry_conversation_load_rejects_body_error_with_foreign_alert_ret
         finally:
             await browser.close()
 
+
+@pytest.mark.asyncio
+async def test_retry_conversation_load_rejects_bound_path_mismatch() -> None:
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            await page.set_content(
+                '<div class="error-page">Could not load this ChatGPT conversation'
+                '<button type="button">Retry</button></div>'
+            )
+            assert await page.evaluate(
+                _RETRY_CONVERSATION_LOAD_FN,
+                {"expectedPath": "/g/g-p-foreign/c/foreign-conversation"},
+            ) is False
+        finally:
+            await browser.close()
+
+
 @pytest.mark.asyncio
 async def test_retry_delivery_timeout_clicks_plain_text_alert_button() -> None:
     """The actual click function (module-level _RETRY_DELIVERY_TIMEOUT_FN,
