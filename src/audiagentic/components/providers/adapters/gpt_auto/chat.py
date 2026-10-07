@@ -870,13 +870,22 @@ class PersistentChat:
             return None
         return await self.snapshot(allow_recovering=True)
 
-    def _conversation_load_recovery_allowed(self) -> bool:
-        workflow = getattr(self.config, "workflow", None)
+    def _conversation_load_recovery_enabled(self) -> bool:
+        config = getattr(self, "config", None)
+        workflow = getattr(config, "workflow", None)
         recovery = getattr(workflow, "recovery", None)
         return bool(
             recovery is not None
             and getattr(recovery, "conversation_load_failure_recovery_enabled", True)
-            and self.chat_url
+            and getattr(self, "chat_url", None)
+        )
+
+    def _conversation_load_recovery_allowed(self) -> bool:
+        workflow = getattr(self.config, "workflow", None)
+        recovery = getattr(workflow, "recovery", None)
+        return bool(
+            self._conversation_load_recovery_enabled()
+            and recovery is not None
             and self._conversation_load_recovery_attempts
             < max(
                 0,
@@ -950,7 +959,7 @@ class PersistentChat:
             # Keep a consumed budget until a replacement completes or the
             # unresolved checkpoint is terminally cleared.
             return False
-        if not self._conversation_load_recovery_allowed():
+        if not self._conversation_load_recovery_enabled():
             return False
 
         # A prior recovery attempt (or a human opening the conversation) can
@@ -1020,7 +1029,9 @@ class PersistentChat:
                 return True
             retry_delay = min(retry_delay * 2.0, 8.0)
 
-        # A prior recovery attempt
+        # Same-tab Retry is independent of replacement-tab budget.
+        if not self._conversation_load_recovery_allowed():
+            return False
         old_handle = self.page_handle
         if old_handle:
             self.page_handle = None
