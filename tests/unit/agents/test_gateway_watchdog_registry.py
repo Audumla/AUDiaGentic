@@ -554,3 +554,107 @@ def test_operations_poller_starts_after_startup_scan_exception(monkeypatch) -> N
     assert not host._operations_thread.is_alive()
     assert pump.calls >= 2
     assert watchdog_calls >= 1
+def test_host_watchdog_continues_after_one_record_fails_diagnosis(tmp_path, monkeypatch) -> None:
+    """A single bad registry record cannot starve later records in the same pass."""
+    from audiagentic.components.agents.gateway.service.host import GatewayServiceHost
+
+    first = tmp_path / "first"
+    second = tmp_path / "second"
+    records = (
+        (first, {"request-id": "req-first", "state": "running"}),
+        (second, {"request-id": "req-second", "state": "running"}),
+    )
+
+    class Registry:
+        def snapshot(self):
+            return records
+
+        def update(self, _root, _record):
+            return None
+
+        def unregister(self, *_args):
+            return None
+
+    def diagnose(root, record):
+        if root == first:
+            raise RuntimeError("malformed first record")
+        return {**record, "watchdog-state": "active"}
+
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.queue.watchdog_registry.watchdog_registry",
+        lambda: Registry(),
+    )
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.queue.dispatch.diagnose_activity_lease",
+        diagnose,
+    )
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.session.sessions.peek_session_runtime",
+        lambda: None,
+    )
+
+    result = GatewayServiceHost.run_watchdog_pass(object.__new__(GatewayServiceHost))
+
+    assert result == ({"request-id": "req-second", "state": "running", "watchdog-state": "active"},)
+
+def test_host_watchdog_does_not_cancel_active_session_when_runtime_is_unavailable(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Restart-time runtime absence is not proof that a cancelled turn stopped."""
+    from audiagentic.components.agents.gateway.service.host import GatewayServiceHost
+
+    project_root = tmp_path / "project"
+    request = {
+        "request-id": "req-active-cancel",
+        "state": "running",
+        "session-id": "ses-active",
+        "revision": 4,
+        "cancel-requested": True,
+        "watchdog-state": "active",
+    }
+
+    class Registry:
+        def __init__(self) -> None:
+            self.updated = []
+
+        def snapshot(self):
+            return ((project_root.resolve(), dict(request)),)
+
+        def update(self, _root, record):
+            self.updated.append(dict(record))
+
+        def unregister(self, *_args):
+            raise AssertionError("active ambiguous request must remain registered")
+
+    class Runtime:
+        def session_runtime_status(self, _session_id):
+            return {"available": False}
+
+    registry = Registry()
+    transitions = []
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.queue.watchdog_registry.watchdog_registry",
+        lambda: registry,
+    )
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.queue.dispatch.diagnose_activity_lease",
+        lambda _root, record: dict(record),
+    )
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.session.sessions.peek_session_runtime",
+        lambda: Runtime(),
+    )
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.session.sessions_store.read_session_record",
+        lambda _root, _session_id: {"state": "active"},
+    )
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.store.transition_owned_terminal",
+        lambda *args, **kwargs: transitions.append((args, kwargs)),
+    )
+
+    result = GatewayServiceHost.run_watchdog_pass(object.__new__(GatewayServiceHost))
+
+    assert result == (request,)
+    assert transitions == []
+    assert registry.updated[-1] == request
