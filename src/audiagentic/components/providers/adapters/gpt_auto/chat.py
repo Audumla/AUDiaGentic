@@ -880,6 +880,16 @@ class PersistentChat:
             and getattr(self, "chat_url", None)
         )
 
+    async def _reset_load_recovery_budget_after_positive_snapshot(
+        self, snapshot: ChatSnapshot
+    ) -> None:
+        """Clear replacement budget only after positive conversation proof."""
+        if self.unresolved_turn_pending and self._defer_unresolved_reconciliation:
+            return
+        self._conversation_load_recovery_attempts = 0
+        self._checkpoint_metadata["conversation-load-recovery-attempts"] = 0
+        await self._persist_checkpoint(self.unresolved_metadata())
+
     def _conversation_load_recovery_allowed(self) -> bool:
         workflow = getattr(self.config, "workflow", None)
         recovery = getattr(workflow, "recovery", None)
@@ -962,26 +972,38 @@ class PersistentChat:
         if not self._conversation_load_recovery_enabled():
             return False
 
-        # A prior recovery attempt (or a human opening the conversation) can
-        # leave several tabs with the same durable conversation URL.  Before
-        # creating yet another replacement, prefer an already-mounted healthy
-        # duplicate.  This is observation-only: no prompt is replayed and the
-        # failed retained tab remains available as provider evidence.
+        # Start the readiness budget before scanning duplicate tabs.  A long
+        # exact-URL scan must not delay the provider Retry/failure boundary.
+        retry_deadline = asyncio.get_running_loop().time() + max(
+            0.0, float(self.config.chat.ready_timeout_seconds)
+        )
         failed_handle = self.page_handle
-        await self._prefer_active_conversation_page()
-        if self.page_handle and self.page_handle != failed_handle:
-            alternate = await self.snapshot(allow_recovering=True)
-            if "conversation-load-failed" not in alternate.dom_signals:
-                return True
+        remaining = retry_deadline - asyncio.get_running_loop().time()
+        if remaining > 0:
+            try:
+                async with asyncio.timeout(remaining):
+                    await self._prefer_active_conversation_page()
+                    if self.page_handle and self.page_handle != failed_handle:
+                        alternate = await self.snapshot(allow_recovering=True)
+                        if self._replacement_snapshot_is_positive(alternate):
+                            await self._reset_load_recovery_budget_after_positive_snapshot(
+                                alternate
+                            )
+                            self._set_unresolved_recovery(
+                                "conversation-load-duplicate-recovered"
+                            )
+                            return True
+            except TimeoutError:
+                self._set_unresolved_recovery(
+                    "conversation-load-duplicate-observation-deadline"
+                )
+
         # Prefer the provider's own Retry control on the retained conversation
         # before creating another tab.  This is observation recovery only: the
         # original prompt may already have executed, so no prompt is replayed.
         # Retry attempts are bounded by the normal readiness window and use
         # increasing delays so a transient renderer load failure can recover
         # without turning synthetic activity into an internal lease renewal.
-        retry_deadline = asyncio.get_running_loop().time() + max(
-            0.0, float(self.config.chat.ready_timeout_seconds)
-        )
         retry_delay = max(
             0.5,
             float(self.config.turn.poll_interval_seconds),
@@ -1048,15 +1070,10 @@ class PersistentChat:
                         attempts=retry_attempts,
                     )
                     break
-                if not (
-                    self.unresolved_turn_pending
-                    and self._defer_unresolved_reconciliation
-                ):
-                    self._conversation_load_recovery_attempts = 0
-                    self._checkpoint_metadata[
-                        "conversation-load-recovery-attempts"
-                    ] = 0
-                    await self._persist_checkpoint(self.unresolved_metadata())
+                await self._reset_load_recovery_budget_after_positive_snapshot(
+                    retried_snapshot
+                )
+
                 self._set_unresolved_recovery(
                     "conversation-load-retry-recovered",
                     attempts=retry_attempts,
