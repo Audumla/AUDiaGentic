@@ -1648,8 +1648,15 @@ class SessionRuntime:
             def _durable_owner_probe(owner_request_id: str | None) -> bool:
                 try:
                     session_record = session_store.read_session_record(project_root, session_id)
-                except AudiaGenticError:
-                    return False
+                except AudiaGenticError as exc:
+                    # Direct SessionRuntime callers create their fallback
+                    # durable session record only after provider open succeeds.
+                    # Permit that narrow bootstrap only; after open the
+                    # transport refuses owner_id=None, so recovery/navigation
+                    # still requires durable ownership.
+                    return bool(
+                        owner_request_id is None and exc.code == "RES-AGW-002"
+                    )
                 if session_record["state"] in session_store.SESSION_TERMINAL_STATES:
                     return False
                 if owner_request_id is None:
