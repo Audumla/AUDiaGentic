@@ -2746,3 +2746,40 @@ async def test_ensure_dedicated_window_anchor_is_not_a_dashboard_refresh_path(mo
     result = await runtime.ensure_dedicated_window_anchor()
     assert result == "anchor"
     assert order == ["bridge-list_pages"]
+
+
+@pytest.mark.asyncio
+async def test_refresh_bound_conversation_refuses_revoked_owner_before_navigation() -> None:
+    config = GptAutoConfig.from_dict(valid_config())
+    navigated: list[str] = []
+
+    class _Browser:
+        async def page_by_handle(self, handle):
+            return SimpleNamespace(
+                handle=handle,
+                target_id="target-1",
+                url="https://chatgpt.com/g/g-p-project/c/provider-session",
+            )
+
+        async def navigate(self, _page, url):
+            navigated.append(url)
+
+    runtime = SimpleNamespace(gpt_browser=_Browser(), bridge=SimpleNamespace())
+    chat = PersistentChat(
+        ag_session_id="session-owner-fence",
+        project_name="project",
+        project_url="https://chatgpt.com/g/g-p-project/project",
+        runtime=runtime,
+        config=config,
+        binding_sink=lambda _update: None,
+        provider_session_id="provider-session",
+        chat_url="https://chatgpt.com/g/g-p-project/c/provider-session",
+    )
+    chat.page_handle = "page-1"
+    chat.target_id = "target-1"
+    chat.state = ChatState.BUSY
+    chat.set_page_mutation_owner_probe(lambda: False)
+
+    assert await chat.refresh_bound_conversation(request_id="req-terminal") is False
+    assert navigated == []
+    assert chat._unresolved_recovery_reason == "refresh-owner-not-live"
