@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import inspect
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -51,6 +52,10 @@ class GptAutoSessionTransport:
         self._closed = False
         self._turn_failure_disposition = SessionFailureDisposition.TERMINATE
         self._pending_cancel_turn_id: str | None = None
+        self._durable_owner_probe: Callable[[str | None], bool] | None = None
+        self._request_owner_id: str | None = None
+        self._open_in_progress = False
+        self.chat.set_page_mutation_owner_probe(self._has_live_durable_owner)
 
     @property
     def ag_session_id(self) -> str:
@@ -60,7 +65,34 @@ class GptAutoSessionTransport:
         """Route checkpoint metadata to the request owning the active turn."""
         self.chat.set_request_metadata_sink(sink)
 
+    def set_durable_owner_probe(
+        self, probe: Callable[[str | None], bool] | None
+    ) -> None:
+        """Install the gateway-owned durable session/request liveness fence."""
+        self._durable_owner_probe = probe
+
+    def set_request_owner(self, request_id: str | None) -> None:
+        """Bind page mutation authority to the currently executing durable request."""
+        self._request_owner_id = request_id
+
+    def _has_live_durable_owner(self) -> bool:
+        if self._closed:
+            return False
+        probe = self._durable_owner_probe
+        if probe is None:
+            # Standalone adapter tests/embedders have no gateway durable store.
+            # Gateway-composed transports install this probe before open().
+            return True
+        owner_id = self._request_owner_id
+        if owner_id is None and not self._open_in_progress:
+            return False
+        try:
+            return bool(probe(owner_id))
+        except Exception:
+            return False
+
     async def open(self) -> SessionOpenResult:
+        self._open_in_progress = True
         try:
             await self.chat.open()
         except ProjectReadinessError as exc:
@@ -85,6 +117,8 @@ class GptAutoSessionTransport:
                 message="gpt-auto project readiness did not complete",
                 details=details,
             ) from exc
+        finally:
+            self._open_in_progress = False
         metadata: dict[str, Any] = {"project-url": self.chat.project_url}
         metadata.update(self.chat.unresolved_metadata())
         ref = None
@@ -378,6 +412,7 @@ class GptAutoSessionTransport:
         if self._closed:
             return
         self._closed = True
+        self._request_owner_id = None
         # Always release the PersistentChat/runtime ownership claim, even when
         # waiting for an in-flight turn raises a provider error.  Previously a
         # non-timeout wait failure skipped ``chat.close()`` and left the
