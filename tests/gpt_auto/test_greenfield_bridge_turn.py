@@ -249,7 +249,7 @@ class _Chat:
             ]
         )
         self.checkpoint_updates = []
-
+        self._page_mutation_owner_probe = None
     async def snapshot(self):
         return next(self._snapshots)
 
@@ -262,6 +262,9 @@ class _Chat:
     def mark_submission_unresolved(self, prompt_text=None):
         self.unresolved_turn_pending = True
         self.prompt_text = prompt_text
+
+    def set_page_mutation_owner_probe(self, probe):
+        self._page_mutation_owner_probe = probe
 
     def mark_prompt_submitted(self, prompt_id, assistant_before_id, prompt_text=None):
         self.unresolved_turn_pending = True
