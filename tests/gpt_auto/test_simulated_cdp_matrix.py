@@ -635,6 +635,13 @@ async def test_new_session_selects_exact_project_from_sidebar(monkeypatch) -> No
     selected_url = f"https://chatgpt.com/g/{project_id}-bigcherry/c/new-chat"
     expected_project_url = f"https://chatgpt.com/g/{project_id}-bigcherry/project"
     calls: list[tuple[str, object]] = []
+    bridge_calls: list[tuple[str, object]] = []
+
+    async def bridge_call(method, params):
+        bridge_calls.append((method, params))
+        return {}
+
+    monkeypatch.setattr(browser.bridge, 'call', bridge_call)
 
     async def new_tab(*, in_window=None, url=None):
         calls.append(("new-tab", (in_window, url)))
@@ -684,6 +691,7 @@ async def test_new_session_selects_exact_project_from_sidebar(monkeypatch) -> No
         ready_timeout=4,
     )
 
+    assert bridge_calls == [("activate_target", {"pageHandle": page.handle, "operator": True, "operator_reason": "dashboard-focus"})]
     assert calls[:2] == [
         ("new-tab", (anchor, None)),
         ("navigate", "https://chatgpt.com/"),
