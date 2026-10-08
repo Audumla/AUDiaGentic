@@ -2477,10 +2477,17 @@ class PersistentChat:
                 if self.state is ChatState.RECOVERING:
                     self._move(ChatState.FAILED)
                 return
+            if not self._page_mutation_owner_is_live():
+                self._set_unresolved_recovery("reconcile-owner-not-live")
+                return
             self.page_handle = await self._create_recovery_page()
             if not self.runtime.claim_page(self, self.page_handle):
                 raise RuntimeError("gpt-auto created a page already owned by another session")
             try:
+                if not self._page_mutation_owner_is_live():
+                    raise ProviderBindingIntegrityError(
+                        "gpt-auto recovery navigation refused without a live durable owner"
+                    )
                 await self.runtime.bridge.call(
                     "navigate",
                     {
@@ -2493,6 +2500,16 @@ class PersistentChat:
             except Exception:
                 handle, self.page_handle = self.page_handle, None
                 self.runtime.release_page(self, handle)
+                if handle:
+                    try:
+                        await self.runtime.bridge.call(
+                            "close_page", {"pageHandle": handle}
+                        )
+                    except Exception:
+                        logger.debug(
+                            "failed to close unowned gpt-auto recovery tab",
+                            exc_info=True,
+                        )
                 raise
             if snapshot is not None and not url_matches_provider_session(
                 snapshot.url, self.provider_session_id
@@ -2531,9 +2548,27 @@ class PersistentChat:
             # cannot prove what happened to the prior Send, so retain the
             # session in RECOVERING instead of admitting a new prompt.
             return
+        if not self._page_mutation_owner_is_live():
+            self._set_unresolved_recovery("reconcile-owner-not-live")
+            return
         self.page_handle = await self._create_recovery_page()
         if not self._claim_page(self.page_handle):
             raise RuntimeError("gpt-auto created a page already owned by another session")
+        if not self._page_mutation_owner_is_live():
+            handle, self.page_handle = self.page_handle, None
+            self.runtime.release_page(self, handle)
+            if handle:
+                try:
+                    await self.runtime.bridge.call(
+                        "close_page", {"pageHandle": handle}
+                    )
+                except Exception:
+                    logger.debug(
+                        "failed to close unowned gpt-auto recovery tab",
+                        exc_info=True,
+                    )
+            self._set_unresolved_recovery("reconcile-owner-not-live")
+            return
         await self.runtime.bridge.call(
             "navigate",
             {
