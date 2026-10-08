@@ -1539,6 +1539,14 @@ def mark_watchdog_intervention_if_expired(
                 initial_observation_expired = datetime.now(timezone.utc) >= started_at + timedelta(seconds=initial_grace)
             except (TypeError, ValueError):
                 initial_observation_expired = False
+        if (
+            record.get("provider-transport-kind") == "provider-session"
+            and not first_activity
+            and not initial_observation_expired
+        ):
+            # There is no provider lease before the initial observation grace
+            # elapses. Do not treat that intentional gap as an expired lease.
+            return record
         if initial_observation_expired:
             expiry = None
         elif record.get("provider-transport-kind") == "provider-session":
