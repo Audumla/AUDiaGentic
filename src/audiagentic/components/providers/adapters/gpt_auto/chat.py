@@ -170,6 +170,7 @@ class PersistentChat:
         self._reconciliation_refresh_attempted = False
         self._reconciliation_delivery_retry_attempted = False
         self._defer_unresolved_reconciliation = False
+        self._defer_page_creation_on_recovery = False
         # A retained exact-URL tab can survive a gateway restart while its
         # renderer is stuck on ChatGPT's conversation-load error page.  Keep a
         # small bounded replacement budget so recovery can attach a fresh
@@ -436,6 +437,9 @@ class PersistentChat:
                     "gpt-auto resume requires a retained browser tab or a durable "
                     "chat-url; neither is available"
                 )
+        if self.page_handle is None and self.provider_session_id and self._defer_page_creation_on_recovery:
+            self._move(ChatState.RECOVERING)
+            raise RuntimeError("gpt-auto restart recovery deferred because the exact provider conversation tab is not attached")
         if self.page_handle is None:
             create_page = getattr(self.runtime, "create_chat_page", None)
             if create_page is not None:
@@ -517,7 +521,9 @@ class PersistentChat:
                 return
         self._move(ChatState.READY)
 
-    def defer_unresolved_reconciliation(self) -> None:
+    def defer_unresolved_reconciliation(
+        self, *, defer_page_creation: bool = False
+    ) -> None:
         """Leave the checkpoint for the request-owned recovery turn.
 
         Gateway restart recovery must first reattach the exact conversation.
@@ -525,6 +531,7 @@ class PersistentChat:
         may observe, persist the response artifact, and clear this checkpoint.
         """
         self._defer_unresolved_reconciliation = True
+        self._defer_page_creation_on_recovery = defer_page_creation
 
     def _bind_page(self, page: dict) -> None:
         page_handle = str(page["pageHandle"])
@@ -2415,6 +2422,12 @@ class PersistentChat:
                     await self.wait_quiescent(allow_recovering=True)
                     self._move(ChatState.READY)
                 return
+            if (
+                self._defer_page_creation_on_recovery
+                and self.provider_session_id
+            ):
+                self._move(ChatState.RECOVERING)
+                raise RuntimeError('gpt-auto restart recovery deferred: exact provider conversation tab is not attached')
             if not self.chat_url:
                 self._set_unresolved_recovery(
                     "provider-conversation-not-found",

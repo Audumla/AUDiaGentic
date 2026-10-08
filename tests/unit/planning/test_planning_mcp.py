@@ -82,6 +82,19 @@ def test_plan_get_item_delegates_to_api():
     mock.assert_called_once_with(_ROOT, "X01", False)
 
 
+def test_plan_get_item_history_is_explicit_opt_in():
+    with (
+        _patch_root(),
+        patch(
+            "audiagentic.components.planning.planning_api.get_item",
+            return_value={"id": "X01", "change_log": [{"description": "old"}]},
+        ) as mock,
+    ):
+        result = planning_mcp.plan_get_item("X01", include_history=True)
+    assert result["change_log"]
+    mock.assert_called_once_with(_ROOT, "X01", True)
+
+
 def test_plan_set_state_delegates_to_api():
     with (
         _patch_root(),

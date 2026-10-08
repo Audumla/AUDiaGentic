@@ -395,6 +395,7 @@ def test_get_item_returns_frontmatter_and_sections(tmp_path):
     assert item["state"] == "pending"
     assert item["title"] == "Test item"
     assert item["description"] == "Do the thing."
+    assert "change_log" not in item
 
 
 def test_get_item_not_found_raises(tmp_path):
