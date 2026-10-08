@@ -3637,6 +3637,31 @@ async def test_project_root_baseline_accepts_prompt_unmounted_decisive_completio
 
 
 @pytest.mark.asyncio
+async def test_final_submission_proof_accepts_fresh_terminal_response_when_prompt_virtualized():
+    chat = _Chat()
+    landing = snap(url="https://chatgpt.com/g/g-p-project")
+    completed = snap(
+        assistants=1,
+        assistant_id="assistant-new",
+        assistant="Complete answer",
+        complete=True,
+        url="https://chatgpt.com/g/g-p-project/c/conversation-2",
+    )
+    chat._snapshots = iter([completed])
+    turn = GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="turn-fresh-virtualized-complete", body="Review AU01"),
+        lambda _: None,
+    )
+    turn.side_effect_attempted = True
+
+    result = await turn._final_submission_proof(landing)
+
+    assert result is completed
+    assert turn._submission_proof_url == completed.url
+    assert turn._submission_proof_assistant_id == "assistant-new"
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "landing_url",
     [
