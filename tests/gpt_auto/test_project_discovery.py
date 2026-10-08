@@ -125,6 +125,34 @@ def test_session_transport_uses_admitted_project_name(monkeypatch, tmp_path: Pat
     assert captured["project_name"] == "Workspace Name"
 
 
+def test_session_transport_uses_provider_project_name_for_pinned_profile(
+    monkeypatch, tmp_path: Path
+):
+    captured: dict[str, object] = {}
+
+    class FakeChat:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+    monkeypatch.setattr(session_transport, "PersistentChat", FakeChat)
+    monkeypatch.setattr(session_transport, "get_runtime", lambda *_args: object())
+    config = valid_config()
+    config["project-name"] = "gpt-t2"
+    config["project-url"] = (
+        "https://chatgpt.com/g/g-p-6a897f6df91081919747556a86ea4d82/project"
+    )
+
+    session_transport.build_session_transport(
+        tmp_path,
+        config=config,
+        ag_session_id="session-1",
+        binding_sink=lambda _update: None,
+        project_name="AUDiaGentic",
+    )
+
+    assert captured["project_name"] == "gpt-t2"
+
+
 @pytest.mark.asyncio
 async def test_page_lost_does_not_reconcile_immediately_when_idle():
     """GP12: closing an idle chat's tab must not force an immediate

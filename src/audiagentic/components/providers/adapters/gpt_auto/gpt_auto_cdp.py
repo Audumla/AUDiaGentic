@@ -1605,23 +1605,15 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                 return readiness
             now = asyncio.get_running_loop().time()
             if now >= next_retry_probe:
-                retry_focused = await self.evaluate(
-                    page,
-                    r"""() => {
-                      const normalize = value => String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
-                      const button = Array.from(document.querySelectorAll('button')).find(
-                        candidate => normalize(candidate.innerText || candidate.textContent || candidate.getAttribute('aria-label')) === 'try again'
-                          && !candidate.disabled && candidate.getClientRects().length
-                      );
-                      if (!button) return false;
-                      button.focus();
-                      return true;
-                    }""",
-                )
-                if retry_focused:
-                    await self.activate(page)
-                    await self.press_enter(page)
-                next_retry_probe = deadline if retry_focused else now + 1.0
+                # Retry the provider-owned control in this page's CDP target.
+                # Do not foreground/activate the target: multiple recovered
+                # sessions can reach this probe concurrently, and activating
+                # each hidden page causes the browser to visibly cycle through
+                # every stale conversation. The page-local retry helper
+                # dispatches the provider control without changing browser
+                # focus or the user's active tab.
+                await self.retry_conversation_load(page)
+                next_retry_probe = deadline
             await asyncio.sleep(0.25)
         raise TimeoutError("ChatGPT composer did not become ready")
 

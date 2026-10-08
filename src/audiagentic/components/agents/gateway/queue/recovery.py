@@ -80,6 +80,51 @@ def _takeover_stale_request(
 
     if record["state"] not in {"queued", "running"}:
         return None, None
+    if record.get("cancel-requested") is True:
+        # A cancellation persisted before a gateway restart is authoritative.
+        # Do not rehydrate or re-enqueue the provider session: doing so can
+        # restart its recovery loop and keep driving browser tabs forever.
+        worker_id = f"recovery_{uuid.uuid4().hex[:16]}"
+        updated = store.takeover_nonterminal_owner(
+            project_root,
+            request_id,
+            expected_owner_epoch=record_epoch,
+            new_owner_epoch=live_owner_epoch,
+            new_worker_id=worker_id,
+            handoff_id=(record.get("recovery") or {}).get("handoff-id")
+            if isinstance(record.get("recovery"), dict)
+            else None,
+        )
+        cancelled = store.transition_owned_terminal(
+            project_root,
+            request_id,
+            "cancelled",
+            updates={
+                "error": {
+                    "code": "CON-AGW-085",
+                    "kind": "agents",
+                    "message": "request was cancelled before gateway restart recovery",
+                    "details": {"recovery-phase": "restart-cancel-requested"},
+                },
+                "recovery": {
+                    "reason": "owner-loss",
+                    "outcome": "in-place",
+                    "phase": "restart-cancel-requested",
+                },
+                "finished-at": now_iso_z(),
+            },
+            owner_epoch=str(updated.get("dispatch-owner-epoch") or live_owner_epoch),
+            worker_id=str(updated.get("worker-id") or worker_id),
+            attempt_epoch=int(updated.get("attempt-epoch") or 0),
+            service_root=service_root,
+        )
+        from audiagentic.components.agents.gateway.queue.queue import _publish_lifecycle_event
+        _publish_lifecycle_event("cancelled", cancelled)
+        logger.info(
+            "discarded restart recovery for previously cancelled request",
+            extra={"request-id": request_id},
+        )
+        return None, None
     if (
         record["state"] == "running"
         and record.get("provider-transport-kind") != "provider-session"

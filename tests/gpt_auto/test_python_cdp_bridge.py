@@ -417,11 +417,17 @@ async def test_python_bridge_exposes_browser_window_and_target_api_operations():
     )
     target_info = await bridge.call("target_info", {"pageHandle": page["pageHandle"]})
     assert target_info["targetInfo"]["type"] == "page"
-    await bridge.call("activate_target", {"pageHandle": page["pageHandle"]})
+    blocked = await bridge.call("activate_target", {"pageHandle": page["pageHandle"]})
+    assert blocked == {"activated": False, "reason": "foreground-activation-not-authorized"}
+    await bridge.call("activate_target", {"pageHandle": page["pageHandle"], "operator": True, "operator_reason": "dashboard-focus"})
+    keep_result = await bridge.call("keep_page_active", {"pageHandle": page["pageHandle"]})
     methods = [call[0] for call in fake.calls]
     assert "Browser.getVersion" in methods
     assert "Browser.setWindowBounds" in methods
     assert "Target.activateTarget" in methods
+    assert keep_result == {"ok": True, "foreground": False}
+    assert "Runtime.evaluate" in methods
+    assert "Page.bringToFront" not in methods
 
 
 @pytest.mark.asyncio
@@ -457,7 +463,7 @@ async def test_python_bridge_uses_chromium_http_activation_assist(monkeypatch):
         "audiagentic.components.providers.adapters.gpt_auto.cdp.bridge.urllib.request.urlopen",
         _urlopen,
     )
-    result = await bridge.call("activate_target", {"pageHandle": page["pageHandle"]})
+    result = await bridge.call("activate_target", {"pageHandle": page["pageHandle"], "operator": True, "operator_reason": "dashboard-focus"})
 
     assert result["activated"] is True
     assert result["transport"] == "cdp+http"
@@ -615,7 +621,7 @@ async def test_python_bridge_live_page_and_window_lifecycle():
         await bridge.call(
             "set_window_bounds", {"pageHandle": page["pageHandle"], "bounds": bounds["bounds"]}
         )
-        await bridge.call("activate_target", {"pageHandle": page["pageHandle"]})
+        await bridge.call("activate_target", {"pageHandle": page["pageHandle"], "operator": True, "operator_reason": "dashboard-focus"})
         in_window = await bridge.call(
             "create_page_in_window", {"anchorPageHandle": page["pageHandle"]}
         )

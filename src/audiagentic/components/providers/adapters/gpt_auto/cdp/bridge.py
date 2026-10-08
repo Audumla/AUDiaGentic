@@ -347,41 +347,34 @@ class PythonCdpBridge:
             async with self._tab_open_lock:
                 anchor = str(params["anchorPageHandle"])
                 anchor_target = await self._target(anchor)
+                anchor_window = await self._window_id(anchor_target)
                 initial_url = str(params.get("url") or "about:blank")
-                before = {
-                    str(i["targetId"])
-                    for i in (await self.client.command("Target.getTargets")).get("targetInfos", [])
-                }
-                await self.evaluate(
-                    anchor,
-                    "url => { window.open(url, '_blank'); return true; }",
-                    initial_url,
-                    user_gesture=True,
+                result = await self.client.command(
+                    "Target.createTarget",
+                    {
+                        "url": initial_url,
+                        "background": True,
+                        "newWindow": False,
+                    },
+                    timeout=timeout,
                 )
-                deadline = asyncio.get_running_loop().time() + (timeout or 5.0)
-                target_id = None
-                while asyncio.get_running_loop().time() < deadline:
-                    for info in (await self.client.command("Target.getTargets")).get(
-                        "targetInfos", []
-                    ):
-                        candidate = str(info.get("targetId") or "")
-                        if (
-                            candidate not in before
-                            and info.get("type") == "page"
-                            and str(info.get("openerId") or "") == anchor_target
-                        ):
-                            target_id = candidate
-                            break
-                    if target_id:
-                        break
-                    await asyncio.sleep(0.05)
-                if target_id is None:
-                    raise RuntimeError("window.open did not create a page target")
+                target_id = str(result["targetId"])
+                window_id = await self._window_id(target_id)
+                if window_id != anchor_window:
+                    # Never fall back to window.open here: Chromium may select
+                    # the new tab and make concurrent restart recovery visibly
+                    # cycle through every session. Defer recovery instead.
+                    await self.client.command(
+                        "Target.closeTarget", {"targetId": target_id}, timeout=timeout
+                    )
+                    raise RuntimeError(
+                        "background tab was not created in the managed browser window"
+                    )
                 handle = self._handle_for_target(target_id)
                 return {
                     "pageHandle": handle,
                     "targetId": target_id,
-                    "windowId": await self._window_id(target_id),
+                    "windowId": window_id,
                 }
         handle = str(params.get("pageHandle") or "")
         if method == "set_focus_emulation":
@@ -490,6 +483,11 @@ class PythonCdpBridge:
                 "Target.getTargetInfo", {"targetId": await self._target(handle)}, timeout=timeout
             )
         if method == "activate_target":
+            if (
+                params.get("operator") is not True
+                or params.get("operator_reason") != "dashboard-focus"
+            ):
+                return {"activated": False, "reason": "foreground-activation-not-authorized"}
             target_id = await self._target(handle)
             # Target.activateTarget is the protocol-level operation, but
             # Chromium's remote-debugging HTTP surface also exposes an
@@ -520,9 +518,18 @@ class PythonCdpBridge:
                 raise RuntimeError(str(result["errorText"]))
             return {"url": str(params["url"])}
         if method == "keep_page_active":
-            await self._session_command(handle, "Page.bringToFront")
-            await self.evaluate(handle, "() => { window.focus(); return true; }")
-            return {"ok": True}
+            # Provider automation runs against page-local CDP sessions. Do not
+            # foreground the target here: restart recovery can rehydrate
+            # several sessions concurrently, and Page.bringToFront/window.focus
+            # makes Chromium visibly cycle through every recovered tab. An
+            # explicit operator focus action uses activate_target instead.
+            await self._session_command(
+                handle,
+                "Runtime.evaluate",
+                {"expression": "() => document.readyState"},
+                timeout=timeout,
+            )
+            return {"ok": True, "foreground": False}
         if method == "dispatch_enter":
             for event_type in ("keyDown", "keyUp"):
                 await self._session_command(

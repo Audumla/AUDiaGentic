@@ -339,6 +339,10 @@ def get_item(
     fm, body = parse_frontmatter(path.read_text(encoding="utf-8"))
     item_store.ensure_not_review(fm, item_id, "VAL-PLN-018")
     sections = item_store.parse_item_sections(body)
+    # Change Log is durable audit history, not a normal item section.  The
+    # shared parser exposes unknown headings by slug, so remove its reserved
+    # ``change_log`` projection unless the caller explicitly opts in below.
+    sections.pop("change_log", None)
     result = {**fm, **sections, "path": str(path.relative_to(project_root))}
     if include_history:
         result["change_log"] = item_store.parse_change_log(body)

@@ -79,7 +79,7 @@ def test_recovery_releases_stale_queued_claim(tmp_path: Path) -> None:
     assert store.active_work_path(service_root, record["request-id"]).exists()
 
 
-def test_recovery_interrupts_stale_running_claim_and_acknowledges_cancel(tmp_path: Path) -> None:
+def test_recovery_terminalizes_cancelled_stale_provider_claim(tmp_path: Path) -> None:
     service_root = tmp_path / "service"
     project_root = tmp_path / "project"
     record = _record(project_root)
@@ -103,13 +103,13 @@ def test_recovery_interrupts_stale_running_claim_and_acknowledges_cancel(tmp_pat
     recovered = store.read_record(project_root, record["request-id"])
 
     assert report.interrupted == 0
-    assert report.running == ((project_root, record["request-id"]),)
-    assert recovered["state"] == "running"
-    assert recovered["recovery-required"] is True
+    assert report.running == ()
+    assert recovered["state"] == "cancelled"
+    assert recovered["recovery-required"] is False
     assert recovered["recovery"]["reason"] == "owner-loss"
     assert recovered["recovery"]["outcome"] == "in-place"
-    assert recovered["cancel-acknowledged-by"] is None
-    assert store.active_work_path(service_root, record["request-id"]).exists()
+    assert recovered["recovery"]["phase"] == "restart-cancel-requested"
+    assert not store.active_work_path(service_root, record["request-id"]).exists()
 
 
 def test_recovery_defers_stale_worker_without_replaying_side_effect(tmp_path: Path) -> None:

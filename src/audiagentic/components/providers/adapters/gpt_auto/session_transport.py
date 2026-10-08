@@ -337,9 +337,13 @@ class GptAutoSessionTransport:
         finally:
             self._active_turn = None
 
-    def defer_unresolved_reconciliation(self) -> None:
+    def defer_unresolved_reconciliation(
+        self, *, defer_page_creation: bool = False
+    ) -> None:
         """Keep the durable checkpoint for ``resume_existing`` to consume."""
-        self.chat.defer_unresolved_reconciliation()
+        self.chat.defer_unresolved_reconciliation(
+            defer_page_creation=defer_page_creation
+        )
 
     async def control(self, request: SessionControlRequest) -> SessionControlResult:
         if request.action is SessionControlAction.CANCEL_TURN:
@@ -446,6 +450,12 @@ def build_session_transport(
         raise ValueError("gpt-auto session transport requires an admitted project name")
     parsed = GptAutoConfig.from_project_dict(config)
     runtime = get_runtime(project_root, parsed)
+    # The admitted project name identifies the repository for provenance. A
+    # pinned GPT profile may target a different ChatGPT Project (for example
+    # the gpt-t2 test project), so use its explicit provider display name for
+    # CDP row selection while retaining the admitted name at the gateway
+    # boundary.
+    provider_project_name = parsed.project_name or project_name.strip()
     metadata = resume_metadata_hint or {}
     project_url_value = metadata.get("project-url") or parsed.project_url
     project_url = str(project_url_value) if project_url_value else None
@@ -496,7 +506,7 @@ def build_session_transport(
             chat_url = None
     chat = PersistentChat(
         ag_session_id=ag_session_id,
-        project_name=project_name.strip(),
+        project_name=provider_project_name,
         project_url=project_url,
         runtime=runtime,
         config=parsed,

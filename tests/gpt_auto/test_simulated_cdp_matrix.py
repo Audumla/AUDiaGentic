@@ -60,6 +60,40 @@ async def test_wait_for_composer_uses_lightweight_readiness_probe(monkeypatch) -
     assert functions == [_COMPOSER_READY_FN]
 
 
+@pytest.mark.asyncio
+async def test_wait_for_composer_retries_without_foregrounding_hidden_page(monkeypatch) -> None:
+    browser = GptAutoCdpBrowserController(_NoopBridge())
+    page = CdpPageRef("page-1", "target-1", 7, "https://chatgpt.com/projects", "")
+    readiness_calls = 0
+    retry_calls = 0
+
+    async def evaluate(_page, function, _argument=None):
+        nonlocal readiness_calls
+        if function == _COMPOSER_READY_FN:
+            readiness_calls += 1
+            if readiness_calls < 6:
+                return {"composerPresent": False, "composerEditable": False, "visible": False}
+            return {"composerPresent": True, "composerEditable": True, "visible": True}
+        raise AssertionError("retry should use the page-local retry helper")
+
+    async def retry_conversation_load(_page, *, expected_path=None):
+        nonlocal retry_calls
+        retry_calls += 1
+        return True
+
+    async def activate(_page):
+        raise AssertionError("automatic retry must not foreground the browser target")
+
+    monkeypatch.setattr(browser, "evaluate", evaluate)
+    monkeypatch.setattr(browser, "retry_conversation_load", retry_conversation_load)
+    monkeypatch.setattr(browser, "activate", activate)
+
+    ready = await browser.wait_for_composer(page, timeout=2)
+
+    assert ready["composerEditable"] is True
+    assert retry_calls == 1
+
+
 def test_snapshot_does_not_promote_static_streaming_animation_to_busy() -> None:
     """The live ChatGPT DOM keeps this class after a response completes."""
     assert 'selector !== ".streaming-animation"' in _SNAPSHOT_FN

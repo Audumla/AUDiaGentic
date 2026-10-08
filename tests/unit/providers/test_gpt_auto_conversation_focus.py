@@ -110,7 +110,7 @@ def test_focus_existing_conversation_activates_target_before_renderer_focus(monk
 
     assert result.outcome.value == "focused"
     assert [method for method, _ in calls] == ["list_pages", "activate_target", "keep_page_active"]
-    assert calls[1][1] == {"pageHandle": "h1"}
+    assert calls[1][1] == {"pageHandle": "h1", "operator": True, "operator_reason": "dashboard-focus"}
 
 
 def test_focus_existing_conversation_falls_back_to_other_window(monkeypatch, tmp_path):

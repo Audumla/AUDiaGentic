@@ -251,6 +251,9 @@ class TurnWorkflowConfig:
 @dataclass(frozen=True)
 class GptAutoConfig:
     contract_version: str
+    # ChatGPT's display name, when this profile is pinned to a provider
+    # project. This is distinct from the admitted repository/workspace name.
+    project_name: str | None
     project_url: str | None
     browser: BrowserConfig
     cdp: CdpConfig
@@ -269,7 +272,16 @@ class GptAutoConfig:
             _invalid("settings must be a mapping")
         _exact_keys(
             settings,
-            {"contract-version", "project-url", "browser", "cdp", "chat", "turn", "workflow"},
+            {
+                "contract-version",
+                "project-name",
+                "project-url",
+                "browser",
+                "cdp",
+                "chat",
+                "turn",
+                "workflow",
+            },
             "settings",
             required={"contract-version", "browser", "cdp", "chat", "turn", "workflow"},
         )
@@ -284,6 +296,11 @@ class GptAutoConfig:
         project_url = (
             _chatgpt_url(settings.get("project-url"))
             if settings.get("project-url") is not None
+            else None
+        )
+        project_name = (
+            _string(settings, "project-name")
+            if settings.get("project-name") is not None
             else None
         )
 
@@ -473,7 +490,16 @@ class GptAutoConfig:
             ),
         )
         workflow = _workflow_config(_mapping(settings, "workflow"))
-        return cls(CURRENT_CONTRACT_VERSION, project_url, browser, cdp, chat, turn, workflow)
+        return cls(
+            CURRENT_CONTRACT_VERSION,
+            project_name,
+            project_url,
+            browser,
+            cdp,
+            chat,
+            turn,
+            workflow,
+        )
 
     @classmethod
     def from_project_dict(cls, data: dict[str, Any]) -> GptAutoConfig:
