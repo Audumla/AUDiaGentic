@@ -6,6 +6,7 @@ import asyncio
 import inspect
 import logging
 import time
+from collections.abc import Callable
 from dataclasses import replace
 from enum import StrEnum
 from urllib.parse import urlsplit
@@ -138,6 +139,7 @@ class PersistentChat:
         # unresolved-turn reconciler must never navigate the same physical
         # tab concurrently or allow a stale page handle to win.
         self._page_mutation_lock = asyncio.Lock()
+        self._page_mutation_owner_probe: Callable[[], bool] | None = None
         self._physical_idle_closed = False
         self._idle_closed_turn_id: str | None = None
         self.unresolved_prompt_message_id = _metadata_text(metadata, "prompt-message-id")
@@ -335,6 +337,23 @@ class PersistentChat:
         browser = getattr(self.runtime, "gpt_browser", None)
         return browser if browser is not None else self.runtime.bridge
 
+    def set_page_mutation_owner_probe(
+        self, probe: Callable[[], bool] | None
+    ) -> None:
+        """Install a fail-closed owner fence for provider-side page mutations."""
+        self._page_mutation_owner_probe = probe
+
+    def _page_mutation_owner_is_live(self) -> bool:
+        if self.state in {ChatState.CLOSED, ChatState.FAILED}:
+            return False
+        probe = self._page_mutation_owner_probe
+        if probe is None:
+            return True
+        try:
+            return bool(probe())
+        except Exception:
+            return False
+
     async def open(self) -> None:
         """Open transactionally; release every resource on partial failure."""
         try:
@@ -349,6 +368,10 @@ class PersistentChat:
     async def _open_impl(self) -> None:
         await self.runtime.ensure_available()
         await self.runtime.register_chat(self)
+        if not self._page_mutation_owner_is_live():
+            raise ProviderBindingIntegrityError(
+                "gpt-auto page mutation refused without a live durable owner"
+            )
         browser = self._gpt_browser()
         composite_open = getattr(browser, "open_project_page", None)
         if self.provider_session_id is None and composite_open is not None:
@@ -1316,29 +1339,35 @@ class PersistentChat:
 
     async def retry_delivery_timeout(self) -> bool:
         """Activate one provider-owned delivery Retry control; never resubmit."""
-        if not self.page_handle:
-            return False
-        browser = self._gpt_browser()
-        retry = getattr(browser, "retry_delivery_timeout", None)
-        if not callable(retry):
-            return False
-        page = await browser.page_by_handle(self.page_handle)
-        return bool(await retry(page))
+        async with self._page_mutation_lock:
+            if not self.page_handle or not self._page_mutation_owner_is_live():
+                return False
+            browser = self._gpt_browser()
+            retry = getattr(browser, "retry_delivery_timeout", None)
+            if not callable(retry):
+                return False
+            page = await browser.page_by_handle(self.page_handle)
+            if not self._page_mutation_owner_is_live():
+                return False
+            return bool(await retry(page))
 
     async def retry_conversation_load(self) -> bool:
         """Click the same-conversation load Retry control; never resubmit."""
-        if not self.page_handle:
-            return False
-        browser = self._gpt_browser()
-        retry = getattr(browser, "retry_conversation_load", None)
-        if not callable(retry):
-            return False
-        page = await browser.page_by_handle(self.page_handle)
-        expected_path = urlsplit(self.chat_url or "").path.rstrip("/") or None
-        # Do not catch TypeError here. An internal provider/CDP TypeError must
-        # remain visible; retrying without expected_path would bypass the
-        # same-evaluation conversation identity fence after page reuse.
-        return bool(await retry(page, expected_path=expected_path))
+        async with self._page_mutation_lock:
+            if not self.page_handle or not self._page_mutation_owner_is_live():
+                return False
+            browser = self._gpt_browser()
+            retry = getattr(browser, "retry_conversation_load", None)
+            if not callable(retry):
+                return False
+            page = await browser.page_by_handle(self.page_handle)
+            expected_path = urlsplit(self.chat_url or "").path.rstrip("/") or None
+            # Do not catch TypeError here. An internal provider/CDP TypeError must
+            # remain visible; retrying without expected_path would bypass the
+            # same-evaluation conversation identity fence after page reuse.
+            if not self._page_mutation_owner_is_live():
+                return False
+            return bool(await retry(page, expected_path=expected_path))
 
     async def release_focus_emulation(self) -> None:
         """Release provider focus emulation after the watcher snapshots."""
@@ -1830,6 +1859,13 @@ class PersistentChat:
         than allowing navigation of an unrelated tab.
         """
         async with self._page_mutation_lock:
+            if not self._page_mutation_owner_is_live():
+                self._set_unresolved_recovery(
+                    "refresh-owner-not-live",
+                    request_id=request_id,
+                    trigger=trigger,
+                )
+                return False
             handle = self.page_handle
             bound_url = canonical_chat_url(self.chat_url)
             if not handle or not self.provider_session_id or not bound_url:
@@ -1870,6 +1906,13 @@ class PersistentChat:
                     current_url, self.provider_session_id
                 ):
                     raise ProviderBindingIntegrityError("bound page provider session changed before refresh")
+                if not self._page_mutation_owner_is_live():
+                    self._set_unresolved_recovery(
+                        "refresh-owner-not-live",
+                        request_id=request_id,
+                        trigger=trigger,
+                    )
+                    return False
                 # Refresh the observed route after validating stable identity;
                 # a saved slugless route need not be directly navigable.
                 await browser.navigate(page, canonical_chat_url(current_url) or bound_url)
