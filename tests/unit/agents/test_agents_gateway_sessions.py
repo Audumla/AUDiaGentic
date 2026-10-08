@@ -3050,3 +3050,18 @@ def test_shutdown_cancels_busy_owner_before_transport_teardown(rig):
     stored = session_store.read_session_record(project_root, record["session-id"])
     assert stored["state"] == "closed"
     assert stored["close-reason"] == "shutdown"
+
+
+def test_handoff_shutdown_revokes_page_owner_without_closing_session(rig):
+    runtime, _clock, transports, project_root = rig
+    record = _open(runtime, project_root)
+    transport = transports[0]
+    transport.set_request_owner("req-old-generation")
+
+    runtime.shutdown(handoff=True)
+
+    assert transport.request_owner is None
+    assert transport.closed is False
+    stored = session_store.read_session_record(project_root, record["session-id"])
+    assert stored["state"] == "active"
+    assert stored.get("close-reason") is None

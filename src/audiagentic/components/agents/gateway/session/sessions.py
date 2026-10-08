@@ -1100,7 +1100,17 @@ class SessionRuntime:
         try:
 
             async def _shutdown_loop() -> None:
-                if not handoff:
+                if handoff:
+                    # Managed restart preserves durable sessions/provider work,
+                    # but the old process generation must lose all authority to
+                    # mutate browser pages before its event loop is stopped.
+                    for handle in list(self._handles.values()):
+                        set_request_owner = getattr(
+                            handle.transport, "set_request_owner", None
+                        )
+                        if callable(set_request_owner):
+                            set_request_owner(None)
+                else:
                     await self._close_all(reason="shutdown")
                 if self._reaper_task is not None and not self._reaper_task.done():
                     self._reaper_task.cancel()
