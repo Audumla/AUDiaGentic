@@ -78,11 +78,13 @@ class GptAutoSessionTransport:
     def _has_live_durable_owner(self) -> bool:
         if self._closed:
             return False
-        owner_id = self._request_owner_id
-        if owner_id is None and not self._open_in_progress:
-            return False
         probe = self._durable_owner_probe
         if probe is None:
+            # Standalone adapter tests/embedders have no gateway durable store.
+            # Gateway-composed transports install this probe before open().
+            return True
+        owner_id = self._request_owner_id
+        if owner_id is None and not self._open_in_progress:
             return False
         try:
             return bool(probe(owner_id))
