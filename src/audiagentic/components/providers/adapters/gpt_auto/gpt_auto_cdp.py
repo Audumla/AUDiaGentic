@@ -2145,6 +2145,19 @@ class GptAutoCdpBrowserController(CdpBrowserController):
         else:
             page = await self.new_window()
         try:
+            # New project targets are intentionally created in the background so
+            # recovery cannot visibly cycle through every open tab. They still
+            # need one explicit activation before navigation/UI events; without
+            # it Chromium can acknowledge the CDP calls while the new target's
+            # project sidebar never hydrates, producing a false readiness error.
+            await self.bridge.call(
+                "activate_target",
+                {
+                    "pageHandle": page.handle,
+                    "operator": True,
+                    "operator_reason": "dashboard-focus",
+                },
+            )
             startup_deadline = asyncio.get_running_loop().time() + max(0.1, navigation_timeout)
             remaining_startup = lambda: max(0.1, startup_deadline - asyncio.get_running_loop().time())
             async with asyncio.timeout(remaining_startup()):
