@@ -260,6 +260,38 @@ def test_initial_zero_activity_gets_non_terminal_reconciliation_diagnostic(tmp_p
     assert diagnosed["diagnostic-evidence"][-1]["kind"] == "initial-activity-timeout"
 
 
+def test_initial_zero_activity_before_grace_does_not_create_diagnostic(tmp_path) -> None:
+    record = store.build_record(
+        execution_profile_id="gpt-auto",
+        prompt_body="inspect",
+        watchdog_policy={
+            "policy-id": "test",
+            "policy-digest": "test",
+            "activity-lease-seconds": 300.0,
+            "absolute-safety-ceiling-seconds": 0.0,
+            "diagnostic-grace-seconds": 30.0,
+            "initial-activity-grace-seconds": 300.0,
+            "available": True,
+        },
+    )
+    record["provider-transport-kind"] = "provider-session"
+    store.write_record(tmp_path, record)
+    claimed = store.claim_dispatch(tmp_path, record["request-id"], owner_epoch="service", expected_revision=0)
+    running = store.start_owned_attempt(
+        tmp_path,
+        record["request-id"],
+        owner_epoch="service",
+        worker_id="worker",
+        expected_revision=claimed["revision"],
+    )
+
+    diagnosed = diagnose_activity_lease(tmp_path, running)
+
+    assert diagnosed["state"] == "running"
+    assert diagnosed["activity-sequence"] == 0
+    assert diagnosed["watchdog-state"] != "intervention"
+    assert diagnosed.get("diagnostic-evidence", []) == []
+
 def test_deferred_ambiguous_recovery_creates_reconcile_diagnostics(tmp_path) -> None:
     record = store.build_record(execution_profile_id="gpt-auto", prompt_body="inspect")
     store.write_record(tmp_path, record)
