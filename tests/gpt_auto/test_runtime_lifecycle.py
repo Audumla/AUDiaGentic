@@ -2830,3 +2830,40 @@ async def test_load_failed_replacement_refuses_revoked_owner_before_page_creatio
     assert await chat._replace_load_failed_page(snapshot) is False
     assert created == []
     assert chat._unresolved_recovery_reason == "conversation-load-owner-not-live"
+
+
+@pytest.mark.asyncio
+async def test_reconcile_refuses_recovery_page_creation_without_live_owner() -> None:
+    config = GptAutoConfig.from_dict(valid_config())
+    created: list[bool] = []
+
+    async def find_conversation_page(*_args, **_kwargs):
+        return None
+
+    async def create_chat_page():
+        created.append(True)
+        return "recovery-page"
+
+    runtime = SimpleNamespace(
+        bridge=SimpleNamespace(),
+        find_conversation_page=find_conversation_page,
+        create_chat_page=create_chat_page,
+    )
+    chat = PersistentChat(
+        ag_session_id="session-reconcile-owner-fence",
+        project_name="project",
+        project_url="https://chatgpt.com/g/g-p-project/project",
+        runtime=runtime,
+        config=config,
+        binding_sink=lambda _update: None,
+        provider_session_id="provider-session",
+        chat_url="https://chatgpt.com/g/g-p-project/c/provider-session",
+    )
+    chat.state = ChatState.RECOVERING
+    chat.set_page_mutation_owner_probe(lambda: False)
+
+    await chat.reconcile([])
+
+    assert created == []
+    assert chat.page_handle is None
+    assert chat._unresolved_recovery_reason == "reconcile-owner-not-live"
