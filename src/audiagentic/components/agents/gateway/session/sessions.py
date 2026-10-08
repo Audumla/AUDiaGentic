@@ -1100,7 +1100,17 @@ class SessionRuntime:
         try:
 
             async def _shutdown_loop() -> None:
-                if not handoff:
+                if handoff:
+                    # Managed restart preserves durable sessions/provider work,
+                    # but the old process generation must lose all authority to
+                    # mutate browser pages before its event loop is stopped.
+                    for handle in list(self._handles.values()):
+                        set_request_owner = getattr(
+                            handle.transport, "set_request_owner", None
+                        )
+                        if callable(set_request_owner):
+                            set_request_owner(None)
+                else:
                     await self._close_all(reason="shutdown")
                 if self._reaper_task is not None and not self._reaper_task.done():
                     self._reaper_task.cancel()
@@ -1633,6 +1643,35 @@ class SessionRuntime:
                 },
             )
         transport = prepared.transport
+        set_owner_probe = getattr(transport, "set_durable_owner_probe", None)
+        if callable(set_owner_probe):
+            def _durable_owner_probe(owner_request_id: str | None) -> bool:
+                try:
+                    session_record = session_store.read_session_record(project_root, session_id)
+                except AudiaGenticError as exc:
+                    # Direct SessionRuntime callers create their fallback
+                    # durable session record only after provider open succeeds.
+                    # Permit that narrow bootstrap only; after open the
+                    # transport refuses owner_id=None, so recovery/navigation
+                    # still requires durable ownership.
+                    return bool(
+                        owner_request_id is None and exc.code == "RES-AGW-002"
+                    )
+                if session_record["state"] in session_store.SESSION_TERMINAL_STATES:
+                    return False
+                if owner_request_id is None:
+                    return True
+                from audiagentic.components.agents.gateway import store as gateway_store
+                try:
+                    request_record = gateway_store.read_record(project_root, owner_request_id)
+                except AudiaGenticError:
+                    return False
+                return bool(
+                    request_record.get("state") not in gateway_store.TERMINAL_STATES
+                    and request_record.get("session-id") == session_id
+                )
+
+            set_owner_probe(_durable_owner_probe)
         transport_started = time.monotonic()
         logger.info(
             "gateway open phase transport-open begin transport=%s",
@@ -2801,10 +2840,13 @@ class SessionRuntime:
                 body=prompt,
                 cancel_token=_local_cancel_event if request_id is not None else None,
             )
+            set_request_owner = getattr(handle.transport, "set_request_owner", None)
             try:
                 set_metadata_sink = getattr(handle.transport, "set_request_metadata_sink", None)
                 if callable(set_metadata_sink):
                     set_metadata_sink(request_provider_metadata_sink)
+                if callable(set_request_owner):
+                    set_request_owner(request_id)
                 # Call the neutral seam: AgentSessionTransport.prompt().
                 # A configured timeout is retained as a provider/profile
                 # observation setting, but never converted to a local kill.
@@ -2862,6 +2904,8 @@ class SessionRuntime:
                     await self._fail_session(handle, reason="failed")
                 raise
             finally:
+                if callable(set_request_owner):
+                    set_request_owner(None)
                 if callable(set_metadata_sink):
                     set_metadata_sink(None)
                 handle.last_activity_clock = self._clock()
@@ -3037,7 +3081,24 @@ class SessionRuntime:
                 )
         handle = self._handles.pop(session_id, None)
         if handle is not None:
+            owning_task = handle.owning_turn_task
+            if reason == "shutdown":
+                set_request_owner = getattr(handle.transport, "set_request_owner", None)
+                if callable(set_request_owner):
+                    set_request_owner(None)
+                if (
+                    owning_task is not None
+                    and owning_task is not asyncio.current_task()
+                    and not owning_task.done()
+                ):
+                    owning_task.cancel()
             await handle.transport.close()
+            if (
+                reason == "shutdown"
+                and owning_task is not None
+                and owning_task is not asyncio.current_task()
+            ):
+                await asyncio.gather(owning_task, return_exceptions=True)
             self._cleanup_handle_runtime(handle)
         try:
             record = session_store.read_session_record(project_root, session_id)
@@ -3102,8 +3163,6 @@ class SessionRuntime:
         """
         self._handles.pop(session_id, None)
         owning_task = handle.owning_turn_task
-        if owning_task is not None and not owning_task.done():
-            owning_task.cancel()
 
         try:
             record = session_store.read_session_record(project_root, session_id)
@@ -3142,6 +3201,18 @@ class SessionRuntime:
                 },
                 correlation_id=handle.correlation_id,
             )
+
+        set_request_owner = getattr(handle.transport, "set_request_owner", None)
+        if callable(set_request_owner):
+            set_request_owner(None)
+        if (
+            owning_task is not None
+            and owning_task is not asyncio.current_task()
+            and not owning_task.done()
+        ):
+            owning_task.cancel()
+        if owning_task is not None and owning_task is not asyncio.current_task():
+            await asyncio.gather(owning_task, return_exceptions=True)
 
         try:
             await asyncio.wait_for(handle.transport.close(), timeout=5.0)
