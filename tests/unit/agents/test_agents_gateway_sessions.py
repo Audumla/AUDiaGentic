@@ -75,6 +75,14 @@ class FakeAgentSessionTransport:
         self.reconcile_calls = 0
         self.defer_unresolved_calls = 0
         self._turn_failure_disposition = SessionFailureDisposition.TERMINATE
+        self.durable_owner_probe: Any = None
+        self.request_owner: str | None = None
+
+    def set_durable_owner_probe(self, probe) -> None:
+        self.durable_owner_probe = probe
+
+    def set_request_owner(self, request_id: str | None) -> None:
+        self.request_owner = request_id
 
     def defer_unresolved_reconciliation(self) -> None:
         self.defer_unresolved_calls += 1
@@ -2991,3 +2999,54 @@ def test_as19_request_id_binding_no_spurious_reject(rig):
     assert dec.coarse_state == "active"
 
     runtime.close_session(tmp_path, session_id)
+
+
+def test_session_runtime_durable_owner_probe_is_project_and_terminal_scoped(rig, tmp_path):
+    runtime, _clock, transports, project_root = rig
+    other_root = tmp_path / "other-project"
+    first = _open(runtime, project_root)
+    second = _open(runtime, other_root)
+    first_transport, second_transport = transports[-2], transports[-1]
+
+    assert first_transport.durable_owner_probe(None) is True
+    assert second_transport.durable_owner_probe(None) is True
+
+    runtime.close_session(project_root, first["session-id"])
+    assert first_transport.durable_owner_probe(None) is False
+    assert second_transport.durable_owner_probe(None) is True
+
+    runtime.close_session(other_root, second["session-id"])
+
+
+def test_shutdown_cancels_busy_owner_before_transport_teardown(rig):
+    runtime, _clock, transports, project_root = rig
+    record = _open(runtime, project_root)
+    transports[0].block_event = threading.Event()
+    outcome: list[BaseException] = []
+
+    def run_turn() -> None:
+        try:
+            runtime.prompt_in_session(
+                project_root,
+                record["session-id"],
+                "blocked shutdown",
+                request_id="req-shutdown-owner",
+            )
+        except BaseException as exc:
+            outcome.append(exc)
+
+    worker = threading.Thread(target=run_turn)
+    worker.start()
+    assert _wait_for(
+        lambda: runtime.session_runtime_status(record["session-id"]).get("current-request-id")
+        == "req-shutdown-owner"
+    )
+
+    runtime.shutdown()
+    worker.join(timeout=2)
+    assert not worker.is_alive()
+    assert transports[0].closed is True
+    assert transports[0].request_owner is None
+    stored = session_store.read_session_record(project_root, record["session-id"])
+    assert stored["state"] == "closed"
+    assert stored["close-reason"] == "shutdown"
