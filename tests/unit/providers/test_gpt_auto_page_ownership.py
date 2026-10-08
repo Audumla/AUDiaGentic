@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
+
+from audiagentic.components.providers.adapters.gpt_auto.chat import ChatState, PersistentChat
 from audiagentic.components.providers.adapters.gpt_auto.runtime import GptAutoProviderRuntime
 
 
@@ -64,3 +67,58 @@ def test_unregister_chat_releases_owned_page() -> None:
 
     assert "session-a" not in runtime._chats
     assert runtime._page_owners == {}
+
+
+@pytest.mark.asyncio
+async def test_refresh_navigation_requires_live_durable_owner() -> None:
+    chat = PersistentChat(
+        ag_session_id="session-owner-fence",
+        project_name="project",
+        project_url="https://chatgpt.com/g/g-p-project/project",
+        runtime=SimpleNamespace(),
+        config=SimpleNamespace(),
+        binding_sink=lambda _update: None,
+        provider_session_id="provider-session",
+        chat_url="https://chatgpt.com/g/g-p-project/c/provider-session",
+    )
+    chat.page_handle = "page-1"
+    chat.state = ChatState.BUSY
+    chat.set_page_mutation_owner_probe(lambda: False)
+
+    assert await chat.refresh_bound_conversation(request_id="req-terminal") is False
+    assert chat._unresolved_recovery_reason == "refresh-owner-not-live"
+
+
+@pytest.mark.asyncio
+async def test_runtime_reconcile_cannot_create_page_without_live_durable_owner() -> None:
+    created: list[bool] = []
+
+    async def find_conversation_page(*_args, **_kwargs):
+        return None
+
+    async def create_chat_page():
+        created.append(True)
+        return "recovery-page"
+
+    runtime = SimpleNamespace(
+        find_conversation_page=find_conversation_page,
+        create_chat_page=create_chat_page,
+    )
+    chat = PersistentChat(
+        ag_session_id="session-reconcile-owner-fence",
+        project_name="project",
+        project_url="https://chatgpt.com/g/g-p-project/project",
+        runtime=runtime,
+        config=SimpleNamespace(),
+        binding_sink=lambda _update: None,
+        provider_session_id="provider-session",
+        chat_url="https://chatgpt.com/g/g-p-project/c/provider-session",
+    )
+    chat.state = ChatState.RECOVERING
+    chat.set_page_mutation_owner_probe(lambda: False)
+
+    await chat.reconcile([])
+
+    assert created == []
+    assert chat.page_handle is None
+    assert chat._unresolved_recovery_reason == "reconcile-owner-not-live"
