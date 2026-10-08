@@ -1061,6 +1061,42 @@ class GptAutoTurn:
                 self._prompt_message_id = self._prompt_id_for_snapshot(final_snapshot)
                 return final_snapshot
 
+        # A fresh project conversation can virtualize both the user message and
+        # its prompt node after the assistant answer is complete. If the submit
+        # operation attempted a side effect and this page has no baseline
+        # assistant, a newly-created durable assistant with terminal controls is
+        # sufficient to prove this request reached a terminal provider turn.
+        # Keep this fenced to a new project conversation; retained conversations
+        # still require the explicit request anchor to prevent adopting another
+        # turn.
+        if final_snapshot is not None:
+            baseline_project_id = parse_project_id(baseline.url)
+            fresh_project_terminal = (
+                self.side_effect_attempted
+                and not parse_provider_session_id(baseline.url)
+                and baseline.user_count == 0
+                and baseline.assistant_count == 0
+                and parse_provider_session_id(final_snapshot.url)
+                and parse_project_id(final_snapshot.url) == baseline_project_id
+                and not final_snapshot.generating
+                and final_snapshot.latest_assistant_id
+                and final_snapshot.latest_assistant_id not in baseline.assistant_message_ids
+                and _is_durable_assistant_message_id(final_snapshot.latest_assistant_id)
+                and final_snapshot.latest_assistant_text
+                and final_snapshot.terminal_witness_assistant_id
+                == final_snapshot.latest_assistant_id
+                and (
+                    not self._submission_proof_url
+                    or canonical_chat_url(final_snapshot.url) == self._submission_proof_url
+                )
+            )
+            if fresh_project_terminal:
+                self._prompt_message_id = (
+                    f"virtualized-prompt-for-{final_snapshot.latest_assistant_id}"
+                )
+                self._submission_proof_url = canonical_chat_url(final_snapshot.url)
+                self._submission_proof_assistant_id = final_snapshot.latest_assistant_id
+                return final_snapshot
         # A retained duplicate tab may have the accepted prompt mounted even
         # when the originally-bound page was stale or virtualised.  This is a
         # read-only correlation lookup; it never resubmits the prompt.
