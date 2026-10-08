@@ -86,7 +86,7 @@ def plan_list_items(
 @mcp.tool()
 @tool_boundary
 def plan_get_item(item_id: str, include_history: bool = False) -> dict[str, Any]:
-    """Read one plan item, optionally including change history."""
+    """Read one plan item; omit change history unless explicitly requested."""
     return planning_api.get_item(project_root_from_env(), item_id, include_history)
 
 

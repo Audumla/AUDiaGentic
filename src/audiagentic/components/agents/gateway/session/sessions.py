@@ -1396,7 +1396,7 @@ class SessionRuntime:
             if resume_existing:
                 defer_recovery = getattr(transport, "defer_unresolved_reconciliation", None)
                 if callable(defer_recovery):
-                    defer_recovery()
+                    defer_recovery(defer_page_creation=True)
             open_result = await transport.open()
         except asyncio.CancelledError:
             if transport is not None:

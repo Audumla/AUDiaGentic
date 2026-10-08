@@ -255,7 +255,16 @@ def test_complete_execution_from_provider_rejects_foreign_unresolved_turn(
     )
     monkeypatch.setattr(api.store, "read_record", lambda *_: record)
     monkeypatch.setattr(sessions_store, "read_session_record", lambda *_: {"provider": {"metadata": {}}})
-    monkeypatch.setattr(sessions_store, "session_provider_metadata", lambda _: {})
+    monkeypatch.setattr(
+        sessions_store,
+        "session_provider_metadata",
+        lambda _: {
+            "unresolved-turn-pending": True,
+            "unresolved-turn-id": "req_other",
+            "prompt-message-id": "foreign-user",
+            "submission-proven": True,
+        },
+    )
     monkeypatch.setattr(sessions_store, "session_provider_id", lambda _: "gpt-auto")
     monkeypatch.setattr(
         session_runtime_module,

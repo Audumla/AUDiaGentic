@@ -145,8 +145,8 @@ async def focus_existing_conversation(
         try:
             handle = await runtime.create_chat_page()
             await runtime.bridge.call("navigate", {"pageHandle": handle, "url": chat_url})
-            await runtime.bridge.call("activate_target", {"pageHandle": handle})
-            await runtime.bridge.call("keep_page_active", {"pageHandle": handle})
+            await runtime.bridge.call("activate_target", {"pageHandle": handle, "operator": True, "operator_reason": "dashboard-focus"})
+            await runtime.bridge.call("keep_page_active", {"pageHandle": handle, "operator": True})
             return ConversationFocusResult(
                 ConversationFocusOutcome.FOCUSED,
                 "conversation-tab-opened",
@@ -154,7 +154,7 @@ async def focus_existing_conversation(
         except Exception:
             if handle:
                 try:
-                    await runtime.bridge.call("close_page", {"pageHandle": handle})
+                    await runtime.bridge.call("close_page", {"pageHandle": handle, "operator": True})
                 except Exception:
                     pass
             return ConversationFocusResult(
@@ -169,8 +169,8 @@ async def focus_existing_conversation(
     # Page.bringToFront/window.focus keeps the renderer visible but does not
     # reliably select the tab in a multi-target browser. Explicitly activate
     # the DevTools target first, then retain the renderer-level focus call.
-    await runtime.bridge.call("activate_target", {"pageHandle": handle})
-    await runtime.bridge.call("keep_page_active", {"pageHandle": handle})
+    await runtime.bridge.call("activate_target", {"pageHandle": handle, "operator": True, "operator_reason": "dashboard-focus"})
+    await runtime.bridge.call("keep_page_active", {"pageHandle": handle, "operator": True})
     return ConversationFocusResult(ConversationFocusOutcome.FOCUSED)
 
 
@@ -233,8 +233,8 @@ async def capture_latest_response(
     handle = str(selected.get("pageHandle") or "")
     if not handle:
         return {"outcome": "unavailable", "reason": "target-handle-missing"}
-    await runtime.bridge.call("activate_target", {"pageHandle": handle})
-    await runtime.bridge.call("keep_page_active", {"pageHandle": handle})
+    await runtime.bridge.call("activate_target", {"pageHandle": handle, "operator": True, "operator_reason": "dashboard-focus"})
+    await runtime.bridge.call("keep_page_active", {"pageHandle": handle, "operator": True})
     page = await runtime.gpt_browser.page_by_handle(handle)
     await runtime.gpt_browser.materialize_latest_assistant_turn(page)
     snapshot = ChatSnapshot.from_bridge(

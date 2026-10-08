@@ -200,7 +200,7 @@ class CdpBrowserController:
         return {"x": float(x), "y": float(y)}
 
     async def activate(self, page: CdpPageRef) -> None:
-        await self.bridge.call("activate_target", {"pageHandle": self._handle(page)})
+        await self.bridge.call("activate_target", {"pageHandle": self._handle(page), "operator": True, "operator_reason": "dashboard-focus"})
 
     async def press_enter(self, page: CdpPageRef) -> None:
         await self.bridge.call("press_enter", {"pageHandle": self._handle(page)})

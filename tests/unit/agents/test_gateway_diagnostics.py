@@ -291,6 +291,91 @@ def test_deferred_ambiguous_recovery_creates_reconcile_diagnostics(tmp_path) -> 
     ]
 
 
+def test_reconcile_synthesizes_diagnostics_from_durable_recovery_evidence(
+    tmp_path, monkeypatch
+) -> None:
+    from audiagentic.components.agents.gateway import api as gateway_api
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+    record = {
+        "request-id": "req_reconcile_evidence",
+        "state": "running",
+        "revision": 4,
+        "recovery": {
+            "phase": "conversation-load-reconcile",
+            "side-effect-state": "may-have-started",
+        },
+        "diagnostic-evidence": [
+            {
+                "request-id": "req_reconcile_evidence",
+                "certainty": "strong",
+                "side-effect-state": "may-have-started",
+            }
+        ],
+    }
+    monkeypatch.setattr(store, "read_record", lambda *_: record)
+    monkeypatch.setattr(
+        store,
+        "update_diagnostics",
+        lambda _root, _request_id, diagnostics, **_kwargs: {
+            **record,
+            "revision": 5,
+            "diagnostics": diagnostics,
+        },
+    )
+
+    def unresolved(*_args, **_kwargs):
+        raise AudiaGenticError(
+            code="CON-AGW-154",
+            kind="agents",
+            message="provider response could not be captured",
+            details={},
+        )
+
+    monkeypatch.setattr(gateway_api, "complete_execution_from_provider", unresolved)
+    result = recover_execution_request(
+        tmp_path, record["request-id"], action="reconcile"
+    )
+
+    assert result["disposition"] == "accepted"
+    assert result["reconciliation"] == {
+        "outcome": "unresolved",
+        "reason": "CON-AGW-154",
+    }
+    assert result["diagnostics"]["side-effect-state"] == "may-have-started"
+
+
+def test_clear_not_submitted_rejects_synthesized_recovery_evidence(
+    tmp_path, monkeypatch
+) -> None:
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+    record = {
+        "request-id": "req_clear_evidence",
+        "state": "running",
+        "revision": 1,
+        "recovery": {
+            "phase": "presubmit-reconcile",
+            "side-effect-state": "may-have-started",
+        },
+        "diagnostic-evidence": [
+            {
+                "request-id": "req_clear_evidence",
+                "certainty": "strong",
+                "side-effect-state": "may-have-started",
+            }
+        ],
+    }
+    monkeypatch.setattr(store, "read_record", lambda *_: record)
+
+    try:
+        recover_execution_request(tmp_path, record["request-id"], action="clear-not-submitted")
+    except AudiaGenticError as exc:
+        assert exc.code == "CON-AGW-145"
+    else:  # pragma: no cover
+        raise AssertionError("clear-not-submitted accepted synthesized evidence")
+
+
 def test_cancellation_provenance_is_durable(tmp_path) -> None:
     record = store.build_record(execution_profile_id="default", prompt_body="cancel")
     store.write_record(tmp_path, record)

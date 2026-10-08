@@ -593,7 +593,7 @@ class GptAutoProviderRuntime:
         actual_target = str(page.get("targetId") or "")
         if expected_target and actual_target and expected_target != actual_target:
             return "active-session-page-recycled"
-        await self.bridge.call("activate_target", {"pageHandle": handle})
+        await self.bridge.call("activate_target", {"pageHandle": handle, "operator": True, "operator_reason": "dashboard-focus"})
         await self.bridge.call("keep_page_active", {"pageHandle": handle})
         return "focused"
 
