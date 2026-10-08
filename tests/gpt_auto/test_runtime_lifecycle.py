@@ -2783,3 +2783,50 @@ async def test_refresh_bound_conversation_refuses_revoked_owner_before_navigatio
     assert await chat.refresh_bound_conversation(request_id="req-terminal") is False
     assert navigated == []
     assert chat._unresolved_recovery_reason == "refresh-owner-not-live"
+
+
+@pytest.mark.asyncio
+async def test_load_failed_replacement_refuses_revoked_owner_before_page_creation() -> None:
+    config = GptAutoConfig.from_dict(valid_config())
+    runtime = SimpleNamespace(bridge=SimpleNamespace())
+    chat = PersistentChat(
+        ag_session_id="session-replacement-owner-fence",
+        project_name="project",
+        project_url="https://chatgpt.com/g/g-p-project/project",
+        runtime=runtime,
+        config=config,
+        binding_sink=lambda _update: None,
+        provider_session_id="provider-session",
+        chat_url="https://chatgpt.com/g/g-p-project/c/provider-session",
+    )
+    chat.page_handle = "page-1"
+    chat.state = ChatState.RECOVERING
+    chat.set_page_mutation_owner_probe(lambda: False)
+    chat._conversation_load_recovery_enabled = lambda: True  # type: ignore[method-assign]
+    chat._conversation_load_recovery_allowed = lambda: True  # type: ignore[method-assign]
+    chat._load_failure_requires_retained_observation = lambda: False  # type: ignore[method-assign]
+    chat._prefer_active_conversation_page = lambda: asyncio.sleep(0)  # type: ignore[method-assign]
+
+    created: list[bool] = []
+
+    async def create_page() -> str:
+        created.append(True)
+        return "replacement-page"
+
+    chat._create_recovery_page = create_page  # type: ignore[method-assign]
+    snapshot = ChatSnapshot(
+        url="https://chatgpt.com/g/g-p-project/c/provider-session",
+        composer_present=False,
+        composer_editable=False,
+        user_count=1,
+        assistant_count=0,
+        latest_user_text="prompt",
+        latest_assistant_id=None,
+        latest_assistant_text=None,
+        dom_signals=frozenset({"conversation-load-failed"}),
+        error_present=True,
+    )
+
+    assert await chat._replace_load_failed_page(snapshot) is False
+    assert created == []
+    assert chat._unresolved_recovery_reason == "conversation-load-owner-not-live"

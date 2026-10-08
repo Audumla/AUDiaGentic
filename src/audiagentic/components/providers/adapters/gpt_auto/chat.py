@@ -1178,6 +1178,12 @@ class PersistentChat:
             return True
         if not self._conversation_load_recovery_allowed():
             return False
+        if not self._page_mutation_owner_is_live():
+            self._set_unresolved_recovery(
+                "conversation-load-owner-not-live",
+                attempts=retry_attempts,
+            )
+            return False
         old_handle = self.page_handle
         if old_handle:
             self.page_handle = None
@@ -1201,6 +1207,10 @@ class PersistentChat:
                 record = await page_record(replacement_handle)
                 if record is not None:
                     self._bind_page(record)
+            if not self._page_mutation_owner_is_live():
+                raise ProviderBindingIntegrityError(
+                    "gpt-auto replacement navigation refused without a live durable owner"
+                )
             await self.runtime.bridge.call(
                 "navigate",
                 {
