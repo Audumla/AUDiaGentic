@@ -2158,10 +2158,15 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                     "operator_reason": "dashboard-focus",
                 },
             )
+            # The home route and project selection are separate provider
+            # operations. Do not let a slow home-shell/sidebar hydration
+            # consume the entire budget reserved for the explicit /projects
+            # fallback; that made a valid project row appear as a readiness
+            # failure after the fallback had only a few milliseconds to run.
+            async with asyncio.timeout(max(0.1, navigation_timeout)):
+                page = await self.navigate(page, _CHATGPT_HOME_URL)
             startup_deadline = asyncio.get_running_loop().time() + max(0.1, navigation_timeout)
             remaining_startup = lambda: max(0.1, startup_deadline - asyncio.get_running_loop().time())
-            async with asyncio.timeout(remaining_startup()):
-                page = await self.navigate(page, _CHATGPT_HOME_URL)
             known_targets = {candidate.target_id for candidate in await self.pages()}
             fallback_bounds = "not-attempted"
             sidebar_selection = await self._select_project_from_sidebar(
@@ -2181,16 +2186,6 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                 isinstance(selection, dict) and selection.get("clicked") is True
             )
             if not selection_clicked:
-                # New-window CDP targets can inherit a compact browser window.
-                # ChatGPT's full Projects page places its trusted New Chat
-                # control at the far right, so ensure the fallback has a usable
-                # viewport before asking the DOM for pointer coordinates.
-                try:
-                    await self.set_bounds(page, CdpWindowBounds(window_state="maximized"))
-                    fallback_bounds = "succeeded"
-                except Exception as exc:  # noqa: BLE001 - selection remains fail-closed
-                    fallback_bounds = f"failed:{type(exc).__name__}"
-                    logger.debug("gpt-auto could not maximize project fallback window", exc_info=True)
                 projects_page_result = await self._open_projects_tab(
                     page, timeout=remaining_startup()
                 )
