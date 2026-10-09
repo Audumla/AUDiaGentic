@@ -2302,6 +2302,24 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                 if selected_url:
                     break
                 await asyncio.sleep(0.1)
+            if not selected_url and expected_project_id and selected_project_id in {None, expected_project_id}:
+                # The Projects page can acknowledge the exact row action while
+                # its far-right control ignores native CDP coordinates. The
+                # row identity is already proven here; recover through the
+                # configured landing URL, then validate the resulting route
+                # before allowing prompt submission.
+                try:
+                    fallback_page = await self.navigate(source_page, project_url)
+                    fallback_project_id = parse_project_id(fallback_page.url)
+                    if (
+                        _is_project_scoped_route(fallback_page.url)
+                        and fallback_project_id == expected_project_id
+                    ):
+                        page = fallback_page
+                        selected_project_id = fallback_project_id
+                        selected_url = fallback_page.url
+                except Exception:  # noqa: BLE001 - retain fail-closed readiness
+                    logger.debug("gpt-auto project landing recovery failed", exc_info=True)
             if not selected_url:
                 if observed_wrong_project:
                     raise RuntimeError(
