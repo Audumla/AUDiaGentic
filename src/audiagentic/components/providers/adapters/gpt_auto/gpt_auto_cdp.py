@@ -2000,7 +2000,7 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                       return {action: 'selected', projectId: actualProjectId, ...clickPoint};
                     }
                     const hoverPoint = safeRowPoint(row);
-                    return hoverPoint ? {action: 'hover', ...hoverPoint} : {action: 'waiting'};
+                    return hoverPoint ? {action: 'hover', projectId: actualProjectId, ...hoverPoint} : {action: 'waiting'};
                   }
                   if (row.getAttribute('aria-expanded') !== 'true') {
                     const clickPoint = safeRowPoint(row);
@@ -2015,7 +2015,7 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                 last_observation = dict(action)
             if action_name == "hover":
                 if hovered_once:
-                    return {"action": "occluded", "last": last_observation}
+                    return {"action": "occluded", "projectId": _canonical_project_id(last_observation.get("projectId")), "last": last_observation}
                 hovered_once = True
                 await self.bridge.call("keep_page_active", {"pageHandle": page.handle})
                 await self.bridge.call(
@@ -2179,6 +2179,7 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                 # independent full timeouts.
                 timeout=remaining_startup(),
             )
+            selected_project_id = None
             selection = sidebar_selection
             selected_project_id = _selection_project_id(selection, expected_project_id)
             projects_tab_opened = False
@@ -2218,7 +2219,7 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                     expected_project_id=expected_project_id,
                     timeout=remaining_startup(),
                 )
-                selected_project_id = _selection_project_id(selection, expected_project_id)
+                selected_project_id = _selection_project_id(selection, expected_project_id) or selected_project_id
             selection_clicked = selection is True or (
                 isinstance(selection, dict) and selection.get("clicked") is True
             )
@@ -2302,18 +2303,27 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                 if selected_url:
                     break
                 await asyncio.sleep(0.1)
-            if not selected_url and expected_project_id and selected_project_id in {None, expected_project_id}:
+            if not selected_url and selected_project_id and (
+                expected_project_id is None or selected_project_id == expected_project_id
+            ):
                 # The Projects page can acknowledge the exact row action while
                 # its far-right control ignores native CDP coordinates. The
-                # row identity is already proven here; recover through the
-                # configured landing URL, then validate the resulting route
-                # before allowing prompt submission.
+                # exact sidebar row already supplied the project identity; use
+                # the configured URL when present, otherwise construct the
+                # project landing route from that trusted provider id.
+                fallback_url = project_url or (
+                    f"https://chatgpt.com/g/{selected_project_id}/project"
+                )
                 try:
-                    fallback_page = await self.navigate(source_page, project_url)
+                    fallback_page = await self.navigate(source_page, fallback_url)
                     fallback_project_id = parse_project_id(fallback_page.url)
                     if (
                         _is_project_scoped_route(fallback_page.url)
-                        and fallback_project_id == expected_project_id
+                        and fallback_project_id == selected_project_id
+                        and (
+                            expected_project_id is None
+                            or fallback_project_id == expected_project_id
+                        )
                     ):
                         page = fallback_page
                         selected_project_id = fallback_project_id
