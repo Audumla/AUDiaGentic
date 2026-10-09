@@ -225,6 +225,55 @@ class PythonCdpBridge:
         result = await self.client.command("Browser.getWindowForTarget", {"targetId": target_id})
         return int(result["windowId"]) if result.get("windowId") is not None else None
 
+    async def _open_page_from_anchor(
+        self,
+        anchor_handle: str,
+        anchor_target: str,
+        anchor_window: int | None,
+        initial_url: str,
+        timeout: float | None,
+    ) -> dict[str, Any] | None:
+        """Materialize a tab from the anchor's own browser window.
+
+        Target.createTarget places a tab in Chromium's active window, which
+        can differ from the managed anchor window when another window has
+        focus. window.open is evaluated in the anchor page so Chromium keeps
+        the new tab with that page and exposes the opener relationship.
+        """
+        await self._session_command(
+            anchor_handle,
+            "Runtime.evaluate",
+            {
+                "expression": f"window.open({json.dumps(initial_url)}, '_blank')",
+                "returnByValue": False,
+                "awaitPromise": False,
+                "userGesture": True,
+            },
+            timeout=timeout,
+        )
+        deadline = asyncio.get_running_loop().time() + min(2.0, max(0.1, timeout or 2.0))
+        while asyncio.get_running_loop().time() < deadline:
+            targets = await self.client.command("Target.getTargets", timeout=timeout)
+            for info in targets.get("targetInfos", []):
+                target_id = str(info.get("targetId") or "")
+                if (
+                    info.get("type") != "page"
+                    or not target_id
+                    or target_id == anchor_target
+                    or str(info.get("openerId") or "") != anchor_target
+                ):
+                    continue
+                window_id = await self._window_id(target_id)
+                if window_id != anchor_window:
+                    continue
+                handle = self._handle_for_target(target_id)
+                return {
+                    "pageHandle": handle,
+                    "targetId": target_id,
+                    "windowId": window_id,
+                }
+            await asyncio.sleep(0.05)
+        return None
     async def _target(self, handle: str) -> str:
         try:
             return self._pages[handle]
@@ -361,15 +410,22 @@ class PythonCdpBridge:
                 target_id = str(result["targetId"])
                 window_id = await self._window_id(target_id)
                 if window_id != anchor_window:
-                    # Never fall back to window.open here: Chromium may select
-                    # the new tab and make concurrent restart recovery visibly
-                    # cycle through every session. Defer recovery instead.
-                    await self.client.command(
-                        "Target.closeTarget", {"targetId": target_id}, timeout=timeout
+                    repaired = await self._open_page_from_anchor(
+                        anchor,
+                        anchor_target,
+                        anchor_window,
+                        initial_url,
+                        timeout,
                     )
-                    raise RuntimeError(
-                        "background tab was not created in the managed browser window"
-                    )
+                    if repaired is not None:
+                        await self.client.command(
+                            "Target.closeTarget", {"targetId": target_id}, timeout=timeout
+                        )
+                        return repaired
+                    # Keep the usable target rather than converting a
+                    # recoverable placement mismatch into a pre-dispatch
+                    # request failure. It remains backgrounded and can still
+                    # be correlated and monitored by its target id.
                 handle = self._handle_for_target(target_id)
                 return {
                     "pageHandle": handle,

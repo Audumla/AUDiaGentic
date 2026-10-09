@@ -137,6 +137,68 @@ async def test_session_command_retries_once_when_reconnect_happens_between_sessi
 
 
 @pytest.mark.asyncio
+async def test_create_page_in_window_repairs_target_created_in_active_window():
+    bridge = PythonCdpBridge(GptAutoConfig.from_dict(valid_config()))
+    fake = _FakeClient()
+    fake.created_target = None
+
+    async def command(method, params=None, *, session_id=None, timeout=None, required_generation=None):
+        params = params or {}
+        fake.calls.append((method, params, session_id))
+        if method == "Target.createTarget":
+            fake.created_target = "target-misplaced"
+            return {"targetId": fake.created_target}
+        if method == "Browser.getWindowForTarget":
+            return {"windowId": 99 if params["targetId"] == "target-misplaced" else 42}
+        if method == "Target.getTargets":
+            if fake.created_target == "target-misplaced":
+                return {
+                    "targetInfos": [
+                        {
+                            "targetId": "target-repaired",
+                            "type": "page",
+                            "url": "https://chatgpt.com/g/g-p-project",
+                            "openerId": "target-anchor",
+                        }
+                    ]
+                }
+            return {"targetInfos": []}
+        if method == "Target.attachToTarget":
+            return {"sessionId": "session-anchor"}
+        if method in {"Page.enable", "Page.setLifecycleEventsEnabled", "Target.closeTarget"}:
+            return {}
+        if method == "Runtime.evaluate":
+            return {"result": {"value": {}}}
+        return await _FakeClient.command(
+            fake,
+            method,
+            params,
+            session_id=session_id,
+            timeout=timeout,
+            required_generation=required_generation,
+        )
+
+    fake.command = command
+    bridge._client = fake
+    bridge._pages["page-anchor"] = "target-anchor"
+
+    result = await bridge.call(
+        "create_page_in_window",
+        {"anchorPageHandle": "page-anchor", "url": "https://chatgpt.com/g/g-p-project"},
+    )
+
+    assert result["targetId"] == "target-repaired"
+    assert result["windowId"] == 42
+    assert any(
+        method == "Runtime.evaluate" and "window.open" in params["expression"]
+        for method, params, _ in fake.calls
+    )
+    assert any(
+        method == "Target.closeTarget" and params["targetId"] == "target-misplaced"
+        for method, params, _ in fake.calls
+    )
+
+@pytest.mark.asyncio
 async def test_python_bridge_serializes_page_creation_and_returns_window_identity():
     bridge = PythonCdpBridge(GptAutoConfig.from_dict(valid_config()))
     fake = _FakeClient()
