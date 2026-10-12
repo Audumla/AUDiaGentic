@@ -2867,3 +2867,43 @@ async def test_reconcile_refuses_recovery_page_creation_without_live_owner() -> 
     assert created == []
     assert chat.page_handle is None
     assert chat._unresolved_recovery_reason == "reconcile-owner-not-live"
+
+
+@pytest.mark.asyncio
+async def test_reconcile_does_not_recreate_tabs_after_load_recovery_budget() -> None:
+    """A provider load outage must not become an endless tab-open loop."""
+    config = GptAutoConfig.from_dict(valid_config())
+    created: list[bool] = []
+
+    async def find_conversation_page(*_args, **_kwargs):
+        return None
+
+    async def create_chat_page():
+        created.append(True)
+        return "recovery-page"
+
+    runtime = SimpleNamespace(
+        bridge=SimpleNamespace(),
+        find_conversation_page=find_conversation_page,
+        create_chat_page=create_chat_page,
+        claim_page=lambda *_args: True,
+    )
+    chat = PersistentChat(
+        ag_session_id="session-reconcile-load-backoff",
+        project_name="project",
+        project_url="https://chatgpt.com/g/g-p-project/project",
+        runtime=runtime,
+        config=config,
+        binding_sink=lambda _update: None,
+        provider_session_id="provider-session",
+        chat_url="https://chatgpt.com/g/g-p-project/c/provider-session",
+        resume_provider_metadata={"conversation-load-recovery-attempts": 2},
+    )
+    chat.state = ChatState.RECOVERING
+
+    await chat.reconcile([])
+
+    assert created == []
+    assert chat.page_handle is None
+    assert chat.state is ChatState.RECOVERING
+    assert chat._unresolved_recovery_reason == "conversation-load-recovery-backoff"
