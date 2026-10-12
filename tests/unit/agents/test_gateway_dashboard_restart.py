@@ -59,10 +59,12 @@ def test_restart_reexecutes_after_close_with_original_args(monkeypatch):
     monkeypatch.setenv("AUDIAGENTIC_SERVICE_OWNER_EPOCH", "old")
     launches = []
     monkeypatch.setattr(process.subprocess, "Popen", lambda args, **kwargs: (events.append(args), launches.append(kwargs)))
+    monkeypatch.setattr(process.os, "_exit", lambda code: events.append(("exit", code)))
     args = ["--port", "8765", "--token-file", "token", "--service-root", "custom"]
     process.main(args)
     assert events[:2] == ["serve", "close"]
     assert events[2][3:] == args
+    assert events[3:] == [("exit", 0)]
     assert "AUDIAGENTIC_SERVICE_OWNER_EPOCH" not in launches[0]["env"]
     assert launches[0]["stdin"] == process.subprocess.DEVNULL
     assert launches[0]["stdout"] == process.subprocess.DEVNULL
