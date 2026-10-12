@@ -35,6 +35,12 @@ def main(argv: list[str] | None = None) -> int:
         # Retire the old owner and release HTTP/provider resources first.
         # A new interpreter loads changed code, retaining the exact launch args.
         _launch_replacement(sys.argv[1:] if argv is None else argv)
+        # Provider runtimes may leave non-daemon asyncio/thread resources alive
+        # after host.close(). Do not let the retired owner remain attached to
+        # CDP alongside its replacement; that creates duplicate observers and
+        # competing tab activation/recovery work. The replacement is already
+        # detached, so terminate this owner immediately.
+        os._exit(0)
     return 0
 
 

@@ -233,7 +233,10 @@ async def capture_latest_response(
     handle = str(selected.get("pageHandle") or "")
     if not handle:
         return {"outcome": "unavailable", "reason": "target-handle-missing"}
-    await runtime.bridge.call("activate_target", {"pageHandle": handle, "operator": True, "operator_reason": "dashboard-focus"})
+    # Provider capture is used by watchdog recovery as well as the dashboard
+    # button. It must remain observation-only: foregrounding here makes a
+    # quiet/stale recovery loop steal focus and cycle through GPT tabs. Only
+    # an explicit focus/open-tab action may activate a target.
     await runtime.bridge.call("keep_page_active", {"pageHandle": handle, "operator": True})
     page = await runtime.gpt_browser.page_by_handle(handle)
     await runtime.gpt_browser.materialize_latest_assistant_turn(page)
