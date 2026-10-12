@@ -2416,6 +2416,19 @@ def test_live_session_lists_without_stale_flag(rig, monkeypatch):
     assert row.get("runtime-state") != "stale-non-live"
 
 
+def test_reconcile_terminal_live_session_closes_provider_handle(rig):
+    """A terminal durable session cannot retain a live provider worker."""
+    runtime, _clock, transports, project_root = rig
+    record = _open(runtime, project_root)
+    session_id = record["session-id"]
+
+    session_store.transition_session_record(project_root, session_id, "closed")
+
+    assert runtime.reconcile_terminal_live_sessions() == [session_id]
+    assert runtime.live_session_ids() == []
+    assert transports[-1].closed is True
+
+
 def test_closing_session_not_in_runtime_is_stale(tmp_path, monkeypatch):
     """A persisted closing session with no live runtime is also flagged stale."""
     from audiagentic.components.agents.gateway import api as api
