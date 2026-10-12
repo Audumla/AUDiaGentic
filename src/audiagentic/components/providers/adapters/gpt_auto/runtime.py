@@ -583,6 +583,8 @@ class GptAutoProviderRuntime:
         chat = self._chats.get(ag_session_id)
         if chat is None:
             return "active-session-not-registered"
+        if _chat_terminal(chat):
+            return "session-terminal"
         handle = chat.page_handle
         if not handle:
             return "active-session-page-unbound"

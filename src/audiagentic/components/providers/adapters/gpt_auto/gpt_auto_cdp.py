@@ -2145,19 +2145,12 @@ class GptAutoCdpBrowserController(CdpBrowserController):
         else:
             page = await self.new_window()
         try:
-            # New project targets are intentionally created in the background so
-            # recovery cannot visibly cycle through every open tab. They still
-            # need one explicit activation before navigation/UI events; without
-            # it Chromium can acknowledge the CDP calls while the new target's
-            # project sidebar never hydrates, producing a false readiness error.
-            await self.bridge.call(
-                "activate_target",
-                {
-                    "pageHandle": page.handle,
-                    "operator": True,
-                    "operator_reason": "dashboard-focus",
-                },
-            )
+            # New project targets are request-owned background work. Do not
+            # activate/foreground them: Target.activateTarget changes the
+            # user's selected tab and caused recovery/new-request paths to
+            # visibly cycle through BigCherry conversations. Page-local CDP
+            # commands remain usable without foregrounding the target; only an
+            # explicit dashboard focus action may call activate_target.
             # The home route and project selection are separate provider
             # operations. Do not let a slow home-shell/sidebar hydration
             # consume the entire budget reserved for the explicit /projects

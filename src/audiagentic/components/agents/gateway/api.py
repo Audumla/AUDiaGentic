@@ -1248,7 +1248,11 @@ def focus_execution_chat(project_root: Path, request_id: str) -> dict[str, Any]:
     )
     if not provider_id:
         return {"request-id": request_id, "outcome": "unavailable", "reason": "provider-identity-missing"}
-    result = get_session_runtime().focus_existing_conversation(
+    gateway_runtime = get_session_runtime()
+    reconcile = getattr(gateway_runtime, "reconcile_terminal_live_sessions", None)
+    if callable(reconcile):
+        reconcile()
+    result = gateway_runtime.focus_existing_conversation(
         project_root, provider_id=str(provider_id), locator=locator
     )
     return {"request-id": request_id, **result}
@@ -1275,7 +1279,11 @@ def focus_execution_session(project_root: Path, session_id: str) -> dict[str, An
         project_url=metadata.get("project-url"),
         gateway_session_id=session_id,
     )
-    result = get_session_runtime().focus_existing_conversation(
+    gateway_runtime = get_session_runtime()
+    reconcile = getattr(gateway_runtime, "reconcile_terminal_live_sessions", None)
+    if callable(reconcile):
+        reconcile()
+    result = gateway_runtime.focus_existing_conversation(
         project_root, provider_id=str(provider_id), locator=locator
     )
     return {"session-id": session_id, **result}
@@ -1741,6 +1749,8 @@ def list_execution_sessions(
 
     if _live_ids is None:
         runtime = peek_session_runtime()
+        if runtime is not None:
+            runtime.reconcile_terminal_live_sessions()
         live_ids = set(runtime.live_session_ids()) if runtime is not None else set()
     else:
         live_ids = set(_live_ids)
@@ -2147,6 +2157,8 @@ def gateway_overview(project_root: Path) -> dict[str, Any]:
         )[:5]
     ]
     runtime = peek_session_runtime()
+    if runtime is not None:
+        runtime.reconcile_terminal_live_sessions()
     live_ids = set(runtime.live_session_ids()) if runtime is not None else set()
     sessions = list_execution_sessions(project_root, state="all", _live_ids=live_ids)
     machine_live_count = len(live_ids)
