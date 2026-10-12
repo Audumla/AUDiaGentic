@@ -345,9 +345,10 @@ class PersistentChat:
         self._page_mutation_owner_probe = probe
 
     def _page_mutation_owner_is_live(self) -> bool:
-        if self.state in {ChatState.CLOSED, ChatState.FAILED}:
+        state = getattr(self, "state", None)
+        if state in {ChatState.CLOSED, ChatState.FAILED}:
             return False
-        probe = self._page_mutation_owner_probe
+        probe = getattr(self, "_page_mutation_owner_probe", None)
         if probe is None:
             return True
         try:
@@ -960,6 +961,27 @@ class PersistentChat:
             )
         )
 
+    def _conversation_load_recovery_exhausted(self) -> bool:
+        """Return whether a failed conversation must remain observation-only.
+
+        A missing exact tab is normally recoverable, but once the persisted
+        replacement budget is exhausted, creating another tab just to render
+        the same provider load-error page is not recovery.  In particular it
+        must not be allowed to become a watchdog-driven tab creation loop.
+        Keep the session recoverable for an operator/dashboard reattach and
+        let the request's normal outer deadline decide its final state.
+        """
+        workflow = getattr(self.config, "workflow", None)
+        recovery = getattr(workflow, "recovery", None)
+        maximum = max(
+            0,
+            int(getattr(recovery, "conversation_load_failure_max_attempts", 0)),
+        )
+        return bool(
+            self._conversation_load_recovery_attempts
+            and self._conversation_load_recovery_attempts >= maximum
+        )
+
     def _load_failure_requires_retained_observation(self) -> bool:
         """Return whether load recovery must stay on the exact conversation."""
         return bool(
@@ -1356,7 +1378,13 @@ class PersistentChat:
 
     async def retry_delivery_timeout(self) -> bool:
         """Activate one provider-owned delivery Retry control; never resubmit."""
-        async with self._page_mutation_lock:
+        # A few lightweight adapter doubles are constructed with
+        # ``object.__new__``; retain the production lock invariant while
+        # keeping those observation-only seams safe.
+        lock = getattr(self, "_page_mutation_lock", None)
+        if lock is None:
+            lock = self._page_mutation_lock = asyncio.Lock()
+        async with lock:
             if not self.page_handle or not self._page_mutation_owner_is_live():
                 return False
             browser = self._gpt_browser()
@@ -1370,7 +1398,10 @@ class PersistentChat:
 
     async def retry_conversation_load(self) -> bool:
         """Click the same-conversation load Retry control; never resubmit."""
-        async with self._page_mutation_lock:
+        lock = getattr(self, "_page_mutation_lock", None)
+        if lock is None:
+            lock = self._page_mutation_lock = asyncio.Lock()
+        async with lock:
             if not self.page_handle or not self._page_mutation_owner_is_live():
                 return False
             browser = self._gpt_browser()
@@ -2492,6 +2523,19 @@ class PersistentChat:
                 return
             if not self._page_mutation_owner_is_live():
                 self._set_unresolved_recovery("reconcile-owner-not-live")
+                return
+            if self._conversation_load_recovery_exhausted():
+                self._set_unresolved_recovery(
+                    "conversation-load-recovery-backoff",
+                    attempts=self._conversation_load_recovery_attempts,
+                    provider_session_id=self.provider_session_id,
+                    chat_url=self.chat_url,
+                )
+                # Do not manufacture synthetic activity for a page that is
+                # not attached.  The request remains recoverable, but only a
+                # later explicit reattach or the normal outer timeout may
+                # change its state.
+                self._move(ChatState.RECOVERING)
                 return
             self.page_handle = await self._create_recovery_page()
             if not self.runtime.claim_page(self, self.page_handle):
