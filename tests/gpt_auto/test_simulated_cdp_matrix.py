@@ -691,7 +691,8 @@ async def test_new_session_selects_exact_project_from_sidebar(monkeypatch) -> No
         ready_timeout=4,
     )
 
-    assert bridge_calls == [("activate_target", {"pageHandle": page.handle, "operator": True, "operator_reason": "dashboard-focus"})]
+    # Background request creation must not foreground the user's selected tab.
+    assert bridge_calls == []
     assert calls[:2] == [
         ("new-tab", (anchor, None)),
         ("navigate", "https://chatgpt.com/"),

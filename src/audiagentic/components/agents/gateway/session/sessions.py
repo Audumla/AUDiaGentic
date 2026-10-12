@@ -768,6 +768,19 @@ class SessionRuntime:
             return []
         return self._call(self._snapshot_ids(), timeout=10)
 
+    def reconcile_terminal_live_sessions(self) -> list[str]:
+        """Close live handles whose durable session is already terminal.
+
+        A process restart or an out-of-band terminal transition can leave the
+        provider transport alive after its durable session has been closed.
+        Such a handle must not continue browser recovery or focus mutations.
+        Active durable sessions are intentionally preserved for keep-alive and
+        resume; only a missing or terminal session record is actionable.
+        """
+        if self._loop is None:
+            return []
+        return self._call(self._reconcile_terminal_live_sessions(), timeout=10)
+
     def session_snapshot_all(self) -> dict[str, dict[str, Any]]:
         """Immutable snapshot of all live sessions' state at one instant.
 
@@ -1142,6 +1155,31 @@ class SessionRuntime:
 
     async def _snapshot_ids(self) -> list[str]:
         return list(self._handles)
+
+    async def _reconcile_terminal_live_sessions(self) -> list[str]:
+        closed: list[str] = []
+        for session_id, handle in list(self._handles.items()):
+            try:
+                record = session_store.read_session_record(handle.project_root, session_id)
+            except AudiaGenticError:
+                record = None
+            if record is not None and record["state"] not in session_store.SESSION_TERMINAL_STATES:
+                continue
+            # The durable state is already terminal (or absent), so shutdown
+            # is safe even if a provider turn is still unwinding.  This path
+            # only removes the in-memory/browser owner; it never rewrites a
+            # durable terminal record.
+            try:
+                await self._close(handle.project_root, session_id, reason="shutdown")
+            except Exception:  # noqa: BLE001 - keep reconciling other handles
+                logger.warning(
+                    "failed to reconcile terminal live session",
+                    extra={"session-id": session_id},
+                    exc_info=True,
+                )
+                continue
+            closed.append(session_id)
+        return closed
 
     async def _session_snapshot_all(self) -> dict[str, dict[str, Any]]:
         """Immutable snapshot of every live session's state at one instant.
