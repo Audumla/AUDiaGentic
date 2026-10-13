@@ -424,6 +424,42 @@ async def test_resume_existing_exposes_definitive_provider_failure_as_terminal(
 
 
 @pytest.mark.asyncio
+async def test_resume_existing_load_failure_is_terminal_and_not_retried(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A repeated conversation-load outage must fail and close the session path."""
+    chat = _chat()
+    chat._checkpoint_metadata["unresolved-turn-id"] = "req-1"
+
+    class _FailedTurn:
+        def __init__(self, *_args) -> None:
+            pass
+
+        async def resume_existing(self):
+            raise AudiaGenticError(
+                "EXT-GPTAUTO-005",
+                "providers",
+                "gpt-auto could not load the durable ChatGPT conversation",
+                {
+                    "failure-reason": "conversation-load-failed",
+                    "recovery-reason": "conversation-load-recovery-exhausted",
+                    "submission-ambiguous": True,
+                },
+            )
+
+    monkeypatch.setattr(transport_module, "GptAutoTurn", _FailedTurn)
+    transport = GptAutoSessionTransport(chat)
+
+    with pytest.raises(AudiaGenticError, match="could not load"):
+        await transport.resume_existing(
+            SessionPrompt(turn_id="req-1", body="already submitted"),
+            lambda _observation: None,
+        )
+
+    assert transport.turn_failure_disposition() is SessionFailureDisposition.TERMINAL_FAILED
+
+
+@pytest.mark.asyncio
 async def test_resume_existing_keeps_durable_session_after_cdp_observation_loss(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
