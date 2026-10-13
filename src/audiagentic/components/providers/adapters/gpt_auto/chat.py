@@ -464,6 +464,22 @@ class PersistentChat:
         if self.page_handle is None and self.provider_session_id and self._defer_page_creation_on_recovery:
             self._move(ChatState.RECOVERING)
             raise RuntimeError("gpt-auto restart recovery deferred because the exact provider conversation tab is not attached")
+        if (
+            self.page_handle is None
+            and self.provider_session_id
+            and self._load_failure_requires_retained_observation()
+        ):
+            self._set_unresolved_recovery(
+                "conversation-load-observation-deferred",
+                provider_session_id=self.provider_session_id,
+                chat_url=self.chat_url,
+                defer_reason="exact-conversation-tab-detached",
+            )
+            self._move(ChatState.RECOVERING)
+            raise RuntimeError(
+                "gpt-auto unresolved provider conversation is detached; "
+                "recovery requires explicit exact-tab reattachment"
+            )
         if self.page_handle is None:
             create_page = getattr(self.runtime, "create_chat_page", None)
             if create_page is not None:
