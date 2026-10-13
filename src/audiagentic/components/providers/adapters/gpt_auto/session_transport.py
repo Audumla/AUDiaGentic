@@ -337,12 +337,20 @@ class GptAutoSessionTransport:
         except Exception as exc:
             retained = await self.chat.retain_after_turn_failure(exc)
             details = getattr(exc, "details", {})
-            definitively_failed = (
-                retained
-                and getattr(exc, "code", None) == "EXT-GPTAUTO-003"
+            load_failure_terminal = (
+                getattr(exc, "code", None) == "EXT-GPTAUTO-005"
                 and isinstance(details, dict)
-                and details.get("failure-reason") == "provider-failure-policy-matched"
-                and not self.chat.unresolved_metadata().get("unresolved-turn-pending")
+                and details.get("failure-reason") == "conversation-load-failed"
+            )
+            definitively_failed = (
+                (
+                    retained
+                    and getattr(exc, "code", None) == "EXT-GPTAUTO-003"
+                    and isinstance(details, dict)
+                    and details.get("failure-reason") == "provider-failure-policy-matched"
+                    and not self.chat.unresolved_metadata().get("unresolved-turn-pending")
+                )
+                or load_failure_terminal
             )
             # A reconstructed observer can fail before it gets a typed
             # provider result (for example while ChatGPT still shows the
