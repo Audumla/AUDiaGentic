@@ -2907,3 +2907,43 @@ async def test_reconcile_does_not_recreate_tabs_after_load_recovery_budget() -> 
     assert chat.page_handle is None
     assert chat.state is ChatState.RECOVERING
     assert chat._unresolved_recovery_reason == "conversation-load-recovery-backoff"
+
+
+@pytest.mark.asyncio
+async def test_reconcile_does_not_recreate_detached_unresolved_conversation() -> None:
+    """Closing an unresolved failed tab must pause, not open a duplicate."""
+    config = GptAutoConfig.from_dict(valid_config())
+    created: list[bool] = []
+
+    async def find_conversation_page(*_args, **_kwargs):
+        return None
+
+    async def create_chat_page():
+        created.append(True)
+        return "recovery-page"
+
+    runtime = SimpleNamespace(
+        bridge=SimpleNamespace(),
+        find_conversation_page=find_conversation_page,
+        create_chat_page=create_chat_page,
+        claim_page=lambda *_args: True,
+    )
+    chat = PersistentChat(
+        ag_session_id="session-detached-unresolved",
+        project_name="project",
+        project_url="https://chatgpt.com/g/g-p-project/project",
+        runtime=runtime,
+        config=config,
+        binding_sink=lambda _update: None,
+        provider_session_id="provider-session",
+        chat_url="https://chatgpt.com/g/g-p-project/c/provider-session",
+        resume_provider_metadata={"unresolved-turn-pending": True},
+    )
+    chat.state = ChatState.RECOVERING
+
+    await chat.reconcile([])
+
+    assert created == []
+    assert chat.page_handle is None
+    assert chat.state is ChatState.RECOVERING
+    assert chat._unresolved_recovery_reason == "conversation-load-observation-deferred"
