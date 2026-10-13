@@ -2524,6 +2524,21 @@ class PersistentChat:
             if not self._page_mutation_owner_is_live():
                 self._set_unresolved_recovery("reconcile-owner-not-live")
                 return
+            if self._load_failure_requires_retained_observation():
+                self._set_unresolved_recovery(
+                    "conversation-load-observation-deferred",
+                    provider_session_id=self.provider_session_id,
+                    chat_url=self.chat_url,
+                    defer_reason="exact-conversation-tab-detached",
+                )
+                # An unresolved Send is correlated only with the exact
+                # provider conversation.  Reopening a fresh tab after an
+                # operator closes the failed tab cannot prove that Send or
+                # safely replay it, so pause and wait for explicit reattach.
+                # In particular, do not turn a provider overload page into a
+                # tab-creation loop or synthetic activity.
+                self._move(ChatState.RECOVERING)
+                return
             if self._conversation_load_recovery_exhausted():
                 self._set_unresolved_recovery(
                     "conversation-load-recovery-backoff",
