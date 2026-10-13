@@ -517,10 +517,14 @@ class GatewayServiceHost:
                     # the provider DOM before merely refreshing the transport;
                     # otherwise the old running record keeps the session fence
                     # and every later request waits forever behind it.
+                    capture_error: AudiaGenticError | None = None
                     try:
                         captured = complete_execution_from_provider(
                             project_root, updated["request-id"]
                         )
+                    except AudiaGenticError as exc:
+                        capture_error = exc
+                        captured = None
                     except Exception:  # noqa: BLE001 - an incomplete turn remains recoverable
                         captured = None
                     if isinstance(captured, dict) and captured.get("state") in {
@@ -535,6 +539,67 @@ class GatewayServiceHost:
                         except Exception:  # noqa: BLE001 - watchdog recovery is advisory
                             logger.warning(
                                 "automatic provider completion could not refresh durable state",
+                                extra={"request-id": updated.get("request-id")},
+                                exc_info=True,
+                            )
+                    elif capture_error is not None and capture_error.code in {
+                        "CON-AGW-154",
+                        "CON-AGW-155",
+                        "CON-AGW-156",
+                    }:
+                        # The provider has rendered terminal-looking material,
+                        # but the response cannot be proven to belong to this
+                        # request.  Reopening the conversation here creates the
+                        # tab-flicking loop and can make a stale observer look
+                        # alive forever.  Preserve the evidence as interrupted
+                        # and require explicit operator reconciliation instead
+                        # of replaying or reopening the provider conversation.
+                        try:
+                            interrupted = store.transition_owned_terminal(
+                                project_root,
+                                updated["request-id"],
+                                "interrupted",
+                                updates={
+                                    "error": {
+                                        "code": capture_error.code,
+                                        "kind": "agents",
+                                        "message": "provider terminal evidence could not be correlated to the request",
+                                        "details": {
+                                            "capture-error": capture_error.message,
+                                            "watchdog-classification": "uncorrelated-provider-terminal",
+                                            "recovery-action": "reconciliation-stopped",
+                                        },
+                                    },
+                                    "recovery": {
+                                        "outcome": "provider-terminal-uncorrelated",
+                                        "phase": "watchdog-reconciliation",
+                                        "next-retry-at": None,
+                                    },
+                                    "finished-at": now_iso_z(),
+                                },
+                                owner_epoch=updated["dispatch-owner-epoch"],
+                                worker_id=updated["worker-id"],
+                                attempt_epoch=updated["attempt-epoch"],
+                                expected_revision=updated.get("revision"),
+                            )
+                            updated = interrupted
+                            if runtime is not None:
+                                try:
+                                    runtime.close_session(
+                                        project_root,
+                                        str(updated["session-id"]),
+                                        reason="uncorrelated-provider-terminal",
+                                    )
+                                except Exception:  # noqa: BLE001 - request terminal state remains authoritative
+                                    logger.warning(
+                                        "could not close uncorrelated provider session",
+                                        extra={"request-id": updated.get("request-id"), "session-id": updated.get("session-id")},
+                                        exc_info=True,
+                                    )
+                            registry.update(project_root, updated)
+                        except Exception:  # noqa: BLE001 - a live owner/revision race wins
+                            logger.warning(
+                                "could not interrupt uncorrelated provider response",
                                 extra={"request-id": updated.get("request-id")},
                                 exc_info=True,
                             )

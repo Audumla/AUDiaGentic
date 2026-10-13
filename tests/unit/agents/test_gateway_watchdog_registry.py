@@ -190,6 +190,96 @@ def test_host_watchdog_captures_completed_provider_turn_before_reconcile(
     assert result == (terminal,)
     assert registry.unregistered == [request_id]
 
+
+def test_host_watchdog_stops_reopen_after_uncorrelated_provider_terminal(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Do not reopen a tab when terminal DOM evidence is not request-owned."""
+    from audiagentic.components.agents.gateway.service.host import GatewayServiceHost
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    request_id = "req-uncorrelated-terminal"
+    diagnosed = {
+        "request-id": request_id,
+        "state": "running",
+        "session-id": "ses-1",
+        "revision": 7,
+        "dispatch-owner-epoch": "owner-1",
+        "worker-id": "worker-1",
+        "attempt-epoch": 1,
+        "watchdog-state": "intervention",
+        "diagnostics": {"resolution-state": "reconciliation-requested"},
+    }
+    interrupted = {**diagnosed, "state": "interrupted", "revision": 8}
+
+    class Registry:
+        def __init__(self) -> None:
+            self.current = (project_root.resolve(), dict(diagnosed))
+            self.unregistered: list[str] = []
+
+        def snapshot(self):
+            return ((self.current[0], dict(self.current[1])),)
+
+        def update(self, root, record):
+            self.current = (root.resolve(), dict(record))
+
+        def unregister(self, _root, request_id):
+            self.unregistered.append(request_id)
+
+    class Runtime:
+        def __init__(self) -> None:
+            self.closed: list[tuple[Path, str, str]] = []
+
+        def close_session(self, root, session_id, *, reason):
+            self.closed.append((root, session_id, reason))
+            return {"state": "closed"}
+
+        def reconcile_active_transport(self, *_args):
+            raise AssertionError("uncorrelated provider evidence must not re-enter transport recovery")
+
+    registry = Registry()
+    runtime = Runtime()
+    transitioned: list[dict] = []
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.queue.watchdog_registry.watchdog_registry",
+        lambda: registry,
+    )
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.queue.dispatch.diagnose_activity_lease",
+        lambda _root, _record: dict(diagnosed),
+    )
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.session.sessions.peek_session_runtime",
+        lambda: runtime,
+    )
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.api.complete_execution_from_provider",
+        lambda *_args: (_ for _ in ()).throw(
+            AudiaGenticError(
+                code="CON-AGW-156",
+                kind="agents",
+                message="provider response is not request-owned",
+                details={},
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.store.transition_owned_terminal",
+        lambda root, req_id, state, **kwargs: transitioned.append(
+            {"root": root, "request-id": req_id, "state": state, **kwargs}
+        )
+        or dict(interrupted),
+    )
+
+    result = GatewayServiceHost.run_watchdog_pass(object.__new__(GatewayServiceHost))
+
+    assert result == (interrupted,)
+    assert transitioned[0]["state"] == "interrupted"
+    assert runtime.closed == [(project_root.resolve(), "ses-1", "uncorrelated-provider-terminal")]
+    assert registry.unregistered == [request_id]
+
 def test_host_watchdog_retries_operator_requested_reconciliation(
     tmp_path: Path, monkeypatch
 ) -> None:
