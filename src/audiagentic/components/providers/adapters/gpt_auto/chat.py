@@ -425,6 +425,23 @@ class PersistentChat:
                 if find_page is not None
                 else None
             )
+            if (
+                page is not None
+                and self.target_id
+                and (self.unresolved_turn_pending or self._submission_proven)
+                and str(page.get("targetId") or "") != self.target_id
+            ):
+                self._set_unresolved_recovery(
+                    "conversation-load-observation-deferred",
+                    provider_session_id=self.provider_session_id,
+                    chat_url=self.chat_url,
+                    defer_reason="replacement-target-requires-explicit-reattach",
+                    observed_target_id=str(page.get("targetId") or ""),
+                    expected_target_id=self.target_id,
+                )
+                raise RuntimeError(
+                    "gpt-auto unresolved provider conversation is attached to a replacement target"
+                )
             if page is not None:
                 if not self._claim_page(str(page["pageHandle"])):
                     raise RuntimeError("gpt-auto retained conversation page is already owned")
@@ -2536,6 +2553,25 @@ class PersistentChat:
                     None,
                 )
             )
+            if (
+                page is not None
+                and self.target_id
+                and (self.unresolved_turn_pending or self._submission_proven)
+                and str(page.get("targetId") or "") != self.target_id
+            ):
+                # A matching conversation URL on a new CDP target is not proof
+                # that the unresolved Send survived. Require explicit
+                # reattachment rather than reviving the stale observer.
+                self._set_unresolved_recovery(
+                    "conversation-load-observation-deferred",
+                    provider_session_id=self.provider_session_id,
+                    chat_url=self.chat_url,
+                    defer_reason="replacement-target-requires-explicit-reattach",
+                    observed_target_id=str(page.get("targetId") or ""),
+                    expected_target_id=self.target_id,
+                )
+                self._move(ChatState.RECOVERING)
+                return
             if page is not None and self._claim_page(str(page["pageHandle"])):
                 self._bind_page(page)
                 retained = await self._retained_page_snapshot()
