@@ -461,6 +461,27 @@ class PersistentChat:
                     "gpt-auto resume requires a retained browser tab or a durable "
                     "chat-url; neither is available"
                 )
+        if (
+            self.page_handle is None
+            and self.provider_session_id
+            and (self.unresolved_turn_pending or self._submission_proven)
+        ):
+            # The durable unresolved-turn fence is authoritative across a
+            # gateway restart.  A reconstructed chat may not have the
+            # in-memory defer flag that page_lost() set in the previous
+            # process, but it must still never create a replacement tab for
+            # an ambiguous provider-side Send.
+            self._set_unresolved_recovery(
+                "conversation-load-observation-deferred",
+                provider_session_id=self.provider_session_id,
+                chat_url=self.chat_url,
+                defer_reason="durable-unresolved-turn-fence",
+            )
+            self._move(ChatState.RECOVERING)
+            raise RuntimeError(
+                "gpt-auto unresolved provider conversation is detached; "
+                "recovery requires explicit exact-tab reattachment"
+            )
         if self.page_handle is None and self.provider_session_id and self._defer_page_creation_on_recovery:
             self._move(ChatState.RECOVERING)
             raise RuntimeError("gpt-auto restart recovery deferred because the exact provider conversation tab is not attached")
