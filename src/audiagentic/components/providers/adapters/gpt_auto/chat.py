@@ -1213,7 +1213,7 @@ class PersistentChat:
         # Replacement is unsafe once a turn was submitted or is ambiguous:
         # the provider may still own the original work. Keep this exact tab
         # bound and let the request observer retry its visible control.
-        if self._load_failure_requires_retained_observation():
+        if self.unresolved_turn_pending or self._submission_proven:
             self._set_unresolved_recovery(
                 "conversation-load-observation-deferred",
                 attempts=retry_attempts,
@@ -2309,6 +2309,12 @@ class PersistentChat:
         self._page_generation += 1
         self.runtime.release_page(self, handle)
         self._lost_during_turn = self.active_turn_id is not None
+        if self.unresolved_turn_pending or self._submission_proven:
+            # A provider load-error tab that an operator closes is not an
+            # invitation to open another exact-URL tab.  Preserve the
+            # unresolved fence so the next recovery/open attempt pauses until
+            # an explicit dashboard reattach supplies the exact conversation.
+            self._defer_page_creation_on_recovery = True
         if self.state is not ChatState.RECOVERING:
             self._move(ChatState.RECOVERING)
         if not self._lost_during_turn:
@@ -2540,7 +2546,7 @@ class PersistentChat:
             if not self._page_mutation_owner_is_live():
                 self._set_unresolved_recovery("reconcile-owner-not-live")
                 return
-            if self._load_failure_requires_retained_observation():
+            if self.unresolved_turn_pending or self._submission_proven:
                 self._set_unresolved_recovery(
                     "conversation-load-observation-deferred",
                     provider_session_id=self.provider_session_id,
