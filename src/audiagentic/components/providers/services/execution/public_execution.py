@@ -82,6 +82,7 @@ async def capture_latest_response(
     *,
     provider_id: str,
     locator: ConversationFocusLocator,
+    passive: bool = False,
 ) -> dict[str, Any]:
     """Read-only provider capability for operator response recovery."""
     from .execution import load_conversation_capture_capability
@@ -89,7 +90,7 @@ async def capture_latest_response(
     hook = load_conversation_capture_capability(provider_id)
     if hook is None:
         return {"outcome": "unsupported", "reason": "provider-capability-unavailable"}
-    value = hook(project_root, provider_id=provider_id, locator=locator)
+    value = hook(project_root, provider_id=provider_id, locator=locator, passive=passive)
     if inspect.isawaitable(value):
         value = await value
     return value if isinstance(value, dict) else {"outcome": "unavailable", "reason": "invalid-provider-capability-result"}

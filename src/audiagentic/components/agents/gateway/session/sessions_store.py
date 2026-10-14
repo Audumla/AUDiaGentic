@@ -311,30 +311,35 @@ def _reconcile_nonterminal_requests_before_expiry(
             return False
 
     eligible: list[dict[str, Any]] = []
+    if not nonterminal:
+        return True
+    session_provider_metadata_value = session_provider_metadata(session)
+    session_provider_session_id = session_provider_metadata_value.get("provider-session-id")
+    session_provider_id_value = session_provider_id(session)
+    if (
+        not isinstance(session_provider_session_id, str)
+        or not session_provider_session_id.strip()
+        or not isinstance(session_provider_id_value, str)
+        or not session_provider_id_value.strip()
+    ):
+        return False
     for record in nonterminal:
-        provider_metadata = session_provider_metadata(session)
         request_metadata = record.get("provider-metadata")
-        binding = session.get("binding")
-        has_provider_binding = bool(
-            (isinstance(binding, dict) and binding.get("provider-session-ref"))
-            or provider_metadata.get("provider-session-id")
-            or (
-                isinstance(request_metadata, dict)
-                and (
-                    request_metadata.get("provider-session-id")
-                    or request_metadata.get("chat-url")
-                )
-            )
-        )
-        if not has_provider_binding:
+        if not isinstance(request_metadata, dict):
+            return False
+        request_provider_session_id = request_metadata.get("provider-session-id")
+        if (
+            not isinstance(request_provider_session_id, str)
+            or not request_provider_session_id.strip()
+            or request_provider_session_id != session_provider_session_id
+            or record.get("resolved-provider-id") != session_provider_id_value
+        ):
             return False
         activity = record.get("activity")
         provider_activity = activity.get("provider") if isinstance(activity, dict) else None
-        lease = (
-            provider_activity.get("lease-expires-at")
-            if isinstance(provider_activity, dict)
-            else None
-        ) or record.get("activity-lease-expires-at")
+        # The legacy top-level lease is the gateway owner/synthetic lease.  It
+        # must never keep a provider session alive during expiry reconciliation.
+        lease = provider_activity.get("lease-expires-at") if isinstance(provider_activity, dict) else None
         if isinstance(lease, str) and lease.strip():
             try:
                 lease_at = datetime.fromisoformat(lease.replace("Z", "+00:00"))

@@ -520,7 +520,7 @@ class GatewayServiceHost:
                     capture_error: AudiaGenticError | None = None
                     try:
                         captured = complete_execution_from_provider(
-                            project_root, updated["request-id"]
+                            project_root, updated["request-id"], passive=True
                         )
                     except AudiaGenticError as exc:
                         capture_error = exc
