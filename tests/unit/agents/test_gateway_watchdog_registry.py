@@ -177,7 +177,7 @@ def test_host_watchdog_captures_completed_provider_turn_before_reconcile(
     )
     monkeypatch.setattr(
         "audiagentic.components.agents.gateway.api.complete_execution_from_provider",
-        lambda root, req_id: captured.append((root, req_id)) or {"state": "completed"},
+        lambda root, req_id, **kwargs: captured.append((root, req_id)) or {"state": "completed"},
     )
     monkeypatch.setattr(
         "audiagentic.components.agents.gateway.store.read_record",
@@ -256,7 +256,7 @@ def test_host_watchdog_stops_reopen_after_uncorrelated_provider_terminal(
     )
     monkeypatch.setattr(
         "audiagentic.components.agents.gateway.api.complete_execution_from_provider",
-        lambda *_args: (_ for _ in ()).throw(
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
             AudiaGenticError(
                 code="CON-AGW-156",
                 kind="agents",
