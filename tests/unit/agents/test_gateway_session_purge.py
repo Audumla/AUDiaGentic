@@ -117,3 +117,49 @@ def test_purge_active_session_with_terminal_requests_completes(tmp_path: Path) -
 
     assert result["outcome"] == "purged"
     assert not gateway_session_dir(tmp_path, session_id).exists()
+
+
+def test_bulk_purge_defaults_to_dry_run_and_reports_terminal_sessions(tmp_path: Path) -> None:
+    session_id = "ses_bulk_terminal"
+    request_id = "req_bulk_terminal"
+    session = sessions_store.build_session_record(session_id=session_id, execution_profile_id="test")
+    session["activity"]["request-ids"] = [request_id]
+    sessions_store.write_session_record(tmp_path, session)
+    sessions_store.transition_session_record(tmp_path, session_id, "closed", updates={"close-reason": "client-request"})
+    request = store.build_record(
+        request_id=request_id,
+        execution_profile_id="test",
+        prompt_body="test",
+        session_id=session_id,
+    )
+    store.write_record(tmp_path, request)
+    store.transition_record(tmp_path, request_id, "running")
+    store.transition_record(tmp_path, request_id, "completed")
+
+    result = api.purge_execution_sessions(tmp_path)
+
+    assert result["outcome"] == "dry-run"
+    assert result["eligible-session-ids"] == [session_id]
+    assert result["blocked"] == []
+    assert gateway_session_dir(tmp_path, session_id).exists()
+
+
+def test_bulk_purge_blocks_live_sessions_without_mutation(tmp_path: Path, monkeypatch) -> None:
+    session_id = "ses_bulk_live"
+    session = sessions_store.build_session_record(session_id=session_id, execution_profile_id="test")
+    sessions_store.write_session_record(tmp_path, session)
+    sessions_store.transition_session_record(tmp_path, session_id, "closed", updates={"close-reason": "client-request"})
+
+    class LiveRuntime:
+        def live_session_ids(self):
+            return [session_id]
+
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.session.sessions.peek_session_runtime",
+        lambda: LiveRuntime(),
+    )
+    result = api.purge_execution_sessions(tmp_path, dry_run=False)
+
+    assert result["outcome"] == "blocked"
+    assert result["blocked"] == [{"session-id": session_id, "reason": "session-live"}]
+    assert gateway_session_dir(tmp_path, session_id).exists()
