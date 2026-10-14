@@ -111,6 +111,28 @@ def test_agent_task_status_delegates():
     mock_call.assert_called_once_with("get_execution_request", _ROOT, "req_x", include_response=True)
 
 
+def test_agent_task_session_purge_delegates():
+    with _patch_root(), patch(
+        "audiagentic.components.agents.mcp.gateway_mcp.call_gateway_method",
+        return_value={"session-id": "ses_x", "outcome": "purged"},
+    ) as mock_call:
+        result = agents_gateway_mcp.agent_task_session_purge("ses_x")
+    assert result == {"session-id": "ses_x", "outcome": "purged"}
+    mock_call.assert_called_once_with("purge_execution_session", _ROOT, "ses_x")
+
+
+def test_agent_task_gateway_purge_defaults_to_dry_run():
+    with _patch_root(), patch(
+        "audiagentic.components.agents.mcp.gateway_mcp.call_gateway_method",
+        return_value={"outcome": "dry-run", "dry-run": True},
+    ) as mock_call:
+        result = agents_gateway_mcp.agent_task_gateway_purge()
+    assert result == {"outcome": "dry-run", "dry-run": True}
+    mock_call.assert_called_once_with(
+        "purge_execution_sessions", _ROOT, dry_run=True, session_ids=None
+    )
+
+
 def test_agent_task_response_returns_small_verified_response_inline():
     with (
         _patch_root(),

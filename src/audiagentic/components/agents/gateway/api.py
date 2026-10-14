@@ -1955,6 +1955,93 @@ def purge_execution_session(project_root: Path, session_id: str) -> dict[str, An
     }
 
 
+def purge_execution_sessions(
+    project_root: Path,
+    *,
+    dry_run: bool = True,
+    session_ids: list[str] | None = None,
+) -> dict[str, Any]:
+    """Inspect or purge terminal sessions in this project.
+
+    Bulk purge is deliberately dry-run by default.  Live/non-terminal sessions
+    and sessions owning non-terminal requests are reported as blockers and are
+    never implicitly closed, failed, or deleted.  The single-session primitive
+    remains the final race-checked destructive boundary.
+    """
+    from audiagentic.components.agents.gateway.session import sessions_store as session_store
+    from audiagentic.components.agents.gateway.session.sessions import peek_session_runtime
+
+    wanted = set(session_ids) if session_ids is not None else None
+    records = session_store.list_session_records(project_root)
+    if wanted is not None:
+        records = [record for record in records if record.get("session-id") in wanted]
+        found = {str(record.get("session-id")) for record in records}
+        missing = sorted(wanted - found)
+    else:
+        missing = []
+    runtime = peek_session_runtime()
+    live_ids = set(runtime.live_session_ids()) if runtime is not None else set()
+    blockers: list[dict[str, Any]] = []
+    eligible: list[str] = []
+    for record in records:
+        session_id = str(record.get("session-id"))
+        if session_id in live_ids:
+            blockers.append({"session-id": session_id, "reason": "session-live"})
+            continue
+        request_records = []
+        seen_request_ids: set[str] = set()
+        unreadable_request = False
+        for request in store.list_records(project_root, include_output=False):
+            if request.get("session-id") == session_id:
+                seen_request_ids.add(str(request.get("request-id")))
+                request_records.append(request)
+        # The session record is authoritative for its lineage.  Read any
+        # referenced request that was not returned by the directory scan so a
+        # partial/corrupt store cannot make an active request look purgeable.
+        for request_id in session_store.session_request_ids(record):
+            if request_id in seen_request_ids:
+                continue
+            try:
+                request = store.read_record(project_root, request_id)
+            except Exception:  # noqa: BLE001 - fail closed below on uncertainty
+                unreadable_request = True
+                blockers.append({"session-id": session_id, "reason": "request-record-unreadable"})
+                continue
+            request_records.append(request)
+        if record.get("state") not in session_store.SESSION_TERMINAL_STATES:
+            blockers.append({"session-id": session_id, "reason": "session-non-terminal"})
+        elif unreadable_request:
+            pass
+        elif any(request.get("state") not in store.TERMINAL_STATES for request in request_records):
+            blockers.append({"session-id": session_id, "reason": "session-has-active-requests"})
+        else:
+            eligible.append(session_id)
+    blockers.extend({"session-id": value, "reason": "session-not-found"} for value in missing)
+    result: dict[str, Any] = {
+        "outcome": "dry-run" if dry_run else "purge",
+        "dry-run": dry_run,
+        "eligible-session-ids": eligible,
+        "blocked": blockers,
+        "eligible-count": len(eligible),
+        "blocked-count": len(blockers),
+    }
+    if dry_run:
+        return result
+    purged: list[str] = []
+    for session_id in eligible:
+        outcome = purge_execution_session(project_root, session_id)
+        if outcome.get("outcome") == "purged":
+            purged.append(session_id)
+        else:
+            result["blocked"].append(
+                {"session-id": session_id, "reason": outcome.get("reason", "purge-not-completed")}
+            )
+    result["purged-session-ids"] = purged
+    result["purged-count"] = len(purged)
+    result["outcome"] = "purged" if not result["blocked"] else ("partial" if purged else "blocked")
+    return result
+
+
 def control_execution_session(
     project_root: Path,
     session_id: str,

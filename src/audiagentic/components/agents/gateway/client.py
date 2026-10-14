@@ -59,6 +59,14 @@ class GatewayClient(Protocol):
         self, project_root: Path, **kwargs: Any
     ) -> list[dict[str, Any]]: ...
     def close_execution_session(self, project_root: Path, session_id: str) -> dict[str, Any]: ...
+    def purge_execution_session(self, project_root: Path, session_id: str) -> dict[str, Any]: ...
+    def purge_execution_sessions(
+        self,
+        project_root: Path,
+        *,
+        dry_run: bool = True,
+        session_ids: list[str] | None = None,
+    ) -> dict[str, Any]: ...
     def control_execution_session(
         self, project_root: Path, session_id: str, **kwargs: Any
     ) -> dict[str, Any]: ...
@@ -149,6 +157,20 @@ class EmbeddedGatewayClient:
 
     def close_execution_session(self, project_root: Path, session_id: str) -> dict[str, Any]:
         return self._application.close_execution_session(project_root, session_id)
+
+    def purge_execution_session(self, project_root: Path, session_id: str) -> dict[str, Any]:
+        return self._application.purge_execution_session(project_root, session_id)
+
+    def purge_execution_sessions(
+        self,
+        project_root: Path,
+        *,
+        dry_run: bool = True,
+        session_ids: list[str] | None = None,
+    ) -> dict[str, Any]:
+        return self._application.purge_execution_sessions(
+            project_root, dry_run=dry_run, session_ids=session_ids
+        )
 
     def control_execution_session(
         self, project_root: Path, session_id: str, **kwargs: Any

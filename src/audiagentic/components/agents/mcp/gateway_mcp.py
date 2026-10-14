@@ -232,6 +232,32 @@ def agent_task_session_close(session_id: str) -> dict[str, Any]:
 
 @mcp.tool()
 @tool_boundary
+def agent_task_session_purge(session_id: str) -> dict[str, Any]:
+    """Permanently purge one terminal gateway session and its request data."""
+    project_root = project_root_from_env()
+    return _sparse(call_gateway_method("purge_execution_session", project_root, session_id))
+
+
+@mcp.tool()
+@tool_boundary
+def agent_task_gateway_purge(
+    dry_run: bool = True,
+    session_ids: list[str] | None = None,
+) -> dict[str, Any]:
+    """Inspect or purge terminal gateway sessions; dry-run defaults to true."""
+    project_root = project_root_from_env()
+    return _sparse(
+        call_gateway_method(
+            "purge_execution_sessions",
+            project_root,
+            dry_run=dry_run,
+            session_ids=session_ids,
+        )
+    )
+
+
+@mcp.tool()
+@tool_boundary
 def agent_task_session_control(
     session_id: str,
     action: str,
