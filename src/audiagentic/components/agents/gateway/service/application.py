@@ -422,6 +422,25 @@ class GatewayServiceApplication:
             return self._application.close_execution_session(
                 root, _required(arguments, "session_id")
             )
+        if operation == "purge_execution_session":
+            _reject_unknown(arguments, {"session_id"})
+            return self._application.purge_execution_session(
+                root, _required(arguments, "session_id")
+            )
+        if operation == "purge_execution_sessions":
+            _reject_unknown(arguments, {"dry_run", "session_ids"})
+            session_ids = arguments.get("session_ids")
+            if session_ids is not None and (
+                not isinstance(session_ids, list)
+                or any(not isinstance(value, str) or not value for value in session_ids)
+            ):
+                raise service_validation_error(32, "session_ids must be a list of non-empty strings")
+            dry_run = arguments.get("dry_run", True)
+            if not isinstance(dry_run, bool):
+                raise service_validation_error(33, "dry_run must be a boolean")
+            return self._application.purge_execution_sessions(
+                root, dry_run=dry_run, session_ids=session_ids
+            )
         if operation == "control_execution_session":
             _reject_unknown(arguments, {"session_id", "turn_id", "action", "control_id", "payload"})
             payload = arguments.get("payload")
