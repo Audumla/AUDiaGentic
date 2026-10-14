@@ -2567,6 +2567,62 @@ def test_durable_idle_sweep_preflights_all_requests_before_mutation(tmp_path):
     assert all(store.read_record(tmp_path, item["request-id"])["state"] == "queued" for item in requests)
 
 
+def test_durable_idle_sweep_rechecks_revision_before_first_mutation(tmp_path, monkeypatch):
+    from audiagentic.components.agents.gateway import api as api
+    from audiagentic.components.agents.gateway import store
+
+    session = session_store.build_session_record(
+        execution_profile_id="gpt-auto",
+        provider_id="gpt-auto",
+        provider_session_ref="provider-session",
+        surface_id="surface-1",
+        provider_metadata={"provider-session-id": "provider-session"},
+        idle_timeout_seconds=60,
+    )
+    session["timing"]["last-activity-at"] = (
+        datetime.now(timezone.utc) - timedelta(hours=1)
+    ).isoformat().replace("+00:00", "Z")
+    session_store.write_session_record(tmp_path, session)
+    request = store.build_record(
+        request_id="req_revision_changed_during_preflight",
+        execution_profile_id="gpt-auto",
+        prompt_body="x",
+        session_id=session["session-id"],
+        session_keep_alive=True,
+        resolved_provider_id="gpt-auto",
+    )
+    request["provider-metadata"] = {"provider-session-id": "provider-session"}
+    store.write_record(tmp_path, request)
+
+    real_read = store.read_record
+    reads = 0
+
+    def read_with_revision_change(root, request_id, *args, **kwargs):
+        nonlocal reads
+        value = real_read(root, request_id, *args, **kwargs)
+        if request_id == request["request-id"]:
+            reads += 1
+            # list_records performs the first read; the request collection
+            # performs the second.  Simulate an activity update before the
+            # immediate pre-mutation re-read.
+            if reads == 2:
+                changed = dict(value)
+                changed["revision"] = int(value["revision"]) + 1
+                return changed
+        return value
+
+    monkeypatch.setattr(store, "read_record", read_with_revision_change)
+
+    row = next(
+        item
+        for item in api.list_execution_sessions(tmp_path, state="all", _live_ids=set())
+        if item["session-id"] == session["session-id"]
+    )
+
+    assert row["state"] == "active"
+    assert real_read(tmp_path, request["request-id"])["state"] == "queued"
+
+
 def test_live_session_lists_without_stale_flag(rig, monkeypatch):
     """A live active session from the runtime lists as live=True and does NOT
     carry a stale diagnostic flag."""
