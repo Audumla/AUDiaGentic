@@ -310,8 +310,8 @@ def _reconcile_nonterminal_requests_before_expiry(
             )
             return False
 
+    eligible: list[dict[str, Any]] = []
     for record in nonterminal:
-        request_id = str(record.get("request-id"))
         provider_metadata = session_provider_metadata(session)
         request_metadata = record.get("provider-metadata")
         binding = session.get("binding")
@@ -345,6 +345,10 @@ def _reconcile_nonterminal_requests_before_expiry(
             except (TypeError, ValueError):
                 # An invalid lease is not meaningful proof of liveness.
                 pass
+        eligible.append(record)
+
+    for record in eligible:
+        request_id = str(record.get("request-id"))
         try:
             side_effect_state = "may-have-started"
             diagnostics = record.get("diagnostics")
