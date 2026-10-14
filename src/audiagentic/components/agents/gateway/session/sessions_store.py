@@ -323,11 +323,16 @@ def _reconcile_nonterminal_requests_before_expiry(
     session_provider_metadata_value = session_provider_metadata(session)
     session_provider_session_id = session_provider_metadata_value.get("provider-session-id")
     session_provider_id_value = session_provider_id(session)
+    binding = session.get("binding")
+    binding_provider_id = binding.get("provider-id") if isinstance(binding, dict) else None
+    binding_provider_session_ref = binding.get("provider-session-ref") if isinstance(binding, dict) else None
     if (
         not isinstance(session_provider_session_id, str)
         or not session_provider_session_id.strip()
         or not isinstance(session_provider_id_value, str)
         or not session_provider_id_value.strip()
+        or binding_provider_id != session_provider_id_value
+        or binding_provider_session_ref != session_provider_session_id
     ):
         return False
     for record in nonterminal:
