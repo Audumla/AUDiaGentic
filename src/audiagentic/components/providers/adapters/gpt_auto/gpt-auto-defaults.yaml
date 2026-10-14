@@ -134,6 +134,16 @@ settings:
         # provider error without mounting role="alert" or the generic
         # network-error message.
         text-contains-any: ['Stream cache expired']
+      response-complete-status:
+        # The current renderer publishes completion through an aria-live
+        # status node instead of mounting the historical assistant action
+        # controls.  This is document-scoped because ChatGPT places the
+        # status node at body level; the snapshot binds the witness to the
+        # current latest assistant turn and still requires not-generating.
+        scope: document
+        selectors: ['span[role="status"]']
+        visible: true
+        text-contains-any: ['Response complete']
       completion-control:
         # GP41 (2026-08-17): [data-testid="copy-turn-action-button"] is NOT
         # unique to assistant turns -- confirmed live it is the SAME
@@ -157,6 +167,11 @@ settings:
         scope: latest-assistant-turn
         selectors:
           - 'button[data-testid="copy-turn-action-button"][aria-label="Copy response"]'
+          # ChatGPT's current renderer labels the same assistant action
+          # "Copy message" (confirmed live on the GPT review tab).  Keep this
+          # scoped to latest-assistant-turn; a document-global Copy message
+          # signal would also match the user's prompt action bar.
+          - 'button[aria-label="Copy message"]'
           # Current ChatGPT project conversations use the same assistant-scoped
           # control with the generic labels "Copy" or "Copy message".
           - 'button[aria-label="Copy"]'
@@ -352,6 +367,7 @@ settings:
         any-of-groups:
           - [completion-control, more-actions-menu]
           - [completion-control, not-generating]
+          - [response-complete-status, not-generating]
           - [canvas-edit-control, canvas-open-editor-control, not-generating]
         # A stale delivery-error panel can remain visible after ChatGPT has
         # produced the replacement answer.  Fresh assistant correlation plus

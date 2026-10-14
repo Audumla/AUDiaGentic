@@ -290,7 +290,9 @@ class ChatSnapshot:
                 {"stop-control", "streaming-indicator", "thinking-indicator", "busy-indicator"}
             )
         )
-        completion_visible = "completion-control" in signals
+        completion_visible = bool(
+            signals.intersection({"completion-control", "response-complete-status"})
+        )
         complete = (
             assistant_fresh
             and bool(self.latest_assistant_text)

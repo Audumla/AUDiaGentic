@@ -2884,9 +2884,14 @@ def _terminal_evidence_proves_checkpoint_clear(
         return False
     if evidence.get("policy") != "response-complete":
         return False
-    required = {"completion-control", "not-generating", "text-present"}
     observed = evidence.get("verification-evidence")
-    return isinstance(observed, (list, tuple, set)) and required <= set(observed)
+    if not isinstance(observed, (list, tuple, set)):
+        return False
+    observed_set = set(observed)
+    return (
+        {"not-generating", "text-present"} <= observed_set
+        and bool(observed_set.intersection({"completion-control", "response-complete-status"}))
+    )
 
 
 def _reconciliation_evidence_clear(

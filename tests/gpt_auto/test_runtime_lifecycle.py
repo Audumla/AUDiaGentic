@@ -532,6 +532,7 @@ async def test_rehydrated_transport_refreshes_target_binding_without_prompt() ->
         target_id="target-fallback",
         binding_sink=binding_sink,
         ag_session_id="session-target-refresh",
+        set_page_mutation_owner_probe=lambda _probe: None,
     )
 
     result = await GptAutoSessionTransport(chat).open()
@@ -557,7 +558,11 @@ async def test_transport_maps_project_readiness_timeout_to_structured_provider_e
     async def open_chat() -> None:
         raise readiness
 
-    chat = SimpleNamespace(open=open_chat, ag_session_id="session-project-readiness")
+    chat = SimpleNamespace(
+        open=open_chat,
+        ag_session_id="session-project-readiness",
+        set_page_mutation_owner_probe=lambda _probe: None,
+    )
 
     with pytest.raises(AudiaGenticError) as raised:
         await GptAutoSessionTransport(chat).open()

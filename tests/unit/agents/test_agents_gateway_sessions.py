@@ -2360,13 +2360,16 @@ def test_legacy_gpt_session_without_persisted_policy_uses_admission_default(tmp_
     assert row["close-reason"] == "idle-timeout"
 
 
-def test_durable_idle_sweep_never_expires_session_with_nonterminal_request(tmp_path):
+def test_durable_idle_sweep_reconciles_nonterminal_request(tmp_path):
     from audiagentic.components.agents.gateway import api as api
     from audiagentic.components.agents.gateway import store
 
     session = session_store.build_session_record(
         execution_profile_id="gpt-auto",
         provider_id="gpt-auto",
+        provider_session_ref="provider-session",
+        surface_id="surface-1",
+        provider_metadata={"provider-session-id": "provider-session"},
         idle_timeout_seconds=60,
     )
     session_id = session["session-id"]
@@ -2390,10 +2393,53 @@ def test_durable_idle_sweep_never_expires_session_with_nonterminal_request(tmp_p
         if item["session-id"] == session_id
     )
 
-    assert request["state"] == "queued"
+    reconciled = store.read_record(tmp_path, request["request-id"])
+    assert reconciled["state"] == "interrupted"
+    assert reconciled["error"]["code"] == "CON-AGW-084"
+    assert reconciled["diagnostics"]["reason-code"] == "provider-session-expired"
+    assert row["state"] == "expired"
+    assert "runtime-state" not in row
+    assert session_store.read_session_record(tmp_path, session_id)["state"] == "expired"
+
+
+def test_durable_idle_sweep_preserves_request_with_provider_activity_lease(tmp_path):
+    from audiagentic.components.agents.gateway import api as api
+    from audiagentic.components.agents.gateway import store
+
+    session = session_store.build_session_record(
+        execution_profile_id="gpt-auto",
+        provider_id="gpt-auto",
+        provider_session_ref="provider-session",
+        surface_id="surface-1",
+        provider_metadata={"provider-session-id": "provider-session"},
+        idle_timeout_seconds=60,
+    )
+    session_id = session["session-id"]
+    session["timing"]["last-activity-at"] = (
+        datetime.now(timezone.utc) - timedelta(hours=1)
+    ).isoformat().replace("+00:00", "Z")
+    session_store.write_session_record(tmp_path, session)
+    request = store.build_record(
+        request_id="req_live_provider_lease",
+        execution_profile_id="gpt-auto",
+        prompt_body="x",
+        session_id=session_id,
+        session_keep_alive=True,
+    )
+    request["activity"]["provider"]["lease-expires-at"] = (
+        datetime.now(timezone.utc) + timedelta(minutes=5)
+    ).isoformat().replace("+00:00", "Z")
+    store.write_record(tmp_path, request)
+
+    row = next(
+        item
+        for item in api.list_execution_sessions(tmp_path, state="all", _live_ids=set())
+        if item["session-id"] == session_id
+    )
+
     assert row["state"] == "active"
     assert row["runtime-state"] == "stale-non-live"
-    assert session_store.read_session_record(tmp_path, session_id)["state"] == "active"
+    assert store.read_record(tmp_path, request["request-id"])["state"] == "queued"
 
 
 def test_live_session_lists_without_stale_flag(rig, monkeypatch):

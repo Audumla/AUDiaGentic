@@ -265,7 +265,9 @@ async def capture_latest_response(
         or not snapshot.latest_assistant_text.strip()
         or not snapshot.latest_assistant_id
         or snapshot.terminal_witness_assistant_id != snapshot.latest_assistant_id
-        or "completion-control" not in snapshot.dom_signals
+        or not snapshot.dom_signals.intersection(
+            {"completion-control", "response-complete-status"}
+        )
     ):
         return {
             "outcome": "unavailable",
