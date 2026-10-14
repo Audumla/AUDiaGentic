@@ -337,6 +337,55 @@ def test_complete_execution_from_provider_uses_prompt_text_for_synthetic_ids(mon
     assert calls["updates"]["__final-response-text"] == "answer"
 
 
+def test_complete_execution_from_provider_accepts_virtualized_prompt_id(monkeypatch, tmp_path: Path):
+    request_id = "req_virtualized_prompt"
+    materialized_prompt = "governed instructions\n\nfinish this review"
+    record = {
+        "request-id": request_id,
+        "state": "running",
+        "revision": 2,
+        "session-id": "ses_capture",
+        "resolved-provider-id": "gpt-auto",
+        "prompt-template-digest": hashlib.sha256(materialized_prompt.encode()).hexdigest(),
+        "provider-metadata": {
+            "chat-url": "https://chatgpt.com/g/g-p-project/c/conversation",
+            "project-url": "https://chatgpt.com/g/g-p-project/project",
+            "provider-session-id": "conversation",
+            "prompt-message-id": "virtualized-prompt-for-assistant-1",
+            "assistant-message-id": "assistant-1",
+            "submission-proven": True,
+        },
+    }
+    prompt_path = gateway_admitted_prompt_path(tmp_path, request_id)
+    prompt_path.parent.mkdir(parents=True, exist_ok=True)
+    prompt_path.write_bytes(materialized_prompt.encode("utf-8"))
+    snapshot = SimpleNamespace(
+        latest_assistant_text="answer",
+        latest_user_text=materialized_prompt,
+        latest_user_id="virtualized-prompt-for-assistant-1",
+        latest_assistant_id="assistant-1",
+        terminal_witness_assistant_id="assistant-1",
+        generating=False,
+        dom_signals=frozenset({"response-complete-status"}),
+        message_refs=(),
+    )
+    updated = {**record, "state": "completed"}
+    monkeypatch.setattr(api.store, "read_record", lambda *_: record)
+    monkeypatch.setattr(sessions_store, "read_session_record", lambda *_: {"provider": {"metadata": {}}})
+    monkeypatch.setattr(sessions_store, "session_provider_metadata", lambda _: {})
+    monkeypatch.setattr(sessions_store, "session_provider_id", lambda _: "gpt-auto")
+    monkeypatch.setattr(
+        session_runtime_module,
+        "get_session_runtime",
+        lambda: SimpleNamespace(capture_latest_response=lambda *args, **kwargs: {"outcome": "captured", "snapshot": snapshot}),
+    )
+    monkeypatch.setattr(api.store, "transition_operator_terminal", lambda *args, **kwargs: updated)
+
+    result = api.complete_execution_from_provider(tmp_path, request_id)
+
+    assert result["state"] == "completed"
+
+
 def test_complete_execution_from_provider_reports_missing_admitted_snapshot(monkeypatch, tmp_path: Path):
     request_id = "req_missing_snapshot"
     record = {
