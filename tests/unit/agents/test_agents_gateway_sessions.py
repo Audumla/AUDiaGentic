@@ -2384,7 +2384,9 @@ def test_durable_idle_sweep_reconciles_nonterminal_request(tmp_path):
         prompt_body="x",
         session_id=session_id,
         session_keep_alive=True,
+        resolved_provider_id="gpt-auto",
     )
+    request["provider-metadata"] = {"provider-session-id": "provider-session"}
     store.write_record(tmp_path, request)
 
     row = next(
@@ -2425,7 +2427,9 @@ def test_durable_idle_sweep_preserves_request_with_provider_activity_lease(tmp_p
         prompt_body="x",
         session_id=session_id,
         session_keep_alive=True,
+        resolved_provider_id="gpt-auto",
     )
+    request["provider-metadata"] = {"provider-session-id": "provider-session"}
     request["activity"]["provider"]["lease-expires-at"] = (
         datetime.now(timezone.utc) + timedelta(minutes=5)
     ).isoformat().replace("+00:00", "Z")
@@ -2440,6 +2444,127 @@ def test_durable_idle_sweep_preserves_request_with_provider_activity_lease(tmp_p
     assert row["state"] == "active"
     assert row["runtime-state"] == "stale-non-live"
     assert store.read_record(tmp_path, request["request-id"])["state"] == "queued"
+
+
+def test_durable_idle_sweep_requires_exact_provider_session_identity(tmp_path):
+    from audiagentic.components.agents.gateway import api as api
+    from audiagentic.components.agents.gateway import store
+
+    session = session_store.build_session_record(
+        execution_profile_id="gpt-auto",
+        provider_id="gpt-auto",
+        provider_session_ref="provider-session",
+        surface_id="surface-1",
+        provider_metadata={"provider-session-id": "provider-session"},
+        idle_timeout_seconds=60,
+    )
+    session["timing"]["last-activity-at"] = (
+        datetime.now(timezone.utc) - timedelta(hours=1)
+    ).isoformat().replace("+00:00", "Z")
+    session_store.write_session_record(tmp_path, session)
+    request = store.build_record(
+        request_id="req_mismatched_provider_session",
+        execution_profile_id="gpt-auto",
+        prompt_body="x",
+        session_id=session["session-id"],
+        session_keep_alive=True,
+        resolved_provider_id="gpt-auto",
+    )
+    request["provider-metadata"] = {"provider-session-id": "other-session"}
+    store.write_record(tmp_path, request)
+
+    row = next(
+        item
+        for item in api.list_execution_sessions(tmp_path, state="all", _live_ids=set())
+        if item["session-id"] == session["session-id"]
+    )
+
+    assert row["state"] == "active"
+    assert store.read_record(tmp_path, request["request-id"])["state"] == "queued"
+
+
+def test_durable_idle_sweep_ignores_legacy_owner_activity_lease(tmp_path):
+    from audiagentic.components.agents.gateway import api as api
+    from audiagentic.components.agents.gateway import store
+
+    session = session_store.build_session_record(
+        execution_profile_id="gpt-auto",
+        provider_id="gpt-auto",
+        provider_session_ref="provider-session",
+        surface_id="surface-1",
+        provider_metadata={"provider-session-id": "provider-session"},
+        idle_timeout_seconds=60,
+    )
+    session["timing"]["last-activity-at"] = (
+        datetime.now(timezone.utc) - timedelta(hours=1)
+    ).isoformat().replace("+00:00", "Z")
+    session_store.write_session_record(tmp_path, session)
+    request = store.build_record(
+        request_id="req_owner_lease_only",
+        execution_profile_id="gpt-auto",
+        prompt_body="x",
+        session_id=session["session-id"],
+        session_keep_alive=True,
+        resolved_provider_id="gpt-auto",
+    )
+    request["provider-metadata"] = {"provider-session-id": "provider-session"}
+    request["activity-lease-expires-at"] = (
+        datetime.now(timezone.utc) + timedelta(hours=1)
+    ).isoformat().replace("+00:00", "Z")
+    store.write_record(tmp_path, request)
+
+    row = next(
+        item
+        for item in api.list_execution_sessions(tmp_path, state="all", _live_ids=set())
+        if item["session-id"] == session["session-id"]
+    )
+
+    assert row["state"] == "expired"
+    assert store.read_record(tmp_path, request["request-id"])["state"] == "interrupted"
+
+
+def test_durable_idle_sweep_preflights_all_requests_before_mutation(tmp_path):
+    from audiagentic.components.agents.gateway import api as api
+    from audiagentic.components.agents.gateway import store
+
+    session = session_store.build_session_record(
+        execution_profile_id="gpt-auto",
+        provider_id="gpt-auto",
+        provider_session_ref="provider-session",
+        surface_id="surface-1",
+        provider_metadata={"provider-session-id": "provider-session"},
+        idle_timeout_seconds=60,
+    )
+    session["timing"]["last-activity-at"] = (
+        datetime.now(timezone.utc) - timedelta(hours=1)
+    ).isoformat().replace("+00:00", "Z")
+    session_store.write_session_record(tmp_path, session)
+    requests = []
+    for request_id in ("req_preflight_one", "req_preflight_two"):
+        request = store.build_record(
+            request_id=request_id,
+            execution_profile_id="gpt-auto",
+            prompt_body="x",
+            session_id=session["session-id"],
+            session_keep_alive=True,
+            resolved_provider_id="gpt-auto",
+        )
+        request["provider-metadata"] = {"provider-session-id": "provider-session"}
+        requests.append(request)
+        store.write_record(tmp_path, request)
+    requests[0]["activity"]["provider"]["lease-expires-at"] = (
+        datetime.now(timezone.utc) + timedelta(minutes=5)
+    ).isoformat().replace("+00:00", "Z")
+    store.write_record(tmp_path, requests[0])
+
+    row = next(
+        item
+        for item in api.list_execution_sessions(tmp_path, state="all", _live_ids=set())
+        if item["session-id"] == session["session-id"]
+    )
+
+    assert row["state"] == "active"
+    assert all(store.read_record(tmp_path, item["request-id"])["state"] == "queued" for item in requests)
 
 
 def test_live_session_lists_without_stale_flag(rig, monkeypatch):

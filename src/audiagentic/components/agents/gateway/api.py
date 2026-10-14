@@ -1289,7 +1289,9 @@ def focus_execution_session(project_root: Path, session_id: str) -> dict[str, An
     return {"session-id": session_id, **result}
 
 
-def complete_execution_from_provider(project_root: Path, request_id: str) -> dict[str, Any]:
+def complete_execution_from_provider(
+    project_root: Path, request_id: str, *, passive: bool = False
+) -> dict[str, Any]:
     """Capture and commit the request-owned current GPT response.
 
     This is an operator recovery action, not a best-effort "latest text" read:
@@ -1338,12 +1340,14 @@ def complete_execution_from_provider(project_root: Path, request_id: str) -> dic
         gateway_session_id=str(session_id),
     )
     from audiagentic.components.agents.gateway.session.sessions import get_session_runtime
-    captured = get_session_runtime().capture_latest_response(project_root, provider_id=str(provider_id), locator=locator)
+    captured = get_session_runtime().capture_latest_response(
+        project_root, provider_id=str(provider_id), locator=locator, passive=passive
+    )
     if captured.get("outcome") != "captured":
         raise AudiaGenticError(code="CON-AGW-154", kind="agents", message="provider response could not be captured", details={"request-id": request_id, "reason": captured.get("reason")})
     snapshot = captured.get("snapshot")
     confirmed = get_session_runtime().capture_latest_response(
-        project_root, provider_id=str(provider_id), locator=locator
+        project_root, provider_id=str(provider_id), locator=locator, passive=passive
     )
     if confirmed.get("outcome") != "captured":
         raise AudiaGenticError(code="CON-AGW-155", kind="agents", message="provider terminal response could not be revalidated", details={"request-id": request_id})
@@ -1379,7 +1383,9 @@ def complete_execution_from_provider(project_root: Path, request_id: str) -> dic
     # response-level More actions menu, so requiring both DOM controls here
     # strands a visibly complete response.  This remains an explicit,
     # request-scoped recovery action, separate from automatic turn policy.
-    if "completion-control" not in getattr(snapshot, "dom_signals", frozenset()):
+    if not getattr(snapshot, "dom_signals", frozenset()).intersection(
+        {"completion-control", "response-complete-status"}
+    ):
         raise AudiaGenticError(code="CON-AGW-155", kind="agents", message="provider completion witness is missing", details={"request-id": request_id})
     if not latest_assistant_id or witness_id != latest_assistant_id:
         raise AudiaGenticError(code="CON-AGW-156", kind="agents", message="provider response is not request-owned", details={"request-id": request_id})

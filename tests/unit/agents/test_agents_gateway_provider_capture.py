@@ -316,7 +316,10 @@ def test_complete_execution_from_provider_uses_prompt_text_for_synthetic_ids(mon
         latest_assistant_id="fallback-assistant-1",
         terminal_witness_assistant_id="fallback-assistant-1",
         generating=False,
-        dom_signals=frozenset({"completion-control", "more-actions-menu"}),
+        # Current ChatGPT can expose the response-level status live region
+        # without the older Copy/Regenerate control.  The gateway must still
+        # commit a proven, quiescent response from this witness.
+        dom_signals=frozenset({"response-complete-status"}),
         message_refs=refs,
     )
     artifact_ref = {"artifact-id": "final-response", "request-id": request_id, "media-type": "text/plain", "bytes": 6, "sha256": "hash"}

@@ -1795,11 +1795,14 @@ async def capture_latest_response(
     *,
     provider_id: str,
     locator: ConversationFocusLocator,
+    passive: bool = False,
 ) -> dict[str, Any]:
     from audiagentic.components.providers.services.execution.public_execution import (
         capture_latest_response as _capture,
     )
-    return await _capture(project_root, provider_id=provider_id, locator=locator)
+    return await _capture(
+        project_root, provider_id=provider_id, locator=locator, passive=passive
+    )
 
 
 # --- AS29 slice 5a: resolved session-surface through public boundary --------

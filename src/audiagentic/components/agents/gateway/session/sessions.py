@@ -655,11 +655,12 @@ class SessionRuntime:
         provider_id: str,
         locator: ConversationFocusLocator,
         timeout_seconds: float = 20.0,
+        passive: bool = False,
     ) -> dict[str, Any]:
         """Read the current response from the request-owned provider tab."""
         return self._call(
             providers_api.capture_latest_response(
-                project_root, provider_id=provider_id, locator=locator
+                project_root, provider_id=provider_id, locator=locator, passive=passive
             ),
             timeout=timeout_seconds,
         )
