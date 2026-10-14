@@ -1421,14 +1421,16 @@ def complete_execution_from_provider(
     # require the persisted prompt fingerprint below instead of rejecting a
     # visibly request-owned completed response as an identity mismatch.
     prompt_text = str(prompt_id) if prompt_id is not None else ""
+    prompt_is_virtualized = prompt_text.startswith("virtualized-prompt-for-")
     prompt_is_real = bool(
         prompt_text
-        and not prompt_text.startswith(("fallback-", "virtualized-prompt-for-"))
+        and not prompt_text.startswith("fallback-")
+        and not prompt_is_virtualized
     )
     if prompt_is_real:
         if latest_user_id != prompt_id:
             raise AudiaGenticError(code="CON-AGW-156", kind="agents", message="provider prompt identity does not match request", details={"request-id": request_id})
-    if not prompt_is_real and effective_metadata.get("unresolved-turn-pending") is True:
+    if not prompt_is_real and not prompt_is_virtualized and effective_metadata.get("unresolved-turn-pending") is True:
         # A count/order advance is not enough for an unresolved pre-ID turn:
         # a later foreign prompt in the same conversation could satisfy it.
         # Require the durable normalized prompt fingerprint before automatic
@@ -1449,7 +1451,7 @@ def complete_execution_from_provider(
                 message="provider prompt does not match the unresolved request",
                 details={"request-id": request_id, "failure-reason": "prompt-digest-mismatch"},
             )
-    if not prompt_is_real and effective_metadata.get("unresolved-turn-pending") is not True:
+    if not prompt_is_real and not prompt_is_virtualized and effective_metadata.get("unresolved-turn-pending") is not True:
         from audiagentic.components.agents.agents_paths import gateway_admitted_prompt_path
         from audiagentic.foundation.io import read_bytes_with_retry
         import hashlib

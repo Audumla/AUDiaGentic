@@ -361,7 +361,9 @@ def test_complete_execution_from_provider_accepts_virtualized_prompt_id(monkeypa
     prompt_path.write_bytes(materialized_prompt.encode("utf-8"))
     snapshot = SimpleNamespace(
         latest_assistant_text="answer",
-        latest_user_text=materialized_prompt,
+        # The user node is virtualized out of the DOM; ownership is carried by
+        # the exact assistant witness and the request's durable session bind.
+        latest_user_text="virtualized user node",
         latest_user_id="virtualized-prompt-for-assistant-1",
         latest_assistant_id="assistant-1",
         terminal_witness_assistant_id="assistant-1",

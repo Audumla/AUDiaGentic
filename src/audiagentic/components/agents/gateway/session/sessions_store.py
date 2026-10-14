@@ -233,17 +233,24 @@ def expire_session_if_policy_exceeded(
         reason = "idle-timeout"
     if reason is None:
         return record
-    # Terminalize owned requests before retiring the session.  If the request
-    # fence changes, the session remains active for a later safe sweep.
-    if not _reconcile_nonterminal_requests_before_expiry(project_root, record, reason=reason):
-        return record
-    expired = transition_session_record(
-        project_root,
-        session_id,
-        "expired",
-        updates={"close-reason": reason, "closed-at": now_iso_z()},
-    )
-    bindings.retire_binding(project_root, expired, state="expired")
+    # Serialize the request preflight, request terminalization, and session
+    # retirement under the same project retention fence.  Per-request CAS is
+    # still required, but without this logical-operation lock another writer
+    # could change a later request between the all-request preflight and the
+    # session transition, leaving a partially reconciled session.
+    with StartupLock(gateway_retention_lock_path(project_root)):
+        current = read_session_record(project_root, session_id)
+        if current.get("state") in SESSION_TERMINAL_STATES:
+            return current
+        if not _reconcile_nonterminal_requests_before_expiry(project_root, current, reason=reason):
+            return current
+        expired = transition_session_record(
+            project_root,
+            session_id,
+            "expired",
+            updates={"close-reason": reason, "closed-at": now_iso_z()},
+        )
+        bindings.retire_binding(project_root, expired, state="expired")
     try:
         record_session_timeline(
             project_root,
@@ -351,6 +358,19 @@ def _reconcile_nonterminal_requests_before_expiry(
                 # An invalid lease is not meaningful proof of liveness.
                 pass
         eligible.append(record)
+
+    # Re-read the complete fence immediately before the first mutation.  The
+    # project retention lock serializes cooperative expiry/archive writers;
+    # this second read closes the remaining preflight window for activity,
+    # cancellation, or provider-lease updates that advanced a request
+    # revision after the initial enumeration.
+    for record in eligible:
+        current = store.read_record(project_root, str(record.get("request-id")))
+        if (
+            current.get("state") in store.TERMINAL_STATES
+            or current.get("revision") != record.get("revision")
+        ):
+            return False
 
     for record in eligible:
         request_id = str(record.get("request-id"))
