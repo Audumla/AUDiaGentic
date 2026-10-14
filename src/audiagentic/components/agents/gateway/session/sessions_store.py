@@ -253,15 +253,9 @@ def expire_session_if_policy_exceeded(
             reason = "idle-timeout"
         if reason is None:
             return current
-        if not _reconcile_nonterminal_requests_before_expiry(project_root, current, reason=reason):
+        expired = _reconcile_nonterminal_requests_before_expiry(project_root, current, reason=reason)
+        if expired is None:
             return current
-        expired = transition_session_record(
-            project_root,
-            session_id,
-            "expired",
-            updates={"close-reason": reason, "closed-at": now_iso_z()},
-        )
-        bindings.retire_binding(project_root, expired, state="expired")
     try:
         record_session_timeline(
             project_root,
@@ -280,7 +274,7 @@ def _reconcile_nonterminal_requests_before_expiry(
     session: dict[str, Any],
     *,
     reason: str,
-) -> bool:
+) -> dict[str, Any] | None:
     """Retire request records whose provider session has durably expired.
 
     A previous protection rule refused to expire any session carrying a
@@ -298,7 +292,7 @@ def _reconcile_nonterminal_requests_before_expiry(
 
     session_id = session.get("session-id")
     if not isinstance(session_id, str) or not session_id:
-        return True
+        return None
     request_ids = set(session_request_ids(session))
     try:
         records = store.list_records(project_root, include_output=False)
@@ -308,7 +302,7 @@ def _reconcile_nonterminal_requests_before_expiry(
             extra={"session-id": session_id},
             exc_info=True,
         )
-        return False
+        return None
     request_ids.update(
         str(record.get("request-id"))
         for record in records
@@ -326,11 +320,9 @@ def _reconcile_nonterminal_requests_before_expiry(
                 extra={"request-id": request_id, "session-id": session_id},
                 exc_info=True,
             )
-            return False
+            return None
 
     eligible: list[dict[str, Any]] = []
-    if not nonterminal:
-        return True
     session_provider_metadata_value = session_provider_metadata(session)
     session_provider_session_id = session_provider_metadata_value.get("provider-session-id")
     session_provider_id_value = session_provider_id(session)
@@ -345,11 +337,11 @@ def _reconcile_nonterminal_requests_before_expiry(
         or binding_provider_id != session_provider_id_value
         or binding_provider_session_ref != session_provider_session_id
     ):
-        return False
+        return None
     for record in nonterminal:
         request_metadata = record.get("provider-metadata")
         if not isinstance(request_metadata, dict):
-            return False
+            return None
         request_provider_session_id = request_metadata.get("provider-session-id")
         if (
             not isinstance(request_provider_session_id, str)
@@ -357,7 +349,7 @@ def _reconcile_nonterminal_requests_before_expiry(
             or request_provider_session_id != session_provider_session_id
             or record.get("resolved-provider-id") != session_provider_id_value
         ):
-            return False
+            return None
         activity = record.get("activity")
         provider_activity = activity.get("provider") if isinstance(activity, dict) else None
         # The legacy top-level lease is the gateway owner/synthetic lease.  It
@@ -369,7 +361,7 @@ def _reconcile_nonterminal_requests_before_expiry(
                 if lease_at.tzinfo is None:
                     lease_at = lease_at.replace(tzinfo=timezone.utc)
                 if lease_at > datetime.now(timezone.utc):
-                    return False
+                    return None
             except (TypeError, ValueError):
                 # An invalid lease is not meaningful proof of liveness.
                 pass
@@ -389,7 +381,7 @@ def _reconcile_nonterminal_requests_before_expiry(
                 current.get("state") in store.TERMINAL_STATES
                 or current.get("revision") != record.get("revision")
             ):
-                return False
+                return None
 
         for record in eligible:
             request_id = str(record.get("request-id"))
@@ -440,8 +432,18 @@ def _reconcile_nonterminal_requests_before_expiry(
                     extra={"request-id": request_id, "session-id": session_id},
                     exc_info=True,
                 )
-                return False
-    return True
+                return None
+        # Keep the session transition inside the request-lock scope. This
+        # prevents a new activity/cancellation mutation from entering between
+        # the last request terminalization and session expiry.
+        expired = transition_session_record(
+            project_root,
+            session_id,
+            "expired",
+            updates={"close-reason": reason, "closed-at": now_iso_z()},
+        )
+        bindings.retire_binding(project_root, expired, state="expired")
+        return expired
 
 
 def expire_session_if_lifetime_exceeded(
