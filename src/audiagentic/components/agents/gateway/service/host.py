@@ -505,12 +505,31 @@ class GatewayServiceHost:
                 updated = _retire_unbound_initial_timeout(updated)
                 registry.update(project_root, updated)
                 diagnostics = updated.get("diagnostics")
+                provider_turn_pending = False
+                session_id = updated.get("session-id")
+                if isinstance(session_id, str) and session_id:
+                    try:
+                        session_record = sessions_store.read_session_record(project_root, session_id)
+                        provider_turn_pending = (
+                            sessions_store.session_provider_metadata(session_record).get(
+                                "unresolved-turn-pending"
+                            )
+                            is True
+                        )
+                    except Exception:  # noqa: BLE001 - durable request state remains authoritative
+                        provider_turn_pending = False
                 if (
-                    updated.get("watchdog-state") == "intervention"
+                    updated.get("state") == "running"
                     and isinstance(updated.get("session-id"), str)
                     and isinstance(diagnostics, dict)
-                    and diagnostics.get("resolution-state")
-                    in {"unresolved", "reconciliation-requested"}
+                    and (
+                        (
+                            updated.get("watchdog-state") == "intervention"
+                            and diagnostics.get("resolution-state")
+                            in {"unresolved", "reconciliation-requested"}
+                        )
+                        or provider_turn_pending
+                    )
                 ):
                     # A quiet provider turn can already be complete even when its
                     # activity observer died. Reconcile the durable request from
@@ -542,11 +561,15 @@ class GatewayServiceHost:
                                 extra={"request-id": updated.get("request-id")},
                                 exc_info=True,
                             )
-                    elif capture_error is not None and capture_error.code in {
+                    elif (
+                        updated.get("watchdog-state") == "intervention"
+                        and capture_error is not None
+                        and capture_error.code in {
                         "CON-AGW-154",
                         "CON-AGW-155",
                         "CON-AGW-156",
-                    }:
+                        }
+                    ):
                         # The provider has rendered terminal-looking material,
                         # but the response cannot be proven to belong to this
                         # request.  Reopening the conversation here creates the
