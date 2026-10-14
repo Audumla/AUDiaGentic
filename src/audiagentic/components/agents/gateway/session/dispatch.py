@@ -1030,6 +1030,22 @@ def _dispatch_session_request(
         if guard_held:
             preparation_guard.release()
             guard_held = False
+        # Persist the immutable provider conversation identity onto a
+        # continuation before the provider turn starts.  This closes the
+        # crash window where admission selected a bound session but the later
+        # metadata relay had not yet reached the request record.
+        if not is_new_session:
+            continuation_metadata = session_store.session_provider_metadata(session_record)
+            if continuation_metadata.get("provider-session-id"):
+                record = store.update_owned_running_session(
+                    project_root,
+                    request_id,
+                    owner_epoch=record["dispatch-owner-epoch"],
+                    worker_id=record["worker-id"],
+                    attempt_epoch=record["attempt-epoch"],
+                    session_id=session_id,
+                    provider_metadata=continuation_metadata,
+                )
         # This only proves that SessionRuntime was entered.  Provider
         # submission state comes from the transport's typed failure contract.
         runtime_invoked = True
