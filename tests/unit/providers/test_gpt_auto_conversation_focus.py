@@ -361,3 +361,44 @@ def test_capture_missing_tab_without_durable_url_never_opens_or_submits(monkeypa
 
     assert result == {"outcome": "unavailable", "reason": "conversation-tab-not-found"}
     assert calls == [("list_pages", None)]
+
+
+def test_passive_capture_missing_tab_never_reopens_or_navigates(monkeypatch, tmp_path):
+    calls = []
+
+    class FakeBridge:
+        async def call(self, method, params=None):
+            calls.append((method, params))
+            if method == "list_pages":
+                return []
+            raise AssertionError(f"passive capture must not call {method}")
+
+    class FakeRuntime:
+        bridge = FakeBridge()
+
+        async def connect_existing(self):
+            return True
+
+        def adopt_existing_dedicated_window(self, pages):
+            return None
+
+        def page_belongs_to_dedicated_window(self, page):
+            return True
+
+        async def create_chat_page(self):
+            raise AssertionError("passive capture must not create a tab")
+
+    monkeypatch.setattr(conversation_focus, "load_provider_config", lambda _: {"providers": {"gpt-auto": {}}})
+    monkeypatch.setattr(conversation_focus, "get_runtime", lambda *_: FakeRuntime())
+
+    result = asyncio.run(
+        conversation_focus.capture_latest_response(
+            tmp_path,
+            provider_id="gpt-auto",
+            locator=_locator("https://chatgpt.com/g/g-p-x/c/s1", "s1"),
+            passive=True,
+        )
+    )
+
+    assert result == {"outcome": "unavailable", "reason": "conversation-tab-not-found"}
+    assert calls == [("list_pages", None)]

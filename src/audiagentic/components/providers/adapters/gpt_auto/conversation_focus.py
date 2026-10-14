@@ -179,12 +179,14 @@ async def capture_latest_response(
     *,
     provider_id: str,
     locator: ConversationFocusLocator,
+    passive: bool = False,
 ) -> dict[str, object]:
     """Read a proven terminal response from one exact GPT conversation.
 
-    Missing retained tabs may be reopened at the durable conversation URL.
-    This remains observation-only: it never types or submits a prompt, and
-    the caller still owns request correlation and terminalization.
+    Missing retained tabs may be reopened at the durable conversation URL for
+    an explicit operator action.  ``passive`` is used by the watchdog and is
+    strictly existing-target-only: it never creates, navigates, activates,
+    refreshes, or materializes a page.
     """
     document = load_provider_config(project_root)
     provider_cfg = (document.get("providers") or {}).get(provider_id)
@@ -212,7 +214,7 @@ async def capture_latest_response(
         and result.outcome is ConversationFocusOutcome.NOT_FOUND
     ):
         chat_url = canonical_chat_url(locator.chat_url or "")
-        if chat_url is not None:
+        if chat_url is not None and not passive:
             try:
                 handle = await runtime.create_chat_page()
                 await runtime.bridge.call(
@@ -237,9 +239,11 @@ async def capture_latest_response(
     # button. It must remain observation-only: foregrounding here makes a
     # quiet/stale recovery loop steal focus and cycle through GPT tabs. Only
     # an explicit focus/open-tab action may activate a target.
-    await runtime.bridge.call("keep_page_active", {"pageHandle": handle, "operator": True})
+    if not passive:
+        await runtime.bridge.call("keep_page_active", {"pageHandle": handle, "operator": True})
     page = await runtime.gpt_browser.page_by_handle(handle)
-    await runtime.gpt_browser.materialize_latest_assistant_turn(page)
+    if not passive:
+        await runtime.gpt_browser.materialize_latest_assistant_turn(page)
     snapshot = ChatSnapshot.from_bridge(
         await runtime.gpt_browser.snapshot(
             page,
