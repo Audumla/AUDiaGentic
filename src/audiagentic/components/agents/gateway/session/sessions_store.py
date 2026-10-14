@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from contextlib import ExitStack
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -27,6 +28,7 @@ from audiagentic.components.agents.agents_paths import (
     gateway_sessions_root,
 )
 from audiagentic.components.agents.gateway.session import bindings as bindings
+from audiagentic.components.agents.gateway.store._shared import _request_lock
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.contracts.schema_registry import validate_with_schema
 from audiagentic.foundation.io import atomic_write_json, load_ndjson
@@ -242,6 +244,15 @@ def expire_session_if_policy_exceeded(
         current = read_session_record(project_root, session_id)
         if current.get("state") in SESSION_TERMINAL_STATES:
             return current
+        # The session may have been refreshed while this sweep waited for the
+        # project fence. Re-evaluate policy from the locked record.
+        reason = None
+        if session_lifetime_expired(current):
+            reason = "max-lifetime"
+        elif session_idle_expired(current):
+            reason = "idle-timeout"
+        if reason is None:
+            return current
         if not _reconcile_nonterminal_requests_before_expiry(project_root, current, reason=reason):
             return current
         expired = transition_session_record(
@@ -364,68 +375,72 @@ def _reconcile_nonterminal_requests_before_expiry(
                 pass
         eligible.append(record)
 
-    # Re-read the complete fence immediately before the first mutation.  The
-    # project retention lock serializes cooperative expiry/archive writers;
-    # this second read closes the remaining preflight window for activity,
-    # cancellation, or provider-lease updates that advanced a request
-    # revision after the initial enumeration.
-    for record in eligible:
-        current = store.read_record(project_root, str(record.get("request-id")))
-        if (
-            current.get("state") in store.TERMINAL_STATES
-            or current.get("revision") != record.get("revision")
-        ):
-            return False
+    with ExitStack() as request_locks:
+        # Hold every request mutation lock through the session transition's
+        # logical operation. Activity/cancellation writers use these same
+        # locks, so request B cannot advance after request A is terminalized.
+        for record in eligible:
+            request_locks.enter_context(_request_lock(project_root, str(record.get("request-id"))))
 
-    for record in eligible:
-        request_id = str(record.get("request-id"))
-        try:
-            side_effect_state = "may-have-started"
-            diagnostics = record.get("diagnostics")
-            if isinstance(diagnostics, dict):
-                side_effect_state = diagnostics.get("side-effect-state") or side_effect_state
-            error = {
-                "code": "CON-AGW-084",
-                "kind": "agents",
-                "message": "provider session expired before the request reached a terminal state",
-                "details": {
-                    "session-id": session_id,
-                    "session-close-reason": reason,
-                    "failure-reason": "provider-session-expired",
-                    "side-effect-state": side_effect_state,
-                    "watchdog-classification": "expired-provider-session",
-                    "reconciliation": "provider-capture-required",
-                    "retry-safe": False,
-                },
-            }
-            updated = store.transition_recovered_terminal(
-                project_root,
-                request_id,
-                "interrupted",
-                error=error,
-                stale_epoch=record.get("dispatch-owner-epoch") or None,
-                expected_revision=record.get("revision"),
-                replay_required=False,
-                replay_reason="provider-session-expired; reconcile or operator-capture before retry",
-            )
-            store.record_gateway_timeline(
-                project_root,
-                request_id,
-                "request.interrupted",
-                state=updated.get("state"),
-                attributes={
-                    "source": "session-expiry-reconciliation",
-                    "session-id": session_id,
-                    "session-close-reason": reason,
-                },
-            )
-        except Exception:  # noqa: BLE001 - one record must not block session expiry
-            logger.warning(
-                "could not reconcile request owned by expired session",
-                extra={"request-id": request_id, "session-id": session_id},
-                exc_info=True,
-            )
-            return False
+        # Re-read the complete fence immediately before the first mutation.
+        for record in eligible:
+            current = store.read_record(project_root, str(record.get("request-id")))
+            if (
+                current.get("state") in store.TERMINAL_STATES
+                or current.get("revision") != record.get("revision")
+            ):
+                return False
+
+        for record in eligible:
+            request_id = str(record.get("request-id"))
+            try:
+                side_effect_state = "may-have-started"
+                diagnostics = record.get("diagnostics")
+                if isinstance(diagnostics, dict):
+                    side_effect_state = diagnostics.get("side-effect-state") or side_effect_state
+                error = {
+                    "code": "CON-AGW-084",
+                    "kind": "agents",
+                    "message": "provider session expired before the request reached a terminal state",
+                    "details": {
+                        "session-id": session_id,
+                        "session-close-reason": reason,
+                        "failure-reason": "provider-session-expired",
+                        "side-effect-state": side_effect_state,
+                        "watchdog-classification": "expired-provider-session",
+                        "reconciliation": "provider-capture-required",
+                        "retry-safe": False,
+                    },
+                }
+                updated = store.transition_recovered_terminal(
+                    project_root,
+                    request_id,
+                    "interrupted",
+                    error=error,
+                    stale_epoch=record.get("dispatch-owner-epoch") or None,
+                    expected_revision=record.get("revision"),
+                    replay_required=False,
+                    replay_reason="provider-session-expired; reconcile or operator-capture before retry",
+                    _request_lock_held=True,
+                )
+                store.record_gateway_timeline(
+                    project_root,
+                    request_id,
+                    "request.interrupted",
+                    state=updated.get("state"),
+                    attributes={
+                        "source": "session-expiry-reconciliation",
+                        "session-id": session_id,
+                        "session-close-reason": reason,
+                    },
+                )
+            except Exception:  # noqa: BLE001 - one record must not block session expiry
+                logger.warning(
+                    "could not reconcile request owned by expired session",
+                    extra={"request-id": request_id, "session-id": session_id},
+                    exc_info=True,
+                )
+                return False
     return True
 
 

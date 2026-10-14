@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 import os
 import time
+from contextlib import nullcontext
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -792,6 +793,7 @@ def transition_recovered_terminal(
     expected_revision: int | None = None,
     replay_required: bool | None = None,
     replay_reason: str | None = None,
+    _request_lock_held: bool = False,
 ) -> dict[str, Any]:
     """Terminalize a recovered request.
 
@@ -803,7 +805,8 @@ def transition_recovered_terminal(
     """
     if new_state not in _shared.TERMINAL_STATES:
         raise AudiaGenticError("VAL-AGW-084", "agents", "recovered transition must be terminal", {})
-    with _request_lock(project_root, request_id):
+    lock = nullcontext() if _request_lock_held else _request_lock(project_root, request_id)
+    with lock:
         record = _read_record_locked(project_root, request_id)
         if expected_revision is not None and record.get("revision") != expected_revision:
             raise AudiaGenticError(

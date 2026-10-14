@@ -1430,6 +1430,10 @@ def complete_execution_from_provider(
     if prompt_is_real:
         if latest_user_id != prompt_id:
             raise AudiaGenticError(code="CON-AGW-156", kind="agents", message="provider prompt identity does not match request", details={"request-id": request_id})
+    if prompt_is_virtualized:
+        virtualized_assistant_id = prompt_text.removeprefix("virtualized-prompt-for-")
+        if not virtualized_assistant_id or virtualized_assistant_id != latest_assistant_id:
+            raise AudiaGenticError(code="CON-AGW-156", kind="agents", message="virtualized provider prompt witness does not match the latest assistant", details={"request-id": request_id})
     if not prompt_is_real and not prompt_is_virtualized and effective_metadata.get("unresolved-turn-pending") is True:
         # A count/order advance is not enough for an unresolved pre-ID turn:
         # a later foreign prompt in the same conversation could satisfy it.
