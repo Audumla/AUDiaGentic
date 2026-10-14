@@ -233,6 +233,10 @@ def expire_session_if_policy_exceeded(
         reason = "idle-timeout"
     if reason is None:
         return record
+    # Terminalize owned requests before retiring the session.  If the request
+    # fence changes, the session remains active for a later safe sweep.
+    if not _reconcile_nonterminal_requests_before_expiry(project_root, record, reason=reason):
+        return record
     expired = transition_session_record(
         project_root,
         session_id,
@@ -251,6 +255,144 @@ def expire_session_if_policy_exceeded(
     except Exception:  # noqa: BLE001 - expiry state is already authoritative
         logger.warning("failed to record durable session expiry timeline", exc_info=True)
     return expired
+
+
+def _reconcile_nonterminal_requests_before_expiry(
+    project_root: Path,
+    session: dict[str, Any],
+    *,
+    reason: str,
+) -> bool:
+    """Retire request records whose provider session has durably expired.
+
+    A previous protection rule refused to expire any session carrying a
+    non-terminal request.  That avoided a broken session/request pair, but it
+    also left stale non-live sessions and running requests immortal after a
+    gateway restart.  Request terminalization is deliberately performed
+    before the session transition; if a request fence changes, the session is
+    left active for a later safe sweep.
+
+    This is deliberately not a success/capture path.  A visible response may
+    belong to another turn or another target; operator/provider reconciliation
+    remains responsible for proving and capturing it later.
+    """
+    from audiagentic.components.agents.gateway import store
+
+    session_id = session.get("session-id")
+    if not isinstance(session_id, str) or not session_id:
+        return True
+    request_ids = set(session_request_ids(session))
+    try:
+        records = store.list_records(project_root, include_output=False)
+    except Exception:  # noqa: BLE001 - expiry state remains authoritative
+        logger.warning(
+            "could not enumerate requests for expired session",
+            extra={"session-id": session_id},
+            exc_info=True,
+        )
+        return False
+    request_ids.update(
+        str(record.get("request-id"))
+        for record in records
+        if record.get("session-id") == session_id and record.get("request-id")
+    )
+    nonterminal: list[dict[str, Any]] = []
+    for request_id in sorted(request_ids):
+        try:
+            record = store.read_record(project_root, request_id)
+            if record.get("state") not in store.TERMINAL_STATES:
+                nonterminal.append(record)
+        except Exception:  # noqa: BLE001 - one record must not block expiry
+            logger.warning(
+                "could not inspect request owned by expiring session",
+                extra={"request-id": request_id, "session-id": session_id},
+                exc_info=True,
+            )
+            return False
+
+    for record in nonterminal:
+        request_id = str(record.get("request-id"))
+        provider_metadata = session_provider_metadata(session)
+        request_metadata = record.get("provider-metadata")
+        binding = session.get("binding")
+        has_provider_binding = bool(
+            (isinstance(binding, dict) and binding.get("provider-session-ref"))
+            or provider_metadata.get("provider-session-id")
+            or (
+                isinstance(request_metadata, dict)
+                and (
+                    request_metadata.get("provider-session-id")
+                    or request_metadata.get("chat-url")
+                )
+            )
+        )
+        if not has_provider_binding:
+            return False
+        activity = record.get("activity")
+        provider_activity = activity.get("provider") if isinstance(activity, dict) else None
+        lease = (
+            provider_activity.get("lease-expires-at")
+            if isinstance(provider_activity, dict)
+            else None
+        ) or record.get("activity-lease-expires-at")
+        if isinstance(lease, str) and lease.strip():
+            try:
+                lease_at = datetime.fromisoformat(lease.replace("Z", "+00:00"))
+                if lease_at.tzinfo is None:
+                    lease_at = lease_at.replace(tzinfo=timezone.utc)
+                if lease_at > datetime.now(timezone.utc):
+                    return False
+            except (TypeError, ValueError):
+                # An invalid lease is not meaningful proof of liveness.
+                pass
+        try:
+            side_effect_state = "may-have-started"
+            diagnostics = record.get("diagnostics")
+            if isinstance(diagnostics, dict):
+                side_effect_state = diagnostics.get("side-effect-state") or side_effect_state
+            error = {
+                "code": "CON-AGW-084",
+                "kind": "agents",
+                "message": "provider session expired before the request reached a terminal state",
+                "details": {
+                    "session-id": session_id,
+                    "session-close-reason": reason,
+                    "failure-reason": "provider-session-expired",
+                    "side-effect-state": side_effect_state,
+                    "watchdog-classification": "expired-provider-session",
+                    "reconciliation": "provider-capture-required",
+                    "retry-safe": False,
+                },
+            }
+            updated = store.transition_recovered_terminal(
+                project_root,
+                request_id,
+                "interrupted",
+                error=error,
+                stale_epoch=record.get("dispatch-owner-epoch") or None,
+                expected_revision=record.get("revision"),
+                replay_required=False,
+                replay_reason="provider-session-expired; reconcile or operator-capture before retry",
+            )
+            store.record_gateway_timeline(
+                project_root,
+                request_id,
+                "request.interrupted",
+                state=updated.get("state"),
+                attributes={
+                    "source": "session-expiry-reconciliation",
+                    "session-id": session_id,
+                    "session-close-reason": reason,
+                },
+            )
+        except Exception:  # noqa: BLE001 - one record must not block session expiry
+            logger.warning(
+                "could not reconcile request owned by expired session",
+                extra={"request-id": request_id, "session-id": session_id},
+                exc_info=True,
+            )
+            return False
+    return True
 
 
 def expire_session_if_lifetime_exceeded(

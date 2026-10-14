@@ -789,6 +789,7 @@ def transition_recovered_terminal(
     *,
     error: BaseException | dict[str, Any] | None,
     stale_epoch: str | None = None,
+    expected_revision: int | None = None,
     replay_required: bool | None = None,
     replay_reason: str | None = None,
 ) -> dict[str, Any]:
@@ -804,6 +805,13 @@ def transition_recovered_terminal(
         raise AudiaGenticError("VAL-AGW-084", "agents", "recovered transition must be terminal", {})
     with _request_lock(project_root, request_id):
         record = _read_record_locked(project_root, request_id)
+        if expected_revision is not None and record.get("revision") != expected_revision:
+            raise AudiaGenticError(
+                code="CON-AGW-143",
+                kind="agents",
+                message="gateway request revision changed during recovery",
+                details={"request-id": request_id},
+            )
         if stale_epoch is not None:
             rec_epoch = record.get("dispatch-owner-epoch")
             if rec_epoch != stale_epoch:
