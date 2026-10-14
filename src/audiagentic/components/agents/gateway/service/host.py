@@ -521,10 +521,10 @@ class GatewayServiceHost:
                 if (
                     updated.get("state") == "running"
                     and isinstance(updated.get("session-id"), str)
-                    and isinstance(diagnostics, dict)
                     and (
                         (
                             updated.get("watchdog-state") == "intervention"
+                            and isinstance(diagnostics, dict)
                             and diagnostics.get("resolution-state")
                             in {"unresolved", "reconciliation-requested"}
                         )
@@ -626,7 +626,7 @@ class GatewayServiceHost:
                                 extra={"request-id": updated.get("request-id")},
                                 exc_info=True,
                             )
-                    elif runtime is not None:
+                    elif runtime is not None and updated.get("watchdog-state") == "intervention":
                         try:
                             outcome = runtime.reconcile_active_transport(
                                 updated["session-id"], updated["request-id"]

@@ -191,6 +191,88 @@ def test_host_watchdog_captures_completed_provider_turn_before_reconcile(
     assert registry.unregistered == [request_id]
 
 
+def test_host_watchdog_passively_probes_unresolved_turn_without_diagnostics(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Synthetic activity must not suppress a passive completion probe."""
+    from audiagentic.components.agents.gateway.service.host import GatewayServiceHost
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    request_id = "req-synthetic-owner"
+    diagnosed = {
+        "request-id": request_id,
+        "state": "running",
+        "session-id": "ses-1",
+        "revision": 7,
+        "watchdog-state": "active",
+        "diagnostics": None,
+    }
+
+    class Registry:
+        def snapshot(self):
+            return ((project_root.resolve(), dict(diagnosed)),)
+
+        def update(self, _root, _record):
+            return None
+
+        def unregister(self, *_args):
+            raise AssertionError("an unresolved passive probe must remain registered")
+
+    class Runtime:
+        def reconcile_active_transport(self, *_args):
+            raise AssertionError("synthetic activity must not trigger transport reconcile")
+
+    captured: list[dict] = []
+
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.queue.watchdog_registry.watchdog_registry",
+        lambda: Registry(),
+    )
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.queue.watchdog_registry.WatchdogRequestRegistry.update",
+        lambda *_args: None,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.queue.dispatch.diagnose_activity_lease",
+        lambda _root, _record: dict(diagnosed),
+    )
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.session.sessions.peek_session_runtime",
+        lambda: Runtime(),
+    )
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.session.sessions_store.read_session_record",
+        lambda _root, _session_id: {
+            "provider": {"metadata": {"unresolved-turn-pending": True}}
+        },
+    )
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.session.sessions_store.session_provider_metadata",
+        lambda session: session["provider"]["metadata"],
+    )
+
+    def capture(_root, _request_id, **kwargs):
+        captured.append(kwargs)
+        raise AudiaGenticError(
+            code="CON-AGW-154",
+            kind="agents",
+            message="terminal evidence is not yet stable",
+        )
+
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.api.complete_execution_from_provider",
+        capture,
+    )
+
+    result = GatewayServiceHost.run_watchdog_pass(object.__new__(GatewayServiceHost))
+
+    assert result == (diagnosed,)
+    assert captured == [{"passive": True}]
+
+
 def test_host_watchdog_stops_reopen_after_uncorrelated_provider_terminal(
     tmp_path: Path, monkeypatch
 ) -> None:
