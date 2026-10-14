@@ -1415,7 +1415,16 @@ def complete_execution_from_provider(
         raise AudiaGenticError(code="CON-AGW-156", kind="agents", message="provider assistant identity does not match request", details={"request-id": request_id})
     if before_assistant_is_real and before_assistant == latest_assistant_id:
         raise AudiaGenticError(code="CON-AGW-156", kind="agents", message="provider response did not advance", details={"request-id": request_id})
-    prompt_is_real = bool(prompt_id and not str(prompt_id).startswith("fallback-"))
+    # GPT-auto intentionally emits this request-local placeholder when the
+    # virtualized renderer has evicted the user node but retained the latest
+    # assistant node.  It is a correlation aid, not a provider message ID;
+    # require the persisted prompt fingerprint below instead of rejecting a
+    # visibly request-owned completed response as an identity mismatch.
+    prompt_text = str(prompt_id) if prompt_id is not None else ""
+    prompt_is_real = bool(
+        prompt_text
+        and not prompt_text.startswith(("fallback-", "virtualized-prompt-for-"))
+    )
     if prompt_is_real:
         if latest_user_id != prompt_id:
             raise AudiaGenticError(code="CON-AGW-156", kind="agents", message="provider prompt identity does not match request", details={"request-id": request_id})
