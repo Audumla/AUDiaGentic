@@ -1167,6 +1167,7 @@ _SNAPSHOT_FN = r"""
   // request merely because its controls are document-global.
   const terminalWitnessAssistantId = (
     domSignals["completion-control"] || domSignals["more-actions-menu"] ||
+    domSignals["response-complete-status"] ||
     domSignals["canvas-edit-control"] || domSignals["canvas-open-editor-control"]
   ) && !fallbackHasUnansweredPrompt ? (latestAssistantRef?.messageId || null) : null;
   // GP19: this bound was 20000, which is small enough that a genuinely

@@ -209,6 +209,34 @@ async def test_fallback_current_renderer_turn_root_includes_sibling_completion_b
 
 
 @pytest.mark.asyncio
+async def test_fallback_response_complete_status_is_bound_to_latest_assistant():
+    """Current ChatGPT can expose only the aria-live completion status."""
+    signals = [
+        dict(
+            name="response-complete-status",
+            scope="document",
+            selectors=['span[role="status"]'],
+            visible=True,
+            textContainsAny=["Response complete"],
+        ),
+    ]
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            await page.set_content('''
+              <div data-message-author-role="user" data-message-id="u1">prompt</div>
+              <div data-message-author-role="assistant" data-message-id="a1">answer</div>
+              <span class="sr-only" role="status" aria-live="polite">Response complete</span>
+            ''')
+            snapshot = await page.evaluate(_SNAPSHOT_FN, signals)
+            assert snapshot["domSignals"]["response-complete-status"]
+            assert snapshot["terminalWitnessAssistantId"] == "a1"
+        finally:
+            await browser.close()
+
+
+@pytest.mark.asyncio
 async def test_activity_observer_captures_interior_changes_but_not_shimmer():
     async with async_playwright() as pw:
         browser = await pw.chromium.launch(headless=True)

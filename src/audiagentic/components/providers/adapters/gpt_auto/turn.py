@@ -1626,7 +1626,9 @@ class GptAutoTurn:
     # "both plus not currently generating", so canvas completion is left
     # entirely to response-complete's own properly-guarded group instead
     # of being approximated here.
-    _TERMINAL_WITNESS_SIGNALS = frozenset({"completion-control", "more-actions-menu"})
+    _TERMINAL_WITNESS_SIGNALS = frozenset(
+        {"completion-control", "more-actions-menu", "response-complete-status"}
+    )
     # GP47: cadence for the poll-loop heartbeat log, independent of tracker
     # state transitions -- see _await_response's heartbeat comment.
     _HEARTBEAT_INTERVAL_SECONDS = 30.0
@@ -3961,6 +3963,7 @@ def _response_decision_diagnostics(
         "text-present",
         "completion-control",
         "more-actions-menu",
+        "response-complete-status",
         "not-generating",
         "canvas-edit-control",
         "canvas-open-editor-control",
