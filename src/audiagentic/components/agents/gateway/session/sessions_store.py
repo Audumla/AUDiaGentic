@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from contextlib import ExitStack
+from contextlib import ExitStack, contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -502,6 +502,14 @@ def _session_lock(project_root: Path, session_id: str) -> StartupLock:
     return StartupLock(gateway_session_path(project_root, session_id).with_name("mutation.lock"))
 
 
+@contextmanager
+def _ordered_session_mutation_lock(project_root: Path, session_id: str):
+    """Acquire shared retention state before the per-session mutation lock."""
+    with StartupLock(gateway_retention_lock_path(project_root)):
+        with _session_lock(project_root, session_id):
+            yield
+
+
 def generate_session_id() -> str:
     """Return a new session ID (UUID-based, mirrors generate_request_id)."""
     return f"ses_{uuid.uuid4().hex[:16]}"
@@ -847,7 +855,7 @@ def install_initial_provider_binding(
     provider metadata. A different reference is a generation conflict and is
     never written in place.
     """
-    with _session_lock(project_root, session_id):
+    with _ordered_session_mutation_lock(project_root, session_id):
         record = read_session_record(project_root, session_id)
         current = record.get("binding")
         if isinstance(current, dict):
@@ -888,8 +896,7 @@ def install_initial_provider_binding(
         # Register first so a retry repairs either side of a partial caller
         # failure without ever permitting a conflicting provider reference.
         bindings.register_open_binding(project_root, record)
-        with StartupLock(gateway_retention_lock_path(project_root)):
-            atomic_write_json(gateway_session_path(project_root, session_id), record)
+        atomic_write_json(gateway_session_path(project_root, session_id), record)
         return record
 
 
