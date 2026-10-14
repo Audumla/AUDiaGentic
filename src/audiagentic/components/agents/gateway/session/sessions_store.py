@@ -322,6 +322,18 @@ def _reconcile_nonterminal_requests_before_expiry(
             )
             return None
 
+    if not nonterminal:
+        # No request mutation or provider ownership proof is needed for an
+        # empty stale session. Retire it under the caller's retention fence.
+        expired = transition_session_record(
+            project_root,
+            session_id,
+            "expired",
+            updates={"close-reason": reason, "closed-at": now_iso_z()},
+        )
+        bindings.retire_binding(project_root, expired, state="expired")
+        return expired
+
     eligible: list[dict[str, Any]] = []
     session_provider_metadata_value = session_provider_metadata(session)
     session_provider_session_id = session_provider_metadata_value.get("provider-session-id")
