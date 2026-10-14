@@ -2697,6 +2697,35 @@ def test_durable_idle_sweep_rechecks_revision_before_first_mutation(tmp_path, mo
     assert real_read(tmp_path, request["request-id"])["state"] == "queued"
 
 
+def test_durable_idle_sweep_rechecks_policy_inside_retention_fence(tmp_path, monkeypatch):
+    session = session_store.build_session_record(
+        execution_profile_id="gpt-auto", provider_id="gpt-auto", idle_timeout_seconds=60
+    )
+    session_id = session["session-id"]
+    old = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat().replace("+00:00", "Z")
+    session["timing"]["last-activity-at"] = old
+    session_store.write_session_record(tmp_path, session)
+    real_read = session_store.read_session_record
+    reads = 0
+
+    def refreshed_after_initial_read(root, current_id):
+        nonlocal reads
+        value = real_read(root, current_id)
+        if current_id == session_id:
+            reads += 1
+            if reads >= 2:
+                value = dict(value)
+                timing = dict(value["timing"])
+                timing["last-activity-at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+                value["timing"] = timing
+        return value
+
+    monkeypatch.setattr(session_store, "read_session_record", refreshed_after_initial_read)
+    result = session_store.expire_session_if_policy_exceeded(tmp_path, session_id)
+
+    assert result["state"] == "active"
+
+
 def test_live_session_lists_without_stale_flag(rig, monkeypatch):
     """A live active session from the runtime lists as live=True and does NOT
     carry a stale diagnostic flag."""
