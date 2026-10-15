@@ -216,6 +216,13 @@ mcp-servers:
       - agent_task_submit
       - agent_task_status
       - agent_task_diagnostics
+      - agent_task_complete_from_provider
+      - agent_task_failure_response
+      - agent_task_gateway_purge
+      - agent_task_session_purge
+      - agent_task_observations
+      - agent_task_evidence
+      - agent_task_observation_replay
       - agent_task_recover
       - agent_task_response
       - agent_task_cancel
@@ -297,6 +304,24 @@ mcp-servers:
         Return bounded semantic failure classification, recovery disposition,
         and redacted provider/activity evidence for one request. This never
         includes prompts, full responses, DOM, CDP handles, or credentials.
+      agent_task_observations: >
+        Return a bounded opaque-cursor page of redacted request-owned
+        DOM/activity facts. Raw prompts, responses, DOM, CDP handles, and
+        credentials are excluded.
+      agent_task_evidence: >
+        Return compact request evidence by default; observation, transition
+        history, and recovery pages are explicit opt-ins.
+      agent_task_observation_replay: >
+        Replay persisted observations and recovery intents into a deterministic
+        analysis. It never performs provider actions or resubmits prompts.
+      agent_task_complete_from_provider: >
+        Capture the request-owned provider response and mark completion without sending a prompt.
+      agent_task_failure_response: >
+        Return provider output retained as bounded failure evidence for a request.
+      agent_task_gateway_purge: >
+        Perform the explicitly requested guarded gateway-session purge; defaults to a dry run.
+      agent_task_session_purge: >
+        Purge one terminal gateway session and its request-owned artifacts after quiescence checks.
       agent_task_recover: >
         Request a safe diagnostic recovery intent: reconcile, abandon, or
         clear-not-submitted. Recovery never resends a provider prompt; poll

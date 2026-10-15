@@ -393,7 +393,48 @@ class GatewayServiceApplication:
                 root, _required(arguments, "request_id")
             )
         if operation == "request_runtime_status":
+            _reject_unknown(arguments, {"request_id"})
             return self._application.request_runtime_status(
+                root, _required(arguments, "request_id")
+            )
+        if operation == "get_execution_observations":
+            _reject_unknown(arguments, {"request_id", "limit", "cursor", "since_sequence"})
+            limit = _optional_positive_int(arguments, "limit") or 25
+            since_sequence = arguments.get("since_sequence")
+            if since_sequence is not None and (isinstance(since_sequence, bool) or not isinstance(since_sequence, int)):
+                raise service_validation_error(36, "since_sequence must be an integer")
+            return self._application.get_execution_observations(
+                root,
+                _required(arguments, "request_id"),
+                limit=limit,
+                cursor=_optional_string(arguments, "cursor"),
+                since_sequence=since_sequence,
+            )
+        if operation == "get_execution_evidence":
+            _reject_unknown(
+                arguments,
+                {"request_id", "include_observations", "include_history", "include_recovery", "limit", "cursor", "since_sequence"},
+            )
+            for key in ("include_observations", "include_history", "include_recovery"):
+                if key in arguments and not isinstance(arguments[key], bool):
+                    raise service_validation_error(37, f"{key} must be a boolean")
+            limit = _optional_positive_int(arguments, "limit") or 25
+            since_sequence = arguments.get("since_sequence")
+            if since_sequence is not None and (isinstance(since_sequence, bool) or not isinstance(since_sequence, int)):
+                raise service_validation_error(38, "since_sequence must be an integer")
+            return self._application.get_execution_evidence(
+                root,
+                _required(arguments, "request_id"),
+                include_observations=arguments.get("include_observations", False),
+                include_history=arguments.get("include_history", False),
+                include_recovery=arguments.get("include_recovery", False),
+                limit=limit,
+                cursor=_optional_string(arguments, "cursor"),
+                since_sequence=since_sequence,
+            )
+        if operation == "replay_execution_observations":
+            _reject_unknown(arguments, {"request_id"})
+            return self._application.replay_execution_observations(
                 root, _required(arguments, "request_id")
             )
         if operation == "run_execution_request":

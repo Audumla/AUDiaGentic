@@ -89,7 +89,7 @@ def agent_task_list_definitions() -> list[dict[str, Any]]:
 
 @mcp.tool()
 @tool_boundary
-def agent_task_status(request_id: str, include_response: bool = True) -> dict[str, Any]:
+def agent_task_status(request_id: str, include_response: bool = False) -> dict[str, Any]:
     """Poll compact lifecycle status; use diagnostics or response for terminal detail."""
     project_root = project_root_from_env()
     status = call_gateway_method("get_execution_request", project_root, request_id, include_response=include_response)
@@ -106,6 +106,70 @@ def agent_task_diagnostics(request_id: str, limit: int = 25) -> dict[str, Any]:
     return _sparse(
         call_gateway_method(
             "get_execution_diagnostics", project_root, request_id=request_id, limit=limit
+        )
+    )
+
+
+@mcp.tool()
+@tool_boundary
+def agent_task_observations(
+    request_id: str,
+    limit: int = 25,
+    cursor: str | None = None,
+    since_sequence: int | None = None,
++) -> dict[str, Any]:
+    """Return a finite page of redacted request-owned observations."""
+    project_root = project_root_from_env()
+    return _sparse(
+        call_gateway_method(
+            "get_execution_observations",
+            project_root,
+            request_id,
+            limit=limit,
+            cursor=cursor,
+            since_sequence=since_sequence,
+        )
+    )
+
+
+@mcp.tool()
+@tool_boundary
+def agent_task_evidence(
+    request_id: str,
+    include_observations: bool = False,
+    include_history: bool = False,
+    include_recovery: bool = False,
+    limit: int = 25,
+    cursor: str | None = None,
+    since_sequence: int | None = None,
+) -> dict[str, Any]:
+    """Return compact evidence; observation/history/recovery tiers are opt-in."""
+    project_root = project_root_from_env()
+    return _sparse(
+        call_gateway_method(
+            "get_execution_evidence",
+            project_root,
+            request_id,
+            include_observations=include_observations,
+            include_history=include_history,
+            include_recovery=include_recovery,
+            limit=limit,
+            cursor=cursor,
+            since_sequence=since_sequence,
+        )
+    )
+
+
+@mcp.tool()
+@tool_boundary
+def agent_task_observation_replay(request_id: str) -> dict[str, Any]:
+    """Replay request-owned observations into a compact recovery analysis."""
+    project_root = project_root_from_env()
+    return _sparse(
+        call_gateway_method(
+            "replay_execution_observations",
+            project_root,
+            request_id,
         )
     )
 
@@ -130,8 +194,6 @@ def agent_task_recover(
     )
 
 
-@mcp.tool()
-@tool_boundary
 @mcp.tool()
 @tool_boundary
 def agent_task_response(request_id: str) -> dict[str, Any]:
@@ -189,7 +251,7 @@ def agent_task_cancel(request_id: str) -> dict[str, Any]:
 @tool_boundary
 def agent_task_list_requests(
     state: str | None = None,
-    limit: int | None = None,
+    limit: int = 25,
 ) -> list[dict[str, Any]]:
     """List persisted requests, newest first; optionally filter by lifecycle state."""
     project_root = project_root_from_env()

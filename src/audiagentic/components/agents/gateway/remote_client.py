@@ -168,6 +168,15 @@ class StandaloneGatewayClient:
             self._call("get_execution_diagnostics", project_root, {"request_id": request_id, "limit": limit}),
         )
 
+    def get_execution_observations(self, project_root: Path, request_id: str, **kwargs: Any) -> dict[str, Any]:
+        return cast(dict[str, Any], self._call("get_execution_observations", project_root, {"request_id": request_id, **kwargs}))
+
+    def get_execution_evidence(self, project_root: Path, request_id: str, **kwargs: Any) -> dict[str, Any]:
+        return cast(dict[str, Any], self._call("get_execution_evidence", project_root, {"request_id": request_id, **kwargs}))
+
+    def replay_execution_observations(self, project_root: Path, request_id: str) -> dict[str, Any]:
+        return cast(dict[str, Any], self._call("replay_execution_observations", project_root, {"request_id": request_id}))
+
     def recover_execution_request(self, project_root: Path, request_id: str, **kwargs: Any) -> dict[str, Any]:
         return cast(
             dict[str, Any],

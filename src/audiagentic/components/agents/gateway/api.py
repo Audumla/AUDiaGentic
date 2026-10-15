@@ -271,9 +271,9 @@ def _attach_agent_status(
         if runtime is not None:
             decision = runtime.latest_lifecycle_decision(session_id, result["request-id"])
 
-    slot = get_queue_manager().request_slot_status(
-        result.get("execution-profile-id"), result.get("request-id")
-    )
+    queue_manager = get_queue_manager()
+    slot_reader = getattr(queue_manager, "request_slot_status", None)
+    slot = slot_reader(result.get("execution-profile-id"), result.get("request-id")) if callable(slot_reader) else None
     queue_state = _request_queue_state(result, slot)
     snapshot = snapshot_for_request(result, decision=decision)
     from audiagentic.components.agents.status.task_status_v4 import (
@@ -1028,6 +1028,81 @@ def get_execution_diagnostics(
     return project_public_diagnostics(raw)
 
 
+def get_execution_observations(
+    project_root: Path,
+    request_id: str,
+    *,
+    limit: int = 25,
+    cursor: str | None = None,
+    since_sequence: int | None = None,
+) -> dict[str, Any]:
+    """Return one finite, opaque-cursor page of redacted DOM/activity facts."""
+    from audiagentic.components.agents.gateway.observability import read_observation_page
+
+    try:
+        return read_observation_page(
+            project_root, request_id, limit=limit, cursor=cursor,
+            since_sequence=since_sequence,
+        )
+    except ValueError as exc:
+        raise AudiaGenticError(
+            code="VAL-AGW-149", kind="agents", message=str(exc), details={}
+        ) from exc
+
+
+def get_execution_evidence(
+    project_root: Path,
+    request_id: str,
+    *,
+    include_observations: bool = False,
+    include_history: bool = False,
+    include_recovery: bool = False,
+    limit: int = 25,
+    cursor: str | None = None,
+    since_sequence: int | None = None,
+) -> dict[str, Any]:
+    """Return compact evidence by default; detail tiers are explicit opt-ins."""
+    if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
+        raise AudiaGenticError(
+            code="VAL-AGW-150", kind="agents",
+            message="evidence limit must be between 1 and 100", details={},
+        )
+    record = store.read_record(project_root, request_id, include_output=False)
+    from audiagentic.components.agents.gateway.observability import (
+        observation_summary, read_observation_page,
+    )
+    result: dict[str, Any] = {
+        "schema_version": "gateway-evidence.v1",
+        "request-id": request_id,
+        "session-id": record.get("session-id"),
+        "state": record.get("state"),
+        "diagnostics": record.get("diagnostics"),
+        "observation-summary": observation_summary(project_root, request_id),
+        "latest-transition": store.latest_transition_projection(project_root, request_id),
+    }
+    if include_observations:
+        result["observations"] = read_observation_page(
+            project_root, request_id, limit=limit, cursor=cursor,
+            since_sequence=since_sequence,
+        )
+    if include_recovery:
+        from audiagentic.components.agents.gateway.replay import read_recovery_page
+        result["recovery"] = read_recovery_page(
+            project_root, request_id, limit=limit, cursor=cursor,
+        )
+    if include_history:
+        result["history"] = store.transition_history_projection(project_root, request_id, limit=limit)
+    return {key: value for key, value in result.items() if value is not None}
+
+
+def replay_execution_observations(project_root: Path, request_id: str) -> dict[str, Any]:
+    """Analyze persisted observations and recovery intents without side effects."""
+    from audiagentic.components.agents.gateway.observability import read_observation_page
+    from audiagentic.components.agents.gateway.replay import replay_request
+    page = read_observation_page(project_root, request_id, limit=100)
+    return replay_request(project_root, request_id, observations=page.get("items", []))
+
+
 def recover_execution_request(
     project_root: Path,
     request_id: str,
@@ -1035,38 +1110,61 @@ def recover_execution_request(
     action: str,
     expected_revision: int | None = None,
 ) -> dict[str, Any]:
-    """Apply one safe, idempotent recovery intent to a request.
-
-    ``reconcile`` only records the operator intent; the provider adapter owns
-    the actual read-only reconciliation. ``abandon`` records cancellation
-    provenance and asks the live session to stop. ``clear-not-submitted`` is
-    deliberately allowed only when the durable side-effect axis is
-    definitively ``not-started``. No action ever sends a new provider prompt.
-    """
+    """Apply one safe, idempotent recovery intent without resending a prompt."""
     if action not in {"reconcile", "abandon", "clear-not-submitted"}:
         raise AudiaGenticError(
-            code="VAL-AGW-144", kind="agents", message="unknown gateway recovery action", details={"action": action}
+            code="VAL-AGW-144",
+            kind="agents",
+            message="unknown gateway recovery action",
+            details={"action": action},
         )
     record = store.read_record(project_root, request_id)
     if expected_revision is not None and record.get("revision") != expected_revision:
         raise AudiaGenticError(
-            code="CON-AGW-143", kind="agents", message="diagnostic recovery revision is stale", details={"request-id": request_id}
+            code="CON-AGW-143",
+            kind="agents",
+            message="diagnostic recovery revision is stale",
+            details={"request-id": request_id},
         )
     diagnostics = record.get("diagnostics")
     if not isinstance(diagnostics, dict) and action == "reconcile":
         from audiagentic.components.agents.gateway.queue.recovery import (
             recoverable_reconcile_diagnostics,
         )
-
         diagnostics = recoverable_reconcile_diagnostics(project_root, record)
     if not isinstance(diagnostics, dict):
         raise AudiaGenticError(
-            code="CON-AGW-145", kind="agents", message="request has no recoverable diagnostic evidence", details={"request-id": request_id}
+            code="CON-AGW-145",
+            kind="agents",
+            message="request has no recoverable diagnostic evidence",
+            details={"request-id": request_id},
         )
     if action == "clear-not-submitted" and diagnostics.get("side-effect-state") != "not-started":
         raise AudiaGenticError(
-            code="CON-AGW-146", kind="agents", message="request side effect is not proven absent", details={"request-id": request_id}
+            code="CON-AGW-146",
+            kind="agents",
+            message="request side effect is not proven absent",
+            details={"request-id": request_id},
         )
+
+    from audiagentic.components.agents.gateway.replay import (
+        prepare_recovery_action,
+        record_recovery_result,
+    )
+    action_attempt_id = f"recovery_{request_id}_{record.get('revision', 0)}_{action}"
+    prepare_recovery_action(
+        project_root,
+        request_id,
+        action_attempt_id=action_attempt_id,
+        action=action,
+        action_kind="reconcile",
+        attempt_epoch=int(record.get("attempt-epoch") or 1),
+        retry_budget=0,
+        submission_proven=(diagnostics.get("side-effect-state") == "submitted"),
+        causal_input_ids=[request_id, str(record.get("session-id") or "")],
+        binding={"session-id": record.get("session-id"), "turn-id": record.get("turn-id")},
+    )
+
     updated_diagnostics = dict(diagnostics)
     recovery = dict(updated_diagnostics.get("recovery") or {})
     if action == "reconcile":
@@ -1087,16 +1185,11 @@ def recover_execution_request(
             expected_revision=record.get("revision"),
         )
         if updated.get("state") == "running":
-            # A restart can leave a worker-backed request with no live queue
-            # worker to consume the cancellation flag. If the durable session
-            # is already terminal, finish the explicit operator disposition
-            # instead of leaving the request cancelling indefinitely.
             session_id = updated.get("session-id")
             session_terminal = False
             if isinstance(session_id, str) and session_id:
                 try:
                     from audiagentic.components.agents.gateway.session import sessions_store
-
                     session = sessions_store.read_session_record(project_root, session_id)
                     session_terminal = session.get("state") in {"failed", "closed", "expired"}
                 except Exception:  # noqa: BLE001 - preserve best-effort cancellation semantics
@@ -1127,6 +1220,14 @@ def recover_execution_request(
                     worker_id=str(updated.get("worker-id") or ""),
                     attempt_epoch=int(updated.get("attempt-epoch") or 0),
                 )
+        record_recovery_result(
+            project_root,
+            request_id,
+            action_attempt_id=action_attempt_id,
+            outcome="abandon-accepted",
+            terminal=updated.get("state") in store.TERMINAL_STATES,
+            causal_input_ids=[request_id],
+        )
         return {
             "request-id": request_id,
             "action": action,
@@ -1139,13 +1240,12 @@ def recover_execution_request(
         recovery["disposition"] = "retry-safe"
         recovery["allowed-actions"] = ["retry"]
         updated_diagnostics["resolution-state"] = "cleared-not-submitted"
+
     updated_diagnostics["recovery"] = recovery
     updated = store.update_diagnostics(
         project_root,
         request_id,
         updated_diagnostics,
-        # Every recovery intent is a compare-and-swap mutation.  Abandon is
-        # handled above as one atomic cancellation+diagnostic operation.
         expected_revision=record.get("revision"),
     )
     if action == "reconcile":
@@ -1163,6 +1263,14 @@ def recover_execution_request(
                 "VAL-AGW-112",
             }:
                 raise
+            record_recovery_result(
+                project_root,
+                request_id,
+                action_attempt_id=action_attempt_id,
+                outcome="reconciliation-unresolved",
+                terminal=False,
+                causal_input_ids=[request_id],
+            )
             return {
                 "request-id": request_id,
                 "action": action,
@@ -1170,11 +1278,16 @@ def recover_execution_request(
                 "state": updated.get("state"),
                 "revision": updated.get("revision"),
                 "diagnostics": updated.get("diagnostics"),
-                "reconciliation": {
-                    "outcome": "unresolved",
-                    "reason": exc.code,
-                },
+                "reconciliation": {"outcome": "unresolved", "reason": exc.code},
             }
+        record_recovery_result(
+            project_root,
+            request_id,
+            action_attempt_id=action_attempt_id,
+            outcome="reconciliation-completed",
+            terminal=True,
+            causal_input_ids=[request_id],
+        )
         return {
             "request-id": request_id,
             "action": action,
@@ -1184,6 +1297,15 @@ def recover_execution_request(
             "response-artifact": completed.get("response-artifact"),
             "reconciliation": {"outcome": "completed"},
         }
+
+    record_recovery_result(
+        project_root,
+        request_id,
+        action_attempt_id=action_attempt_id,
+        outcome="cleared-not-submitted",
+        terminal=updated.get("state") in store.TERMINAL_STATES,
+        causal_input_ids=[request_id],
+    )
     return {
         "request-id": request_id,
         "action": action,
@@ -1192,8 +1314,6 @@ def recover_execution_request(
         "revision": updated.get("revision"),
         "diagnostics": updated.get("diagnostics"),
     }
-
-
 def get_execution_response(project_root: Path, request_id: str) -> str:
     """Return the complete verified terminal response artifact."""
     record = store.read_record(project_root, request_id)
