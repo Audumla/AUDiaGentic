@@ -177,3 +177,24 @@ def test_replay_uses_canonical_errors_meaningful_activity_and_actual_recovery_ou
     assert set(result["action-outcomes"]) == {
         "provider-resume-completed", "abandon-accepted", "reconciliation-completed", "cleared-not-submitted"
     }
+
+def test_replay_carries_prior_timing_witnesses_into_terminal_resolution():
+    entries = [
+        {
+            "monotonic_ms": 100,
+            "facts": {
+                "response-identity": {
+                    "terminal-witness-hash": "witness-from-timing",
+                    "response-ref-hash": "response-from-timing",
+                }
+            },
+        },
+        {
+            "event": "terminal",
+            "monotonic_ms": 150,
+            "facts": {"response-identity": {"terminal": True, "stop-reason": "end_turn"}},
+        },
+    ]
+    result = replay.replay_observations(entries)
+    assert result["completion-evidence"]["completion-proven"] is True
+    assert result["outcome-classification"] == "completed-with-witness"

@@ -6,6 +6,13 @@ import json
 import pytest
 from audiagentic.components.agents.gateway import observability, replay
 from audiagentic.components.agents.agents_paths import gateway_observation_artifact_dir
+from audiagentic.components.agents.gateway.evidence_projection import project_public_gateway_evidence
+from audiagentic.components.agents.gateway.observation_projection import append_transport_observation
+from audiagentic.foundation.transports.agent_session import (
+    CorrelationQuality,
+    TransportObservation,
+    TransportObservationKind,
+)
 
 
 def test_observation_journal_is_redacted_coalesced_and_ordered(tmp_path):
@@ -38,6 +45,34 @@ def test_observation_journal_is_redacted_coalesced_and_ordered(tmp_path):
     assert "secret-cookie" not in encoded
     assert "do not persist" not in encoded
     assert raw["items"][0]["facts"]["dom-signals"]["stop-control"] is True
+
+
+def test_transport_timing_completion_diagnostics_reach_journal_and_public_evidence(tmp_path):
+    observation = TransportObservation(
+        ag_session_id="ses_timing",
+        turn_id="turn_timing",
+        sequence=7,
+        kind=TransportObservationKind.TIMING,
+        observed_at="2026-10-15T00:00:00Z",
+        correlation_quality=CorrelationQuality.REQUEST_SCOPED,
+        attributes={
+            "timing-event": "response-decision",
+            "diagnostic-signature": "diag-1",
+            "diagnostic-details": json.dumps({
+                "completion-gates": {"completion-satisfied": True, "terminal-witness-present": True},
+                "completion-matched": ["assistant-bound", "stable-output"],
+            }),
+        },
+    )
+    append_transport_observation(tmp_path, "req_timing", observation, session_id="ses_timing")
+    item = observability.read_observation_page(tmp_path, "req_timing")["items"][0]
+    diagnostic = item["facts"]["diagnostic-facts"]
+    assert diagnostic["completion-gates"]["completion-satisfied"] is True
+    assert diagnostic["completion-matched"] == ["assistant-bound", "stable-output"]
+    public = project_public_gateway_evidence({"observations": {"items": [item]}})
+    assert public["observations"]["items"][0]["facts"]["diagnostic-facts"]["completion-matched"] == [
+        "assistant-bound", "stable-output"
+    ]
 
 
 def test_unchanged_polls_are_periodically_coalesced(tmp_path):
