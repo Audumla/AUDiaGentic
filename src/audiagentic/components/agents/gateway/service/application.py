@@ -413,7 +413,7 @@ class GatewayServiceApplication:
         if operation == "get_execution_evidence":
             _reject_unknown(
                 arguments,
-                {"request_id", "include_observations", "include_history", "include_recovery", "limit", "cursor", "since_sequence"},
+                {"request_id", "include_observations", "include_history", "include_recovery", "limit", "cursor", "observation_cursor", "recovery_cursor", "since_sequence"},
             )
             for key in ("include_observations", "include_history", "include_recovery"):
                 if key in arguments and not isinstance(arguments[key], bool):
@@ -430,6 +430,8 @@ class GatewayServiceApplication:
                 include_recovery=arguments.get("include_recovery", False),
                 limit=limit,
                 cursor=_optional_string(arguments, "cursor"),
+                observation_cursor=_optional_string(arguments, "observation_cursor"),
+                recovery_cursor=_optional_string(arguments, "recovery_cursor"),
                 since_sequence=since_sequence,
             )
         if operation == "replay_execution_observations":

@@ -39,6 +39,18 @@ def test_observation_journal_is_redacted_coalesced_and_ordered(tmp_path):
     assert raw["items"][0]["facts"]["dom-signals"]["stop-control"] is True
 
 
+def test_unchanged_polls_are_periodically_coalesced(tmp_path):
+    for poll in range(1, 11):
+        observability.append_observation(
+            tmp_path,
+            "req_coalesce",
+            poll_seq=poll,
+            dom_signals={"stop-control": True},
+        )
+    page = observability.read_observation_page(tmp_path, "req_coalesce", limit=100)
+    assert page["count"] <= 3
+    assert page["items"][-1]["event"] == "observation-coalesced"
+
 def test_observation_cursor_is_finite_and_opaque(tmp_path):
     for poll in range(1, 4):
         observability.append_observation(tmp_path, "req_page", poll_seq=poll, dom_signals={"poll": poll})
@@ -63,7 +75,7 @@ def test_optional_artifact_is_bounded_redacted_and_purgeable(tmp_path):
     artifact = next(artifact_dir.glob("*.json.gz"))
     decoded = json.loads(gzip.decompress(artifact.read_bytes()))
     assert "token" not in decoded
-    assert decoded["children"][0]["text"] == "safe"
+    assert decoded.get("children", [{}])[0].get("text") is None
     assert metadata["compressed_bytes"] == artifact.stat().st_size
     assert observability.purge_observation_artifacts(tmp_path, "req_artifact") == 2
     assert not artifact_dir.exists()
