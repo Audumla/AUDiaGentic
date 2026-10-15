@@ -1283,8 +1283,8 @@ def recover_execution_request(
             "diagnostics": updated.get("diagnostics"),
         }
     else:
-        recovery["disposition"] = "retry-safe"
-        recovery["allowed-actions"] = ["retry"]
+        recovery["disposition"] = "cleared-not-submitted"
+        recovery["allowed-actions"] = []
         updated_diagnostics["resolution-state"] = "cleared-not-submitted"
 
     updated_diagnostics["recovery"] = recovery

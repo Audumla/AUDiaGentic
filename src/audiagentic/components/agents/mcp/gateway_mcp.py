@@ -26,14 +26,63 @@ mcp = mcp_server(__name__, structured_output_only=True)
 
 _RESPONSE_PREVIEW_FIELDS = frozenset({"output-preview", "output-truncated"})
 
+_MAX_PAGE = 100
+
+
+def _page_limit(value: int) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= _MAX_PAGE:
+        raise ValueError(f"limit must be an integer between 1 and {_MAX_PAGE}")
+    return value
+
+def _public_scalar(value: Any) -> Any:
+    if isinstance(value, str):
+        return value[:256] if value else None
+    if isinstance(value, (bool, int, float)):
+        return value
+    return None
+
+
+def _request_dto(value: Any) -> dict[str, Any]:
+    """Project lifecycle mutations without copying arbitrary record fields."""
+    source = value if isinstance(value, dict) else {}
+    result: dict[str, Any] = {}
+    request_id = source.get("request-id") or source.get("request_id")
+    session_id = source.get("session-id") or source.get("session_id")
+    for key in ("state", "revision", "action", "disposition", "outcome", "error-code", "reason"):
+        raw = _public_scalar(source.get(key))
+        if raw is not None:
+            result[key] = raw
+    warnings = source.get("warnings")
+    if isinstance(warnings, list):
+        result["warnings"] = [item[:256] for item in warnings if isinstance(item, str)][:16]
+    if isinstance(request_id, str) and request_id:
+        result["request-id"] = request_id
+    if isinstance(session_id, str) and session_id:
+        result["session-id"] = session_id
+    return result
+
+
+def _session_dto(value: Any) -> dict[str, Any]:
+    source = value if isinstance(value, dict) else {}
+    result: dict[str, Any] = {}
+    session_id = source.get("session-id") or source.get("session_id")
+    if isinstance(session_id, str) and session_id:
+        result["session-id"] = session_id
+    for key in ("state", "live", "runtime-state", "created-at", "updated-at", "provider-id", "model-id"):
+        raw = _public_scalar(source.get(key))
+        if raw is not None:
+            result[key] = raw
+    return result
+
 
 def _status_without_response_preview(status: dict[str, Any]) -> dict[str, Any]:
     """Keep MCP status compact and null-free; never spend tokens on a preview."""
-    return {
-        key: value
-        for key, value in status.items()
-        if key not in _RESPONSE_PREVIEW_FIELDS and value is not None
-    }
+    allowed = {"task_id", "request_id", "request-id", "lifecycle", "activity_seq", "activity_at", "activity", "outcome", "error_code", "error-code", "session_id", "session-id", "contract-version"}
+    result = {key: _public_scalar(status.get(key)) for key in allowed if key not in _RESPONSE_PREVIEW_FIELDS and _public_scalar(status.get(key)) is not None}
+    session_id = status.get("session_id") or status.get("session-id")
+    if isinstance(session_id, str) and session_id:
+        result["session_id"] = session_id
+    return result
 
 
 def _sparse(value: Any) -> Any:
@@ -113,6 +162,7 @@ def agent_task_status(request_id: str, include_response: bool = False) -> dict[s
 def agent_task_diagnostics(request_id: str, limit: int = 25) -> dict[str, Any]:
     """Return bounded, redacted failure and activity evidence for a request."""
     project_root = project_root_from_env()
+    _page_limit(limit)
     return _sparse(
         call_gateway_method(
             "get_execution_diagnostics", project_root, request_id=request_id, limit=limit
@@ -131,6 +181,7 @@ def agent_task_observations(
 ) -> dict[str, Any]:
     """Return a finite page of redacted request-owned observations."""
     project_root = project_root_from_env()
+    _page_limit(limit)
     params: dict[str, Any] = {
         "limit": limit,
         "cursor": cursor,
@@ -164,6 +215,7 @@ def agent_task_evidence(
 ) -> dict[str, Any]:
     """Return compact evidence; observation/history/recovery tiers are opt-in."""
     project_root = project_root_from_env()
+    _page_limit(limit)
     params: dict[str, Any] = {
         "include_observations": include_observations,
         "include_history": include_history,
@@ -210,7 +262,7 @@ def agent_task_recover(
 ) -> dict[str, Any]:
     """Request reconcile, abandon, or clear-not-submitted; recovery never resends a prompt."""
     project_root = project_root_from_env()
-    return _sparse(
+    return _request_dto(
         call_gateway_method(
             "recover_execution_request",
             project_root,
@@ -271,7 +323,7 @@ def agent_task_complete_from_provider(request_id: str) -> dict[str, Any]:
 def agent_task_cancel(request_id: str) -> dict[str, Any]:
     """Cancel a queued request, or best-effort mark a running one cancel-requested."""
     project_root = project_root_from_env()
-    return _sparse(call_gateway_method("cancel_execution_request", project_root, request_id))
+    return _request_dto(call_gateway_method("cancel_execution_request", project_root, request_id))
 
 
 @mcp.tool()
@@ -282,11 +334,12 @@ def agent_task_list_requests(
 ) -> list[dict[str, Any]]:
     """List persisted requests, newest first; optionally filter by lifecycle state."""
     project_root = project_root_from_env()
+    _page_limit(limit)
     requests = call_gateway_method(
         "list_execution_requests", project_root, state=state, limit=limit
     )
     projected = [
-        _status_without_response_preview(item) if isinstance(item, dict) else item
+        _request_dto(item)
         for item in requests
     ]
     return projected
@@ -306,9 +359,7 @@ def agent_task_session_list(state: str | None = "active") -> list[dict[str, Any]
     """List sessions, defaulting to active; pass a lifecycle state or ``all``."""
     project_root = project_root_from_env()
     gateway_state = None if state == "all" else state
-    return _sparse(
-        call_gateway_method("list_execution_sessions", project_root, state=gateway_state)
-    )
+    return [_session_dto(item) for item in call_gateway_method("list_execution_sessions", project_root, state=gateway_state)]
 
 
 @mcp.tool()
@@ -316,7 +367,7 @@ def agent_task_session_list(state: str | None = "active") -> list[dict[str, Any]
 def agent_task_session_close(session_id: str) -> dict[str, Any]:
     """Close a session and its agent process; repeated close is idempotent."""
     project_root = project_root_from_env()
-    return _sparse(call_gateway_method("close_execution_session", project_root, session_id))
+    return _session_dto(call_gateway_method("close_execution_session", project_root, session_id))
 
 
 @mcp.tool()
@@ -356,7 +407,7 @@ def agent_task_session_control(
 ) -> dict[str, Any]:
     """Send a session control acknowledgement; poll request status for lifecycle truth."""
     project_root = project_root_from_env()
-    return _sparse(
+    return _request_dto(
         call_gateway_method(
             "control_execution_session",
             project_root,
@@ -385,7 +436,7 @@ def agent_task_session_resume(
     }
     if component_profile is not None:
         kwargs["component_profile"] = component_profile
-    return _sparse(
+    return _session_dto(
         call_gateway_method("resume_execution_session", project_root, source_session_id, **kwargs)
     )
 
@@ -426,14 +477,10 @@ def agent_task_submit(
     if provider_chat_url is not None:
         submit_kwargs["provider_chat_url"] = provider_chat_url
     status = call_gateway_method("submit_execution_request", project_root, **submit_kwargs)
-    return _sparse({
-        "request-id": status.get("request-id"),
-        "state": status.get("state"),
-        "session-id": status.get("session-id"),
-        "metadata": status.get("metadata") or {},
-        "provider-metadata": status.get("provider-metadata") or {},
-        "warnings": status.get("warnings") or [],
-    })
+    result = _request_dto(status)
+    if isinstance(status, dict) and isinstance(status.get("warnings"), list) and status["warnings"]:
+        result["warnings"] = status["warnings"][:16]
+    return result
 
 
 def main() -> None:

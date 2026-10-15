@@ -61,6 +61,10 @@ def _prepare_native_recovery_fence(
         "chat-id": chat_id,
         "turn-id": turn_id,
         "prompt-fingerprint": prompt_fingerprint,
+        "assistant-id": assistant_id,
+        "terminal-witness-id": terminal_witness_id,
+        "provider-session-id": chat_id,
+        "provider-turn-id": turn_id,
     }
     proof = prove_turn_correlation(
         binding_record,
@@ -119,7 +123,7 @@ def _prepare_native_recovery_fence(
         raise AudiaGenticError(
             code="CON-AGW-156",
             kind="agents",
-            message="provider-native continuation is fenced pending strong turn correlation",
+            message="cannot recover an existing turn: provider-native continuation is fenced pending strong turn correlation",
             details={
                 "request-id": request_id,
                 "session-id": session_id,
@@ -1164,7 +1168,9 @@ def _dispatch_session_request(
                 return record
 
             dispatch_claim = _claim_session_turn
-        if resume_existing:
+        # Promptless resume is observation-only; no provider side effect is
+        # possible until a prompt exists, so do not create a native retry intent.
+        if resume_existing and dispatch_prompt:
             recovery_intent = _prepare_native_recovery_fence(
                 project_root,
                 request_id,
