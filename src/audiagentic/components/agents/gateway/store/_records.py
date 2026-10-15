@@ -19,7 +19,7 @@ from audiagentic.components.agents.agents_paths import (
     gateway_timeline_index_path,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError, redact_details
-from audiagentic.foundation.io import atomic_write_json, iter_ndjson, last_ndjson, load_ndjson, read_text_with_retry
+from audiagentic.foundation.io import atomic_write_json, iter_ndjson, last_ndjson, load_ndjson, read_text_with_retry, tail_ndjson
 from audiagentic.foundation.time import now_iso_z
 
 from . import _shared
@@ -858,12 +858,11 @@ def transition_history_projection(
     if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
         raise ValueError("transition history limit must be between 1 and 100")
     try:
-        from collections import deque
         journal = gateway_timeline_path(project_root, request_id)
         index_path = gateway_timeline_index_path(project_root, request_id)
-        entries = deque(maxlen=limit)
+        entries: list[dict[str, str | None]] = []
         if journal.exists() and index_path.exists():
-            offsets = deque(iter_ndjson(index_path), maxlen=limit)
+            offsets = tail_ndjson(index_path, limit)
             with journal.open("rb") as journal_handle:
                 for metadata in offsets:
                     journal_handle.seek(int(metadata["offset"]))
@@ -874,7 +873,7 @@ def transition_history_projection(
                     if isinstance(event, str) and isinstance(timestamp, str) and (state is None or isinstance(state, str)):
                         entries.append({"event": event, "state": state, "timestamp": timestamp})
         else:
-            for entry in iter_ndjson(journal):
+            for entry in tail_ndjson(journal, limit):
                 event = entry.get("event")
                 timestamp = entry.get("timestamp")
                 state = entry.get("state")
@@ -883,7 +882,7 @@ def transition_history_projection(
     except (OSError, ValueError):
         logger.warning("failed to read gateway request timeline", extra={"request-id": request_id})
         return []
-    return list(entries)
+    return entries
 
 
 def transition_history_page(
@@ -1058,9 +1057,6 @@ def list_records(
         entry for entry in root.iterdir()
         if entry.is_dir() and entry.name not in {"idempotency", "sessions"}
     ]
-    if limit is not None:
-        entries.sort(key=lambda entry: entry.stat().st_mtime_ns, reverse=True)
-        entries = entries[:limit]
     for entry in entries:
         if not entry.is_dir() or entry.name in {"idempotency", "sessions"}:
             continue
@@ -1068,5 +1064,8 @@ def list_records(
             records.append(read_record(project_root, entry.name, include_output=include_output))
         except AudiaGenticError:
             logger.warning("skipping unreadable gateway request", extra={"request-id": entry.name}, exc_info=True)
+    records.sort(key=lambda record: str(record.get("created-at") or ""), reverse=True)
+    if limit is not None:
+        records = records[:limit]
     return records
 

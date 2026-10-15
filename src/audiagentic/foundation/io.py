@@ -186,11 +186,47 @@ def iter_ndjson(path: Path):
 
 
 def last_ndjson(path: Path) -> dict[str, Any] | None:
-    """Return the last mapping row from an NDJSON file, if present."""
-    latest = None
-    for entry in iter_ndjson(path):
-        latest = entry
-    return latest
+    """Return the last mapping row without scanning the whole journal."""
+    rows = tail_ndjson(path, 1)
+    return rows[0] if rows else None
+
+
+def tail_ndjson(path: Path, limit: int) -> list[dict[str, Any]]:
+    """Return the last bounded number of mapping rows using reverse reads."""
+    if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
+        raise ValueError("NDJSON tail limit must be a positive integer")
+    if not path.exists():
+        return []
+    rows: list[dict[str, Any]] = []
+    pending = b""
+    chunk_size = 8192
+    with path.open("rb") as handle:
+        position = handle.seek(0, os.SEEK_END)
+        while position > 0 and len(rows) < limit:
+            size = min(chunk_size, position)
+            position -= size
+            handle.seek(position)
+            pending = handle.read(size) + pending
+            raw_lines = pending.split(b"\n")
+            if position > 0:
+                pending = raw_lines[0]
+                raw_lines = raw_lines[1:]
+            else:
+                pending = b""
+            for raw in reversed(raw_lines):
+                raw = raw.strip()
+                if not raw:
+                    continue
+                try:
+                    value = json.loads(raw.decode("utf-8"))
+                except (UnicodeDecodeError, json.JSONDecodeError):
+                    continue
+                if isinstance(value, dict):
+                    rows.append(value)
+                    if len(rows) >= limit:
+                        break
+    rows.reverse()
+    return rows
 
 
 def load_yaml_value(path: Path, default: Any = None) -> Any:
