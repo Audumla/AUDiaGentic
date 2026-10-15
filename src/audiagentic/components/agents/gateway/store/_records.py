@@ -896,6 +896,7 @@ def transition_history_page(
     if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
         raise ValueError("transition history limit must be between 1 and 100")
     offset = 0
+    index_offset: int | None = None
     if cursor:
         try:
             padded = cursor + "=" * (-len(cursor) % 4)
@@ -903,20 +904,33 @@ def transition_history_page(
             offset = decoded["offset"]
             if decoded.get("v") != 1 or isinstance(offset, bool) or not isinstance(offset, int) or offset < 0:
                 raise ValueError
+            index_offset = decoded.get("index-offset")
+            if index_offset is not None and (isinstance(index_offset, bool) or not isinstance(index_offset, int) or index_offset < 0):
+                raise ValueError
         except (ValueError, KeyError, TypeError, UnicodeError, json.JSONDecodeError):
             raise ValueError("invalid history cursor") from None
     items: list[dict[str, str | None]] = []
     has_more = False
+    next_index_offset: int | None = None
     journal = gateway_timeline_path(project_root, request_id)
     index_path = gateway_timeline_index_path(project_root, request_id)
     try:
         if journal.exists() and index_path.exists():
-            with index_path.open("r", encoding="utf-8") as index_handle, journal.open("rb") as journal_handle:
-                for index, raw_index in enumerate(index_handle):
-                    if index < offset:
+            with index_path.open("rb") as index_handle, journal.open("rb") as journal_handle:
+                if index_offset is not None:
+                    index_handle.seek(index_offset)
+                index = 0
+                while True:
+                    current_index_offset = index_handle.tell()
+                    raw_index = index_handle.readline()
+                    if not raw_index:
+                        break
+                    if index_offset is None and index < offset:
+                        index += 1
                         continue
                     if len(items) >= limit:
                         has_more = True
+                        next_index_offset = current_index_offset
                         break
                     metadata = json.loads(raw_index)
                     journal_handle.seek(int(metadata["offset"]))
@@ -926,6 +940,7 @@ def transition_history_page(
                     state = entry.get("state")
                     if isinstance(event, str) and isinstance(timestamp, str) and (state is None or isinstance(state, str)):
                         items.append({"event": event, "state": state, "timestamp": timestamp})
+                    index += 1
         else:
             for index, entry in enumerate(iter_ndjson(journal)):
                 if index < offset:
@@ -950,7 +965,7 @@ def transition_history_page(
     }
     if has_more:
         result["next-cursor"] = base64.urlsafe_b64encode(
-            json.dumps({"v": 1, "offset": offset + len(items)}, separators=(",", ":")).encode()
+            json.dumps({"v": 1, "offset": offset + len(items), "index-offset": next_index_offset}, separators=(",", ":")).encode()
         ).decode().rstrip("=")
     return result
 

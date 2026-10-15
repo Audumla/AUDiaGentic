@@ -5,7 +5,11 @@ import json
 
 import pytest
 from audiagentic.components.agents.gateway import observability, replay
-from audiagentic.components.agents.agents_paths import gateway_observation_artifact_dir
+from audiagentic.components.agents.agents_paths import (
+    gateway_observation_artifact_dir,
+    gateway_recovery_index_path,
+    gateway_recovery_action_path,
+)
 from audiagentic.components.agents.gateway.evidence_projection import project_public_gateway_evidence
 from audiagentic.components.agents.gateway.observation_projection import append_transport_observation
 from audiagentic.foundation.transports.agent_session import (
@@ -268,6 +272,36 @@ def test_native_continuation_fence_persists_intent_before_provider_action(tmp_pa
     assert page["items"][0]["action-kind"] == "provider-native-continue"
     assert page["items"][0]["disposition"] == "intent-persisted"
     assert page["items"][0]["retry-budget"] == 2
+
+
+def test_recovery_deep_cursor_carries_index_offset(tmp_path, monkeypatch):
+    journal = gateway_recovery_action_path(tmp_path, "req_deep_recovery")
+    index_path = gateway_recovery_index_path(tmp_path, "req_deep_recovery")
+    journal.parent.mkdir(parents=True)
+    lines = []
+    index_rows = []
+    offset = 0
+    for event_index in range(120):
+        line = (json.dumps({"schema-version": "gateway-recovery.v1", "event": "action-result", "event-index": event_index}) + "\n").encode()
+        lines.append(line)
+        index_rows.append({"offset": offset, "length": len(line)})
+        offset += len(line)
+    journal.write_bytes(b"".join(lines))
+    index_path.write_text("".join(json.dumps(row) + "\n" for row in index_rows), encoding="utf-8")
+
+    page = replay.read_recovery_page(tmp_path, "req_deep_recovery", limit=5)
+    for _ in range(10):
+        page = replay.read_recovery_page(tmp_path, "req_deep_recovery", limit=5, cursor=page["next-cursor"])
+    assert [item["event-index"] for item in page["items"]] == list(range(50, 55))
+    cursor = json.loads(__import__("base64").urlsafe_b64decode(page["next-cursor"] + "=" * (-len(page["next-cursor"]) % 4)))
+    assert cursor["index-offset"] > 0
+
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.replay.iter_ndjson",
+        lambda _path: (_ for _ in ()).throw(AssertionError("deep indexed recovery used a full-prefix fallback")),
+    )
+    next_page = replay.read_recovery_page(tmp_path, "req_deep_recovery", limit=5, cursor=page["next-cursor"])
+    assert next_page["items"][0]["event-index"] == 55
 
 def test_native_fence_never_synthesizes_terminal_witness_from_assistant(tmp_path):
     from audiagentic.components.agents.gateway.session.dispatch import _prepare_native_recovery_fence
