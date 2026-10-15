@@ -251,8 +251,11 @@ def classify_reconnect(record: Mapping[str, Any], *, pending_action: bool = Fals
         "submission-proven": submission,
     }
 
-def _cursor(offset: int) -> str:
-    return base64.urlsafe_b64encode(json.dumps({"v": 1, "offset": offset}, separators=(",", ":")).encode()).decode().rstrip("=")
+def _cursor(offset: int, *, index_offset: int | None = None) -> str:
+    payload: dict[str, int] = {"v": 1, "offset": offset}
+    if index_offset is not None:
+        payload["index-offset"] = index_offset
+    return base64.urlsafe_b64encode(json.dumps(payload, separators=(",", ":")).encode()).decode().rstrip("=")
 
 
 def _offset(cursor: str | None) -> int:
@@ -273,21 +276,42 @@ def read_recovery_page(project_root: Path, request_id: str, *, limit: int = 25, 
     if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= _PAGE_SIZE:
         raise ValueError("recovery limit must be an integer between 1 and 100")
     start = _offset(cursor)
+    index_offset: int | None = None
+    if cursor:
+        try:
+            padded = cursor + "=" * (-len(cursor) % 4)
+            value = json.loads(base64.urlsafe_b64decode(padded.encode()).decode())
+            index_offset = value.get("index-offset")
+            if index_offset is not None and (isinstance(index_offset, bool) or not isinstance(index_offset, int) or index_offset < 0):
+                raise ValueError
+        except (ValueError, KeyError, TypeError, UnicodeError, json.JSONDecodeError) as exc:
+            raise ValueError("invalid recovery cursor") from exc
     items: list[dict[str, Any]] = []
     has_more = False
+    next_index_offset: int | None = None
     journal = gateway_recovery_action_path(project_root, request_id)
     index_path = gateway_recovery_index_path(project_root, request_id)
     if journal.exists() and index_path.exists():
-        with index_path.open("r", encoding="utf-8") as index_handle, journal.open("rb") as journal_handle:
-            for index, raw_index in enumerate(index_handle):
-                if index < start:
+        with index_path.open("rb") as index_handle, journal.open("rb") as journal_handle:
+            if index_offset is not None:
+                index_handle.seek(index_offset)
+            index = 0
+            while True:
+                current_index_offset = index_handle.tell()
+                raw_index = index_handle.readline()
+                if not raw_index:
+                    break
+                if index_offset is None and index < start:
+                    index += 1
                     continue
                 if len(items) >= limit:
                     has_more = True
+                    next_index_offset = current_index_offset
                     break
                 metadata = json.loads(raw_index)
                 journal_handle.seek(int(metadata["offset"]))
                 items.append(json.loads(journal_handle.readline().decode("utf-8")))
+                index += 1
     else:
         for index, entry in enumerate(iter_ndjson(journal)):
             if index < start:
@@ -304,7 +328,7 @@ def read_recovery_page(project_root: Path, request_id: str, *, limit: int = 25, 
         "returned": len(items),
     }
     if has_more:
-        result["next-cursor"] = _cursor(start + len(items))
+        result["next-cursor"] = _cursor(start + len(items), index_offset=next_index_offset)
     return result
 
 
