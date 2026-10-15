@@ -1,0 +1,119 @@
+from __future__ import annotations
+
+import json
+
+from audiagentic.components.agents.gateway import replay
+from audiagentic.components.agents.agents_paths import gateway_observation_index_path
+from audiagentic.components.agents.gateway.evidence_projection import project_public_gateway_evidence
+from audiagentic.components.agents.gateway.observation_projection import append_request_projection
+from audiagentic.components.agents.gateway.observability import append_observation, read_observation_page
+from audiagentic.components.agents.gateway.store import transition_history_page
+
+
+def test_provider_binding_and_diagnostics_project_into_request_journal(tmp_path):
+    event = append_request_projection(
+        tmp_path,
+        "req_seam",
+        {
+            "request-id": "req_seam",
+            "session-id": "ses_1",
+            "turn-id": "turn_1",
+            "attempt-epoch": 3,
+            "state": "running",
+            "provider-metadata": {
+                "provider-session-id": "chat_1",
+                "assistant-message-id": "assistant_1",
+                "submission-proven": False,
+                "dom-signals": ["completion-control", "error-alert", "network-error-alert"],
+                "secret": "do not persist",
+            },
+            "diagnostics": {
+                "failure-code": "EXT-GPTAUTO-003",
+                "side-effect-state": "may-have-started",
+                "resolution-state": "unresolved",
+            },
+        },
+        source="provider-binding",
+    )
+    assert event["source"] == "provider-binding"
+    page = read_observation_page(tmp_path, "req_seam")
+    item = page["items"][0]
+    assert item["facts"]["dom-signals"]["completion-control"] is True
+    assert item["facts"]["response-identity"]["assistant-id"] == "assistant_1"
+    assert item["facts"]["decision"]["submission-proven"] is False
+    assert "do not persist" not in json.dumps(item)
+
+
+def test_recovery_result_closes_real_action_and_is_journaled(tmp_path):
+    replay.prepare_recovery_action(
+        tmp_path,
+        "req_action",
+        action_attempt_id="attempt_1",
+        action="resume-existing",
+        action_kind="provider-native-continue",
+        attempt_epoch=1,
+        retry_budget=1,
+        submission_proven=False,
+    )
+    replay.record_recovery_result(
+        tmp_path,
+        "req_action",
+        action_attempt_id="attempt_1",
+        outcome="provider-resume-completed",
+        terminal=True,
+    )
+    page = read_observation_page(tmp_path, "req_action", limit=10)
+    assert [item["source"] for item in page["items"]] == ["recovery-intent", "recovery-result"]
+    assert page["items"][-1]["facts"]["action"]["outcome"] == "provider-resume-completed"
+
+
+def test_observation_reads_have_index_and_bounded_tail(tmp_path):
+    for poll in range(1, 11):
+        append_observation(tmp_path, "req_tail", poll_seq=poll, dom_signals={"stop-control": bool(poll % 2)})
+    assert gateway_observation_index_path(tmp_path, "req_tail").exists()
+    page = read_observation_page(tmp_path, "req_tail", tail=2)
+    assert [item["poll_seq"] for item in page["items"]] == [9, 10]
+
+
+def test_history_cursor_is_independent_and_deterministic(tmp_path):
+    timeline = tmp_path / ".audiagentic" / "runtime" / "agent-execution-gateway" / "req_history" / "timeline.ndjson"
+    timeline.parent.mkdir(parents=True)
+    timeline.write_text(
+        "".join(json.dumps({"event": f"state-{i}", "state": "running", "timestamp": f"t-{i}"}) + "\n" for i in range(3)),
+        encoding="utf-8",
+    )
+    first = transition_history_page(tmp_path, "req_history", limit=2)
+    second = transition_history_page(tmp_path, "req_history", limit=2, cursor=first["next-cursor"])
+    assert [item["event"] for item in first["items"]] == ["state-0", "state-1"]
+    assert [item["event"] for item in second["items"]] == ["state-2"]
+
+
+def test_public_evidence_has_one_redaction_and_byte_boundary():
+    payload = {
+        "schema_version": "gateway-evidence.v1",
+        "request-id": "req_public",
+        "state": "running",
+        "diagnostics": {"classification": "watchdog", "reason-code": "reconcile"},
+        "evidence": [{"sequence": i, "phase": "in-progress"} for i in range(100)],
+        "observation-summary": {"count": 100, "latest": {"facts": {"message": "raw prompt secret"}}},
+        "observations": {"items": [{"event": "dom-observed", "facts": {"text": "raw prompt secret"}} for _ in range(100)]},
+        "recovery": {"items": [{"binding": {"prompt-fingerprint": "secret"}, "outcome": "pending"} for _ in range(100)]},
+        "history": {"items": [{"event": "state", "state": "running", "timestamp": "t"} for _ in range(100)]},
+    }
+    result = project_public_gateway_evidence(payload, max_bytes=2048)
+    encoded = json.dumps(result)
+    assert len(encoded.encode("utf-8")) <= 2048
+    assert "raw prompt secret" not in encoded
+    assert "prompt-fingerprint" not in encoded
+
+
+def test_reconnect_classification_is_read_only_and_fail_closed():
+    safe = replay.classify_reconnect(
+        {"provider-metadata": {"provider-session-id": "chat", "submission-proven": False}}
+    )
+    ambiguous = replay.classify_reconnect(
+        {"provider-metadata": {"provider-session-id": "chat", "submission-proven": True}}
+    )
+    assert safe["classification"] == "safe-reconnect"
+    assert safe["read-only"] is True
+    assert ambiguous["classification"] == "reconcile-required"

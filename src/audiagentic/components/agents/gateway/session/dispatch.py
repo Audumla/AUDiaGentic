@@ -127,6 +127,7 @@ def _prepare_native_recovery_fence(
                 "recovery-outcome": outcome,
             },
         )
+    return intent
 
 def _merge_provider_metadata(
     current_metadata: dict[str, Any] | None,
@@ -789,6 +790,11 @@ def _dispatch_session_request(
                 provider_metadata=merged_metadata,
             )
             client_defaults.remember(project_root, record)
+            try:
+                from audiagentic.components.agents.gateway.observation_projection import append_request_projection
+                append_request_projection(project_root, request_id, record, source="provider-binding")
+            except Exception:  # noqa: BLE001 - journal is advisory
+                logger.debug("provider binding journal append failed", extra={"request-id": request_id}, exc_info=True)
 
         if is_new_session:
             # keep-alive: open a new session bound to this profile
@@ -1159,7 +1165,7 @@ def _dispatch_session_request(
 
             dispatch_claim = _claim_session_turn
         if resume_existing:
-            _prepare_native_recovery_fence(
+            recovery_intent = _prepare_native_recovery_fence(
                 project_root,
                 request_id,
                 record,
@@ -1180,6 +1186,16 @@ def _dispatch_session_request(
             resume_existing=resume_existing,
             request_provider_metadata_sink=_relay_provider_metadata,
         )
+        if resume_existing and isinstance(recovery_intent, dict):
+            from audiagentic.components.agents.gateway.replay import record_recovery_result
+            record_recovery_result(
+                project_root,
+                request_id,
+                action_attempt_id=str(recovery_intent["action-attempt-id"]),
+                outcome="provider-resume-completed",
+                terminal=True,
+                causal_input_ids=[request_id, session_id],
+            )
     except _CancelledDuringDispatch:
         if guard_held:
             preparation_guard.release()
@@ -1772,6 +1788,11 @@ def _dispatch_session_request(
             session_id=session_id,
             provider_metadata=provider_metadata,
         )
+        try:
+            from audiagentic.components.agents.gateway.observation_projection import append_request_projection
+            append_request_projection(project_root, request_id, record, source="provider-terminal")
+        except Exception:  # noqa: BLE001 - journal is advisory
+            logger.debug("provider terminal journal append failed", extra={"request-id": request_id}, exc_info=True)
     client_defaults.remember(project_root, record)
 
     if result.stop_reason == "cancelled":
@@ -2035,7 +2056,7 @@ def _transition_owned_attempt(
     updates: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Persist a terminal state only while this worker attempt still owns it."""
-    return store.transition_owned_terminal(
+    updated = store.transition_owned_terminal(
         project_root,
         record["request-id"],
         new_state,
@@ -2044,3 +2065,9 @@ def _transition_owned_attempt(
         worker_id=record["worker-id"],
         attempt_epoch=record["attempt-epoch"],
     )
+    try:
+        from audiagentic.components.agents.gateway.observation_projection import append_request_projection
+        append_request_projection(project_root, record["request-id"], updated, source="gateway-terminal")
+    except Exception:  # noqa: BLE001 - journal is advisory
+        logger.debug("terminal diagnostic journal append failed", extra={"request-id": record["request-id"]}, exc_info=True)
+    return updated
