@@ -261,6 +261,17 @@ def append_observation(
             handle.write(index_line)
             handle.flush()
             os.fsync(handle.fileno())
+        from audiagentic.components.agents.gateway.retention import (
+            compact_indexed_ndjson,
+            journal_max_bytes,
+        )
+        compact_indexed_ndjson(
+            journal_path,
+            index_path,
+            max_bytes=journal_max_bytes("observation"),
+            preserve=lambda row: row.get("facts", {}).get("decision", {}).get("terminal") is True
+            or row.get("facts", {}).get("action", {}).get("terminal") is True,
+        )
     return event
 
 

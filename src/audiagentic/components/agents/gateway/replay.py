@@ -52,6 +52,16 @@ def _append(project_root: Path, request_id: str, event: dict[str, Any]) -> dict[
         handle.write(json.dumps({"event-seq": event["event-seq"], "offset": offset, "length": len(line.encode("utf-8"))}, separators=(",", ":")) + "\n")
         handle.flush()
         os.fsync(handle.fileno())
+    from audiagentic.components.agents.gateway.retention import (
+        compact_indexed_ndjson,
+        journal_max_bytes,
+    )
+    compact_indexed_ndjson(
+        path,
+        index,
+        max_bytes=journal_max_bytes("recovery"),
+        preserve=lambda row: row.get("event") in {"action-result", "recovery-terminal", "reconciliation-result"},
+    )
     return event
 
 

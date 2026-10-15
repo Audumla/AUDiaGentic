@@ -75,6 +75,17 @@ def record_timeline_event(
                 handle.write(json.dumps({"offset": offset, "length": len(line.encode("utf-8"))}) + "\n")
                 handle.flush()
                 os.fsync(handle.fileno())
+            if path.name == "timeline.ndjson":
+                from audiagentic.components.agents.gateway.retention import (
+                    compact_indexed_ndjson,
+                    journal_max_bytes,
+                )
+                compact_indexed_ndjson(
+                    path,
+                    index_path,
+                    max_bytes=journal_max_bytes("timeline"),
+                    preserve=lambda row: row.get("state") in {"completed", "failed", "cancelled", "rejected", "interrupted", "timed-out", "expired", "abandoned"},
+                )
     except Exception:  # noqa: BLE001
         logger.warning(
             "failed to record timeline event",
