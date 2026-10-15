@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 import inspect
+import re
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from audiagentic.components.agents.gateway.session.client_defaults import (
-    _bounded_cause_message,
-)
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.time import now_iso_z
 from audiagentic.foundation.transports.agent_session import (
@@ -43,6 +41,14 @@ from .urls import (
     parse_provider_session_id,
     url_matches_provider_session,
 )
+
+
+def _bounded_cause_message(error: BaseException) -> str:
+    """Keep provider admission causes useful without leaking private context."""
+    message = re.sub(r"\s+", " ", str(error)).strip()
+    message = re.sub(r"(?i)https?://\S+", "[redacted-url]", message)
+    message = re.sub(r"(?i)(?:[A-Z]:\\|/)[^\s]+", "[redacted-path]", message)
+    return message[:240]
 
 
 class GptAutoSessionTransport:

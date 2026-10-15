@@ -2760,6 +2760,7 @@ class GptAutoTurn:
                 self._response_message_id = response_message_id
                 self._terminal_evidence = {
                     "turn-id": self.request.turn_id,
+                    "terminal-witness-id": response_message_id,
                     "policy": "response-complete",
                     "generating-at-terminal": bool(current.generating or verify.generating)
                     if "verify" in locals()

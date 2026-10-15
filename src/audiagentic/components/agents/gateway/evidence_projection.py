@@ -149,7 +149,8 @@ def project_public_gateway_evidence(payload: Mapping[str, Any], *, max_bytes: in
         page = _stream_page(payload.get(key), kind=kind)
         if page is not None:
             result[key] = page
-    result["truncated"] = bool(base.get("truncated"))
+    if base.get("truncated"):
+        result["truncated"] = True
 
     def encoded_size() -> int:
         return len(json.dumps(result, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8"))

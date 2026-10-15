@@ -3,12 +3,29 @@
 from __future__ import annotations
 
 import re
+from typing import Any
 from urllib.parse import unquote, urlsplit, urlunsplit
 
 from .window_anchor import is_gateway_dashboard_url
 
 _PROJECT_RE = re.compile(r"/g/(g-p-[^/]+)")
 _CHAT_RE = re.compile(r"/c/([^/?#]+)")
+_GENERIC_CHAT_TITLES = frozenset({
+    "skip to content",
+    "chat history",
+    "open sidebar",
+    "close sidebar",
+})
+
+
+def normalize_chat_title(value: Any) -> str | None:
+    """Return a bounded conversation label, excluding navigation labels."""
+    if not isinstance(value, str):
+        return None
+    text = " ".join(value.split()).strip()
+    if not text or text.casefold() in _GENERIC_CHAT_TITLES:
+        return None
+    return text[:256]
 
 
 def parse_project_id(url: str) -> str | None:

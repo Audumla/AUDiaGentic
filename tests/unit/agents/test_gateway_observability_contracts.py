@@ -3,6 +3,7 @@ from __future__ import annotations
 import gzip
 import json
 
+import pytest
 from audiagentic.components.agents.gateway import observability, replay
 from audiagentic.components.agents.agents_paths import gateway_observation_artifact_dir
 
@@ -53,6 +54,23 @@ def test_unchanged_polls_are_periodically_coalesced(tmp_path):
     assert page["items"][-1]["coalesced"]["repeat_count"] == 10
     assert page["items"][-1]["coalesced"]["last_poll_seq"] == 10
 
+def test_terminal_force_flush_persists_final_gap_after_unchanged_coalescing(tmp_path):
+    first = observability.append_observation(
+        tmp_path, "req_final_gap", poll_seq=1, dom_signals={"stable": True}
+    )
+    observability.append_observation(
+        tmp_path, "req_final_gap", poll_seq=2, dom_signals={"stable": True}
+    )
+    final = observability.append_observation(
+        tmp_path, "req_final_gap", poll_seq=3, dom_signals={"stable": True},
+        decision={"outcome": "terminal"}, force_flush=True,
+    )
+    page = observability.read_observation_page(tmp_path, "req_final_gap", limit=10)
+    assert first["event_seq"] == 1
+    assert final["event_seq"] == 3
+    assert page["count"] == 3
+    assert page["items"][-1]["facts"]["decision"]["outcome"] == "terminal"
+
 def test_observation_cursor_is_finite_and_opaque(tmp_path):
     for poll in range(1, 4):
         observability.append_observation(tmp_path, "req_page", poll_seq=poll, dom_signals={"poll": poll})
@@ -83,6 +101,18 @@ def test_optional_artifact_is_bounded_redacted_and_purgeable(tmp_path):
     assert observability.purge_observation_artifacts(tmp_path, "req_artifact") == 2
     assert not artifact_dir.exists()
 
+
+def test_artifact_ttl_is_enforced_by_evidence_reads(tmp_path):
+    observability.capture_redacted_artifact(
+        tmp_path, "req_expiring", {"role": "main"}, ttl_seconds=1
+    )
+    manifest = gateway_observation_artifact_dir(tmp_path, "req_expiring") / "manifest.ndjson"
+    row = json.loads(manifest.read_text(encoding="utf-8").splitlines()[0])
+    row["expires_at_epoch"] = 0
+    manifest.write_text(json.dumps(row) + "\n", encoding="utf-8")
+    observability.observation_summary(tmp_path, "req_expiring")
+    assert not list(gateway_observation_artifact_dir(tmp_path, "req_expiring").glob("*.json.gz"))
+    assert not (gateway_observation_artifact_dir(tmp_path, "req_expiring") / "manifest.ndjson").exists()
 
 def test_recovery_intent_fences_ambiguous_submission_and_replay(tmp_path):
     rejected = replay.prepare_recovery_action(
@@ -128,6 +158,29 @@ def test_native_continuation_fence_persists_intent_before_provider_action(tmp_pa
     from audiagentic.components.agents.gateway.session.dispatch import (
         _prepare_native_recovery_fence,
     )
+    from audiagentic.components.agents.gateway.session.sessions_store import (
+        build_session_record,
+        write_session_record,
+    )
+    write_session_record(
+        tmp_path,
+        build_session_record(
+            session_id="session",
+            execution_profile_id="gpt-auto",
+            provider_id="gpt-auto",
+            provider_session_ref="chat",
+            surface_id="chatgpt-web",
+            provider_metadata={
+                "project-id": "project",
+                "project-url": "https://chatgpt.com/g/g-p-project/project",
+                "provider-session-id": "chat",
+                "unresolved-turn-id": "turn",
+                "prompt-text-digest": "fp",
+                "assistant-message-id": "assistant",
+                "terminal-evidence": {"terminal-witness-id": "assistant"},
+            },
+        ),
+    )
 
     _prepare_native_recovery_fence(
         tmp_path,
@@ -144,7 +197,7 @@ def test_native_continuation_fence_persists_intent_before_provider_action(tmp_pa
                 "prompt-text-digest": "fp",
                 "assistant-before-message-id": "assistant",
                 "assistant-message-id": "assistant",
-                "terminal-evidence": {"kind": "terminal"},
+                "terminal-evidence": {"terminal-witness-id": "assistant", "kind": "terminal"},
                 "submission-proven": False,
             },
             "recovery": {"max-attempts": 2, "attempt": 0},
@@ -155,6 +208,30 @@ def test_native_continuation_fence_persists_intent_before_provider_action(tmp_pa
     assert page["items"][0]["action-kind"] == "provider-native-continue"
     assert page["items"][0]["disposition"] == "intent-persisted"
     assert page["items"][0]["retry-budget"] == 2
+
+def test_native_fence_never_synthesizes_terminal_witness_from_assistant(tmp_path):
+    from audiagentic.components.agents.gateway.session.dispatch import _prepare_native_recovery_fence
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+    from audiagentic.components.agents.gateway.session.sessions_store import build_session_record, write_session_record
+    write_session_record(tmp_path, build_session_record(
+        session_id="session", execution_profile_id="gpt-auto", provider_id="gpt-auto",
+        provider_session_ref="chat", surface_id="chatgpt-web",
+        provider_metadata={
+            "project-id": "project", "provider-session-id": "chat", "unresolved-turn-id": "turn",
+            "prompt-text-digest": "fp", "assistant-message-id": "assistant",
+            "terminal-evidence": {"terminal-witness-id": "assistant"},
+        },
+    ))
+    with pytest.raises(AudiaGenticError) as raised:
+        _prepare_native_recovery_fence(tmp_path, "req_missing_witness", {
+            "request-id": "req_missing_witness", "project-id": "project", "session-id": "session",
+            "attempt-epoch": 1, "prompt-digest": "fp", "provider-metadata": {
+                "provider-session-id": "chat", "unresolved-turn-id": "turn", "prompt-text-digest": "fp",
+                "assistant-before-message-id": "assistant", "assistant-message-id": "assistant",
+                "terminal-evidence": {"kind": "terminal"}, "submission-proven": False,
+            }, "recovery": {"max-attempts": 2, "attempt": 0},
+        }, session_id="session")
+    assert raised.value.code == "CON-AGW-156"
 
 def test_turn_correlation_requires_boundary_and_terminal_witness():
     proof = replay.prove_turn_correlation(
