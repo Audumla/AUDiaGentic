@@ -1118,19 +1118,20 @@ def replay_execution_observations(project_root: Path, request_id: str) -> dict[s
     from audiagentic.components.agents.gateway.observability import read_observation_page
     from audiagentic.components.agents.gateway.replay import replay_request
 
-    observations: list[dict[str, Any]] = []
-    cursor: str | None = None
-    while True:
-        page = read_observation_page(
-            project_root, request_id, limit=100, cursor=cursor
-        )
-        observations.extend(page.get("items", []))
-        if not page.get("has_more"):
-            break
-        cursor = page.get("next_cursor")
-        if not isinstance(cursor, str) or not cursor:
-            break
-    return replay_request(project_root, request_id, observations=observations)
+    def observations():
+        cursor: str | None = None
+        while True:
+            page = read_observation_page(
+                project_root, request_id, limit=100, cursor=cursor
+            )
+            yield from page.get("items", [])
+            if not page.get("has_more"):
+                return
+            cursor = page.get("next_cursor")
+            if not isinstance(cursor, str) or not cursor:
+                return
+
+    return replay_request(project_root, request_id, observations=observations())
 
 
 def recover_execution_request(

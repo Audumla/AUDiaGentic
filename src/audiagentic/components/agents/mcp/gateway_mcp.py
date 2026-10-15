@@ -92,7 +92,12 @@ def agent_task_list_definitions() -> list[dict[str, Any]]:
 def agent_task_status(request_id: str, include_response: bool = False) -> dict[str, Any]:
     """Poll compact lifecycle status; use diagnostics or response for terminal detail."""
     project_root = project_root_from_env()
-    status = call_gateway_method("get_execution_request", project_root, request_id, include_response=include_response)
+    status = dict(call_gateway_method(
+        "get_execution_request", project_root, request_id, include_response=include_response
+    ))
+    # The compact default is an explicit versioned MCP contract. Callers that
+    # need the prior terminal payload use the opt-in flag or response tool.
+    status.setdefault("contract-version", "task-status.v4-compact")
     # V4 is a fixed-shape contract: its inactive axes are explicitly null and
     # must not be removed by the generic sparse projection.
     return _status_without_response_preview(status)
