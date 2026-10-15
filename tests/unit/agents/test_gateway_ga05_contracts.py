@@ -62,6 +62,33 @@ def test_evidence_is_compact_by_default_and_detail_is_opt_in():
     )
 
 
+def test_evidence_uses_independent_observation_and_recovery_cursors():
+    with _patch_root(), patch(
+        "audiagentic.components.agents.mcp.gateway_mcp.call_gateway_method",
+        return_value={},
+    ) as call:
+        gateway_mcp.agent_task_evidence(
+            "req-1",
+            include_observations=True,
+            include_recovery=True,
+            cursor="shared",
+            observation_cursor="obs",
+            recovery_cursor="recovery",
+        )
+    call.assert_called_once_with(
+        "get_execution_evidence",
+        _ROOT,
+        "req-1",
+        include_observations=True,
+        include_history=False,
+        include_recovery=True,
+        limit=25,
+        cursor="shared",
+        observation_cursor="obs",
+        recovery_cursor="recovery",
+        since_sequence=None,
+    )
+
 def test_observation_replay_is_read_only_and_explicit():
     payload = {
         "request-id": "req-1",

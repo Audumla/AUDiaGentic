@@ -1059,6 +1059,8 @@ def get_execution_evidence(
     include_recovery: bool = False,
     limit: int = 25,
     cursor: str | None = None,
+    observation_cursor: str | None = None,
+    recovery_cursor: str | None = None,
     since_sequence: int | None = None,
 ) -> dict[str, Any]:
     """Return compact evidence by default; detail tiers are explicit opt-ins."""
@@ -1071,24 +1073,40 @@ def get_execution_evidence(
     from audiagentic.components.agents.gateway.observability import (
         observation_summary, read_observation_page,
     )
+    from audiagentic.components.agents.gateway.diagnostics import activity_monitoring_snapshot
+    from audiagentic.components.agents.status.diagnostics_projection import project_public_diagnostics
+    latest_transition = store.latest_transition_projection(project_root, request_id)
+    diagnostic_view = project_public_diagnostics(
+        {
+            "request-id": request_id,
+            "session-id": record.get("session-id"),
+            "state": record.get("state"),
+            "diagnostics": record.get("diagnostics"),
+            "monitoring": activity_monitoring_snapshot(record),
+            "evidence": record.get("diagnostic-evidence"),
+            "latest-transition": latest_transition,
+        }
+    )
     result: dict[str, Any] = {
         "schema_version": "gateway-evidence.v1",
         "request-id": request_id,
         "session-id": record.get("session-id"),
         "state": record.get("state"),
-        "diagnostics": record.get("diagnostics"),
+        "diagnostics": diagnostic_view.get("diagnostics"),
+        "monitoring": diagnostic_view.get("monitoring"),
+        "diagnostic-evidence": diagnostic_view.get("evidence"),
         "observation-summary": observation_summary(project_root, request_id),
-        "latest-transition": store.latest_transition_projection(project_root, request_id),
+        "latest-transition": latest_transition,
     }
     if include_observations:
         result["observations"] = read_observation_page(
-            project_root, request_id, limit=limit, cursor=cursor,
+            project_root, request_id, limit=limit, cursor=observation_cursor or cursor,
             since_sequence=since_sequence,
         )
     if include_recovery:
         from audiagentic.components.agents.gateway.replay import read_recovery_page
         result["recovery"] = read_recovery_page(
-            project_root, request_id, limit=limit, cursor=cursor,
+            project_root, request_id, limit=limit, cursor=recovery_cursor or cursor,
         )
     if include_history:
         result["history"] = store.transition_history_projection(project_root, request_id, limit=limit)
@@ -1096,11 +1114,23 @@ def get_execution_evidence(
 
 
 def replay_execution_observations(project_root: Path, request_id: str) -> dict[str, Any]:
-    """Analyze persisted observations and recovery intents without side effects."""
+    """Analyze the complete persisted observation journal without side effects."""
     from audiagentic.components.agents.gateway.observability import read_observation_page
     from audiagentic.components.agents.gateway.replay import replay_request
-    page = read_observation_page(project_root, request_id, limit=100)
-    return replay_request(project_root, request_id, observations=page.get("items", []))
+
+    observations: list[dict[str, Any]] = []
+    cursor: str | None = None
+    while True:
+        page = read_observation_page(
+            project_root, request_id, limit=100, cursor=cursor
+        )
+        observations.extend(page.get("items", []))
+        if not page.get("has_more"):
+            break
+        cursor = page.get("next_cursor")
+        if not isinstance(cursor, str) or not cursor:
+            break
+    return replay_request(project_root, request_id, observations=observations)
 
 
 def recover_execution_request(
