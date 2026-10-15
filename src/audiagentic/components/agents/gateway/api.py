@@ -1097,12 +1097,12 @@ def get_execution_evidence(
         "diagnostics": diagnostic_view.get("diagnostics"),
         "monitoring": diagnostic_view.get("monitoring"),
         "diagnostic-evidence": diagnostic_view.get("evidence"),
-        "observation-summary": observation_summary(project_root, request_id),
         "latest-transition": latest_transition,
     }
     from audiagentic.components.agents.gateway.replay import classify_reconnect
     result["reconnect-classification"] = classify_reconnect(record)
     if include_observations:
+        result["observation-summary"] = observation_summary(project_root, request_id)
         result["observations"] = read_observation_page(
             project_root, request_id, limit=limit, cursor=observation_cursor or cursor,
             since_sequence=since_sequence,
@@ -1827,11 +1827,7 @@ def list_execution_requests(
     # Dashboard rows never include full response bodies. Avoid reopening
     # request-owned artifacts while scanning history; the artifact is only
     # dereferenced by the explicit response operation.
-    records = (
-        store.list_records(project_root, include_output=False, limit=limit)
-        if limit is not None
-        else store.list_records(project_root, include_output=False)
-    )
+    records = store.list_records(project_root, include_output=False)
     if state is not None:
         records = [r for r in records if r["state"] == state]
     records.sort(key=lambda r: r["created-at"], reverse=True)

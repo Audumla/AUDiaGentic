@@ -528,6 +528,37 @@ def test_list_execution_requests_most_recent_first_and_filterable(tmp_path: Path
     assert limited[0]["task_id"] == second["request-id"]
 
 
+def test_list_execution_requests_filters_state_before_limit_and_uses_created_at(tmp_path: Path):
+    records = (
+        ("req_failed_old", "failed", "2026-10-15T00:00:01Z"),
+        ("req_failed_new", "failed", "2026-10-15T00:00:03Z"),
+        ("req_completed_latest_mtime", "completed", "2026-10-15T00:00:02Z"),
+    )
+    for request_id, state, created_at in records:
+        record = store.build_record(execution_profile_id="default", prompt_body=request_id)
+        record["request-id"] = request_id
+        record["state"] = state
+        record["created-at"] = created_at
+        store.write_record(tmp_path, record)
+
+    failed = gateway.list_execution_requests(tmp_path, state="failed", limit=1)
+    assert [row["task_id"] for row in failed] == ["req_failed_new"]
+
+
+def test_default_evidence_does_not_scan_observation_summary(tmp_path: Path, monkeypatch):
+    record = store.build_record(execution_profile_id="default", prompt_body="evidence")
+    store.write_record(tmp_path, record)
+
+    def fail_summary(*_args, **_kwargs):
+        raise AssertionError("default evidence unexpectedly loaded observation summary")
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.observability.observation_summary",
+        fail_summary,
+    )
+    evidence = gateway.get_execution_evidence(tmp_path, record["request-id"])
+    assert evidence["observation-summary"] == {}
+
+
 def test_dashboard_request_projection_exposes_only_safe_gpt_chat_link(tmp_path: Path):
     record = store.build_record(execution_profile_id="gpt-auto", prompt_body="review")
     record["provider-metadata"] = {

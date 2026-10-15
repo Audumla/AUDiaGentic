@@ -25,7 +25,7 @@ from audiagentic.components.agents.agents_paths import (
     gateway_observation_path,
     gateway_request_path,
 )
-from audiagentic.foundation.io import atomic_write_text, iter_ndjson, last_ndjson
+from audiagentic.foundation.io import atomic_write_text, iter_ndjson, last_ndjson, tail_ndjson
 from audiagentic.foundation.logging.redaction import redact_text
 from audiagentic.foundation.system.process import StartupLock
 from audiagentic.foundation.time import now_iso_z
@@ -113,21 +113,27 @@ def _project_fields(fields: Mapping[str, Any] | None) -> dict[str, Any]:
     return projected if isinstance(projected, dict) else {}
 
 
-def _cursor(value: int) -> str:
-    raw = json.dumps({"event_seq": value}, separators=(",", ":")).encode()
+def _cursor(value: int, *, index_offset: int | None = None) -> str:
+    payload: dict[str, int] = {"event_seq": value}
+    if index_offset is not None:
+        payload["index_offset"] = index_offset
+    raw = json.dumps(payload, separators=(",", ":")).encode()
     return base64.urlsafe_b64encode(raw).decode().rstrip("=")
 
 
-def _decode_cursor(value: str | None) -> int:
+def _decode_cursor(value: str | None) -> tuple[int, int | None]:
     if not value:
-        return 0
+        return 0, None
     try:
         padded = value + "=" * (-len(value) % 4)
         decoded = json.loads(base64.urlsafe_b64decode(padded.encode()).decode())
         sequence = decoded["event_seq"]
         if isinstance(sequence, bool) or not isinstance(sequence, int) or sequence < 0:
             raise ValueError
-        return sequence
+        index_offset = decoded.get("index_offset")
+        if index_offset is not None and (isinstance(index_offset, bool) or not isinstance(index_offset, int) or index_offset < 0):
+            raise ValueError
+        return sequence, index_offset
     except (ValueError, KeyError, TypeError, json.JSONDecodeError, UnicodeDecodeError):
         raise ValueError("invalid observation cursor") from None
 
@@ -272,38 +278,44 @@ def read_observation_page(
         raise ValueError("observation limit must be an integer between 1 and 100")
     if tail is not None and (isinstance(tail, bool) or not isinstance(tail, int) or not 1 <= tail <= 100):
         raise ValueError("observation tail must be an integer between 1 and 100")
-    after = max(_decode_cursor(cursor), int(since_sequence or 0))
+    cursor_after, cursor_offset = _decode_cursor(cursor)
+    after = max(cursor_after, int(since_sequence or 0))
     page: list[dict[str, Any]] = []
     has_more = False
+    next_cursor_offset: int | None = None
     if tail is not None and not cursor and not since_sequence:
-        from collections import deque
-        recent = deque(maxlen=tail + 1)
         index_path = gateway_observation_index_path(project_root, request_id)
         journal_path = gateway_observation_path(project_root, request_id)
         if index_path.exists() and journal_path.exists():
-            for item in iter_ndjson(index_path):
-                recent.append(item)
+            recent = tail_ndjson(index_path, tail + 1)
             with journal_path.open("rb") as journal_handle:
                 for index in list(recent)[-tail:]:
                     journal_handle.seek(int(index["offset"]))
                     page.append(json.loads(journal_handle.readline().decode("utf-8")))
             has_more = len(recent) > tail
         else:
-            for item in iter_ndjson(journal_path):
-                recent.append(item)
+            recent = tail_ndjson(journal_path, tail + 1)
             has_more = len(recent) > tail
-            page = list(recent)[-tail:]
+            page = recent[-tail:]
     else:
         index_path = gateway_observation_index_path(project_root, request_id)
-        if index_path.exists() and gateway_observation_path(project_root, request_id).exists():
+        journal_path = gateway_observation_path(project_root, request_id)
+        if index_path.exists() and journal_path.exists():
             try:
-                with index_path.open("r", encoding="utf-8") as index_handle, gateway_observation_path(project_root, request_id).open("rb") as journal_handle:
-                    for raw_index in index_handle:
+                with index_path.open("rb") as index_handle, journal_path.open("rb") as journal_handle:
+                    if cursor_offset is not None:
+                        index_handle.seek(cursor_offset)
+                    while True:
+                        current_index_offset = index_handle.tell()
+                        raw_index = index_handle.readline()
+                        if not raw_index:
+                            break
                         index = json.loads(raw_index)
                         if int(index.get("event_seq", 0)) <= after:
                             continue
                         if len(page) >= limit:
                             has_more = True
+                            next_cursor_offset = current_index_offset
                             break
                         journal_handle.seek(int(index["offset"]))
                         item = json.loads(journal_handle.readline().decode("utf-8"))
@@ -311,8 +323,8 @@ def read_observation_page(
             except (OSError, KeyError, TypeError, ValueError, UnicodeDecodeError, json.JSONDecodeError):
                 page = []
                 has_more = False
-        if not page and not has_more:
-            for item in iter_ndjson(gateway_observation_path(project_root, request_id)):
+        else:
+            for item in iter_ndjson(journal_path):
                 if int(item.get("event_seq", 0)) <= after:
                     continue
                 if len(page) < limit:
@@ -320,7 +332,7 @@ def read_observation_page(
                 else:
                     has_more = True
                     break
-    next_cursor = _cursor(int(page[-1]["event_seq"])) if has_more and page else None
+    next_cursor = _cursor(int(page[-1]["event_seq"]), index_offset=next_cursor_offset) if has_more and page else None
     return {
         "schema_version": SCHEMA_VERSION,
         "request_id": request_id,
@@ -340,10 +352,10 @@ def observation_summary(project_root: Path, request_id: str) -> dict[str, Any]:
     latest = None
     if index.exists() and journal.exists():
         try:
-            with index.open("r", encoding="utf-8") as handle:
-                count = sum(1 for _ in handle)
             first = next(iter_ndjson(journal), None)
             latest = last_ndjson(journal)
+            last_index = last_ndjson(index)
+            count = int(last_index.get("event_seq", 0)) if last_index else 0
         except (OSError, ValueError, TypeError, json.JSONDecodeError):
             count = 0
     if count == 0:
