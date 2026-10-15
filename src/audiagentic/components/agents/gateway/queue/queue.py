@@ -1845,6 +1845,17 @@ class GatewayQueueManager:
                         service_root=service_root,
                     )
                     _publish_lifecycle_event("interrupted", interrupted)
+                    session_id = current.get("session-id")
+                    if isinstance(session_id, str) and session_id:
+                        try:
+                            from audiagentic.components.agents.gateway.session import sessions_store
+                            sessions_store.expire_session_if_policy_exceeded(project_root, session_id)
+                        except Exception:  # noqa: BLE001 - request interruption remains authoritative
+                            logger.warning(
+                                "could not expire exhausted recovery session",
+                                extra={"request-id": request_id, "session-id": session_id},
+                                exc_info=True,
+                            )
                     logger.warning(
                         "gateway request recovery exhausted; request interrupted",
                         extra={

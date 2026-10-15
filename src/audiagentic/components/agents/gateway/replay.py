@@ -11,6 +11,7 @@ from typing import Any
 
 from audiagentic.components.agents.agents_paths import (
     gateway_recovery_action_path,
+    gateway_recovery_index_path,
     gateway_request_path,
 )
 from audiagentic.foundation.io import iter_ndjson, last_ndjson
@@ -39,8 +40,15 @@ def _append(project_root: Path, request_id: str, event: dict[str, Any]) -> dict[
     previous = last_ndjson(gateway_recovery_action_path(project_root, request_id))
     event = dict(event)
     event["event-seq"] = (int(previous.get("event-seq", 0)) if previous else 0) + 1
+    line = json.dumps(event, sort_keys=True, separators=(",", ":")) + "\n"
+    offset = path.stat().st_size if path.exists() else 0
     with path.open("a", encoding="utf-8", newline="\n") as handle:
-        handle.write(json.dumps(event, sort_keys=True, separators=(",", ":")) + "\n")
+        handle.write(line)
+        handle.flush()
+        os.fsync(handle.fileno())
+    index = gateway_recovery_index_path(project_root, request_id)
+    with index.open("a", encoding="utf-8", newline="\n") as handle:
+        handle.write(json.dumps({"event-seq": event["event-seq"], "offset": offset, "length": len(line.encode("utf-8"))}, separators=(",", ":")) + "\n")
         handle.flush()
         os.fsync(handle.fileno())
     return event
@@ -90,7 +98,10 @@ def prepare_recovery_action(
         else:
             disposition, outcome = "intent-persisted", "pending-side-effect"
         safe_binding = {
-            key: value for key in ("project-id", "session-id", "chat-id", "turn-id", "prompt-fingerprint")
+            key: value for key in (
+                "project-id", "session-id", "chat-id", "turn-id", "prompt-fingerprint",
+                "assistant-id", "terminal-witness-id", "provider-session-id", "provider-turn-id",
+            )
             if isinstance((value := (binding or {}).get(key)), (str, int, bool))
         }
         event = {
@@ -163,6 +174,7 @@ def record_recovery_result(
             source="recovery-result",
             action={"event": "action-result", "kind": "recovery", "outcome": outcome, "terminal": terminal},
             causal_input_ids=[request_id, action_attempt_id],
+            force_flush=bool(terminal or outcome in {"success", "completed", "provider-resume-completed", "abandon-accepted"}),
         )
     except Exception:  # noqa: BLE001 - recovery journal remains advisory
         pass
@@ -259,14 +271,28 @@ def read_recovery_page(project_root: Path, request_id: str, *, limit: int = 25, 
     start = _offset(cursor)
     items: list[dict[str, Any]] = []
     has_more = False
-    for index, entry in enumerate(iter_ndjson(gateway_recovery_action_path(project_root, request_id))):
-        if index < start:
-            continue
-        if len(items) < limit:
-            items.append(entry)
-        else:
-            has_more = True
-            break
+    journal = gateway_recovery_action_path(project_root, request_id)
+    index_path = gateway_recovery_index_path(project_root, request_id)
+    if journal.exists() and index_path.exists():
+        with index_path.open("r", encoding="utf-8") as index_handle, journal.open("rb") as journal_handle:
+            for index, raw_index in enumerate(index_handle):
+                if index < start:
+                    continue
+                if len(items) >= limit:
+                    has_more = True
+                    break
+                metadata = json.loads(raw_index)
+                journal_handle.seek(int(metadata["offset"]))
+                items.append(json.loads(journal_handle.readline().decode("utf-8")))
+    else:
+        for index, entry in enumerate(iter_ndjson(journal)):
+            if index < start:
+                continue
+            if len(items) < limit:
+                items.append(entry)
+            else:
+                has_more = True
+                break
     result = {
         "schema-version": SCHEMA_VERSION,
         "request-id": request_id,
@@ -283,6 +309,12 @@ def replay_observations(entries: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
     observation_count = 0
     groups: dict[str, dict[str, int]] = defaultdict(lambda: {"observations": 0, "errors": 0, "resolved": 0, "actions": 0, "action-success": 0})
     first_activity: int | None = None
+    first_response: int | None = None
+    terminal_observation = False
+    response_identity_seen = False
+    terminal_witness_seen = False
+    completion_proven = False
+    false_terminal_observation = False
     original_errors: list[dict[str, Any]] = []
     for row in entries:
         facts = row.get("facts") if isinstance(row.get("facts"), Mapping) else {}
@@ -312,14 +344,45 @@ def replay_observations(entries: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
             bucket["actions"] += 1
             if action.get("outcome") in {"accepted", "completed", "success"}:
                 bucket["action-success"] += 1
+        response = facts.get("response-identity") if isinstance(facts, Mapping) else {}
+        response = response if isinstance(response, Mapping) else {}
+        is_terminal = bool(response.get("terminal") or row.get("event") == "terminal")
+        has_response = bool(response.get("assistant-id") or response.get("assistant-id-hash") or response.get("response-ref-hash") or response.get("terminal-witness-present"))
+        has_witness = bool(response.get("terminal-witness-present") or response.get("terminal-witness-hash"))
+        terminal_observation = terminal_observation or is_terminal
+        response_identity_seen = response_identity_seen or has_response
+        terminal_witness_seen = terminal_witness_seen or has_witness
+        if is_terminal and not (has_witness and has_response):
+            false_terminal_observation = True
+        if has_response and first_response is None:
+            first_response = int(row.get("monotonic_ms", 0))
+        if terminal_witness_seen and response_identity_seen and is_terminal:
+            completion_proven = True
     total_errors = sum(value["errors"] for value in groups.values())
     resolved = sum(value["resolved"] for value in groups.values())
+    completion_proven = bool(completion_proven and terminal_observation)
+    if completion_proven and total_errors:
+        outcome_classification = "false-terminal-failure" if false_terminal_observation else "error-later-resolved"
+    elif completion_proven:
+        outcome_classification = "completed-with-witness"
+    elif terminal_observation:
+        outcome_classification = "terminal-without-completion-proof"
+    else:
+        outcome_classification = "incomplete-observation"
     return {
         "schema-version": SCHEMA_VERSION,
         "observations": observation_count,
         "groups": dict(groups),
         "resolution-rate": (resolved / total_errors) if total_errors else None,
         "first-activity-monotonic-ms": first_activity,
+        "time-to-first-response-ms": (first_response - first_activity) if first_activity is not None and first_response is not None else None,
+        "completion-evidence": {
+            "terminal-observation-seen": terminal_observation,
+            "response-identity-seen": response_identity_seen,
+            "terminal-witness-seen": terminal_witness_seen,
+            "completion-proven": completion_proven,
+        },
+        "outcome-classification": outcome_classification,
         "stop-disappearance-is-observation": True,
         "_original-errors": original_errors[:32],
     }

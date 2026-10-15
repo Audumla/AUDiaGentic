@@ -8,10 +8,13 @@ observation journal remains a passive evidence sink.
 from __future__ import annotations
 
 import hashlib
+import json
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+from audiagentic.components.agents.gateway.diagnostics import activity_group, normalize_activity_label
+from audiagentic.foundation.transports.agent_session import TransportObservationKind
 from .observability import append_observation
 
 _DOM_SIGNALS = frozenset(
@@ -32,6 +35,157 @@ _DOM_SIGNALS = frozenset(
         "delivery-timeout-retry",
     }
 )
+
+
+_DIAGNOSTIC_GATE_KEYS = frozenset({
+    "composer-present", "composer-editable", "composer-unavailable", "generating",
+    "raw-generating", "not-generating", "completion-satisfied", "completion-control",
+    "more-actions-menu", "response-complete-status", "terminal-witness-present",
+    "terminal-witness-is-latest", "terminal-witness-is-response", "prompt-ref-present",
+    "response-ref-present", "response-ref-is-latest", "response-ref-is-bound",
+    "raw-same-bound-conversation", "raw-matches-provider-session", "prompt-unmounted",
+})
+_CORRELATION_KEYS = frozenset({
+    "page-handle-digest", "raw-url-digest", "baseline-url-digest", "bound-url-digest",
+    "correlation-error", "response-ref-present", "response-ref-is-latest",
+    "response-ref-is-bound", "terminal-witness-present", "terminal-witness-is-latest",
+    "terminal-witness-is-response", "prompt-ref-present", "raw-matches-provider-session",
+})
+
+
+def _bounded_text(value: Any, limit: int = 256) -> str | None:
+    return value.strip()[:limit] if isinstance(value, str) and value.strip() else None
+
+
+def _digest(value: Any) -> str | None:
+    text = _bounded_text(value, 512)
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:32] if text else None
+
+
+def _diagnostic_details(attributes: Mapping[str, Any]) -> Mapping[str, Any]:
+    raw = attributes.get("diagnostic-details")
+    if not isinstance(raw, str) or len(raw.encode("utf-8")) > 16 * 1024:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return {}
+    return parsed if isinstance(parsed, Mapping) else {}
+
+
+def project_transport_observation(observation: Any) -> dict[str, Any]:
+    """Project one TransportObservation into shared bounded diagnostic facts."""
+    attributes = observation.attributes if isinstance(getattr(observation, "attributes", None), Mapping) else {}
+    kind = getattr(getattr(observation, "kind", None), "value", None) or str(getattr(observation, "kind", "unknown"))
+    facts = _diagnostic_details(attributes)
+    activity_label = _bounded_text(attributes.get("model_activity"), 64)
+    activity_label = normalize_activity_label(activity_label) if activity_label else None
+    activity: dict[str, Any] = {"kind": kind}
+    correlation_quality = _bounded_text(attributes.get("correlation-quality"), 64)
+    if correlation_quality:
+        activity["correlation-quality"] = correlation_quality
+    if activity_label:
+        activity["label"] = activity_label
+        group = activity_group(activity_label)
+        if group:
+            activity["group"] = group
+    diagnostic: dict[str, Any] = {}
+    dom_signals: dict[str, bool | int] = {}
+    raw_signals = facts.get("scoped-dom-signals") or facts.get("raw-dom-signals") or facts.get("dom-signals")
+    if isinstance(raw_signals, (list, tuple, set, frozenset)):
+        normalized = {str(value).strip().lower().replace("_", "-") for value in raw_signals if isinstance(value, str) and value.strip()}
+        dom_signals.update({signal: True for signal in sorted(normalized & _DOM_SIGNALS)})
+        dom_signals["signal-count"] = len(normalized)
+    for key in _DIAGNOSTIC_GATE_KEYS:
+        value = facts.get(key)
+        if isinstance(value, bool):
+            diagnostic[key] = value
+    completion_gates = facts.get("completion-gates")
+    if isinstance(completion_gates, Mapping):
+        diagnostic["completion-gates"] = {
+            str(key)[:64]: bool(value)
+            for key, value in list(completion_gates.items())[:32]
+            if isinstance(value, bool)
+        }
+    matched = facts.get("completion-matched")
+    if isinstance(matched, (list, tuple)):
+        diagnostic["completion-matched"] = [str(value)[:64] for value in matched if isinstance(value, str)][:16]
+    response_identity: dict[str, Any] = {}
+    for key in ("terminal-witness-hash", "response-ref-hash", "latest-assistant-hash"):
+        if (value := _bounded_text(facts.get(key), 128)):
+            response_identity[key] = value
+    if kind == TransportObservationKind.TERMINAL.value:
+        response_identity["terminal"] = True
+        for key in ("stop_reason", "stop-reason"):
+            if (value := _bounded_text(attributes.get(key))):
+                response_identity["stop-reason"] = value
+                break
+    for key in ("terminal-witness-id", "terminal-witness-assistant-id", "latest-assistant-id", "response-ref-id"):
+        if (value := _digest(facts.get(key))):
+            response_identity[key.replace("_", "-") + "-hash"] = value
+    if diagnostic.get("terminal-witness-present"):
+        response_identity["terminal-witness-present"] = True
+    error_occurrence: dict[str, Any] = {}
+    for key in ("error_code", "error-code", "reason", "failure-code", "classification", "correlation-error"):
+        if (value := _bounded_text(attributes.get(key) or facts.get(key))):
+            error_occurrence[key.replace("_", "-")] = value
+    decision: dict[str, Any] = {}
+    for key in ("completion-satisfied", "not-generating", "composer-editable", "raw-same-bound-conversation", "raw-matches-provider-session"):
+        if key in diagnostic:
+            decision[key] = diagnostic[key]
+    for key in ("timing-event", "diagnostic-signature"):
+        value = _bounded_text(attributes.get(key) or facts.get(key), 128)
+        if value:
+            decision[key] = value
+    correlation = {key: facts[key] for key in _CORRELATION_KEYS if key in facts and isinstance(facts[key], (str, bool))}
+    if correlation:
+        decision["correlation"] = correlation
+    return {
+        "activity": activity,
+        "dom-signals": dom_signals,
+        "diagnostic-facts": diagnostic,
+        "response-identity": response_identity,
+        "error-occurrence": error_occurrence,
+        "decision": decision,
+        "controls": {key.replace("_", "-"): attributes[key] for key in ("tool_call_id", "tool_status") if isinstance(attributes.get(key), (str, int, bool))},
+        "correlation": correlation,
+    }
+
+
+def append_transport_observation(
+    project_root: Path,
+    request_id: str,
+    observation: Any,
+    *,
+    session_id: str | None = None,
+    source: str = "session-transport",
+    cdp_target_hash: str | None = None,
+    attempt_epoch: int = 1,
+    force_flush: bool = False,
+) -> dict[str, Any]:
+    """Persist the shared bounded TransportObservation projection for GA03."""
+    projected = project_transport_observation(observation)
+    kind = getattr(getattr(observation, "kind", None), "value", None) or str(getattr(observation, "kind", "unknown"))
+    return append_observation(
+        project_root,
+        request_id,
+        session_id=session_id,
+        turn_id=getattr(observation, "turn_id", None),
+        cdp_target_hash=cdp_target_hash,
+        attempt_epoch=attempt_epoch,
+        poll_seq=int(getattr(observation, "sequence", None) or 0),
+        source=source,
+        dom_signals=projected["dom-signals"],
+        activity=projected["activity"],
+        controls=projected["controls"],
+        response_identity=projected["response-identity"],
+        error_occurrence=projected["error-occurrence"],
+        decision=projected["decision"],
+        action={"kind": kind} if kind in {"tool-requested", "permission-requested"} else {},
+        causal_input_ids=[request_id, session_id or ""],
+        force_flush=force_flush or kind in {"terminal", "transport-error", "transport-closed"},
+        observed_at=getattr(observation, "observed_at", None),
+    )
 
 
 def _hash(value: Any) -> str | None:
@@ -124,7 +278,8 @@ def append_request_projection(
         decision=decision,
         action=action or {},
         causal_input_ids=[request_id, str(record.get("session-id") or "")],
+        force_flush=record.get("state") in {"completed", "failed", "cancelled", "interrupted", "timed-out"},
     )
 
 
-__all__ = ["append_request_projection"]
+__all__ = ["append_request_projection", "append_transport_observation", "project_transport_observation"]

@@ -149,6 +149,18 @@ def _running_record(tmp_path, **kwargs):
     )
     create_admitted_session = False
     if provider_session:
+        kwargs.setdefault(
+            "watchdog_policy",
+            {
+                "policy-id": "test",
+                "policy-digest": "test",
+                "activity-lease-seconds": 300.0,
+                "absolute-safety-ceiling-seconds": 0.0,
+                "diagnostic-grace-seconds": 30.0,
+                "initial-activity-grace-seconds": 1.0,
+                "available": True,
+            },
+        )
         session_id = kwargs.setdefault("session_id", sessions_store.generate_session_id())
         kwargs.setdefault("provider_transport_kind", "provider-session")
         try:

@@ -2858,13 +2858,8 @@ class SessionRuntime:
                     # This is observation-only and never touches browser focus,
                     # navigation, tabs, or provider controls.
                     try:
-                        from audiagentic.components.agents.gateway.observability import append_observation
+                        from audiagentic.components.agents.gateway.observation_projection import append_transport_observation
                         from audiagentic.components.agents.gateway import store as gateway_store
-                        safe_attributes = {
-                            key: value
-                            for key, value in (dict(attributes).items() if isinstance(attributes, Mapping) else ())
-                            if isinstance(value, (str, int, float, bool))
-                        }
                         attempt_epoch = 1
                         target_hash = None
                         try:
@@ -2881,71 +2876,9 @@ class SessionRuntime:
                                 target_hash = hashlib.sha256(target_id.encode()).hexdigest()[:32]
                         except Exception:  # noqa: BLE001 - journal is advisory
                             pass
-                        correlation_quality = getattr(obs, "correlation_quality", None)
-                        correlation_quality = getattr(correlation_quality, "value", correlation_quality)
-                        activity_facts = {
-                            "kind": kind,
-                            **(
-                                {"label": safe_attributes["model_activity"]}
-                                if isinstance(safe_attributes.get("model_activity"), str)
-                                else {}
-                            ),
-                            **(
-                                {"correlation-quality": correlation_quality}
-                                if isinstance(correlation_quality, str) and correlation_quality
-                                else {}
-                            ),
-                        }
-                        controls = {
-                            key: safe_attributes[key]
-                            for key in ("tool_call_id", "tool_status")
-                            if key in safe_attributes
-                        }
-                        response_identity = (
-                            {"terminal": True, "stop-reason": safe_attributes["stop_reason"]}
-                            if kind == "terminal" and "stop_reason" in safe_attributes
-                            else {"terminal": True} if kind == "terminal" else {}
-                        )
-                        error_occurrence = {
-                            key: safe_attributes[key]
-                            for key in ("error_code", "reason")
-                            if key in safe_attributes
-                        }
-                        decision = {}
-                        if kind == "timing" and "timing-event" in safe_attributes:
-                            decision = {
-                                "event": safe_attributes["timing-event"],
-                                "diagnostic-signature": safe_attributes.get("diagnostic-signature"),
-                            }
-                            details = safe_attributes.get("diagnostic-details")
-                            if isinstance(details, str):
-                                decision["details-digest"] = hashlib.sha256(
-                                    details.encode()
-                                ).hexdigest()[:32]
-                        append_observation(
-                            project_root,
-                            request_id,
-                            session_id=session_id,
-                            turn_id=(
-                                getattr(obs, "turn_id", None)
-                                if isinstance(getattr(obs, "turn_id", None), str)
-                                and getattr(obs, "turn_id", None)
-                                else request_id
-                            ),
-                            project_hash=hashlib.sha256(str(project_root).encode()).hexdigest()[:32],
-                            cdp_target_hash=target_hash,
-                            attempt_epoch=attempt_epoch,
-                            poll_seq=int(getattr(obs, "sequence", None) or 0),
-                            source="session-transport",
-                            activity=activity_facts,
-                            controls=controls,
-                            response_identity=response_identity,
-                            error_occurrence=error_occurrence,
-                            decision=decision,
-                            action={"kind": kind} if kind in {"tool-requested", "permission-requested"} else {},
-                            causal_input_ids=[request_id, session_id],
-                            observed_at=getattr(obs, "observed_at", None),
-                            monotonic_ms=int(time.monotonic() * 1000),
+                        append_transport_observation(
+                            project_root, request_id, obs, session_id=session_id,
+                            cdp_target_hash=target_hash, attempt_epoch=attempt_epoch,
                         )
                     except Exception:  # noqa: BLE001 - journal must never alter turn outcome
                         logger.debug(
