@@ -208,7 +208,7 @@ mcp-servers:
       agent_gateway_create_operation: Create bounded provider-neutral gateway administration work.
       agent_gateway_get_operation: Read bounded gateway administration work status.
       agent_gateway_list_operations: List bounded gateway administration work.
-      agent_gateway_get_retention_policy: Read the redacted gateway retention policy.
+      agent_gateway_get_retention_policy: Read machine-owned rolling request-history retention and byte caps; no automatic request-directory deletion is performed.
   - name: ag-agents-gateway
     module: audiagentic.components.agents.mcp.gateway_mcp
     direct-tools:
