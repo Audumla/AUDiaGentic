@@ -109,7 +109,7 @@ def test_agent_task_status_delegates():
         result = agents_gateway_mcp.agent_task_status("req_x")
     assert result["contract-version"] == "task-status.v4-compact"
     assert result["task_id"] == mock_call.return_value["task_id"]
-    mock_call.assert_called_once_with("get_execution_request", _ROOT, "req_x", include_response=False)
+    mock_call.assert_called_once_with("get_execution_request", _ROOT, "req_x")
 
 
 def test_agent_task_session_purge_delegates():

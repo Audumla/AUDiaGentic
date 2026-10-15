@@ -5,6 +5,8 @@ records. Imports _shared for constants — one-way edges only.
 """
 from __future__ import annotations
 
+import base64
+import json
 import logging
 from collections.abc import Mapping
 from pathlib import Path
@@ -869,6 +871,53 @@ def transition_history_projection(
         ):
             projected.append({"event": event, "state": state, "timestamp": timestamp})
     return projected[-limit:]
+
+
+def transition_history_page(
+    project_root: Path,
+    request_id: str,
+    *,
+    limit: int = 100,
+    cursor: str | None = None,
+) -> dict[str, Any]:
+    """Return a deterministic, independently-cursorable history page."""
+    if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
+        raise ValueError("transition history limit must be between 1 and 100")
+    offset = 0
+    if cursor:
+        try:
+            padded = cursor + "=" * (-len(cursor) % 4)
+            decoded = json.loads(base64.urlsafe_b64decode(padded.encode()).decode())
+            offset = decoded["offset"]
+            if decoded.get("v") != 1 or isinstance(offset, bool) or not isinstance(offset, int) or offset < 0:
+                raise ValueError
+        except (ValueError, KeyError, TypeError, UnicodeError, json.JSONDecodeError):
+            raise ValueError("invalid history cursor") from None
+    try:
+        raw_entries = load_ndjson(gateway_timeline_path(project_root, request_id))
+    except (OSError, ValueError):
+        raw_entries = []
+    entries: list[dict[str, str | None]] = []
+    for entry in raw_entries:
+        event = entry.get("event")
+        timestamp = entry.get("timestamp")
+        state = entry.get("state")
+        if isinstance(event, str) and isinstance(timestamp, str) and (state is None or isinstance(state, str)):
+            entries.append({"event": event, "state": state, "timestamp": timestamp})
+    items = entries[offset : offset + limit]
+    has_more = offset + len(items) < len(entries)
+    result: dict[str, Any] = {
+        "schema-version": "gateway-history.v1",
+        "request-id": request_id,
+        "items": items,
+        "returned": len(items),
+        "has-more": has_more,
+    }
+    if has_more:
+        result["next-cursor"] = base64.urlsafe_b64encode(
+            json.dumps({"v": 1, "offset": offset + len(items)}, separators=(",", ":")).encode()
+        ).decode().rstrip("=")
+    return result
 
 def project_public_status(
     record: dict[str, Any],

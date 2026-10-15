@@ -21,10 +21,12 @@ from typing import Any, Mapping
 
 from audiagentic.components.agents.agents_paths import (
     gateway_observation_artifact_dir,
+    gateway_observation_index_path,
     gateway_observation_path,
     gateway_request_path,
 )
 from audiagentic.foundation.io import iter_ndjson, last_ndjson
+from audiagentic.foundation.logging.redaction import redact_text
 from audiagentic.foundation.system.process import StartupLock
 from audiagentic.foundation.time import now_iso_z
 
@@ -60,6 +62,10 @@ _SAFE_TEXT_KEYS = frozenset(
         "model-activity", "tool-call-id", "tool-status", "stop-reason",
         "error-code", "reason", "timing-event", "diagnostic-signature",
         "correlation-quality", "assistant-id", "turn-id",
+        "signals", "response-id", "identity-quality", "reconnect-classification",
+        "side-effect-state", "resolution-state", "failure-code", "reason-code",
+        "failure-reason", "submission-state", "submission-proven", "submission-ambiguous",
+        "terminal", "terminal-witness", "media-type", "bytes", "attempt-epoch",
     }
 )
 
@@ -94,7 +100,8 @@ def _safe(value: Any, *, depth: int = 0) -> Any:
         return value
     if isinstance(value, (int, float)):
         return value
-    return _text(value)
+    text = _text(value)
+    return redact_text(text) if text is not None else None
 
 def _project_fields(fields: Mapping[str, Any] | None) -> dict[str, Any]:
     projected = _safe(fields or {})
@@ -171,6 +178,7 @@ def append_observation(
         previous = last_ndjson(journal_path)
         event_seq = int(previous.get("event_seq", 0)) + 1 if previous else 1
         previous_digest = previous.get("current_digest") if previous else None
+        index_path = gateway_observation_index_path(project_root, request_id)
         unchanged = bool(
             previous
             and previous_digest == current_digest
@@ -224,8 +232,19 @@ def append_observation(
                 return event
         line = json.dumps(event, sort_keys=True, separators=(",", ":")) + "\n"
         journal_path.parent.mkdir(parents=True, exist_ok=True)
+        offset = journal_path.stat().st_size if journal_path.exists() else 0
         with journal_path.open("a", encoding="utf-8", newline="\n") as handle:
             handle.write(line)
+            handle.flush()
+            os.fsync(handle.fileno())
+        index_path.parent.mkdir(parents=True, exist_ok=True)
+        index_line = json.dumps(
+            {"event_seq": event["event_seq"], "offset": offset, "length": len(line.encode("utf-8"))},
+            sort_keys=True,
+            separators=(",", ":"),
+        ) + "\n"
+        with index_path.open("a", encoding="utf-8", newline="\n") as handle:
+            handle.write(index_line)
             handle.flush()
             os.fsync(handle.fileno())
     return event
@@ -238,20 +257,49 @@ def read_observation_page(
     limit: int = 25,
     cursor: str | None = None,
     since_sequence: int | None = None,
+    tail: int | None = None,
 ) -> dict[str, Any]:
     if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
         raise ValueError("observation limit must be an integer between 1 and 100")
+    if tail is not None and (isinstance(tail, bool) or not isinstance(tail, int) or not 1 <= tail <= 100):
+        raise ValueError("observation tail must be an integer between 1 and 100")
     after = max(_decode_cursor(cursor), int(since_sequence or 0))
     page: list[dict[str, Any]] = []
     has_more = False
-    for item in iter_ndjson(gateway_observation_path(project_root, request_id)):
-        if int(item.get("event_seq", 0)) <= after:
-            continue
-        if len(page) < limit:
-            page.append(item)
-        else:
-            has_more = True
-            break
+    if tail is not None and not cursor and not since_sequence:
+        from collections import deque
+        recent = deque(maxlen=tail + 1)
+        for item in iter_ndjson(gateway_observation_path(project_root, request_id)):
+            recent.append(item)
+        has_more = len(recent) > tail
+        page = list(recent)[-tail:]
+    else:
+        index_path = gateway_observation_index_path(project_root, request_id)
+        if index_path.exists() and gateway_observation_path(project_root, request_id).exists():
+            try:
+                with index_path.open("r", encoding="utf-8") as index_handle, gateway_observation_path(project_root, request_id).open("rb") as journal_handle:
+                    for raw_index in index_handle:
+                        index = json.loads(raw_index)
+                        if int(index.get("event_seq", 0)) <= after:
+                            continue
+                        if len(page) >= limit:
+                            has_more = True
+                            break
+                        journal_handle.seek(int(index["offset"]))
+                        item = json.loads(journal_handle.readline().decode("utf-8"))
+                        page.append(item)
+            except (OSError, KeyError, TypeError, ValueError, UnicodeDecodeError, json.JSONDecodeError):
+                page = []
+                has_more = False
+        if not page and not has_more:
+            for item in iter_ndjson(gateway_observation_path(project_root, request_id)):
+                if int(item.get("event_seq", 0)) <= after:
+                    continue
+                if len(page) < limit:
+                    page.append(item)
+                else:
+                    has_more = True
+                    break
     next_cursor = _cursor(int(page[-1]["event_seq"])) if has_more and page else None
     return {
         "schema_version": SCHEMA_VERSION,
@@ -292,7 +340,7 @@ def capture_redacted_artifact(
     max_decompressed_bytes: int = _MAX_DOM_DECOMPRESSED,
 ) -> dict[str, Any]:
     """Persist an explicitly requested bounded redacted DOM/accessibility artifact."""
-    safe = _safe(value)
+    safe = _artifact_safe(value)
     raw = json.dumps(safe, sort_keys=True, separators=(",", ":")).encode("utf-8")
     if len(raw) > min(max_decompressed_bytes, _MAX_DOM_DECOMPRESSED):
         raise ValueError("observation artifact exceeds decompressed size cap")
@@ -321,6 +369,40 @@ def capture_redacted_artifact(
             handle.flush()
             os.fsync(handle.fileno())
     return metadata
+
+
+_ARTIFACT_KEYS = frozenset({
+    "tag", "role", "state", "signal", "signals", "kind", "name-digest", "id-digest",
+    "classes-digest", "node-count", "depth", "visible", "disabled", "selected",
+    "checked", "expanded", "children", "attributes", "media-type", "source",
+})
+_ARTIFACT_TEXT_KEYS = frozenset({
+    "tag", "role", "state", "signal", "kind", "name-digest", "id-digest",
+    "classes-digest", "media-type", "source",
+})
+
+
+def _artifact_safe(value: Any, *, key: str | None = None, depth: int = 0) -> Any:
+    """Apply a closed accessibility/DOM metadata allowlist; text is never stored."""
+    if depth > 4:
+        return None
+    if isinstance(value, Mapping):
+        result: dict[str, Any] = {}
+        for raw_key, raw_value in list(value.items())[:_MAX_ITEMS]:
+            normalized = str(raw_key).casefold().replace("_", "-")
+            if normalized not in _ARTIFACT_KEYS:
+                continue
+            projected = _artifact_safe(raw_value, key=normalized, depth=depth + 1)
+            if projected is not None:
+                result[normalized] = projected
+        return result
+    if isinstance(value, (list, tuple)):
+        return [item for item in (_artifact_safe(item, key=key, depth=depth + 1) for item in value[:_MAX_ITEMS]) if item is not None]
+    if isinstance(value, bool) or value is None or isinstance(value, (int, float)):
+        return value
+    if isinstance(value, str) and key in _ARTIFACT_TEXT_KEYS:
+        return redact_text(value)[:_MAX_TEXT]
+    return None
 
 
 def purge_observation_artifacts(project_root: Path, request_id: str) -> int:

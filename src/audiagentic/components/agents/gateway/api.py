@@ -1035,6 +1035,7 @@ def get_execution_observations(
     limit: int = 25,
     cursor: str | None = None,
     since_sequence: int | None = None,
+    tail: int | None = None,
 ) -> dict[str, Any]:
     """Return one finite, opaque-cursor page of redacted DOM/activity facts."""
     from audiagentic.components.agents.gateway.observability import read_observation_page
@@ -1042,7 +1043,7 @@ def get_execution_observations(
     try:
         return read_observation_page(
             project_root, request_id, limit=limit, cursor=cursor,
-            since_sequence=since_sequence,
+            since_sequence=since_sequence, tail=tail,
         )
     except ValueError as exc:
         raise AudiaGenticError(
@@ -1061,6 +1062,7 @@ def get_execution_evidence(
     cursor: str | None = None,
     observation_cursor: str | None = None,
     recovery_cursor: str | None = None,
+    history_cursor: str | None = None,
     since_sequence: int | None = None,
 ) -> dict[str, Any]:
     """Return compact evidence by default; detail tiers are explicit opt-ins."""
@@ -1098,6 +1100,8 @@ def get_execution_evidence(
         "observation-summary": observation_summary(project_root, request_id),
         "latest-transition": latest_transition,
     }
+    from audiagentic.components.agents.gateway.replay import classify_reconnect
+    result["reconnect-classification"] = classify_reconnect(record)
     if include_observations:
         result["observations"] = read_observation_page(
             project_root, request_id, limit=limit, cursor=observation_cursor or cursor,
@@ -1109,8 +1113,18 @@ def get_execution_evidence(
             project_root, request_id, limit=limit, cursor=recovery_cursor or cursor,
         )
     if include_history:
-        result["history"] = store.transition_history_projection(project_root, request_id, limit=limit)
-    return {key: value for key, value in result.items() if value is not None}
+        result["history"] = store.transition_history_page(
+            project_root, request_id, limit=limit, cursor=history_cursor
+        )
+    try:
+        from audiagentic.components.agents.gateway.evidence_projection import project_public_gateway_evidence
+        return project_public_gateway_evidence(
+            {key: value for key, value in result.items() if value is not None}
+        )
+    except ValueError as exc:
+        raise AudiaGenticError(
+            code="VAL-AGW-151", kind="agents", message=str(exc), details={}
+        ) from exc
 
 
 def replay_execution_observations(project_root: Path, request_id: str) -> dict[str, Any]:
@@ -1131,7 +1145,8 @@ def replay_execution_observations(project_root: Path, request_id: str) -> dict[s
             if not isinstance(cursor, str) or not cursor:
                 return
 
-    return replay_request(project_root, request_id, observations=observations())
+    record = store.read_record(project_root, request_id, include_output=False)
+    return replay_request(project_root, request_id, observations=observations(), record=record)
 
 
 def recover_execution_request(
