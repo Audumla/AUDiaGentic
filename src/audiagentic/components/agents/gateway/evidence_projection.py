@@ -47,7 +47,7 @@ def _observation(value: Any) -> dict[str, Any]:
     facts = value.get("facts")
     if isinstance(facts, Mapping):
         categories: dict[str, Any] = {}
-        for category in ("dom-signals", "activity", "controls", "response-identity", "error-occurrence", "decision", "action"):
+        for category in ("dom-signals", "activity", "controls", "diagnostic-facts", "response-identity", "error-occurrence", "decision", "action"):
             raw = facts.get(category)
             if not isinstance(raw, Mapping):
                 continue

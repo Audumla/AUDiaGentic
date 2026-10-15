@@ -70,7 +70,7 @@ def record_timeline_event(
                 handle.write(line)
                 handle.flush()
                 os.fsync(handle.fileno())
-            index_path = path.with_name(path.name + ".index.ndjson")
+            index_path = path.with_suffix(".index.ndjson")
             with index_path.open("a", encoding="utf-8") as handle:
                 handle.write(json.dumps({"offset": offset, "length": len(line.encode("utf-8"))}) + "\n")
                 handle.flush()

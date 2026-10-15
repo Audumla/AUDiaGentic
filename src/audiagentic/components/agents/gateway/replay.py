@@ -318,6 +318,7 @@ def replay_observations(entries: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
     response_identity_seen = False
     terminal_witness_seen = False
     completion_proven = False
+    terminal_proof_seen = False
     false_terminal_observation = False
     original_errors: list[dict[str, Any]] = []
     action_outcomes: list[str] = []
@@ -369,15 +370,15 @@ def replay_observations(entries: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
         terminal_observation = terminal_observation or is_terminal
         response_identity_seen = response_identity_seen or has_response
         terminal_witness_seen = terminal_witness_seen or has_witness
-        if is_terminal and not (has_witness and has_response):
-            false_terminal_observation = True
         if has_response and first_response is None:
             first_response = int(row.get("monotonic_ms", 0))
-        if terminal_witness_seen and response_identity_seen and is_terminal:
+        if is_terminal and terminal_witness_seen and response_identity_seen:
+            terminal_proof_seen = True
             completion_proven = True
     total_errors = sum(value["errors"] for value in groups.values())
     resolved = sum(value["resolved"] for value in groups.values())
     completion_proven = bool(completion_proven and terminal_observation)
+    false_terminal_observation = bool(terminal_observation and not terminal_proof_seen)
     if completion_proven and total_errors:
         outcome_classification = "false-terminal-failure" if false_terminal_observation else "error-later-resolved"
     elif completion_proven:
