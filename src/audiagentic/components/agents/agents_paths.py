@@ -99,6 +99,11 @@ def gateway_observation_path(project_root: Path, request_id: str) -> Path:
     return gateway_request_dir(project_root, request_id) / "observations.ndjson"
 
 
+def gateway_observation_index_path(project_root: Path, request_id: str) -> Path:
+    """Return the byte-offset index for the request observation journal."""
+    return gateway_request_dir(project_root, request_id) / "observations.index.ndjson"
+
+
 def gateway_observation_artifact_dir(project_root: Path, request_id: str) -> Path:
     """Return the optional bounded, redacted observation-artifact directory."""
     return gateway_request_dir(project_root, request_id) / "observation-artifacts"

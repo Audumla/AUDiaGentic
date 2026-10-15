@@ -70,6 +70,10 @@ def prepare_recovery_action(
         entries = _read(project_root, request_id)
         for entry in entries:
             if entry.get("action-attempt-id") == action_attempt_id:
+                if entry.get("event") == "action-intent" and entry.get("disposition") == "intent-persisted":
+                    if any(item.get("event") == "action-result" and item.get("action-attempt-id") == action_attempt_id for item in entries):
+                        return {**entry, "disposition": "already-recorded", "outcome": "action-already-recorded"}
+                    return {**entry, "disposition": "reconciliation-required", "outcome": "action-result-missing"}
                 return entry
         consumed_budget = sum(
             1
@@ -105,7 +109,20 @@ def prepare_recovery_action(
             "binding": safe_binding,
             "created-at": now_iso_z(),
         }
-        return _append(project_root, request_id, event)
+        result = _append(project_root, request_id, event)
+    try:
+        from .observability import append_observation
+        append_observation(
+            project_root,
+            request_id,
+            attempt_epoch=attempt_epoch,
+            source="recovery-intent",
+            action={"event": "action-intent", "kind": action_kind, "outcome": outcome},
+            causal_input_ids=[request_id, action_attempt_id],
+        )
+    except Exception:  # noqa: BLE001 - recovery journal remains authoritative
+        pass
+    return result
 
 
 def record_recovery_result(
@@ -120,9 +137,12 @@ def record_recovery_result(
     """Append reconciliation/result evidence; never mutate the intent event."""
     with _lock(project_root, request_id):
         entries = _read(project_root, request_id)
+        for entry in entries:
+            if entry.get("event") == "action-result" and entry.get("action-attempt-id") == action_attempt_id:
+                return entry
         if not any(item.get("action-attempt-id") == action_attempt_id for item in entries):
             raise ValueError("recovery action intent is missing")
-        return _append(
+        result = _append(
             project_root,
             request_id,
             {
@@ -135,6 +155,18 @@ def record_recovery_result(
                 "created-at": now_iso_z(),
             },
         )
+    try:
+        from .observability import append_observation
+        append_observation(
+            project_root,
+            request_id,
+            source="recovery-result",
+            action={"event": "action-result", "kind": "recovery", "outcome": outcome, "terminal": terminal},
+            causal_input_ids=[request_id, action_attempt_id],
+        )
+    except Exception:  # noqa: BLE001 - recovery journal remains advisory
+        pass
+    return result
 
 
 def prove_turn_correlation(
@@ -174,6 +206,34 @@ def prove_turn_correlation(
     proof["strong"] = all(proof[key] for key in ("project-session-chat-bound", "prompt-identity-proven", "assistant-boundary-proven", "terminal-witness-proven"))
     return proof
 
+
+def classify_reconnect(record: Mapping[str, Any], *, pending_action: bool = False) -> dict[str, Any]:
+    """Classify reconnect safety from durable facts without mutating state."""
+    metadata = record.get("provider-metadata")
+    metadata = metadata if isinstance(metadata, Mapping) else {}
+    diagnostics = record.get("diagnostics")
+    diagnostics = diagnostics if isinstance(diagnostics, Mapping) else {}
+    submission = metadata.get("submission-proven")
+    pending = bool(pending_action or metadata.get("unresolved-turn-pending"))
+    if pending or submission is True or diagnostics.get("side-effect-state") in {"may-have-started", "submission-proven", "terminal-evidence-seen"}:
+        classification = "reconcile-required"
+        reason = "provider-side effect may still belong to the unresolved turn"
+    elif submission is False and (metadata.get("provider-session-id") or metadata.get("chat-id")):
+        classification = "safe-reconnect"
+        reason = "durable binding proves a provider session and submission was not started"
+    elif record.get("state") in {"completed", "failed", "cancelled", "interrupted", "timed-out"}:
+        classification = "terminal-observation"
+        reason = "request is terminal; reconnect is observation-only"
+    else:
+        classification = "not-reconnectable"
+        reason = "durable binding is insufficient for a safe reconnect"
+    return {
+        "classification": classification,
+        "reason": reason,
+        "read-only": True,
+        "provider-binding-present": bool(metadata.get("provider-session-id") or metadata.get("chat-id")),
+        "submission-proven": submission,
+    }
 
 def _cursor(offset: int) -> str:
     return base64.urlsafe_b64encode(json.dumps({"v": 1, "offset": offset}, separators=(",", ":")).encode()).decode().rstrip("=")
@@ -265,7 +325,7 @@ def replay_observations(entries: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
     }
 
 
-def replay_request(project_root: Path, request_id: str, *, observations: Iterable[Mapping[str, Any]] = ()) -> dict[str, Any]:
+def replay_request(project_root: Path, request_id: str, *, observations: Iterable[Mapping[str, Any]] = (), record: Mapping[str, Any] | None = None) -> dict[str, Any]:
     """Produce a deterministic, fail-closed replay decision."""
     actions = _read(project_root, request_id)
     intents = {item.get("action-attempt-id"): item for item in actions if item.get("event") == "action-intent"}
@@ -273,6 +333,7 @@ def replay_request(project_root: Path, request_id: str, *, observations: Iterabl
     pending = [item for key, item in intents.items() if key and key not in results]
     analysis = replay_observations(observations)
     original_errors = analysis.pop("_original-errors", [])
+    reconnect = classify_reconnect(record or {}, pending_action=bool(pending))
     analysis.update({
         "request-id": request_id,
         "pending-action-attempts": [item.get("action-attempt-id") for item in pending],
@@ -280,12 +341,14 @@ def replay_request(project_root: Path, request_id: str, *, observations: Iterabl
         "recovery-decision": "reconciliation-required" if pending else "observation-only",
         "safe-to-resubmit": False,
         "duplicate-prompt-fence": "ambiguous-action-attempt" if pending else "no-automatic-resubmit",
+        "reconnect-classification": reconnect,
     })
     return analysis
 
 
 __all__ = [
     "SCHEMA_VERSION",
+    "classify_reconnect",
     "prepare_recovery_action",
     "prove_turn_correlation",
     "read_recovery_page",

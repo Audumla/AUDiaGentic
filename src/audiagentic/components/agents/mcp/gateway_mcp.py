@@ -92,9 +92,14 @@ def agent_task_list_definitions() -> list[dict[str, Any]]:
 def agent_task_status(request_id: str, include_response: bool = False) -> dict[str, Any]:
     """Poll compact lifecycle status; use diagnostics or response for terminal detail."""
     project_root = project_root_from_env()
-    status = dict(call_gateway_method(
-        "get_execution_request", project_root, request_id, include_response=include_response
-    ))
+    if include_response:
+        status = dict(call_gateway_method(
+            "get_execution_request", project_root, request_id, include_response=True
+        ))
+    else:
+        # Preserve the pre-v4 call shape for clients and gateway doubles that
+        # do not accept the optional response keyword.
+        status = dict(call_gateway_method("get_execution_request", project_root, request_id))
     # The compact default is an explicit versioned MCP contract. Callers that
     # need the prior terminal payload use the opt-in flag or response tool.
     status.setdefault("contract-version", "task-status.v4-compact")
@@ -122,17 +127,23 @@ def agent_task_observations(
     limit: int = 25,
     cursor: str | None = None,
     since_sequence: int | None = None,
+    tail: int | None = None,
 ) -> dict[str, Any]:
     """Return a finite page of redacted request-owned observations."""
     project_root = project_root_from_env()
+    params: dict[str, Any] = {
+        "limit": limit,
+        "cursor": cursor,
+        "since_sequence": since_sequence,
+    }
+    if tail is not None:
+        params["tail"] = tail
     return _sparse(
         call_gateway_method(
             "get_execution_observations",
             project_root,
             request_id,
-            limit=limit,
-            cursor=cursor,
-            since_sequence=since_sequence,
+            **params,
         )
     )
 
@@ -148,6 +159,7 @@ def agent_task_evidence(
     cursor: str | None = None,
     observation_cursor: str | None = None,
     recovery_cursor: str | None = None,
+    history_cursor: str | None = None,
     since_sequence: int | None = None,
 ) -> dict[str, Any]:
     """Return compact evidence; observation/history/recovery tiers are opt-in."""
@@ -164,6 +176,8 @@ def agent_task_evidence(
         params["observation_cursor"] = observation_cursor
     if recovery_cursor is not None:
         params["recovery_cursor"] = recovery_cursor
+    if history_cursor is not None:
+        params["history_cursor"] = history_cursor
     return _sparse(
         call_gateway_method(
             "get_execution_evidence",
