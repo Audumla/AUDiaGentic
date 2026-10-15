@@ -117,7 +117,7 @@ def agent_task_observations(
     limit: int = 25,
     cursor: str | None = None,
     since_sequence: int | None = None,
-+) -> dict[str, Any]:
+) -> dict[str, Any]:
     """Return a finite page of redacted request-owned observations."""
     project_root = project_root_from_env()
     return _sparse(
