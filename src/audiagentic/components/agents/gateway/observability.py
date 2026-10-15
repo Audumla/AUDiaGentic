@@ -57,6 +57,9 @@ _SAFE_TEXT_KEYS = frozenset(
     {
         "id", "kind", "state", "status", "phase", "label", "event", "source",
         "code", "classification", "outcome", "digest", "hash", "sequence", "count",
+        "model-activity", "tool-call-id", "tool-status", "stop-reason",
+        "error-code", "reason", "timing-event", "diagnostic-signature",
+        "correlation-quality", "assistant-id", "turn-id",
     }
 )
 
@@ -81,7 +84,10 @@ def _safe(value: Any, *, depth: int = 0) -> Any:
     if isinstance(value, (list, tuple)):
         return [
             item
-            for item in (_safe(v, depth=depth + 1) for v in value[:_MAX_ITEMS])
+            for item in (
+                None if isinstance(v, str) else _safe(v, depth=depth + 1)
+                for v in value[:_MAX_ITEMS]
+            )
             if item is not None
         ]
     if isinstance(value, bool) or value is None:
@@ -199,10 +205,11 @@ def append_observation(
             first_seq = int(prior.get("first_event_seq", previous.get("event_seq", event_seq)))
             first_poll = int(prior.get("first_poll_seq", previous.get("poll_seq", poll_seq)))
             previous_mono = int(previous.get("monotonic_ms", event["monotonic_ms"]))
+            poll_gap = max(1, event["poll_seq"] - int(previous.get("poll_seq", first_poll)))
             event["coalesced"] = {
                 "first_event_seq": first_seq,
                 "last_event_seq": event_seq,
-                "repeat_count": int(prior.get("repeat_count", 1)) + 1,
+                "repeat_count": int(prior.get("repeat_count", 1)) + poll_gap,
                 "first_poll_seq": first_poll,
                 "last_poll_seq": event["poll_seq"],
                 "max_gap_ms": max(int(prior.get("max_gap_ms", 0)), max(0, event["monotonic_ms"] - previous_mono)),
