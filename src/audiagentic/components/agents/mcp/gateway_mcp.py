@@ -75,13 +75,20 @@ def _session_dto(value: Any) -> dict[str, Any]:
     return result
 
 
-def _status_without_response_preview(status: dict[str, Any]) -> dict[str, Any]:
+def _status_without_response_preview(status: dict[str, Any], *, include_response: bool = False) -> dict[str, Any]:
     """Keep MCP status compact and null-free; never spend tokens on a preview."""
-    allowed = {"task_id", "request_id", "request-id", "lifecycle", "activity_seq", "activity_at", "activity", "outcome", "error_code", "error-code", "session_id", "session-id", "contract-version"}
+    allowed = {"task_id", "request_id", "request-id", "session_id", "session-id", "lifecycle", "state", "activity_seq", "activity-seq", "activity_at", "activity-at", "activity", "activity_type", "outcome", "error_code", "error-code", "contract-version", "revision"}
     result = {key: _public_scalar(status.get(key)) for key in allowed if key not in _RESPONSE_PREVIEW_FIELDS and _public_scalar(status.get(key)) is not None}
     session_id = status.get("session_id") or status.get("session-id")
     if isinstance(session_id, str) and session_id:
         result["session_id"] = session_id
+    if include_response and isinstance(status.get("response"), dict):
+        response = status["response"]
+        result["response"] = {
+            key: _public_scalar(response.get(key))
+            for key in ("text", "bytes", "format", "media_type")
+            if _public_scalar(response.get(key)) is not None
+        }
     return result
 
 
@@ -154,7 +161,7 @@ def agent_task_status(request_id: str, include_response: bool = False) -> dict[s
     status.setdefault("contract-version", "task-status.v4-compact")
     # V4 is a fixed-shape contract: its inactive axes are explicitly null and
     # must not be removed by the generic sparse projection.
-    return _status_without_response_preview(status)
+    return _status_without_response_preview(status, include_response=include_response)
 
 
 @mcp.tool()
@@ -230,14 +237,14 @@ def agent_task_evidence(
         params["recovery_cursor"] = recovery_cursor
     if history_cursor is not None:
         params["history_cursor"] = history_cursor
-    return _sparse(
-        call_gateway_method(
+    raw = call_gateway_method(
             "get_execution_evidence",
             project_root,
             request_id,
             **params,
         )
-    )
+    from audiagentic.components.agents.gateway.evidence_projection import project_public_gateway_evidence
+    return _sparse(project_public_gateway_evidence(raw))
 
 @mcp.tool()
 @tool_boundary
@@ -338,11 +345,7 @@ def agent_task_list_requests(
     requests = call_gateway_method(
         "list_execution_requests", project_root, state=state, limit=limit
     )
-    projected = [
-        _request_dto(item)
-        for item in requests
-    ]
-    return projected
+    return [_status_without_response_preview(dict(item)) for item in requests]
 
 
 @mcp.tool()

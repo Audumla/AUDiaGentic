@@ -93,6 +93,11 @@ def gateway_timeline_path(project_root: Path, request_id: str) -> Path:
     return gateway_request_dir(project_root, request_id) / "timeline.ndjson"
 
 
+def gateway_timeline_index_path(project_root: Path, request_id: str) -> Path:
+    """Return the byte-offset index for the request timeline."""
+    return gateway_request_dir(project_root, request_id) / "timeline.index.ndjson"
+
+
 
 def gateway_observation_path(project_root: Path, request_id: str) -> Path:
     """Return the append-only request-owned DOM/activity journal path."""

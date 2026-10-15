@@ -200,7 +200,7 @@ def test_public_status_contains_canonical_agent_status(tmp_path: Path, monkeypat
     assert status["lifecycle"] == "terminal"
     assert status["outcome"] == "success"
     assert set(status) == {
-        "task_id", "lifecycle", "activity_seq", "outcome"
+        "task_id", "request_id", "session_id", "lifecycle", "activity_seq", "outcome"
     }
 
 
@@ -226,6 +226,8 @@ def test_public_status_is_slim_v4_projection(tmp_path: Path, monkeypatch):
     status = gateway.get_execution_request(tmp_path, result["request-id"])
     assert status == {
         "task_id": result["request-id"],
+        "request_id": result["request-id"],
+        "session_id": status["session_id"],
         "lifecycle": "terminal",
         "activity_seq": 0,
         "outcome": "success",
@@ -513,7 +515,7 @@ def test_list_execution_requests_most_recent_first_and_filterable(tmp_path: Path
     all_requests = gateway.list_execution_requests(tmp_path)
     assert [r["task_id"] for r in all_requests] == [second["request-id"], first["request-id"]]
     assert all(set(r) == {
-        "task_id", "lifecycle", "activity_seq", "outcome"
+        "task_id", "request_id", "session_id", "lifecycle", "activity_seq", "outcome"
     } for r in all_requests)
     assert all_requests[0]["outcome"] == "failed"
     assert all_requests[1]["outcome"] == "success"

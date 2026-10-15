@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 
-from audiagentic.components.agents.gateway.mapping import normalize_chat_title
+from .urls import normalize_chat_title
 
 
 class PageObservationState(StrEnum):

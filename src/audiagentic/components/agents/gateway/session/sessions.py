@@ -2811,6 +2811,16 @@ class SessionRuntime:
             )
 
             async def _observation_sink(obs):
+                # Legacy ACP-shaped transports may still invoke the callback
+                # with a raw AcpEvent. Normalize that at the session boundary
+                # so every downstream observer sees the neutral contract.
+                if not hasattr(obs, "attributes"):
+                    try:
+                        from audiagentic.foundation.transports.acp import _map_acp_event_to_observation
+                        obs = _map_acp_event_to_observation(obs, session_id, request_id)
+                    except (AttributeError, TypeError, ValueError):
+                        logger.debug("could not normalize legacy transport event", exc_info=True)
+                        return
                 # AS19 Stage-2 Slice A: thread TransportObservation through the
                 # observer lease (if one was resolved). The lease normalizes it
                 # into canonical StatusEvidence. Best-effort — never block or

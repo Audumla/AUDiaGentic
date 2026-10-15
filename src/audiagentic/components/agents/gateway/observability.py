@@ -263,6 +263,7 @@ def read_observation_page(
     since_sequence: int | None = None,
     tail: int | None = None,
 ) -> dict[str, Any]:
+    purge_expired_observation_artifacts(project_root, request_id)
     if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
         raise ValueError("observation limit must be an integer between 1 and 100")
     if tail is not None and (isinstance(tail, bool) or not isinstance(tail, int) or not 1 <= tail <= 100):
@@ -316,6 +317,7 @@ def read_observation_page(
 
 
 def observation_summary(project_root: Path, request_id: str) -> dict[str, Any]:
+    purge_expired_observation_artifacts(project_root, request_id)
     journal = gateway_observation_path(project_root, request_id)
     index = gateway_observation_index_path(project_root, request_id)
     count = 0

@@ -114,6 +114,7 @@ _WORK_ACTIVITY_LABELS = frozenset({
     "dom-materialization",
     "dom-activity",
     "thinking",
+    "generating",
     "searching-web",
     "searching-the-web",
     "read-resource",

@@ -17,6 +17,7 @@ from audiagentic.components.agents.agents_paths import (
 from audiagentic.foundation.io import iter_ndjson, last_ndjson
 from audiagentic.foundation.system.process import StartupLock
 from audiagentic.foundation.time import now_iso_z
+from audiagentic.foundation.transports.agent_session import is_meaningful_activity_label
 
 SCHEMA_VERSION = "gateway-recovery.v1"
 _PAGE_SIZE = 100
@@ -75,21 +76,22 @@ def prepare_recovery_action(
     if action_kind not in {"provider-native-retry", "provider-native-continue", "linked-child-turn", "reconcile"}:
         raise ValueError("unknown recovery action kind")
     with _lock(project_root, request_id):
-        entries = _read(project_root, request_id)
-        for entry in entries:
+        existing: dict[str, Any] | None = None
+        result_seen = False
+        consumed_budget = 0
+        for entry in iter_ndjson(gateway_recovery_action_path(project_root, request_id)):
             if entry.get("action-attempt-id") == action_attempt_id:
-                if entry.get("event") == "action-intent" and entry.get("disposition") == "intent-persisted":
-                    if any(item.get("event") == "action-result" and item.get("action-attempt-id") == action_attempt_id for item in entries):
-                        return {**entry, "disposition": "already-recorded", "outcome": "action-already-recorded"}
-                    return {**entry, "disposition": "reconciliation-required", "outcome": "action-result-missing"}
-                return entry
-        consumed_budget = sum(
-            1
-            for item in entries
-            if item.get("event") == "action-intent"
-            and item.get("action-kind") in {"provider-native-retry", "provider-native-continue"}
-            and item.get("disposition") == "intent-persisted"
-        )
+                existing = entry
+            if entry.get("event") == "action-result" and entry.get("action-attempt-id") == action_attempt_id:
+                result_seen = True
+            if entry.get("event") == "action-intent" and entry.get("action-kind") in {"provider-native-retry", "provider-native-continue"} and entry.get("disposition") == "intent-persisted":
+                consumed_budget += 1
+        if existing is not None:
+            if existing.get("event") == "action-intent" and existing.get("disposition") == "intent-persisted":
+                if result_seen:
+                    return {**existing, "disposition": "already-recorded", "outcome": "action-already-recorded"}
+                return {**existing, "disposition": "reconciliation-required", "outcome": "action-result-missing"}
+            return existing
         remaining_budget = max(0, int(retry_budget) - consumed_budget)
         if action_kind in {"provider-native-retry", "provider-native-continue"} and submission_proven is not False:
             disposition, outcome = "reconciliation-required", "rejected-ambiguous-submission"
@@ -147,11 +149,13 @@ def record_recovery_result(
 ) -> dict[str, Any]:
     """Append reconciliation/result evidence; never mutate the intent event."""
     with _lock(project_root, request_id):
-        entries = _read(project_root, request_id)
-        for entry in entries:
+        intent_seen = False
+        for entry in iter_ndjson(gateway_recovery_action_path(project_root, request_id)):
             if entry.get("event") == "action-result" and entry.get("action-attempt-id") == action_attempt_id:
                 return entry
-        if not any(item.get("action-attempt-id") == action_attempt_id for item in entries):
+            if entry.get("action-attempt-id") == action_attempt_id:
+                intent_seen = True
+        if not intent_seen:
             raise ValueError("recovery action intent is missing")
         result = _append(
             project_root,
@@ -316,15 +320,25 @@ def replay_observations(entries: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
     completion_proven = False
     false_terminal_observation = False
     original_errors: list[dict[str, Any]] = []
+    action_outcomes: list[str] = []
+    successful_action_outcomes = {
+        "accepted", "completed", "success", "provider-resume-completed",
+        "abandon-accepted", "reconciliation-completed", "cleared-not-submitted",
+    }
     for row in entries:
         facts = row.get("facts") if isinstance(row.get("facts"), Mapping) else {}
         activity = facts.get("activity") if isinstance(facts, Mapping) else {}
-        if first_activity is None and isinstance(activity, Mapping) and activity:
-            first_activity = int(row.get("monotonic_ms", 0))
+        if first_activity is None and isinstance(activity, Mapping):
+            label = activity.get("label") or activity.get("model-activity") or activity.get("activity-label")
+            kind = activity.get("kind")
+            if (isinstance(label, str) and is_meaningful_activity_label(label)) or kind in {
+                "tool-requested", "tool-finished", "permission-requested", "in-progress",
+            }:
+                first_activity = int(row.get("monotonic_ms", 0))
         error = facts.get("error-occurrence") if isinstance(facts, Mapping) else {}
         error_code = "none"
         if isinstance(error, Mapping):
-            error_code = _text(error.get("code"), 128) or _text(error.get("classification"), 128) or "none"
+            error_code = next((_text(error.get(key), 128) for key in ("error-code", "failure-code", "reason-code", "code", "classification", "reason") if _text(error.get(key), 128)), "none")
         bucket = groups[error_code]
         observation_count += 1
         bucket["observations"] += 1
@@ -333,7 +347,7 @@ def replay_observations(entries: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
         if isinstance(error, Mapping) and error:
             original_errors.append({
                 key: error[key]
-                for key in ("code", "classification", "occurrence-id")
+                for key in ("error-code", "failure-code", "reason-code", "code", "classification", "occurrence-id")
                 if key in error
             })
         decision = facts.get("decision") if isinstance(facts, Mapping) else {}
@@ -342,7 +356,10 @@ def replay_observations(entries: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
         action = facts.get("action") if isinstance(facts, Mapping) else {}
         if isinstance(action, Mapping) and action:
             bucket["actions"] += 1
-            if action.get("outcome") in {"accepted", "completed", "success"}:
+            outcome = _text(action.get("outcome"), 128)
+            if outcome:
+                action_outcomes.append(outcome)
+            if outcome in successful_action_outcomes:
                 bucket["action-success"] += 1
         response = facts.get("response-identity") if isinstance(facts, Mapping) else {}
         response = response if isinstance(response, Mapping) else {}
@@ -383,6 +400,8 @@ def replay_observations(entries: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
             "completion-proven": completion_proven,
         },
         "outcome-classification": outcome_classification,
+        "action-outcomes": action_outcomes[:32],
+        "action-success-count": sum(1 for value in action_outcomes if value in successful_action_outcomes),
         "stop-disappearance-is-observation": True,
         "_original-errors": original_errors[:32],
     }
