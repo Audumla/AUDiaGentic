@@ -845,6 +845,31 @@ def latest_transition_projection(project_root: Path, request_id: str) -> dict[st
     return None
 
 
+def transition_history_projection(
+    project_root: Path,
+    request_id: str,
+    *,
+    limit: int = 100,
+) -> list[dict[str, str | None]]:
+    """Return bounded safe transition milestones for explicit evidence reads."""
+    if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
+        raise ValueError("transition history limit must be between 1 and 100")
+    try:
+        entries = load_ndjson(gateway_timeline_path(project_root, request_id))
+    except (OSError, ValueError):
+        logger.warning("failed to read gateway request timeline", extra={"request-id": request_id})
+        return []
+    projected: list[dict[str, str | None]] = []
+    for entry in entries:
+        event = entry.get("event")
+        timestamp = entry.get("timestamp")
+        state = entry.get("state")
+        if isinstance(event, str) and isinstance(timestamp, str) and (
+            state is None or isinstance(state, str)
+        ):
+            projected.append({"event": event, "state": state, "timestamp": timestamp})
+    return projected[-limit:]
+
 def project_public_status(
     record: dict[str, Any],
     *,

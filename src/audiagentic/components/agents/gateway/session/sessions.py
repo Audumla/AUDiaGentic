@@ -2853,6 +2853,49 @@ class SessionRuntime:
                 if request_id is not None:
                     kind = getattr(getattr(obs, "kind", None), "value", None) or getattr(obs, "kind", "unknown")
                     attributes = getattr(obs, "attributes", {})
+                    # GA03: persist only the normalized provider facts already
+                    # emitted through this request-owned observation boundary.
+                    # This is observation-only and never touches browser focus,
+                    # navigation, tabs, or provider controls.
+                    try:
+                        from audiagentic.components.agents.gateway.observability import append_observation
+                        from audiagentic.components.agents.gateway import store as gateway_store
+                        safe_attributes = dict(attributes) if isinstance(attributes, Mapping) else {}
+                        attempt_epoch = 1
+                        try:
+                            attempt_epoch = int(
+                                gateway_store.read_record(
+                                    project_root, request_id, include_output=False
+                                ).get("attempt-epoch") or 1
+                            )
+                        except Exception:  # noqa: BLE001 - journal is advisory
+                            pass
+                        activity_label = safe_attributes.get("model_activity") or safe_attributes.get("model-activity")
+                        append_observation(
+                            project_root,
+                            request_id,
+                            session_id=session_id,
+                            turn_id=request_id,
+                            attempt_epoch=attempt_epoch,
+                            poll_seq=int(getattr(obs, "sequence", None) or 0),
+                            source="session-transport",
+                            dom_signals=safe_attributes.get("dom-signals") if isinstance(safe_attributes.get("dom-signals"), Mapping) else ({"kind": kind} if kind else {}),
+                            activity={"label": activity_label, "kind": kind} if activity_label or kind else {},
+                            controls=safe_attributes.get("controls") if isinstance(safe_attributes.get("controls"), Mapping) else {},
+                            response_identity=safe_attributes.get("response-identity") if isinstance(safe_attributes.get("response-identity"), Mapping) else {},
+                            error_occurrence=safe_attributes.get("error-occurrence") if isinstance(safe_attributes.get("error-occurrence"), Mapping) else {},
+                            decision=safe_attributes.get("decision") if isinstance(safe_attributes.get("decision"), Mapping) else {},
+                            action=safe_attributes.get("action") if isinstance(safe_attributes.get("action"), Mapping) else {},
+                            causal_input_ids=[request_id, session_id],
+                            observed_at=getattr(obs, "observed_at", None),
+                            monotonic_ms=int(time.monotonic() * 1000),
+                        )
+                    except Exception:  # noqa: BLE001 - journal must never alter turn outcome
+                        logger.debug(
+                            "request observation journal append failed",
+                            extra={"request-id": request_id, "session-id": session_id},
+                            exc_info=True,
+                        )
                     decision_rendered = (
                         kind == "timing"
                         and isinstance(attributes, Mapping)
