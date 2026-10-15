@@ -1844,7 +1844,6 @@ class GatewayQueueManager:
                         attempt_epoch=record["attempt-epoch"],
                         service_root=service_root,
                     )
-                    _publish_lifecycle_event("interrupted", interrupted)
                     session_id = current.get("session-id")
                     if isinstance(session_id, str) and session_id:
                         try:
@@ -1856,6 +1855,7 @@ class GatewayQueueManager:
                                 extra={"request-id": request_id, "session-id": session_id},
                                 exc_info=True,
                             )
+                    _publish_lifecycle_event("interrupted", interrupted)
                     logger.warning(
                         "gateway request recovery exhausted; request interrupted",
                         extra={
@@ -2135,6 +2135,25 @@ class GatewayQueueManager:
 
         while True:
             if record["state"] in store.TERMINAL_STATES:
+                recovery = record.get("recovery") if isinstance(record.get("recovery"), dict) else {}
+                if (
+                    record.get("state") == "interrupted"
+                    and recovery.get("outcome") == "bounded-recovery-exhausted"
+                    and record.get("provider-transport-kind") == "provider-session"
+                    and isinstance(record.get("session-id"), str)
+                ):
+                    from audiagentic.components.agents.gateway.session import sessions_store
+                    session = sessions_store.expire_session_if_policy_exceeded(
+                        project_root, record["session-id"]
+                    )
+                    if isinstance(session, dict) and session.get("state") not in sessions_store.SESSION_TERMINAL_STATES:
+                        now = time.monotonic()
+                        if deadline is not None and now >= deadline:
+                            return record
+                        time.sleep(min(_WAIT_INITIAL_BACKOFF_SECONDS, max(0.0, (deadline - now) if deadline is not None else _WAIT_INITIAL_BACKOFF_SECONDS)))
+                        record = store.read_record(project_root, request_id)
+                        continue
+                    record = store.read_record(project_root, request_id)
                 return record
             now = time.monotonic()
             if deadline is not None and now >= deadline:

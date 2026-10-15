@@ -158,3 +158,22 @@ def test_reconnect_classification_is_read_only_and_fail_closed():
     assert safe["classification"] == "safe-reconnect"
     assert safe["read-only"] is True
     assert ambiguous["classification"] == "reconcile-required"
+
+def test_replay_uses_canonical_errors_meaningful_activity_and_actual_recovery_outcomes():
+    entries = [
+        {"monotonic_ms": 100, "facts": {"activity": {"label": "heartbeat"}, "error-occurrence": {"failure-code": "FAIL-1"}}},
+        {"monotonic_ms": 150, "facts": {"activity": {"label": "thinking"}}},
+        {"monotonic_ms": 175, "facts": {"action": {"outcome": "provider-resume-completed"}}},
+        {"monotonic_ms": 176, "facts": {"action": {"outcome": "abandon-accepted"}}},
+        {"monotonic_ms": 177, "facts": {"action": {"outcome": "reconciliation-completed"}}},
+        {"monotonic_ms": 178, "facts": {"action": {"outcome": "cleared-not-submitted"}}},
+        {"event": "terminal", "monotonic_ms": 200, "facts": {"response-identity": {"terminal": True, "terminal-witness-hash": "w", "response-ref-hash": "r"}}},
+    ]
+    result = replay.replay_observations(entries)
+    assert result["first-activity-monotonic-ms"] == 150
+    assert result["time-to-first-response-ms"] == 50
+    assert result["groups"]["FAIL-1"]["errors"] == 1
+    assert result["action-success-count"] == 4
+    assert set(result["action-outcomes"]) == {
+        "provider-resume-completed", "abandon-accepted", "reconciliation-completed", "cleared-not-submitted"
+    }

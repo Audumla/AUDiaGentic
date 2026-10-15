@@ -11,7 +11,6 @@ from dataclasses import replace
 from enum import StrEnum
 from urllib.parse import urlsplit
 
-from audiagentic.components.agents.gateway.mapping import normalize_chat_title
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.transports.session_binding import (
     ProviderSessionBindingSink,
@@ -30,6 +29,7 @@ from .urls import (
     canonical_project_url,
     parse_project_id,
     parse_provider_session_id,
+    normalize_chat_title,
     same_chat_identity,
     url_matches_provider_session,
 )

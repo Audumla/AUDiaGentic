@@ -2404,7 +2404,7 @@ def gateway_overview(project_root: Path) -> dict[str, Any]:
     from audiagentic.components.agents.gateway.session import sessions_store as session_store
     from audiagentic.components.agents.gateway.session.sessions import peek_session_runtime
 
-    records = store.list_records(project_root)
+    records = store.list_records(project_root, include_output=False)
     by_state: dict[str, int] = {}
     for record in records:
         by_state[record["state"]] = by_state.get(record["state"], 0) + 1

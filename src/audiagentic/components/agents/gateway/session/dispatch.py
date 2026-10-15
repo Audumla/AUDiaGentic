@@ -42,18 +42,26 @@ def _prepare_native_recovery_fence(
 
     metadata = record.get("provider-metadata")
     metadata = metadata if isinstance(metadata, dict) else {}
-    project_id = record.get("project-id") or hashlib.sha256(
-        str(project_root).encode()
-    ).hexdigest()[:32]
+    from audiagentic.components.agents.gateway.session import sessions_store
+    from audiagentic.components.providers.adapters.gpt_auto.urls import parse_project_id
+
+    session_record = sessions_store.read_session_record(project_root, session_id)
+    session_metadata = sessions_store.session_provider_metadata(session_record)
+    session_binding = session_record.get("binding") if isinstance(session_record.get("binding"), dict) else {}
+    project_id = record.get("project-id") or metadata.get("project-id")
+    if not isinstance(project_id, str) or not project_id:
+        project_id = parse_project_id(str(metadata.get("project-url") or metadata.get("chat-url") or ""))
     chat_id = metadata.get("provider-session-id") or metadata.get("chat-id")
-    turn_id = metadata.get("unresolved-turn-id") or record.get("turn-id") or request_id
+    turn_id = metadata.get("unresolved-turn-id") or record.get("turn-id")
     prompt_fingerprint = metadata.get("prompt-text-digest") or record.get("prompt-digest")
     assistant_id = metadata.get("assistant-message-id") or metadata.get(
         "assistant-before-message-id"
     )
     terminal_evidence = metadata.get("terminal-evidence")
     terminal_witness_id = (
-        assistant_id if isinstance(terminal_evidence, dict) and terminal_evidence else None
+        terminal_evidence.get("terminal-witness-id")
+        if isinstance(terminal_evidence, dict)
+        else None
     )
     binding_record = {
         "project-id": project_id,
@@ -66,6 +74,25 @@ def _prepare_native_recovery_fence(
         "provider-session-id": chat_id,
         "provider-turn-id": turn_id,
     }
+    session_project_id = session_metadata.get("project-id")
+    if not isinstance(session_project_id, str) or not session_project_id:
+        session_project_id = parse_project_id(str(session_metadata.get("project-url") or session_metadata.get("chat-url") or ""))
+    session_chat_id = session_metadata.get("provider-session-id") or session_metadata.get("chat-id") or session_binding.get("provider-session-ref")
+    independent_values = {
+        "project-id": session_project_id,
+        "chat-id": session_chat_id,
+        "turn-id": session_metadata.get("unresolved-turn-id"),
+        "prompt-fingerprint": session_metadata.get("prompt-text-digest"),
+        "assistant-id": session_metadata.get("assistant-message-id"),
+        "terminal-witness-id": (
+            session_metadata.get("terminal-evidence", {}).get("terminal-witness-id")
+            if isinstance(session_metadata.get("terminal-evidence"), dict)
+            else None
+        ),
+    }
+    identity_keys = ("project-id", "chat-id", "turn-id", "prompt-fingerprint", "assistant-id", "terminal-witness-id")
+    independent_missing = [key for key in identity_keys if not isinstance(independent_values.get(key), str) or not independent_values[key]]
+    independent_mismatches = [key for key in identity_keys if key not in independent_missing and independent_values[key] != binding_record.get(key)]
     proof = prove_turn_correlation(
         binding_record,
         project_id=project_id if isinstance(project_id, str) else None,
@@ -82,6 +109,9 @@ def _prepare_native_recovery_fence(
             terminal_witness_id if isinstance(terminal_witness_id, str) else None
         ),
     )
+    proof["independent-session-evidence-bound"] = not independent_missing and not independent_mismatches
+    proof["independent-session-evidence-missing"] = independent_missing
+    proof["independent-session-evidence-mismatches"] = independent_mismatches
     recovery = record.get("recovery")
     recovery = recovery if isinstance(recovery, dict) else {}
     try:
@@ -106,7 +136,7 @@ def _prepare_native_recovery_fence(
         causal_input_ids=[request_id, session_id],
         binding=binding_record,
     )
-    if intent.get("disposition") != "intent-persisted" or not proof.get("strong"):
+    if intent.get("disposition") != "intent-persisted" or not proof.get("strong") or not proof.get("independent-session-evidence-bound"):
         outcome = (
             "rejected-correlation-proof"
             if intent.get("disposition") == "intent-persisted"

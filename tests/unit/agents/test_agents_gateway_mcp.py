@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from pathlib import Path
 from unittest.mock import patch
 
@@ -423,3 +424,46 @@ def test_agent_task_submit_forwards_provider_chat_url():
         )
 
     assert mock_call.call_args.kwargs["provider_chat_url"].endswith("/c/conversation-1")
+
+def test_agent_task_status_include_response_preserves_canonical_response():
+    with _patch_root(), patch(
+        "audiagentic.components.agents.mcp.gateway_mcp.call_gateway_method",
+        return_value={
+            "task_id": "req_x", "request_id": "req_x", "session_id": "ses_x",
+            "lifecycle": "terminal", "activity_seq": 4, "activity_at": "2026-10-15T00:00:00Z",
+            "activity": None, "outcome": "success",
+            "response": {"text": "done", "bytes": 4, "format": "text", "media_type": "text/plain"},
+        },
+    ) as mock_call:
+        result = agents_gateway_mcp.agent_task_status("req_x", include_response=True)
+    assert result["request_id"] == "req_x"
+    assert result["session_id"] == "ses_x"
+    assert result["response"] == {"text": "done", "bytes": 4, "format": "text", "media_type": "text/plain"}
+    mock_call.assert_called_once_with("get_execution_request", _ROOT, "req_x", include_response=True)
+
+def test_agent_task_list_requests_preserves_api_v4_progress_fields():
+    with _patch_root(), patch(
+        "audiagentic.components.agents.mcp.gateway_mcp.call_gateway_method",
+        return_value=[{
+            "task_id": "req_x", "request_id": "req_x", "session_id": "ses_x",
+            "lifecycle": "active", "activity": "running", "activity_type": "provider-progress",
+            "activity_seq": 7, "activity_at": "2026-10-15T00:00:00Z", "outcome": None,
+            "metadata": {"prompt": "secret"},
+        }],
+    ):
+        result = agents_gateway_mcp.agent_task_list_requests(limit=1)
+    assert result == [{
+        "task_id": "req_x", "request_id": "req_x", "session_id": "ses_x",
+        "lifecycle": "active", "activity": "running", "activity_type": "provider-progress",
+        "activity_seq": 7, "activity_at": "2026-10-15T00:00:00Z",
+    }]
+
+def test_agent_task_evidence_reapplies_public_allowlist_before_mcp_output():
+    with _patch_root(), patch(
+        "audiagentic.components.agents.mcp.gateway_mcp.call_gateway_method",
+        return_value={"schema_version": "gateway-evidence.v1", "request-id": "req_x", "state": "running", "diagnostics": {"classification": "watchdog", "prompt": "secret"}, "evidence": [{"phase": "running", "raw-dom": "secret"}], "observation-summary": {"count": 1, "latest": {"facts": {"message": "secret"}}}, "latest-transition": {"event": "running", "timestamp": "now"}, "provider-metadata": {"target-id": "secret"}},
+    ):
+        result = agents_gateway_mcp.agent_task_evidence("req_x")
+    encoded = json.dumps(result)
+    assert "secret" not in encoded
+    assert result["request-id"] == "req_x"

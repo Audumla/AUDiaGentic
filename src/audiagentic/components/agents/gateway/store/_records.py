@@ -16,9 +16,10 @@ from audiagentic.components.agents.agents_paths import (
     gateway_request_path,
     gateway_root,
     gateway_timeline_path,
+    gateway_timeline_index_path,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError, redact_details
-from audiagentic.foundation.io import atomic_write_json, load_ndjson, read_text_with_retry
+from audiagentic.foundation.io import atomic_write_json, iter_ndjson, last_ndjson, load_ndjson, read_text_with_retry
 from audiagentic.foundation.time import now_iso_z
 
 from . import _shared
@@ -834,11 +835,11 @@ def latest_transition_projection(project_root: Path, request_id: str) -> dict[st
     mapping into a public projection.
     """
     try:
-        entries = load_ndjson(gateway_timeline_path(project_root, request_id))
+        entry = last_ndjson(gateway_timeline_path(project_root, request_id))
     except (OSError, ValueError):
         logger.warning("failed to read gateway request timeline", extra={"request-id": request_id})
         return None
-    for entry in reversed(entries):
+    if entry:
         event = entry.get("event")
         timestamp = entry.get("timestamp")
         state = entry.get("state")
@@ -857,20 +858,18 @@ def transition_history_projection(
     if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
         raise ValueError("transition history limit must be between 1 and 100")
     try:
-        entries = load_ndjson(gateway_timeline_path(project_root, request_id))
+        from collections import deque
+        entries = deque(maxlen=limit)
+        for entry in iter_ndjson(gateway_timeline_path(project_root, request_id)):
+            event = entry.get("event")
+            timestamp = entry.get("timestamp")
+            state = entry.get("state")
+            if isinstance(event, str) and isinstance(timestamp, str) and (state is None or isinstance(state, str)):
+                entries.append({"event": event, "state": state, "timestamp": timestamp})
     except (OSError, ValueError):
         logger.warning("failed to read gateway request timeline", extra={"request-id": request_id})
         return []
-    projected: list[dict[str, str | None]] = []
-    for entry in entries:
-        event = entry.get("event")
-        timestamp = entry.get("timestamp")
-        state = entry.get("state")
-        if isinstance(event, str) and isinstance(timestamp, str) and (
-            state is None or isinstance(state, str)
-        ):
-            projected.append({"event": event, "state": state, "timestamp": timestamp})
-    return projected[-limit:]
+    return list(entries)
 
 
 def transition_history_page(
@@ -893,19 +892,42 @@ def transition_history_page(
                 raise ValueError
         except (ValueError, KeyError, TypeError, UnicodeError, json.JSONDecodeError):
             raise ValueError("invalid history cursor") from None
+    items: list[dict[str, str | None]] = []
+    has_more = False
+    journal = gateway_timeline_path(project_root, request_id)
+    index_path = gateway_timeline_index_path(project_root, request_id)
     try:
-        raw_entries = load_ndjson(gateway_timeline_path(project_root, request_id))
-    except (OSError, ValueError):
-        raw_entries = []
-    entries: list[dict[str, str | None]] = []
-    for entry in raw_entries:
-        event = entry.get("event")
-        timestamp = entry.get("timestamp")
-        state = entry.get("state")
-        if isinstance(event, str) and isinstance(timestamp, str) and (state is None or isinstance(state, str)):
-            entries.append({"event": event, "state": state, "timestamp": timestamp})
-    items = entries[offset : offset + limit]
-    has_more = offset + len(items) < len(entries)
+        if journal.exists() and index_path.exists():
+            with index_path.open("r", encoding="utf-8") as index_handle, journal.open("rb") as journal_handle:
+                for index, raw_index in enumerate(index_handle):
+                    if index < offset:
+                        continue
+                    if len(items) >= limit:
+                        has_more = True
+                        break
+                    metadata = json.loads(raw_index)
+                    journal_handle.seek(int(metadata["offset"]))
+                    entry = json.loads(journal_handle.readline().decode("utf-8"))
+                    event = entry.get("event")
+                    timestamp = entry.get("timestamp")
+                    state = entry.get("state")
+                    if isinstance(event, str) and isinstance(timestamp, str) and (state is None or isinstance(state, str)):
+                        items.append({"event": event, "state": state, "timestamp": timestamp})
+        else:
+            for index, entry in enumerate(iter_ndjson(journal)):
+                if index < offset:
+                    continue
+                if len(items) >= limit:
+                    has_more = True
+                    break
+                event = entry.get("event")
+                timestamp = entry.get("timestamp")
+                state = entry.get("state")
+                if isinstance(event, str) and isinstance(timestamp, str) and (state is None or isinstance(state, str)):
+                    items.append({"event": event, "state": state, "timestamp": timestamp})
+    except (OSError, ValueError, TypeError, UnicodeDecodeError, json.JSONDecodeError):
+        items = []
+        has_more = False
     result: dict[str, Any] = {
         "schema-version": "gateway-history.v1",
         "request-id": request_id,
