@@ -859,13 +859,27 @@ def transition_history_projection(
         raise ValueError("transition history limit must be between 1 and 100")
     try:
         from collections import deque
+        journal = gateway_timeline_path(project_root, request_id)
+        index_path = gateway_timeline_index_path(project_root, request_id)
         entries = deque(maxlen=limit)
-        for entry in iter_ndjson(gateway_timeline_path(project_root, request_id)):
-            event = entry.get("event")
-            timestamp = entry.get("timestamp")
-            state = entry.get("state")
-            if isinstance(event, str) and isinstance(timestamp, str) and (state is None or isinstance(state, str)):
-                entries.append({"event": event, "state": state, "timestamp": timestamp})
+        if journal.exists() and index_path.exists():
+            offsets = deque(iter_ndjson(index_path), maxlen=limit)
+            with journal.open("rb") as journal_handle:
+                for metadata in offsets:
+                    journal_handle.seek(int(metadata["offset"]))
+                    entry = json.loads(journal_handle.readline().decode("utf-8"))
+                    event = entry.get("event")
+                    timestamp = entry.get("timestamp")
+                    state = entry.get("state")
+                    if isinstance(event, str) and isinstance(timestamp, str) and (state is None or isinstance(state, str)):
+                        entries.append({"event": event, "state": state, "timestamp": timestamp})
+        else:
+            for entry in iter_ndjson(journal):
+                event = entry.get("event")
+                timestamp = entry.get("timestamp")
+                state = entry.get("state")
+                if isinstance(event, str) and isinstance(timestamp, str) and (state is None or isinstance(state, str)):
+                    entries.append({"event": event, "state": state, "timestamp": timestamp})
     except (OSError, ValueError):
         logger.warning("failed to read gateway request timeline", extra={"request-id": request_id})
         return []
@@ -1028,12 +1042,26 @@ def read_public_status(project_root: Path, request_id: str) -> dict[str, Any]:
     return status
 
 
-def list_records(project_root: Path, *, include_output: bool = True) -> list[dict[str, Any]]:
+def list_records(
+    project_root: Path,
+    *,
+    include_output: bool = True,
+    limit: int | None = None,
+) -> list[dict[str, Any]]:
     root = gateway_root(project_root)
     if not root.exists():
         return []
+    if limit is not None and (isinstance(limit, bool) or not isinstance(limit, int) or limit < 1):
+        raise ValueError("request list limit must be a positive integer")
     records = []
-    for entry in sorted(root.iterdir()):
+    entries = [
+        entry for entry in root.iterdir()
+        if entry.is_dir() and entry.name not in {"idempotency", "sessions"}
+    ]
+    if limit is not None:
+        entries.sort(key=lambda entry: entry.stat().st_mtime_ns, reverse=True)
+        entries = entries[:limit]
+    for entry in entries:
         if not entry.is_dir() or entry.name in {"idempotency", "sessions"}:
             continue
         try:

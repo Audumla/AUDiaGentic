@@ -178,6 +178,7 @@ def append_transport_observation(
         dom_signals=projected["dom-signals"],
         activity=projected["activity"],
         controls=projected["controls"],
+        diagnostic_facts=projected["diagnostic-facts"],
         response_identity=projected["response-identity"],
         error_occurrence=projected["error-occurrence"],
         decision=projected["decision"],

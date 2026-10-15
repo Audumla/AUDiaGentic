@@ -25,7 +25,7 @@ from audiagentic.components.agents.agents_paths import (
     gateway_observation_path,
     gateway_request_path,
 )
-from audiagentic.foundation.io import iter_ndjson, last_ndjson
+from audiagentic.foundation.io import atomic_write_text, iter_ndjson, last_ndjson
 from audiagentic.foundation.logging.redaction import redact_text
 from audiagentic.foundation.system.process import StartupLock
 from audiagentic.foundation.time import now_iso_z
@@ -73,7 +73,7 @@ _SAFE_TEXT_KEYS = frozenset(
 )
 
 
-def _safe(value: Any, *, depth: int = 0) -> Any:
+def _safe(value: Any, *, depth: int = 0, key: str | None = None) -> Any:
     """Project provider facts to bounded JSON without secret-bearing keys."""
     if depth > 3:
         return None
@@ -83,8 +83,8 @@ def _safe(value: Any, *, depth: int = 0) -> Any:
             key = _text(raw_key, 64)
             if not key or _SENSITIVE.search(key):
                 continue
-            projected = _safe(raw_value, depth=depth + 1)
             normalized_key = key.casefold().replace("_", "-")
+            projected = _safe(raw_value, depth=depth + 1, key=normalized_key)
             if isinstance(projected, str) and normalized_key not in _SAFE_TEXT_KEYS:
                 continue
             if projected is not None:
@@ -94,7 +94,9 @@ def _safe(value: Any, *, depth: int = 0) -> Any:
         return [
             item
             for item in (
-                None if isinstance(v, str) else _safe(v, depth=depth + 1)
+                _text(v) if isinstance(v, str) and key in _SAFE_TEXT_KEYS else (
+                    None if isinstance(v, str) else _safe(v, depth=depth + 1)
+                )
                 for v in value[:_MAX_ITEMS]
             )
             if item is not None
@@ -154,6 +156,7 @@ def append_observation(
     dom_signals: Mapping[str, Any] | None = None,
     activity: Mapping[str, Any] | None = None,
     controls: Mapping[str, Any] | None = None,
+    diagnostic_facts: Mapping[str, Any] | None = None,
     response_identity: Mapping[str, Any] | None = None,
     error_occurrence: Mapping[str, Any] | None = None,
     decision: Mapping[str, Any] | None = None,
@@ -171,6 +174,7 @@ def append_observation(
         "dom-signals": _project_fields(dom_signals),
         "activity": _project_fields(activity),
         "controls": _project_fields(controls),
+        "diagnostic-facts": _project_fields(diagnostic_facts),
         "response-identity": _project_fields(response_identity),
         "error-occurrence": _project_fields(error_occurrence),
         "decision": _project_fields(decision),
@@ -274,10 +278,21 @@ def read_observation_page(
     if tail is not None and not cursor and not since_sequence:
         from collections import deque
         recent = deque(maxlen=tail + 1)
-        for item in iter_ndjson(gateway_observation_path(project_root, request_id)):
-            recent.append(item)
-        has_more = len(recent) > tail
-        page = list(recent)[-tail:]
+        index_path = gateway_observation_index_path(project_root, request_id)
+        journal_path = gateway_observation_path(project_root, request_id)
+        if index_path.exists() and journal_path.exists():
+            for item in iter_ndjson(index_path):
+                recent.append(item)
+            with journal_path.open("rb") as journal_handle:
+                for index in list(recent)[-tail:]:
+                    journal_handle.seek(int(index["offset"]))
+                    page.append(json.loads(journal_handle.readline().decode("utf-8")))
+            has_more = len(recent) > tail
+        else:
+            for item in iter_ndjson(journal_path):
+                recent.append(item)
+            has_more = len(recent) > tail
+            page = list(recent)[-tail:]
     else:
         index_path = gateway_observation_index_path(project_root, request_id)
         if index_path.exists() and gateway_observation_path(project_root, request_id).exists():
@@ -371,7 +386,7 @@ def capture_redacted_artifact(
     path = directory / f"{digest}.json.gz"
     with _journal_lock(project_root, request_id):
         directory.mkdir(parents=True, exist_ok=True)
-        purge_expired_observation_artifacts(project_root, request_id)
+        _purge_expired_observation_artifacts_locked(project_root, request_id)
         if not path.exists():
             path.write_bytes(compressed)
         manifest = directory / "manifest.ndjson"
@@ -439,7 +454,7 @@ def purge_observation_artifacts(project_root: Path, request_id: str) -> int:
     return removed
 
 
-def purge_expired_observation_artifacts(project_root: Path, request_id: str) -> int:
+def _purge_expired_observation_artifacts_locked(project_root: Path, request_id: str) -> int:
     """Remove only expired request-owned artifacts and stale manifest rows."""
     directory = gateway_observation_artifact_dir(project_root, request_id)
     manifest = directory / "manifest.ndjson"
@@ -461,10 +476,22 @@ def purge_expired_observation_artifacts(project_root: Path, request_id: str) -> 
         if path.is_file():
             path.unlink(missing_ok=True)
             removed += 1
-    manifest.write_text("".join(json.dumps(item, sort_keys=True, separators=(",", ":")) + "\n" for item in retained), encoding="utf-8")
-    if not retained:
+    if retained:
+        atomic_write_text(
+            manifest,
+            "".join(
+                json.dumps(item, sort_keys=True, separators=(",", ":")) + "\n"
+                for item in retained
+            ),
+        )
+    else:
         manifest.unlink(missing_ok=True)
     return removed
+
+
+def purge_expired_observation_artifacts(project_root: Path, request_id: str) -> int:
+    with _journal_lock(project_root, request_id):
+        return _purge_expired_observation_artifacts_locked(project_root, request_id)
 
 __all__ = [
     "ARTIFACT_SCHEMA_VERSION",

@@ -1827,7 +1827,11 @@ def list_execution_requests(
     # Dashboard rows never include full response bodies. Avoid reopening
     # request-owned artifacts while scanning history; the artifact is only
     # dereferenced by the explicit response operation.
-    records = store.list_records(project_root, include_output=False)
+    records = (
+        store.list_records(project_root, include_output=False, limit=limit)
+        if limit is not None
+        else store.list_records(project_root, include_output=False)
+    )
     if state is not None:
         records = [r for r in records if r["state"] == state]
     records.sort(key=lambda r: r["created-at"], reverse=True)
