@@ -3,7 +3,11 @@ from __future__ import annotations
 import json
 
 from audiagentic.components.agents.gateway import replay
-from audiagentic.components.agents.agents_paths import gateway_observation_index_path
+from audiagentic.components.agents.agents_paths import (
+    gateway_observation_index_path,
+    gateway_timeline_index_path,
+    gateway_timeline_path,
+)
 from audiagentic.components.agents.gateway.evidence_projection import project_public_gateway_evidence
 from audiagentic.components.agents.gateway.observation_projection import append_request_projection
 from audiagentic.components.agents.gateway.observability import append_observation, observation_summary, read_observation_page
@@ -127,6 +131,36 @@ def test_history_cursor_is_independent_and_deterministic(tmp_path):
     second = transition_history_page(tmp_path, "req_history", limit=2, cursor=first["next-cursor"])
     assert [item["event"] for item in first["items"]] == ["state-0", "state-1"]
     assert [item["event"] for item in second["items"]] == ["state-2"]
+
+
+def test_history_deep_cursor_carries_index_offset(tmp_path, monkeypatch):
+    timeline = gateway_timeline_path(tmp_path, "req_deep_history")
+    index_path = gateway_timeline_index_path(tmp_path, "req_deep_history")
+    timeline.parent.mkdir(parents=True)
+    lines = []
+    index_rows = []
+    offset = 0
+    for event_index in range(120):
+        line = (json.dumps({"event": f"state-{event_index}", "state": "running", "timestamp": f"t-{event_index}"}) + "\n").encode()
+        lines.append(line)
+        index_rows.append({"event_seq": event_index + 1, "offset": offset, "length": len(line)})
+        offset += len(line)
+    timeline.write_bytes(b"".join(lines))
+    index_path.write_text("".join(json.dumps(row) + "\n" for row in index_rows), encoding="utf-8")
+
+    page = transition_history_page(tmp_path, "req_deep_history", limit=5)
+    for _ in range(10):
+        page = transition_history_page(tmp_path, "req_deep_history", limit=5, cursor=page["next-cursor"])
+    assert [item["event"] for item in page["items"]] == [f"state-{i}" for i in range(50, 55)]
+    cursor = json.loads(__import__("base64").urlsafe_b64decode(page["next-cursor"] + "=" * (-len(page["next-cursor"]) % 4)))
+    assert cursor["index-offset"] > 0
+
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.store._records.iter_ndjson",
+        lambda _path: (_ for _ in ()).throw(AssertionError("deep indexed history used a full-prefix fallback")),
+    )
+    next_page = transition_history_page(tmp_path, "req_deep_history", limit=5, cursor=page["next-cursor"])
+    assert next_page["items"][0]["event"] == "state-55"
 
 
 def test_public_evidence_has_one_redaction_and_byte_boundary():
