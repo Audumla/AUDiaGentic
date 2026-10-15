@@ -2881,11 +2881,18 @@ class SessionRuntime:
                                 target_hash = hashlib.sha256(target_id.encode()).hexdigest()[:32]
                         except Exception:  # noqa: BLE001 - journal is advisory
                             pass
+                        correlation_quality = getattr(obs, "correlation_quality", None)
+                        correlation_quality = getattr(correlation_quality, "value", correlation_quality)
                         activity_facts = {
                             "kind": kind,
                             **(
                                 {"label": safe_attributes["model_activity"]}
                                 if isinstance(safe_attributes.get("model_activity"), str)
+                                else {}
+                            ),
+                            **(
+                                {"correlation-quality": correlation_quality}
+                                if isinstance(correlation_quality, str) and correlation_quality
                                 else {}
                             ),
                         }
@@ -2919,7 +2926,12 @@ class SessionRuntime:
                             project_root,
                             request_id,
                             session_id=session_id,
-                            turn_id=request_id,
+                            turn_id=(
+                                getattr(obs, "turn_id", None)
+                                if isinstance(getattr(obs, "turn_id", None), str)
+                                and getattr(obs, "turn_id", None)
+                                else request_id
+                            ),
                             project_hash=hashlib.sha256(str(project_root).encode()).hexdigest()[:32],
                             cdp_target_hash=target_hash,
                             attempt_epoch=attempt_epoch,

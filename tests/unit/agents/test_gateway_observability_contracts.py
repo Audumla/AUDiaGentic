@@ -50,6 +50,8 @@ def test_unchanged_polls_are_periodically_coalesced(tmp_path):
     page = observability.read_observation_page(tmp_path, "req_coalesce", limit=100)
     assert page["count"] <= 3
     assert page["items"][-1]["event"] == "observation-coalesced"
+    assert page["items"][-1]["coalesced"]["repeat_count"] == 10
+    assert page["items"][-1]["coalesced"]["last_poll_seq"] == 10
 
 def test_observation_cursor_is_finite_and_opaque(tmp_path):
     for poll in range(1, 4):
@@ -69,13 +71,14 @@ def test_optional_artifact_is_bounded_redacted_and_purgeable(tmp_path):
     metadata = observability.capture_redacted_artifact(
         tmp_path,
         "req_artifact",
-        {"role": "main", "token": "secret", "children": [{"text": "safe"}]},
+        {"role": "main", "token": "secret", "children": [{"text": "safe"}], "labels": ["raw prompt/DOM text"]},
     )
     artifact_dir = gateway_observation_artifact_dir(tmp_path, "req_artifact")
     artifact = next(artifact_dir.glob("*.json.gz"))
     decoded = json.loads(gzip.decompress(artifact.read_bytes()))
     assert "token" not in decoded
     assert decoded.get("children", [{}])[0].get("text") is None
+    assert "raw prompt/DOM text" not in decoded.get("labels", [])
     assert metadata["compressed_bytes"] == artifact.stat().st_size
     assert observability.purge_observation_artifacts(tmp_path, "req_artifact") == 2
     assert not artifact_dir.exists()
@@ -120,6 +123,38 @@ def test_recovery_intent_fences_ambiguous_submission_and_replay(tmp_path):
     assert result["safe-to-resubmit"] is False
     assert result["duplicate-prompt-fence"] == "ambiguous-action-attempt"
 
+
+def test_native_continuation_fence_persists_intent_before_provider_action(tmp_path):
+    from audiagentic.components.agents.gateway.session.dispatch import (
+        _prepare_native_recovery_fence,
+    )
+
+    _prepare_native_recovery_fence(
+        tmp_path,
+        "req_native",
+        {
+            "request-id": "req_native",
+            "project-id": "project",
+            "session-id": "session",
+            "attempt-epoch": 1,
+            "prompt-digest": "fp",
+            "provider-metadata": {
+                "provider-session-id": "chat",
+                "unresolved-turn-id": "turn",
+                "prompt-text-digest": "fp",
+                "assistant-before-message-id": "assistant",
+                "assistant-message-id": "assistant",
+                "terminal-evidence": {"kind": "terminal"},
+                "submission-proven": False,
+            },
+            "recovery": {"max-attempts": 2, "attempt": 0},
+        },
+        session_id="session",
+    )
+    page = replay.read_recovery_page(tmp_path, "req_native", limit=10)
+    assert page["items"][0]["action-kind"] == "provider-native-continue"
+    assert page["items"][0]["disposition"] == "intent-persisted"
+    assert page["items"][0]["retry-budget"] == 2
 
 def test_turn_correlation_requires_boundary_and_terminal_witness():
     proof = replay.prove_turn_correlation(

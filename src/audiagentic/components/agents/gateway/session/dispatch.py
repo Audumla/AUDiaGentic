@@ -27,6 +27,107 @@ from audiagentic.foundation.transports.agent_session import SessionFailureDispos
 logger = logging.getLogger(__name__)
 
 
+def _prepare_native_recovery_fence(
+    project_root: Path,
+    request_id: str,
+    record: dict[str, Any],
+    *,
+    session_id: str,
+) -> None:
+    from audiagentic.components.agents.gateway.replay import (
+        prepare_recovery_action,
+        prove_turn_correlation,
+        record_recovery_result,
+    )
+
+    metadata = record.get("provider-metadata")
+    metadata = metadata if isinstance(metadata, dict) else {}
+    project_id = record.get("project-id") or hashlib.sha256(
+        str(project_root).encode()
+    ).hexdigest()[:32]
+    chat_id = metadata.get("provider-session-id") or metadata.get("chat-id")
+    turn_id = metadata.get("unresolved-turn-id") or record.get("turn-id") or request_id
+    prompt_fingerprint = metadata.get("prompt-text-digest") or record.get("prompt-digest")
+    assistant_id = metadata.get("assistant-message-id") or metadata.get(
+        "assistant-before-message-id"
+    )
+    terminal_evidence = metadata.get("terminal-evidence")
+    terminal_witness_id = (
+        assistant_id if isinstance(terminal_evidence, dict) and terminal_evidence else None
+    )
+    binding_record = {
+        "project-id": project_id,
+        "session-id": session_id,
+        "chat-id": chat_id,
+        "turn-id": turn_id,
+        "prompt-fingerprint": prompt_fingerprint,
+    }
+    proof = prove_turn_correlation(
+        binding_record,
+        project_id=project_id if isinstance(project_id, str) else None,
+        session_id=session_id,
+        chat_id=chat_id if isinstance(chat_id, str) else None,
+        turn_id=turn_id if isinstance(turn_id, str) else None,
+        prompt_fingerprint=(
+            prompt_fingerprint if isinstance(prompt_fingerprint, str) else None
+        ),
+        assistant_id=assistant_id if isinstance(assistant_id, str) else None,
+        assistant_pinned=bool(metadata.get("assistant-before-message-id")),
+        assistant_remounted=False,
+        terminal_witness_id=(
+            terminal_witness_id if isinstance(terminal_witness_id, str) else None
+        ),
+    )
+    recovery = record.get("recovery")
+    recovery = recovery if isinstance(recovery, dict) else {}
+    try:
+        retry_budget = max(
+            0,
+            int(recovery.get("max-attempts")) - int(recovery.get("attempt") or 0),
+        )
+    except (TypeError, ValueError):
+        retry_budget = 0
+    action_attempt_id = "native-continue-" + request_id + "-" + str(
+        record.get("attempt-epoch", 1)
+    ) + "-" + str(recovery.get("attempt") or 0)
+    intent = prepare_recovery_action(
+        project_root,
+        request_id,
+        action_attempt_id=action_attempt_id,
+        action="resume-existing",
+        action_kind="provider-native-continue",
+        attempt_epoch=int(record.get("attempt-epoch") or 1),
+        retry_budget=retry_budget,
+        submission_proven=metadata.get("submission-proven"),
+        causal_input_ids=[request_id, session_id],
+        binding=binding_record,
+    )
+    if intent.get("disposition") != "intent-persisted" or not proof.get("strong"):
+        outcome = (
+            "rejected-correlation-proof"
+            if intent.get("disposition") == "intent-persisted"
+            else str(intent.get("outcome") or "rejected-recovery-action")
+        )
+        record_recovery_result(
+            project_root,
+            request_id,
+            action_attempt_id=action_attempt_id,
+            outcome=outcome,
+            terminal=True,
+            causal_input_ids=[request_id, session_id],
+        )
+        raise AudiaGenticError(
+            code="CON-AGW-156",
+            kind="agents",
+            message="provider-native continuation is fenced pending strong turn correlation",
+            details={
+                "request-id": request_id,
+                "session-id": session_id,
+                "recovery-proof": proof,
+                "recovery-outcome": outcome,
+            },
+        )
+
 def _merge_provider_metadata(
     current_metadata: dict[str, Any] | None,
     request_metadata: dict[str, Any],
@@ -1057,6 +1158,13 @@ def _dispatch_session_request(
                 return record
 
             dispatch_claim = _claim_session_turn
+        if resume_existing:
+            _prepare_native_recovery_fence(
+                project_root,
+                request_id,
+                record,
+                session_id=session_id,
+            )
         result = runtime.prompt_in_session(
             project_root,
             session_id,

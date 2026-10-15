@@ -13,7 +13,7 @@ from audiagentic.components.agents.agents_paths import (
     gateway_recovery_action_path,
     gateway_request_path,
 )
-from audiagentic.foundation.io import load_ndjson
+from audiagentic.foundation.io import iter_ndjson, last_ndjson
 from audiagentic.foundation.system.process import StartupLock
 from audiagentic.foundation.time import now_iso_z
 
@@ -30,15 +30,15 @@ def _lock(project_root: Path, request_id: str) -> StartupLock:
 
 
 def _read(project_root: Path, request_id: str) -> list[dict[str, Any]]:
-    return load_ndjson(gateway_recovery_action_path(project_root, request_id))
+    return list(iter_ndjson(gateway_recovery_action_path(project_root, request_id)))
 
 
 def _append(project_root: Path, request_id: str, event: dict[str, Any]) -> dict[str, Any]:
     path = gateway_recovery_action_path(project_root, request_id)
     path.parent.mkdir(parents=True, exist_ok=True)
-    entries = _read(project_root, request_id)
+    previous = last_ndjson(gateway_recovery_action_path(project_root, request_id))
     event = dict(event)
-    event["event-seq"] = (int(entries[-1].get("event-seq", 0)) if entries else 0) + 1
+    event["event-seq"] = (int(previous.get("event-seq", 0)) if previous else 0) + 1
     with path.open("a", encoding="utf-8", newline="\n") as handle:
         handle.write(json.dumps(event, sort_keys=True, separators=(",", ":")) + "\n")
         handle.flush()
@@ -71,9 +71,17 @@ def prepare_recovery_action(
         for entry in entries:
             if entry.get("action-attempt-id") == action_attempt_id:
                 return entry
+        consumed_budget = sum(
+            1
+            for item in entries
+            if item.get("event") == "action-intent"
+            and item.get("action-kind") in {"provider-native-retry", "provider-native-continue"}
+            and item.get("disposition") == "intent-persisted"
+        )
+        remaining_budget = max(0, int(retry_budget) - consumed_budget)
         if action_kind in {"provider-native-retry", "provider-native-continue"} and submission_proven is not False:
             disposition, outcome = "reconciliation-required", "rejected-ambiguous-submission"
-        elif retry_budget == 0 and action_kind != "reconcile":
+        elif remaining_budget == 0 and action_kind != "reconcile":
             disposition, outcome = "budget-exhausted", "rejected-retry-budget"
         else:
             disposition, outcome = "intent-persisted", "pending-side-effect"
@@ -88,7 +96,8 @@ def prepare_recovery_action(
             "action": _text(action, 128),
             "action-kind": action_kind,
             "attempt-epoch": max(1, int(attempt_epoch)),
-            "retry-budget": int(retry_budget),
+            "retry-budget": remaining_budget if action_kind != "reconcile" else int(retry_budget),
+            "retry-budget-before": int(retry_budget),
             "submission-proven": submission_proven,
             "disposition": disposition,
             "outcome": outcome,
@@ -170,14 +179,14 @@ def _cursor(offset: int) -> str:
     return base64.urlsafe_b64encode(json.dumps({"v": 1, "offset": offset}, separators=(",", ":")).encode()).decode().rstrip("=")
 
 
-def _offset(cursor: str | None, total: int) -> int:
+def _offset(cursor: str | None) -> int:
     if not cursor:
         return 0
     try:
         padded = cursor + "=" * (-len(cursor) % 4)
         value = json.loads(base64.urlsafe_b64decode(padded.encode()).decode())
         offset = value["offset"]
-        if value.get("v") != 1 or isinstance(offset, bool) or not isinstance(offset, int) or not 0 <= offset <= total:
+        if value.get("v") != 1 or isinstance(offset, bool) or not isinstance(offset, int) or offset < 0:
             raise ValueError
         return offset
     except (ValueError, KeyError, TypeError, UnicodeError, json.JSONDecodeError) as exc:
@@ -187,26 +196,35 @@ def _offset(cursor: str | None, total: int) -> int:
 def read_recovery_page(project_root: Path, request_id: str, *, limit: int = 25, cursor: str | None = None) -> dict[str, Any]:
     if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= _PAGE_SIZE:
         raise ValueError("recovery limit must be an integer between 1 and 100")
-    entries = _read(project_root, request_id)
-    start = _offset(cursor, len(entries))
-    items = entries[start : start + limit]
+    start = _offset(cursor)
+    items: list[dict[str, Any]] = []
+    has_more = False
+    for index, entry in enumerate(iter_ndjson(gateway_recovery_action_path(project_root, request_id))):
+        if index < start:
+            continue
+        if len(items) < limit:
+            items.append(entry)
+        else:
+            has_more = True
+            break
     result = {
         "schema-version": SCHEMA_VERSION,
         "request-id": request_id,
         "items": items,
         "returned": len(items),
     }
-    if start + len(items) < len(entries):
+    if has_more:
         result["next-cursor"] = _cursor(start + len(items))
     return result
 
 
 def replay_observations(entries: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
     """Analyze captured journals without CDP or lifecycle mutation."""
-    rows = list(entries)
+    observation_count = 0
     groups: dict[str, dict[str, int]] = defaultdict(lambda: {"observations": 0, "errors": 0, "resolved": 0, "actions": 0, "action-success": 0})
     first_activity: int | None = None
-    for row in rows:
+    original_errors: list[dict[str, Any]] = []
+    for row in entries:
         facts = row.get("facts") if isinstance(row.get("facts"), Mapping) else {}
         activity = facts.get("activity") if isinstance(facts, Mapping) else {}
         if first_activity is None and isinstance(activity, Mapping) and activity:
@@ -216,9 +234,16 @@ def replay_observations(entries: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
         if isinstance(error, Mapping):
             error_code = _text(error.get("code"), 128) or _text(error.get("classification"), 128) or "none"
         bucket = groups[error_code]
+        observation_count += 1
         bucket["observations"] += 1
         if error_code != "none":
             bucket["errors"] += 1
+        if isinstance(error, Mapping) and error:
+            original_errors.append({
+                key: error[key]
+                for key in ("code", "classification", "occurrence-id")
+                if key in error
+            })
         decision = facts.get("decision") if isinstance(facts, Mapping) else {}
         if isinstance(decision, Mapping) and decision.get("outcome") in {"completed", "resolved", "terminal-success"}:
             bucket["resolved"] += 1
@@ -231,11 +256,12 @@ def replay_observations(entries: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
     resolved = sum(value["resolved"] for value in groups.values())
     return {
         "schema-version": SCHEMA_VERSION,
-        "observations": len(rows),
+        "observations": observation_count,
         "groups": dict(groups),
         "resolution-rate": (resolved / total_errors) if total_errors else None,
         "first-activity-monotonic-ms": first_activity,
         "stop-disappearance-is-observation": True,
+        "_original-errors": original_errors[:32],
     }
 
 
@@ -245,13 +271,8 @@ def replay_request(project_root: Path, request_id: str, *, observations: Iterabl
     intents = {item.get("action-attempt-id"): item for item in actions if item.get("event") == "action-intent"}
     results = {item.get("action-attempt-id") for item in actions if item.get("event") == "action-result"}
     pending = [item for key, item in intents.items() if key and key not in results]
-    original_errors = []
-    for row in observations:
-        facts = row.get("facts") if isinstance(row.get("facts"), Mapping) else {}
-        error = facts.get("error-occurrence") if isinstance(facts, Mapping) else None
-        if isinstance(error, Mapping) and error:
-            original_errors.append({key: error[key] for key in ("code", "classification", "occurrence-id") if key in error})
     analysis = replay_observations(observations)
+    original_errors = analysis.pop("_original-errors", [])
     analysis.update({
         "request-id": request_id,
         "pending-action-attempts": [item.get("action-attempt-id") for item in pending],
