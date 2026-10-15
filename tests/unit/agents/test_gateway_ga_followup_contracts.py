@@ -6,7 +6,7 @@ from audiagentic.components.agents.gateway import replay
 from audiagentic.components.agents.agents_paths import gateway_observation_index_path
 from audiagentic.components.agents.gateway.evidence_projection import project_public_gateway_evidence
 from audiagentic.components.agents.gateway.observation_projection import append_request_projection
-from audiagentic.components.agents.gateway.observability import append_observation, read_observation_page
+from audiagentic.components.agents.gateway.observability import append_observation, observation_summary, read_observation_page
 from audiagentic.components.agents.gateway.store import transition_history_page
 
 
@@ -74,6 +74,47 @@ def test_observation_reads_have_index_and_bounded_tail(tmp_path):
     page = read_observation_page(tmp_path, "req_tail", tail=2)
     assert [item["poll_seq"] for item in page["items"]] == [9, 10]
 
+
+def test_observation_summary_keeps_metadata_and_latest_diagnostic_facts(tmp_path):
+    append_observation(
+        tmp_path,
+        "req_summary",
+        poll_seq=4,
+        activity={"label": "generating", "group": "provider-work"},
+        decision={"completion-satisfied": False},
+    )
+    append_observation(
+        tmp_path,
+        "req_summary",
+        poll_seq=5,
+        response_identity={"terminal": True, "terminal-witness-hash": "witness"},
+        decision={"completion-satisfied": True},
+        force_flush=True,
+    )
+    summary = observation_summary(tmp_path, "req_summary")
+    assert summary["count"] == 2
+    assert summary["first_event_seq"] == 1
+    assert summary["last_event_seq"] == 2
+    assert summary["last_poll_seq"] == 5
+    assert summary["has_more"] is False
+    assert summary["latest"]["facts"]["response-identity"]["terminal"] is True
+
+    public = project_public_gateway_evidence({"observation-summary": summary})
+    public_summary = public["observation-summary"]
+    assert public_summary["count"] == 2
+    assert public_summary["last_poll_seq"] == 5
+    assert public_summary["latest"]["facts"]["response-identity"]["terminal"] is True
+
+
+def test_replay_requires_terminal_and_response_witnesses_and_reports_ttfa():
+    entries = [
+        {"event": "dom-observed", "monotonic_ms": 100, "facts": {"activity": {"label": "generating"}, "error-occurrence": {"code": "E1"}}},
+        {"event": "terminal", "monotonic_ms": 175, "facts": {"response-identity": {"terminal": True, "terminal-witness-hash": "w", "response-ref-hash": "r"}, "decision": {"completion-satisfied": True}}},
+    ]
+    result = replay.replay_observations(entries)
+    assert result["completion-evidence"]["completion-proven"] is True
+    assert result["outcome-classification"] == "error-later-resolved"
+    assert result["time-to-first-response-ms"] == 75
 
 def test_history_cursor_is_independent_and_deterministic(tmp_path):
     timeline = tmp_path / ".audiagentic" / "runtime" / "agent-execution-gateway" / "req_history" / "timeline.ndjson"

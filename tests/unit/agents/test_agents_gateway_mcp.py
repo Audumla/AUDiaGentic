@@ -112,6 +112,30 @@ def test_agent_task_status_delegates():
     mock_call.assert_called_once_with("get_execution_request", _ROOT, "req_x")
 
 
+def test_status_and_submit_dtos_drop_raw_metadata_and_status_has_session_id():
+    with (
+        _patch_root(),
+        patch("audiagentic.components.agents.mcp.gateway_mcp.call_gateway_method") as mock_call,
+    ):
+        mock_call.return_value = {
+            "task_id": "req_x",
+            "lifecycle": "running",
+            "session-id": "ses_x",
+            "metadata": {"prompt": "secret"},
+            "provider-metadata": {"target-id": "raw"},
+        }
+        status = agents_gateway_mcp.agent_task_status("req_x")
+        mock_call.return_value = {
+            "request-id": "req_x",
+            "state": "queued",
+            "session-id": "ses_x",
+            "metadata": {"prompt": "secret"},
+            "provider-metadata": {"target-id": "raw"},
+        }
+        submitted = agents_gateway_mcp.agent_task_submit("reviewer-agent", prompt_body="hi")
+    assert status["session_id"] == "ses_x"
+    assert "metadata" not in status and "provider-metadata" not in status
+    assert submitted == {"request-id": "req_x", "state": "queued", "session-id": "ses_x"}
 def test_agent_task_session_purge_delegates():
     with _patch_root(), patch(
         "audiagentic.components.agents.mcp.gateway_mcp.call_gateway_method",

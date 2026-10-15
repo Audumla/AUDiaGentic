@@ -62,10 +62,31 @@ def _observation(value: Any) -> dict[str, Any]:
                     projected[normalized] = _text(item)
                 elif isinstance(item, (list, tuple)):
                     projected[normalized] = [_text(raw_item) for raw_item in item if isinstance(raw_item, str)][:20]
+                elif isinstance(item, Mapping):
+                    projected[normalized] = {
+                        str(nested_key)[:64]: (_scalar(nested_value) if not isinstance(nested_value, Mapping) else None)
+                        for nested_key, nested_value in list(item.items())[:32]
+                        if isinstance(nested_value, (bool, int, float, str))
+                    }
             if projected:
                 categories[category] = projected
         if categories:
             result["facts"] = categories
+    return result
+
+
+def _observation_summary(value: Any) -> dict[str, Any]:
+    """Project summary metadata separately from a single observation event."""
+    if not isinstance(value, Mapping):
+        return {}
+    result = {
+        key: _scalar(value[key])
+        for key in ("schema_version", "request_id", "count", "first_event_seq", "last_event_seq", "last_poll_seq", "has_more", "next_cursor")
+        if key in value
+    }
+    latest = value.get("latest")
+    if isinstance(latest, Mapping):
+        result["latest"] = _observation(latest)
     return result
 
 
@@ -120,7 +141,7 @@ def project_public_gateway_evidence(payload: Mapping[str, Any], *, max_bytes: in
         "diagnostics": base.get("diagnostics"),
         "monitoring": base.get("monitoring"),
         "diagnostic-evidence": base.get("evidence", []),
-        "observation-summary": _observation(payload.get("observation-summary", {})),
+        "observation-summary": _observation_summary(payload.get("observation-summary", {})),
         "latest-transition": base.get("latest-transition"),
         "reconnect-classification": reconnect_public,
     }

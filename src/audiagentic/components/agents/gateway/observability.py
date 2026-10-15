@@ -62,6 +62,9 @@ _SAFE_TEXT_KEYS = frozenset(
         "model-activity", "tool-call-id", "tool-status", "stop-reason",
         "error-code", "reason", "timing-event", "diagnostic-signature",
         "correlation-quality", "assistant-id", "turn-id",
+        "group", "activity-label", "activity-group", "completion-matched",
+        "page-handle-digest", "raw-url-digest", "baseline-url-digest", "bound-url-digest",
+        "correlation-error", "terminal-witness-hash", "response-ref-hash", "latest-assistant-hash",
         "signals", "response-id", "identity-quality", "reconnect-classification",
         "side-effect-state", "resolution-state", "failure-code", "reason-code",
         "failure-reason", "submission-state", "submission-proven", "submission-ambiguous",
@@ -161,6 +164,7 @@ def append_observation(
     build_version: str = "unknown",
     observed_at: str | None = None,
     monotonic_ms: int | None = None,
+    force_flush: bool = False,
 ) -> dict[str, Any]:
     """Append one immutable observation, coalescing identical polls safely."""
     safe_parts = {
@@ -222,7 +226,7 @@ def append_observation(
                 "last_poll_seq": event["poll_seq"],
                 "max_gap_ms": max(int(prior.get("max_gap_ms", 0)), max(0, event["monotonic_ms"] - previous_mono)),
             }
-        if unchanged and previous and previous.get("event") == "observation-coalesced":
+        if unchanged and previous and previous.get("event") == "observation-coalesced" and not force_flush:
             poll_gap = max(0, event["poll_seq"] - int(previous.get("poll_seq", 0)))
             if poll_gap < 8:
                 event["event_seq"] = int(previous.get("event_seq", event_seq))
@@ -312,13 +316,24 @@ def read_observation_page(
 
 
 def observation_summary(project_root: Path, request_id: str) -> dict[str, Any]:
+    journal = gateway_observation_path(project_root, request_id)
+    index = gateway_observation_index_path(project_root, request_id)
     count = 0
     first = None
     latest = None
-    for item in iter_ndjson(gateway_observation_path(project_root, request_id)):
-        count += 1
-        first = first or item
-        latest = item
+    if index.exists() and journal.exists():
+        try:
+            with index.open("r", encoding="utf-8") as handle:
+                count = sum(1 for _ in handle)
+            first = next(iter_ndjson(journal), None)
+            latest = last_ndjson(journal)
+        except (OSError, ValueError, TypeError, json.JSONDecodeError):
+            count = 0
+    if count == 0:
+        for item in iter_ndjson(journal):
+            count += 1
+            first = first or item
+            latest = item
     return {
         "schema_version": SCHEMA_VERSION,
         "request_id": request_id,
@@ -327,6 +342,8 @@ def observation_summary(project_root: Path, request_id: str) -> dict[str, Any]:
         "last_event_seq": latest.get("event_seq") if latest else None,
         "last_poll_seq": latest.get("poll_seq") if latest else None,
         "latest": latest,
+        "has_more": False,
+        "next_cursor": None,
     }
 
 
@@ -352,6 +369,7 @@ def capture_redacted_artifact(
     path = directory / f"{digest}.json.gz"
     with _journal_lock(project_root, request_id):
         directory.mkdir(parents=True, exist_ok=True)
+        purge_expired_observation_artifacts(project_root, request_id)
         if not path.exists():
             path.write_bytes(compressed)
         manifest = directory / "manifest.ndjson"
@@ -362,7 +380,7 @@ def capture_redacted_artifact(
             "compressed_bytes": len(compressed),
             "decompressed_bytes": len(raw),
             "created_at": now_iso_z(),
-            "expires_at_epoch": int(time.time()) + max(1, int(ttl_seconds)),
+            "expires_at_epoch": int(time.time()) + min(86400, max(1, int(ttl_seconds))),
         }
         with manifest.open("a", encoding="utf-8", newline="\n") as handle:
             handle.write(json.dumps(metadata, sort_keys=True, separators=(",", ":")) + "\n")
@@ -419,6 +437,33 @@ def purge_observation_artifacts(project_root: Path, request_id: str) -> int:
     return removed
 
 
+def purge_expired_observation_artifacts(project_root: Path, request_id: str) -> int:
+    """Remove only expired request-owned artifacts and stale manifest rows."""
+    directory = gateway_observation_artifact_dir(project_root, request_id)
+    manifest = directory / "manifest.ndjson"
+    if not manifest.exists():
+        return 0
+    now = int(time.time())
+    retained: list[dict[str, Any]] = []
+    expired: set[str] = set()
+    for item in iter_ndjson(manifest):
+        artifact_id = item.get("artifact_id")
+        expires = item.get("expires_at_epoch")
+        if isinstance(artifact_id, str) and isinstance(expires, int) and expires <= now:
+            expired.add(artifact_id)
+        else:
+            retained.append({key: item[key] for key in ("schema_version", "artifact_id", "media_type", "compressed_bytes", "decompressed_bytes", "created_at", "expires_at_epoch") if key in item})
+    removed = 0
+    for artifact_id in expired:
+        path = directory / f"{artifact_id}.json.gz"
+        if path.is_file():
+            path.unlink(missing_ok=True)
+            removed += 1
+    manifest.write_text("".join(json.dumps(item, sort_keys=True, separators=(",", ":")) + "\n" for item in retained), encoding="utf-8")
+    if not retained:
+        manifest.unlink(missing_ok=True)
+    return removed
+
 __all__ = [
     "ARTIFACT_SCHEMA_VERSION",
     "SCHEMA_VERSION",
@@ -426,5 +471,6 @@ __all__ = [
     "capture_redacted_artifact",
     "observation_summary",
     "purge_observation_artifacts",
+    "purge_expired_observation_artifacts",
     "read_observation_page",
 ]

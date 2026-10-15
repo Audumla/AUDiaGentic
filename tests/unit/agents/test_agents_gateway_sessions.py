@@ -1866,6 +1866,14 @@ def test_intra_turn_events_wired_to_eventbus(rig, monkeypatch):
     )
     assert result.stop_reason == "end_turn"
 
+    from audiagentic.components.agents.gateway.observability import read_observation_page
+    journal = read_observation_page(tmp_path, "req_1", limit=20)
+    assert journal["items"]
+    assert journal["items"][-1]["session_id"] == session_id
+    assert journal["items"][-1]["facts"]["response-identity"]["terminal"] is True
+    activity_facts = [item["facts"]["activity"] for item in journal["items"] if item["facts"]["activity"].get("label")]
+    assert any(item.get("label") == "generating" and item.get("group") for item in activity_facts)
+
     # Verify the normalized turn events were published, deduped, and terminal-aware
     turn_topics = [(t, p) for t, p in events_captured if t.startswith("agents.turn.")]
     assert [t for t, _ in turn_topics] == [
