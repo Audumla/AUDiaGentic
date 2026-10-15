@@ -694,6 +694,7 @@ async def test_python_bridge_live_page_and_window_lifecycle():
         html = (
             "data:text/html,<html><body>"
             "<div id='prompt-textarea' class='ProseMirror' contenteditable='true'></div>"
+            "<button data-testid='send-button' type='button'>Send</button>"
             "</body></html>"
         )
         await bridge.call("navigate", {"pageHandle": page["pageHandle"], "url": html})
@@ -706,6 +707,8 @@ async def test_python_bridge_live_page_and_window_lifecycle():
         assert submitted == {
             "actionComplete": True,
             "typedText": "CDP bridge live smoke",
+            "sendButtonClicked": True,
+            "enterDispatched": False,
         }
         stopped = await api.stop_generation(page_ref)
         assert stopped["stopped"] is False
