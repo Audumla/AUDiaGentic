@@ -1,6 +1,6 @@
 # Check-In Summary
 
-Total changes: 1130
+Total changes: 1131
 
 - gpt-auto completion detection is now backed by repeatable multi-turn live DOM traces and a localization-safe latest-response completion marker.
 - gpt-auto now advances from identifiable per-turn DOM evidence, safely detects sustained abandoned empty responses, and avoids false completion from mutations to older responses.
@@ -1129,6 +1129,7 @@ Total changes: 1130
 - Completed the GA03-GA05 gateway observability and recovery hardening pass with bounded shared evidence, witness-backed replay, identity-fenced recovery, compact MCP DTOs, indexed history, and regression coverage.
 - Fixed the remaining production observability and recovery audit findings, added real API/MCP regressions, and validated the complete agent test aggregate through 100%.
 - Gateway observability and recovery now retain the diagnostics needed to explain completion decisions, close the session-expiry race, classify replay from cumulative evidence, and keep bounded history and artifact retention operations safe.
+- The gateway's evidence and history reads now stay bounded even for large journals, while request lists return the correct state-filtered newest records before applying limits.
 - Add durable redacted gateway observations, fail-closed recovery replay, and compact explicit MCP evidence tools.
 - Closed the second Dev-GPT review gaps around native recovery fencing, evidence retention, bounded replay, artifact privacy, and compact-status compatibility; the focused gateway suite passes.
 - Applied the Dev-GPT review fixes across observability, recovery evidence, and MCP compactness, added regression coverage, and verified the focused gateway suite.
