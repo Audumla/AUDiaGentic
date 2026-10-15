@@ -409,6 +409,8 @@ def reset_gateway_client() -> None:
 _READ_ONLY_GATEWAY_METHODS = frozenset({
     "get_execution_request",
     "get_execution_diagnostics",
+    "get_execution_observations",
+    "get_execution_evidence",
     "replay_execution_observations",
     "get_execution_response",
     "get_execution_response_payload",

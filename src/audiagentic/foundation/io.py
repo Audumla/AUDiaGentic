@@ -170,15 +170,27 @@ def atomic_write_ndjson(path: Path, entries: list[dict[str, Any]], *, append: bo
 
 
 def load_ndjson(path: Path) -> list[dict[str, Any]]:
+    return list(iter_ndjson(path))
+
+
+def iter_ndjson(path: Path):
+    """Yield mapping rows from an NDJSON file without retaining the whole file."""
     if not path.exists():
-        return []
-    entries = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        if line.strip():
-            obj = json.loads(line)
-            if isinstance(obj, dict):
-                entries.append(obj)
-    return entries
+        return
+    with path.open("r", encoding="utf-8") as handle:
+        for line in handle:
+            if line.strip():
+                obj = json.loads(line)
+                if isinstance(obj, dict):
+                    yield obj
+
+
+def last_ndjson(path: Path) -> dict[str, Any] | None:
+    """Return the last mapping row from an NDJSON file, if present."""
+    latest = None
+    for entry in iter_ndjson(path):
+        latest = entry
+    return latest
 
 
 def load_yaml_value(path: Path, default: Any = None) -> Any:

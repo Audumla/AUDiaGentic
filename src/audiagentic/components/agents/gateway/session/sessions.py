@@ -2860,32 +2860,77 @@ class SessionRuntime:
                     try:
                         from audiagentic.components.agents.gateway.observability import append_observation
                         from audiagentic.components.agents.gateway import store as gateway_store
-                        safe_attributes = dict(attributes) if isinstance(attributes, Mapping) else {}
+                        safe_attributes = {
+                            key: value
+                            for key, value in (dict(attributes).items() if isinstance(attributes, Mapping) else ())
+                            if isinstance(value, (str, int, float, bool))
+                        }
                         attempt_epoch = 1
+                        target_hash = None
                         try:
-                            attempt_epoch = int(
-                                gateway_store.read_record(
-                                    project_root, request_id, include_output=False
-                                ).get("attempt-epoch") or 1
+                            request_record = gateway_store.read_record(
+                                project_root, request_id, include_output=False
                             )
+                            attempt_epoch = int(request_record.get("attempt-epoch") or 1)
+                            target_id = (
+                                (request_record.get("provider-metadata") or {}).get("target-id")
+                                if isinstance(request_record.get("provider-metadata"), Mapping)
+                                else None
+                            )
+                            if isinstance(target_id, str) and target_id:
+                                target_hash = hashlib.sha256(target_id.encode()).hexdigest()[:32]
                         except Exception:  # noqa: BLE001 - journal is advisory
                             pass
-                        activity_label = safe_attributes.get("model_activity") or safe_attributes.get("model-activity")
+                        activity_facts = {
+                            "kind": kind,
+                            **(
+                                {"label": safe_attributes["model_activity"]}
+                                if isinstance(safe_attributes.get("model_activity"), str)
+                                else {}
+                            ),
+                        }
+                        controls = {
+                            key: safe_attributes[key]
+                            for key in ("tool_call_id", "tool_status")
+                            if key in safe_attributes
+                        }
+                        response_identity = (
+                            {"terminal": True, "stop-reason": safe_attributes["stop_reason"]}
+                            if kind == "terminal" and "stop_reason" in safe_attributes
+                            else {"terminal": True} if kind == "terminal" else {}
+                        )
+                        error_occurrence = {
+                            key: safe_attributes[key]
+                            for key in ("error_code", "reason")
+                            if key in safe_attributes
+                        }
+                        decision = {}
+                        if kind == "timing" and "timing-event" in safe_attributes:
+                            decision = {
+                                "event": safe_attributes["timing-event"],
+                                "diagnostic-signature": safe_attributes.get("diagnostic-signature"),
+                            }
+                            details = safe_attributes.get("diagnostic-details")
+                            if isinstance(details, str):
+                                decision["details-digest"] = hashlib.sha256(
+                                    details.encode()
+                                ).hexdigest()[:32]
                         append_observation(
                             project_root,
                             request_id,
                             session_id=session_id,
                             turn_id=request_id,
+                            project_hash=hashlib.sha256(str(project_root).encode()).hexdigest()[:32],
+                            cdp_target_hash=target_hash,
                             attempt_epoch=attempt_epoch,
                             poll_seq=int(getattr(obs, "sequence", None) or 0),
                             source="session-transport",
-                            dom_signals=safe_attributes.get("dom-signals") if isinstance(safe_attributes.get("dom-signals"), Mapping) else ({"kind": kind} if kind else {}),
-                            activity={"label": activity_label, "kind": kind} if activity_label or kind else {},
-                            controls=safe_attributes.get("controls") if isinstance(safe_attributes.get("controls"), Mapping) else {},
-                            response_identity=safe_attributes.get("response-identity") if isinstance(safe_attributes.get("response-identity"), Mapping) else {},
-                            error_occurrence=safe_attributes.get("error-occurrence") if isinstance(safe_attributes.get("error-occurrence"), Mapping) else {},
-                            decision=safe_attributes.get("decision") if isinstance(safe_attributes.get("decision"), Mapping) else {},
-                            action=safe_attributes.get("action") if isinstance(safe_attributes.get("action"), Mapping) else {},
+                            activity=activity_facts,
+                            controls=controls,
+                            response_identity=response_identity,
+                            error_occurrence=error_occurrence,
+                            decision=decision,
+                            action={"kind": kind} if kind in {"tool-requested", "permission-requested"} else {},
                             causal_input_ids=[request_id, session_id],
                             observed_at=getattr(obs, "observed_at", None),
                             monotonic_ms=int(time.monotonic() * 1000),

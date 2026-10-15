@@ -24,7 +24,7 @@ from audiagentic.components.agents.agents_paths import (
     gateway_observation_path,
     gateway_request_path,
 )
-from audiagentic.foundation.io import load_ndjson
+from audiagentic.foundation.io import iter_ndjson, last_ndjson
 from audiagentic.foundation.system.process import StartupLock
 from audiagentic.foundation.time import now_iso_z
 
@@ -36,7 +36,7 @@ _MAX_DOM_DECOMPRESSED = 256 * 1024
 _MAX_DOM_COMPRESSED = 64 * 1024
 _SENSITIVE = re.compile(
     r"(?:cookie|storage|authorization|header|token|secret|password|credential|network|body|"
-    r"prompt|raw[-_ ]?dom|response[-_ ]?text|access[-_ ]?token|message|description|value|content|html|input|query|url)",
+    r"prompt|raw[-_ ]?dom|response[-_ ]?text|access[-_ ]?token|message|description|value|content|html|text|input|query|url)",
     re.IGNORECASE,
 )
 
@@ -53,6 +53,14 @@ def _text(value: Any, limit: int = _MAX_TEXT) -> str | None:
     return cleaned[:limit] if cleaned else None
 
 
+_SAFE_TEXT_KEYS = frozenset(
+    {
+        "id", "kind", "state", "status", "phase", "label", "event", "source",
+        "code", "classification", "outcome", "digest", "hash", "sequence", "count",
+    }
+)
+
+
 def _safe(value: Any, *, depth: int = 0) -> Any:
     """Project provider facts to bounded JSON without secret-bearing keys."""
     if depth > 3:
@@ -64,17 +72,23 @@ def _safe(value: Any, *, depth: int = 0) -> Any:
             if not key or _SENSITIVE.search(key):
                 continue
             projected = _safe(raw_value, depth=depth + 1)
+            normalized_key = key.casefold().replace("_", "-")
+            if isinstance(projected, str) and normalized_key not in _SAFE_TEXT_KEYS:
+                continue
             if projected is not None:
                 result[key] = projected
         return result
     if isinstance(value, (list, tuple)):
-        return [item for item in (_safe(v, depth=depth + 1) for v in value[:_MAX_ITEMS]) if item is not None]
+        return [
+            item
+            for item in (_safe(v, depth=depth + 1) for v in value[:_MAX_ITEMS])
+            if item is not None
+        ]
     if isinstance(value, bool) or value is None:
         return value
     if isinstance(value, (int, float)):
         return value
     return _text(value)
-
 
 def _project_fields(fields: Mapping[str, Any] | None) -> dict[str, Any]:
     projected = _safe(fields or {})
@@ -148,8 +162,7 @@ def append_observation(
     current_digest = _digest(safe_parts)
     journal_path = gateway_observation_path(project_root, request_id)
     with _journal_lock(project_root, request_id):
-        entries = load_ndjson(journal_path)
-        previous = entries[-1] if entries else None
+        previous = last_ndjson(journal_path)
         event_seq = int(previous.get("event_seq", 0)) + 1 if previous else 1
         previous_digest = previous.get("current_digest") if previous else None
         unchanged = bool(
@@ -194,6 +207,14 @@ def append_observation(
                 "last_poll_seq": event["poll_seq"],
                 "max_gap_ms": max(int(prior.get("max_gap_ms", 0)), max(0, event["monotonic_ms"] - previous_mono)),
             }
+        if unchanged and previous and previous.get("event") == "observation-coalesced":
+            poll_gap = max(0, event["poll_seq"] - int(previous.get("poll_seq", 0)))
+            if poll_gap < 8:
+                event["event_seq"] = int(previous.get("event_seq", event_seq))
+                event["event_id"] = str(previous.get("event_id") or event["event_id"])
+                event["coalesced"]["last_event_seq"] = event["event_seq"]
+                event["coalesced"]["repeat_count"] = int(previous.get("coalesced", {}).get("repeat_count", 1)) + poll_gap
+                return event
         line = json.dumps(event, sort_keys=True, separators=(",", ":")) + "\n"
         journal_path.parent.mkdir(parents=True, exist_ok=True)
         with journal_path.open("a", encoding="utf-8", newline="\n") as handle:
@@ -214,13 +235,17 @@ def read_observation_page(
     if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
         raise ValueError("observation limit must be an integer between 1 and 100")
     after = max(_decode_cursor(cursor), int(since_sequence or 0))
-    entries = [
-        item
-        for item in load_ndjson(gateway_observation_path(project_root, request_id))
-        if int(item.get("event_seq", 0)) > after
-    ]
-    page = entries[:limit]
-    next_cursor = _cursor(int(page[-1]["event_seq"])) if len(entries) > len(page) and page else None
+    page: list[dict[str, Any]] = []
+    has_more = False
+    for item in iter_ndjson(gateway_observation_path(project_root, request_id)):
+        if int(item.get("event_seq", 0)) <= after:
+            continue
+        if len(page) < limit:
+            page.append(item)
+        else:
+            has_more = True
+            break
+    next_cursor = _cursor(int(page[-1]["event_seq"])) if has_more and page else None
     return {
         "schema_version": SCHEMA_VERSION,
         "request_id": request_id,
@@ -232,13 +257,18 @@ def read_observation_page(
 
 
 def observation_summary(project_root: Path, request_id: str) -> dict[str, Any]:
-    entries = load_ndjson(gateway_observation_path(project_root, request_id))
-    latest = entries[-1] if entries else None
+    count = 0
+    first = None
+    latest = None
+    for item in iter_ndjson(gateway_observation_path(project_root, request_id)):
+        count += 1
+        first = first or item
+        latest = item
     return {
         "schema_version": SCHEMA_VERSION,
         "request_id": request_id,
-        "count": len(entries),
-        "first_event_seq": entries[0].get("event_seq") if entries else None,
+        "count": count,
+        "first_event_seq": first.get("event_seq") if first else None,
         "last_event_seq": latest.get("event_seq") if latest else None,
         "last_poll_seq": latest.get("poll_seq") if latest else None,
         "latest": latest,

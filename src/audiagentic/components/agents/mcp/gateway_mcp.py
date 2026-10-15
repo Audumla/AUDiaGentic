@@ -141,24 +141,32 @@ def agent_task_evidence(
     include_recovery: bool = False,
     limit: int = 25,
     cursor: str | None = None,
+    observation_cursor: str | None = None,
+    recovery_cursor: str | None = None,
     since_sequence: int | None = None,
 ) -> dict[str, Any]:
     """Return compact evidence; observation/history/recovery tiers are opt-in."""
     project_root = project_root_from_env()
+    params: dict[str, Any] = {
+        "include_observations": include_observations,
+        "include_history": include_history,
+        "include_recovery": include_recovery,
+        "limit": limit,
+        "cursor": cursor,
+        "since_sequence": since_sequence,
+    }
+    if observation_cursor is not None:
+        params["observation_cursor"] = observation_cursor
+    if recovery_cursor is not None:
+        params["recovery_cursor"] = recovery_cursor
     return _sparse(
         call_gateway_method(
             "get_execution_evidence",
             project_root,
             request_id,
-            include_observations=include_observations,
-            include_history=include_history,
-            include_recovery=include_recovery,
-            limit=limit,
-            cursor=cursor,
-            since_sequence=since_sequence,
+            **params,
         )
     )
-
 
 @mcp.tool()
 @tool_boundary
