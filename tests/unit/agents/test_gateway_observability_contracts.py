@@ -120,6 +120,31 @@ def test_observation_cursor_is_finite_and_opaque(tmp_path):
     assert next_page["has_more"] is False
 
 
+def test_large_observation_tail_cursor_and_summary_reads_are_bounded(tmp_path, monkeypatch):
+    for poll in range(1, 141):
+        observability.append_observation(
+            tmp_path, "req_large", poll_seq=poll, dom_signals={"poll": poll}
+        )
+    tail = observability.read_observation_page(tmp_path, "req_large", tail=2)
+    assert [item["event_seq"] for item in tail["items"]] == [139, 140]
+
+    first_page = observability.read_observation_page(tmp_path, "req_large", limit=2)
+    def fail_full_scan(_path):
+        raise AssertionError("bounded indexed read unexpectedly scanned the journal")
+    monkeypatch.setattr(observability, "iter_ndjson", fail_full_scan)
+    next_page = observability.read_observation_page(
+        tmp_path, "req_large", limit=2, cursor=first_page["next_cursor"]
+    )
+    assert [item["event_seq"] for item in next_page["items"]] == [3, 4]
+
+    calls = []
+    monkeypatch.setattr(observability, "iter_ndjson", lambda path: (calls.append(path) or iter([{"event_seq": 1}])))
+    summary = observability.observation_summary(tmp_path, "req_large")
+    assert summary["count"] == 140
+    assert summary["last_event_seq"] == 140
+    assert len(calls) == 1
+
+
 def test_optional_artifact_is_bounded_redacted_and_purgeable(tmp_path):
     metadata = observability.capture_redacted_artifact(
         tmp_path,
