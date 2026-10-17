@@ -94,6 +94,27 @@ class GatewayConsoleTrace:
     def full(self) -> bool:
         return _mode() == "full"
 
+    def _rotate_if_needed(self, line: str) -> None:
+        from audiagentic.components.agents.gateway.retention import console_trace_max_bytes
+
+        stream = self.stream
+        name = getattr(stream, "name", None)
+        if not isinstance(name, (str, os.PathLike)):
+            return
+        path = Path(name)
+        try:
+            if path.stat().st_size + len(line.encode("utf-8")) <= console_trace_max_bytes():
+                return
+            stream.flush()
+            stream.close()
+            os.replace(path, path.with_name(path.name + ".1"))
+            self.stream = path.open("a", encoding="utf-8", buffering=1)
+        except OSError:
+            try:
+                self.stream = path.open("a", encoding="utf-8", buffering=1)
+            except OSError:
+                self.stream = sys.stderr
+
     def _write(self, event: str, **fields: Any) -> None:
         if not self.enabled:
             return
@@ -105,6 +126,7 @@ class GatewayConsoleTrace:
         )
         line = f"[{timestamp}] {event}" + (f" {rendered}" if rendered else "")
         with self._lock:
+            self._rotate_if_needed(line + "\n")
             self.stream.write(line + "\n")
             self.stream.flush()
 

@@ -572,6 +572,44 @@ def test_transport_open_failure_is_closed_before_error_escapes(tmp_path):
         runtime.shutdown()
 
 
+def test_admitted_session_is_failed_when_provider_open_fails(tmp_path):
+    """A pre-admitted new session cannot remain active after transport timeout."""
+    transport = _OpenFailureTransport()
+
+    def prepare_fn(project_root, *, provider_id, surface_hint, model_id=None, **kwargs):
+        transport.ag_session_id = kwargs["ag_session_id"]
+        return _build_fake_prepared(transport)
+
+    runtime = SessionRuntime(
+        clock=_Clock(),
+        reap_interval_seconds=60,
+        provider_prepare_fn=prepare_fn,
+    )
+    session = session_store.build_session_record(
+        created_by_request_id="req_open_timeout",
+        provider_transport_kind="provider-session",
+        execution_profile_id="profile-1",
+        provider_id="opencode",
+        model_id="m1",
+    )
+    session_store.write_session_record(tmp_path, session)
+    try:
+        with pytest.raises(RuntimeError, match="provider open failed"):
+            runtime.open_session(
+                tmp_path,
+                execution_profile_id="profile-1",
+                provider_id="opencode",
+                model_id="m1",
+                surface_hint=None,
+                session_id=session["session-id"],
+            )
+        failed = session_store.read_session_record(tmp_path, session["session-id"])
+        assert failed["state"] == "failed"
+        assert failed["close-reason"] == "failed"
+        assert failed["timing"]["closed-at"]
+    finally:
+        runtime.shutdown()
+
 def test_open_prompt_close_lifecycle(rig):
     runtime, clock, transports, tmp_path = rig
     record = _open(runtime, tmp_path)
@@ -1865,6 +1903,14 @@ def test_intra_turn_events_wired_to_eventbus(rig, monkeypatch):
         correlation_id="corr_1",
     )
     assert result.stop_reason == "end_turn"
+
+    from audiagentic.components.agents.gateway.observability import read_observation_page
+    journal = read_observation_page(tmp_path, "req_1", limit=20)
+    assert journal["items"]
+    assert journal["items"][-1]["session_id"] == session_id
+    assert journal["items"][-1]["facts"]["response-identity"]["terminal"] is True
+    activity_facts = [item["facts"]["activity"] for item in journal["items"] if item["facts"]["activity"].get("label")]
+    assert any(item.get("label") == "generating" and item.get("group") for item in activity_facts)
 
     # Verify the normalized turn events were published, deduped, and terminal-aware
     turn_topics = [(t, p) for t, p in events_captured if t.startswith("agents.turn.")]

@@ -106,7 +106,7 @@ def record_gateway_timeline(
     state: str | None = None,
     attributes: dict | None = None,
 ) -> dict:
-    return record_timeline_event(
+    result = record_timeline_event(
         gateway_timeline_path(project_root, request_id),
         component=_COMPONENT_ID,
         resource_kind=_RESOURCE_KIND,
@@ -117,6 +117,13 @@ def record_gateway_timeline(
         correlation_id=(attributes or {}).get("correlation_id")
         or (attributes or {}).get("correlation-id"),
     )
+    if state in TERMINAL_STATES:
+        try:
+            from ..retention import enforce_request_retention
+            enforce_request_retention(project_root, exclude_request_id=request_id)
+        except Exception:  # noqa: BLE001 - retention must not break lifecycle writes
+            logger.warning("gateway rolling retention pass failed", extra={"request-id": request_id}, exc_info=True)
+    return result
 
 
 def _request_lock(project_root: Path, request_id: str) -> StartupLock:

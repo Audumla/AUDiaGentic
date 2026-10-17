@@ -5,6 +5,8 @@ records. Imports _shared for constants — one-way edges only.
 """
 from __future__ import annotations
 
+import base64
+import json
 import logging
 from collections.abc import Mapping
 from pathlib import Path
@@ -14,9 +16,10 @@ from audiagentic.components.agents.agents_paths import (
     gateway_request_path,
     gateway_root,
     gateway_timeline_path,
+    gateway_timeline_index_path,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError, redact_details
-from audiagentic.foundation.io import atomic_write_json, load_ndjson, read_text_with_retry
+from audiagentic.foundation.io import atomic_write_json, iter_ndjson, last_ndjson, load_ndjson, read_text_with_retry, tail_ndjson
 from audiagentic.foundation.time import now_iso_z
 
 from . import _shared
@@ -832,11 +835,11 @@ def latest_transition_projection(project_root: Path, request_id: str) -> dict[st
     mapping into a public projection.
     """
     try:
-        entries = load_ndjson(gateway_timeline_path(project_root, request_id))
+        entry = last_ndjson(gateway_timeline_path(project_root, request_id))
     except (OSError, ValueError):
         logger.warning("failed to read gateway request timeline", extra={"request-id": request_id})
         return None
-    for entry in reversed(entries):
+    if entry:
         event = entry.get("event")
         timestamp = entry.get("timestamp")
         state = entry.get("state")
@@ -844,6 +847,127 @@ def latest_transition_projection(project_root: Path, request_id: str) -> dict[st
             return {"event": event, "state": state, "timestamp": timestamp}
     return None
 
+
+def transition_history_projection(
+    project_root: Path,
+    request_id: str,
+    *,
+    limit: int = 100,
+) -> list[dict[str, str | None]]:
+    """Return bounded safe transition milestones for explicit evidence reads."""
+    if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
+        raise ValueError("transition history limit must be between 1 and 100")
+    try:
+        journal = gateway_timeline_path(project_root, request_id)
+        index_path = gateway_timeline_index_path(project_root, request_id)
+        entries: list[dict[str, str | None]] = []
+        if journal.exists() and index_path.exists():
+            offsets = tail_ndjson(index_path, limit)
+            with journal.open("rb") as journal_handle:
+                for metadata in offsets:
+                    journal_handle.seek(int(metadata["offset"]))
+                    entry = json.loads(journal_handle.readline().decode("utf-8"))
+                    event = entry.get("event")
+                    timestamp = entry.get("timestamp")
+                    state = entry.get("state")
+                    if isinstance(event, str) and isinstance(timestamp, str) and (state is None or isinstance(state, str)):
+                        entries.append({"event": event, "state": state, "timestamp": timestamp})
+        else:
+            for entry in tail_ndjson(journal, limit):
+                event = entry.get("event")
+                timestamp = entry.get("timestamp")
+                state = entry.get("state")
+                if isinstance(event, str) and isinstance(timestamp, str) and (state is None or isinstance(state, str)):
+                    entries.append({"event": event, "state": state, "timestamp": timestamp})
+    except (OSError, ValueError):
+        logger.warning("failed to read gateway request timeline", extra={"request-id": request_id})
+        return []
+    return entries
+
+
+def transition_history_page(
+    project_root: Path,
+    request_id: str,
+    *,
+    limit: int = 100,
+    cursor: str | None = None,
+) -> dict[str, Any]:
+    """Return a deterministic, independently-cursorable history page."""
+    if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
+        raise ValueError("transition history limit must be between 1 and 100")
+    offset = 0
+    index_offset: int | None = None
+    if cursor:
+        try:
+            padded = cursor + "=" * (-len(cursor) % 4)
+            decoded = json.loads(base64.urlsafe_b64decode(padded.encode()).decode())
+            offset = decoded["offset"]
+            if decoded.get("v") != 1 or isinstance(offset, bool) or not isinstance(offset, int) or offset < 0:
+                raise ValueError
+            index_offset = decoded.get("index-offset")
+            if index_offset is not None and (isinstance(index_offset, bool) or not isinstance(index_offset, int) or index_offset < 0):
+                raise ValueError
+        except (ValueError, KeyError, TypeError, UnicodeError, json.JSONDecodeError):
+            raise ValueError("invalid history cursor") from None
+    items: list[dict[str, str | None]] = []
+    has_more = False
+    next_index_offset: int | None = None
+    journal = gateway_timeline_path(project_root, request_id)
+    index_path = gateway_timeline_index_path(project_root, request_id)
+    try:
+        if journal.exists() and index_path.exists():
+            with index_path.open("rb") as index_handle, journal.open("rb") as journal_handle:
+                if index_offset is not None:
+                    index_handle.seek(index_offset)
+                index = 0
+                while True:
+                    current_index_offset = index_handle.tell()
+                    raw_index = index_handle.readline()
+                    if not raw_index:
+                        break
+                    if index_offset is None and index < offset:
+                        index += 1
+                        continue
+                    if len(items) >= limit:
+                        has_more = True
+                        next_index_offset = current_index_offset
+                        break
+                    metadata = json.loads(raw_index)
+                    journal_handle.seek(int(metadata["offset"]))
+                    entry = json.loads(journal_handle.readline().decode("utf-8"))
+                    event = entry.get("event")
+                    timestamp = entry.get("timestamp")
+                    state = entry.get("state")
+                    if isinstance(event, str) and isinstance(timestamp, str) and (state is None or isinstance(state, str)):
+                        items.append({"event": event, "state": state, "timestamp": timestamp})
+                    index += 1
+        else:
+            for index, entry in enumerate(iter_ndjson(journal)):
+                if index < offset:
+                    continue
+                if len(items) >= limit:
+                    has_more = True
+                    break
+                event = entry.get("event")
+                timestamp = entry.get("timestamp")
+                state = entry.get("state")
+                if isinstance(event, str) and isinstance(timestamp, str) and (state is None or isinstance(state, str)):
+                    items.append({"event": event, "state": state, "timestamp": timestamp})
+    except (OSError, ValueError, TypeError, UnicodeDecodeError, json.JSONDecodeError):
+        items = []
+        has_more = False
+    result: dict[str, Any] = {
+        "schema-version": "gateway-history.v1",
+        "request-id": request_id,
+        "items": items,
+        "returned": len(items),
+        "has-more": has_more,
+    }
+    if has_more:
+        result["next-cursor"] = base64.urlsafe_b64encode(
+            json.dumps({"v": 1, "offset": offset + len(items), "index-offset": next_index_offset}, separators=(",", ":")).encode()
+        ).decode().rstrip("=")
+    return result
 
 def project_public_status(
     record: dict[str, Any],
@@ -932,17 +1056,31 @@ def read_public_status(project_root: Path, request_id: str) -> dict[str, Any]:
     return status
 
 
-def list_records(project_root: Path, *, include_output: bool = True) -> list[dict[str, Any]]:
+def list_records(
+    project_root: Path,
+    *,
+    include_output: bool = True,
+    limit: int | None = None,
+) -> list[dict[str, Any]]:
     root = gateway_root(project_root)
     if not root.exists():
         return []
+    if limit is not None and (isinstance(limit, bool) or not isinstance(limit, int) or limit < 1):
+        raise ValueError("request list limit must be a positive integer")
     records = []
-    for entry in sorted(root.iterdir()):
+    entries = [
+        entry for entry in root.iterdir()
+        if entry.is_dir() and entry.name not in {"idempotency", "sessions"}
+    ]
+    for entry in entries:
         if not entry.is_dir() or entry.name in {"idempotency", "sessions"}:
             continue
         try:
             records.append(read_record(project_root, entry.name, include_output=include_output))
         except AudiaGenticError:
             logger.warning("skipping unreadable gateway request", extra={"request-id": entry.name}, exc_info=True)
+    records.sort(key=lambda record: str(record.get("created-at") or ""), reverse=True)
+    if limit is not None:
+        records = records[:limit]
     return records
 

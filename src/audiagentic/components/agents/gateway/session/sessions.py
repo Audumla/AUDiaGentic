@@ -1479,7 +1479,7 @@ class SessionRuntime:
                     message="rehydrated transport did not prove the original session identity",
                     details={"session-id": session_id},
                 )
-        except BaseException:
+        except BaseException as exc:
             await _close_failed_transport(transport)
             raise
 
@@ -1722,7 +1722,7 @@ class SessionRuntime:
         )
         try:
             open_result = await transport.open()
-        except BaseException:
+        except BaseException as exc:
             logger.exception(
                 "gateway open phase transport-open failed elapsed-ms=%.1f",
                 (time.monotonic() - transport_started) * 1000,
@@ -1732,6 +1732,30 @@ class SessionRuntime:
                 },
             )
             await _close_failed_transport(transport)
+            # Admission persists the request-owned session before the provider
+            # transport is opened. If opening fails, that record must not
+            # remain active and block later work or mislead recovery logic.
+            try:
+                admitted = session_store.read_session_record(project_root, session_id)
+                if admitted.get("state") == "active" and not admitted.get("binding"):
+                    session_store.transition_session_record(
+                        project_root,
+                        session_id,
+                        "failed",
+                        updates={
+                            "close-reason": "failed",
+                            "closed-at": now_iso_z(),
+                            "error": exc,
+                        },
+                    )
+            except AudiaGenticError:
+                # Direct runtime callers may not have an admitted durable
+                # record; the transport failure remains authoritative.
+                logger.debug(
+                    "no admitted durable session to fail after provider-open error",
+                    extra={"session-id": session_id},
+                    exc_info=True,
+                )
             raise
         logger.info(
             "gateway open phase transport-open complete elapsed-ms=%.1f provider-ref-present=%s",
@@ -1831,7 +1855,7 @@ class SessionRuntime:
                     "correlation-id": correlation_id,
                 },
             )
-        except BaseException:
+        except BaseException as exc:
             # Never leak a child because bookkeeping failed.
             await _close_failed_transport(transport)
             raise
@@ -2690,7 +2714,7 @@ class SessionRuntime:
             from .fifo_wait import acquire_turn_lock
 
             await acquire_turn_lock(handle.turn_lock, _local_cancel_event)
-        except BaseException:
+        except BaseException as exc:
             if request_id is not None:
                 self._turn_cancels.pop(request_id, None)
             raise
@@ -2811,6 +2835,16 @@ class SessionRuntime:
             )
 
             async def _observation_sink(obs):
+                # Legacy ACP-shaped transports may still invoke the callback
+                # with a raw AcpEvent. Normalize that at the session boundary
+                # so every downstream observer sees the neutral contract.
+                if not hasattr(obs, "attributes"):
+                    try:
+                        from audiagentic.foundation.transports.acp import _map_acp_event_to_observation
+                        obs = _map_acp_event_to_observation(obs, session_id, request_id)
+                    except (AttributeError, TypeError, ValueError):
+                        logger.debug("could not normalize legacy transport event", exc_info=True)
+                        return
                 # AS19 Stage-2 Slice A: thread TransportObservation through the
                 # observer lease (if one was resolved). The lease normalizes it
                 # into canonical StatusEvidence. Best-effort — never block or
@@ -2853,6 +2887,39 @@ class SessionRuntime:
                 if request_id is not None:
                     kind = getattr(getattr(obs, "kind", None), "value", None) or getattr(obs, "kind", "unknown")
                     attributes = getattr(obs, "attributes", {})
+                    # GA03: persist only the normalized provider facts already
+                    # emitted through this request-owned observation boundary.
+                    # This is observation-only and never touches browser focus,
+                    # navigation, tabs, or provider controls.
+                    try:
+                        from audiagentic.components.agents.gateway.observation_projection import append_transport_observation
+                        from audiagentic.components.agents.gateway import store as gateway_store
+                        attempt_epoch = 1
+                        target_hash = None
+                        try:
+                            request_record = gateway_store.read_record(
+                                project_root, request_id, include_output=False
+                            )
+                            attempt_epoch = int(request_record.get("attempt-epoch") or 1)
+                            target_id = (
+                                (request_record.get("provider-metadata") or {}).get("target-id")
+                                if isinstance(request_record.get("provider-metadata"), Mapping)
+                                else None
+                            )
+                            if isinstance(target_id, str) and target_id:
+                                target_hash = hashlib.sha256(target_id.encode()).hexdigest()[:32]
+                        except Exception:  # noqa: BLE001 - journal is advisory
+                            pass
+                        append_transport_observation(
+                            project_root, request_id, obs, session_id=session_id,
+                            cdp_target_hash=target_hash, attempt_epoch=attempt_epoch,
+                        )
+                    except Exception:  # noqa: BLE001 - journal must never alter turn outcome
+                        logger.debug(
+                            "request observation journal append failed",
+                            extra={"request-id": request_id, "session-id": session_id},
+                            exc_info=True,
+                        )
                     decision_rendered = (
                         kind == "timing"
                         and isinstance(attributes, Mapping)

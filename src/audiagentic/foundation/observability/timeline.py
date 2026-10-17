@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import threading
 from pathlib import Path
 from typing import Any
@@ -63,9 +64,28 @@ def record_timeline_event(
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         with _lock_for(path):
+            offset = path.stat().st_size if path.exists() else 0
+            line = json.dumps(record, sort_keys=True) + "\n"
             with path.open("a", encoding="utf-8") as handle:
-                handle.write(json.dumps(record, sort_keys=True))
-                handle.write("\n")
+                handle.write(line)
+                handle.flush()
+                os.fsync(handle.fileno())
+            index_path = path.with_suffix(".index.ndjson")
+            with index_path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps({"offset": offset, "length": len(line.encode("utf-8"))}) + "\n")
+                handle.flush()
+                os.fsync(handle.fileno())
+            if path.name == "timeline.ndjson":
+                from audiagentic.components.agents.gateway.retention import (
+                    compact_indexed_ndjson,
+                    journal_max_bytes,
+                )
+                compact_indexed_ndjson(
+                    path,
+                    index_path,
+                    max_bytes=journal_max_bytes("timeline"),
+                    preserve=lambda row: row.get("state") in {"completed", "failed", "cancelled", "rejected", "interrupted", "timed-out", "expired", "abandoned"},
+                )
     except Exception:  # noqa: BLE001
         logger.warning(
             "failed to record timeline event",

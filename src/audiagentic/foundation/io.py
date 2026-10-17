@@ -170,15 +170,63 @@ def atomic_write_ndjson(path: Path, entries: list[dict[str, Any]], *, append: bo
 
 
 def load_ndjson(path: Path) -> list[dict[str, Any]]:
+    return list(iter_ndjson(path))
+
+
+def iter_ndjson(path: Path):
+    """Yield mapping rows from an NDJSON file without retaining the whole file."""
+    if not path.exists():
+        return
+    with path.open("r", encoding="utf-8") as handle:
+        for line in handle:
+            if line.strip():
+                obj = json.loads(line)
+                if isinstance(obj, dict):
+                    yield obj
+
+
+def last_ndjson(path: Path) -> dict[str, Any] | None:
+    """Return the last mapping row without scanning the whole journal."""
+    rows = tail_ndjson(path, 1)
+    return rows[0] if rows else None
+
+
+def tail_ndjson(path: Path, limit: int) -> list[dict[str, Any]]:
+    """Return the last bounded number of mapping rows using reverse reads."""
+    if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
+        raise ValueError("NDJSON tail limit must be a positive integer")
     if not path.exists():
         return []
-    entries = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        if line.strip():
-            obj = json.loads(line)
-            if isinstance(obj, dict):
-                entries.append(obj)
-    return entries
+    rows: list[dict[str, Any]] = []
+    pending = b""
+    chunk_size = 8192
+    with path.open("rb") as handle:
+        position = handle.seek(0, os.SEEK_END)
+        while position > 0 and len(rows) < limit:
+            size = min(chunk_size, position)
+            position -= size
+            handle.seek(position)
+            pending = handle.read(size) + pending
+            raw_lines = pending.split(b"\n")
+            if position > 0:
+                pending = raw_lines[0]
+                raw_lines = raw_lines[1:]
+            else:
+                pending = b""
+            for raw in reversed(raw_lines):
+                raw = raw.strip()
+                if not raw:
+                    continue
+                try:
+                    value = json.loads(raw.decode("utf-8"))
+                except (UnicodeDecodeError, json.JSONDecodeError):
+                    continue
+                if isinstance(value, dict):
+                    rows.append(value)
+                    if len(rows) >= limit:
+                        break
+    rows.reverse()
+    return rows
 
 
 def load_yaml_value(path: Path, default: Any = None) -> Any:

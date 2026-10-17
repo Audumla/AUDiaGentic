@@ -27,6 +27,142 @@ from audiagentic.foundation.transports.agent_session import SessionFailureDispos
 logger = logging.getLogger(__name__)
 
 
+def _prepare_native_recovery_fence(
+    project_root: Path,
+    request_id: str,
+    record: dict[str, Any],
+    *,
+    session_id: str,
+) -> None:
+    from audiagentic.components.agents.gateway.replay import (
+        prepare_recovery_action,
+        prove_turn_correlation,
+        record_recovery_result,
+    )
+
+    metadata = record.get("provider-metadata")
+    metadata = metadata if isinstance(metadata, dict) else {}
+    from audiagentic.components.agents.gateway.session import sessions_store
+    from audiagentic.components.providers.adapters.gpt_auto.urls import parse_project_id
+
+    session_record = sessions_store.read_session_record(project_root, session_id)
+    session_metadata = sessions_store.session_provider_metadata(session_record)
+    session_binding = session_record.get("binding") if isinstance(session_record.get("binding"), dict) else {}
+    project_id = record.get("project-id") or metadata.get("project-id")
+    if not isinstance(project_id, str) or not project_id:
+        project_id = parse_project_id(str(metadata.get("project-url") or metadata.get("chat-url") or ""))
+    chat_id = metadata.get("provider-session-id") or metadata.get("chat-id")
+    turn_id = metadata.get("unresolved-turn-id") or record.get("turn-id")
+    prompt_fingerprint = metadata.get("prompt-text-digest") or record.get("prompt-digest")
+    assistant_id = metadata.get("assistant-message-id") or metadata.get(
+        "assistant-before-message-id"
+    )
+    terminal_evidence = metadata.get("terminal-evidence")
+    terminal_witness_id = (
+        terminal_evidence.get("terminal-witness-id")
+        if isinstance(terminal_evidence, dict)
+        else None
+    )
+    binding_record = {
+        "project-id": project_id,
+        "session-id": session_id,
+        "chat-id": chat_id,
+        "turn-id": turn_id,
+        "prompt-fingerprint": prompt_fingerprint,
+        "assistant-id": assistant_id,
+        "terminal-witness-id": terminal_witness_id,
+        "provider-session-id": chat_id,
+        "provider-turn-id": turn_id,
+    }
+    session_project_id = session_metadata.get("project-id")
+    if not isinstance(session_project_id, str) or not session_project_id:
+        session_project_id = parse_project_id(str(session_metadata.get("project-url") or session_metadata.get("chat-url") or ""))
+    session_chat_id = session_metadata.get("provider-session-id") or session_metadata.get("chat-id") or session_binding.get("provider-session-ref")
+    independent_values = {
+        "project-id": session_project_id,
+        "chat-id": session_chat_id,
+        "turn-id": session_metadata.get("unresolved-turn-id"),
+        "prompt-fingerprint": session_metadata.get("prompt-text-digest"),
+        "assistant-id": session_metadata.get("assistant-message-id"),
+        "terminal-witness-id": (
+            session_metadata.get("terminal-evidence", {}).get("terminal-witness-id")
+            if isinstance(session_metadata.get("terminal-evidence"), dict)
+            else None
+        ),
+    }
+    identity_keys = ("project-id", "chat-id", "turn-id", "prompt-fingerprint", "assistant-id", "terminal-witness-id")
+    independent_missing = [key for key in identity_keys if not isinstance(independent_values.get(key), str) or not independent_values[key]]
+    independent_mismatches = [key for key in identity_keys if key not in independent_missing and independent_values[key] != binding_record.get(key)]
+    proof = prove_turn_correlation(
+        binding_record,
+        project_id=project_id if isinstance(project_id, str) else None,
+        session_id=session_id,
+        chat_id=chat_id if isinstance(chat_id, str) else None,
+        turn_id=turn_id if isinstance(turn_id, str) else None,
+        prompt_fingerprint=(
+            prompt_fingerprint if isinstance(prompt_fingerprint, str) else None
+        ),
+        assistant_id=assistant_id if isinstance(assistant_id, str) else None,
+        assistant_pinned=bool(metadata.get("assistant-before-message-id")),
+        assistant_remounted=False,
+        terminal_witness_id=(
+            terminal_witness_id if isinstance(terminal_witness_id, str) else None
+        ),
+    )
+    proof["independent-session-evidence-bound"] = not independent_missing and not independent_mismatches
+    proof["independent-session-evidence-missing"] = independent_missing
+    proof["independent-session-evidence-mismatches"] = independent_mismatches
+    recovery = record.get("recovery")
+    recovery = recovery if isinstance(recovery, dict) else {}
+    try:
+        retry_budget = max(
+            0,
+            int(recovery.get("max-attempts")) - int(recovery.get("attempt") or 0),
+        )
+    except (TypeError, ValueError):
+        retry_budget = 0
+    action_attempt_id = "native-continue-" + request_id + "-" + str(
+        record.get("attempt-epoch", 1)
+    ) + "-" + str(recovery.get("attempt") or 0)
+    intent = prepare_recovery_action(
+        project_root,
+        request_id,
+        action_attempt_id=action_attempt_id,
+        action="resume-existing",
+        action_kind="provider-native-continue",
+        attempt_epoch=int(record.get("attempt-epoch") or 1),
+        retry_budget=retry_budget,
+        submission_proven=metadata.get("submission-proven"),
+        causal_input_ids=[request_id, session_id],
+        binding=binding_record,
+    )
+    if intent.get("disposition") != "intent-persisted" or not proof.get("strong") or not proof.get("independent-session-evidence-bound"):
+        outcome = (
+            "rejected-correlation-proof"
+            if intent.get("disposition") == "intent-persisted"
+            else str(intent.get("outcome") or "rejected-recovery-action")
+        )
+        record_recovery_result(
+            project_root,
+            request_id,
+            action_attempt_id=action_attempt_id,
+            outcome=outcome,
+            terminal=True,
+            causal_input_ids=[request_id, session_id],
+        )
+        raise AudiaGenticError(
+            code="CON-AGW-156",
+            kind="agents",
+            message="cannot recover an existing turn: provider-native continuation is fenced pending strong turn correlation",
+            details={
+                "request-id": request_id,
+                "session-id": session_id,
+                "recovery-proof": proof,
+                "recovery-outcome": outcome,
+            },
+        )
+    return intent
+
 def _merge_provider_metadata(
     current_metadata: dict[str, Any] | None,
     request_metadata: dict[str, Any],
@@ -402,6 +538,31 @@ def _auto_resume_reopenable_closed_session(
     return new_session_id, new_session_record, updated_record
 
 
+def _failed_session_has_safe_provider_continuation(
+    project_root: Path, session_record: dict[str, Any]
+) -> bool:
+    """Return whether a failed session can safely resume a new turn.
+
+    A failed gateway session is not proof that its provider conversation is
+    gone. GPT-auto can retain the exact ChatGPT conversation and tab while a
+    turn-level failure tears down the local handle. Resuming is safe for a
+    later prompt only when the durable provider binding exists and no prior
+    prompt is still fenced as unresolved; the latter would make a new prompt
+    a possible duplicate.
+    """
+    from audiagentic.components.agents.gateway.session import sessions_store as session_store
+    binding = session_store.read_session_binding(
+        project_root, str(session_record.get("session-id") or "")
+    )
+    if not isinstance(binding, dict) or not binding.get("provider-session-ref"):
+        return False
+    metadata = session_store.session_provider_metadata(session_record)
+    return not any(
+        metadata.get(key) is True
+        for key in ("unresolved-turn-pending", "submission-ambiguous")
+    )
+
+
 def _build_surface_hint(profile: dict[str, Any]) -> Any:
     """Build the surface hint from the resolved execution profile.
 
@@ -688,6 +849,11 @@ def _dispatch_session_request(
                 provider_metadata=merged_metadata,
             )
             client_defaults.remember(project_root, record)
+            try:
+                from audiagentic.components.agents.gateway.observation_projection import append_request_projection
+                append_request_projection(project_root, request_id, record, source="provider-binding")
+            except Exception:  # noqa: BLE001 - journal is advisory
+                logger.debug("provider binding journal append failed", extra={"request-id": request_id}, exc_info=True)
 
         if is_new_session:
             # keep-alive: open a new session bound to this profile
@@ -891,7 +1057,15 @@ def _dispatch_session_request(
                         request_runtime_root=request_runtime_root,
                         project_name=project_name,
                     )
-                elif resume_existing and session_record.get("state") == "failed":
+                elif (
+                    session_record.get("state") == "failed"
+                    and (
+                        resume_existing
+                        or _failed_session_has_safe_provider_continuation(
+                            project_root, session_record
+                        )
+                    )
+                ):
                     session_id, session_record, record = _auto_resume_reopenable_closed_session(
                         project_root,
                         runtime,
@@ -900,7 +1074,7 @@ def _dispatch_session_request(
                         context_fingerprint=context_fingerprint,
                         request_runtime_root=request_runtime_root,
                         project_name=project_name,
-                        allow_failed=True,
+                        allow_failed=resume_existing,
                     )
                 elif session_record.get("state") != "active":
                     raise AudiaGenticError(
@@ -1057,6 +1231,15 @@ def _dispatch_session_request(
                 return record
 
             dispatch_claim = _claim_session_turn
+        # Promptless resume is observation-only; no provider side effect is
+        # possible until a prompt exists, so do not create a native retry intent.
+        if resume_existing and dispatch_prompt:
+            recovery_intent = _prepare_native_recovery_fence(
+                project_root,
+                request_id,
+                record,
+                session_id=session_id,
+            )
         result = runtime.prompt_in_session(
             project_root,
             session_id,
@@ -1072,6 +1255,16 @@ def _dispatch_session_request(
             resume_existing=resume_existing,
             request_provider_metadata_sink=_relay_provider_metadata,
         )
+        if resume_existing and isinstance(recovery_intent, dict):
+            from audiagentic.components.agents.gateway.replay import record_recovery_result
+            record_recovery_result(
+                project_root,
+                request_id,
+                action_attempt_id=str(recovery_intent["action-attempt-id"]),
+                outcome="provider-resume-completed",
+                terminal=True,
+                causal_input_ids=[request_id, session_id],
+            )
     except _CancelledDuringDispatch:
         if guard_held:
             preparation_guard.release()
@@ -1610,11 +1803,21 @@ def _dispatch_session_request(
             details={"original-type": type(exc).__name__, "original-repr": cause[:500]},
         )
         if isinstance(exc, Exception) and not resume_existing and _default_recovery_attempt < 2 and not store.read_record(project_root, request_id).get("cancel-requested"):
-            replacement = client_defaults.replace_failed_default(
-                project_root, record, wrapped,
-                recover_url=not runtime_invoked and _default_recovery_attempt == 0 and not (record.get("metadata") or {}).get("provider-chat-url"),
-                attach_request=not runtime_invoked,
-            )
+            if not runtime_invoked:
+                # A request-owned new session has no provider side effect until
+                # prompt_in_session is reached. Retry it once in a fresh
+                # session even when the client-default marker is non-automatic;
+                # that marker describes reuse policy, not whether admission
+                # succeeded.
+                replacement = client_defaults.replace_failed_session(
+                    project_root, record, wrapped
+                )
+            else:
+                replacement = client_defaults.replace_failed_default(
+                    project_root, record, wrapped,
+                    recover_url=False,
+                    attach_request=False,
+                )
             if replacement is not None:
                 record = replacement
                 if not runtime_invoked:
@@ -1664,6 +1867,11 @@ def _dispatch_session_request(
             session_id=session_id,
             provider_metadata=provider_metadata,
         )
+        try:
+            from audiagentic.components.agents.gateway.observation_projection import append_request_projection
+            append_request_projection(project_root, request_id, record, source="provider-terminal")
+        except Exception:  # noqa: BLE001 - journal is advisory
+            logger.debug("provider terminal journal append failed", extra={"request-id": request_id}, exc_info=True)
     client_defaults.remember(project_root, record)
 
     if result.stop_reason == "cancelled":
@@ -1927,7 +2135,7 @@ def _transition_owned_attempt(
     updates: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Persist a terminal state only while this worker attempt still owns it."""
-    return store.transition_owned_terminal(
+    updated = store.transition_owned_terminal(
         project_root,
         record["request-id"],
         new_state,
@@ -1936,3 +2144,9 @@ def _transition_owned_attempt(
         worker_id=record["worker-id"],
         attempt_epoch=record["attempt-epoch"],
     )
+    try:
+        from audiagentic.components.agents.gateway.observation_projection import append_request_projection
+        append_request_projection(project_root, record["request-id"], updated, source="gateway-terminal")
+    except Exception:  # noqa: BLE001 - journal is advisory
+        logger.debug("terminal diagnostic journal append failed", extra={"request-id": record["request-id"]}, exc_info=True)
+    return updated

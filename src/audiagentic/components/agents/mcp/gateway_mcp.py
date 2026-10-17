@@ -26,14 +26,70 @@ mcp = mcp_server(__name__, structured_output_only=True)
 
 _RESPONSE_PREVIEW_FIELDS = frozenset({"output-preview", "output-truncated"})
 
+_MAX_PAGE = 100
 
-def _status_without_response_preview(status: dict[str, Any]) -> dict[str, Any]:
+
+def _page_limit(value: int) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= _MAX_PAGE:
+        raise ValueError(f"limit must be an integer between 1 and {_MAX_PAGE}")
+    return value
+
+def _public_scalar(value: Any) -> Any:
+    if isinstance(value, str):
+        return value[:256] if value else None
+    if isinstance(value, (bool, int, float)):
+        return value
+    return None
+
+
+def _request_dto(value: Any) -> dict[str, Any]:
+    """Project lifecycle mutations without copying arbitrary record fields."""
+    source = value if isinstance(value, dict) else {}
+    result: dict[str, Any] = {}
+    request_id = source.get("request-id") or source.get("request_id")
+    session_id = source.get("session-id") or source.get("session_id")
+    for key in ("state", "revision", "action", "disposition", "outcome", "error-code", "reason"):
+        raw = _public_scalar(source.get(key))
+        if raw is not None:
+            result[key] = raw
+    warnings = source.get("warnings")
+    if isinstance(warnings, list):
+        result["warnings"] = [item[:256] for item in warnings if isinstance(item, str)][:16]
+    if isinstance(request_id, str) and request_id:
+        result["request-id"] = request_id
+    if isinstance(session_id, str) and session_id:
+        result["session-id"] = session_id
+    return result
+
+
+def _session_dto(value: Any) -> dict[str, Any]:
+    source = value if isinstance(value, dict) else {}
+    result: dict[str, Any] = {}
+    session_id = source.get("session-id") or source.get("session_id")
+    if isinstance(session_id, str) and session_id:
+        result["session-id"] = session_id
+    for key in ("state", "live", "runtime-state", "created-at", "updated-at", "provider-id", "model-id"):
+        raw = _public_scalar(source.get(key))
+        if raw is not None:
+            result[key] = raw
+    return result
+
+
+def _status_without_response_preview(status: dict[str, Any], *, include_response: bool = False) -> dict[str, Any]:
     """Keep MCP status compact and null-free; never spend tokens on a preview."""
-    return {
-        key: value
-        for key, value in status.items()
-        if key not in _RESPONSE_PREVIEW_FIELDS and value is not None
-    }
+    allowed = {"task_id", "request_id", "request-id", "session_id", "session-id", "lifecycle", "state", "activity_seq", "activity-seq", "activity_at", "activity-at", "activity", "activity_type", "outcome", "error_code", "error-code", "contract-version", "revision"}
+    result = {key: _public_scalar(status.get(key)) for key in allowed if key not in _RESPONSE_PREVIEW_FIELDS and _public_scalar(status.get(key)) is not None}
+    session_id = status.get("session_id") or status.get("session-id")
+    if isinstance(session_id, str) and session_id:
+        result["session_id"] = session_id
+    if include_response and isinstance(status.get("response"), dict):
+        response = status["response"]
+        result["response"] = {
+            key: _public_scalar(response.get(key))
+            for key in ("text", "bytes", "format", "media_type")
+            if _public_scalar(response.get(key)) is not None
+        }
+    return result
 
 
 def _sparse(value: Any) -> Any:
@@ -89,13 +145,23 @@ def agent_task_list_definitions() -> list[dict[str, Any]]:
 
 @mcp.tool()
 @tool_boundary
-def agent_task_status(request_id: str, include_response: bool = True) -> dict[str, Any]:
+def agent_task_status(request_id: str, include_response: bool = False) -> dict[str, Any]:
     """Poll compact lifecycle status; use diagnostics or response for terminal detail."""
     project_root = project_root_from_env()
-    status = call_gateway_method("get_execution_request", project_root, request_id, include_response=include_response)
+    if include_response:
+        status = dict(call_gateway_method(
+            "get_execution_request", project_root, request_id, include_response=True
+        ))
+    else:
+        # Preserve the pre-v4 call shape for clients and gateway doubles that
+        # do not accept the optional response keyword.
+        status = dict(call_gateway_method("get_execution_request", project_root, request_id))
+    # The compact default is an explicit versioned MCP contract. Callers that
+    # need the prior terminal payload use the opt-in flag or response tool.
+    status.setdefault("contract-version", "task-status.v4-compact")
     # V4 is a fixed-shape contract: its inactive axes are explicitly null and
     # must not be removed by the generic sparse projection.
-    return _status_without_response_preview(status)
+    return _status_without_response_preview(status, include_response=include_response)
 
 
 @mcp.tool()
@@ -103,9 +169,93 @@ def agent_task_status(request_id: str, include_response: bool = True) -> dict[st
 def agent_task_diagnostics(request_id: str, limit: int = 25) -> dict[str, Any]:
     """Return bounded, redacted failure and activity evidence for a request."""
     project_root = project_root_from_env()
+    _page_limit(limit)
     return _sparse(
         call_gateway_method(
             "get_execution_diagnostics", project_root, request_id=request_id, limit=limit
+        )
+    )
+
+
+@mcp.tool()
+@tool_boundary
+def agent_task_observations(
+    request_id: str,
+    limit: int = 25,
+    cursor: str | None = None,
+    since_sequence: int | None = None,
+    tail: int | None = None,
+) -> dict[str, Any]:
+    """Return a finite page of redacted request-owned observations."""
+    project_root = project_root_from_env()
+    _page_limit(limit)
+    params: dict[str, Any] = {
+        "limit": limit,
+        "cursor": cursor,
+        "since_sequence": since_sequence,
+    }
+    if tail is not None:
+        params["tail"] = tail
+    return _sparse(
+        call_gateway_method(
+            "get_execution_observations",
+            project_root,
+            request_id,
+            **params,
+        )
+    )
+
+
+@mcp.tool()
+@tool_boundary
+def agent_task_evidence(
+    request_id: str,
+    include_observations: bool = False,
+    include_history: bool = False,
+    include_recovery: bool = False,
+    limit: int = 25,
+    cursor: str | None = None,
+    observation_cursor: str | None = None,
+    recovery_cursor: str | None = None,
+    history_cursor: str | None = None,
+    since_sequence: int | None = None,
+) -> dict[str, Any]:
+    """Return compact evidence; observation/history/recovery tiers are opt-in."""
+    project_root = project_root_from_env()
+    _page_limit(limit)
+    params: dict[str, Any] = {
+        "include_observations": include_observations,
+        "include_history": include_history,
+        "include_recovery": include_recovery,
+        "limit": limit,
+        "cursor": cursor,
+        "since_sequence": since_sequence,
+    }
+    if observation_cursor is not None:
+        params["observation_cursor"] = observation_cursor
+    if recovery_cursor is not None:
+        params["recovery_cursor"] = recovery_cursor
+    if history_cursor is not None:
+        params["history_cursor"] = history_cursor
+    raw = call_gateway_method(
+            "get_execution_evidence",
+            project_root,
+            request_id,
+            **params,
+        )
+    from audiagentic.components.agents.gateway.evidence_projection import project_public_gateway_evidence
+    return _sparse(project_public_gateway_evidence(raw))
+
+@mcp.tool()
+@tool_boundary
+def agent_task_observation_replay(request_id: str) -> dict[str, Any]:
+    """Replay request-owned observations into a compact recovery analysis."""
+    project_root = project_root_from_env()
+    return _sparse(
+        call_gateway_method(
+            "replay_execution_observations",
+            project_root,
+            request_id,
         )
     )
 
@@ -119,7 +269,7 @@ def agent_task_recover(
 ) -> dict[str, Any]:
     """Request reconcile, abandon, or clear-not-submitted; recovery never resends a prompt."""
     project_root = project_root_from_env()
-    return _sparse(
+    return _request_dto(
         call_gateway_method(
             "recover_execution_request",
             project_root,
@@ -130,8 +280,6 @@ def agent_task_recover(
     )
 
 
-@mcp.tool()
-@tool_boundary
 @mcp.tool()
 @tool_boundary
 def agent_task_response(request_id: str) -> dict[str, Any]:
@@ -182,25 +330,22 @@ def agent_task_complete_from_provider(request_id: str) -> dict[str, Any]:
 def agent_task_cancel(request_id: str) -> dict[str, Any]:
     """Cancel a queued request, or best-effort mark a running one cancel-requested."""
     project_root = project_root_from_env()
-    return _sparse(call_gateway_method("cancel_execution_request", project_root, request_id))
+    return _request_dto(call_gateway_method("cancel_execution_request", project_root, request_id))
 
 
 @mcp.tool()
 @tool_boundary
 def agent_task_list_requests(
     state: str | None = None,
-    limit: int | None = None,
+    limit: int = 25,
 ) -> list[dict[str, Any]]:
     """List persisted requests, newest first; optionally filter by lifecycle state."""
     project_root = project_root_from_env()
+    _page_limit(limit)
     requests = call_gateway_method(
         "list_execution_requests", project_root, state=state, limit=limit
     )
-    projected = [
-        _status_without_response_preview(item) if isinstance(item, dict) else item
-        for item in requests
-    ]
-    return projected
+    return [_status_without_response_preview(dict(item)) for item in requests]
 
 
 @mcp.tool()
@@ -217,9 +362,7 @@ def agent_task_session_list(state: str | None = "active") -> list[dict[str, Any]
     """List sessions, defaulting to active; pass a lifecycle state or ``all``."""
     project_root = project_root_from_env()
     gateway_state = None if state == "all" else state
-    return _sparse(
-        call_gateway_method("list_execution_sessions", project_root, state=gateway_state)
-    )
+    return [_session_dto(item) for item in call_gateway_method("list_execution_sessions", project_root, state=gateway_state)]
 
 
 @mcp.tool()
@@ -227,7 +370,7 @@ def agent_task_session_list(state: str | None = "active") -> list[dict[str, Any]
 def agent_task_session_close(session_id: str) -> dict[str, Any]:
     """Close a session and its agent process; repeated close is idempotent."""
     project_root = project_root_from_env()
-    return _sparse(call_gateway_method("close_execution_session", project_root, session_id))
+    return _session_dto(call_gateway_method("close_execution_session", project_root, session_id))
 
 
 @mcp.tool()
@@ -267,7 +410,7 @@ def agent_task_session_control(
 ) -> dict[str, Any]:
     """Send a session control acknowledgement; poll request status for lifecycle truth."""
     project_root = project_root_from_env()
-    return _sparse(
+    return _request_dto(
         call_gateway_method(
             "control_execution_session",
             project_root,
@@ -296,7 +439,7 @@ def agent_task_session_resume(
     }
     if component_profile is not None:
         kwargs["component_profile"] = component_profile
-    return _sparse(
+    return _session_dto(
         call_gateway_method("resume_execution_session", project_root, source_session_id, **kwargs)
     )
 
@@ -337,14 +480,10 @@ def agent_task_submit(
     if provider_chat_url is not None:
         submit_kwargs["provider_chat_url"] = provider_chat_url
     status = call_gateway_method("submit_execution_request", project_root, **submit_kwargs)
-    return _sparse({
-        "request-id": status.get("request-id"),
-        "state": status.get("state"),
-        "session-id": status.get("session-id"),
-        "metadata": status.get("metadata") or {},
-        "provider-metadata": status.get("provider-metadata") or {},
-        "warnings": status.get("warnings") or [],
-    })
+    result = _request_dto(status)
+    if isinstance(status, dict) and isinstance(status.get("warnings"), list) and status["warnings"]:
+        result["warnings"] = status["warnings"][:16]
+    return result
 
 
 def main() -> None:

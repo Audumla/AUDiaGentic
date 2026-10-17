@@ -47,6 +47,7 @@ def test_queued_is_pending_waiting_without_nulls() -> None:
 
     assert result == {
         "task_id": "req-1",
+        "request_id": "req-1",
         "lifecycle": "pending",
         "activity": "waiting",
         "activity_seq": 0,
@@ -60,6 +61,7 @@ def test_running_is_active_running_without_provider_details() -> None:
 
     assert result == {
         "task_id": "req-1",
+        "request_id": "req-1",
         "lifecycle": "active",
         "activity": "running",
         "activity_seq": 0,
@@ -139,6 +141,7 @@ def test_terminal_states_have_one_outcome_and_no_activity(
 
     assert result == {
         "task_id": "req-1",
+        "request_id": "req-1",
         "lifecycle": "terminal",
         "activity_seq": 0,
         "outcome": outcome,
@@ -159,6 +162,7 @@ def test_v4_has_only_contract_keys_and_no_internal_fields() -> None:
 
     assert set(result) == {
         "task_id",
+        "request_id",
         "lifecycle",
         "activity",
         "activity_seq",
@@ -216,6 +220,7 @@ def test_dispatching_is_active_running_even_when_v3_snapshot_is_unknown() -> Non
 
     assert project_task_status_v4(record, snapshot) == {
         "task_id": "req-1",
+        "request_id": "req-1",
         "lifecycle": "active",
         "activity": "running",
         "activity_seq": 0,
@@ -233,6 +238,7 @@ def test_activity_progress_markers_are_projected_from_durable_record() -> None:
 
     assert project_task_status_v4(record, _snapshot(record, AgentLifecycle.ACTIVE)) == {
         "task_id": "req-1",
+        "request_id": "req-1",
         "lifecycle": "active",
         "activity": "running",
         "activity_seq": 12,
@@ -251,6 +257,7 @@ def test_activity_type_is_a_bounded_provider_work_description() -> None:
 
     assert project_task_status_v4(record, _snapshot(record, AgentLifecycle.ACTIVE)) == {
         "task_id": "req-1",
+        "request_id": "req-1",
         "lifecycle": "active",
         "activity": "running",
         "activity_type": "searching-web",

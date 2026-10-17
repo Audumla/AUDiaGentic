@@ -36,11 +36,11 @@ def _submit(
     client, prompt: str, *, session_id: str | None = None, stage: int
 ) -> dict[str, Any]:
     task = client.submit_execution_request(
-        "gpt-auto-reviewer-agent",
+        ROOT,
+        agent_id="reviewer-gpt-agent",
         prompt_body=prompt,
         session_id=session_id,
         session_keep_alive=True,
-        timeout_seconds=3900,
         source=SOURCE,
         metadata={"plan-item-id": "SH10", "monitor-stage": stage},
     )

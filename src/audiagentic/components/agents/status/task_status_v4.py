@@ -161,6 +161,8 @@ ull``.
                 raise TaskStatusContractError("durable terminal state contradicts snapshot outcome")
         return _compact({
             "task_id": request_id,
+            "request_id": request_id,
+            "session_id": record.get("session-id"),
             "lifecycle": "terminal",
             "warnings": record.get("warnings") or None,
             "activity": None,
@@ -175,6 +177,8 @@ ull``.
     if state == "queued":
         return _compact({
             "task_id": request_id,
+            "request_id": request_id,
+            "session_id": record.get("session-id"),
             "lifecycle": "pending",
             "warnings": record.get("warnings") or None,
             "activity": "waiting",
@@ -202,6 +206,8 @@ ull``.
         activity_type = project_activity_type(record) if activity_seq else None
         return _compact({
             "task_id": request_id,
+            "request_id": request_id,
+            "session_id": record.get("session-id"),
             "lifecycle": "active",
             "warnings": record.get("warnings") or None,
             "activity": activity,

@@ -93,6 +93,35 @@ def gateway_timeline_path(project_root: Path, request_id: str) -> Path:
     return gateway_request_dir(project_root, request_id) / "timeline.ndjson"
 
 
+def gateway_timeline_index_path(project_root: Path, request_id: str) -> Path:
+    """Return the byte-offset index for the request timeline."""
+    return gateway_request_dir(project_root, request_id) / "timeline.index.ndjson"
+
+
+
+def gateway_observation_path(project_root: Path, request_id: str) -> Path:
+    """Return the append-only request-owned DOM/activity journal path."""
+    return gateway_request_dir(project_root, request_id) / "observations.ndjson"
+
+
+def gateway_observation_index_path(project_root: Path, request_id: str) -> Path:
+    """Return the byte-offset index for the request observation journal."""
+    return gateway_request_dir(project_root, request_id) / "observations.index.ndjson"
+
+
+def gateway_observation_artifact_dir(project_root: Path, request_id: str) -> Path:
+    """Return the optional bounded, redacted observation-artifact directory."""
+    return gateway_request_dir(project_root, request_id) / "observation-artifacts"
+
+
+def gateway_recovery_action_path(project_root: Path, request_id: str) -> Path:
+    """Return the immutable recovery action-intent journal path."""
+    return gateway_request_dir(project_root, request_id) / "recovery-actions.ndjson"
+
+def gateway_recovery_index_path(project_root: Path, request_id: str) -> Path:
+    """Return the byte-offset index for the recovery action journal."""
+    return gateway_request_dir(project_root, request_id) / "recovery-actions.index.ndjson"
+
 def gateway_admission_lock_path(project_root: Path) -> Path:
     """Return the project-local lock protecting idempotent admission."""
     return gateway_root(project_root) / "admission.lock"

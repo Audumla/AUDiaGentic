@@ -31,7 +31,7 @@ from audiagentic.components.agents.gateway.session import bindings as bindings
 from audiagentic.components.agents.gateway.store._shared import _request_lock
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.contracts.schema_registry import validate_with_schema
-from audiagentic.foundation.io import atomic_write_json, load_ndjson
+from audiagentic.foundation.io import atomic_write_json, iter_ndjson
 from audiagentic.foundation.observability import record_timeline_event
 from audiagentic.foundation.system.process import StartupLock
 from audiagentic.foundation.time import now_iso_z
@@ -386,76 +386,89 @@ def _reconcile_nonterminal_requests_before_expiry(
         for record in eligible:
             request_locks.enter_context(_request_lock(project_root, str(record.get("request-id"))))
 
-        # Re-read the complete fence immediately before the first mutation.
-        for record in eligible:
-            current = store.read_record(project_root, str(record.get("request-id")))
-            if (
-                current.get("state") in store.TERMINAL_STATES
-                or current.get("revision") != record.get("revision")
-            ):
-                return None
+        # Hold the session mutation fence before the final policy check and
+        # keep it through request terminalization and session transition.
+        # Activity refreshes use this same lock, so a refresh cannot land
+        # between the policy check and expiry.
+        with _session_lock(project_root, session_id):
+            current_session = read_session_record(project_root, session_id)
+            if current_session.get("state") in SESSION_TERMINAL_STATES:
+                return current_session
+            reason = None
+            if session_lifetime_expired(current_session):
+                reason = "max-lifetime"
+            elif session_idle_expired(current_session):
+                reason = "idle-timeout"
+            if reason is None:
+                return current_session
 
-        for record in eligible:
-            request_id = str(record.get("request-id"))
-            try:
-                side_effect_state = "may-have-started"
-                diagnostics = record.get("diagnostics")
-                if isinstance(diagnostics, dict):
-                    side_effect_state = diagnostics.get("side-effect-state") or side_effect_state
-                error = {
-                    "code": "CON-AGW-084",
-                    "kind": "agents",
-                    "message": "provider session expired before the request reached a terminal state",
-                    "details": {
-                        "session-id": session_id,
-                        "session-close-reason": reason,
-                        "failure-reason": "provider-session-expired",
-                        "side-effect-state": side_effect_state,
-                        "watchdog-classification": "expired-provider-session",
-                        "reconciliation": "provider-capture-required",
-                        "retry-safe": False,
-                    },
-                }
-                updated = store.transition_recovered_terminal(
-                    project_root,
-                    request_id,
-                    "interrupted",
-                    error=error,
-                    stale_epoch=record.get("dispatch-owner-epoch") or None,
-                    expected_revision=record.get("revision"),
-                    replay_required=False,
-                    replay_reason="provider-session-expired; reconcile or operator-capture before retry",
-                    _request_lock_held=True,
-                )
-                store.record_gateway_timeline(
-                    project_root,
-                    request_id,
-                    "request.interrupted",
-                    state=updated.get("state"),
-                    attributes={
-                        "source": "session-expiry-reconciliation",
-                        "session-id": session_id,
-                        "session-close-reason": reason,
-                    },
-                )
-            except Exception:  # noqa: BLE001 - one record must not block session expiry
-                logger.warning(
-                    "could not reconcile request owned by expired session",
-                    extra={"request-id": request_id, "session-id": session_id},
-                    exc_info=True,
-                )
-                return None
-        # Keep the session transition inside the request-lock scope. This
-        # prevents a new activity/cancellation mutation from entering between
-        # the last request terminalization and session expiry.
-        expired = transition_session_record(
-            project_root,
-            session_id,
-            "expired",
-            updates={"close-reason": reason, "closed-at": now_iso_z()},
-        )
-        bindings.retire_binding(project_root, expired, state="expired")
-        return expired
+            for record in eligible:
+                current = store.read_record(project_root, str(record.get("request-id")))
+                if (
+                    current.get("state") in store.TERMINAL_STATES
+                    or current.get("revision") != record.get("revision")
+                ):
+                    return None
+
+            for record in eligible:
+                request_id = str(record.get("request-id"))
+                try:
+                    side_effect_state = "may-have-started"
+                    diagnostics = record.get("diagnostics")
+                    if isinstance(diagnostics, dict):
+                        side_effect_state = diagnostics.get("side-effect-state") or side_effect_state
+                    error = {
+                        "code": "CON-AGW-084",
+                        "kind": "agents",
+                        "message": "provider session expired before the request reached a terminal state",
+                        "details": {
+                            "session-id": session_id,
+                            "session-close-reason": reason,
+                            "failure-reason": "provider-session-expired",
+                            "side-effect-state": side_effect_state,
+                            "watchdog-classification": "expired-provider-session",
+                            "reconciliation": "provider-capture-required",
+                            "retry-safe": False,
+                        },
+                    }
+                    updated = store.transition_recovered_terminal(
+                        project_root,
+                        request_id,
+                        "interrupted",
+                        error=error,
+                        stale_epoch=record.get("dispatch-owner-epoch") or None,
+                        expected_revision=record.get("revision"),
+                        replay_required=False,
+                        replay_reason="provider-session-expired; reconcile or operator-capture before retry",
+                        _request_lock_held=True,
+                    )
+                    store.record_gateway_timeline(
+                        project_root,
+                        request_id,
+                        "request.interrupted",
+                        state=updated.get("state"),
+                        attributes={
+                            "source": "session-expiry-reconciliation",
+                            "session-id": session_id,
+                            "session-close-reason": reason,
+                        },
+                    )
+                except Exception:  # noqa: BLE001 - one record must not block session expiry
+                    logger.warning(
+                        "could not reconcile request owned by expired session",
+                        extra={"request-id": request_id, "session-id": session_id},
+                        exc_info=True,
+                    )
+                    return None
+            expired = _transition_session_record_locked(
+                project_root,
+                session_id,
+                current_session,
+                "expired",
+                updates={"close-reason": reason, "closed-at": now_iso_z()},
+            )
+            bindings.retire_binding(project_root, expired, state="expired")
+            return expired
 
 
 def expire_session_if_lifetime_exceeded(
@@ -932,7 +945,7 @@ def latest_turn_quality_summary(
     returned — only bounded scalar facts (AS36 step 4).
     """
     try:
-        entries = load_ndjson(gateway_session_timeline_path(project_root, session_id))
+        entries = iter_ndjson(gateway_session_timeline_path(project_root, session_id))
     except (OSError, ValueError):
         logger.warning(
             "failed to read gateway session timeline for quality summary",
@@ -1023,11 +1036,12 @@ def latest_turn_projection(
     native frames, or binding internals.
     """
     try:
-        entries = load_ndjson(gateway_session_timeline_path(project_root, session_id))
+        entries = iter_ndjson(gateway_session_timeline_path(project_root, session_id))
     except (OSError, ValueError):
         logger.warning("failed to read gateway session timeline", extra={"session-id": session_id})
         return None
-    for entry in reversed(entries):
+    latest: dict[str, Any] | None = None
+    for entry in entries:
         event = entry.get("event")
         if not isinstance(event, str) or not event.startswith("session.turn."):
             continue
@@ -1056,8 +1070,8 @@ def latest_turn_projection(
             value = attrs.get(key)
             if isinstance(value, (str, int, float, bool)):
                 projected[key] = value
-        return projected
-    return None
+        latest = projected
+    return latest
 
 
 def build_session_progress_summary(
@@ -1080,7 +1094,7 @@ def build_session_progress_summary(
     Only scalar fields — no text, provider refs, tool args, or raw payloads.
     """
     try:
-        entries = load_ndjson(gateway_session_timeline_path(project_root, session_id))
+        entries = iter_ndjson(gateway_session_timeline_path(project_root, session_id))
     except (OSError, ValueError):
         logger.warning(
             "failed to read gateway session timeline for progress summary",
@@ -1241,44 +1255,58 @@ def transition_session_record(
         )
     with _session_lock(project_root, session_id):
         record = read_session_record(project_root, session_id)
-        ensure_session_transition(record["state"], new_state)
-        updated = dict(record)
-        updated["state"] = new_state
-        timing = dict(updated.get("timing") or {})
-        timing["updated-at"] = now_iso_z()
-        for key, value in (updates or {}).items():
-            key = key.replace("_", "-")
-            if key in ("closed-at", "last-activity-at"):
-                if value is None:
-                    timing.pop(key, None)
-                else:
-                    timing[key] = value
-            elif key == "close-reason":
-                if value is None:
-                    updated.pop("close-reason", None)
-                else:
-                    updated["close-reason"] = value
-            elif key == "error":
-                redacted = _redact_error(value)
-                if redacted is None:
-                    updated.pop("error", None)
-                else:
-                    updated["error"] = redacted
-        updated["timing"] = timing
-        write_session_record(project_root, updated)
-        record_session_timeline(
-            project_root,
-            session_id,
-            "state.changed",
-            state=new_state,
-            attributes={
-                "from": record["state"],
-                "to": new_state,
-                "close-reason": updated.get("close-reason"),
-                "updated-keys": sorted((updates or {}).keys()),
-            },
+        return _transition_session_record_locked(
+            project_root, session_id, record, new_state, updates=updates
         )
-        return updated
+
+
+def _transition_session_record_locked(
+    project_root: Path,
+    session_id: str,
+    record: dict[str, Any],
+    new_state: str,
+    *,
+    updates: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Apply a session transition while the caller holds the session lock."""
+    ensure_session_transition(record["state"], new_state)
+    updated = dict(record)
+    updated["state"] = new_state
+    timing = dict(updated.get("timing") or {})
+    timing["updated-at"] = now_iso_z()
+    for key, value in (updates or {}).items():
+        key = key.replace("_", "-")
+        if key in ("closed-at", "last-activity-at"):
+            if value is None:
+                timing.pop(key, None)
+            else:
+                timing[key] = value
+        elif key == "close-reason":
+            if value is None:
+                updated.pop("close-reason", None)
+            else:
+                updated["close-reason"] = value
+        elif key == "error":
+            redacted = _redact_error(value)
+            if redacted is None:
+                updated.pop("error", None)
+            else:
+                updated["error"] = redacted
+    updated["timing"] = timing
+    write_session_record(project_root, updated)
+    record_session_timeline(
+        project_root,
+        session_id,
+        "state.changed",
+        state=new_state,
+        attributes={
+            "from": record["state"],
+            "to": new_state,
+            "close-reason": updated.get("close-reason"),
+            "updated-keys": sorted((updates or {}).keys()),
+        },
+    )
+    return updated
 
 
 def record_session_turn(

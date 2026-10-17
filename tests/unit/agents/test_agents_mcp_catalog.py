@@ -70,7 +70,7 @@ def test_gateway_status_metadata_matches_fixed_status_signature() -> None:
     module = importlib.import_module(gateway["module"])
     signature = inspect.signature(module.agent_task_status)
 
-    assert tuple(signature.parameters) == ("request_id",)
+    assert tuple(signature.parameters) == ("request_id", "include_response")
     description = gateway["tool-descriptions"]["agent_task_status"]
     assert "response_version" not in description
     assert "compact lifecycle/activity status" in description

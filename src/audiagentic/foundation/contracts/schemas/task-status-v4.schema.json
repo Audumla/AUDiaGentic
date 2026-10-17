@@ -5,6 +5,7 @@
   "additionalProperties": false,
   "required": [
     "task_id",
+    "request_id",
     "lifecycle",
     "activity_seq"
   ],
@@ -15,6 +16,14 @@
       }, "required": ["code", "message"], "additionalProperties": false
     }},
     "task_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "request_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "session_id": {
       "type": "string",
       "minLength": 1
     },

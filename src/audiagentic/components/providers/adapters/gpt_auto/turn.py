@@ -2760,6 +2760,7 @@ class GptAutoTurn:
                 self._response_message_id = response_message_id
                 self._terminal_evidence = {
                     "turn-id": self.request.turn_id,
+                    "terminal-witness-id": response_message_id,
                     "policy": "response-complete",
                     "generating-at-terminal": bool(current.generating or verify.generating)
                     if "verify" in locals()
@@ -4012,6 +4013,9 @@ def _response_decision_diagnostics(
             and response_id == virtualized_assistant_id
         ),
         "terminal-witness-present": terminal_id is not None,
+        "terminal-witness-hash": _text_digest(terminal_id) if terminal_id else None,
+        "response-ref-hash": _text_digest(response_id) if response_id else None,
+        "latest-assistant-hash": _text_digest(latest_id) if latest_id else None,
         "terminal-witness-is-latest": bool(terminal_id and terminal_id == latest_id),
         "terminal-witness-is-response": bool(terminal_id and terminal_id == response_id),
         "raw-generating": raw.generating,

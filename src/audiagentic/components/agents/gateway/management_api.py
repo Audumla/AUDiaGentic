@@ -277,6 +277,11 @@ def gateway_get_retention_policy(project_root: Path) -> dict[str, Any]:
         "purge-enabled": policy.enabled,
         "minimum-archive-age-seconds": policy.minimum_archive_age_seconds,
         "max-batch-size": policy.max_batch_size,
+        "request-history-limit": policy.request_history_limit,
+        "timeline-max-bytes": policy.timeline_max_bytes,
+        "observation-max-bytes": policy.observation_max_bytes,
+        "recovery-max-bytes": policy.recovery_max_bytes,
+        "console-trace-max-bytes": policy.console_trace_max_bytes,
         "policy-id": policy.policy_id,
         "policy-digest": policy.digest,
     }
