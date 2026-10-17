@@ -1153,13 +1153,12 @@ def test_closed_by_non_shutdown_reason_still_raises_res_agw_003(rig):
     assert len(transports) == 1  # no successor transport was ever opened
 
 
-def test_failed_session_never_auto_resumes(rig):
-    """A genuinely failed session must still require the caller's own
-    explicit session_resume -- GP13's core invariant: a real terminal
-    failure is never silently papered over by a transparent resume."""
+def test_failed_session_with_durable_binding_auto_resumes(resumable_rig):
+    """A failed local generation can continue when its provider binding is safe."""
     from audiagentic.components.agents.gateway.session import sessions_store as session_store
 
-    runtime, transports, tmp_path = rig
+    runtime, transports, tmp_path = resumable_rig
+
     first = _dispatch(
         tmp_path, _running_record(tmp_path, session_keep_alive=True), dispatch_prompt="hello"
     )
@@ -1178,9 +1177,9 @@ def test_failed_session_never_auto_resumes(rig):
     second = _dispatch(
         tmp_path, _running_record(tmp_path, session_id=session_id), dispatch_prompt="are you there"
     )
-    assert second["state"] == "failed"
-    assert second["error"]["code"] == "RES-AGW-003"
-    assert len(transports) == 1
+    assert second["state"] == "completed", second
+    assert second["session-id"] != session_id
+    assert transports[1].turns == ["are you there"]
 
 
 def test_auto_resume_expected_refusal_falls_back_to_res_agw_003(resumable_rig, monkeypatch):

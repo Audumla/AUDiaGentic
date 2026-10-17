@@ -538,6 +538,31 @@ def _auto_resume_reopenable_closed_session(
     return new_session_id, new_session_record, updated_record
 
 
+def _failed_session_has_safe_provider_continuation(
+    project_root: Path, session_record: dict[str, Any]
+) -> bool:
+    """Return whether a failed session can safely resume a new turn.
+
+    A failed gateway session is not proof that its provider conversation is
+    gone. GPT-auto can retain the exact ChatGPT conversation and tab while a
+    turn-level failure tears down the local handle. Resuming is safe for a
+    later prompt only when the durable provider binding exists and no prior
+    prompt is still fenced as unresolved; the latter would make a new prompt
+    a possible duplicate.
+    """
+    from audiagentic.components.agents.gateway.session import sessions_store as session_store
+    binding = session_store.read_session_binding(
+        project_root, str(session_record.get("session-id") or "")
+    )
+    if not isinstance(binding, dict) or not binding.get("provider-session-ref"):
+        return False
+    metadata = session_store.session_provider_metadata(session_record)
+    return not any(
+        metadata.get(key) is True
+        for key in ("unresolved-turn-pending", "submission-ambiguous")
+    )
+
+
 def _build_surface_hint(profile: dict[str, Any]) -> Any:
     """Build the surface hint from the resolved execution profile.
 
@@ -1032,7 +1057,15 @@ def _dispatch_session_request(
                         request_runtime_root=request_runtime_root,
                         project_name=project_name,
                     )
-                elif resume_existing and session_record.get("state") == "failed":
+                elif (
+                    session_record.get("state") == "failed"
+                    and (
+                        resume_existing
+                        or _failed_session_has_safe_provider_continuation(
+                            project_root, session_record
+                        )
+                    )
+                ):
                     session_id, session_record, record = _auto_resume_reopenable_closed_session(
                         project_root,
                         runtime,
@@ -1041,7 +1074,7 @@ def _dispatch_session_request(
                         context_fingerprint=context_fingerprint,
                         request_runtime_root=request_runtime_root,
                         project_name=project_name,
-                        allow_failed=True,
+                        allow_failed=resume_existing,
                     )
                 elif session_record.get("state") != "active":
                     raise AudiaGenticError(
@@ -1770,11 +1803,21 @@ def _dispatch_session_request(
             details={"original-type": type(exc).__name__, "original-repr": cause[:500]},
         )
         if isinstance(exc, Exception) and not resume_existing and _default_recovery_attempt < 2 and not store.read_record(project_root, request_id).get("cancel-requested"):
-            replacement = client_defaults.replace_failed_default(
-                project_root, record, wrapped,
-                recover_url=not runtime_invoked and _default_recovery_attempt == 0 and not (record.get("metadata") or {}).get("provider-chat-url"),
-                attach_request=not runtime_invoked,
-            )
+            if not runtime_invoked:
+                # A request-owned new session has no provider side effect until
+                # prompt_in_session is reached. Retry it once in a fresh
+                # session even when the client-default marker is non-automatic;
+                # that marker describes reuse policy, not whether admission
+                # succeeded.
+                replacement = client_defaults.replace_failed_session(
+                    project_root, record, wrapped
+                )
+            else:
+                replacement = client_defaults.replace_failed_default(
+                    project_root, record, wrapped,
+                    recover_url=False,
+                    attach_request=False,
+                )
             if replacement is not None:
                 record = replacement
                 if not runtime_invoked:

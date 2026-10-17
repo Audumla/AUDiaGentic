@@ -1479,7 +1479,7 @@ class SessionRuntime:
                     message="rehydrated transport did not prove the original session identity",
                     details={"session-id": session_id},
                 )
-        except BaseException:
+        except BaseException as exc:
             await _close_failed_transport(transport)
             raise
 
@@ -1722,7 +1722,7 @@ class SessionRuntime:
         )
         try:
             open_result = await transport.open()
-        except BaseException:
+        except BaseException as exc:
             logger.exception(
                 "gateway open phase transport-open failed elapsed-ms=%.1f",
                 (time.monotonic() - transport_started) * 1000,
@@ -1732,6 +1732,30 @@ class SessionRuntime:
                 },
             )
             await _close_failed_transport(transport)
+            # Admission persists the request-owned session before the provider
+            # transport is opened. If opening fails, that record must not
+            # remain active and block later work or mislead recovery logic.
+            try:
+                admitted = session_store.read_session_record(project_root, session_id)
+                if admitted.get("state") == "active" and not admitted.get("binding"):
+                    session_store.transition_session_record(
+                        project_root,
+                        session_id,
+                        "failed",
+                        updates={
+                            "close-reason": "failed",
+                            "closed-at": now_iso_z(),
+                            "error": exc,
+                        },
+                    )
+            except AudiaGenticError:
+                # Direct runtime callers may not have an admitted durable
+                # record; the transport failure remains authoritative.
+                logger.debug(
+                    "no admitted durable session to fail after provider-open error",
+                    extra={"session-id": session_id},
+                    exc_info=True,
+                )
             raise
         logger.info(
             "gateway open phase transport-open complete elapsed-ms=%.1f provider-ref-present=%s",
@@ -1831,7 +1855,7 @@ class SessionRuntime:
                     "correlation-id": correlation_id,
                 },
             )
-        except BaseException:
+        except BaseException as exc:
             # Never leak a child because bookkeeping failed.
             await _close_failed_transport(transport)
             raise
@@ -2690,7 +2714,7 @@ class SessionRuntime:
             from .fifo_wait import acquire_turn_lock
 
             await acquire_turn_lock(handle.turn_lock, _local_cancel_event)
-        except BaseException:
+        except BaseException as exc:
             if request_id is not None:
                 self._turn_cancels.pop(request_id, None)
             raise
