@@ -11,6 +11,7 @@ from audiagentic.components.agents.gateway import store
 from audiagentic.components.agents.gateway.session import sessions as session_runtime_module
 from audiagentic.components.agents.gateway.session import sessions_store
 from audiagentic.components.agents.agents_paths import gateway_admitted_prompt_path
+from audiagentic.components.providers.adapters.gpt_auto.snapshot import ChatMessageRef
 
 
 @pytest.mark.parametrize("initial_state", ["running", "failed", "cancelled"])
@@ -83,6 +84,71 @@ def test_complete_execution_from_provider_persists_correlated_response(monkeypat
     assert capture_calls == 2
     assert calls["expected_revision"] == 7
     assert calls["updates"]["__final-response-text"] == "captured answer"
+
+
+def test_complete_from_provider_accepts_terminal_durable_assistant_remount(
+    monkeypatch, tmp_path: Path
+):
+    record = {
+        "request-id": "req_remount",
+        "state": "failed",
+        "revision": 9,
+        "session-id": "ses_capture",
+        "resolved-provider-id": "gpt-auto",
+        "provider-metadata": {
+            "chat-url": "https://chatgpt.com/g/g-p-project/c/conversation",
+            "project-url": "https://chatgpt.com/g/g-p-project/project",
+            "provider-session-id": "conversation",
+            "prompt-message-id": "prompt-1",
+            "assistant-message-id": "assistant-before-remount",
+            "submission-proven": True,
+        },
+    }
+    snapshot = SimpleNamespace(
+        latest_assistant_text="captured answer after remount",
+        latest_user_text="request",
+        latest_user_id="prompt-1",
+        latest_assistant_id="assistant-after-remount",
+        terminal_witness_assistant_id="assistant-after-remount",
+        generating=False,
+        dom_signals=frozenset({"completion-control", "response-complete-status"}),
+        message_refs=(
+            ChatMessageRef(role="user", message_id="prompt-1", text="request", sequence=0),
+            ChatMessageRef(
+                role="assistant",
+                message_id="assistant-after-remount",
+                text="captured answer after remount",
+                sequence=1,
+            ),
+        ),
+    )
+    monkeypatch.setattr(api.store, "read_record", lambda *_: record)
+    monkeypatch.setattr(
+        sessions_store,
+        "read_session_record",
+        lambda *_: {"provider": {"metadata": {}}},
+    )
+    monkeypatch.setattr(sessions_store, "session_provider_metadata", lambda _: {})
+    monkeypatch.setattr(sessions_store, "session_provider_id", lambda _: "gpt-auto")
+    monkeypatch.setattr(
+        session_runtime_module,
+        "get_session_runtime",
+        lambda: SimpleNamespace(
+            capture_latest_response=lambda *_args, **_kwargs: {
+                "outcome": "captured",
+                "snapshot": snapshot,
+            }
+        ),
+    )
+    monkeypatch.setattr(
+        api.store,
+        "transition_operator_terminal",
+        lambda *_args, **_kwargs: {**record, "state": "completed", "revision": 10},
+    )
+
+    result = api.complete_execution_from_provider(tmp_path, "req_remount")
+
+    assert result["state"] == "completed"
 
 
 def test_complete_execution_from_provider_rejects_queued_request(monkeypatch, tmp_path: Path):

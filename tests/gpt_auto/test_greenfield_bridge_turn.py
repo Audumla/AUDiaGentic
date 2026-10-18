@@ -29,6 +29,7 @@ from audiagentic.components.providers.adapters.gpt_auto.turn import (
     _facts,
     _progress_activity_labels,
     _same_response_slot_replacement,
+    _terminal_same_response_slot_replacement,
     _scope_response_snapshot,
 )
 from audiagentic.components.providers.adapters.gpt_auto.urls import (
@@ -1423,6 +1424,43 @@ def test_same_response_slot_replacement_requires_one_prompt_owned_assistant() ->
     )
     assert not _same_response_slot_replacement(
         with_two_assistants,
+        prompt_message_id="prompt-1",
+        old_assistant_id="assistant-old",
+        new_assistant_id="assistant-new",
+    )
+
+
+def test_durable_assistant_remount_is_adopted_only_with_terminal_dom_witness() -> None:
+    terminal = replace(
+        snap(
+            users=1,
+            assistants=1,
+            user="Review AU01",
+            user_id="prompt-1",
+            assistant="final response",
+            assistant_id="assistant-new",
+            complete=True,
+        ),
+        message_refs=(
+            ChatMessageRef(role="user", message_id="prompt-1", text="Review AU01", sequence=0),
+            ChatMessageRef(
+                role="assistant",
+                message_id="assistant-new",
+                text="final response",
+                sequence=1,
+            ),
+        ),
+    )
+
+    assert _terminal_same_response_slot_replacement(
+        terminal,
+        prompt_message_id="prompt-1",
+        old_assistant_id="assistant-old",
+        new_assistant_id="assistant-new",
+    )
+
+    assert not _terminal_same_response_slot_replacement(
+        replace(terminal, generating=True, dom_signals=frozenset({"stop-control"})),
         prompt_message_id="prompt-1",
         old_assistant_id="assistant-old",
         new_assistant_id="assistant-new",

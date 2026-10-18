@@ -74,6 +74,33 @@ def test_restart_reexecutes_after_close_with_original_args(monkeypatch):
     assert host.lifecycle.restart_enabled
 
 
+def test_unexpected_server_exit_relaunches_the_gateway(monkeypatch):
+    events = []
+    host = SimpleNamespace(
+        lifecycle=SimpleNamespace(restart_requested=False, exit_reason=None),
+        serve_forever=lambda: events.append("serve"),
+        close=lambda: events.append("close"),
+    )
+    monkeypatch.setattr(process.GatewayServiceHost, "create", lambda **kwargs: host)
+    launches = []
+    monkeypatch.setattr(process.subprocess, "Popen", lambda args, **kwargs: launches.append((args, kwargs)))
+    monkeypatch.setattr(process.os, "_exit", lambda code: events.append(("exit", code)))
+
+    process.main(["--port", "8765", "--token-file", "token"])
+
+    assert events == ["serve", "close", ("exit", 0)]
+    assert launches
+    assert host.lifecycle.restart_requested
+
+
+def test_close_deadline_reports_a_stranded_host(monkeypatch):
+    never = threading.Event()
+    host = SimpleNamespace(close=lambda: never.wait())
+    monkeypatch.setattr(process, "_CLOSE_DEADLINE_SECONDS", 0.01)
+
+    assert process._close_host_with_deadline(host) is False
+
+
 @pytest.mark.parametrize("action", ["restart", "cancel-request", "project-image"])
 def test_dashboard_action_requires_token_same_origin_and_closed_body(action):
     application = SimpleNamespace(

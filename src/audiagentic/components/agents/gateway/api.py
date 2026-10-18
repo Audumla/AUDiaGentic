@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import functools
 import hashlib
+import os
 import uuid
 from pathlib import Path
 from typing import Any
@@ -55,6 +56,80 @@ def set_queue_manager(manager: queue_mod.GatewayQueueManager) -> None:
     global _QUEUE_MANAGER
     _QUEUE_MANAGER = manager
 
+
+def _workspace_label(value: str) -> str:
+    return "".join(character for character in value.casefold() if character.isalnum())
+
+
+def _resolve_workspace_project_root(
+    project_root: Path,
+    workspace_name: str | None,
+) -> Path:
+    """Resolve an explicit workspace label to a local project root.
+
+    The MCP server has one process CWD, but the gateway can serve sibling
+    checkouts. workspace_name is therefore an admission selector, not merely
+    prompt metadata. Resolution is limited to the current project and
+    explicitly configured workspace roots or direct siblings, and ambiguity
+    fails closed.
+    """
+    if not isinstance(workspace_name, str) or not workspace_name.strip():
+        return project_root
+
+    requested = _workspace_label(workspace_name)
+    current = Path(project_root).resolve()
+    candidates: list[Path] = [current]
+    configured = os.environ.get("AUDIAGENTIC_WORKSPACE_ROOTS", "")
+    if configured.strip():
+        candidates.extend(
+            Path(value).expanduser().resolve()
+            for value in configured.split(os.pathsep)
+            if value.strip()
+        )
+    else:
+        search_parents = [current.parent, *list(current.parents)[1:4]]
+        for parent in search_parents:
+            if not parent.is_dir():
+                continue
+            candidates.extend(
+                child.resolve()
+                for child in parent.iterdir()
+                if child.is_dir() and child != current
+            )
+
+    matches: list[Path] = []
+    from audiagentic.foundation.io import load_yaml_file
+
+    for candidate in candidates:
+        if candidate in matches:
+            continue
+        labels = {_workspace_label(candidate.name)}
+        config_path = candidate / ".audiagentic" / "config" / "project.yaml"
+        if config_path.is_file():
+            config = load_yaml_file(config_path)
+            if isinstance(config, dict):
+                for key in ("project-id", "project_id", "project-name", "project_name"):
+                    value = config.get(key)
+                    if isinstance(value, str) and value.strip():
+                        labels.add(_workspace_label(value))
+        if requested in labels:
+            matches.append(candidate)
+
+    if len(matches) == 1:
+        return matches[0]
+    if len(matches) > 1:
+        raise AudiaGenticError(
+            code="VAL-AGW-152",
+            kind="agents",
+            message="workspace_name matches multiple project roots",
+            details={"workspace-name": workspace_name.strip()},
+        )
+    raise AudiaGenticError(
+        code="RES-AGW-152",
+        kind="agents",
+        message="workspace_name could not be resolved to a local project root",
+        details={"workspace-name": workspace_name.strip()},
+    )
 
 def _resolve_profile_for_submit(
     project_root: Path, execution_profile_id: str | None
@@ -415,6 +490,8 @@ def submit_execution_request(
                 details={},
             )
 
+    project_root = _resolve_workspace_project_root(project_root, workspace_name)
+
     # --- 1. Construct and validate the submission envelope -----------------
     if component_profile is None:
         component_profile = get_active_profile()
@@ -642,7 +719,7 @@ def submit_execution_request(
         if normalized_provider_chat_url:
             persisted_metadata["provider-chat-url"] = normalized_provider_chat_url
         # --- 4. Build the execution manifest -----------------------------------
-        request_id = store.generate_request_id()
+        request_id = store.generate_request_id(canonical_root.display)
         from audiagentic.components.agents.gateway.session import sessions_store as _session_store
 
         # Every admitted request owns a durable gateway session.  Provider
@@ -1578,7 +1655,22 @@ def complete_execution_from_provider(
     expected_assistant_is_real = bool(expected_assistant and not str(expected_assistant).startswith("fallback-"))
     before_assistant_is_real = bool(before_assistant and not str(before_assistant).startswith("fallback-"))
     if expected_assistant_is_real and expected_assistant != latest_assistant_id:
-        raise AudiaGenticError(code="CON-AGW-156", kind="agents", message="provider assistant identity does not match request", details={"request-id": request_id})
+        # The ChatGPT renderer can remount a completed assistant response
+        # with a new durable DOM message id.  Reconcile that case only when
+        # the exact prompt-owned ordered slot and an independent terminal DOM
+        # witness prove that it is the same response.  Ambiguous/later-turn
+        # captures remain fail-closed.
+        from audiagentic.components.providers.adapters.gpt_auto.turn import (
+            _terminal_same_response_slot_replacement,
+        )
+
+        if not _terminal_same_response_slot_replacement(
+            snapshot,
+            prompt_message_id=str(prompt_id or ""),
+            old_assistant_id=str(expected_assistant),
+            new_assistant_id=str(latest_assistant_id or ""),
+        ):
+            raise AudiaGenticError(code="CON-AGW-156", kind="agents", message="provider assistant identity does not match request", details={"request-id": request_id})
     if before_assistant_is_real and before_assistant == latest_assistant_id:
         raise AudiaGenticError(code="CON-AGW-156", kind="agents", message="provider response did not advance", details={"request-id": request_id})
     # GPT-auto intentionally emits this request-local placeholder when the
@@ -1673,6 +1765,30 @@ def complete_execution_from_provider(
         project_root, request_id, expected_revision=int(record.get("revision", 0)),
         updates={"__final-response-text": text, "error": None, "completion": {"source": "operator-provider-capture", "provider-message-id": latest_assistant_id}},
     )
+    # Operator capture is a verified terminal witness, just like the normal
+    # turn observer.  Clear the request-owned unresolved-turn fence as part
+    # of the same terminalization; otherwise a later prompt on this durable
+    # conversation remains queued behind a predecessor that is already
+    # completed.
+    if session_id and isinstance(session_record, dict) and session_record.get("session-id") == str(session_id):
+        session_store.update_provider_metadata(
+            project_root,
+            str(session_id),
+            {
+                "unresolved-turn-pending": False,
+                "recovery-state": "terminal-captured",
+            },
+            remove_keys=(
+                "unresolved-turn-id",
+                "prompt-message-id",
+                "assistant-message-id",
+                "assistant-before-message-id",
+                "assistant-before-id",
+                "prompt-text-digest",
+                "submission-proven",
+                "terminal-evidence",
+            ),
+        )
     return {"request-id": request_id, "state": updated.get("state"), "response-artifact": updated.get("response-artifact"), "capture-source": "provider-current-response"}
 
 
@@ -2357,6 +2473,10 @@ def resume_execution_session(
         opening_request_ids = session_store.session_request_ids(
             session_store.read_session_record(project_root, source_session_id)
         )
+        if not opening_request_ids:
+            created_by_request_id = source_record.get("created-by-request-id")
+            if isinstance(created_by_request_id, str) and created_by_request_id:
+                opening_request_ids = [created_by_request_id]
         if opening_request_ids:
             opening_record = store.read_record(project_root, opening_request_ids[0])
             template_context = opening_record.get("template-context")
