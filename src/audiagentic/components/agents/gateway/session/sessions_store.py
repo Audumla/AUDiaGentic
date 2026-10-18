@@ -1331,7 +1331,25 @@ def record_session_turn(
                 return record
             updated = dict(record)
             provider = dict(updated.get("provider") or {})
-            provider["metadata"] = dict(provider_metadata)
+            current_metadata = dict(provider.get("metadata") or {})
+            current_metadata.update(provider_metadata)
+            if (
+                current_metadata.get("unresolved-turn-pending") is True
+                and isinstance(current_metadata.get("terminal-evidence"), dict)
+            ):
+                current_metadata["unresolved-turn-pending"] = False
+                for key in (
+                    "recovery-state",
+                    "unresolved-turn-id",
+                    "unresolved-baseline-user-id",
+                    "unresolved-baseline-assistant-id",
+                    "unresolved-baseline-user-count",
+                    "unresolved-baseline-assistant-count",
+                    "unresolved-baseline-error-alert-occurrences",
+                    "terminal-evidence",
+                ):
+                    current_metadata.pop(key, None)
+            provider["metadata"] = current_metadata
             updated["provider"] = provider
             timing = dict(updated.get("timing") or {})
             timing["updated-at"] = now_iso_z()
@@ -1354,7 +1372,31 @@ def record_session_turn(
         timestamp = now_iso_z()
         if provider_metadata is not None:
             provider = dict(updated.get("provider") or {})
-            provider["metadata"] = dict(provider_metadata)
+            current_metadata = dict(provider.get("metadata") or {})
+            current_metadata.update(provider_metadata)
+            # The provider result is assembled from the turn's checkpoint
+            # snapshot.  A successful turn may therefore still carry the
+            # pre-send unresolved marker even though terminal proof already
+            # cleared it through the checkpoint sink.  Terminal evidence is
+            # the authoritative proof here; do not resurrect a stale fence
+            # while recording the completed turn.
+            if (
+                current_metadata.get("unresolved-turn-pending") is True
+                and isinstance(current_metadata.get("terminal-evidence"), dict)
+            ):
+                current_metadata["unresolved-turn-pending"] = False
+                for key in (
+                    "recovery-state",
+                    "unresolved-turn-id",
+                    "unresolved-baseline-user-id",
+                    "unresolved-baseline-assistant-id",
+                    "unresolved-baseline-user-count",
+                    "unresolved-baseline-assistant-count",
+                    "unresolved-baseline-error-alert-occurrences",
+                    "terminal-evidence",
+                ):
+                    current_metadata.pop(key, None)
+            provider["metadata"] = current_metadata
             updated["provider"] = provider
         timing = dict(updated.get("timing") or {})
         timing["last-activity-at"] = timestamp

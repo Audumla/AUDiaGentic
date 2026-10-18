@@ -5,9 +5,13 @@ import argparse
 import os
 import subprocess
 import sys
+import threading
 from pathlib import Path
 
 from audiagentic.components.agents.gateway.service.host import GatewayServiceHost
+
+
+_CLOSE_DEADLINE_SECONDS = 30.0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -25,13 +29,26 @@ def main(argv: list[str] | None = None) -> int:
         service_root=args.service_root,
     )
     host.lifecycle.restart_enabled = True
+    unexpected_server_exit = False
     try:
         host.serve_forever()
     finally:
+        # ``serve_forever`` should only return after an explicit lifecycle
+        # action.  Treat an unannotated return as a failed service boundary:
+        # otherwise the process can remain alive after its socket is closed
+        # and the managed-service record falsely continues to say ``running``.
+        unexpected_server_exit = not bool(
+            getattr(host.lifecycle, "restart_requested", False)
+            or getattr(host.lifecycle, "exit_reason", None)
+        )
+        if unexpected_server_exit:
+            host.lifecycle.restart_requested = True
         if host.lifecycle.restart_requested:
             os.environ["AUDIAGENTIC_GATEWAY_RESTART_HANDOFF"] = "1"
-        host.close()
-    if host.lifecycle.restart_requested:
+        closed = _close_host_with_deadline(host)
+    if not closed:
+        _fence_stranded_host(host)
+    if host.lifecycle.restart_requested or not closed:
         # Retire the old owner and release HTTP/provider resources first.
         # A new interpreter loads changed code, retaining the exact launch args.
         _launch_replacement(sys.argv[1:] if argv is None else argv)
@@ -42,6 +59,34 @@ def main(argv: list[str] | None = None) -> int:
         # detached, so terminate this owner immediately.
         os._exit(0)
     return 0
+
+
+def _close_host_with_deadline(host: GatewayServiceHost) -> bool:
+    """Close the host without allowing provider teardown to strand the service."""
+    finished = threading.Event()
+
+    def close() -> None:
+        try:
+            host.close()
+        finally:
+            finished.set()
+
+    threading.Thread(target=close, name="gateway-host-close", daemon=True).start()
+    return finished.wait(_CLOSE_DEADLINE_SECONDS)
+
+
+def _fence_stranded_host(host: GatewayServiceHost) -> None:
+    """Release the managed owner before replacing a host stuck in teardown."""
+    try:
+        host.server.server_close()
+    except Exception:
+        pass
+    try:
+        host.owner.retire(expected_epoch=host.owner_epoch)
+    except Exception:
+        # The replacement's startup recovery remains the final authority; a
+        # stale record must never keep this process alive indefinitely.
+        pass
 
 
 def _launch_replacement(argv: list[str]) -> None:

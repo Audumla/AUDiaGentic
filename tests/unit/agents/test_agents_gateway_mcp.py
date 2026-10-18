@@ -260,6 +260,31 @@ def test_agent_task_session_resume_delegates_to_gateway_client():
     )
 
 
+def test_agent_task_session_resume_routes_to_session_owning_checkout():
+    owning_root = Path("C:/example-dev-root/bigcherry")
+    with (
+        _patch_root(),
+        patch(
+            "audiagentic.components.agents.mcp.gateway_mcp._session_project_root",
+            return_value=owning_root,
+        ),
+        patch("audiagentic.components.agents.mcp.gateway_mcp.call_gateway_method") as mock_call,
+    ):
+        mock_call.return_value = {"session-id": "ses_new", "state": "active"}
+        result = agents_gateway_mcp.agent_task_session_resume(
+            "ses_bigcherry", "ctl_002", model_id="chatgpt"
+        )
+
+    assert result["session-id"] == "ses_new"
+    mock_call.assert_called_once_with(
+        "resume_execution_session",
+        owning_root,
+        "ses_bigcherry",
+        control_id="ctl_002",
+        model_id="chatgpt",
+    )
+
+
 def test_agent_task_session_control_delegates_to_gateway_client():
     with (
         _patch_root(),

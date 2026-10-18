@@ -99,6 +99,11 @@ def _is_durable_assistant_message_id(message_id: str | None) -> bool:
     return bool(message_id and not message_id.startswith("fallback-assistant-"))
 
 
+_REMOUNT_TERMINAL_WITNESS_SIGNALS = frozenset(
+    {"completion-control", "more-actions-menu", "response-complete-status"}
+)
+
+
 def _text_digest(text: str | None) -> str | None:
     """Return a bounded diagnostic fingerprint without logging response text."""
     if text is None:
@@ -1794,7 +1799,15 @@ class GptAutoTurn:
                 _fallback_prompt_anchor_is_stable(
                     baseline, raw, prompt_message_id, prompt_text=self.request.body
                 )
-                and _is_fallback_assistant_message_id(old_id)
+                and (
+                    _is_fallback_assistant_message_id(old_id)
+                    or _terminal_same_response_slot_replacement(
+                        raw,
+                        prompt_message_id=prompt_message_id,
+                        old_assistant_id=old_id,
+                        new_assistant_id=new_id,
+                    )
+                )
                 and (
                     _is_fallback_assistant_message_id(new_id)
                     or _is_durable_assistant_message_id(new_id)
@@ -3321,6 +3334,36 @@ def _same_response_slot_replacement(
     ):
         return False
     return snapshot.latest_assistant_id == new_assistant_id
+
+
+def _terminal_same_response_slot_replacement(
+    snapshot: ChatSnapshot,
+    *,
+    prompt_message_id: str,
+    old_assistant_id: str,
+    new_assistant_id: str,
+) -> bool:
+    """Allow a durable assistant ID to change only after a proven remount.
+
+    The provider can rematerialize the completed assistant node with a new
+    ``data-message-id``.  A durable-ID change is normally unsafe, but it is
+    recoverable when the ordered turn boundary is unambiguous and the DOM
+    independently proves that this one response is terminal.  Requiring the
+    terminal witness and non-generating state prevents synthetic activity or
+    a transient streaming remount from masking a submission/ownership bug.
+    """
+    return (
+        _same_response_slot_replacement(
+            snapshot,
+            prompt_message_id=prompt_message_id,
+            old_assistant_id=old_assistant_id,
+            new_assistant_id=new_assistant_id,
+        )
+        and not snapshot.generating
+        and bool(snapshot.latest_assistant_text)
+        and snapshot.terminal_witness_assistant_id == new_assistant_id
+        and bool(snapshot.dom_signals & _REMOUNT_TERMINAL_WITNESS_SIGNALS)
+    )
 
 
 def _scope_response_snapshot(

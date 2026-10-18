@@ -191,6 +191,67 @@ def test_host_watchdog_captures_completed_provider_turn_before_reconcile(
     assert registry.unregistered == [request_id]
 
 
+def test_host_watchdog_does_not_capture_turn_owned_by_live_runtime(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """The active observer, not the watchdog, owns a live provider turn."""
+    from audiagentic.components.agents.gateway.service.host import GatewayServiceHost
+
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    request_id = "req-live-turn"
+    diagnosed = {
+        "request-id": request_id,
+        "state": "running",
+        "session-id": "ses-live",
+        "revision": 7,
+        "watchdog-state": "intervention",
+        "diagnostics": {"resolution-state": "unresolved"},
+    }
+
+    class Registry:
+        def __init__(self) -> None:
+            self.current = (project_root.resolve(), dict(diagnosed))
+
+        def snapshot(self):
+            return ((self.current[0], dict(self.current[1])),)
+
+        def update(self, root, record):
+            self.current = (root.resolve(), dict(record))
+
+    class Runtime:
+        def session_runtime_status(self, _session_id):
+            return {"available": True, "turn-active": True, "current-request-id": request_id}
+
+    registry = Registry()
+    captured: list[str] = []
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.queue.watchdog_registry.watchdog_registry",
+        lambda: registry,
+    )
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.queue.dispatch.diagnose_activity_lease",
+        lambda _root, _record: dict(diagnosed),
+    )
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.session.sessions.peek_session_runtime",
+        lambda: Runtime(),
+    )
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.api.complete_execution_from_provider",
+        lambda *_args, **_kwargs: captured.append(request_id),
+    )
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.session.sessions_store.read_session_record",
+        lambda *_args: {"session-id": "ses-live", "provider": {"metadata": {"unresolved-turn-pending": True}}},
+    )
+
+    result = GatewayServiceHost.run_watchdog_pass(object.__new__(GatewayServiceHost))
+
+    assert captured == []
+    assert result == (diagnosed,)
+
+
 def test_host_watchdog_passively_probes_unresolved_turn_without_diagnostics(
     tmp_path: Path, monkeypatch
 ) -> None:

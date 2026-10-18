@@ -553,6 +553,44 @@ def test_stale_active_rehydrate_failure_is_deferred_for_retry(rig, monkeypatch):
     assert exc.value.phase == "rehydrate-retry"
     assert exc.value.side_effect_state == "may-have-started"
 
+
+def test_durable_chat_reopen_does_not_replace_explicit_session(rig, monkeypatch):
+    """A retained provider chat is retried in place, never silently forked."""
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+    runtime, transports, root = rig
+    first = _dispatch(
+        root, _running_record(root, session_keep_alive=True), dispatch_prompt="hello"
+    )
+    session_id = first["session-id"]
+    sessions_store.update_provider_metadata(
+        root,
+        session_id,
+        {"chat-url": "https://chatgpt.com/g/g-p-project/c/conversation"},
+    )
+    monkeypatch.setattr(
+        runtime,
+        "session_runtime_status",
+        lambda _session_id: {"available": False},
+    )
+
+    def rehydrate_failure(*_args, **_kwargs):
+        raise AudiaGenticError(
+            code="EXT-AGW-118",
+            kind="agents",
+            message="provider rejected durable session rehydration",
+        )
+
+    monkeypatch.setattr(runtime, "rehydrate_session", rehydrate_failure)
+    record = _running_record(root, session_id=session_id, session_keep_alive=True)
+    with pytest.raises(RecoveryDeferred) as exc:
+        _dispatch(root, record, dispatch_prompt="follow-up")
+
+    assert exc.value.phase == "rehydrate-retry"
+    stored = store.read_record(root, record["request-id"])
+    assert stored["session-id"] == session_id
+    assert len(transports) == 1
+
 def test_promptless_restart_resume_reaches_provider_observer(rig, monkeypatch):
     """A recovered running turn must not fail before observation-only resume."""
     runtime, transports, tmp_path = rig
@@ -1153,6 +1191,36 @@ def test_closed_by_non_shutdown_reason_still_raises_res_agw_003(rig):
     assert len(transports) == 1  # no successor transport was ever opened
 
 
+
+def test_preterminal_reconciliation_uses_passive_capture_for_proven_gpt_turn(monkeypatch, tmp_path):
+    calls = []
+
+    def capture(root, request_id, *, passive=False):
+        calls.append((root, request_id, passive))
+        return {"request-id": request_id, "state": "completed"}
+
+    from audiagentic.components.agents.gateway import api
+
+    monkeypatch.setattr(api, "complete_execution_from_provider", capture)
+    result = session_dispatch._reconcile_before_failed_terminal(
+        tmp_path,
+        {"provider-metadata": {"submission-proven": True}},
+        provider_id="gpt-auto",
+        request_id="req_reconcile",
+    )
+    assert result["state"] == "completed"
+    assert calls == [(tmp_path, "req_reconcile", True)]
+
+
+def test_preterminal_reconciliation_does_not_capture_ambiguous_without_submission_evidence(tmp_path):
+    result = session_dispatch._reconcile_before_failed_terminal(
+        tmp_path,
+        {"provider-metadata": {"submission-proven": False, "submission-ambiguous": True}},
+        provider_id="gpt-auto",
+        request_id="req_ambiguous",
+    )
+    assert result is None
+
 def test_failed_session_with_durable_binding_auto_resumes(resumable_rig):
     """A failed local generation can continue when its provider binding is safe."""
     from audiagentic.components.agents.gateway.session import sessions_store as session_store
@@ -1276,3 +1344,112 @@ def test_no_isolation_plain_record_routes_through_ephemeral_session(rig, monkeyp
     assert len(transports) == 1
     assert transports[0].turns == ["do the thing"]
     assert transports[0].closed  # not keep-alive: ephemeral session auto-closes
+
+
+def test_completed_predecessor_fence_is_cleared_before_followup(tmp_path, monkeypatch):
+    """A completed turn with a lost checkpoint clear must not block the next turn."""
+    predecessor = {
+        "state": "completed",
+        "session-id": "ses_shared",
+        "provider-metadata": {
+            "terminal-evidence": {"terminal-witness-id": "assistant-prev"},
+        },
+    }
+    record = {
+        "request-id": "req_followup",
+        "session-id": "ses_shared",
+        "dispatch-owner-epoch": "owner",
+        "worker-id": "worker",
+        "attempt-epoch": "attempt",
+        "provider-metadata": {
+            "unresolved-turn-pending": True,
+            "unresolved-turn-id": "req_previous",
+            "prompt-text-digest": "stale",
+        },
+    }
+    monkeypatch.setattr(session_dispatch.store, "read_record", lambda *_args: predecessor)
+    session_updates = []
+    monkeypatch.setattr(
+        sessions_store,
+        "update_provider_metadata",
+        lambda *args, **kwargs: session_updates.append((args, kwargs)),
+    )
+    monkeypatch.setattr(
+        session_dispatch.store,
+        "update_owned_running_session",
+        lambda *_args, **kwargs: {
+            **record,
+            "state": "running",
+            "provider-metadata": kwargs["provider_metadata"],
+        },
+    )
+    monkeypatch.setattr(session_dispatch.store, "record_gateway_timeline", lambda *_args, **_kwargs: None)
+
+    cleared = session_dispatch._clear_terminal_predecessor_fence(
+        tmp_path,
+        record,
+        session_store=sessions_store,
+    )
+
+    assert cleared is not None
+    assert cleared["provider-metadata"]["unresolved-turn-pending"] is False
+    assert cleared["provider-metadata"]["recovery-state"] == "stale-predecessor-fence-cleared"
+    assert cleared["provider-metadata"]["stale-predecessor-request-id"] == "req_previous"
+    assert "unresolved-turn-id" not in cleared["provider-metadata"]
+    assert session_updates
+
+
+
+
+def test_completed_session_checkpoint_repairs_missing_predecessor_record(tmp_path, monkeypatch):
+    """A lost predecessor request record can still be reconciled from the session."""
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+    record = {
+        "request-id": "req_followup",
+        "session-id": "ses_shared",
+        "dispatch-owner-epoch": "owner",
+        "worker-id": "worker",
+        "attempt-epoch": "attempt",
+        "provider-metadata": {
+            "unresolved-turn-pending": True,
+            "unresolved-turn-id": "req_previous",
+        },
+    }
+    session_record = {
+        "provider": {
+            "metadata": {
+                "unresolved-turn-id": "req_previous",
+                "terminal-evidence": {"terminal-witness-id": "assistant-prev"},
+            }
+        }
+    }
+    def missing(*_args):
+        raise AudiaGenticError(
+            code="RES-AGW-001", kind="agents", message="missing"
+        )
+    monkeypatch.setattr(session_dispatch.store, "read_record", missing)
+    monkeypatch.setattr(sessions_store, "read_session_record", lambda *_args: session_record)
+    monkeypatch.setattr(
+        sessions_store,
+        "update_provider_metadata",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        session_dispatch.store,
+        "update_owned_running_session",
+        lambda *_args, **kwargs: {
+            **record,
+            "state": "running",
+            "provider-metadata": kwargs["provider_metadata"],
+        },
+    )
+    monkeypatch.setattr(session_dispatch.store, "record_gateway_timeline", lambda *_args, **_kwargs: None)
+
+    cleared = session_dispatch._clear_terminal_predecessor_fence(
+        tmp_path, record, session_store=sessions_store
+    )
+
+    assert cleared is not None
+    assert cleared["provider-metadata"]["unresolved-turn-pending"] is False
+
+

@@ -33,6 +33,16 @@ def test_build_record_defaults(tmp_path: Path) -> None:
     assert record["request-id"].startswith("req_")
 
 
+def test_generate_request_id_includes_safe_project_slug() -> None:
+    request_id = store.generate_request_id(Path(r"C:\example-dev-root\Big Cherry"))
+    assert request_id.startswith("req_big-cherry_")
+    assert len(request_id.rsplit("_", 1)[-1]) == 12
+
+
+def test_generate_request_id_has_bounded_fallback_slug() -> None:
+    request_id = store.generate_request_id(Path("!!!"))
+    assert request_id.startswith("req_project_")
+
 def test_value_error_detail_is_preserved_for_operator_diagnosis(tmp_path: Path) -> None:
     record = store.build_record(execution_profile_id="default", prompt_body="do the thing")
     store.write_record(tmp_path, record)
