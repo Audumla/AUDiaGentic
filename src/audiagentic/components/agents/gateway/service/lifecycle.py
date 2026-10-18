@@ -52,16 +52,20 @@ def gateway_quiescence_facts(service_root: Path | None = None) -> dict[str, Any]
     """Redacted domain quiescence facts. Foundation never inspects internals —
     this is the gateway-owned callback data contract (SH10 step 2)."""
     from audiagentic.components.agents.gateway import api as api
+    from audiagentic.components.agents.gateway import store
     from audiagentic.components.agents.gateway.ingress import ingress_backlog
     from audiagentic.components.agents.gateway.session.sessions import peek_session_runtime
 
-    depths = api.get_queue_manager().project_queue_depths(service_root) if service_root is not None else {}
+    queue_manager = api.get_queue_manager()
+    depths = queue_manager.project_queue_depths(service_root) if service_root is not None else {}
     pending = sum(d.get("pending", 0) for d in depths.values())
     running = sum(d.get("running", 0) for d in depths.values())
     runtime = peek_session_runtime()
     live_sessions = len(runtime.live_session_ids()) if runtime is not None else 0
     backlog = ingress_backlog(service_root)
     active_operations = 0
+    recovery_pending = queue_manager.recovery_pending_count(service_root)
+    durable_active_work = store.count_active_work(service_root) if service_root is not None else 0
     if service_root is not None:
         from audiagentic.components.agents.gateway.operations import ManagementOperationStore
 
@@ -77,9 +81,13 @@ def gateway_quiescence_facts(service_root: Path | None = None) -> dict[str, Any]
         "live-sessions": live_sessions,
         "ingress-pending": backlog["pending"],
         "active-gateway-operations": active_operations,
+        "recovery-pending": recovery_pending,
+        "durable-active-work": durable_active_work,
         "quiescent": (
             pending == 0
             and running == 0
+            and recovery_pending == 0
+            and durable_active_work == 0
             and live_sessions == 0
             and backlog["pending"] == 0
             and active_operations == 0
@@ -161,36 +169,22 @@ class GatewayLifecycleController:
         logger.info("gateway drain cancelled; resumed")
         return self._store.status()
 
-    def request_restart(self) -> dict[str, Any]:
-        """Drain admission and refuse a restart that would interrupt work."""
+    def request_restart(
+        self, *, force: bool = False, initiating_lease_id: str | None = None
+    ) -> dict[str, Any]:
+        """Drain admission and hand non-terminal work to the next generation."""
+        del force
         if not self.restart_enabled:
             raise lifecycle_conflict_error(1, "this gateway host does not support restart")
         if self.restart_requested:
             return {"restarting": True}
-        was_running = self._store.read().state == "running"
         self.request_drain()
-        facts = gateway_quiescence_facts(self._store.root)
-        from audiagentic.components.agents.gateway.session.sessions import peek_session_runtime
-
-        runtime = peek_session_runtime()
-        sessions = runtime.session_snapshot_all() if runtime is not None else {}
-        busy_sessions = [
-            session_id for session_id, state in sessions.items()
-            if state.get("turn-active") or state.get("pending-turns", 0)
-        ]
-        # Automatic idle shutdown still treats an open provider handle as
-        # non-quiescent. An explicit restart may release idle handles through
-        # normal host cleanup: durable conversation bindings survive it.
-        blocking_work = any(facts[key] for key in (
-            "pending-requests", "running-requests", "ingress-pending",
-            "active-gateway-operations",
-        )) or bool(busy_sessions)
-        if blocking_work:
-            if was_running:
-                self.request_resume()
-            raise lifecycle_conflict_error(
-                1, "gateway has queued or running work; retry restart when idle",
-                quiescence=facts, busy_sessions=busy_sessions,
+        if initiating_lease_id is not None:
+            # The restart RPC is invoked while holding the caller lease.  End
+            # that lease before stopping the host so owner retirement cannot
+            # be vetoed by the RPC client's finally/close racing shutdown.
+            self._store.release_lease(
+                initiating_lease_id, expected_epoch=self._owner_epoch
             )
         self.restart_requested = True
         self._exit_reason = "operator-restart"

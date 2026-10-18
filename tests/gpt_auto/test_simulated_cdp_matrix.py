@@ -8,7 +8,7 @@ tested repeatably, including malformed/negative responses.
 from __future__ import annotations
 
 import asyncio
-from types import SimpleNamespace
+from pathlib import Path
 
 import pytest
 
@@ -23,12 +23,75 @@ from audiagentic.components.providers.adapters.gpt_auto.cdp.cdp_browser import (
 )
 from audiagentic.components.providers.adapters.gpt_auto.config import GptAutoConfig
 from audiagentic.components.providers.adapters.gpt_auto.gpt_auto_cdp import (
+    _COMPOSER_READY_FN,
+    _PROJECT_NEW_CHAT_POINT_FN,
     _SNAPSHOT_FN,
     GptAutoCdpBrowserController,
 )
 from audiagentic.components.providers.adapters.gpt_auto.snapshot import ChatSnapshot
 
 from .test_greenfield_config_urls import valid_config
+
+
+class _NoopBridge:
+    async def call(self, *_args, **_kwargs):
+        return {}
+
+
+@pytest.mark.asyncio
+async def test_wait_for_composer_uses_lightweight_readiness_probe(monkeypatch) -> None:
+    browser = GptAutoCdpBrowserController(_NoopBridge())
+    page = CdpPageRef("page-1", "target-1", 7, "https://chatgpt.com/projects", "")
+    functions: list[str] = []
+
+    async def evaluate(_page, function, _argument=None):
+        functions.append(function)
+        return {"composerPresent": True, "composerEditable": True, "visible": True}
+
+    async def snapshot(_page, **_kwargs):
+        raise AssertionError("full DOM snapshot must not gate composer readiness")
+
+    monkeypatch.setattr(browser, "evaluate", evaluate)
+    monkeypatch.setattr(browser, "snapshot", snapshot)
+
+    ready = await browser.wait_for_composer(page, timeout=1)
+
+    assert ready["composerEditable"] is True
+    assert functions == [_COMPOSER_READY_FN]
+
+
+@pytest.mark.asyncio
+async def test_wait_for_composer_retries_without_foregrounding_hidden_page(monkeypatch) -> None:
+    browser = GptAutoCdpBrowserController(_NoopBridge())
+    page = CdpPageRef("page-1", "target-1", 7, "https://chatgpt.com/projects", "")
+    readiness_calls = 0
+    retry_calls = 0
+
+    async def evaluate(_page, function, _argument=None):
+        nonlocal readiness_calls
+        if function == _COMPOSER_READY_FN:
+            readiness_calls += 1
+            if readiness_calls < 6:
+                return {"composerPresent": False, "composerEditable": False, "visible": False}
+            return {"composerPresent": True, "composerEditable": True, "visible": True}
+        raise AssertionError("retry should use the page-local retry helper")
+
+    async def retry_conversation_load(_page, *, expected_path=None):
+        nonlocal retry_calls
+        retry_calls += 1
+        return True
+
+    async def activate(_page):
+        raise AssertionError("automatic retry must not foreground the browser target")
+
+    monkeypatch.setattr(browser, "evaluate", evaluate)
+    monkeypatch.setattr(browser, "retry_conversation_load", retry_conversation_load)
+    monkeypatch.setattr(browser, "activate", activate)
+
+    ready = await browser.wait_for_composer(page, timeout=2)
+
+    assert ready["composerEditable"] is True
+    assert retry_calls == 1
 
 
 def test_snapshot_does_not_promote_static_streaming_animation_to_busy() -> None:
@@ -61,8 +124,49 @@ def test_snapshot_activity_anchors_to_latest_agent_turn_before_assistant_node() 
     """
     assert "const agentTurns = Array.from(document.querySelectorAll('.agent-turn'))" in _SNAPSHOT_FN
     assert "const latestAgentTurn = agentTurns.length ? agentTurns[agentTurns.length - 1] : null" in _SNAPSHOT_FN
-    assert ") : latestAgentTurn;" in _SNAPSHOT_FN
+    assert "const progressTurns = agentTurns.length" in _SNAPSHOT_FN
+    assert "const latestFallbackActivityBlock" in _SNAPSHOT_FN
+    assert "fallbackHasUnansweredPrompt" in _SNAPSHOT_FN
     assert "[class~=\"group/tool-message\"]" in _SNAPSHOT_FN
+
+
+def test_snapshot_has_structural_progress_fallback_and_semantic_digest() -> None:
+    for selector in (
+        '[data-testid*="citation" i]',
+        '[data-testid="writing-block-container"]',
+        "table",
+        "[aria-valuenow]",
+        "[aria-valuetext]",
+        "[data-phase]",
+        "[data-progress]",
+    ):
+        assert selector in _SNAPSHOT_FN
+    for kind in (
+        "dom-status",
+        "dom-progress",
+        "dom-tool-result",
+        "dom-connector",
+        "dom-citation",
+        "dom-table",
+        "dom-materialization",
+    ):
+        assert kind in _SNAPSHOT_FN
+    assert "const semanticStateDigest = (node, excludedRoots = null, lexicalCarriers = null, canonicalLexicalRoots = []) =>" in _SNAPSHOT_FN
+    assert "const semanticNodeDigest = (node, excludedRoots = null, lexicalCarriers = null, canonicalLexicalRoots = []) =>" in _SNAPSHOT_FN
+    assert "const boundedScalarMaterial = value =>" in _SNAPSHOT_FN
+    assert "const boundedTextForKind = node =>" in _SNAPSHOT_FN
+    assert "const visibleTextDigest = (node, excludedRoots = null) =>" in _SNAPSHOT_FN
+    assert "dom-activity-v2" in _SNAPSHOT_FN
+    assert "new MutationObserver" in _SNAPSHOT_FN
+    assert "domActivityOwnerPromptMessageId" in _SNAPSHOT_FN
+
+
+def test_completion_snapshot_accepts_current_regenerate_response_control() -> None:
+    defaults = (
+        Path(__file__).parents[2]
+        / "src/audiagentic/components/providers/adapters/gpt_auto/gpt-auto-defaults.yaml"
+    )
+    assert 'button[aria-label="Regenerate response"]' in defaults.read_text(encoding="utf-8")
 
 
 def test_snapshot_resolves_sidebar_title_by_active_conversation_url() -> None:
@@ -264,13 +368,280 @@ async def test_bridge_positive_lifecycle_sequence_is_typed_and_reusable():
 
 
 @pytest.mark.asyncio
-async def test_new_session_selects_exact_project_from_projects_page(monkeypatch) -> None:
-    browser = GptAutoCdpBrowserController(SimpleNamespace())
+async def test_projects_new_chat_uses_trusted_cdp_pointer_click(monkeypatch) -> None:
+    calls: list[tuple[str, object]] = []
+
+    class Bridge:
+        async def call(self, method, params=None, **_kwargs):
+            calls.append((method, params))
+            return {"clicked": True}
+
+    browser = GptAutoCdpBrowserController(Bridge())
+    page = CdpPageRef("page-1", "target-1", 7, "https://chatgpt.com/projects", "")
+
+    async def evaluate(_page, _function, _name=None):
+        return {"x": 123.5, "y": 456.5, "projectId": "g-p-audiagentic"}
+
+    monkeypatch.setattr(browser, "evaluate", evaluate)
+
+    assert await browser._select_project_from_projects_page(page, "AUDiaGentic", timeout=1) == {"clicked": True, "projectId": "g-p-audiagentic"}
+    assert calls == [
+        ("keep_page_active", {"pageHandle": "page-1"}),
+        ("click", {"pageHandle": "page-1", "x": 123.5, "y": 456.5}),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_sidebar_project_uses_trusted_pointer_for_exact_project(monkeypatch) -> None:
+    calls: list[tuple[str, object]] = []
+    inputs: list[object] = []
+
+    class Bridge:
+        async def call(self, method, params=None, **_kwargs):
+            calls.append((method, params))
+            return {"clicked": True}
+
+    browser = GptAutoCdpBrowserController(Bridge(), action_pause_seconds=0.0)
+    page = CdpPageRef("page-1", "target-1", 7, "https://chatgpt.com/", "")
+
+    async def evaluate(_page, _function, value=None):
+        inputs.append(value)
+        return {"action": "selected", "projectId": "g-p-69cc8c4cc7648191a009f358113d8dd2", "x": 101.5, "y": 202.5}
+
+    monkeypatch.setattr(browser, "evaluate", evaluate)
+
+    assert await browser._select_project_from_sidebar(
+        page,
+        "AUDiaGentic",
+        expected_project_id="g-p-69cc8c4cc7648191a009f358113d8dd2",
+        timeout=2,
+    ) == {"clicked": True, "projectId": "g-p-69cc8c4cc7648191a009f358113d8dd2"}
+    assert inputs == [{
+        "name": "AUDiaGentic",
+        "expectedProjectId": "g-p-69cc8c4cc7648191a009f358113d8dd2",
+    }]
+    assert calls == [
+        ("keep_page_active", {"pageHandle": "page-1"}),
+        ("click", {"pageHandle": "page-1", "x": 101.5, "y": 202.5}),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_sidebar_occluded_new_chat_hovers_once_then_trusted_clicks(monkeypatch) -> None:
+    calls: list[tuple[str, object]] = []
+    actions = iter([
+        {"action": "hover", "x": 120.0, "y": 44.0},
+        {"action": "selected", "projectId": "g-p-69cc", "x": 277.6, "y": 44.0},
+    ])
+
+    class Bridge:
+        async def call(self, method, params=None, **_kwargs):
+            calls.append((method, params))
+            return {"ok": True}
+
+    browser = GptAutoCdpBrowserController(Bridge(), action_pause_seconds=0.0)
+    page = CdpPageRef("page-1", "target-1", 7, "https://chatgpt.com/", "")
+
+    async def evaluate(_page, function, value=None):
+        assert "button.contains(document.elementFromPoint" in function
+        assert value["expectedProjectId"] == "g-p-69cc"
+        return next(actions)
+
+    monkeypatch.setattr(browser, "evaluate", evaluate)
+
+    assert await browser._select_project_from_sidebar(
+        page, "AUDiaGentic", expected_project_id="g-p-69cc", timeout=2
+    ) == {"clicked": True, "projectId": "g-p-69cc"}
+    assert calls == [
+        ("keep_page_active", {"pageHandle": "page-1"}),
+        ("hover", {"pageHandle": "page-1", "x": 120.0, "y": 44.0}),
+        ("keep_page_active", {"pageHandle": "page-1"}),
+        ("click", {"pageHandle": "page-1", "x": 277.6, "y": 44.0}),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_sidebar_project_rejects_wrong_exact_project_id(monkeypatch) -> None:
+    calls: list[tuple[str, object]] = []
+
+    class Bridge:
+        async def call(self, method, params=None, **_kwargs):
+            calls.append((method, params))
+            return {}
+
+    browser = GptAutoCdpBrowserController(Bridge(), action_pause_seconds=0.0)
+    page = CdpPageRef("page-1", "target-1", 7, "https://chatgpt.com/", "")
+
+    async def evaluate(_page, function, value=None):
+        assert "data-app-action-sidebar-project-id" in function
+        assert value["expectedProjectId"] == "g-p-expected"
+        return {"action": "project-id-mismatch", "actualProjectId": "g-p-wrong"}
+
+    monkeypatch.setattr(browser, "evaluate", evaluate)
+
+    assert await browser._select_project_from_sidebar(
+        page, "AUDiaGentic", expected_project_id="g-p-expected", timeout=2
+    ) == {"action": "project-id-mismatch", "actualProjectId": "g-p-wrong"}
+    assert calls == []
+
+
+def test_projects_new_chat_point_scrolls_before_viewport_validation() -> None:
+    scroll = _PROJECT_NEW_CHAT_POINT_FN.index("button.scrollIntoView")
+    rect = _PROJECT_NEW_CHAT_POINT_FN.index("button.getBoundingClientRect", scroll)
+    viewport = _PROJECT_NEW_CHAT_POINT_FN.index("window.innerWidth", rect)
+
+    assert scroll < rect < viewport
+    assert "x < 0 || y < 0" in _PROJECT_NEW_CHAT_POINT_FN
+    assert "matching.length !== 1" in _PROJECT_NEW_CHAT_POINT_FN
+    assert "canonicalProjectId" in _PROJECT_NEW_CHAT_POINT_FN
+    assert "data-app-action-sidebar-project-row" in _PROJECT_NEW_CHAT_POINT_FN
+    assert "sidebarProjectIdForName" in _PROJECT_NEW_CHAT_POINT_FN
+
+
+@pytest.mark.asyncio
+async def test_sidebar_project_expands_once_before_selecting_new_chat(monkeypatch) -> None:
+    import audiagentic.components.providers.adapters.gpt_auto.gpt_auto_cdp as cdp
+
+    calls: list[tuple[str, object]] = []
+
+    class Bridge:
+        async def call(self, method, params=None, **_kwargs):
+            calls.append((method, params))
+            return {"clicked": True}
+
+    browser = GptAutoCdpBrowserController(Bridge(), action_pause_seconds=0.0)
+    page = CdpPageRef("page-1", "target-1", 7, "https://chatgpt.com/", "")
+    actions = iter([
+        {"action": "expand", "x": 20, "y": 30},
+        {"action": "waiting"},
+        {"action": "selected", "projectId": "g-p-bigcherry", "x": 40, "y": 50},
+    ])
+    delays: list[float] = []
+
+    async def evaluate(_page, _function, _value=None):
+        return next(actions)
+
+    async def record_sleep(delay):
+        delays.append(delay)
+
+    monkeypatch.setattr(browser, "evaluate", evaluate)
+    monkeypatch.setattr(cdp.asyncio, "sleep", record_sleep)
+
+    assert await browser._select_project_from_sidebar(
+        page, "BigCherry", expected_project_id="g-p-bigcherry", timeout=2
+    ) == {"clicked": True, "projectId": "g-p-bigcherry"}
+    assert delays.count(browser._PAGE_READY_PAUSE_SECONDS) == 1
+    assert [method for method, _params in calls].count("click") == 2
+
+
+@pytest.mark.asyncio
+async def test_sidebar_project_never_repeats_expand_pointer(monkeypatch) -> None:
+    calls: list[tuple[str, object]] = []
+
+    class Bridge:
+        async def call(self, method, params=None, **_kwargs):
+            calls.append((method, params))
+            return {"clicked": True}
+
+    browser = GptAutoCdpBrowserController(Bridge(), action_pause_seconds=0.0)
+    page = CdpPageRef("page-1", "target-1", 7, "https://chatgpt.com/", "")
+    actions = iter([
+        {"action": "expand", "x": 20, "y": 30},
+        {"action": "expand", "x": 20, "y": 30},
+    ])
+
+    async def evaluate(_page, _function, _value=None):
+        return next(actions)
+
+    async def no_wait(_delay):
+        return None
+
+    monkeypatch.setattr(browser, "evaluate", evaluate)
+    monkeypatch.setattr(asyncio, "sleep", no_wait)
+
+    assert await browser._select_project_from_sidebar(
+        page, "BigCherry", expected_project_id="g-p-bigcherry", timeout=2
+    ) == {"action": "expand-not-effective", "last": {"action": "expand", "x": 20, "y": 30}}
+    assert [method for method, _params in calls].count("click") == 1
+
+
+@pytest.mark.asyncio
+async def test_timed_out_anchor_cleanup_closes_only_late_blank_targets(monkeypatch) -> None:
+    browser = GptAutoCdpBrowserController(_NoopBridge())
+    anchor = CdpPageRef("anchor", "anchor-target", 7, "http://127.0.0.1:8765/dashboard", "")
+    late_blank = CdpPageRef("late", "late-target", 7, "about:blank", "", "anchor-target")
+    navigated = CdpPageRef("navigated", "navigated-target", 7, "https://example.test/", "", "anchor-target")
+    unrelated = CdpPageRef("unrelated", "unrelated-target", 7, "about:blank", "", "other-target")
+    closed: list[CdpPageRef] = []
+
+    async def pages():
+        return (late_blank, navigated, unrelated)
+
+    async def close(page):
+        closed.append(page)
+
+    monkeypatch.setattr(browser, "pages", pages)
+    monkeypatch.setattr(browser, "close", close)
+
+    await browser._close_late_anchor_targets(anchor, {"anchor-target"})
+
+    assert closed == [late_blank]
+
+
+@pytest.mark.asyncio
+async def test_timed_out_anchor_cleanup_fails_closed_when_baseline_is_unknown() -> None:
+    browser = GptAutoCdpBrowserController(_NoopBridge())
+    anchor = CdpPageRef("anchor", "anchor-target", 7, "http://127.0.0.1:8765/dashboard", "")
+    closed: list[CdpPageRef] = []
+
+    async def close(page):
+        closed.append(page)
+
+    browser.close = close  # type: ignore[method-assign]
+    await browser._close_late_anchor_targets(anchor, None)
+
+    assert closed == []
+
+
+@pytest.mark.asyncio
+async def test_timed_out_anchor_cleanup_catches_target_that_appears_after_first_scan(monkeypatch) -> None:
+    browser = GptAutoCdpBrowserController(_NoopBridge())
+    anchor = CdpPageRef("anchor", "anchor-target", 7, "http://127.0.0.1:8765/dashboard", "")
+    late_blank = CdpPageRef("late", "late-target", 7, "about:blank", "", "anchor-target")
+    closed: list[CdpPageRef] = []
+    scans = iter([(), (late_blank,), (late_blank,)])
+
+    async def pages():
+        return next(scans)
+
+    async def close(page):
+        closed.append(page)
+
+    monkeypatch.setattr(browser, "pages", pages)
+    monkeypatch.setattr(browser, "close", close)
+    await browser._close_late_anchor_targets(anchor, {"anchor-target"})
+
+    assert closed == [late_blank]
+
+
+@pytest.mark.asyncio
+async def test_new_session_selects_exact_project_from_sidebar(monkeypatch) -> None:
+    browser = GptAutoCdpBrowserController(_NoopBridge())
     anchor = CdpPageRef("anchor", "anchor-target", 7, "http://127.0.0.1:8765/dashboard", "")
     page = CdpPageRef("page-1", "target-1", 7, "about:blank", "")
     project_id = "g-p-6a7bbf85d06c8191835b0d64958b4d7a"
-    selected_url = f"https://chatgpt.com/g/{project_id}-bigcherry/project"
+    # The current ChatGPT sidebar New Chat action can land directly in a
+    # project-scoped conversation rather than the project landing route.
+    selected_url = f"https://chatgpt.com/g/{project_id}-bigcherry/c/new-chat"
+    expected_project_url = f"https://chatgpt.com/g/{project_id}-bigcherry/project"
     calls: list[tuple[str, object]] = []
+    bridge_calls: list[tuple[str, object]] = []
+
+    async def bridge_call(method, params):
+        bridge_calls.append((method, params))
+        return {}
+
+    monkeypatch.setattr(browser.bridge, 'call', bridge_call)
 
     async def new_tab(*, in_window=None, url=None):
         calls.append(("new-tab", (in_window, url)))
@@ -282,6 +653,10 @@ async def test_new_session_selects_exact_project_from_projects_page(monkeypatch)
 
     async def evaluate(_page, _function, name=None):
         calls.append(("find-project", name))
+        return True
+
+    async def select_sidebar(_page, name, *, expected_project_id, timeout):
+        calls.append(("select-sidebar", (name, expected_project_id, timeout)))
         return True
 
     page_after_click = CdpPageRef(page.handle, page.target_id, page.window_id, selected_url, "")
@@ -302,6 +677,7 @@ async def test_new_session_selects_exact_project_from_projects_page(monkeypatch)
     monkeypatch.setattr(browser, "new_tab", new_tab)
     monkeypatch.setattr(browser, "navigate", navigate)
     monkeypatch.setattr(browser, "evaluate", evaluate)
+    monkeypatch.setattr(browser, "_select_project_from_sidebar", select_sidebar)
     monkeypatch.setattr(browser, "pages", pages)
     monkeypatch.setattr(browser, "page_by_handle", page_by_handle)
     monkeypatch.setattr(browser, "snapshot", snapshot)
@@ -315,18 +691,145 @@ async def test_new_session_selects_exact_project_from_projects_page(monkeypatch)
         ready_timeout=4,
     )
 
-    assert calls == [
+    # Background request creation must not foreground the user's selected tab.
+    assert bridge_calls == []
+    assert calls[:2] == [
         ("new-tab", (anchor, None)),
-        ("navigate", "https://chatgpt.com/projects"),
-        ("find-project", "BigCherry"),
-        ("composer", 4),
+        ("navigate", "https://chatgpt.com/"),
     ]
+    assert calls[2][0] == "select-sidebar"
+    assert calls[2][1][:2] == ("BigCherry", project_id)
+    assert 0 < calls[2][1][2] <= 3
+    assert calls[3] == ("composer", 4)
+    assert opened["projectUrl"] == expected_project_url
+
+
+@pytest.mark.asyncio
+async def test_new_session_uses_direct_projects_fallback_when_sidebar_has_no_project(monkeypatch) -> None:
+    browser = GptAutoCdpBrowserController(_NoopBridge())
+    page = CdpPageRef("page-1", "target-1", 7, "about:blank", "")
+    project_id = "g-p-6a7bbf85d06c8191835b0d64958b4d7a"
+    selected_url = f"https://chatgpt.com/g/{project_id}-bigcherry/project"
+    calls: list[tuple[str, object]] = []
+
+    async def new_window():
+        return page
+
+    async def navigate(_page, url):
+        calls.append(("navigate", url))
+        return page
+
+    async def pages():
+        return (page,)
+
+    async def select_sidebar(_page, name, *, expected_project_id, timeout):
+        calls.append(("select-sidebar", (name, expected_project_id, timeout)))
+        return False
+
+    async def wait_for_projects_route(_page, *, timeout):
+        calls.append(("projects-route", timeout))
+        return True
+
+    async def select_project(_page, name, *, expected_project_id=None, timeout):
+        calls.append(("select-project", (name, timeout)))
+        return True
+
+    async def page_by_handle(_handle):
+        return CdpPageRef(page.handle, page.target_id, page.window_id, selected_url, "")
+
+    async def wait_for_composer(_page, *, timeout):
+        calls.append(("composer", timeout))
+        return {"composerPresent": True, "composerEditable": True}
+
+    monkeypatch.setattr(browser, "new_window", new_window)
+    monkeypatch.setattr(browser, "navigate", navigate)
+    monkeypatch.setattr(browser, "pages", pages)
+    monkeypatch.setattr(browser, "_select_project_from_sidebar", select_sidebar)
+    monkeypatch.setattr(browser, "_wait_for_projects_route", wait_for_projects_route)
+    monkeypatch.setattr(browser, "_select_project_from_projects_page", select_project)
+    monkeypatch.setattr(browser, "page_by_handle", page_by_handle)
+    monkeypatch.setattr(browser, "wait_for_composer", wait_for_composer)
+
+    opened = await browser.open_project_page(
+        project_name="BigCherry",
+        project_url=f"https://chatgpt.com/g/{project_id}-bigcherry/project",
+        anchor_page=None,
+        navigation_timeout=3,
+        ready_timeout=4,
+    )
+
+    assert calls[0] == ("navigate", "https://chatgpt.com/")
+    assert calls[1][0] == "select-sidebar"
+    assert calls[1][1][:2] == ("BigCherry", project_id)
+    assert 0 < calls[1][1][2] <= 3
+    assert calls[2][0] == "navigate"
+    assert calls[2][1] == "https://chatgpt.com/projects"
+    assert calls[3][0] == "projects-route"
+    assert 0 < calls[3][1] <= 3
+    assert calls[4][0] == "select-project"
+    assert calls[4][1][0] == "BigCherry"
+    assert 0 < calls[4][1][1] <= 3
+    assert calls[5] == ("composer", 4)
     assert opened["projectUrl"] == selected_url
 
 
 @pytest.mark.asyncio
+async def test_new_session_maps_composer_timeout_to_project_readiness(monkeypatch) -> None:
+    from audiagentic.components.providers.adapters.gpt_auto.gpt_auto_cdp import (
+        ProjectReadinessError,
+    )
+
+    browser = GptAutoCdpBrowserController(_NoopBridge())
+    page = CdpPageRef("page-1", "target-1", 7, "about:blank", "")
+    project_id = "g-p-6a7bbf85d06c8191835b0d64958b4d7a"
+    selected_url = f"https://chatgpt.com/g/{project_id}-bigcherry/project"
+    selected_page = CdpPageRef("selected", "target-2", 7, selected_url, "")
+
+    async def new_window():
+        return page
+
+    async def navigate(_page, _url):
+        return page
+
+    async def select_sidebar(_page, _name, *, expected_project_id, timeout):
+        return True
+
+    async def pages():
+        return (selected_page,)
+
+    async def page_by_handle(_handle):
+        return selected_page
+
+    async def wait_for_composer(_page, *, timeout):
+        raise TimeoutError("composer did not mount")
+
+    async def close(_page):
+        return None
+
+    monkeypatch.setattr(browser, "new_window", new_window)
+    monkeypatch.setattr(browser, "navigate", navigate)
+    monkeypatch.setattr(browser, "_select_project_from_sidebar", select_sidebar)
+    monkeypatch.setattr(browser, "pages", pages)
+    monkeypatch.setattr(browser, "page_by_handle", page_by_handle)
+    monkeypatch.setattr(browser, "wait_for_composer", wait_for_composer)
+    monkeypatch.setattr(browser, "close", close)
+
+    with pytest.raises(ProjectReadinessError) as raised:
+        await browser.open_project_page(
+            project_name="BigCherry",
+            project_url=f"https://chatgpt.com/g/{project_id}-bigcherry/project",
+            anchor_page=None,
+            navigation_timeout=3,
+            ready_timeout=4,
+        )
+
+    assert raised.value.details["reason"] == "composer-not-ready"
+    assert raised.value.details["failure-stage"] == "readiness"
+
+
+@pytest.mark.asyncio
 async def test_new_session_rejects_projects_ui_identity_mismatch(monkeypatch) -> None:
-    browser = GptAutoCdpBrowserController(SimpleNamespace())
+    browser = GptAutoCdpBrowserController(_NoopBridge())
     page = CdpPageRef("page-1", "target-1", 7, "about:blank", "")
     configured_id = "g-p-configured"
     discovered_url = "https://chatgpt.com/g/g-p-different-project/project"
@@ -339,6 +842,21 @@ async def test_new_session_rejects_projects_ui_identity_mismatch(monkeypatch) ->
         return page
 
     async def evaluate(_page, _function, _name=None):
+        return True
+
+    async def hover_text(_page, _label):
+        return True
+
+    async def click_text(_page, _label):
+        return True
+
+    async def wait_for_projects_route(_page, *, timeout):
+        return True
+
+    async def select_project(_page, _name, *, expected_project_id=None, timeout):
+        return True
+
+    async def select_sidebar(_page, _name, *, expected_project_id, timeout):
         return True
 
     discovered = CdpPageRef(page.handle, page.target_id, page.window_id, discovered_url, "")
@@ -355,10 +873,14 @@ async def test_new_session_rejects_projects_ui_identity_mismatch(monkeypatch) ->
     monkeypatch.setattr(browser, "new_window", new_window)
     monkeypatch.setattr(browser, "navigate", navigate)
     monkeypatch.setattr(browser, "evaluate", evaluate)
+    monkeypatch.setattr(browser, "hover_text", hover_text)
+    monkeypatch.setattr(browser, "click_text", click_text)
+    monkeypatch.setattr(browser, "_wait_for_projects_route", wait_for_projects_route)
+    monkeypatch.setattr(browser, "_select_project_from_projects_page", select_project)
+    monkeypatch.setattr(browser, "_select_project_from_sidebar", select_sidebar)
     monkeypatch.setattr(browser, "pages", pages)
     monkeypatch.setattr(browser, "page_by_handle", page_by_handle)
     monkeypatch.setattr(browser, "close", close)
-
     with pytest.raises(RuntimeError, match="does not match configured project identity"):
         await browser.open_project_page(
             project_name="BigCherry",
@@ -372,14 +894,76 @@ async def test_new_session_rejects_projects_ui_identity_mismatch(monkeypatch) ->
 
 
 @pytest.mark.asyncio
+async def test_new_session_rejects_wrong_projects_fallback_target_without_configured_url(monkeypatch) -> None:
+    browser = GptAutoCdpBrowserController(_NoopBridge())
+    projects_page = CdpPageRef("projects", "projects-target", 7, "about:blank", "")
+    wrong_page = CdpPageRef(
+        "chat", "chat-target", 7,
+        "https://chatgpt.com/g/g-p-gpt-t1/project", "gpt-t1",
+        opener_id=None,
+    )
+    closed: list[CdpPageRef] = []
+    page_scans = 0
+
+    async def new_window():
+        return projects_page
+
+    async def navigate(_page, _url):
+        return projects_page
+
+    async def select_sidebar(_page, _name, *, expected_project_id, timeout):
+        return False
+
+    async def open_projects(_page, *, timeout):
+        return True
+
+    async def select_project(_page, _name, *, expected_project_id=None, timeout):
+        return {"clicked": True, "projectId": "g-p-bigcherry"}
+
+    async def pages():
+        nonlocal page_scans
+        page_scans += 1
+        return (projects_page,) if page_scans == 1 else (projects_page, wrong_page)
+
+    async def page_by_handle(_handle):
+        return CdpPageRef(
+            projects_page.handle, projects_page.target_id, projects_page.window_id,
+            "https://chatgpt.com/projects", "Projects",
+        )
+
+    async def close(page):
+        closed.append(page)
+
+    monkeypatch.setattr(browser, "new_window", new_window)
+    monkeypatch.setattr(browser, "navigate", navigate)
+    monkeypatch.setattr(browser, "_select_project_from_sidebar", select_sidebar)
+    monkeypatch.setattr(browser, "_open_projects_tab", open_projects)
+    monkeypatch.setattr(browser, "_select_project_from_projects_page", select_project)
+    monkeypatch.setattr(browser, "pages", pages)
+    monkeypatch.setattr(browser, "page_by_handle", page_by_handle)
+    monkeypatch.setattr(browser, "close", close)
+    with pytest.raises(RuntimeError, match="does not match configured project identity"):
+        await browser.open_project_page(
+            project_name="BigCherry",
+            project_url=None,
+            anchor_page=None,
+            navigation_timeout=0.01,
+            ready_timeout=4,
+        )
+
+    assert closed == [wrong_page, projects_page]
+
+@pytest.mark.asyncio
 async def test_new_session_adopts_ui_opened_target_and_closes_projects_tab(monkeypatch) -> None:
-    browser = GptAutoCdpBrowserController(SimpleNamespace())
+    browser = GptAutoCdpBrowserController(_NoopBridge())
     projects_page = CdpPageRef("projects", "projects-target", 7, "about:blank", "")
     project_id = "g-p-6a7bbf85d06c8191835b0d64958b4d7a"
     opened_page = CdpPageRef(
         "chat", "chat-target", 7,
         f"https://chatgpt.com/g/{project_id}-bigcherry/project", "BigCherry",
+        opener_id=None,
     )
+    foreign_page = CdpPageRef("personal", "personal-target", 7, opened_page.url, "Personal")
     closed: list[CdpPageRef] = []
     page_scans = 0
 
@@ -392,15 +976,34 @@ async def test_new_session_adopts_ui_opened_target_and_closes_projects_tab(monke
     async def evaluate(_page, _function, _name=None):
         return True
 
+    async def hover_text(_page, _label):
+        return True
+
+    async def click_text(_page, _label):
+        return True
+
+    async def wait_for_projects_route(_page, *, timeout):
+        return True
+
+    async def select_project(_page, _name, *, expected_project_id=None, timeout):
+        return True
+
+    async def select_sidebar(_page, _name, *, expected_project_id, timeout):
+        return True
+
     async def pages():
         nonlocal page_scans
         page_scans += 1
-        return (projects_page,) if page_scans == 1 else (projects_page, opened_page)
+        return (
+            (projects_page, foreign_page)
+            if page_scans == 1
+            else (projects_page, foreign_page, opened_page)
+        )
 
     async def page_by_handle(_handle):
         return CdpPageRef(
             projects_page.handle, projects_page.target_id, projects_page.window_id,
-            "https://chatgpt.com/projects", "Projects",
+            "https://chatgpt.com/", "ChatGPT",
         )
 
     async def wait_for_composer(page, *, timeout):
@@ -414,6 +1017,11 @@ async def test_new_session_adopts_ui_opened_target_and_closes_projects_tab(monke
     monkeypatch.setattr(browser, "new_window", new_window)
     monkeypatch.setattr(browser, "navigate", navigate)
     monkeypatch.setattr(browser, "evaluate", evaluate)
+    monkeypatch.setattr(browser, "hover_text", hover_text)
+    monkeypatch.setattr(browser, "click_text", click_text)
+    monkeypatch.setattr(browser, "_wait_for_projects_route", wait_for_projects_route)
+    monkeypatch.setattr(browser, "_select_project_from_projects_page", select_project)
+    monkeypatch.setattr(browser, "_select_project_from_sidebar", select_sidebar)
     monkeypatch.setattr(browser, "pages", pages)
     monkeypatch.setattr(browser, "page_by_handle", page_by_handle)
     monkeypatch.setattr(browser, "wait_for_composer", wait_for_composer)
@@ -429,6 +1037,60 @@ async def test_new_session_adopts_ui_opened_target_and_closes_projects_tab(monke
 
     assert result["page"] == opened_page
     assert closed == [projects_page]
+
+
+@pytest.mark.asyncio
+async def test_new_session_rejects_fresh_wrong_project_target_without_opener(monkeypatch) -> None:
+    browser = GptAutoCdpBrowserController(_NoopBridge())
+    projects_page = CdpPageRef("projects", "projects-target", 7, "about:blank", "")
+    configured_id = "g-p-configured"
+    wrong_page = CdpPageRef(
+        "chat", "chat-target", 7,
+        "https://chatgpt.com/g/g-p-wrong-project/project", "Wrong Project",
+        opener_id=None,
+    )
+    closed: list[CdpPageRef] = []
+    page_scans = 0
+
+    async def new_window():
+        return projects_page
+
+    async def navigate(_page, _url):
+        return projects_page
+
+    async def select_sidebar(_page, _name, *, expected_project_id, timeout):
+        return True
+
+    async def pages():
+        nonlocal page_scans
+        page_scans += 1
+        return (projects_page,) if page_scans == 1 else (projects_page, wrong_page)
+
+    async def page_by_handle(_handle):
+        return CdpPageRef(
+            projects_page.handle, projects_page.target_id, projects_page.window_id,
+            "https://chatgpt.com/", "ChatGPT",
+        )
+
+    async def close(page):
+        closed.append(page)
+
+    monkeypatch.setattr(browser, "new_window", new_window)
+    monkeypatch.setattr(browser, "navigate", navigate)
+    monkeypatch.setattr(browser, "_select_project_from_sidebar", select_sidebar)
+    monkeypatch.setattr(browser, "pages", pages)
+    monkeypatch.setattr(browser, "page_by_handle", page_by_handle)
+    monkeypatch.setattr(browser, "close", close)
+    with pytest.raises(RuntimeError, match="does not match configured project identity"):
+        await browser.open_project_page(
+            project_name="BigCherry",
+            project_url=f"https://chatgpt.com/g/{configured_id}-bigcherry/project",
+            anchor_page=None,
+            navigation_timeout=0.01,
+            ready_timeout=4,
+        )
+
+    assert closed == [wrong_page, projects_page]
 
 
 @pytest.mark.asyncio
@@ -538,11 +1200,12 @@ class _GptOperationBridge:
     def __init__(self, *, send_enabled: bool = True, stop_visible: bool = True) -> None:
         self.send_enabled = send_enabled
         self.stop_visible = stop_visible
+        self.inserted_text = ""
         self.calls: list[tuple[str, dict]] = []
 
     async def evaluate(self, page_handle, function, argument=None, **kwargs):
-        if "execCommand" in function:
-            return str(argument or "")
+        if "editor?.innerText" in function:
+            return self.inserted_text
         if "send-button" in function:
             return self.send_enabled
         if "stop-button" in function or "stop-generating" in function:
@@ -551,6 +1214,8 @@ class _GptOperationBridge:
 
     async def call(self, method, params=None, **kwargs):
         self.calls.append((method, params or {}))
+        if method == "insert_text":
+            self.inserted_text = str((params or {}).get("text") or "")
         if method == "dispatch_enter":
             return {"ok": True}
         return {"ok": True}
@@ -560,6 +1225,13 @@ class _NavigationOnClickBridge(_GptOperationBridge):
     async def evaluate(self, page_handle, function, argument=None, **kwargs):
         if "send-button" in function:
             assert "async" not in function
+        return await super().evaluate(page_handle, function, argument, **kwargs)
+
+
+class _HungClickAcknowledgementBridge(_GptOperationBridge):
+    async def evaluate(self, page_handle, function, argument=None, **kwargs):
+        if "send-button" in function:
+            await asyncio.Event().wait()
         return await super().evaluate(page_handle, function, argument, **kwargs)
 
 
@@ -577,6 +1249,38 @@ async def test_gpt_provider_send_click_is_synchronous():
 
 
 @pytest.mark.asyncio
+async def test_gpt_provider_hung_click_acknowledgement_exits_ambiguous_quickly(monkeypatch):
+    from audiagentic.components.providers.adapters.gpt_auto.gpt_auto_cdp import (
+        ComposerSubmissionTimeout,
+    )
+
+    monkeypatch.setattr(
+        GptAutoCdpBrowserController,
+        "_SEND_CLICK_ACK_TIMEOUT_SECONDS",
+        0.01,
+    )
+    monkeypatch.setattr(GptAutoCdpBrowserController, "_PAGE_READY_PAUSE_SECONDS", 0.0)
+    monkeypatch.setattr(GptAutoCdpBrowserController, "_TYPED_PAUSE_SECONDS", 0.0)
+    browser = GptAutoCdpBrowserController(
+        _HungClickAcknowledgementBridge(),  # type: ignore[arg-type]
+        action_pause_seconds=0.0,
+    )
+
+    with pytest.raises(ComposerSubmissionTimeout) as raised:
+        await asyncio.wait_for(
+            browser.submit(
+                CdpPageRef("page-1", "target-1"),
+                "ambiguous send",
+                timeout=120.0,
+            ),
+            timeout=0.5,
+        )
+
+    assert raised.value.send_attempted is True
+    assert raised.value.stage == "send-button"
+
+
+@pytest.mark.asyncio
 async def test_gpt_provider_waits_for_composer_state_before_click(monkeypatch):
     """Readiness polling continues beyond the old three-attempt limit."""
     import audiagentic.components.providers.adapters.gpt_auto.gpt_auto_cdp as cdp
@@ -589,7 +1293,11 @@ async def test_gpt_provider_waits_for_composer_state_before_click(monkeypatch):
     monkeypatch.setattr(cdp.asyncio, "sleep", record_sleep)
     browser = GptAutoCdpBrowserController(_TransientSendFailureBridge(fail_attempts=5))  # type: ignore[arg-type]
     await browser.submit(CdpPageRef("page-1", "target-1"), "settle first")
-    assert delays == [GptAutoCdpBrowserController._SUBMIT_POLL_SECONDS] * 5
+    assert delays.count(GptAutoCdpBrowserController._SUBMIT_POLL_SECONDS) == 5
+    assert delays.count(GptAutoCdpBrowserController._PAGE_READY_PAUSE_SECONDS) >= 2
+    # insertion, send-button readiness, and the post-click render turn each
+    # get a short browser-action pause.
+    assert delays.count(GptAutoCdpBrowserController._ACTION_PAUSE_SECONDS) >= 3
 
 
 @pytest.mark.asyncio
@@ -612,7 +1320,9 @@ async def test_gpt_provider_never_bypasses_disabled_send_with_enter():
     bridge = _GptOperationBridge(send_enabled=False)
     browser = GptAutoCdpBrowserController(bridge)  # type: ignore[arg-type]
     page = CdpPageRef("page-1", "target-1")
-    from audiagentic.components.providers.adapters.gpt_auto.gpt_auto_cdp import ComposerSubmissionTimeout
+    from audiagentic.components.providers.adapters.gpt_auto.gpt_auto_cdp import (
+        ComposerSubmissionTimeout,
+    )
     with pytest.raises(ComposerSubmissionTimeout) as raised:
         await browser.submit(page, "fallback", timeout=0.02)
     assert raised.value.send_attempted is False
@@ -640,7 +1350,9 @@ class _TransientSendFailureBridge(_GptOperationBridge):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("fail_at,ambiguous", [(1, False), (2, True)])
 async def test_composer_timeout_preserves_send_boundary(monkeypatch, fail_at, ambiguous):
-    from audiagentic.components.providers.adapters.gpt_auto.gpt_auto_cdp import ComposerSubmissionTimeout
+    from audiagentic.components.providers.adapters.gpt_auto.gpt_auto_cdp import (
+        ComposerSubmissionTimeout,
+    )
 
     browser = GptAutoCdpBrowserController(_GptOperationBridge())
     calls = 0
@@ -681,7 +1393,9 @@ async def test_gpt_provider_submit_gives_up_after_bounded_retries():
     bridge = _TransientSendFailureBridge(fail_attempts=999)
     browser = GptAutoCdpBrowserController(bridge)  # type: ignore[arg-type]
     page = CdpPageRef("page-1", "target-1")
-    from audiagentic.components.providers.adapters.gpt_auto.gpt_auto_cdp import ComposerSubmissionTimeout
+    from audiagentic.components.providers.adapters.gpt_auto.gpt_auto_cdp import (
+        ComposerSubmissionTimeout,
+    )
     with pytest.raises(ComposerSubmissionTimeout):
         await browser.submit(page, "never recovers", timeout=0.02)
     assert (
@@ -698,3 +1412,27 @@ async def test_gpt_provider_rejects_blank_prompt_and_reports_no_stop_control():
     with pytest.raises(ValueError, match="non-empty"):
         await browser.submit(page, "   ")
     assert (await browser.stop_generation(page))["stopped"] is False
+@pytest.mark.asyncio
+async def test_projects_new_chat_allows_idless_row_for_post_click_url_proof(monkeypatch) -> None:
+    calls: list[tuple[str, object]] = []
+
+    class Bridge:
+        async def call(self, method, params=None, **_kwargs):
+            calls.append((method, params))
+            return {"clicked": True}
+
+    browser = GptAutoCdpBrowserController(Bridge(), action_pause_seconds=0.0)
+    page = CdpPageRef("page-1", "target-1", 7, "https://chatgpt.com/projects", "")
+
+    async def evaluate(_page, _function, _value=None):
+        return {"x": 123.5, "y": 456.5, "projectId": None}
+
+    monkeypatch.setattr(browser, "evaluate", evaluate)
+
+    assert await browser._select_project_from_projects_page(
+        page, "BigCherry", timeout=0.05
+    ) == {"clicked": True, "projectId": None}
+    assert calls == [
+        ("keep_page_active", {"pageHandle": "page-1"}),
+        ("click", {"pageHandle": "page-1", "x": 123.5, "y": 456.5}),
+    ]

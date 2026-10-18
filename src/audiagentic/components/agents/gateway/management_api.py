@@ -8,12 +8,27 @@ registry, or custom validation -- these are thin wrappers over the shared
 """
 from __future__ import annotations
 
+import os
+import time
 from pathlib import Path
 from typing import Any
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 _COMPONENT_ID = "agents"
+_RESTART_WAIT_SECONDS_ENV = "AUDIAGENTIC_GATEWAY_RESTART_WAIT_SECONDS"
+_RESTART_POLL_SECONDS = 0.25
+
+
+def _restart_wait_seconds() -> float:
+    raw = os.environ.get(_RESTART_WAIT_SECONDS_ENV, "60")
+    try:
+        value = float(raw)
+    except ValueError as exc:
+        raise ValueError(f"{_RESTART_WAIT_SECONDS_ENV} must be a number") from exc
+    if value <= 0:
+        raise ValueError(f"{_RESTART_WAIT_SECONDS_ENV} must be positive")
+    return value
 
 
 def active_implementation_id(project_root: Path) -> str:
@@ -262,6 +277,11 @@ def gateway_get_retention_policy(project_root: Path) -> dict[str, Any]:
         "purge-enabled": policy.enabled,
         "minimum-archive-age-seconds": policy.minimum_archive_age_seconds,
         "max-batch-size": policy.max_batch_size,
+        "request-history-limit": policy.request_history_limit,
+        "timeline-max-bytes": policy.timeline_max_bytes,
+        "observation-max-bytes": policy.observation_max_bytes,
+        "recovery-max-bytes": policy.recovery_max_bytes,
+        "console-trace-max-bytes": policy.console_trace_max_bytes,
         "policy-id": policy.policy_id,
         "policy-digest": policy.digest,
     }
@@ -271,20 +291,58 @@ def gateway_restart(project_root: Path, *, force: bool = False) -> dict[str, Any
     """Restart the machine-scoped gateway service through its managed lifecycle.
 
     The caller's project root is only the admission context; the service itself
-    remains machine-scoped.  The old service is stopped before a fresh managed
-    instance is started, and no unrelated MCP stdio processes are touched.
+    remains machine-scoped. The managed lifecycle performs a durable handoff
+    before the replacement starts; no unrelated MCP stdio processes are touched.
     """
-    from audiagentic.components.agents.gateway.service.bootstrap import start_or_attach_gateway
+    from audiagentic.components.agents.gateway.service.bootstrap import (
+        attach_existing_gateway,
+        start_or_attach_gateway,
+    )
 
+    del force
     client = start_or_attach_gateway()
     try:
-        stopping = client.service_stop(project_root, force=force)
+        restarting = client.dashboard_restart(project_root)
     finally:
         client.close()
 
-    replacement = start_or_attach_gateway()
+    old_epoch = restarting.get("owner-epoch")
+    deadline = time.monotonic() + _restart_wait_seconds()
+    replacement = None
+    last_error: AudiaGenticError | None = None
+    while replacement is None:
+        try:
+            # The retiring host owns the replacement launch.  This waiter is
+            # attach-only so a delayed/failed handoff cannot create a second
+            # process generation behind the host's back.
+            candidate = attach_existing_gateway()
+            status = candidate.service_status(project_root)
+            if old_epoch is not None and status.get("owner-epoch") == old_epoch:
+                candidate.close()
+                raise AudiaGenticError(
+                    "CON-MSVC-030",
+                    "agents",
+                    "gateway replacement has not changed owner epoch",
+                )
+            replacement = candidate
+        except AudiaGenticError as exc:
+            # The old generation is expected to remain observable while it
+            # drains and retires. Retry only those lifecycle race outcomes;
+            # all configuration/auth/protocol errors remain fail-closed.
+            if exc.code not in {
+                "CON-MSVC-026",
+                "CON-MSVC-027",
+                "CON-MSVC-028",
+                "CON-MSVC-030",
+            }:
+                raise
+            last_error = exc
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise last_error
+            time.sleep(min(_RESTART_POLL_SECONDS, remaining))
     try:
         status = replacement.service_status(project_root)
     finally:
         replacement.close()
-    return {"stopping": stopping, "restarted": True, "status": status}
+    return {"restarting": restarting, "restarted": True, "status": status}

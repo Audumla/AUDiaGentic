@@ -23,8 +23,8 @@ from audiagentic.components.agents.gateway.application import InProcessGatewayAp
 from audiagentic.components.agents.gateway.queue import queue as agents_gateway_queue
 from audiagentic.components.agents.gateway.service.dashboard import (
     _most_recent,
-    _request_sort_key,
     _request_row,
+    _request_sort_key,
     _session_sort_key,
     render_dashboard_html,
 )
@@ -54,6 +54,27 @@ def _make_profile(project_root: Path, profile_id: str, provider_id: str, **param
 def _result(data: dict) -> SimpleNamespace:
     return SimpleNamespace(result_data=data)
 
+
+def test_workspace_name_resolves_sibling_project_root(tmp_path: Path) -> None:
+    current = tmp_path / "AUDiaGentic"
+    target = tmp_path / "bigcherry"
+    for root in (current, target):
+        (root / ".audiagentic" / "config").mkdir(parents=True)
+    (target / ".audiagentic" / "config" / "project.yaml").write_text(
+        "project-id: bigcherry" + chr(10) + "project-name: BigCherry" + chr(10),
+        encoding="utf-8",
+    )
+
+    resolved = gateway._resolve_workspace_project_root(current, "BigCherry")
+
+    assert resolved == target.resolve()
+
+
+def test_workspace_name_resolution_fails_closed_when_missing(tmp_path: Path) -> None:
+    with pytest.raises(AudiaGenticError) as exc_info:
+        gateway._resolve_workspace_project_root(tmp_path / "AUDiaGentic", "missing")
+
+    assert exc_info.value.code == "RES-AGW-152"
 
 def test_submit_returns_immediately_for_long_running_request(tmp_path: Path, monkeypatch):
     _make_profile(tmp_path, "default", "local-openai")
@@ -200,7 +221,7 @@ def test_public_status_contains_canonical_agent_status(tmp_path: Path, monkeypat
     assert status["lifecycle"] == "terminal"
     assert status["outcome"] == "success"
     assert set(status) == {
-        "task_id", "lifecycle", "activity_seq", "outcome"
+        "task_id", "request_id", "session_id", "lifecycle", "activity_seq", "outcome"
     }
 
 
@@ -226,6 +247,8 @@ def test_public_status_is_slim_v4_projection(tmp_path: Path, monkeypatch):
     status = gateway.get_execution_request(tmp_path, result["request-id"])
     assert status == {
         "task_id": result["request-id"],
+        "request_id": result["request-id"],
+        "session_id": status["session_id"],
         "lifecycle": "terminal",
         "activity_seq": 0,
         "outcome": "success",
@@ -513,7 +536,7 @@ def test_list_execution_requests_most_recent_first_and_filterable(tmp_path: Path
     all_requests = gateway.list_execution_requests(tmp_path)
     assert [r["task_id"] for r in all_requests] == [second["request-id"], first["request-id"]]
     assert all(set(r) == {
-        "task_id", "lifecycle", "activity_seq", "outcome"
+        "task_id", "request_id", "session_id", "lifecycle", "activity_seq", "outcome"
     } for r in all_requests)
     assert all_requests[0]["outcome"] == "failed"
     assert all_requests[1]["outcome"] == "success"
@@ -524,6 +547,37 @@ def test_list_execution_requests_most_recent_first_and_filterable(tmp_path: Path
     limited = gateway.list_execution_requests(tmp_path, limit=1)
     assert len(limited) == 1
     assert limited[0]["task_id"] == second["request-id"]
+
+
+def test_list_execution_requests_filters_state_before_limit_and_uses_created_at(tmp_path: Path):
+    records = (
+        ("req_failed_old", "failed", "2026-10-15T00:00:01Z"),
+        ("req_failed_new", "failed", "2026-10-15T00:00:03Z"),
+        ("req_completed_latest_mtime", "completed", "2026-10-15T00:00:02Z"),
+    )
+    for request_id, state, created_at in records:
+        record = store.build_record(execution_profile_id="default", prompt_body=request_id)
+        record["request-id"] = request_id
+        record["state"] = state
+        record["created-at"] = created_at
+        store.write_record(tmp_path, record)
+
+    failed = gateway.list_execution_requests(tmp_path, state="failed", limit=1)
+    assert [row["task_id"] for row in failed] == ["req_failed_new"]
+
+
+def test_default_evidence_does_not_scan_observation_summary(tmp_path: Path, monkeypatch):
+    record = store.build_record(execution_profile_id="default", prompt_body="evidence")
+    store.write_record(tmp_path, record)
+
+    def fail_summary(*_args, **_kwargs):
+        raise AssertionError("default evidence unexpectedly loaded observation summary")
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.observability.observation_summary",
+        fail_summary,
+    )
+    evidence = gateway.get_execution_evidence(tmp_path, record["request-id"])
+    assert evidence["observation-summary"] == {}
 
 
 def test_dashboard_request_projection_exposes_only_safe_gpt_chat_link(tmp_path: Path):
@@ -602,7 +656,7 @@ def test_dashboard_ordering_uses_lifecycle_then_session_and_request_ids():
     ]
 
 
-def test_dashboard_request_projection_exposes_focus_for_live_gpt_without_chat_url():
+def test_dashboard_request_projection_does_not_own_session_focus():
     row = _request_row(
         {
             "request-id": "req_live",
@@ -613,7 +667,37 @@ def test_dashboard_request_projection_exposes_focus_for_live_gpt_without_chat_ur
     )
 
     assert "provider-chat-url" not in row
-    assert row["focus-tab-available"] is True
+    assert "focus-tab-available" not in row
+
+
+def test_focus_execution_session_uses_durable_session_binding(tmp_path: Path, monkeypatch):
+    from audiagentic.components.agents.gateway.session import sessions, sessions_store
+
+    session = sessions_store.build_session_record(
+        execution_profile_id="gpt-auto", provider_id="gpt-auto"
+    )
+    session["provider"]["metadata"] = {
+        "chat-url": "https://chatgpt.com/g/g-p-example/c/c-session",
+        "provider-session-id": "c-session",
+        "project-url": "https://chatgpt.com/g/g-p-example/project",
+    }
+    sessions_store.write_session_record(tmp_path, session)
+
+    captured = {}
+
+    class Runtime:
+        def focus_existing_conversation(self, project_root, *, provider_id, locator):
+            captured.update(project_root=project_root, provider_id=provider_id, locator=locator)
+            return {"outcome": "focused"}
+
+    monkeypatch.setattr(sessions, "get_session_runtime", lambda: Runtime())
+
+    result = gateway.focus_execution_session(tmp_path, session["session-id"])
+
+    assert result == {"session-id": session["session-id"], "outcome": "focused"}
+    assert captured["provider_id"] == "gpt-auto"
+    assert captured["locator"].gateway_session_id == session["session-id"]
+    assert captured["locator"].chat_url.endswith("/c/c-session")
 
 
 def test_dashboard_session_request_projection_inherits_execution_from_session_header():
@@ -635,7 +719,7 @@ def test_dashboard_session_request_projection_inherits_execution_from_session_he
     assert "resolved-model-id" not in row
 
 
-def test_dashboard_session_request_keeps_gpt_focus_eligibility_without_execution_cells():
+def test_dashboard_session_request_does_not_duplicate_session_focus_control():
     row = _request_row(
         {
             "request-id": "req_session_gpt",
@@ -646,7 +730,7 @@ def test_dashboard_session_request_keeps_gpt_focus_eligibility_without_execution
         include_execution=False,
     )
 
-    assert row["focus-tab-available"] is True
+    assert "focus-tab-available" not in row
 
 
 def test_dashboard_terminal_request_does_not_render_historical_unresolved_marker():

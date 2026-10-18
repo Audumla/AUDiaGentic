@@ -33,6 +33,16 @@ def test_build_record_defaults(tmp_path: Path) -> None:
     assert record["request-id"].startswith("req_")
 
 
+def test_generate_request_id_includes_safe_project_slug() -> None:
+    request_id = store.generate_request_id(Path(r"H:\development\projects\Big Cherry"))
+    assert request_id.startswith("req_big-cherry_")
+    assert len(request_id.rsplit("_", 1)[-1]) == 12
+
+
+def test_generate_request_id_has_bounded_fallback_slug() -> None:
+    request_id = store.generate_request_id(Path("!!!"))
+    assert request_id.startswith("req_project_")
+
 def test_value_error_detail_is_preserved_for_operator_diagnosis(tmp_path: Path) -> None:
     record = store.build_record(execution_profile_id="default", prompt_body="do the thing")
     store.write_record(tmp_path, record)
@@ -699,12 +709,29 @@ def test_read_migrates_v1_record_under_request_lock(tmp_path: Path) -> None:
     assert migrated["contract-version"] == "v5"
     assert migrated["dispatch-owner-epoch"] is None
     assert migrated["recovery"] is None
+    assert migrated["recovery-required"] is False
     assert migrated["resolved-source-id"] is None
     assert migrated["resolved-capacity-generation"] is None
     assert migrated["activity-sequence"] == 0
     assert migrated["last-activity-at"] is None
     assert json.loads(path.read_text(encoding="utf-8"))["contract-version"] == "v5"
     assert load_ndjson(gateway_timeline_path(tmp_path, legacy["request-id"]))[-1]["event"] == "record.migrated"
+
+
+def test_read_migrates_current_record_missing_restart_recovery_flag(tmp_path: Path) -> None:
+    """A cutover record missing the new required field remains readable."""
+    record = store.build_record(execution_profile_id="default", prompt_body="hello")
+    store.write_record(tmp_path, record)
+    path = gateway_request_path(tmp_path, record["request-id"])
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    raw.pop("recovery-required")
+    atomic_write_json(path, raw)
+
+    migrated = store.read_record(tmp_path, record["request-id"])
+
+    assert migrated["recovery-required"] is False
+    persisted = json.loads(path.read_text(encoding="utf-8"))
+    assert persisted["recovery-required"] is False
 
 
 def test_read_repairs_partial_v4_activity_cutover(tmp_path: Path) -> None:
@@ -961,6 +988,43 @@ def test_expired_activity_only_marks_diagnostic_intervention(tmp_path: Path) -> 
     assert diagnosed["watchdog-state"] == "intervention"
     assert diagnosed["watchdog-reason"] == "activity-lease-expired-diagnostic"
 
+
+def test_watchdog_normalizes_naive_provider_lease_timestamp(tmp_path: Path) -> None:
+    record = store.build_record(
+        execution_profile_id="gpt-auto",
+        prompt_body="hello",
+        provider_transport_kind="provider-session",
+    )
+    store.write_record(tmp_path, record)
+    claimed = store.claim_dispatch(
+        tmp_path, record["request-id"], owner_epoch="service-a", expected_revision=0
+    )
+    running = store.start_owned_attempt(
+        tmp_path,
+        record["request-id"],
+        owner_epoch="service-a",
+        worker_id="worker-a",
+        expected_revision=claimed["revision"],
+    )
+    running["activity"]["provider"].update({
+        "capability": "supported",
+        "phase": "provider-progress",
+        "first-at": "2026-01-01T00:00:00",
+        "last-at": "2026-01-01T00:00:00",
+        "lease-expires-at": "2000-01-01T00:00:00",
+    })
+    store.write_record(tmp_path, running)
+
+    diagnosed = store.mark_watchdog_intervention_if_expired(
+        tmp_path,
+        record["request-id"],
+        owner_epoch="service-a",
+        worker_id="worker-a",
+        attempt_epoch=running["attempt-epoch"],
+    )
+
+    assert diagnosed["watchdog-state"] == "intervention"
+    assert diagnosed["watchdog-reason"] == "activity-lease-expired-diagnostic"
 
 def test_owned_dispatch_fences_reject_stale_owner_worker_and_attempt(tmp_path: Path) -> None:
     record = store.build_record(execution_profile_id="default", prompt_body="hello")
@@ -1416,3 +1480,91 @@ def test_owned_terminal_persists_absolute_safety_ceiling_classification(tmp_path
         updates={"error": {"code": "TO-AGW-077", "details": {"watchdog-classification": "absolute-safety-ceiling"}}},
     )
     assert terminal["terminal-classification"] == "absolute-safety-ceiling"
+
+
+def test_defer_owned_recovery_retains_bounded_root_error_summary(tmp_path: Path) -> None:
+    """Recovery persistence retains the bounded root error code/type/kind and
+    a flattened, truncated, redacted slice of its details — never prompt or
+    credential text, never unbounded payloads."""
+    record = store.build_record(
+        execution_profile_id="recovery-diag",
+        prompt_body="hello",
+        session_id="ses-1",
+        provider_transport_kind="provider-session",
+    )
+    store.write_record(tmp_path, record)
+    claimed = store.claim_dispatch(
+        tmp_path, record["request-id"], owner_epoch="owner-1", expected_revision=0
+    )
+    started = store.start_owned_attempt(
+        tmp_path,
+        record["request-id"],
+        owner_epoch="owner-1",
+        worker_id="worker-1",
+        expected_revision=claimed["revision"],
+    )
+    assert started["state"] == "running"
+
+    error = AudiaGenticError(
+        code="EXT-AGW-118",
+        kind="agents",
+        message="provider reattach unavailable",
+        details={
+            "session-id": "ses-1",
+            "dom-signals": ["network-error-alert", "error-alert"],
+            "nested": {"opaque": "dropped"},
+            "note": "x" * 500,
+            "token": "Bearer abcd1234-5678",
+        },
+    )
+    deferred = store.defer_owned_recovery(
+        tmp_path,
+        record["request-id"],
+        owner_epoch="owner-1",
+        worker_id="worker-1",
+        attempt_epoch=started["attempt-epoch"],
+        error=error,
+        phase="rehydrate-retry",
+        side_effect_state="may-have-started",
+        retry_delay_seconds=1,
+    )
+    recovery = deferred["recovery"]
+    assert recovery["attempt"] == 1
+    assert recovery["last-error"] == "provider reattach unavailable"
+    assert recovery["last-error-code"] == "EXT-AGW-118"
+    assert recovery["last-error-type"] == "AudiaGenticError"
+    assert recovery["last-error-kind"] == "agents"
+    details = recovery["last-error-details"]
+    assert details["session-id"] == "ses-1"
+    assert details["dom-signals"] == ["network-error-alert", "error-alert"]
+    assert details["note"] == "x" * 256  # truncated
+    assert "nested" not in details  # nested mappings stay out
+    assert details["token"] == "[REDACTED]"  # credentials never persist
+
+    # The persisted (on-disk) record carries the same bounded summary and
+    # still satisfies the record schema.
+    reread = store.read_record(tmp_path, record["request-id"])
+    assert reread["recovery"]["last-error-code"] == "EXT-AGW-118"
+    assert reread["recovery"]["last-error-details"]["dom-signals"] == [
+        "network-error-alert",
+        "error-alert",
+    ]
+
+
+def test_bounded_recovery_error_handles_plain_and_mapping_errors() -> None:
+    """The projection is total: exceptions without a contract envelope and
+    mapping-shaped errors are bounded instead of raising."""
+    bounded = store.bounded_recovery_error(ValueError("boom"))
+    assert bounded == {"code": None, "type": "ValueError", "kind": None}
+
+    mapping_error = {
+        "code": "EXT-AGW-118",
+        "kind": "agents",
+        "message": "provider reattach unavailable",
+        "details": {"dom-signals": ["network-error-alert"], "blob": "y" * 500},
+    }
+    bounded = store.bounded_recovery_error(mapping_error)
+    assert bounded["code"] == "EXT-AGW-118"
+    assert bounded["kind"] == "agents"
+    assert bounded["details"]["blob"] == "y" * 256
+    assert store.bounded_recovery_error(None) is None

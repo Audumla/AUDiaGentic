@@ -13,16 +13,295 @@ module-level cycles.
 from __future__ import annotations
 
 import logging
+import hashlib
 from pathlib import Path
 from typing import Any
 
 from audiagentic.components.agents.gateway import store as store
 from audiagentic.components.agents.gateway.mapping import first_present
+from audiagentic.components.agents.gateway.queue.recovery_control import RecoveryDeferred
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.time import now_iso_z
+from audiagentic.foundation.transports.agent_session import SessionFailureDisposition
 
 logger = logging.getLogger(__name__)
 
+
+def _prepare_native_recovery_fence(
+    project_root: Path,
+    request_id: str,
+    record: dict[str, Any],
+    *,
+    session_id: str,
+) -> None:
+    from audiagentic.components.agents.gateway.replay import (
+        prepare_recovery_action,
+        prove_turn_correlation,
+        record_recovery_result,
+    )
+
+    metadata = record.get("provider-metadata")
+    metadata = metadata if isinstance(metadata, dict) else {}
+    from audiagentic.components.agents.gateway.session import sessions_store
+    from audiagentic.components.providers.adapters.gpt_auto.urls import parse_project_id
+
+    session_record = sessions_store.read_session_record(project_root, session_id)
+    session_metadata = sessions_store.session_provider_metadata(session_record)
+    session_binding = session_record.get("binding") if isinstance(session_record.get("binding"), dict) else {}
+    project_id = record.get("project-id") or metadata.get("project-id")
+    if not isinstance(project_id, str) or not project_id:
+        project_id = parse_project_id(str(metadata.get("project-url") or metadata.get("chat-url") or ""))
+    chat_id = metadata.get("provider-session-id") or metadata.get("chat-id")
+    turn_id = metadata.get("unresolved-turn-id") or record.get("turn-id")
+    prompt_fingerprint = metadata.get("prompt-text-digest") or record.get("prompt-digest")
+    assistant_id = metadata.get("assistant-message-id") or metadata.get(
+        "assistant-before-message-id"
+    )
+    terminal_evidence = metadata.get("terminal-evidence")
+    terminal_witness_id = (
+        terminal_evidence.get("terminal-witness-id")
+        if isinstance(terminal_evidence, dict)
+        else None
+    )
+    binding_record = {
+        "project-id": project_id,
+        "session-id": session_id,
+        "chat-id": chat_id,
+        "turn-id": turn_id,
+        "prompt-fingerprint": prompt_fingerprint,
+        "assistant-id": assistant_id,
+        "terminal-witness-id": terminal_witness_id,
+        "provider-session-id": chat_id,
+        "provider-turn-id": turn_id,
+    }
+    session_project_id = session_metadata.get("project-id")
+    if not isinstance(session_project_id, str) or not session_project_id:
+        session_project_id = parse_project_id(str(session_metadata.get("project-url") or session_metadata.get("chat-url") or ""))
+    session_chat_id = session_metadata.get("provider-session-id") or session_metadata.get("chat-id") or session_binding.get("provider-session-ref")
+    independent_values = {
+        "project-id": session_project_id,
+        "chat-id": session_chat_id,
+        "turn-id": session_metadata.get("unresolved-turn-id"),
+        "prompt-fingerprint": session_metadata.get("prompt-text-digest"),
+        "assistant-id": session_metadata.get("assistant-message-id"),
+        "terminal-witness-id": (
+            session_metadata.get("terminal-evidence", {}).get("terminal-witness-id")
+            if isinstance(session_metadata.get("terminal-evidence"), dict)
+            else None
+        ),
+    }
+    identity_keys = ("project-id", "chat-id", "turn-id", "prompt-fingerprint", "assistant-id", "terminal-witness-id")
+    independent_missing = [key for key in identity_keys if not isinstance(independent_values.get(key), str) or not independent_values[key]]
+    independent_mismatches = [key for key in identity_keys if key not in independent_missing and independent_values[key] != binding_record.get(key)]
+    proof = prove_turn_correlation(
+        binding_record,
+        project_id=project_id if isinstance(project_id, str) else None,
+        session_id=session_id,
+        chat_id=chat_id if isinstance(chat_id, str) else None,
+        turn_id=turn_id if isinstance(turn_id, str) else None,
+        prompt_fingerprint=(
+            prompt_fingerprint if isinstance(prompt_fingerprint, str) else None
+        ),
+        assistant_id=assistant_id if isinstance(assistant_id, str) else None,
+        assistant_pinned=bool(metadata.get("assistant-before-message-id")),
+        assistant_remounted=False,
+        terminal_witness_id=(
+            terminal_witness_id if isinstance(terminal_witness_id, str) else None
+        ),
+    )
+    proof["independent-session-evidence-bound"] = not independent_missing and not independent_mismatches
+    proof["independent-session-evidence-missing"] = independent_missing
+    proof["independent-session-evidence-mismatches"] = independent_mismatches
+    recovery = record.get("recovery")
+    recovery = recovery if isinstance(recovery, dict) else {}
+    try:
+        retry_budget = max(
+            0,
+            int(recovery.get("max-attempts")) - int(recovery.get("attempt") or 0),
+        )
+    except (TypeError, ValueError):
+        retry_budget = 0
+    action_attempt_id = "native-continue-" + request_id + "-" + str(
+        record.get("attempt-epoch", 1)
+    ) + "-" + str(recovery.get("attempt") or 0)
+    intent = prepare_recovery_action(
+        project_root,
+        request_id,
+        action_attempt_id=action_attempt_id,
+        action="resume-existing",
+        action_kind="provider-native-continue",
+        attempt_epoch=int(record.get("attempt-epoch") or 1),
+        retry_budget=retry_budget,
+        submission_proven=metadata.get("submission-proven"),
+        causal_input_ids=[request_id, session_id],
+        binding=binding_record,
+    )
+    if intent.get("disposition") != "intent-persisted" or not proof.get("strong") or not proof.get("independent-session-evidence-bound"):
+        outcome = (
+            "rejected-correlation-proof"
+            if intent.get("disposition") == "intent-persisted"
+            else str(intent.get("outcome") or "rejected-recovery-action")
+        )
+        record_recovery_result(
+            project_root,
+            request_id,
+            action_attempt_id=action_attempt_id,
+            outcome=outcome,
+            terminal=True,
+            causal_input_ids=[request_id, session_id],
+        )
+        raise AudiaGenticError(
+            code="CON-AGW-156",
+            kind="agents",
+            message="cannot recover an existing turn: provider-native continuation is fenced pending strong turn correlation",
+            details={
+                "request-id": request_id,
+                "session-id": session_id,
+                "recovery-proof": proof,
+                "recovery-outcome": outcome,
+            },
+        )
+    return intent
+
+def _merge_provider_metadata(
+    current_metadata: dict[str, Any] | None,
+    request_metadata: dict[str, Any],
+) -> dict[str, Any]:
+    """Merge provider metadata without destroying unresolved-turn evidence.
+
+    A pre-send fence is deliberately ``submission-proven=False``.  It still
+    carries the prompt text digest used to correlate a completed DOM turn when
+    ChatGPT does not expose message ids.  The old merge removed that digest
+    along with provider ids, leaving the durable unresolved marker with no
+    recovery evidence and causing an endless presubmit-reconcile loop.
+    """
+    merged = dict(current_metadata) if isinstance(current_metadata, dict) else {}
+    # Only an explicit false is a pre-send/unproven fence.  Provider
+    # metadata relays are allowed to omit this field; omission must not erase
+    # correlation or terminal evidence already persisted for the turn.
+    if request_metadata.get("submission-proven") is False:
+        for key in (
+            "prompt-message-id",
+            "assistant-message-id",
+            "assistant-before-message-id",
+            "assistant-before-id",
+            "submission-proven",
+            "prompt-text-digest",
+            "terminal-evidence",
+        ):
+            merged.pop(key, None)
+    merged.update(request_metadata)
+    return merged
+
+
+_UNRESOLVED_CHECKPOINT_KEYS = (
+    "unresolved-turn-id",
+    "prompt-message-id",
+    "assistant-message-id",
+    "assistant-before-message-id",
+    "assistant-before-id",
+    "prompt-text-digest",
+    "submission-proven",
+    "terminal-evidence",
+)
+
+
+def _clear_terminal_predecessor_fence(
+    project_root: Path,
+    record: dict[str, Any],
+    *,
+    session_store: Any,
+) -> dict[str, Any] | None:
+    """Clear only a proven stale predecessor fence before a new prompt."""
+    metadata = record.get("provider-metadata")
+    if not isinstance(metadata, dict) or metadata.get("unresolved-turn-pending") is not True:
+        return None
+    predecessor_id = metadata.get("unresolved-turn-id")
+    if not isinstance(predecessor_id, str) or not predecessor_id or predecessor_id == record.get("request-id"):
+        return None
+    session_id = record.get("session-id")
+    if not isinstance(session_id, str) or not session_id:
+        return None
+    try:
+        predecessor = store.read_record(project_root, predecessor_id)
+    except AudiaGenticError:
+        predecessor = None
+    if predecessor is None:
+        try:
+            session_record = session_store.read_session_record(project_root, session_id)
+        except AudiaGenticError:
+            return None
+        session_metadata = session_store.session_provider_metadata(session_record)
+        if (
+            session_metadata.get("unresolved-turn-id") != predecessor_id
+            or not isinstance(session_metadata.get("terminal-evidence"), dict)
+        ):
+            return None
+        predecessor = {
+            "state": "completed",
+            "session-id": session_id,
+            "provider-metadata": session_metadata,
+        }
+    predecessor_state = predecessor.get("state")
+    if predecessor_state not in {"failed", "cancelled", "interrupted", "completed"}:
+        return None
+    if predecessor.get("session-id") != session_id:
+        return None
+    error = predecessor.get("error")
+    details = error.get("details") if isinstance(error, dict) else None
+    predecessor_metadata = predecessor.get("provider-metadata")
+    predecessor_terminal_evidence = (
+        predecessor_metadata.get("terminal-evidence")
+        if isinstance(predecessor_metadata, dict)
+        else None
+    )
+    if predecessor_state == "completed":
+        # A completed predecessor is already terminal; its terminal witness
+        # is sufficient to prove that the old unresolved fence is stale. The
+        # previous implementation only recognized failed/cancelled records
+        # with captured failure output, so a successful turn whose checkpoint
+        # clear was lost could fence every later turn indefinitely.
+        if not isinstance(predecessor_terminal_evidence, dict) or not (
+            predecessor_terminal_evidence.get("terminal-witness-id")
+            or predecessor_terminal_evidence.get("turn-id")
+        ):
+            return None
+    else:
+        if not isinstance(details, dict):
+            return None
+        dom_signals = set(details.get("dom-signals") or ())
+        if not details.get("failure-response-available") or "completion-control" not in dom_signals:
+            return None
+    cleared = dict(metadata)
+    cleared["unresolved-turn-pending"] = False
+    cleared["recovery-state"] = "stale-predecessor-fence-cleared"
+    cleared["stale-predecessor-request-id"] = predecessor_id
+    for key in _UNRESOLVED_CHECKPOINT_KEYS:
+        cleared.pop(key, None)
+    session_store.update_provider_metadata(
+        project_root, session_id,
+        {"unresolved-turn-pending": False, "recovery-state": "stale-predecessor-fence-cleared", "stale-predecessor-request-id": predecessor_id},
+        remove_keys=_UNRESOLVED_CHECKPOINT_KEYS,
+    )
+    updated = store.update_owned_running_session(
+        project_root, record["request-id"],
+        owner_epoch=record["dispatch-owner-epoch"],
+        worker_id=record["worker-id"],
+        attempt_epoch=record["attempt-epoch"],
+        session_id=session_id,
+        provider_metadata=cleared,
+    )
+    store.record_gateway_timeline(
+        project_root, record["request-id"],
+        "provider.unresolved-fence-cleared",
+        state=updated["state"],
+        attributes={
+            "predecessor-request-id": predecessor_id,
+            "predecessor-state": predecessor.get("state"),
+            "reason": "terminal-predecessor-with-completion-control-and-failure-response",
+        },
+    )
+    return updated
 
 def _terminal_session_diagnostics(session_id: str, record: dict[str, Any]) -> dict[str, Any]:
     """Return sparse facts needed to repair a continuation rejection.
@@ -119,6 +398,40 @@ def _explain_stale_session_runtime_error(
     )
 
 
+def _has_reopenable_provider_conversation(
+    project_root: Path, record: dict[str, Any]
+) -> bool:
+    """Whether a failed local open can be retried against the same GPT chat.
+
+    A provider-session request is not equivalent to a one-shot request.  If
+    its durable session record still contains the provider binding/chat URL,
+    replacing it with a fresh gateway session can silently create a second
+    ChatGPT conversation.  Keep the original request/session fenced and let
+    the queue retry exact-session rehydration instead; the normal outer
+    request/session policy remains responsible for eventual expiry.
+    """
+    if record.get("provider-transport-kind") != "provider-session":
+        return False
+    session_id = record.get("session-id")
+    if not isinstance(session_id, str) or not session_id:
+        return False
+    try:
+        from audiagentic.components.agents.gateway.session import sessions_store
+
+        session = sessions_store.read_session_record(project_root, session_id)
+    except Exception:  # noqa: BLE001 - recovery guard must never mask the cause
+        return False
+    if session.get("state") not in {"active", "closed", "expired", "failed"}:
+        return False
+    metadata = sessions_store.session_provider_metadata(session)
+    binding = session.get("binding")
+    return bool(
+        metadata.get("chat-url")
+        or metadata.get("provider-session-id")
+        or (isinstance(binding, dict) and binding.get("provider-session-ref"))
+    )
+
+
 # ── AS28 slice 4a helpers ────────────────────────────────────────
 # GP13 (scoped, 2026-08-17): a resume-eligibility refusal from AS49's
 # validate_resume_eligibility() (see resume.py's module docstring for the
@@ -156,6 +469,7 @@ def _auto_resume_reopenable_closed_session(
     context_fingerprint: str | None,
     request_runtime_root: Path,
     project_name: str | None = None,
+    allow_failed: bool = False,
 ) -> tuple[str, dict[str, Any], dict[str, Any]]:
     """Transparently resume a session closed by a resumable gateway policy.
 
@@ -168,19 +482,15 @@ def _auto_resume_reopenable_closed_session(
     narrow in scope: a gateway shutdown and its configured ``idle-timeout``
     are resource-lifetime policies, not evidence that the provider
     conversation is invalid. A later turn may therefore resume the durable
-    provider binding. This function is never reached for a genuinely failed
-    session or an intentional client/post-turn close: those still require an
-    explicit session_resume, never a silent reopen.
+    provider binding. A failed source is accepted only for the
+    observation-only restart-recovery path (``allow_failed=True``); ordinary
+    continuation still requires an explicit session_resume.
 
-    Reuses AS49's existing resume_session() machinery as-is -- no new
-    concurrency primitive. A control id deterministic in the source
-    session id means concurrent racing continuations against the same
-    closed session converge on resume.py's existing idempotency-by-
-    control-id lookup and resolve to the SAME successor, rather than each
-    minting its own. This is a real, accepted, narrower guarantee than
-    GP13's full per-source reservation model: an EXPLICIT caller resume
-    (a different control id) racing this SAME source session could still
-    mint a second, different successor. Not closed by this patch.
+    Reuses AS49's existing resume_session() machinery.  The runtime now
+    serializes the complete source-to-successor decision per source session;
+    the deterministic control id still makes repeated automatic recovery
+    idempotent, while the lock also closes the race with an explicit resume
+    using a different control id.
 
     Returns (new_session_id, new_session_record, updated_request_record).
     Raises the original RES-AGW-003 for any expected resume-ineligibility
@@ -189,6 +499,27 @@ def _auto_resume_reopenable_closed_session(
     propagates as itself -- it must never be masked as mere ineligibility.
     """
     from audiagentic.components.agents.gateway.session import sessions_store as session_store
+
+    recovery = record.get("recovery")
+    recovery_attempt = recovery.get("attempt", 0) if isinstance(recovery, dict) else 0
+    try:
+        recovery_attempt = max(0, int(recovery_attempt))
+    except (TypeError, ValueError):
+        recovery_attempt = 0
+
+    def _resume_control_id(resume_source: str) -> str:
+        # A failed observation-only control must not permanently poison all
+        # later attempts for the same source. Each durable recovery attempt
+        # gets its own idempotency key; ordinary explicit/resource-policy
+        # resumes retain the stable source-scoped key.
+        suffix = f":observation:{recovery_attempt}" if allow_failed else ""
+        return f"auto-resume:{resume_source}{suffix}"
+
+    if allow_failed:
+        logger.info(
+            "resuming failed local session as an observation-only restart successor",
+            extra={"source-session-id": source_session_id, "request-id": record.get("request-id")},
+        )
 
     try:
         resume_source_id = source_session_id
@@ -199,10 +530,11 @@ def _auto_resume_reopenable_closed_session(
             # continuations against the SAME closed source must resolve to
             # the same idempotency lookup, which a request-id-derived key
             # would not give them.
-            control_id=f"auto-resume:{resume_source_id}",
+            control_id=_resume_control_id(resume_source_id),
             execution_context_fingerprint=context_fingerprint or record.get("context-fingerprint"),
             request_runtime_root=request_runtime_root,
             project_name=project_name,
+            resume_existing=allow_failed,
         )
         # A later gateway shutdown can close the idempotent successor before
         # the next caller arrives. Replaying the original control then
@@ -227,10 +559,11 @@ def _auto_resume_reopenable_closed_session(
             new_session_record = runtime.resume_session(
                 project_root,
                 resume_source_id,
-                control_id=f"auto-resume:{resume_source_id}",
+                control_id=_resume_control_id(resume_source_id),
                 execution_context_fingerprint=context_fingerprint or record.get("context-fingerprint"),
                 request_runtime_root=request_runtime_root,
                 project_name=project_name,
+                resume_existing=allow_failed,
             )
     except AudiaGenticError as exc:
         if exc.code in _AUTO_RESUME_EXPECTED_REFUSAL_CODES:
@@ -276,6 +609,61 @@ def _auto_resume_reopenable_closed_session(
     return new_session_id, new_session_record, updated_record
 
 
+def _failed_session_has_safe_provider_continuation(
+    project_root: Path, session_record: dict[str, Any]
+) -> bool:
+    """Return whether a failed session can safely resume a new turn.
+
+    A failed gateway session is not proof that its provider conversation is
+    gone. GPT-auto can retain the exact ChatGPT conversation and tab while a
+    turn-level failure tears down the local handle. Resuming is safe for a
+    later prompt only when the durable provider binding exists and no prior
+    prompt is still fenced as unresolved; the latter would make a new prompt
+    a possible duplicate.
+    """
+    from audiagentic.components.agents.gateway.session import sessions_store as session_store
+    binding = session_store.read_session_binding(
+        project_root, str(session_record.get("session-id") or "")
+    )
+    if not isinstance(binding, dict) or not binding.get("provider-session-ref"):
+        return False
+    metadata = session_store.session_provider_metadata(session_record)
+    return not any(
+        metadata.get(key) is True
+        for key in ("unresolved-turn-pending", "submission-ambiguous")
+    )
+
+
+def _reconcile_before_failed_terminal(
+    project_root: Path,
+    record: dict[str, Any],
+    *,
+    provider_id: str | None,
+    request_id: str,
+) -> dict[str, Any] | None:
+    """Recheck a failed GPT turn before persisting terminal failure."""
+    if provider_id != "gpt-auto":
+        return None
+    metadata = record.get("provider-metadata")
+    if not isinstance(metadata, dict) or not (
+        metadata.get("submission-proven") is True
+        or metadata.get("unresolved-turn-pending") is True
+    ):
+        return None
+    try:
+        # Local import avoids the API/dispatch module cycle at import time.
+        from audiagentic.components.agents.gateway.api import complete_execution_from_provider
+        return complete_execution_from_provider(project_root, request_id, passive=True)
+    except AudiaGenticError as exc:
+        store.record_gateway_timeline(
+            project_root,
+            request_id,
+            "provider.reconciliation-before-failure",
+            state="running",
+            attributes={"outcome": "unresolved", "error-code": exc.code},
+        )
+        return None
+
 def _build_surface_hint(profile: dict[str, Any]) -> Any:
     """Build the surface hint from the resolved execution profile.
 
@@ -310,6 +698,10 @@ def _admitted_project_name(record: dict[str, Any]) -> str | None:
     return name.strip() if isinstance(name, str) and name.strip() else None
 
 
+def _session_output_media_type(result: Any) -> str:
+    value = getattr(result, "final_media_type", None)
+    return value if isinstance(value, str) and value else "text/plain; charset=utf-8"
+
 def _session_output_from_result(result: Any) -> str | None:
     """Read the bounded final summary from a SessionTurnResult.
 
@@ -317,6 +709,27 @@ def _session_output_from_result(result: Any) -> str | None:
     output from protocol events. The adapter carries assistant-text
     fragments only (no thought, tool args, provider refs)."""
     return result.final_summary if hasattr(result, "final_summary") else None
+
+
+def _failure_response_updates(project_root: Path, request_id: str, error: Any) -> dict[str, Any]:
+    """Persist provider DOM text separately from successful request output."""
+    details = getattr(error, "details", None)
+    if not isinstance(details, dict):
+        return {}
+    text = details.get("failure-response-text")
+    if not isinstance(text, str) or not text.strip():
+        return {}
+    from audiagentic.components.agents.gateway.output import persist_failure_response
+
+    artifact = persist_failure_response(project_root, request_id, text)
+    return {
+        "failure-response-artifact": {
+            key: artifact[key]
+            for key in ("artifact-id", "request-id", "media-type", "bytes", "sha256")
+        },
+        "failure-response-preview": artifact["output-preview"],
+        "failure-response-truncated": artifact["output-truncated"],
+    }
 
 
 def _post_turn_close_continued_session_if_quiescent(
@@ -356,8 +769,12 @@ def _dispatch_session_request(
     context_fingerprint: str | None = None,
     preallocated_session_id: str | None = None,
     _default_recovery_attempt: int = 0,
+    _network_followup_attempts: int = 0,
+    _provider_error_followup_attempts: int = 0,
     _unsent_retry_used: bool = False,
     session_start: Any | None = None,
+    project_name: str | None = None,
+    resume_existing: bool = False,
 ) -> dict[str, Any]:
     """Dispatch a sessionful request through the live SessionRuntime (AS04).
 
@@ -378,8 +795,36 @@ def _dispatch_session_request(
 
     request_id = record["request-id"]
     execution_profile_id = record["execution-profile-id"]
+    recovery = record.get("recovery")
+    recovery = recovery if isinstance(recovery, dict) else {}
+    continuation = recovery.get("continuation")
+    continuation = continuation if isinstance(continuation, dict) else {}
+    # A follow-up prompt is a provider-side continuation, not a fresh root
+    # dispatch.  The queue may invoke this runner again after the provider
+    # adapter lost its observation handle; restore the durable counters and
+    # force observation-only recovery so the original prompt is never replayed.
+    if recovery.get("phase") == "followup-reconcile" and continuation:
+        resume_existing = True
+        try:
+            _network_followup_attempts = max(
+                _network_followup_attempts,
+                int(continuation.get("network-followup-attempts", 0)),
+            )
+            _provider_error_followup_attempts = max(
+                _provider_error_followup_attempts,
+                int(continuation.get("provider-error-followup-attempts", 0)),
+            )
+            _default_recovery_attempt = max(
+                _default_recovery_attempt,
+                int(continuation.get("default-recovery-attempt", 0)),
+            )
+        except (TypeError, ValueError):
+            # Invalid private recovery metadata must not make the request
+            # eligible for a new prompt.  Observation-only recovery remains
+            # the safe default.
+            resume_existing = True
     runtime = get_session_runtime()
-    project_name = _admitted_project_name(record)
+    project_name = project_name or _admitted_project_name(record)
 
     admitted_snapshot = profiles_mod.snapshot_from_record(record)
     if admitted_snapshot is not None:
@@ -420,9 +865,49 @@ def _dispatch_session_request(
     preparation_guard = client_defaults.preparation_guard(record)
     preparation_guard.acquire()
     guard_held = True
-    prompt_started = False
+    runtime_invoked = False
     try:
-        record = client_defaults.redirect_if_replaced(project_root, record)
+        if not isinstance(dispatch_prompt, str) or not dispatch_prompt.strip():
+            # A restart can lose the private admitted-prompt snapshot after
+            # the provider has already answered. Before retaining the
+            # request in an endless rehydrate retry, use the same
+            # evidence-gated DOM capture exposed to operators. It can only
+            # terminalize after proving a stable, request-owned response, so
+            # an incomplete or ambiguous turn remains in observation-only
+            # recovery and is never replayed.
+            if resume_existing:
+                try:
+                    from audiagentic.components.agents.gateway.api import (
+                        complete_execution_from_provider,
+                    )
+                    captured = complete_execution_from_provider(project_root, request_id)
+                except Exception:  # noqa: BLE001 - incomplete turns remain recoverable
+                    captured = None
+                if isinstance(captured, dict) and captured.get("state") in {
+                    "completed",
+                    "failed",
+                    "cancelled",
+                    "interrupted",
+                }:
+                    return store.read_record(project_root, request_id)
+                # Restart recovery deliberately has no prompt to replay. If
+                # the current provider DOM was not already terminal, continue
+                # into the observation-only resume_existing path below. The
+                # provider transport owns the durable unresolved-turn
+                # checkpoint and must be allowed to reattach it.
+            else:
+                raise AudiaGenticError(
+                    code="RES-AGW-004",
+                    kind="agents",
+                    message="admitted request has no recoverable dispatch prompt",
+                    details={
+                        "failure-reason": "dispatch-prompt-unavailable",
+                        "resume-existing": resume_existing,
+                        "request-id": request_id,
+                    },
+                )
+        if not resume_existing:
+            record = client_defaults.redirect_if_replaced(project_root, record)
         session_id = record.get("session-id")
         if session_id is None:
             raise AudiaGenticError(
@@ -443,6 +928,34 @@ def _dispatch_session_request(
         is_new_session = admitted_session.get("created-by-request-id") == request_id
         if record.get("client-default-session"):
             is_new_session = not admitted_session.get("binding") and not runtime.session_runtime_status(session_id).get("available")
+        if resume_existing:
+            # Recovery must never use the request-creator fast path.  That
+            # path opens a fresh provider transport and can lose the durable
+            # session binding/checkpoint when the request-level relay was
+            # interrupted before publication.
+            is_new_session = False
+
+        async def _relay_provider_metadata(metadata: dict[str, Any]) -> None:
+            nonlocal record
+            merged_metadata = _merge_provider_metadata(
+                record.get("provider-metadata"), dict(metadata)
+            )
+            record = store.update_owned_running_session(
+                project_root,
+                request_id,
+                owner_epoch=record["dispatch-owner-epoch"],
+                worker_id=record["worker-id"],
+                attempt_epoch=record["attempt-epoch"],
+                session_id=session_id,
+                provider_metadata=merged_metadata,
+            )
+            client_defaults.remember(project_root, record)
+            try:
+                from audiagentic.components.agents.gateway.observation_projection import append_request_projection
+                append_request_projection(project_root, request_id, record, source="provider-binding")
+            except Exception:  # noqa: BLE001 - journal is advisory
+                logger.debug("provider binding journal append failed", extra={"request-id": request_id}, exc_info=True)
+
         if is_new_session:
             # keep-alive: open a new session bound to this profile
             request_runtime_root.mkdir(parents=True, exist_ok=True)
@@ -482,24 +995,6 @@ def _dispatch_session_request(
             # (AS49) is the correct, non-speculative behavior until a real
             # need for a finer split shows up.
             manifest_context_fingerprint = context_fingerprint or record.get("context-fingerprint")
-            async def _relay_provider_metadata(metadata: dict[str, Any]) -> None:
-                nonlocal record
-                current_metadata = record.get("provider-metadata")
-                merged_metadata = (
-                    dict(current_metadata) if isinstance(current_metadata, dict) else {}
-                )
-                merged_metadata.update(metadata)
-                record = store.update_owned_running_session(
-                    project_root,
-                    request_id,
-                    owner_epoch=record["dispatch-owner-epoch"],
-                    worker_id=record["worker-id"],
-                    attempt_epoch=record["attempt-epoch"],
-                    session_id=session_id,
-                    provider_metadata=merged_metadata,
-                )
-                client_defaults.remember(project_root, record)
-
             session_record = runtime.open_session(
                 project_root,
                 execution_profile_id=execution_profile_id,
@@ -572,6 +1067,17 @@ def _dispatch_session_request(
                     details={"request-id": request_id},
                 )
             session_record = session_store.read_session_record(project_root, session_id)
+            if not resume_existing and isinstance(dispatch_prompt, str) and dispatch_prompt.strip():
+                # A provider observer can race terminal capture and rewrite
+                # its unresolved-turn checkpoint after the request is already
+                # completed. Reconcile that proven predecessor fence before
+                # admitting the next prompt; never fork the conversation just
+                # because stale checkpoint metadata was reasserted.
+                cleared = _clear_terminal_predecessor_fence(
+                    project_root, record, session_store=session_store
+                )
+                if cleared is not None:
+                    record = cleared
             if session_record["execution-profile-id"] != execution_profile_id:
                 raise AudiaGenticError(
                     code="VAL-AGW-060",
@@ -623,19 +1129,37 @@ def _dispatch_session_request(
                             "request-fingerprint": context_fingerprint,
                         },
                     )
+            # The client-default guard protects selection/binding, not the
+            # potentially slow provider rehydration operation.  Holding it
+            # while CDP/browser recovery runs can strand a later request for
+            # the same client before it reaches the session turn lock or its
+            # activity watcher.  The durable session/turn fences below own
+            # concurrency once this request has selected its session.
+            if guard_held:
+                preparation_guard.release()
+                guard_held = False
             # Handles are process-local. After a gateway restart the durable
             # record can remain active while its handle is absent. Reattach
             # the exact provider binding before applying continuation policy.
             if not runtime.session_runtime_status(session_id).get("available"):
                 if (
-                    session_record.get("state") in {"closed", "expired"}
+                    (not resume_existing or not dispatch_prompt.strip())
+                    and session_record.get("state") in {"closed", "expired"}
                     and session_record.get("close-reason") in _AUTO_RESUMABLE_CLOSE_REASONS
                 ):
-                    # A gateway resource-policy close retains the durable
-                    # provider binding. Resume creates one linked successor
-                    # with a live transport, so no active-state rehydrate is
-                    # needed here. Intentional close and failure reasons are
-                    # deliberately excluded from this automatic path.
+                    # A gateway resource-policy close (shutdown/idle-timeout)
+                    # retains the durable provider binding. Resume creates one
+                    # linked successor with a live transport, so no
+                    # active-state rehydrate is needed here. Intentional close
+                    # (client-request) and failure reasons are deliberately
+                    # excluded from this automatic path. Observation-only
+                    # restart recovery (resume_existing=True) uses the SAME
+                    # reopen gate: the successor is reattached and the
+                    # unresolved turn is observed prompt-free instead of
+                    # looping on RES-AGW-003 until the bounded CON-AGW-084
+                    # interruption. A source without a durable binding is
+                    # refused by AS49 eligibility validation (RES-AGW-111) and
+                    # falls back to RES-AGW-003 — it is never reopened.
                     session_id, session_record, record = _auto_resume_reopenable_closed_session(
                         project_root,
                         runtime,
@@ -644,6 +1168,25 @@ def _dispatch_session_request(
                         context_fingerprint=context_fingerprint,
                         request_runtime_root=request_runtime_root,
                         project_name=project_name,
+                    )
+                elif (
+                    session_record.get("state") == "failed"
+                    and (
+                        resume_existing
+                        or _failed_session_has_safe_provider_continuation(
+                            project_root, session_record
+                        )
+                    )
+                ):
+                    session_id, session_record, record = _auto_resume_reopenable_closed_session(
+                        project_root,
+                        runtime,
+                        source_session_id=session_id,
+                        record=record,
+                        context_fingerprint=context_fingerprint,
+                        request_runtime_root=request_runtime_root,
+                        project_name=project_name,
+                        allow_failed=resume_existing,
                     )
                 elif session_record.get("state") != "active":
                     raise AudiaGenticError(
@@ -661,37 +1204,59 @@ def _dispatch_session_request(
                         if opening_request_ids
                         else None
                     )
-                    runtime.rehydrate_session(
-                        project_root,
-                        session_id,
-                        execution_profile_id=execution_profile_id,
-                        provider_id=provider_id,
-                        model_id=session_store.session_model_id(session_record)
-                        or record.get("resolved-model-id"),
-                        surface_hint=_build_surface_hint(profile),
-                        idle_timeout_seconds=(
-                            record.get("session-idle-timeout-seconds")
-                            if record.get("session-idle-timeout-seconds") is not None
-                            else session_store.session_idle_timeout_seconds(session_record)
-                        ),
-                        max_lifetime_seconds=(
-                            record.get("session-max-lifetime-seconds")
-                            if record.get("session-max-lifetime-seconds") is not None
-                            else session_store.session_max_lifetime_seconds(session_record)
-                        ),
-                        turn_timeout_seconds=first_present(
-                            params, "session-turn-timeout-seconds", "session_turn_timeout_seconds"
-                        ),
-                        turn_silence_timeout_seconds=first_present(
-                            params,
-                            "session-turn-silence-timeout-seconds",
-                            "session_turn_silence_timeout_seconds",
-                        ),
-                        correlation_id=record.get("correlation-id"),
-                        request_runtime_root=rehydrate_root,
-                        mcp_entries=providers_api.collect_management_mcp_launch_entries(project_root),
-                        project_name=project_name,
-                    )
+                    try:
+                        runtime.rehydrate_session(
+                            project_root,
+                            session_id,
+                            execution_profile_id=execution_profile_id,
+                            provider_id=provider_id,
+                            model_id=session_store.session_model_id(session_record)
+                            or record.get("resolved-model-id"),
+                            surface_hint=_build_surface_hint(profile),
+                            idle_timeout_seconds=(
+                                record.get("session-idle-timeout-seconds")
+                                if record.get("session-idle-timeout-seconds") is not None
+                                else session_store.session_idle_timeout_seconds(session_record)
+                            ),
+                            max_lifetime_seconds=(
+                                record.get("session-max-lifetime-seconds")
+                                if record.get("session-max-lifetime-seconds") is not None
+                                else session_store.session_max_lifetime_seconds(session_record)
+                            ),
+                            turn_timeout_seconds=first_present(
+                                params, "session-turn-timeout-seconds", "session_turn_timeout_seconds"
+                            ),
+                            turn_silence_timeout_seconds=first_present(
+                                params,
+                                "session-turn-silence-timeout-seconds",
+                                "session_turn_silence_timeout_seconds",
+                            ),
+                            correlation_id=record.get("correlation-id"),
+                            request_runtime_root=rehydrate_root,
+                            mcp_entries=providers_api.collect_management_mcp_launch_entries(project_root),
+                            project_name=project_name,
+                            resume_existing=resume_existing,
+                        )
+                    except AudiaGenticError as exc:
+                        if exc.code == "EXT-AGW-118":
+                            # Rehydration itself is observation-only.  This is
+                            # true both before a fresh prompt and while
+                            # recovering an already-submitted turn: opening
+                            # the exact retained conversation may fail because
+                            # the CDP bridge/browser is transiently unavailable,
+                            # but that cannot prove the provider turn stopped
+                            # or that the prompt was unsent.  Keep the same
+                            # request/session in recovery for either path;
+                            # never rotate the client default or replay a
+                            # prompt merely because reattachment was refused.
+                            raise RecoveryDeferred(
+                                exc,
+                                phase="rehydrate-retry",
+                                side_effect_state=(
+                                    "may-have-started" if resume_existing else "not-started"
+                                ),
+                            ) from exc
+                        raise
 
             # Global/profile policy is applied only to the in-memory handle;
             # _SessionHandle.update_bounds keeps the more-open value.
@@ -714,7 +1279,13 @@ def _dispatch_session_request(
                 details={"request-id": request_id},
             )
         session_id = str(session_id)
-        _raise_if_cancelled(project_root, request_id)
+        if resume_existing and store.read_record(project_root, request_id).get("cancel-requested"):
+            # Recovered work may already have sent this turn. Reattach first,
+            # signal cancellation against the exact turn, and let the
+            # provider resume path establish the authoritative outcome.
+            runtime.request_cancel(request_id, session_id=session_id)
+        else:
+            _raise_if_cancelled(project_root, request_id)
         store.record_gateway_timeline(
             project_root,
             request_id,
@@ -728,7 +1299,10 @@ def _dispatch_session_request(
                 "max-attempts": 1,
             },
         )
-        from audiagentic.components.agents.gateway.activity import RequestActivityRelay
+        from audiagentic.components.agents.gateway.activity import (
+            RequestActivityRelay,
+            frozen_activity_lease_seconds,
+        )
         activity_relay = RequestActivityRelay(
             project_root,
             request_id,
@@ -736,11 +1310,31 @@ def _dispatch_session_request(
             worker_id=record["worker-id"],
             attempt_epoch=record["attempt-epoch"],
             provider_capability="supported" if str(provider_id).startswith("gpt-auto") else "unknown",
+            lease_seconds=frozen_activity_lease_seconds(record),
         )
         client_defaults.remember(project_root, record)
-        preparation_guard.release()
-        guard_held = False
-        prompt_started = True
+        if guard_held:
+            preparation_guard.release()
+            guard_held = False
+        # Persist the immutable provider conversation identity onto a
+        # continuation before the provider turn starts.  This closes the
+        # crash window where admission selected a bound session but the later
+        # metadata relay had not yet reached the request record.
+        if not is_new_session:
+            continuation_metadata = session_store.session_provider_metadata(session_record)
+            if continuation_metadata.get("provider-session-id"):
+                record = store.update_owned_running_session(
+                    project_root,
+                    request_id,
+                    owner_epoch=record["dispatch-owner-epoch"],
+                    worker_id=record["worker-id"],
+                    attempt_epoch=record["attempt-epoch"],
+                    session_id=session_id,
+                    provider_metadata=continuation_metadata,
+                )
+        # This only proves that SessionRuntime was entered.  Provider
+        # submission state comes from the transport's typed failure contract.
+        runtime_invoked = True
         dispatch_claim = None
         if session_start is not None and store.read_record(project_root, request_id)["state"] == "queued":
             def _claim_session_turn() -> dict[str, Any]:
@@ -749,6 +1343,15 @@ def _dispatch_session_request(
                 return record
 
             dispatch_claim = _claim_session_turn
+        # Promptless resume is observation-only; no provider side effect is
+        # possible until a prompt exists, so do not create a native retry intent.
+        if resume_existing and dispatch_prompt:
+            recovery_intent = _prepare_native_recovery_fence(
+                project_root,
+                request_id,
+                record,
+                session_id=session_id,
+            )
         result = runtime.prompt_in_session(
             project_root,
             session_id,
@@ -761,18 +1364,98 @@ def _dispatch_session_request(
             timeout_seconds=None,
             activity_relay=activity_relay,
             dispatch_claim=dispatch_claim,
+            resume_existing=resume_existing,
+            request_provider_metadata_sink=_relay_provider_metadata,
         )
+        if resume_existing and isinstance(recovery_intent, dict):
+            from audiagentic.components.agents.gateway.replay import record_recovery_result
+            record_recovery_result(
+                project_root,
+                request_id,
+                action_attempt_id=str(recovery_intent["action-attempt-id"]),
+                outcome="provider-resume-completed",
+                terminal=True,
+                causal_input_ids=[request_id, session_id],
+            )
     except _CancelledDuringDispatch:
         if guard_held:
             preparation_guard.release()
+        if resume_existing:
+            raise RecoveryDeferred(
+                AudiaGenticError(
+                    code="CON-AGW-CANCELLED",
+                    kind="agents",
+                    message="recovered turn cancellation requires provider reconciliation",
+                    details={"session-id": session_id, "request-id": request_id},
+                ),
+                phase="cancel-reconcile",
+            )
         if request_runtime is not None:
             _cleanup_request_runtime(request_runtime)
         return _transition_owned_attempt(project_root, record, "cancelled")
+    except RecoveryDeferred:
+        # RecoveryDeferred is queue control flow, not a terminal provider
+        # error. Preserve it so the queue can retain the running request and
+        # schedule the next exact-session rehydration attempt.
+        if guard_held:
+            preparation_guard.release()
+        raise
     except AudiaGenticError as exc:
         if guard_held:
             preparation_guard.release()
+        if resume_existing:
+            disposition = runtime.session_failure_disposition(session_id)
+            if disposition is not SessionFailureDisposition.TERMINAL_FAILED:
+                # Rehydrate/open failures cannot prove that the old generation
+                # did not submit the turn. The queue owns the non-terminal
+                # retry and keeps the durable request/session identity.
+                followup_recovery = recovery.get("phase") == "followup-reconcile"
+                raise RecoveryDeferred(
+                    exc,
+                    phase=(
+                        "followup-reconcile"
+                        if followup_recovery
+                        else ("rehydrate-retry" if not runtime_invoked else "observe-retry")
+                    ),
+                    continuation=continuation if followup_recovery else None,
+                ) from exc
         cancelled = store.read_record(project_root, request_id).get("cancel-requested")
-        if client_defaults.proven_unsent_composer_failure(exc) and not cancelled and not _unsent_retry_used:
+        if (
+            client_defaults.structured_presubmit_failure(exc)
+            and (exc.details or {}).get("previous-turn-unresolved") is True
+            and not cancelled
+        ):
+            # A terminal predecessor with captured completion evidence cannot
+            # keep the session fenced forever. Clear only that proven stale
+            # checkpoint; live or ambiguous predecessors remain queued safely.
+            cleared = _clear_terminal_predecessor_fence(
+                project_root,
+                store.read_record(project_root, request_id),
+                session_store=session_store,
+            )
+            if cleared is not None:
+                return _dispatch_session_request(
+                    project_root,
+                    cleared,
+                    dispatch_prompt=dispatch_prompt,
+                    context_fingerprint=context_fingerprint,
+                    _default_recovery_attempt=_default_recovery_attempt,
+                    _network_followup_attempts=_network_followup_attempts,
+                    _provider_error_followup_attempts=_provider_error_followup_attempts,
+                    _unsent_retry_used=_unsent_retry_used,
+                    session_start=session_start,
+                    project_name=project_name,
+                    resume_existing=False,
+                )            # The current prompt was never submitted, but the preceding
+            # provider turn still has an unresolved Send fence.  Keep this
+            # request queued on the same session until reconciliation proves
+            # the session safe; never replay it or rotate the client's default.
+            raise RecoveryDeferred(
+                exc,
+                phase="presubmit-reconcile",
+                side_effect_state="not-started",
+            ) from exc
+        if client_defaults.proven_same_session_presubmit_retryable_failure(exc) and not cancelled and not _unsent_retry_used:
             store.append_owned_attempt(
                 project_root, request_id, owner_epoch=record["dispatch-owner-epoch"],
                 worker_id=record["worker-id"], attempt_epoch=record["attempt-epoch"],
@@ -786,21 +1469,412 @@ def _dispatch_session_request(
             return _dispatch_session_request(
                 project_root, record, dispatch_prompt=dispatch_prompt,
                 context_fingerprint=context_fingerprint,
-                _default_recovery_attempt=_default_recovery_attempt, _unsent_retry_used=True,
+                _default_recovery_attempt=_default_recovery_attempt,
+                _unsent_retry_used=True,
+                session_start=session_start,
+                resume_existing=resume_existing,
             )
-        if not store.read_record(project_root, request_id).get("cancel-requested"):
-            replacement = client_defaults.replace_failed_default(
+        if (
+            not cancelled
+            and isinstance(exc.details, dict)
+            and exc.details.get("failure-stage") == "submission"
+            and exc.details.get("submission-state") == "not_started"
+            and exc.details.get("submission-ambiguous") is False
+        ):
+            # A browser admission failure proved that Send was never reached.
+            # Keep the request queued for bounded provider recovery instead of
+            # rotating or terminalizing it; retrying remains safe because the
+            # durable unresolved fence was cleared by the transport.
+            raise RecoveryDeferred(
+                exc,
+                phase="presubmit-retry",
+                side_effect_state="not-started",
+            ) from exc
+        if (
+            not resume_existing
+            and not cancelled
+            and not runtime_invoked
+            and exc.code == "EXT-AGW-118"
+            and _has_reopenable_provider_conversation(project_root, record)
+        ):
+            # This is a continuation against a durable GPT conversation, not
+            # a new one-shot request.  A transient load/reattach failure must
+            # not fall through to replace_failed_session(), which reserves a
+            # second ChatGPT conversation and loses the original context.
+            # Re-enter the exact-session rehydrate path silently; the queue's
+            # normal recovery/outer-timeout policy still bounds the request.
+            store.record_gateway_timeline(
+                project_root,
+                request_id,
+                "provider.conversation.reopen-deferred",
+                state="running",
+                attributes={
+                    "same-session": True,
+                    "runtime-invoked": False,
+                    "durable-chat-retained": True,
+                    "error-code": exc.code,
+                },
+            )
+            raise RecoveryDeferred(
+                exc,
+                phase="rehydrate-retry",
+                side_effect_state="not-started",
+            ) from exc
+        if not resume_existing and not store.read_record(project_root, request_id).get("cancel-requested"):
+            failure_details = exc.details if isinstance(exc.details, dict) else {}
+            dom_signals = failure_details.get("dom-signals") or ()
+            recovery_policy = failure_details.get("recovery-policy")
+            if not isinstance(recovery_policy, dict):
+                # Compatibility for older provider records that predate the
+                # workflow recovery block. Resolved current configs always
+                # provide this policy through the adapter diagnostics.
+                recovery_policy = {
+                    "network-error-followup-enabled": True,
+                    "network-error-followup-max-attempts": 1,
+                    "network-error-followup-prompt-template": (
+                        "Complete the previous request. The previous response was interrupted by a "
+                        "network error. Continue from the work already done and provide the complete "
+                        "answer.\n\nOriginal request:\n{original_request}"
+                    ),
+                    "provider-error-followup-enabled": True,
+                    "provider-error-followup-max-attempts": 1,
+                    "provider-error-followup-prompt-template": (
+                        "Complete the previous request. ChatGPT reported a temporary request error. "
+                        "Continue from the work already done and provide the complete "
+                        "answer.\n\nOriginal request:\n{original_request}"
+                    ),
+                    "conversation-load-failure-recovery-enabled": True,
+                    "conversation-load-failure-max-attempts": 2,
+                }
+            load_failed = (
+                failure_details.get("failure-reason") == "conversation-load-failed"
+                or "conversation-load-failed" in dom_signals
+            )
+            # A conversation-load error is safe to recover in a fresh chat
+            # only when the failed page proves that this request never got
+            # past submission.  Once Send was proven, or submission remains
+            # ambiguous, rotating the session and replaying the original
+            # prompt can duplicate provider work that is still running in the
+            # old conversation.  Preserve the current session/evidence and
+            # let the normal terminal/recovery policy decide its outcome.
+            load_submission_proven = failure_details.get("submission-proven") is True
+            # Fresh-session replay is safe only with affirmative proof that
+            # this request never crossed the browser side-effect boundary.
+            # Missing fields are intentionally unsafe: older or incomplete
+            # failure producers must not turn a conversation-load error into
+            # a duplicate provider prompt.
+            load_proven_unsent = (
+                failure_details.get("submission-proven") is False
+                and failure_details.get("submission-ambiguous") is False
+                and (
+                    failure_details.get("submission-attempted") is False
+                    or (
+                        failure_details.get("failure-stage") == "submission"
+                        and failure_details.get("submission-state") == "not_started"
+                    )
+                )
+            )
+            load_submission_ambiguous = (
+                not load_proven_unsent
+                if load_failed
+                else failure_details.get("submission-ambiguous") is True
+            )
+            load_recovery_enabled = bool(
+                recovery_policy.get("conversation-load-failure-recovery-enabled", True)
+            )
+            try:
+                load_recovery_max_attempts = max(
+                    0,
+                    int(recovery_policy.get("conversation-load-failure-max-attempts", 2)),
+                )
+                network_followup_max_attempts = max(
+                    0,
+                    int(recovery_policy.get("network-error-followup-max-attempts", 1)),
+                )
+                provider_error_followup_max_attempts = max(
+                    0,
+                    int(recovery_policy.get("provider-error-followup-max-attempts", 1)),
+                )
+            except (TypeError, ValueError):
+                load_recovery_max_attempts = 0
+                network_followup_max_attempts = 0
+                provider_error_followup_max_attempts = 0
+            if load_failed and not load_proven_unsent:
+                # A load-error page is not proof that the provider turn
+                # stopped.  Once submission is proven, ambiguous, or simply
+                # undocumented by an older failure producer, retain the
+                # request/session and re-enter observation-only recovery.
+                # Falling through to the terminal failure transition here
+                # strands provider work and breaks FIFO continuation after a
+                # gateway restart.
+                failure_updates = _failure_response_updates(project_root, request_id, exc)
+                if failure_updates:
+                    record = store.update_owned_running_session(
+                        project_root,
+                        request_id,
+                        owner_epoch=record["dispatch-owner-epoch"],
+                        worker_id=record["worker-id"],
+                        attempt_epoch=record["attempt-epoch"],
+                        session_id=session_id,
+                        result_updates=failure_updates,
+                    )
+                store.record_gateway_timeline(
+                    project_root,
+                    request_id,
+                    "provider.conversation.load-observation-deferred",
+                    state="running",
+                    attributes={
+                        "same-session": True,
+                        "submission-proven": load_submission_proven,
+                        "submission-ambiguous": load_submission_ambiguous,
+                        "failure-response-available": bool(failure_updates),
+                    },
+                )
+                raise RecoveryDeferred(
+                    exc,
+                    phase="conversation-load-reconcile",
+                    side_effect_state="may-have-started",
+                    continuation={
+                        "kind": "conversation-load",
+                        "resume-existing": True,
+                        "default-recovery-attempt": _default_recovery_attempt,
+                        "load-recovery-attempts": _default_recovery_attempt + 1,
+                    },
+                ) from exc
+            if (
+                load_failed
+                and load_recovery_enabled
+                and _default_recovery_attempt < load_recovery_max_attempts
+                and load_proven_unsent
+            ):
+                replacement = client_defaults.replace_failed_default(
+                    project_root, record, exc, recover_url=False, attach_request=True,
+                )
+                if replacement is None:
+                    replacement = client_defaults.replace_failed_session(project_root, record, exc)
+                if replacement is not None:
+                    return _dispatch_session_request(
+                        project_root, replacement, dispatch_prompt=dispatch_prompt,
+                        context_fingerprint=context_fingerprint,
+                        _default_recovery_attempt=_default_recovery_attempt + 1,
+                        session_start=session_start,
+                        resume_existing=False,
+                    )
+            network_followup_enabled = bool(
+                recovery_policy.get("network-error-followup-enabled", True)
+            )
+            network_observation_only = (
+                "network-error-alert" in dom_signals
+                and runtime_invoked
+                and (
+                    not network_followup_enabled
+                    or _network_followup_attempts >= network_followup_max_attempts
+                )
+            )
+            if (
+                "network-error-alert" in dom_signals
+                and (
+                    (
+                        network_followup_enabled
+                        and _network_followup_attempts < network_followup_max_attempts
+                    )
+                    or network_observation_only
+                )
+                and runtime_invoked
+                and runtime.session_failure_disposition(session_id)
+                is not SessionFailureDisposition.TERMINAL_FAILED
+            ):
+                # The original Send may have reached the provider. Preserve
+                # the evidence and defer to observation or explicit recovery;
+                # never submit a second prompt from an ambiguous failure.
+                failure_updates = _failure_response_updates(project_root, request_id, exc)
+                if failure_updates:
+                    record = store.update_owned_running_session(
+                        project_root,
+                        request_id,
+                        owner_epoch=record["dispatch-owner-epoch"],
+                        worker_id=record["worker-id"],
+                        attempt_epoch=record["attempt-epoch"],
+                        session_id=session_id,
+                        result_updates=failure_updates,
+                    )
+                store.record_gateway_timeline(
+                    project_root,
+                    request_id,
+                    "provider.turn.failure-recovered",
+                    state="running",
+                    attributes={
+                        "reason": "network-error-alert",
+                        "same-session": True,
+                        "original-prompt-length": len(dispatch_prompt),
+                        "followup-attempt": _network_followup_attempts + 1,
+                        "recovery-mode": (
+                            "observation-only" if network_observation_only else "followup-reconcile"
+                        ),
+                        "failure-response-available": bool(failure_updates),
+                        "dom-signals": sorted(str(item) for item in (failure_details.get("dom-signals") or ())),
+                        "observed-assistant-id": failure_details.get("failure-response-message-id"),
+                        "activity-sequence": failure_details.get("activity-sequence"),
+                    },
+                )
+                raise RecoveryDeferred(
+                    exc,
+                    phase="followup-reconcile",
+                    side_effect_state="may-have-started",
+                    continuation={
+                        "kind": "network-error-observation",
+                        "resume-existing": True,
+                        "network-followup-attempts": _network_followup_attempts,
+                        "default-recovery-attempt": _default_recovery_attempt,
+                        "failure-response-available": bool(failure_updates),
+                    },
+                ) from exc
+            error_evidence = {
+                str(signal)
+                for signal in (*dom_signals, *(failure_details.get("evidence") or ()))
+            }
+            provider_error_alert = bool(
+                error_evidence.intersection(
+                    {"request-error-alert", "error-alert", "stream-cache-expired"}
+                )
+            )
+            provider_followup_enabled = bool(
+                recovery_policy.get("provider-error-followup-enabled", True)
+            )
+            provider_observation_only = (
+                provider_error_alert
+                and runtime_invoked
+                and (
+                    not provider_followup_enabled
+                    or _provider_error_followup_attempts >= provider_error_followup_max_attempts
+                )
+            )
+            if (
+                provider_error_alert
+                and "network-error-alert" not in error_evidence
+                and (
+                    (
+                        provider_followup_enabled
+                        and _provider_error_followup_attempts < provider_error_followup_max_attempts
+                    )
+                    or provider_observation_only
+                )
+                and runtime_invoked
+                and runtime.session_failure_disposition(session_id)
+                is not SessionFailureDisposition.TERMINAL_FAILED
+            ):
+                # A provider alert is not proof that Send was never reached.
+                # Preserve the failed attempt and require observation or an
+                # explicit recovery action before any new provider prompt.
+                failure_updates = _failure_response_updates(project_root, request_id, exc)
+                if failure_updates:
+                    record = store.update_owned_running_session(
+                        project_root,
+                        request_id,
+                        owner_epoch=record["dispatch-owner-epoch"],
+                        worker_id=record["worker-id"],
+                        attempt_epoch=record["attempt-epoch"],
+                        session_id=session_id,
+                        result_updates=failure_updates,
+                    )
+                store.record_gateway_timeline(
+                    project_root,
+                    request_id,
+                    "provider.turn.failure-recovered",
+                    state="running",
+                    attributes={
+                        "reason": "provider-error-alert",
+                        "same-session": True,
+                        "original-prompt-length": len(dispatch_prompt),
+                        "followup-attempt": _provider_error_followup_attempts + 1,
+                        "recovery-mode": (
+                            "observation-only" if provider_observation_only else "followup-reconcile"
+                        ),
+                        "failure-response-available": bool(failure_updates),
+                        "dom-signals": sorted(error_evidence),
+                    },
+                )
+                raise RecoveryDeferred(
+                    exc,
+                    phase="followup-reconcile",
+                    side_effect_state="may-have-started",
+                    continuation={
+                        "kind": "provider-error-observation",
+                        "resume-existing": True,
+                        "provider-error-followup-attempts": _provider_error_followup_attempts,
+                        "default-recovery-attempt": _default_recovery_attempt,
+                        "failure-response-available": bool(failure_updates),
+                    },
+                ) from exc
+            if (
+                not cancelled
+                and runtime_invoked
+                and (_network_followup_attempts > 0 or _provider_error_followup_attempts > 0)
+            ):
+                # A recovery prompt has already been submitted in this
+                # provider conversation.  A subsequent provider alert is not
+                # proof that the recovery turn did not start: the live tab
+                # may still be generating while the old error panel remains
+                # in the document.  Preserve the failed-attempt evidence and
+                # re-enter observation-only recovery; never terminalize the
+                # parent request while that follow-up may still be running.
+                failure_updates = _failure_response_updates(project_root, request_id, exc)
+                if failure_updates:
+                    record = store.update_owned_running_session(
+                        project_root,
+                        request_id,
+                        owner_epoch=record["dispatch-owner-epoch"],
+                        worker_id=record["worker-id"],
+                        attempt_epoch=record["attempt-epoch"],
+                        session_id=session_id,
+                        result_updates=failure_updates,
+                    )
+                store.record_gateway_timeline(
+                    project_root,
+                    request_id,
+                    "provider.followup.observation-deferred",
+                    state="running",
+                    attributes={
+                        "network-followup-attempts": _network_followup_attempts,
+                        "provider-error-followup-attempts": _provider_error_followup_attempts,
+                        "same-session": True,
+                        "failure-response-available": bool(failure_updates),
+                        "dom-signals": sorted(error_evidence),
+                    },
+                )
+                raise RecoveryDeferred(
+                    exc,
+                    phase="followup-reconcile",
+                    side_effect_state="may-have-started",
+                    continuation={
+                        "kind": "provider-followup",
+                        "resume-existing": True,
+                        "network-followup-attempts": _network_followup_attempts,
+                        "provider-error-followup-attempts": _provider_error_followup_attempts,
+                        "default-recovery-attempt": _default_recovery_attempt,
+                        "followup-prompt-length": len(dispatch_prompt),
+                        "followup-prompt-digest": hashlib.sha256(
+                            dispatch_prompt.encode("utf-8")
+                        ).hexdigest(),
+                    },
+                ) from exc
+            replacement = None if (load_submission_proven or load_submission_ambiguous) else client_defaults.replace_failed_default(
                 project_root, record, exc,
-                recover_url=not prompt_started and _default_recovery_attempt == 0 and not (record.get("metadata") or {}).get("provider-chat-url"),
-                attach_request=not prompt_started and _default_recovery_attempt < 2,
-            ) if _default_recovery_attempt < 2 or prompt_started else None
+                recover_url=not runtime_invoked and _default_recovery_attempt == 0 and not (record.get("metadata") or {}).get("provider-chat-url"),
+                attach_request=not runtime_invoked and _default_recovery_attempt < 2,
+            ) if _default_recovery_attempt < 2 or runtime_invoked else None
             if replacement is not None:
                 record = replacement
-                if not prompt_started:
+                if not runtime_invoked:
                     return _dispatch_session_request(project_root, record, dispatch_prompt=dispatch_prompt, context_fingerprint=context_fingerprint, _default_recovery_attempt=_default_recovery_attempt + 1)
         exc = _explain_stale_session_runtime_error(project_root, session_id, exc)
         if request_runtime is not None:
             _quarantine_request_runtime(request_runtime, request_runtime_root.parent / "quarantine")
+        reconciled = _reconcile_before_failed_terminal(
+            project_root, record, provider_id=provider_id, request_id=request_id
+        )
+        if reconciled is not None and reconciled.get("state") == "completed":
+            return reconciled
         store.append_owned_attempt(
             project_root,
             request_id,
@@ -819,11 +1893,46 @@ def _dispatch_session_request(
             project_root,
             record,
             "failed",
-            updates={"error": exc, "session-id": session_id, "finished-at": now_iso_z()},
+            updates={
+                "error": exc,
+                "session-id": session_id,
+                "finished-at": now_iso_z(),
+                **_failure_response_updates(project_root, request_id, exc),
+            },
         )
     except BaseException as exc:
         if guard_held:
             preparation_guard.release()
+        if resume_existing and "unresolved turn does not belong to the recovered request" in str(exc):
+            current = store.read_record(project_root, request_id)
+            cleared = _clear_terminal_predecessor_fence(
+                project_root,
+                current,
+                session_store=session_store,
+            )
+            if cleared is not None:
+                return _dispatch_session_request(
+                    project_root,
+                    cleared,
+                    dispatch_prompt=dispatch_prompt,
+                    context_fingerprint=context_fingerprint,
+                    _default_recovery_attempt=_default_recovery_attempt,
+                    _network_followup_attempts=_network_followup_attempts,
+                    _provider_error_followup_attempts=_provider_error_followup_attempts,
+                    _unsent_retry_used=_unsent_retry_used,
+                    session_start=session_start,
+                    project_name=project_name,
+                    resume_existing=False,
+                )
+        if resume_existing:
+            cause = repr(exc) or f"<{type(exc).__name__}>"
+            wrapped = AudiaGenticError(
+                code="INT-AGW-098",
+                kind="agents",
+                message=f"session recovery failed: {cause}",
+                details={"original-type": type(exc).__name__, "original-repr": cause[:500]},
+            )
+            raise RecoveryDeferred(wrapped) from exc
         # Safety net: wrap any non-AudiaGenticError so _redact_error preserves
         # the message (INT-AGW-098 boundary handler — prevents raw exceptions
         # like provider-specific errors from being silently redacted).
@@ -833,22 +1942,56 @@ def _dispatch_session_request(
         )
         if request_runtime is not None:
             _quarantine_request_runtime(request_runtime, request_runtime_root.parent / "quarantine")
+        cause = repr(exc) or f"<{type(exc).__name__}>"
         wrapped = AudiaGenticError(
             code="INT-AGW-098",
             kind="agents",
-            message=f"session dispatch failed: {exc}",
-            details={"original-type": type(exc).__name__},
+            message=f"session dispatch failed: {cause}",
+            details={"original-type": type(exc).__name__, "original-repr": cause[:500]},
         )
-        if isinstance(exc, Exception) and _default_recovery_attempt < 2 and not store.read_record(project_root, request_id).get("cancel-requested"):
-            replacement = client_defaults.replace_failed_default(
-                project_root, record, wrapped,
-                recover_url=not prompt_started and _default_recovery_attempt == 0 and not (record.get("metadata") or {}).get("provider-chat-url"),
-                attach_request=not prompt_started,
+        if (
+            not resume_existing
+            and not runtime_invoked
+            and isinstance(exc, TimeoutError)
+            and _has_reopenable_provider_conversation(project_root, record)
+        ):
+            store.record_gateway_timeline(
+                project_root,
+                request_id,
+                "provider.conversation.reopen-deferred",
+                state="running",
+                attributes={"same-session": True, "runtime-invoked": False, "error-code": "TIMEOUT"},
             )
+            raise RecoveryDeferred(
+                wrapped,
+                phase="rehydrate-retry",
+                side_effect_state="not-started",
+            ) from exc
+        if isinstance(exc, Exception) and not resume_existing and _default_recovery_attempt < 2 and not store.read_record(project_root, request_id).get("cancel-requested"):
+            if not runtime_invoked:
+                # A request-owned new session has no provider side effect until
+                # prompt_in_session is reached. Retry it once in a fresh
+                # session even when the client-default marker is non-automatic;
+                # that marker describes reuse policy, not whether admission
+                # succeeded.
+                replacement = client_defaults.replace_failed_session(
+                    project_root, record, wrapped
+                )
+            else:
+                replacement = client_defaults.replace_failed_default(
+                    project_root, record, wrapped,
+                    recover_url=False,
+                    attach_request=False,
+                )
             if replacement is not None:
                 record = replacement
-                if not prompt_started:
+                if not runtime_invoked:
                     return _dispatch_session_request(project_root, record, dispatch_prompt=dispatch_prompt, context_fingerprint=context_fingerprint, _default_recovery_attempt=_default_recovery_attempt + 1)
+        reconciled = _reconcile_before_failed_terminal(
+            project_root, record, provider_id=provider_id, request_id=request_id
+        )
+        if reconciled is not None and reconciled.get("state") == "completed":
+            return reconciled
         store.append_owned_attempt(
             project_root,
             request_id,
@@ -894,6 +2037,11 @@ def _dispatch_session_request(
             session_id=session_id,
             provider_metadata=provider_metadata,
         )
+        try:
+            from audiagentic.components.agents.gateway.observation_projection import append_request_projection
+            append_request_projection(project_root, request_id, record, source="provider-terminal")
+        except Exception:  # noqa: BLE001 - journal is advisory
+            logger.debug("provider terminal journal append failed", extra={"request-id": request_id}, exc_info=True)
     client_defaults.remember(project_root, record)
 
     if result.stop_reason == "cancelled":
@@ -935,7 +2083,7 @@ def _dispatch_session_request(
                     "assistant-output-available": bool(output_text and output_text.strip()),
                 },
             )
-        if error is not None:
+        if error is not None and not resume_existing:
             record = client_defaults.replace_failed_default(
                 project_root, record, error, recover_url=False, attach_request=False,
             ) or record
@@ -945,7 +2093,7 @@ def _dispatch_session_request(
         if isinstance(output_text, str) and output_text.strip():
             from audiagentic.components.agents.gateway.output import persist_final_response
 
-            artifact = persist_final_response(project_root, request_id, output_text)
+            artifact = persist_final_response(project_root, request_id, output_text, media_type=_session_output_media_type(result))
             artifact_ref = {
                 key: artifact[key]
                 for key in ("artifact-id", "request-id", "media-type", "bytes", "sha256")
@@ -1017,9 +2165,15 @@ def _dispatch_session_request(
             message="provider session completed without an assistant response",
             details={"stop-reason": result.stop_reason or "unknown"},
         )
-        record = client_defaults.replace_failed_default(
-            project_root, record, error, recover_url=False, attach_request=False,
-        ) or record
+        if not resume_existing:
+            record = client_defaults.replace_failed_default(
+                project_root, record, error, recover_url=False, attach_request=False,
+            ) or record
+        reconciled = _reconcile_before_failed_terminal(
+            project_root, record, provider_id=provider_id, request_id=request_id
+        )
+        if reconciled is not None and reconciled.get("state") == "completed":
+            return reconciled
         store.append_owned_attempt(
             project_root,
             request_id,
@@ -1047,7 +2201,7 @@ def _dispatch_session_request(
             },
         )
     from audiagentic.components.agents.gateway.output import persist_final_response
-    artifact = persist_final_response(project_root, request_id, output_text)
+    artifact = persist_final_response(project_root, request_id, output_text, media_type=_session_output_media_type(result))
     artifact_ref = {key: artifact[key] for key in ("artifact-id", "request-id", "media-type", "bytes", "sha256")}
     store.append_owned_attempt(
         project_root,
@@ -1156,7 +2310,7 @@ def _transition_owned_attempt(
     updates: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Persist a terminal state only while this worker attempt still owns it."""
-    return store.transition_owned_terminal(
+    updated = store.transition_owned_terminal(
         project_root,
         record["request-id"],
         new_state,
@@ -1165,3 +2319,31 @@ def _transition_owned_attempt(
         worker_id=record["worker-id"],
         attempt_epoch=record["attempt-epoch"],
     )
+    if new_state == "completed" and record.get("session-id"):
+        try:
+            from audiagentic.components.agents.gateway.session import sessions_store
+
+            session_id = str(record["session-id"])
+            session_record = sessions_store.read_session_record(project_root, session_id)
+            if session_record.get("session-id") == session_id:
+                sessions_store.update_provider_metadata(
+                    project_root,
+                    session_id,
+                    {"unresolved-turn-pending": False, "recovery-state": "terminal-completed"},
+                    remove_keys=(
+                        "unresolved-turn-id", "prompt-message-id", "assistant-message-id",
+                        "assistant-before-message-id", "assistant-before-id",
+                        "prompt-text-digest", "submission-proven", "terminal-evidence",
+                    ),
+                )
+        except Exception:  # noqa: BLE001 - terminal request state remains authoritative
+            logger.warning("could not clear completed provider turn fence", extra={"request-id": record["request-id"]}, exc_info=True)
+    try:
+        from audiagentic.components.agents.gateway.observation_projection import append_request_projection
+        append_request_projection(project_root, record["request-id"], updated, source="gateway-terminal")
+    except Exception:  # noqa: BLE001 - journal is advisory
+        logger.debug("terminal diagnostic journal append failed", extra={"request-id": record["request-id"]}, exc_info=True)
+    return updated
+
+
+

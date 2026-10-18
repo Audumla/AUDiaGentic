@@ -12,6 +12,7 @@ from audiagentic.components.agents.configuration.management import (
 )
 from audiagentic.components.agents.gateway import store as store
 from audiagentic.components.agents.gateway.queue import dispatch as dispatch
+from audiagentic.components.agents.gateway.session import dispatch as session_dispatch
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.features.base import ImplementationState
 from audiagentic.foundation.features.state import set_implementation_state
@@ -67,6 +68,63 @@ def _dispatch(project_root: Path, record: dict, prompt: str = "do the thing") ->
 
 def _worker_result(data: dict) -> SimpleNamespace:
     return SimpleNamespace(result_data=data)
+
+
+def test_unresolved_metadata_preserves_prompt_digest_for_dom_reconciliation() -> None:
+    current = {
+        "project-url": "https://chatgpt.com/g/g-p-example/project",
+        "prompt-message-id": "old-prompt",
+        "assistant-message-id": "old-assistant",
+        "prompt-text-digest": "old-digest",
+        "submission-proven": True,
+    }
+
+    merged = session_dispatch._merge_provider_metadata(
+        current,
+        {
+            "unresolved-turn-pending": True,
+            "unresolved-turn-id": "turn-new",
+            "prompt-text-digest": "new-digest",
+            "submission-proven": False,
+        },
+    )
+
+    assert merged["prompt-text-digest"] == "new-digest"
+    assert merged["unresolved-turn-pending"] is True
+    assert "prompt-message-id" not in merged
+    assert "assistant-message-id" not in merged
+    assert "old-digest" not in merged.values()
+
+
+def test_unresolved_metadata_without_digest_clears_stale_digest() -> None:
+    merged = session_dispatch._merge_provider_metadata(
+        {
+            "prompt-text-digest": "stale",
+            "submission-proven": True,
+            "terminal-evidence": {"checkpoint-clear-persisted": True},
+        },
+        {"unresolved-turn-pending": True, "submission-proven": False},
+    )
+
+    assert "prompt-text-digest" not in merged
+    assert "terminal-evidence" not in merged
+
+
+def test_metadata_without_submission_proven_does_not_clear_turn_evidence() -> None:
+    current = {
+        "prompt-text-digest": "active",
+        "submission-proven": True,
+        "terminal-evidence": {"turn-id": "turn-1"},
+    }
+
+    merged = session_dispatch._merge_provider_metadata(
+        current,
+        {"terminal-evidence": {"turn-id": "turn-1", "text-present": True}},
+    )
+
+    assert merged["prompt-text-digest"] == "active"
+    assert merged["submission-proven"] is True
+    assert merged["terminal-evidence"]["text-present"] is True
 
 
 def test_classify_failure_prefixes():
@@ -208,6 +266,44 @@ def test_dispatch_reloads_admitted_prompt_snapshot_when_fast_path_is_lost(
 
     assert result["state"] == "completed"
     assert captured["prompt-body"] == "frozen admitted prompt\r\nwith café"
+
+
+def test_restart_observation_does_not_require_prompt_snapshot(
+    tmp_path: Path, monkeypatch
+):
+    """Existing provider turns are observed without reconstructing a prompt."""
+    _make_profile(tmp_path, "default", "gpt-auto", model_id="chatgpt")
+    record = _record(tmp_path, "default")
+    record.update(
+        {
+            "state": "running",
+            "session-id": "ses-restart",
+            "provider-transport-kind": "provider-session",
+        }
+    )
+    captured: dict[str, object] = {}
+
+    def observe_existing(*args, **kwargs):
+        captured.update(kwargs)
+        return {"state": "completed", "output": "observed"}
+
+    monkeypatch.setattr(dispatch, "_dispatch_session_request", observe_existing)
+
+    result = dispatch.dispatch_request(
+        tmp_path,
+        record,
+        dispatch_prompt="",
+        manifest_id="mf_test",
+        context_fingerprint="0" * 64,
+        component_profile="",
+        provider_isolation_tier="none",
+        worker_timeout_seconds=10,
+        resume_existing=True,
+    )
+
+    assert result["state"] == "completed"
+    assert captured["dispatch_prompt"] == ""
+    assert captured["resume_existing"] is True
 
 
 def test_dispatch_uses_profile_stream_controls_and_ignores_metadata_working_root(

@@ -120,6 +120,55 @@ class ManagedServiceStarter:
                 lease_facts=safe_lease_facts,
             )
 
+    def attach_existing(
+        self,
+        declaration: ManagedServiceDeclaration,
+        *,
+        client_instance_id: str,
+        lease_ttl_seconds: float,
+        correlation_id: str | None = None,
+        lease_facts: Mapping[str, Any] | None = None,
+    ) -> StartOrAttachResult:
+        """Attach only; never create, recover, or launch a service.
+
+        Restart callers use this after the retiring generation has handed off
+        ownership.  A missing or non-attachable record is an error rather than
+        permission to create a competing replacement.
+        """
+        if declaration.key != self.store.key:
+            raise validation_error(25, "managed-service declaration key does not match store")
+        validate_id(client_instance_id, "client-instance-id")
+        if isinstance(lease_ttl_seconds, bool) or lease_ttl_seconds <= 0:
+            raise validation_error(17, "lease ttl must be positive")
+        safe_lease_facts = validate_facts(lease_facts, "lease facts")
+        with self.store._lock():
+            if not self.store.record_path.exists():
+                raise conflict_error(30, "managed service record is not ready for attach")
+            record = self.store._read_unlocked()
+            timestamp = self.store._clock()
+            leases, changed = normalize_lease_history(record.leases, current_time=timestamp)
+            if changed:
+                record = self.store._write_unlocked(
+                    replace(
+                        record,
+                        revision=record.revision + 1,
+                        updated_at=timestamp,
+                        leases=leases,
+                    ),
+                    "lease.expired",
+                )
+            attached = self._try_attach(
+                record,
+                declaration=declaration,
+                client_instance_id=client_instance_id,
+                lease_ttl_seconds=lease_ttl_seconds,
+                correlation_id=correlation_id,
+                lease_facts=safe_lease_facts,
+            )
+            if attached is None:
+                raise conflict_error(30, "managed service owner is not ready for attach")
+            return attached
+
     def _try_attach(
         self,
         record: ManagedServiceRecord,

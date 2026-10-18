@@ -78,6 +78,134 @@ def test_relay_preserves_all_activity_labels_in_durable_request_history(
     ] == list(ACTIVITY_LABELS)
 
 
+def test_relay_persists_dom_edge_activity_labels(tmp_path: Path) -> None:
+    record = store.build_record(execution_profile_id="default", prompt_body="hello")
+    store.write_record(tmp_path, record)
+    claimed = store.claim_dispatch(
+        tmp_path, record["request-id"], owner_epoch="service-a", expected_revision=0
+    )
+    running = store.start_owned_attempt(
+        tmp_path,
+        record["request-id"],
+        owner_epoch="service-a",
+        worker_id="worker-a",
+        expected_revision=claimed["revision"],
+    )
+    relay = RequestActivityRelay(
+        tmp_path,
+        record["request-id"],
+        owner_epoch="service-a",
+        worker_id="worker-a",
+        attempt_epoch=running["attempt-epoch"],
+        min_interval_seconds=0.0,
+    )
+
+    relay.observe_provider(
+        source="session-transport",
+        source_instance="session:ses-1:turn:req-1",
+        source_sequence=1,
+        phase="soft-liveness",
+    )
+    relay.observe_provider(
+        source="session-transport",
+        source_instance="session:ses-1:turn:req-1",
+        source_sequence=2,
+        phase="delivery-timeout-retry",
+    )
+
+    persisted = store.read_record(tmp_path, record["request-id"])
+    assert persisted["activity-sequence"] == 2
+    assert persisted["activity"]["provider"].get("phase") is None
+    timeline = load_ndjson(gateway_timeline_path(tmp_path, record["request-id"]))
+    assert [
+        entry["event"] for entry in timeline if entry["event"] == "activity.client-liveness"
+    ] == ["activity.client-liveness", "activity.client-liveness"]
+
+
+
+def test_soft_liveness_advances_public_activity_without_provider_lease(tmp_path: Path) -> None:
+    record = store.build_record(execution_profile_id="default", prompt_body="hello")
+    store.write_record(tmp_path, record)
+    claimed = store.claim_dispatch(
+        tmp_path, record["request-id"], owner_epoch="service-a", expected_revision=0
+    )
+    running = store.start_owned_attempt(
+        tmp_path,
+        record["request-id"],
+        owner_epoch="service-a",
+        worker_id="worker-a",
+        expected_revision=claimed["revision"],
+    )
+    relay = RequestActivityRelay(
+        tmp_path,
+        record["request-id"],
+        owner_epoch="service-a",
+        worker_id="worker-a",
+        attempt_epoch=running["attempt-epoch"],
+        min_interval_seconds=0.0,
+    )
+
+    relay.observe_provider(
+        source="session-transport",
+        source_instance="session:ses-1:turn:req-1",
+        source_sequence=1,
+        phase="soft-liveness",
+    )
+
+    persisted = store.read_record(tmp_path, record["request-id"])
+    assert persisted["activity-sequence"] == 1
+    assert persisted["last-activity-at"] is not None
+    assert persisted["activity"]["provider"]["last-at"] is None
+    assert persisted["activity"]["provider"]["lease-expires-at"] is None
+    assert persisted["activity-lease-expires-at"] is None
+    assert persisted["activity"]["owner"]["source-sequence"] == 1
+    timeline = load_ndjson(gateway_timeline_path(tmp_path, record["request-id"]))
+    assert [entry["event"] for entry in timeline if entry["event"] == "activity.client-liveness"] == [
+        "activity.client-liveness"
+    ]
+
+def test_response_observing_renews_owner_lease_without_progress_sequence(
+    tmp_path: Path,
+) -> None:
+    """Synthetic response polling must not make stalled work look active."""
+    record = store.build_record(execution_profile_id="default", prompt_body="hello")
+    store.write_record(tmp_path, record)
+    claimed = store.claim_dispatch(
+        tmp_path, record["request-id"], owner_epoch="service-a", expected_revision=0
+    )
+    running = store.start_owned_attempt(
+        tmp_path,
+        record["request-id"],
+        owner_epoch="service-a",
+        worker_id="worker-a",
+        expected_revision=claimed["revision"],
+    )
+    relay = RequestActivityRelay(
+        tmp_path,
+        record["request-id"],
+        owner_epoch="service-a",
+        worker_id="worker-a",
+        attempt_epoch=running["attempt-epoch"],
+        min_interval_seconds=0.0,
+    )
+
+    relay.observe_provider(
+        source="session-transport",
+        source_instance="session:ses-1:turn:req-1",
+        source_sequence=1,
+        phase="response-observing",
+    )
+
+    persisted = store.read_record(tmp_path, record["request-id"])
+    assert persisted["activity-sequence"] == 0
+    assert persisted["last-activity-at"] is None
+    assert persisted["activity"]["owner"]["source-sequence"] == 1
+    timeline = load_ndjson(gateway_timeline_path(tmp_path, record["request-id"]))
+    assert [
+        entry["event"] for entry in timeline if entry["event"] == "activity.owner-heartbeat"
+    ] == ["activity.owner-heartbeat"]
+
+
 @pytest.mark.asyncio
 async def test_session_timeline_retains_every_later_activity_label(
     tmp_path: Path,
@@ -140,6 +268,92 @@ async def test_session_timeline_retains_every_later_activity_label(
     ] == list(ACTIVITY_LABELS)
     assert published == [turn_events.TURN_MODEL_STARTED_TOPIC]
 
+
+@pytest.mark.asyncio
+async def test_pre_readiness_activity_reaches_real_relay_path(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The lifecycle marker must renew the durable lease before CDP readiness."""
+    relay = RequestActivityRelay(
+        tmp_path,
+        "req-early-activity",
+        owner_epoch="owner",
+        worker_id="worker",
+        attempt_epoch=1,
+    )
+    recorded: list[dict] = []
+    monkeypatch.setattr(
+        store,
+        "record_owned_activity",
+        lambda *args, **kwargs: recorded.append(dict(kwargs)) or {},
+    )
+    monkeypatch.setattr(
+        turn_events.session_store,
+        "record_session_timeline",
+        lambda *args, **kwargs: {},
+    )
+    callback = turn_events._make_on_event_callback(
+        "ses-early-activity",
+        tmp_path,
+        "req-early-activity",
+        "profile-1",
+        "corr-1",
+        activity_relay=relay,
+    )
+
+    await callback(
+        TransportObservation(
+            ag_session_id="ag-s-1",
+            turn_id="req-early-activity",
+            sequence=None,
+            kind=TransportObservationKind.ACTIVITY,
+            observed_at="2026-09-04T00:00:00Z",
+            correlation_quality=CorrelationQuality.REQUEST_SCOPED,
+            attributes={"model_activity": "inspected"},
+        )
+    )
+
+    assert len(recorded) == 1
+    assert recorded[0]["phase"] == "inspected"
+
+
+@pytest.mark.asyncio
+async def test_synthetic_observations_do_not_reset_session_silence_clock(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    marker_calls: list[bool] = []
+    monkeypatch.setattr(
+        turn_events.session_store,
+        "record_session_timeline",
+        lambda *args, **kwargs: {},
+    )
+    callback = turn_events._make_on_event_callback(
+        "ses-1",
+        tmp_path,
+        "req-1",
+        "profile-1",
+        "corr-1",
+        activity_marker=lambda: marker_calls.append(True),
+    )
+    for sequence, label in enumerate(
+        ("connection-refreshing", "response-observed"),
+        start=1,
+    ):
+        await callback(
+            TransportObservation(
+                ag_session_id="ag-s-1",
+                turn_id="req-1",
+                sequence=sequence,
+                kind=TransportObservationKind.ACTIVITY,
+                observed_at=f"2026-09-04T00:00:0{sequence}Z",
+                correlation_quality=CorrelationQuality.REQUEST_SCOPED,
+                attributes={"model_activity": label},
+            )
+        )
+
+    assert marker_calls == []
 
 @pytest.mark.asyncio
 async def test_timing_milestones_are_timeline_only_not_activity(

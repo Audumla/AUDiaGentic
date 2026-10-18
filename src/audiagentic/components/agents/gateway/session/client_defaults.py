@@ -8,12 +8,14 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import threading
 import weakref
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.io import atomic_write_json
@@ -67,8 +69,46 @@ def _read(path: Path) -> dict[str, Any]:
     return value
 
 
+def _claimed_by_other_client(
+    service_root: Path,
+    current_path: Path,
+    session_id: str,
+    logical_client_id: str,
+    provider_surface: str,
+) -> bool:
+    """Return whether another canonical default claims this session.
+
+    A session may be explicitly shared, but it must never be selected as two
+    different clients' implicit default.  Check the bounded service-local
+    default index before adopting an automatic binding; malformed/legacy
+    entries are ignored and therefore cannot establish ownership.
+    """
+    defaults_root = service_root / "client-default-sessions"
+    if not defaults_root.exists():
+        return False
+    for candidate in defaults_root.glob("*.json"):
+        if candidate == current_path:
+            continue
+        try:
+            other = _read(candidate)
+        except (OSError, ValueError):
+            continue
+        if (
+            other.get("schema-generation") == _SCOPE_SCHEMA_GENERATION
+            and other.get("provider-surface") == provider_surface
+            and other.get("session-id") == session_id
+            and other.get("logical-client-id")
+            and other.get("logical-client-id") != logical_client_id
+        ):
+            return True
+    return False
+
+
 def chat_url(metadata: dict[str, Any]) -> str | None:
-    from audiagentic.components.providers.adapters.gpt_auto.urls import canonical_chat_url, parse_project_id
+    from audiagentic.components.providers.adapters.gpt_auto.urls import (
+        canonical_chat_url,
+        parse_project_id,
+    )
 
     for key in ("chat-url", "provider-chat-url"):
         value = metadata.get(key)
@@ -90,13 +130,36 @@ def warning(code: str, message: str, session_id: str | None = None) -> dict[str,
     return result
 
 
-def proven_unsent_composer_failure(error: Exception) -> bool:
-    """Only explicit provider proof allows retrying a stateful prompt."""
+_PRESUBMIT_STAGES = frozenset({"readiness", "turn_setup", "submission"})
+
+
+def _bounded_cause_message(error: BaseException) -> str:
+    """Keep provider admission causes useful without leaking private context."""
+    message = re.sub(r"\s+", " ", str(error)).strip()
+    message = re.sub(r"(?i)https?://\S+", "[redacted-url]", message)
+    message = re.sub(r"(?i)(?:[A-Z]:\\|/)[^\s]+", "[redacted-path]", message)
+    return message[:240]
+
+
+def structured_presubmit_failure(error: Exception) -> bool:
+    """Return whether a typed error proves provider submission did not start."""
+    if not isinstance(error, AudiaGenticError):
+        return False
+    details = error.details
     return (
-        isinstance(error, AudiaGenticError)
-        and error.code == "EXT-GPTAUTO-003"
-        and error.details.get("failure-reason") == "composer-operation-timeout"
-        and error.details.get("submission-ambiguous") is False
+        isinstance(details, dict)
+        and details.get("failure-stage") in _PRESUBMIT_STAGES
+        and details.get("submission-state") == "not_started"
+        and details.get("submission-proven") is False
+        and details.get("submission-ambiguous") is False
+    )
+
+
+def proven_same_session_presubmit_retryable_failure(error: Exception) -> bool:
+    """Only explicit, typed proof permits retrying a stateful prompt in place."""
+    return (
+        structured_presubmit_failure(error)
+        and error.details.get("retryable-same-session") is True
     )
 
 
@@ -178,7 +241,29 @@ def select(
         if automatic and binding.get("session-id"):
             from audiagentic.components.agents.gateway.session import sessions_store
 
-            selection.session_id = str(binding["session-id"])
+            selected_session_id = str(binding["session-id"])
+            if _claimed_by_other_client(
+                Path(service_root),
+                path,
+                selected_session_id,
+                client_id,
+                provider_id,
+            ):
+                # Do not adopt the other client's conversation or its chat
+                # URL.  Leaving this selection unbound makes admission create
+                # and commit a fresh default for this client.
+                selection.session_id = None
+                selection.provider_chat_url = None
+                selection.binding = {}
+                selection.warnings.append(
+                    warning(
+                        "CON-AGW-123",
+                        "Client default session ownership conflict; creating a separate session.",
+                    )
+                )
+                yield selection
+                return
+            selection.session_id = selected_session_id
             try:
                 session = sessions_store.read_session_record(project_root, selection.session_id)
                 recovered_url = chat_url(sessions_store.session_provider_metadata(session))
@@ -243,17 +328,19 @@ def _attach(project_root: Path, record: dict[str, Any], target: str, note: dict[
 
 def replace_failed_default(project_root: Path, record: dict[str, Any], error: Exception, *, recover_url: bool, attach_request: bool = True) -> dict[str, Any] | None:
     """Prepare a replacement before prompt submission; preserve prior failure evidence."""
-    if proven_unsent_composer_failure(error):
+    # Any structured pre-submit failure belongs to the current session.  A
+    # false retryable flag means admission is blocked by unresolved provider
+    # state, not that another default session should be substituted.
+    if structured_presubmit_failure(error):
         return None
     identity = record.get("client-default-session")
     if not isinstance(identity, dict) or not identity.get("automatic"):
         return None
-    from audiagentic.components.agents.gateway.session import sessions_store
-
     # Preserve the cause before replacing the default; the public warning
     # intentionally omits exception text, but protected attempt history must
     # retain it for diagnosis even when the fallback later succeeds.
     from audiagentic.components.agents.gateway import store
+    from audiagentic.components.agents.gateway.session import sessions_store
     store.append_owned_attempt(
         project_root, record["request-id"],
         owner_epoch=record["dispatch-owner-epoch"], worker_id=record["worker-id"],
@@ -290,3 +377,34 @@ def replace_failed_default(project_root: Path, record: dict[str, Any], error: Ex
         updated = _attach(project_root, record, target if attach_request else record["session-id"], note, url if attach_request else None)
         atomic_write_json(path, {"session-id": target, **({"chat-url": url} if url else {})})
         return updated
+
+
+def replace_failed_session(project_root: Path, record: dict[str, Any], error: Exception) -> dict[str, Any] | None:
+    """Reserve a fresh provider session for an explicit session-bound request."""
+    from audiagentic.components.agents.gateway import store
+    from audiagentic.components.agents.gateway.session import sessions_store
+
+    try:
+        session = sessions_store.build_session_record(
+            created_by_request_id=record["request-id"],
+            provider_transport_kind="provider-session",
+            execution_profile_id=record["execution-profile-id"],
+            provider_id=record["resolved-provider-id"],
+            model_id=record.get("resolved-model-id"),
+        )
+        sessions_store.write_session_record(project_root, session)
+        target = session["session-id"]
+        return _attach(
+            project_root,
+            record,
+            target,
+            warning(
+                getattr(error, "code", "EXT-GPTAUTO-003"),
+                "Provider conversation could not be loaded; resubmitting in a fresh session.",
+                record.get("session-id"),
+            ),
+            None,
+        )
+    except Exception:  # noqa: BLE001 - recovery must leave the original failure authoritative
+        logger.exception("failed to reserve replacement provider session", extra={"request-id": record.get("request-id")})
+        return None

@@ -1,5 +1,10 @@
 # Consumer Pipeline Gateway Agent Reviews
 
+> Historical snapshot: this report records the review queue and results as
+> observed on 2026-07-20. Rows marked `TBD`, `Queued`, or `Running` are not
+> current repository or gateway status. Use current gateway records and active
+> planning items for live state.
+
 ## Session Overview
 - **Date**: 2026-07-20
 - **Goal**: Implement AS19/AS30/AS31 consumer pipeline via gateway agents

@@ -19,11 +19,19 @@ class GatewayApplication(Protocol):
     """Operations owned by the gateway control plane."""
 
     def submit_execution_request(self, project_root: Path, **kwargs: Any) -> dict[str, Any]: ...
-    def get_execution_request(self, project_root: Path, request_id: str) -> dict[str, Any]: ...
+    def get_execution_request(self, project_root: Path, request_id: str, *, include_response: bool = False) -> dict[str, Any]: ...
     def get_execution_diagnostics(self, project_root: Path, request_id: str, *, limit: int = 25) -> dict[str, Any]: ...
     def recover_execution_request(self, project_root: Path, request_id: str, **kwargs: Any) -> dict[str, Any]: ...
+    def get_execution_observations(self, project_root: Path, request_id: str, **kwargs: Any) -> dict[str, Any]: ...
+    def get_execution_evidence(self, project_root: Path, request_id: str, **kwargs: Any) -> dict[str, Any]: ...
+    def replay_execution_observations(self, project_root: Path, request_id: str) -> dict[str, Any]: ...
+
+    def get_execution_response_payload(self, project_root: Path, request_id: str) -> dict[str, Any]: ...
     def get_execution_response(self, project_root: Path, request_id: str) -> str: ...
+    def get_execution_failure_response(self, project_root: Path, request_id: str) -> str: ...
     def focus_execution_chat(self, project_root: Path, request_id: str) -> dict[str, Any]: ...
+    def focus_execution_session(self, project_root: Path, session_id: str) -> dict[str, Any]: ...
+    def complete_execution_from_provider(self, project_root: Path, request_id: str) -> dict[str, Any]: ...
     def wait_execution_request(
         self,
         project_root: Path,
@@ -42,6 +50,13 @@ class GatewayApplication(Protocol):
     ) -> list[dict[str, Any]]: ...
     def close_execution_session(self, project_root: Path, session_id: str) -> dict[str, Any]: ...
     def purge_execution_session(self, project_root: Path, session_id: str) -> dict[str, Any]: ...
+    def purge_execution_sessions(
+        self,
+        project_root: Path,
+        *,
+        dry_run: bool = True,
+        session_ids: list[str] | None = None,
+    ) -> dict[str, Any]: ...
     def control_execution_session(
         self, project_root: Path, session_id: str, **kwargs: Any
     ) -> dict[str, Any]: ...
@@ -83,20 +98,40 @@ class InProcessGatewayApplication:
             **kwargs,
         )
 
-    def get_execution_request(self, project_root: Path, request_id: str) -> dict[str, Any]:
-        return self._api().get_execution_request(project_root, request_id)
+    def get_execution_request(self, project_root: Path, request_id: str, *, include_response: bool = False) -> dict[str, Any]:
+        return self._api().get_execution_request(project_root, request_id, include_response=include_response)
 
     def get_execution_diagnostics(self, project_root: Path, request_id: str, *, limit: int = 25) -> dict[str, Any]:
         return self._api().get_execution_diagnostics(project_root, request_id, limit=limit)
 
+    def get_execution_observations(self, project_root: Path, request_id: str, **kwargs: Any) -> dict[str, Any]:
+        return self._api().get_execution_observations(project_root, request_id, **kwargs)
+
+    def get_execution_evidence(self, project_root: Path, request_id: str, **kwargs: Any) -> dict[str, Any]:
+        return self._api().get_execution_evidence(project_root, request_id, **kwargs)
+    def replay_execution_observations(self, project_root: Path, request_id: str) -> dict[str, Any]:
+        return self._api().replay_execution_observations(project_root, request_id)
+
     def recover_execution_request(self, project_root: Path, request_id: str, **kwargs: Any) -> dict[str, Any]:
         return self._api().recover_execution_request(project_root, request_id, **kwargs)
+
+    def get_execution_response_payload(self, project_root: Path, request_id: str) -> dict[str, Any]:
+        return self._api().get_execution_response_payload(project_root, request_id)
 
     def get_execution_response(self, project_root: Path, request_id: str) -> str:
         return self._api().get_execution_response(project_root, request_id)
 
+    def get_execution_failure_response(self, project_root: Path, request_id: str) -> str:
+        return self._api().get_execution_failure_response(project_root, request_id)
+
     def focus_execution_chat(self, project_root: Path, request_id: str) -> dict[str, Any]:
         return self._api().focus_execution_chat(project_root, request_id)
+
+    def focus_execution_session(self, project_root: Path, session_id: str) -> dict[str, Any]:
+        return self._api().focus_execution_session(project_root, session_id)
+
+    def complete_execution_from_provider(self, project_root: Path, request_id: str) -> dict[str, Any]:
+        return self._api().complete_execution_from_provider(project_root, request_id)
 
     def wait_execution_request(
         self,
@@ -133,6 +168,17 @@ class InProcessGatewayApplication:
 
     def purge_execution_session(self, project_root: Path, session_id: str) -> dict[str, Any]:
         return self._api().purge_execution_session(project_root, session_id)
+
+    def purge_execution_sessions(
+        self,
+        project_root: Path,
+        *,
+        dry_run: bool = True,
+        session_ids: list[str] | None = None,
+    ) -> dict[str, Any]:
+        return self._api().purge_execution_sessions(
+            project_root, dry_run=dry_run, session_ids=session_ids
+        )
 
     def control_execution_session(
         self, project_root: Path, session_id: str, **kwargs: Any

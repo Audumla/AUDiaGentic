@@ -23,6 +23,7 @@ from audiagentic.foundation.system.managed_process import current_process_eviden
 from audiagentic.foundation.system.managed_service import ManagedServiceStore
 from audiagentic.foundation.system.managed_service_contracts import EndpointInfo, ServiceKey
 from audiagentic.foundation.system.managed_service_owner import ManagedServiceOwner
+from audiagentic.foundation.time import now_iso_z
 
 logger = logging.getLogger(__name__)
 GATEWAY_SERVICE_KEY = ServiceKey("agent-execution-gateway", "default")
@@ -197,7 +198,39 @@ class GatewayServiceHost:
             recover_gateway_requests,
         )
 
-        recover_gateway_requests(self.service_store.root, live_owner_epoch=self.owner_epoch)
+        recovery_report = recover_gateway_requests(
+            self.service_store.root, live_owner_epoch=self.owner_epoch
+        )
+        # Rebuild the process-local scheduler only after durable ownership has
+        # been taken over.  This keeps queued work claimable once and gives
+        # already-running work the dedicated observation/recovery path.
+        if recovery_report.queued or recovery_report.running:
+            from audiagentic.components.agents.gateway import api as gateway_api
+            from audiagentic.components.agents.gateway.queue.recovery import recovery_runner
+
+            queue_manager = gateway_api.get_queue_manager()
+            for project_root, request_id in recovery_report.queued:
+                record = gateway_api.store.read_record(project_root, request_id)
+                runtime = record.get("gateway-profile-runtime") or {}
+                queue_manager.enqueue_recovered_queued(
+                    project_root,
+                    record,
+                    dict(runtime.get("params") or {}),
+                    recovery_runner(record, project_root=project_root),
+                    dispatch_owner_epoch=self.owner_epoch,
+                    dispatch_service_root=self.service_store.root,
+                )
+            for project_root, request_id in recovery_report.running:
+                record = gateway_api.store.read_record(project_root, request_id)
+                runtime = record.get("gateway-profile-runtime") or {}
+                queue_manager.enqueue_recovered_running(
+                    project_root,
+                    record,
+                    dict(runtime.get("params") or {}),
+                    recovery_runner(record, project_root=project_root),
+                    dispatch_owner_epoch=self.owner_epoch,
+                    dispatch_service_root=self.service_store.root,
+                )
         # GP26: machine-level gpt-auto config drift detection runs after durable
         # request recovery (correctness-critical) and before readiness. An
         # invalid MACHINE-level config is fatal (it is the shared foundation);
@@ -278,11 +311,27 @@ class GatewayServiceHost:
 
         def _poll() -> None:
             while not self._operations_stop.wait(interval_seconds):
-                pump.run_once(owner_epoch=self.owner_epoch)
-                self.run_watchdog_pass()
+                # A malformed management operation or one unexpected watchdog
+                # record must not kill the service's only operations thread.
+                # If this thread exits, durable requests can remain visibly
+                # running without receiving either recovery or terminal-state
+                # evaluation until the next gateway restart.
+                try:
+                    pump.run_once(owner_epoch=self.owner_epoch)
+                except Exception:  # noqa: BLE001 - keep the poller alive
+                    logger.exception("gateway management operation poll failed")
+                try:
+                    self.run_watchdog_pass()
+                except Exception:  # noqa: BLE001 - keep the poller alive
+                    logger.exception("gateway watchdog pass failed")
 
-        # Startup scan makes notifier loss and host restart harmless.
-        pump.run_once(owner_epoch=self.owner_epoch)
+        # Startup scan makes notifier loss and host restart harmless. It is
+        # best-effort: a malformed old operation must not prevent the poller
+        # from starting and retrying on the next cadence.
+        try:
+            pump.run_once(owner_epoch=self.owner_epoch)
+        except Exception:  # noqa: BLE001 - keep the poller available
+            logger.exception("gateway startup operation scan failed")
         self._operations_thread = threading.Thread(
             target=_poll, name="gateway-operations-poller", daemon=True
         )
@@ -295,48 +344,338 @@ class GatewayServiceHost:
         and an optional provider transport seam. It never resubmits a prompt;
         the ordinary activity relay must still prove that the turn resumed.
         """
-        from audiagentic.components.agents.gateway.queue.dispatch import diagnose_activity_lease
-        from audiagentic.components.agents.gateway.queue.watchdog_registry import watchdog_registry
         from audiagentic.components.agents.gateway import store
-        from audiagentic.components.agents.gateway.api import recover_execution_request
+        from audiagentic.components.agents.gateway.api import (
+            complete_execution_from_provider,
+            recover_execution_request,
+        )
+        from audiagentic.components.agents.gateway.queue.dispatch import diagnose_activity_lease
+        from audiagentic.components.agents.gateway.queue.watchdog_policy import load_watchdog_policy
+        from audiagentic.components.agents.gateway.queue.watchdog_registry import watchdog_registry
+        from audiagentic.components.agents.gateway.session import sessions_store
         from audiagentic.components.agents.gateway.session.sessions import peek_session_runtime
+
+        def _retire_unbound_initial_timeout(updated: dict[str, Any]) -> dict[str, Any]:
+            """Terminalize an orphaned attempt only when no provider side effect is possible.
+
+            A watchdog observation is not proof that a prompt failed.  The
+            exception here is deliberately narrow: the initial observation
+            expired, the session never acquired a durable provider binding,
+            the provider did not report an unresolved turn, and the session is
+            not live in this gateway process.  Keeping that combination in
+            ``running`` otherwise permanently consumes queue capacity.
+            """
+            if updated.get("state") != "running" or updated.get("watchdog-reason") != "initial-activity-observation-expired":
+                return updated
+            session_id = updated.get("session-id")
+            if not isinstance(session_id, str) or not session_id:
+                return updated
+            diagnostics = updated.get("diagnostics")
+            if not isinstance(diagnostics, dict) or diagnostics.get("resolution-state") != "unresolved":
+                return updated
+            try:
+                session = sessions_store.read_session_record(project_root, session_id)
+            except Exception:  # noqa: BLE001 - watchdog recovery is best effort
+                return updated
+            if session.get("binding"):
+                return updated
+            metadata = sessions_store.session_provider_metadata(session)
+            if metadata.get("unresolved-turn-pending"):
+                return updated
+            if runtime is not None:
+                try:
+                    if runtime.session_runtime_status(session_id).get("available"):
+                        return updated
+                except Exception:  # noqa: BLE001 - retain reconcile-only behavior on probe failure
+                    return updated
+            from datetime import datetime, timedelta, timezone
+            try:
+                diagnosed_at = datetime.fromisoformat(str(updated.get("updated-at")).replace("Z", "+00:00"))
+                if diagnosed_at.tzinfo is None:
+                    diagnosed_at = diagnosed_at.replace(tzinfo=timezone.utc)
+                policy = updated.get("watchdog-policy")
+                grace = float(policy.get("diagnostic-grace-seconds", 30.0)) if isinstance(policy, dict) else load_watchdog_policy().diagnostic_grace_seconds
+                if datetime.now(timezone.utc) < diagnosed_at + timedelta(seconds=max(grace, 1.0)):
+                    return updated
+            except (TypeError, ValueError, OverflowError):
+                return updated
+            error = {
+                "code": "RES-AGW-003",
+                "kind": "agents",
+                "message": "provider session binding was not established before the initial activity window expired",
+                "details": {
+                    "session-id": session_id,
+                    "failure-reason": "provider-binding-not-established",
+                    "watchdog-reason": "initial-activity-observation-expired",
+                    "retry-safe": True,
+                    "suggestion": "retry the request; no provider conversation binding or unresolved turn was found",
+                },
+            }
+            try:
+                retired = store.transition_owned_terminal(
+                    project_root,
+                    updated["request-id"],
+                    "failed",
+                    updates={
+                        "error": error,
+                        "recovery": {"reason": "unproven-execution", "outcome": "resubmit-required"},
+                    },
+                    owner_epoch=updated["dispatch-owner-epoch"],
+                    worker_id=updated["worker-id"],
+                    attempt_epoch=updated["attempt-epoch"],
+                    expected_revision=updated.get("revision"),
+                )
+            except Exception:  # noqa: BLE001 - a live worker or newer owner wins the race
+                return store.read_record(project_root, updated["request-id"])
+            try:
+                if session.get("state") == "active":
+                    sessions_store.transition_session_record(
+                        project_root,
+                        session_id,
+                        "failed",
+                        updates={"close-reason": "failed"},
+                    )
+            except Exception:  # noqa: BLE001 - request terminal state remains authoritative
+                logger.warning("failed to retire orphaned gateway session", extra={"session-id": session_id}, exc_info=True)
+            return retired
 
         registry = watchdog_registry()
         runtime = peek_session_runtime()
         results: list[dict[str, Any]] = []
         for project_root, record in registry.snapshot():
-            updated = diagnose_activity_lease(project_root, record)
-            registry.update(project_root, updated)
-            diagnostics = updated.get("diagnostics")
-            if (
-                runtime is not None
-                and updated.get("watchdog-state") == "intervention"
-                and isinstance(updated.get("session-id"), str)
-                and isinstance(diagnostics, dict)
-                and diagnostics.get("resolution-state") == "unresolved"
-            ):
-                outcome = runtime.reconcile_active_transport(
-                    updated["session-id"], updated["request-id"]
-                )
-                if outcome.get("status") == "reconciled":
+            try:
+                try:
+                    updated = diagnose_activity_lease(project_root, record)
+                    registry.update(project_root, updated)
+                except Exception:  # noqa: BLE001 - one malformed record must not starve later requests
+                    logger.exception(
+                        "gateway watchdog record diagnosis failed; continuing",
+                        extra={"request-id": record.get("request-id")},
+                    )
+                    continue
+                if (
+                    updated.get("state") == "running"
+                    and updated.get("cancel-requested") is True
+                    and isinstance(updated.get("session-id"), str)
+                ):
+                    session_id = str(updated["session-id"])
                     try:
-                        recover_execution_request(
-                            project_root,
-                            updated["request-id"],
-                            action="reconcile",
-                            expected_revision=updated.get("revision"),
-                        )
-                        updated = store.read_record(project_root, updated["request-id"])
+                        session = sessions_store.read_session_record(project_root, session_id)
+                    except Exception:  # noqa: BLE001 - a missing record is not proof the turn stopped
+                        session = None
+                    session_terminal = isinstance(session, dict) and session.get("state") in {
+                        "closed",
+                        "failed",
+                        "expired",
+                    }
+                    runtime_available = False
+                    if runtime is not None:
+                        try:
+                            runtime_available = bool(
+                                runtime.session_runtime_status(session_id).get("available")
+                            )
+                        except Exception:  # noqa: BLE001 - retain the durable session fact
+                            runtime_available = False
+                    # Cancellation is terminal intent. Once the owning runtime is
+                    # gone, do not require the detached session record to close
+                    # first or the request can remain running forever.
+                    provider_session = updated.get("provider-transport-kind") == "provider-session"
+                    if session_terminal and not runtime_available and not provider_session:
+                        try:
+                            updated = store.transition_owned_terminal(
+                                project_root,
+                                updated["request-id"],
+                                "cancelled",
+                                updates={
+                                    "error": {
+                                        "code": "CON-AGW-CANCELLED",
+                                        "kind": "agents",
+                                        "message": "gateway request cancellation confirmed after session closure",
+                                    },
+                                    "finished-at": now_iso_z(),
+                                },
+                                owner_epoch=updated["dispatch-owner-epoch"],
+                                worker_id=updated["worker-id"],
+                                attempt_epoch=updated["attempt-epoch"],
+                                expected_revision=updated.get("revision"),
+                            )
+                        except Exception:  # noqa: BLE001 - a live worker or newer owner wins
+                            updated = store.read_record(project_root, updated["request-id"])
                         registry.update(project_root, updated)
-                    except Exception:  # noqa: BLE001 - watchdog recovery is advisory
-                        logger.warning(
-                            "automatic transport reconciliation could not persist intent",
-                            extra={"request-id": updated.get("request-id")},
-                            exc_info=True,
+                updated = _retire_unbound_initial_timeout(updated)
+                registry.update(project_root, updated)
+                diagnostics = updated.get("diagnostics")
+                provider_turn_pending = False
+                runtime_owns_turn = False
+                session_id = updated.get("session-id")
+                if isinstance(session_id, str) and session_id:
+                    try:
+                        session_record = sessions_store.read_session_record(project_root, session_id)
+                        provider_turn_pending = (
+                            sessions_store.session_provider_metadata(session_record).get(
+                                "unresolved-turn-pending"
+                            )
+                            is True
                         )
-            results.append(updated)
-            if updated.get("state") in {"completed", "failed", "cancelled", "interrupted"}:
-                registry.unregister(project_root, str(updated.get("request-id", "")))
+                    except Exception:  # noqa: BLE001 - durable request state remains authoritative
+                        provider_turn_pending = False
+                    if provider_turn_pending and runtime is not None:
+                        try:
+                            runtime_status = runtime.session_runtime_status(session_id)
+                            runtime_owns_turn = bool(
+                                runtime_status.get("available")
+                                and (
+                                    runtime_status.get("turn-active") is True
+                                    or runtime_status.get("current-request-id")
+                                    == updated.get("request-id")
+                                )
+                            )
+                        except Exception:  # noqa: BLE001 - capture remains an advisory fallback
+                            runtime_owns_turn = False
+                if (
+                    updated.get("state") == "running"
+                    and isinstance(updated.get("session-id"), str)
+                    and not runtime_owns_turn
+                    and (
+                        (
+                            updated.get("watchdog-state") == "intervention"
+                            and isinstance(diagnostics, dict)
+                            and diagnostics.get("resolution-state")
+                            in {"unresolved", "reconciliation-requested"}
+                        )
+                        or provider_turn_pending
+                    )
+                ):
+                    # A quiet provider turn can already be complete even when its
+                    # activity observer died. Reconcile the durable request from
+                    # the provider DOM before merely refreshing the transport;
+                    # otherwise the old running record keeps the session fence
+                    # and every later request waits forever behind it.
+                    capture_error: AudiaGenticError | None = None
+                    try:
+                        captured = complete_execution_from_provider(
+                            project_root, updated["request-id"], passive=True
+                        )
+                    except AudiaGenticError as exc:
+                        capture_error = exc
+                        captured = None
+                    except Exception:  # noqa: BLE001 - an incomplete turn remains recoverable
+                        captured = None
+                    if isinstance(captured, dict) and captured.get("state") in {
+                        "completed",
+                        "failed",
+                        "cancelled",
+                        "interrupted",
+                    }:
+                        try:
+                            updated = store.read_record(project_root, updated["request-id"])
+                            registry.update(project_root, updated)
+                        except Exception:  # noqa: BLE001 - watchdog recovery is advisory
+                            logger.warning(
+                                "automatic provider completion could not refresh durable state",
+                                extra={"request-id": updated.get("request-id")},
+                                exc_info=True,
+                            )
+                    elif (
+                        updated.get("watchdog-state") == "intervention"
+                        and capture_error is not None
+                        and capture_error.code in {
+                        "CON-AGW-154",
+                        "CON-AGW-155",
+                        "CON-AGW-156",
+                        }
+                    ):
+                        # The provider has rendered terminal-looking material,
+                        # but the response cannot be proven to belong to this
+                        # request.  Reopening the conversation here creates the
+                        # tab-flicking loop and can make a stale observer look
+                        # alive forever.  Preserve the evidence as interrupted
+                        # and require explicit operator reconciliation instead
+                        # of replaying or reopening the provider conversation.
+                        try:
+                            interrupted = store.transition_owned_terminal(
+                                project_root,
+                                updated["request-id"],
+                                "interrupted",
+                                updates={
+                                    "error": {
+                                        "code": capture_error.code,
+                                        "kind": "agents",
+                                        "message": "provider terminal evidence could not be correlated to the request",
+                                        "details": {
+                                            "capture-error": capture_error.message,
+                                            "watchdog-classification": "uncorrelated-provider-terminal",
+                                            "recovery-action": "reconciliation-stopped",
+                                        },
+                                    },
+                                    "recovery": {
+                                        "outcome": "provider-terminal-uncorrelated",
+                                        "phase": "watchdog-reconciliation",
+                                        "next-retry-at": None,
+                                    },
+                                    "finished-at": now_iso_z(),
+                                },
+                                owner_epoch=updated["dispatch-owner-epoch"],
+                                worker_id=updated["worker-id"],
+                                attempt_epoch=updated["attempt-epoch"],
+                                expected_revision=updated.get("revision"),
+                            )
+                            updated = interrupted
+                            if runtime is not None:
+                                try:
+                                    runtime.close_session(
+                                        project_root,
+                                        str(updated["session-id"]),
+                                        reason="uncorrelated-provider-terminal",
+                                    )
+                                except Exception:  # noqa: BLE001 - request terminal state remains authoritative
+                                    logger.warning(
+                                        "could not close uncorrelated provider session",
+                                        extra={"request-id": updated.get("request-id"), "session-id": updated.get("session-id")},
+                                        exc_info=True,
+                                    )
+                            registry.update(project_root, updated)
+                        except Exception:  # noqa: BLE001 - a live owner/revision race wins
+                            logger.warning(
+                                "could not interrupt uncorrelated provider response",
+                                extra={"request-id": updated.get("request-id")},
+                                exc_info=True,
+                            )
+                    elif runtime is not None and updated.get("watchdog-state") == "intervention":
+                        try:
+                            outcome = runtime.reconcile_active_transport(
+                                updated["session-id"], updated["request-id"]
+                            )
+                        except Exception:  # noqa: BLE001 - isolate one provider transport
+                            logger.exception(
+                                "gateway watchdog transport reconciliation failed",
+                                extra={"request-id": updated.get("request-id")},
+                            )
+                            outcome = {}
+                        if outcome.get("status") == "reconciled":
+                            try:
+                                recover_execution_request(
+                                    project_root,
+                                    updated["request-id"],
+                                    action="reconcile",
+                                    expected_revision=updated.get("revision"),
+                                )
+                                updated = store.read_record(project_root, updated["request-id"])
+                                registry.update(project_root, updated)
+                            except Exception:  # noqa: BLE001 - watchdog recovery is advisory
+                                logger.warning(
+                                    "automatic transport reconciliation could not persist intent",
+                                    extra={"request-id": updated.get("request-id")},
+                                    exc_info=True,
+                                )
+                results.append(updated)
+                if updated.get("state") in {"completed", "failed", "cancelled", "interrupted"}:
+                    registry.unregister(project_root, str(updated.get("request-id", "")))
+            except Exception:  # noqa: BLE001 - one registry record must not starve later requests
+                logger.exception(
+                    "gateway watchdog record failed; continuing with remaining requests",
+                    extra={"request-id": record.get("request-id")},
+                )
         return tuple(results)
 
     def close(self) -> None:

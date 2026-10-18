@@ -4,13 +4,10 @@ Multi-agent workflow orchestration system for AI coding agents. Provides the inf
 
 ## Quick links
 
-- **[docs/layout.md](docs/layout.md)** — directory layout and config hierarchy
+- **[docs/README.md](docs/README.md)** — documentation map and authority rules
 - **[docs/planning/](docs/planning/)** — planning system (requests, specs, tasks, plans, work packages)
 - **[docs/releases/](docs/releases/)** — current release and audit docs
-- **[docs/testing/](docs/testing/)** — test environment and architecture
-- **[docs/knowledge/](docs/knowledge/)** — knowledge vault
 - **[docs/examples/](docs/examples/)** — example project scaffold
-- **[docs/archive/](docs/archive/)** — superseded references
 
 ## Source code
 
@@ -18,7 +15,7 @@ Multi-agent workflow orchestration system for AI coding agents. Provides the inf
 |-------|------|----------|
 | Foundation | `src/audiagentic/foundation/` | Contracts, config, events, workflow primitives |
 | Runtime | `src/audiagentic/runtime/` | Lifecycle management, state |
-| Components | `src/audiagentic/components/optional/` | Providers, coding LSP, ledger, agent jobs, release, source control |
+| Components | `src/audiagentic/components/` | Agents, providers, coding LSP, ledger, release, source control, planning, and session services |
 
 ## Installation
 
@@ -63,5 +60,5 @@ Use `tests/docker/Dockerfile.release-test` only when validating the wheel-instal
 
 ## Testing
 
-- **[docs/testing/TEST_ENVIRONMENT.md](docs/testing/TEST_ENVIRONMENT.md)** — primary test environment guide
-- **[docs/testing/TEST_ARCHITECTURE.md](docs/testing/TEST_ARCHITECTURE.md)** — test architecture overview
+- See [`tests/TESTING.md`](tests/TESTING.md) for current test commands, tiers,
+  markers, and architecture notes.

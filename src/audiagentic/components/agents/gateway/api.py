@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import functools
 import hashlib
+import os
 import uuid
 from pathlib import Path
 from typing import Any
@@ -25,6 +26,7 @@ from audiagentic.components.agents.gateway.mapping import normalize_chat_title
 from audiagentic.components.agents.gateway.queue import dispatch as dispatch
 from audiagentic.components.agents.gateway.queue import queue as queue_mod
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.foundation.time import now_iso_z
 
 # A blocking wait with no requested timeout still needs a bound so it cannot
 # hang forever; callers that want longer pass an explicit timeout_seconds.
@@ -54,6 +56,80 @@ def set_queue_manager(manager: queue_mod.GatewayQueueManager) -> None:
     global _QUEUE_MANAGER
     _QUEUE_MANAGER = manager
 
+
+def _workspace_label(value: str) -> str:
+    return "".join(character for character in value.casefold() if character.isalnum())
+
+
+def _resolve_workspace_project_root(
+    project_root: Path,
+    workspace_name: str | None,
+) -> Path:
+    """Resolve an explicit workspace label to a local project root.
+
+    The MCP server has one process CWD, but the gateway can serve sibling
+    checkouts. workspace_name is therefore an admission selector, not merely
+    prompt metadata. Resolution is limited to the current project and
+    explicitly configured workspace roots or direct siblings, and ambiguity
+    fails closed.
+    """
+    if not isinstance(workspace_name, str) or not workspace_name.strip():
+        return project_root
+
+    requested = _workspace_label(workspace_name)
+    current = Path(project_root).resolve()
+    candidates: list[Path] = [current]
+    configured = os.environ.get("AUDIAGENTIC_WORKSPACE_ROOTS", "")
+    if configured.strip():
+        candidates.extend(
+            Path(value).expanduser().resolve()
+            for value in configured.split(os.pathsep)
+            if value.strip()
+        )
+    else:
+        search_parents = [current.parent, *list(current.parents)[1:4]]
+        for parent in search_parents:
+            if not parent.is_dir():
+                continue
+            candidates.extend(
+                child.resolve()
+                for child in parent.iterdir()
+                if child.is_dir() and child != current
+            )
+
+    matches: list[Path] = []
+    from audiagentic.foundation.io import load_yaml_file
+
+    for candidate in candidates:
+        if candidate in matches:
+            continue
+        labels = {_workspace_label(candidate.name)}
+        config_path = candidate / ".audiagentic" / "config" / "project.yaml"
+        if config_path.is_file():
+            config = load_yaml_file(config_path)
+            if isinstance(config, dict):
+                for key in ("project-id", "project_id", "project-name", "project_name"):
+                    value = config.get(key)
+                    if isinstance(value, str) and value.strip():
+                        labels.add(_workspace_label(value))
+        if requested in labels:
+            matches.append(candidate)
+
+    if len(matches) == 1:
+        return matches[0]
+    if len(matches) > 1:
+        raise AudiaGenticError(
+            code="VAL-AGW-152",
+            kind="agents",
+            message="workspace_name matches multiple project roots",
+            details={"workspace-name": workspace_name.strip()},
+        )
+    raise AudiaGenticError(
+        code="RES-AGW-152",
+        kind="agents",
+        message="workspace_name could not be resolved to a local project root",
+        details={"workspace-name": workspace_name.strip()},
+    )
 
 def _resolve_profile_for_submit(
     project_root: Path, execution_profile_id: str | None
@@ -220,6 +296,31 @@ def _runtime_fingerprint() -> dict[str, str]:
     return result
 
 
+def _request_queue_state(record: dict[str, Any], slot: str | None) -> str:
+    """Project scheduler attachment truth for compact request status."""
+    state = record.get("state")
+    if state in store.TERMINAL_STATES:
+        return "terminal"
+    if slot in {"active", "idle"}:
+        return "running"
+    if state == "queued":
+        return "queued"
+    if state in {"dispatching", "running"}:
+        if record.get("recovery-required") is True:
+            return "recovery-required"
+        if slot is None:
+            # A provider-session may still be alive outside this gateway
+            # generation; a worker-backed request cannot be observed or
+            # reattached once its owner is gone.
+            return (
+                "recovery-required"
+                if record.get("provider-transport-kind") == "provider-session"
+                else "orphaned"
+            )
+        return "running"
+    return str(state or "unknown")
+
+
 def _attach_agent_status(
     result: dict[str, Any],
     project_root: Path,
@@ -245,6 +346,10 @@ def _attach_agent_status(
         if runtime is not None:
             decision = runtime.latest_lifecycle_decision(session_id, result["request-id"])
 
+    queue_manager = get_queue_manager()
+    slot_reader = getattr(queue_manager, "request_slot_status", None)
+    slot = slot_reader(result.get("execution-profile-id"), result.get("request-id")) if callable(slot_reader) else None
+    queue_state = _request_queue_state(result, slot)
     snapshot = snapshot_for_request(result, decision=decision)
     from audiagentic.components.agents.status.task_status_v4 import (
         TaskStatusContractError,
@@ -252,7 +357,7 @@ def _attach_agent_status(
     )
 
     try:
-        return project_task_status_v4(result, snapshot)
+        return project_task_status_v4(result, snapshot, queue_state=queue_state)
     except TaskStatusContractError as exc:
         raise AudiaGenticError(
             code="CON-AGW-147",
@@ -384,6 +489,8 @@ def submit_execution_request(
                 message="provider_chat_url must identify a project-scoped ChatGPT conversation",
                 details={},
             )
+
+    project_root = _resolve_workspace_project_root(project_root, workspace_name)
 
     # --- 1. Construct and validate the submission envelope -----------------
     if component_profile is None:
@@ -589,7 +696,9 @@ def submit_execution_request(
         },
     )
 
-    from audiagentic.components.agents.gateway.session.client_defaults import select as select_default_session
+    from audiagentic.components.agents.gateway.session.client_defaults import (
+        select as select_default_session,
+    )
     with select_default_session(
         project_root, service_root=_dispatch_service_root, client_id=logical_client_id,
         agent_id=agent_id, provider_id=resolved_provider_id, session_id=continuation_session_id,
@@ -598,7 +707,9 @@ def submit_execution_request(
         continuation_session_id = default_selection.session_id
         normalized_provider_chat_url = default_selection.provider_chat_url
         if normalized_provider_chat_url:
-            from audiagentic.components.agents.gateway.session.conversation_owner import resolve_conversation_owner
+            from audiagentic.components.agents.gateway.session.conversation_owner import (
+                resolve_conversation_owner,
+            )
             continuation_session_id = resolve_conversation_owner(
                 project_root, normalized_provider_chat_url, continuation_session_id,
             )
@@ -608,7 +719,7 @@ def submit_execution_request(
         if normalized_provider_chat_url:
             persisted_metadata["provider-chat-url"] = normalized_provider_chat_url
         # --- 4. Build the execution manifest -----------------------------------
-        request_id = store.generate_request_id()
+        request_id = store.generate_request_id(canonical_root.display)
         from audiagentic.components.agents.gateway.session import sessions_store as _session_store
 
         # Every admitted request owns a durable gateway session.  Provider
@@ -884,14 +995,77 @@ def submit_execution_request(
     return dict(record)
 
 
+def _response_representation(media_type: str) -> str:
+    if media_type == "text/markdown; charset=utf-8":
+        return "markdown"
+    if media_type == "text/plain; charset=utf-8":
+        return "text"
+    raise AudiaGenticError(code="CON-AGW-148", kind="agents", message="gateway response artifact media type is invalid", details={"media-type": str(media_type)[:128]})
+
+
+def _bounded_terminal_error_fields(record: dict[str, Any]) -> dict[str, str]:
+    result: dict[str, str] = {}
+    diagnostics = record.get("diagnostics")
+    if isinstance(diagnostics, dict):
+        failure_code = diagnostics.get("failure-code")
+        reason_code = diagnostics.get("reason-code")
+        if isinstance(failure_code, str) and failure_code:
+            result["error_code"] = failure_code[:256]
+        if isinstance(reason_code, str) and reason_code:
+            result["error_reason"] = reason_code[:256]
+    if "error_code" not in result:
+        error = record.get("error")
+        if isinstance(error, dict):
+            code = error.get("code")
+            if isinstance(code, str) and code:
+                result["error_code"] = code[:256]
+    return result
+
+
+def get_execution_response_payload(project_root: Path, request_id: str) -> dict[str, Any]:
+    record = store.read_record(project_root, request_id, include_output=False)
+    artifact = record.get("response-artifact")
+    if record.get("state") not in store.TERMINAL_STATES or not isinstance(artifact, dict):
+        raise AudiaGenticError(code="RES-AGW-141", kind="agents", message="gateway response artifact unavailable", details={})
+    from audiagentic.components.agents.gateway.output import read_final_response
+    text = read_final_response(project_root, request_id, artifact)
+    media_type = artifact.get("media-type") if isinstance(artifact.get("media-type"), str) else ""
+    payload: dict[str, Any] = {
+        "text": text,
+        "bytes": len(text.encode("utf-8")),
+        "format": _response_representation(media_type),
+        "media_type": media_type,
+        "state": str(record.get("state") or ""),
+    }
+    payload.update(_bounded_terminal_error_fields(record))
+    return payload
+
 def get_execution_request(
     project_root: Path,
     request_id: str,
+    *,
+    include_response: bool = False,
 ) -> dict[str, Any]:
-    """Return the compact public V4 task status."""
+    """Return compact V4 status, optionally with verified terminal response."""
     record = store.read_public_status(project_root, request_id)
-    return _attach_agent_status(record, project_root)
-
+    status = _attach_agent_status(record, project_root)
+    if not include_response or status.get("lifecycle") != "terminal":
+        return status
+    try:
+        response = get_execution_response_payload(project_root, request_id)
+    except AudiaGenticError as exc:
+        if exc.code == "RES-AGW-141":
+            return status
+        raise
+    return {
+        **status,
+        "response": {
+            "text": response["text"],
+            "bytes": response["bytes"],
+            "format": response["format"],
+            "media_type": response["media_type"],
+        },
+    }
 
 def get_execution_diagnostics(
     project_root: Path, request_id: str, *, limit: int = 25
@@ -931,6 +1105,127 @@ def get_execution_diagnostics(
     return project_public_diagnostics(raw)
 
 
+def get_execution_observations(
+    project_root: Path,
+    request_id: str,
+    *,
+    limit: int = 25,
+    cursor: str | None = None,
+    since_sequence: int | None = None,
+    tail: int | None = None,
+) -> dict[str, Any]:
+    """Return one finite, opaque-cursor page of redacted DOM/activity facts."""
+    from audiagentic.components.agents.gateway.observability import read_observation_page
+
+    try:
+        return read_observation_page(
+            project_root, request_id, limit=limit, cursor=cursor,
+            since_sequence=since_sequence, tail=tail,
+        )
+    except ValueError as exc:
+        raise AudiaGenticError(
+            code="VAL-AGW-149", kind="agents", message=str(exc), details={}
+        ) from exc
+
+
+def get_execution_evidence(
+    project_root: Path,
+    request_id: str,
+    *,
+    include_observations: bool = False,
+    include_history: bool = False,
+    include_recovery: bool = False,
+    limit: int = 25,
+    cursor: str | None = None,
+    observation_cursor: str | None = None,
+    recovery_cursor: str | None = None,
+    history_cursor: str | None = None,
+    since_sequence: int | None = None,
+) -> dict[str, Any]:
+    """Return compact evidence by default; detail tiers are explicit opt-ins."""
+    if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
+        raise AudiaGenticError(
+            code="VAL-AGW-150", kind="agents",
+            message="evidence limit must be between 1 and 100", details={},
+        )
+    record = store.read_record(project_root, request_id, include_output=False)
+    from audiagentic.components.agents.gateway.observability import (
+        observation_summary, read_observation_page,
+    )
+    from audiagentic.components.agents.gateway.diagnostics import activity_monitoring_snapshot
+    from audiagentic.components.agents.status.diagnostics_projection import project_public_diagnostics
+    latest_transition = store.latest_transition_projection(project_root, request_id)
+    diagnostic_view = project_public_diagnostics(
+        {
+            "request-id": request_id,
+            "session-id": record.get("session-id"),
+            "state": record.get("state"),
+            "diagnostics": record.get("diagnostics"),
+            "monitoring": activity_monitoring_snapshot(record),
+            "evidence": record.get("diagnostic-evidence"),
+            "latest-transition": latest_transition,
+        }
+    )
+    result: dict[str, Any] = {
+        "schema_version": "gateway-evidence.v1",
+        "request-id": request_id,
+        "session-id": record.get("session-id"),
+        "state": record.get("state"),
+        "diagnostics": diagnostic_view.get("diagnostics"),
+        "monitoring": diagnostic_view.get("monitoring"),
+        "diagnostic-evidence": diagnostic_view.get("evidence"),
+        "latest-transition": latest_transition,
+    }
+    from audiagentic.components.agents.gateway.replay import classify_reconnect
+    result["reconnect-classification"] = classify_reconnect(record)
+    if include_observations:
+        result["observation-summary"] = observation_summary(project_root, request_id)
+        result["observations"] = read_observation_page(
+            project_root, request_id, limit=limit, cursor=observation_cursor or cursor,
+            since_sequence=since_sequence,
+        )
+    if include_recovery:
+        from audiagentic.components.agents.gateway.replay import read_recovery_page
+        result["recovery"] = read_recovery_page(
+            project_root, request_id, limit=limit, cursor=recovery_cursor or cursor,
+        )
+    if include_history:
+        result["history"] = store.transition_history_page(
+            project_root, request_id, limit=limit, cursor=history_cursor
+        )
+    try:
+        from audiagentic.components.agents.gateway.evidence_projection import project_public_gateway_evidence
+        return project_public_gateway_evidence(
+            {key: value for key, value in result.items() if value is not None}
+        )
+    except ValueError as exc:
+        raise AudiaGenticError(
+            code="VAL-AGW-151", kind="agents", message=str(exc), details={}
+        ) from exc
+
+
+def replay_execution_observations(project_root: Path, request_id: str) -> dict[str, Any]:
+    """Analyze the complete persisted observation journal without side effects."""
+    from audiagentic.components.agents.gateway.observability import read_observation_page
+    from audiagentic.components.agents.gateway.replay import replay_request
+
+    def observations():
+        cursor: str | None = None
+        while True:
+            page = read_observation_page(
+                project_root, request_id, limit=100, cursor=cursor
+            )
+            yield from page.get("items", [])
+            if not page.get("has_more"):
+                return
+            cursor = page.get("next_cursor")
+            if not isinstance(cursor, str) or not cursor:
+                return
+
+    record = store.read_record(project_root, request_id, include_output=False)
+    return replay_request(project_root, request_id, observations=observations(), record=record)
+
+
 def recover_execution_request(
     project_root: Path,
     request_id: str,
@@ -938,32 +1233,61 @@ def recover_execution_request(
     action: str,
     expected_revision: int | None = None,
 ) -> dict[str, Any]:
-    """Apply one safe, idempotent recovery intent to a request.
-
-    ``reconcile`` only records the operator intent; the provider adapter owns
-    the actual read-only reconciliation. ``abandon`` records cancellation
-    provenance and asks the live session to stop. ``clear-not-submitted`` is
-    deliberately allowed only when the durable side-effect axis is
-    definitively ``not-started``. No action ever sends a new provider prompt.
-    """
+    """Apply one safe, idempotent recovery intent without resending a prompt."""
     if action not in {"reconcile", "abandon", "clear-not-submitted"}:
         raise AudiaGenticError(
-            code="VAL-AGW-144", kind="agents", message="unknown gateway recovery action", details={"action": action}
+            code="VAL-AGW-144",
+            kind="agents",
+            message="unknown gateway recovery action",
+            details={"action": action},
         )
     record = store.read_record(project_root, request_id)
     if expected_revision is not None and record.get("revision") != expected_revision:
         raise AudiaGenticError(
-            code="CON-AGW-143", kind="agents", message="diagnostic recovery revision is stale", details={"request-id": request_id}
+            code="CON-AGW-143",
+            kind="agents",
+            message="diagnostic recovery revision is stale",
+            details={"request-id": request_id},
         )
     diagnostics = record.get("diagnostics")
+    if not isinstance(diagnostics, dict) and action == "reconcile":
+        from audiagentic.components.agents.gateway.queue.recovery import (
+            recoverable_reconcile_diagnostics,
+        )
+        diagnostics = recoverable_reconcile_diagnostics(project_root, record)
     if not isinstance(diagnostics, dict):
         raise AudiaGenticError(
-            code="CON-AGW-145", kind="agents", message="request has no recoverable diagnostic evidence", details={"request-id": request_id}
+            code="CON-AGW-145",
+            kind="agents",
+            message="request has no recoverable diagnostic evidence",
+            details={"request-id": request_id},
         )
     if action == "clear-not-submitted" and diagnostics.get("side-effect-state") != "not-started":
         raise AudiaGenticError(
-            code="CON-AGW-146", kind="agents", message="request side effect is not proven absent", details={"request-id": request_id}
+            code="CON-AGW-146",
+            kind="agents",
+            message="request side effect is not proven absent",
+            details={"request-id": request_id},
         )
+
+    from audiagentic.components.agents.gateway.replay import (
+        prepare_recovery_action,
+        record_recovery_result,
+    )
+    action_attempt_id = f"recovery_{request_id}_{record.get('revision', 0)}_{action}"
+    prepare_recovery_action(
+        project_root,
+        request_id,
+        action_attempt_id=action_attempt_id,
+        action=action,
+        action_kind="reconcile",
+        attempt_epoch=int(record.get("attempt-epoch") or 1),
+        retry_budget=0,
+        submission_proven=(diagnostics.get("side-effect-state") == "submitted"),
+        causal_input_ids=[request_id, str(record.get("session-id") or "")],
+        binding={"session-id": record.get("session-id"), "turn-id": record.get("turn-id")},
+    )
+
     updated_diagnostics = dict(diagnostics)
     recovery = dict(updated_diagnostics.get("recovery") or {})
     if action == "reconcile":
@@ -983,6 +1307,50 @@ def recover_execution_request(
             diagnostics=updated_diagnostics,
             expected_revision=record.get("revision"),
         )
+        if updated.get("state") == "running":
+            session_id = updated.get("session-id")
+            session_terminal = False
+            if isinstance(session_id, str) and session_id:
+                try:
+                    from audiagentic.components.agents.gateway.session import sessions_store
+                    session = sessions_store.read_session_record(project_root, session_id)
+                    session_terminal = session.get("state") in {"failed", "closed", "expired"}
+                except Exception:  # noqa: BLE001 - preserve best-effort cancellation semantics
+                    session_terminal = False
+            if session_terminal:
+                updated = store.transition_owned_terminal(
+                    project_root,
+                    request_id,
+                    "cancelled",
+                    updates={
+                        "diagnostics": updated_diagnostics,
+                        "error": {
+                            "code": "CON-AGW-CANCELLED",
+                            "kind": "agents",
+                            "message": "request cancelled after its provider session became unavailable",
+                            "details": {
+                                "provider-cancellation-delivered": False,
+                                "side-effect-state": (
+                                    (updated.get("diagnostics") or {}).get("side-effect-state")
+                                    if isinstance(updated.get("diagnostics"), dict)
+                                    else "may-have-started"
+                                ),
+                            },
+                        },
+                        "finished-at": now_iso_z(),
+                    },
+                    owner_epoch=updated.get("dispatch-owner-epoch") or "",
+                    worker_id=str(updated.get("worker-id") or ""),
+                    attempt_epoch=int(updated.get("attempt-epoch") or 0),
+                )
+        record_recovery_result(
+            project_root,
+            request_id,
+            action_attempt_id=action_attempt_id,
+            outcome="abandon-accepted",
+            terminal=updated.get("state") in store.TERMINAL_STATES,
+            causal_input_ids=[request_id],
+        )
         return {
             "request-id": request_id,
             "action": action,
@@ -992,17 +1360,74 @@ def recover_execution_request(
             "diagnostics": updated.get("diagnostics"),
         }
     else:
-        recovery["disposition"] = "retry-safe"
-        recovery["allowed-actions"] = ["retry"]
+        recovery["disposition"] = "cleared-not-submitted"
+        recovery["allowed-actions"] = []
         updated_diagnostics["resolution-state"] = "cleared-not-submitted"
+
     updated_diagnostics["recovery"] = recovery
     updated = store.update_diagnostics(
         project_root,
         request_id,
         updated_diagnostics,
-        # Every recovery intent is a compare-and-swap mutation.  Abandon is
-        # handled above as one atomic cancellation+diagnostic operation.
         expected_revision=record.get("revision"),
+    )
+    if action == "reconcile":
+        try:
+            completed = complete_execution_from_provider(project_root, request_id)
+        except AudiaGenticError as exc:
+            if exc.code not in {
+                "CON-AGW-152",
+                "CON-AGW-153",
+                "CON-AGW-154",
+                "CON-AGW-155",
+                "CON-AGW-156",
+                "CON-AGW-157",
+                "RES-AGW-112",
+                "VAL-AGW-112",
+            }:
+                raise
+            record_recovery_result(
+                project_root,
+                request_id,
+                action_attempt_id=action_attempt_id,
+                outcome="reconciliation-unresolved",
+                terminal=False,
+                causal_input_ids=[request_id],
+            )
+            return {
+                "request-id": request_id,
+                "action": action,
+                "disposition": "accepted",
+                "state": updated.get("state"),
+                "revision": updated.get("revision"),
+                "diagnostics": updated.get("diagnostics"),
+                "reconciliation": {"outcome": "unresolved", "reason": exc.code},
+            }
+        record_recovery_result(
+            project_root,
+            request_id,
+            action_attempt_id=action_attempt_id,
+            outcome="reconciliation-completed",
+            terminal=True,
+            causal_input_ids=[request_id],
+        )
+        return {
+            "request-id": request_id,
+            "action": action,
+            "disposition": "accepted",
+            "state": completed.get("state"),
+            "revision": completed.get("revision"),
+            "response-artifact": completed.get("response-artifact"),
+            "reconciliation": {"outcome": "completed"},
+        }
+
+    record_recovery_result(
+        project_root,
+        request_id,
+        action_attempt_id=action_attempt_id,
+        outcome="cleared-not-submitted",
+        terminal=updated.get("state") in store.TERMINAL_STATES,
+        causal_input_ids=[request_id],
     )
     return {
         "request-id": request_id,
@@ -1012,8 +1437,6 @@ def recover_execution_request(
         "revision": updated.get("revision"),
         "diagnostics": updated.get("diagnostics"),
     }
-
-
 def get_execution_response(project_root: Path, request_id: str) -> str:
     """Return the complete verified terminal response artifact."""
     record = store.read_record(project_root, request_id)
@@ -1022,6 +1445,16 @@ def get_execution_response(project_root: Path, request_id: str) -> str:
         raise AudiaGenticError(code="RES-AGW-141", kind="agents", message="gateway response artifact unavailable", details={})
     from audiagentic.components.agents.gateway.output import read_final_response
     return read_final_response(project_root, request_id, artifact)
+
+
+def get_execution_failure_response(project_root: Path, request_id: str) -> str:
+    """Return the latest provider DOM response captured on a failed request."""
+    record = store.read_record(project_root, request_id)
+    artifact = record.get("failure-response-artifact")
+    if not isinstance(artifact, dict):
+        raise AudiaGenticError(code="RES-AGW-143", kind="agents", message="gateway failure response artifact unavailable", details={})
+    from audiagentic.components.agents.gateway.output import read_failure_response
+    return read_failure_response(project_root, request_id, artifact)
 
 
 def focus_execution_chat(project_root: Path, request_id: str) -> dict[str, Any]:
@@ -1058,10 +1491,305 @@ def focus_execution_chat(project_root: Path, request_id: str) -> dict[str, Any]:
     )
     if not provider_id:
         return {"request-id": request_id, "outcome": "unavailable", "reason": "provider-identity-missing"}
-    result = get_session_runtime().focus_existing_conversation(
+    gateway_runtime = get_session_runtime()
+    reconcile = getattr(gateway_runtime, "reconcile_terminal_live_sessions", None)
+    if callable(reconcile):
+        reconcile()
+    result = gateway_runtime.focus_existing_conversation(
         project_root, provider_id=str(provider_id), locator=locator
     )
     return {"request-id": request_id, **result}
+
+
+def focus_execution_session(project_root: Path, session_id: str) -> dict[str, Any]:
+    """Focus the provider conversation owned by a durable gateway session."""
+    from audiagentic.components.agents.gateway.session import (
+        sessions_store as session_store,
+    )
+    from audiagentic.components.agents.gateway.session.sessions import get_session_runtime
+    from audiagentic.components.providers.contracts.conversation_focus import (
+        ConversationFocusLocator,
+    )
+
+    record = session_store.read_session_record(project_root, session_id)
+    provider_id = session_store.session_provider_id(record)
+    metadata = session_store.session_provider_metadata(record) or {}
+    if not provider_id:
+        return {"session-id": session_id, "outcome": "unavailable", "reason": "provider-identity-missing"}
+    locator = ConversationFocusLocator(
+        chat_url=metadata.get("chat-url"),
+        provider_session_id=metadata.get("provider-session-id"),
+        project_url=metadata.get("project-url"),
+        gateway_session_id=session_id,
+    )
+    gateway_runtime = get_session_runtime()
+    reconcile = getattr(gateway_runtime, "reconcile_terminal_live_sessions", None)
+    if callable(reconcile):
+        reconcile()
+    result = gateway_runtime.focus_existing_conversation(
+        project_root, provider_id=str(provider_id), locator=locator
+    )
+    return {"session-id": session_id, **result}
+
+
+def complete_execution_from_provider(
+    project_root: Path, request_id: str, *, passive: bool = False
+) -> dict[str, Any]:
+    """Capture and commit the request-owned current GPT response.
+
+    This is an operator recovery action, not a best-effort "latest text" read:
+    the provider snapshot must prove the same prompt, a quiescent assistant
+    turn, and the structural completion witness before the request is closed.
+    """
+    record = store.read_record(project_root, request_id)
+    # A failed/cancelled request can still own a completed provider turn.  The
+    # operator capture below re-proves prompt/assistant identity, stable DOM
+    # completion, and the exact response before it is allowed to supersede the
+    # prior terminal outcome.  Rejected and queued requests remain ineligible:
+    # they do not prove that provider work was admitted.
+    operator_recoverable_states = {"running", "interrupted", "failed", "cancelled", "timed-out", "expired", "abandoned"}
+    if record.get("state") not in operator_recoverable_states:
+        raise AudiaGenticError(code="CON-AGW-152", kind="agents", message="request is not operator-completable", details={"request-id": request_id})
+    provider_id = record.get("resolved-provider-id") or record.get("provider-id")
+    metadata = dict(record.get("provider-metadata") or {})
+    locator_metadata = dict(metadata)
+    effective_metadata = dict(metadata)
+    session_id = record.get("session-id")
+    if session_id:
+        from audiagentic.components.agents.gateway.session import sessions_store as session_store
+        from audiagentic.components.agents.gateway.queue.recovery import (
+            resolve_effective_turn_evidence,
+        )
+
+        try:
+            session_record = session_store.read_session_record(project_root, str(session_id))
+        except Exception:
+            if metadata.get("submission-proven") is not True and metadata.get("unresolved-turn-pending") is not True:
+                raise AudiaGenticError(code="CON-AGW-157", kind="agents", message="request prompt submission is not proven", details={"request-id": request_id})
+            raise
+        session_metadata = session_store.session_provider_metadata(session_record)
+        locator_metadata = {**session_metadata, **metadata}
+        effective_metadata = resolve_effective_turn_evidence(record, session_metadata)
+        provider_id = provider_id or session_store.session_provider_id(session_record)
+    if effective_metadata.get("submission-proven") is not True and effective_metadata.get("unresolved-turn-pending") is not True:
+        raise AudiaGenticError(code="CON-AGW-157", kind="agents", message="request prompt submission is not proven", details={"request-id": request_id})
+    if not provider_id or not session_id:
+        raise AudiaGenticError(code="CON-AGW-153", kind="agents", message="request provider session is unavailable", details={"request-id": request_id})
+    from audiagentic.components.providers.contracts.conversation_focus import ConversationFocusLocator
+    locator = ConversationFocusLocator(
+        chat_url=locator_metadata.get("chat-url"),
+        provider_session_id=locator_metadata.get("provider-session-id"),
+        project_url=locator_metadata.get("project-url"),
+        gateway_session_id=str(session_id),
+    )
+    from audiagentic.components.agents.gateway.session.sessions import get_session_runtime
+    captured = get_session_runtime().capture_latest_response(
+        project_root, provider_id=str(provider_id), locator=locator, passive=passive
+    )
+    if captured.get("outcome") != "captured":
+        raise AudiaGenticError(code="CON-AGW-154", kind="agents", message="provider response could not be captured", details={"request-id": request_id, "reason": captured.get("reason")})
+    snapshot = captured.get("snapshot")
+    confirmed = get_session_runtime().capture_latest_response(
+        project_root, provider_id=str(provider_id), locator=locator, passive=passive
+    )
+    if confirmed.get("outcome") != "captured":
+        raise AudiaGenticError(code="CON-AGW-155", kind="agents", message="provider terminal response could not be revalidated", details={"request-id": request_id})
+    confirmed_snapshot = confirmed.get("snapshot")
+
+    def snapshot_signature(value: Any) -> tuple[Any, ...]:
+        return (
+            getattr(value, "latest_user_id", None),
+            getattr(value, "latest_user_text", None),
+            getattr(value, "latest_assistant_id", None),
+            getattr(value, "latest_assistant_text", None),
+            getattr(value, "terminal_witness_assistant_id", None),
+            bool(getattr(value, "generating", True)),
+            tuple(sorted(getattr(value, "dom_signals", frozenset()))),
+        )
+
+    if snapshot_signature(snapshot) != snapshot_signature(confirmed_snapshot):
+        raise AudiaGenticError(code="CON-AGW-155", kind="agents", message="provider terminal response was not stable across verification snapshots", details={"request-id": request_id})
+    snapshot = confirmed_snapshot
+    text = getattr(snapshot, "latest_assistant_text", None)
+    latest_user = getattr(snapshot, "latest_user_text", None)
+    latest_user_id = getattr(snapshot, "latest_user_id", None)
+    latest_assistant_id = getattr(snapshot, "latest_assistant_id", None)
+    witness_id = getattr(snapshot, "terminal_witness_assistant_id", None)
+    prompt_id = effective_metadata.get("prompt-message-id")
+    expected_assistant = effective_metadata.get("assistant-message-id")
+    before_assistant = effective_metadata.get("assistant-before-message-id") or effective_metadata.get("assistant-before-id")
+    if not isinstance(text, str) or not text.strip() or getattr(snapshot, "generating", True):
+        raise AudiaGenticError(code="CON-AGW-155", kind="agents", message="provider response is not terminal", details={"request-id": request_id})
+    # Manual operator capture has two stable snapshots plus exact prompt and
+    # assistant correlation below.  ChatGPT's current renderer may expose the
+    # response-level Copy/Regenerate control while omitting the older
+    # response-level More actions menu, so requiring both DOM controls here
+    # strands a visibly complete response.  This remains an explicit,
+    # request-scoped recovery action, separate from automatic turn policy.
+    if not getattr(snapshot, "dom_signals", frozenset()).intersection(
+        {"completion-control", "response-complete-status"}
+    ):
+        raise AudiaGenticError(code="CON-AGW-155", kind="agents", message="provider completion witness is missing", details={"request-id": request_id})
+    if not latest_assistant_id or witness_id != latest_assistant_id:
+        raise AudiaGenticError(code="CON-AGW-156", kind="agents", message="provider response is not request-owned", details={"request-id": request_id})
+    if effective_metadata.get("submission-proven") is not True:
+        baseline_user_count = effective_metadata.get("unresolved-baseline-user-count")
+        baseline_assistant_count = effective_metadata.get("unresolved-baseline-assistant-count")
+        latest_user_ref = snapshot.latest_user_ref() if hasattr(snapshot, "latest_user_ref") else None
+        latest_assistant_ref = next(
+            (ref for ref in reversed(getattr(snapshot, "message_refs", ())) if getattr(ref, "role", None) == "assistant"),
+            None,
+        )
+        if (
+            not isinstance(baseline_user_count, int)
+            or isinstance(baseline_user_count, bool)
+            or not isinstance(baseline_assistant_count, int)
+            or isinstance(baseline_assistant_count, bool)
+            or getattr(snapshot, "user_count", 0) <= baseline_user_count
+            or getattr(snapshot, "assistant_count", 0) <= baseline_assistant_count
+            or latest_user_ref is None
+            or latest_assistant_ref is None
+            or latest_user_ref.sequence >= latest_assistant_ref.sequence
+        ):
+            raise AudiaGenticError(code="CON-AGW-156", kind="agents", message="provider response did not advance beyond the unresolved-turn baseline", details={"request-id": request_id})
+    expected_assistant_is_real = bool(expected_assistant and not str(expected_assistant).startswith("fallback-"))
+    before_assistant_is_real = bool(before_assistant and not str(before_assistant).startswith("fallback-"))
+    if expected_assistant_is_real and expected_assistant != latest_assistant_id:
+        # The ChatGPT renderer can remount a completed assistant response
+        # with a new durable DOM message id.  Reconcile that case only when
+        # the exact prompt-owned ordered slot and an independent terminal DOM
+        # witness prove that it is the same response.  Ambiguous/later-turn
+        # captures remain fail-closed.
+        from audiagentic.components.providers.adapters.gpt_auto.turn import (
+            _terminal_same_response_slot_replacement,
+        )
+
+        if not _terminal_same_response_slot_replacement(
+            snapshot,
+            prompt_message_id=str(prompt_id or ""),
+            old_assistant_id=str(expected_assistant),
+            new_assistant_id=str(latest_assistant_id or ""),
+        ):
+            raise AudiaGenticError(code="CON-AGW-156", kind="agents", message="provider assistant identity does not match request", details={"request-id": request_id})
+    if before_assistant_is_real and before_assistant == latest_assistant_id:
+        raise AudiaGenticError(code="CON-AGW-156", kind="agents", message="provider response did not advance", details={"request-id": request_id})
+    # GPT-auto intentionally emits this request-local placeholder when the
+    # virtualized renderer has evicted the user node but retained the latest
+    # assistant node.  It is a correlation aid, not a provider message ID;
+    # require the persisted prompt fingerprint below instead of rejecting a
+    # visibly request-owned completed response as an identity mismatch.
+    prompt_text = str(prompt_id) if prompt_id is not None else ""
+    prompt_is_virtualized = prompt_text.startswith("virtualized-prompt-for-")
+    prompt_is_real = bool(
+        prompt_text
+        and not prompt_text.startswith("fallback-")
+        and not prompt_is_virtualized
+    )
+    if prompt_is_real:
+        if latest_user_id != prompt_id:
+            raise AudiaGenticError(code="CON-AGW-156", kind="agents", message="provider prompt identity does not match request", details={"request-id": request_id})
+    if prompt_is_virtualized:
+        virtualized_assistant_id = prompt_text.removeprefix("virtualized-prompt-for-")
+        if not virtualized_assistant_id or virtualized_assistant_id != latest_assistant_id:
+            raise AudiaGenticError(code="CON-AGW-156", kind="agents", message="virtualized provider prompt witness does not match the latest assistant", details={"request-id": request_id})
+    if not prompt_is_real and not prompt_is_virtualized and effective_metadata.get("unresolved-turn-pending") is True:
+        # A count/order advance is not enough for an unresolved pre-ID turn:
+        # a later foreign prompt in the same conversation could satisfy it.
+        # Require the durable normalized prompt fingerprint before automatic
+        # or operator capture can terminalize the visible assistant response.
+        from audiagentic.components.providers.adapters.gpt_auto.prompt_fingerprint import PromptFingerprint
+        expected_prompt_digest = effective_metadata.get("prompt-text-digest")
+        if not isinstance(expected_prompt_digest, str) or not expected_prompt_digest:
+            raise AudiaGenticError(
+                code="CON-AGW-156",
+                kind="agents",
+                message="provider prompt correlation fingerprint is unavailable",
+                details={"request-id": request_id, "failure-reason": "prompt-digest-unavailable"},
+            )
+        if not isinstance(latest_user, str) or PromptFingerprint.from_text(latest_user).digest != expected_prompt_digest:
+            raise AudiaGenticError(
+                code="CON-AGW-156",
+                kind="agents",
+                message="provider prompt does not match the unresolved request",
+                details={"request-id": request_id, "failure-reason": "prompt-digest-mismatch"},
+            )
+    if not prompt_is_real and not prompt_is_virtualized and effective_metadata.get("unresolved-turn-pending") is not True:
+        from audiagentic.components.agents.agents_paths import gateway_admitted_prompt_path
+        from audiagentic.foundation.io import read_bytes_with_retry
+        import hashlib
+        try:
+            prompt = read_bytes_with_retry(
+                gateway_admitted_prompt_path(project_root, request_id)
+            ).decode("utf-8")
+        except OSError as exc:
+            raise AudiaGenticError(
+                code="RES-AGW-112",
+                kind="agents",
+                message="admitted prompt snapshot is unavailable",
+                details={"request-id": request_id},
+            ) from exc
+        prompt_digest = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
+        # The admitted file contains the materialized agent prompt, whose
+        # digest is persisted as prompt-template-digest. prompt-digest is the
+        # caller's raw prompt identity and intentionally differs whenever the
+        # agent definition adds governed prompt instructions.
+        admitted_digest = record.get("prompt-template-digest") or record.get("prompt-digest")
+        if admitted_digest != prompt_digest:
+            raise AudiaGenticError(code="CON-AGW-156", kind="agents", message="admitted request prompt digest is inconsistent", details={"request-id": request_id})
+        latest_user_ref = next(
+            (ref for ref in reversed(getattr(snapshot, "message_refs", ())) if getattr(ref, "role", None) == "user"),
+            None,
+        )
+        latest_assistant_ref = next(
+            (ref for ref in reversed(getattr(snapshot, "message_refs", ())) if getattr(ref, "role", None) == "assistant"),
+            None,
+        )
+        if latest_user_ref is not None and latest_assistant_ref is not None and latest_user_ref.sequence >= latest_assistant_ref.sequence:
+            raise AudiaGenticError(code="CON-AGW-156", kind="agents", message="provider response ordering does not follow the request prompt", details={"request-id": request_id})
+        if not isinstance(latest_user, str) or latest_user.strip() != prompt.strip() or (latest_user_ref is not None and (latest_user_ref.correlation_text or latest_user_ref.text or "").strip() != prompt.strip()):
+            raise AudiaGenticError(code="CON-AGW-156", kind="agents", message="provider prompt text does not match request", details={"request-id": request_id})
+    recovered_binding = confirmed.get("binding")
+    if isinstance(recovered_binding, dict):
+        from audiagentic.components.agents.gateway.session import sessions_store as session_store
+
+        session_store.update_provider_metadata(
+            project_root,
+            str(session_id),
+            {
+                str(key): value
+                for key, value in recovered_binding.items()
+                if value is not None
+            },
+        )
+    updated = store.transition_operator_terminal(
+        project_root, request_id, expected_revision=int(record.get("revision", 0)),
+        updates={"__final-response-text": text, "error": None, "completion": {"source": "operator-provider-capture", "provider-message-id": latest_assistant_id}},
+    )
+    # Operator capture is a verified terminal witness, just like the normal
+    # turn observer.  Clear the request-owned unresolved-turn fence as part
+    # of the same terminalization; otherwise a later prompt on this durable
+    # conversation remains queued behind a predecessor that is already
+    # completed.
+    if session_id and isinstance(session_record, dict) and session_record.get("session-id") == str(session_id):
+        session_store.update_provider_metadata(
+            project_root,
+            str(session_id),
+            {
+                "unresolved-turn-pending": False,
+                "recovery-state": "terminal-captured",
+            },
+            remove_keys=(
+                "unresolved-turn-id",
+                "prompt-message-id",
+                "assistant-message-id",
+                "assistant-before-message-id",
+                "assistant-before-id",
+                "prompt-text-digest",
+                "submission-proven",
+                "terminal-evidence",
+            ),
+        )
+    return {"request-id": request_id, "state": updated.get("state"), "response-artifact": updated.get("response-artifact"), "capture-source": "provider-current-response"}
 
 
 def request_runtime_status(project_root: Path, request_id: str) -> dict[str, Any]:
@@ -1069,21 +1797,15 @@ def request_runtime_status(project_root: Path, request_id: str) -> dict[str, Any
     record = store.read_public_status(project_root, request_id)
     state = record["state"]
     slot = get_queue_manager().request_slot_status(record["execution-profile-id"], request_id)
-    if state in store.TERMINAL_STATES:
-        queue_state = "terminal"
+    queue_state = _request_queue_state(record, slot)
+    if queue_state == "terminal":
         profile_slot = None
-    elif slot is not None:
-        queue_state = "running" if slot in {"active", "idle"} else "queued"
-        profile_slot = slot
-    elif state == "running":
-        queue_state = "running"
-        profile_slot = "active"
-    elif state == "queued" and record.get("dispatch-owner-epoch"):
-        queue_state = "queued"
-        profile_slot = "pending"
+    elif queue_state in {"recovery-required", "orphaned"}:
+        profile_slot = None
+    elif state == "queued":
+        profile_slot = slot or "pending"
     else:
-        queue_state = state
-        profile_slot = None
+        profile_slot = slot or "active"
 
     session_status: dict[str, Any] = {"available": False}
     session_id = record.get("session-id")
@@ -1314,7 +2036,7 @@ def _public_session_projection(record: dict[str, Any]) -> dict[str, Any]:
 def list_execution_sessions(
     project_root: Path,
     *,
-    state: str | None = None,
+    state: str | None = "active",
     _live_ids: set[str] | None = None,
 ) -> list[dict[str, Any]]:
     """List persisted gateway sessions in stable lifecycle/ID order, with a 'live' flag for
@@ -1330,10 +2052,30 @@ def list_execution_sessions(
 
     if _live_ids is None:
         runtime = peek_session_runtime()
+        if runtime is not None:
+            runtime.reconcile_terminal_live_sessions()
         live_ids = set(runtime.live_session_ids()) if runtime is not None else set()
     else:
         live_ids = set(_live_ids)
     records = session_store.list_session_records(project_root)
+    # The process-local reaper owns live transports.  Persisted sessions left
+    # non-live by a restart still need their independent durable idle policy
+    # applied; otherwise they remain "active" forever and pollute capacity and
+    # recovery decisions.  Expiry also reconciles any request records owned by
+    # the session, so a request cannot remain running behind a dead session.
+    # Listing is a regular dashboard/MCP sweep point and never expires a handle
+    # held by this process.
+    records = [
+        session_store.expire_session_if_policy_exceeded(
+            project_root, str(record["session-id"])
+        )
+        if record.get("state") not in session_store.SESSION_TERMINAL_STATES
+        and record.get("session-id") not in live_ids
+        else record
+        for record in records
+    ]
+    if state == "all":
+        state = None
     if state is not None:
         records = [r for r in records if r["state"] == state]
     # Keep non-terminal sessions first, then use the durable session id as a
@@ -1495,6 +2237,93 @@ def purge_execution_session(project_root: Path, session_id: str) -> dict[str, An
     }
 
 
+def purge_execution_sessions(
+    project_root: Path,
+    *,
+    dry_run: bool = True,
+    session_ids: list[str] | None = None,
+) -> dict[str, Any]:
+    """Inspect or purge terminal sessions in this project.
+
+    Bulk purge is deliberately dry-run by default.  Live/non-terminal sessions
+    and sessions owning non-terminal requests are reported as blockers and are
+    never implicitly closed, failed, or deleted.  The single-session primitive
+    remains the final race-checked destructive boundary.
+    """
+    from audiagentic.components.agents.gateway.session import sessions_store as session_store
+    from audiagentic.components.agents.gateway.session.sessions import peek_session_runtime
+
+    wanted = set(session_ids) if session_ids is not None else None
+    records = session_store.list_session_records(project_root)
+    if wanted is not None:
+        records = [record for record in records if record.get("session-id") in wanted]
+        found = {str(record.get("session-id")) for record in records}
+        missing = sorted(wanted - found)
+    else:
+        missing = []
+    runtime = peek_session_runtime()
+    live_ids = set(runtime.live_session_ids()) if runtime is not None else set()
+    blockers: list[dict[str, Any]] = []
+    eligible: list[str] = []
+    for record in records:
+        session_id = str(record.get("session-id"))
+        if session_id in live_ids:
+            blockers.append({"session-id": session_id, "reason": "session-live"})
+            continue
+        request_records = []
+        seen_request_ids: set[str] = set()
+        unreadable_request = False
+        for request in store.list_records(project_root, include_output=False):
+            if request.get("session-id") == session_id:
+                seen_request_ids.add(str(request.get("request-id")))
+                request_records.append(request)
+        # The session record is authoritative for its lineage.  Read any
+        # referenced request that was not returned by the directory scan so a
+        # partial/corrupt store cannot make an active request look purgeable.
+        for request_id in session_store.session_request_ids(record):
+            if request_id in seen_request_ids:
+                continue
+            try:
+                request = store.read_record(project_root, request_id)
+            except Exception:  # noqa: BLE001 - fail closed below on uncertainty
+                unreadable_request = True
+                blockers.append({"session-id": session_id, "reason": "request-record-unreadable"})
+                continue
+            request_records.append(request)
+        if record.get("state") not in session_store.SESSION_TERMINAL_STATES:
+            blockers.append({"session-id": session_id, "reason": "session-non-terminal"})
+        elif unreadable_request:
+            pass
+        elif any(request.get("state") not in store.TERMINAL_STATES for request in request_records):
+            blockers.append({"session-id": session_id, "reason": "session-has-active-requests"})
+        else:
+            eligible.append(session_id)
+    blockers.extend({"session-id": value, "reason": "session-not-found"} for value in missing)
+    result: dict[str, Any] = {
+        "outcome": "dry-run" if dry_run else "purge",
+        "dry-run": dry_run,
+        "eligible-session-ids": eligible,
+        "blocked": blockers,
+        "eligible-count": len(eligible),
+        "blocked-count": len(blockers),
+    }
+    if dry_run:
+        return result
+    purged: list[str] = []
+    for session_id in eligible:
+        outcome = purge_execution_session(project_root, session_id)
+        if outcome.get("outcome") == "purged":
+            purged.append(session_id)
+        else:
+            result["blocked"].append(
+                {"session-id": session_id, "reason": outcome.get("reason", "purge-not-completed")}
+            )
+    result["purged-session-ids"] = purged
+    result["purged-count"] = len(purged)
+    result["outcome"] = "purged" if not result["blocked"] else ("partial" if purged else "blocked")
+    return result
+
+
 def control_execution_session(
     project_root: Path,
     session_id: str,
@@ -1644,6 +2473,10 @@ def resume_execution_session(
         opening_request_ids = session_store.session_request_ids(
             session_store.read_session_record(project_root, source_session_id)
         )
+        if not opening_request_ids:
+            created_by_request_id = source_record.get("created-by-request-id")
+            if isinstance(created_by_request_id, str) and created_by_request_id:
+                opening_request_ids = [created_by_request_id]
         if opening_request_ids:
             opening_record = store.read_record(project_root, opening_request_ids[0])
             template_context = opening_record.get("template-context")
@@ -1691,7 +2524,7 @@ def gateway_overview(project_root: Path) -> dict[str, Any]:
     from audiagentic.components.agents.gateway.session import sessions_store as session_store
     from audiagentic.components.agents.gateway.session.sessions import peek_session_runtime
 
-    records = store.list_records(project_root)
+    records = store.list_records(project_root, include_output=False)
     by_state: dict[str, int] = {}
     for record in records:
         by_state[record["state"]] = by_state.get(record["state"], 0) + 1
@@ -1708,8 +2541,10 @@ def gateway_overview(project_root: Path) -> dict[str, Any]:
         )[:5]
     ]
     runtime = peek_session_runtime()
+    if runtime is not None:
+        runtime.reconcile_terminal_live_sessions()
     live_ids = set(runtime.live_session_ids()) if runtime is not None else set()
-    sessions = list_execution_sessions(project_root, _live_ids=live_ids)
+    sessions = list_execution_sessions(project_root, state="all", _live_ids=live_ids)
     machine_live_count = len(live_ids)
 
     # Provider descriptor load diagnostics
@@ -1759,4 +2594,3 @@ def gateway_overview(project_root: Path) -> dict[str, Any]:
         "runtime-fingerprint": _runtime_fingerprint(),
         "diagnostics": provider_diagnostics,
     }
-

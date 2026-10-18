@@ -5,7 +5,10 @@ records. Imports _shared for constants — one-way edges only.
 """
 from __future__ import annotations
 
+import base64
+import json
 import logging
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -13,9 +16,10 @@ from audiagentic.components.agents.agents_paths import (
     gateway_request_path,
     gateway_root,
     gateway_timeline_path,
+    gateway_timeline_index_path,
 )
-from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.foundation.io import atomic_write_json, load_ndjson, read_text_with_retry
+from audiagentic.foundation.contracts.errors import AudiaGenticError, redact_details
+from audiagentic.foundation.io import atomic_write_json, iter_ndjson, last_ndjson, load_ndjson, read_text_with_retry, tail_ndjson
 from audiagentic.foundation.time import now_iso_z
 
 from . import _shared
@@ -56,6 +60,10 @@ def _redact_error(error: BaseException | dict[str, Any] | None) -> dict[str, Any
             details = _project_session_error_details(error.details)
             if details:
                 projected["details"] = details
+        elif error.code == "CON-AGW-084" and isinstance(error.details, dict):
+            details = _project_bounded_recovery_error_details(error.details)
+            if details:
+                projected["details"] = details
         return projected
     if isinstance(error, BaseException):
         # Preserve ordinary validation/configuration detail so operators can
@@ -64,7 +72,139 @@ def _redact_error(error: BaseException | dict[str, Any] | None) -> dict[str, Any
         if isinstance(error, ValueError) and str(error):
             return {"code": "VAL-AGW-999", "message": str(error), "kind": type(error).__name__}
         return {"code": "UNKNOWN", "message": "unexpected error (see server logs)", "kind": type(error).__name__}
-    return {k: v for k, v in error.items() if k in _shared._REDACTED_ERROR_KEYS}
+    projected = {k: v for k, v in error.items() if k in _shared._REDACTED_ERROR_KEYS}
+    if error.get("code") == "CON-AGW-084" and isinstance(error.get("details"), dict):
+        details = _project_bounded_recovery_error_details(error["details"])
+        if details:
+            projected["details"] = details
+    return projected
+
+
+_RECOVERY_ERROR_MAX_CODE = 128
+_RECOVERY_ERROR_MAX_KIND = 64
+_RECOVERY_ERROR_MAX_DETAIL_KEYS = 16
+_RECOVERY_ERROR_MAX_DETAIL_STR = 256
+_RECOVERY_ERROR_MAX_DETAIL_ITEMS = 8
+
+
+def _bounded_recovery_error_scalar(value: Any) -> Any:
+    """Flatten one error-detail value to a bounded, serializable scalar."""
+    if isinstance(value, str):
+        text = value.replace("\x00", "")
+        return text[:_RECOVERY_ERROR_MAX_DETAIL_STR] or None
+    if value is None or isinstance(value, (bool, int, float)):
+        return value
+    if isinstance(value, (list, tuple)):
+        items: list[Any] = []
+        for item in value[:_RECOVERY_ERROR_MAX_DETAIL_ITEMS]:
+            if isinstance(item, str):
+                items.append(item.replace("\x00", "")[:128])
+            elif item is None or isinstance(item, (bool, int, float)):
+                items.append(item)
+        return items or None
+    # Nested mappings/objects are deliberately dropped: the summary must
+    # stay flat and bounded, and unstructured payloads are where prompt or
+    # transport text would hide.
+    return None
+
+
+def bounded_recovery_error(
+    error: BaseException | Mapping[str, Any] | None,
+) -> dict[str, Any] | None:
+    """Project a recovery-deferred error to a bounded, prompt-free summary.
+
+    Retains only the root error's code, exception type, contract kind, and a
+    flattened, truncated slice of its already-redacted details. This is what
+    the durable recovery trail keeps (``defer_owned_recovery``) and what the
+    bounded CON-AGW-084 interruption exposes as ``root-recovery-error``, so an
+    operator can see why observation-only recovery exhausted without leaking
+    prompts, credentials, tracebacks, or unbounded payloads.
+    """
+    if error is None:
+        return None
+    if isinstance(error, AudiaGenticError):
+        code: Any = error.code
+        kind: Any = error.kind
+        details: Any = error.details
+        type_name: Any = "AudiaGenticError"
+        if not isinstance(code, str):
+            code = None
+    elif isinstance(error, Mapping):
+        code = error.get("code")
+        kind = error.get("kind")
+        details = error.get("details")
+        type_name = error.get("type") or "dict"
+    elif isinstance(error, BaseException):
+        code = getattr(error, "code", None)
+        kind = getattr(error, "kind", None)
+        details = getattr(error, "details", None)
+        type_name = type(error).__name__
+    else:
+        return None
+    projected: dict[str, Any] = {
+        "code": code[:_RECOVERY_ERROR_MAX_CODE] if isinstance(code, str) else None,
+        "type": type_name[:_RECOVERY_ERROR_MAX_CODE] if isinstance(type_name, str) else None,
+        "kind": kind[:_RECOVERY_ERROR_MAX_KIND] if isinstance(kind, str) else None,
+    }
+    bounded_details: dict[str, Any] = {}
+    if isinstance(details, Mapping):
+        for key, value in details.items():
+            if len(bounded_details) >= _RECOVERY_ERROR_MAX_DETAIL_KEYS:
+                break
+            key_text = str(key)[:_RECOVERY_ERROR_MAX_KIND]
+            bounded_value = _bounded_recovery_error_scalar(value)
+            if bounded_value is not None:
+                bounded_details[key_text] = bounded_value
+    if bounded_details:
+        projected["details"] = redact_details(bounded_details)
+    return projected
+
+
+_BOUNDED_RECOVERY_ERROR_SCALAR_KEYS = frozenset(
+    {"recovery-attempt", "recovery-max-attempts", "recovery-phase", "side-effect-state", "session-fence-state"}
+)
+
+
+def _project_bounded_recovery_error_details(details: dict[str, Any]) -> dict[str, Any]:
+    """Project the CON-AGW-084 interruption details to a safe public shape.
+
+    The interruption details are queue-owned and small: bounded retry-budget
+    counters plus the ``root-recovery-error`` summary produced by
+    :func:`bounded_recovery_error`.  Only those named fields survive; the
+    nested root summary is re-validated to its bounded shape so a malformed
+    producer cannot smuggle unbounded or sensitive payloads into the record.
+    """
+    projected: dict[str, Any] = {}
+    for key in _BOUNDED_RECOVERY_ERROR_SCALAR_KEYS:
+        value = details.get(key)
+        if value is None or isinstance(value, bool):
+            projected[key] = value
+        elif isinstance(value, int):
+            projected[key] = value
+        elif isinstance(value, str):
+            projected[key] = value[:_RECOVERY_ERROR_MAX_KIND]
+    if details.get("submission-proven") is not None:
+        projected["submission-proven"] = bool(details["submission-proven"])
+    root = details.get("root-recovery-error")
+    if isinstance(root, dict):
+        bounded_root: dict[str, Any] = {}
+        for key in ("code", "type", "kind"):
+            value = root.get(key)
+            if isinstance(value, str):
+                bounded_root[key] = value[:_RECOVERY_ERROR_MAX_CODE]
+        if isinstance(root.get("details"), dict):
+            bounded_details: dict[str, Any] = {}
+            for key, value in root["details"].items():
+                if len(bounded_details) >= _RECOVERY_ERROR_MAX_DETAIL_KEYS:
+                    break
+                bounded_value = _bounded_recovery_error_scalar(value)
+                if bounded_value is not None:
+                    bounded_details[str(key)[:_RECOVERY_ERROR_MAX_KIND]] = bounded_value
+            if bounded_details:
+                bounded_root["details"] = redact_details(bounded_details)
+        if bounded_root:
+            projected["root-recovery-error"] = bounded_root
+    return projected
 
 
 _GPT_AUTO_DETAIL_KEYS = frozenset(
@@ -120,6 +260,10 @@ _GPT_AUTO_DETAIL_KEYS = frozenset(
         "typed-text-length",
         "typed-text-match",
         "cause-type",
+        "failure-response-available",
+        "failure-response-message-id",
+        "failure-response-source",
+        "failure-response-truncated",
     }
 )
 
@@ -416,6 +560,7 @@ def build_record(
         "dispatch-claimed-at": None,
         "dispatch-service-root": None,
         "recovery": None,
+        "recovery-required": False,
         "replay-required": None,
         "replay-reason": None,
         "replayed-by-request-id": None,
@@ -588,6 +733,10 @@ def _migrate_v1_payload(payload: dict[str, Any]) -> dict[str, Any]:
     migrated.setdefault("activity-sequence", 0)
     migrated.setdefault("activity-source", None)
     migrated.setdefault("activity-lease-expires-at", None)
+    # Legacy requests are not in a recovery turn merely because they predate
+    # this field, so every accepted historical version gets an explicit false
+    # default before version-specific validation.
+    migrated.setdefault("recovery-required", False)
     activity = migrated.get("activity")
     if not isinstance(activity, dict):
         activity = _shared.default_activity()
@@ -659,6 +808,7 @@ def read_record(
         and "activity-source" in payload
         and "activity-lease-expires-at" in payload
         and "activity" in payload
+        and "recovery-required" in payload
         and isinstance(payload.get("activity"), dict)
         and isinstance(payload["activity"].get("provider"), dict)
         and "first-at" in payload["activity"]["provider"]
@@ -685,11 +835,11 @@ def latest_transition_projection(project_root: Path, request_id: str) -> dict[st
     mapping into a public projection.
     """
     try:
-        entries = load_ndjson(gateway_timeline_path(project_root, request_id))
+        entry = last_ndjson(gateway_timeline_path(project_root, request_id))
     except (OSError, ValueError):
         logger.warning("failed to read gateway request timeline", extra={"request-id": request_id})
         return None
-    for entry in reversed(entries):
+    if entry:
         event = entry.get("event")
         timestamp = entry.get("timestamp")
         state = entry.get("state")
@@ -697,6 +847,127 @@ def latest_transition_projection(project_root: Path, request_id: str) -> dict[st
             return {"event": event, "state": state, "timestamp": timestamp}
     return None
 
+
+def transition_history_projection(
+    project_root: Path,
+    request_id: str,
+    *,
+    limit: int = 100,
+) -> list[dict[str, str | None]]:
+    """Return bounded safe transition milestones for explicit evidence reads."""
+    if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
+        raise ValueError("transition history limit must be between 1 and 100")
+    try:
+        journal = gateway_timeline_path(project_root, request_id)
+        index_path = gateway_timeline_index_path(project_root, request_id)
+        entries: list[dict[str, str | None]] = []
+        if journal.exists() and index_path.exists():
+            offsets = tail_ndjson(index_path, limit)
+            with journal.open("rb") as journal_handle:
+                for metadata in offsets:
+                    journal_handle.seek(int(metadata["offset"]))
+                    entry = json.loads(journal_handle.readline().decode("utf-8"))
+                    event = entry.get("event")
+                    timestamp = entry.get("timestamp")
+                    state = entry.get("state")
+                    if isinstance(event, str) and isinstance(timestamp, str) and (state is None or isinstance(state, str)):
+                        entries.append({"event": event, "state": state, "timestamp": timestamp})
+        else:
+            for entry in tail_ndjson(journal, limit):
+                event = entry.get("event")
+                timestamp = entry.get("timestamp")
+                state = entry.get("state")
+                if isinstance(event, str) and isinstance(timestamp, str) and (state is None or isinstance(state, str)):
+                    entries.append({"event": event, "state": state, "timestamp": timestamp})
+    except (OSError, ValueError):
+        logger.warning("failed to read gateway request timeline", extra={"request-id": request_id})
+        return []
+    return entries
+
+
+def transition_history_page(
+    project_root: Path,
+    request_id: str,
+    *,
+    limit: int = 100,
+    cursor: str | None = None,
+) -> dict[str, Any]:
+    """Return a deterministic, independently-cursorable history page."""
+    if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
+        raise ValueError("transition history limit must be between 1 and 100")
+    offset = 0
+    index_offset: int | None = None
+    if cursor:
+        try:
+            padded = cursor + "=" * (-len(cursor) % 4)
+            decoded = json.loads(base64.urlsafe_b64decode(padded.encode()).decode())
+            offset = decoded["offset"]
+            if decoded.get("v") != 1 or isinstance(offset, bool) or not isinstance(offset, int) or offset < 0:
+                raise ValueError
+            index_offset = decoded.get("index-offset")
+            if index_offset is not None and (isinstance(index_offset, bool) or not isinstance(index_offset, int) or index_offset < 0):
+                raise ValueError
+        except (ValueError, KeyError, TypeError, UnicodeError, json.JSONDecodeError):
+            raise ValueError("invalid history cursor") from None
+    items: list[dict[str, str | None]] = []
+    has_more = False
+    next_index_offset: int | None = None
+    journal = gateway_timeline_path(project_root, request_id)
+    index_path = gateway_timeline_index_path(project_root, request_id)
+    try:
+        if journal.exists() and index_path.exists():
+            with index_path.open("rb") as index_handle, journal.open("rb") as journal_handle:
+                if index_offset is not None:
+                    index_handle.seek(index_offset)
+                index = 0
+                while True:
+                    current_index_offset = index_handle.tell()
+                    raw_index = index_handle.readline()
+                    if not raw_index:
+                        break
+                    if index_offset is None and index < offset:
+                        index += 1
+                        continue
+                    if len(items) >= limit:
+                        has_more = True
+                        next_index_offset = current_index_offset
+                        break
+                    metadata = json.loads(raw_index)
+                    journal_handle.seek(int(metadata["offset"]))
+                    entry = json.loads(journal_handle.readline().decode("utf-8"))
+                    event = entry.get("event")
+                    timestamp = entry.get("timestamp")
+                    state = entry.get("state")
+                    if isinstance(event, str) and isinstance(timestamp, str) and (state is None or isinstance(state, str)):
+                        items.append({"event": event, "state": state, "timestamp": timestamp})
+                    index += 1
+        else:
+            for index, entry in enumerate(iter_ndjson(journal)):
+                if index < offset:
+                    continue
+                if len(items) >= limit:
+                    has_more = True
+                    break
+                event = entry.get("event")
+                timestamp = entry.get("timestamp")
+                state = entry.get("state")
+                if isinstance(event, str) and isinstance(timestamp, str) and (state is None or isinstance(state, str)):
+                    items.append({"event": event, "state": state, "timestamp": timestamp})
+    except (OSError, ValueError, TypeError, UnicodeDecodeError, json.JSONDecodeError):
+        items = []
+        has_more = False
+    result: dict[str, Any] = {
+        "schema-version": "gateway-history.v1",
+        "request-id": request_id,
+        "items": items,
+        "returned": len(items),
+        "has-more": has_more,
+    }
+    if has_more:
+        result["next-cursor"] = base64.urlsafe_b64encode(
+            json.dumps({"v": 1, "offset": offset + len(items), "index-offset": next_index_offset}, separators=(",", ":")).encode()
+        ).decode().rstrip("=")
+    return result
 
 def project_public_status(
     record: dict[str, Any],
@@ -707,10 +978,11 @@ def project_public_status(
     visible = (
         "contract-version", "request-id", "agent-id", "prompt-profile-id", "prompt-template-name", "prompt-template-digest", "prompt-definition-fingerprint", "execution-profile-id", "mode", "state",
         "response-artifact", "output-preview", "output-truncated",
+        "failure-response-artifact", "failure-response-preview", "failure-response-truncated",
         "cancel-requested", "revision", "dispatch-owner-epoch", "dispatch-claimed-at",
         "cancel-acknowledged-at", "cancel-acknowledged-by",
         "cancel-provenance",
-        "recovery", "worker-id", "attempt-epoch", "provider-id", "model-id",
+        "recovery", "recovery-required", "worker-id", "attempt-epoch", "provider-id", "model-id",
         "session-id", "session-keep-alive", "completion", "usage", "error", "attempts", "created-at",
         "updated-at", "started-at", "finished-at",
         "replay-required", "replay-reason", "replayed-by-request-id", "resumed-from-request-id",
@@ -728,6 +1000,18 @@ def project_public_status(
     )
     status = {field: record.get(field) for field in visible}
     status["activity"] = record.get("activity")
+    recovery = record.get("recovery")
+    if isinstance(recovery, dict) and record.get("state") in {"queued", "running"}:
+        # ``state`` is the durable request lifecycle; this derived field tells
+        # clients whether a live provider turn is actually being observed.
+        status["execution-status"] = "recovering"
+        status["recovery-phase"] = recovery.get("phase")
+        status["recovery-attempt"] = recovery.get("attempt")
+        status["recovery-next-retry-at"] = recovery.get("next-retry-at")
+    elif record.get("state") == "running":
+        status["execution-status"] = "active"
+    else:
+        status["execution-status"] = record.get("state")
     # Provider metadata is deliberately not exposed wholesale.  This one
     # boolean is safe and essential for interpreting a running request:
     # ``True`` means the provider may still be completing the submitted turn,
@@ -772,17 +1056,31 @@ def read_public_status(project_root: Path, request_id: str) -> dict[str, Any]:
     return status
 
 
-def list_records(project_root: Path, *, include_output: bool = True) -> list[dict[str, Any]]:
+def list_records(
+    project_root: Path,
+    *,
+    include_output: bool = True,
+    limit: int | None = None,
+) -> list[dict[str, Any]]:
     root = gateway_root(project_root)
     if not root.exists():
         return []
+    if limit is not None and (isinstance(limit, bool) or not isinstance(limit, int) or limit < 1):
+        raise ValueError("request list limit must be a positive integer")
     records = []
-    for entry in sorted(root.iterdir()):
+    entries = [
+        entry for entry in root.iterdir()
+        if entry.is_dir() and entry.name not in {"idempotency", "sessions"}
+    ]
+    for entry in entries:
         if not entry.is_dir() or entry.name in {"idempotency", "sessions"}:
             continue
         try:
             records.append(read_record(project_root, entry.name, include_output=include_output))
         except AudiaGenticError:
             logger.warning("skipping unreadable gateway request", extra={"request-id": entry.name}, exc_info=True)
+    records.sort(key=lambda record: str(record.get("created-at") or ""), reverse=True)
+    if limit is not None:
+        records = records[:limit]
     return records
 

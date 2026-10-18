@@ -1,5 +1,6 @@
 """Restart controls stay authenticated and replace code only after host cleanup."""
 import json
+import os
 import threading
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -8,8 +9,43 @@ from urllib.request import Request, urlopen
 
 import pytest
 
+from audiagentic.commands import gateway as gateway_command
 from audiagentic.components.agents.gateway.service import process
 from audiagentic.components.agents.gateway.service.http_transport import GatewayHTTPServer
+
+
+def test_foreground_gateway_reexecutes_after_handoff_cleanup(monkeypatch):
+    events = []
+
+    def close():
+        events.append(("close", os.environ.get("AUDIAGENTIC_GATEWAY_RESTART_HANDOFF")))
+
+    host = SimpleNamespace(
+        endpoint="http://127.0.0.1:8765",
+        token_path="token",
+        lifecycle=SimpleNamespace(restart_enabled=False, restart_requested=True),
+        serve_forever=lambda: events.append(("serve", None)),
+        close=close,
+    )
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.service.host.GatewayServiceHost.create",
+        lambda **kwargs: host,
+    )
+    monkeypatch.setattr(gateway_command, "_install_shutdown_signals", lambda _host: SimpleNamespace(forced_fallback=False))
+    exec_calls = []
+    monkeypatch.setattr(gateway_command.os, "execv", lambda executable, args: exec_calls.append((executable, args)))
+    monkeypatch.setattr(gateway_command.sys, "argv", ["launcher", "gateway", "serve", "--port", "8765"])
+    monkeypatch.delenv("AUDIAGENTIC_GATEWAY_RESTART_HANDOFF", raising=False)
+
+    result = gateway_command.cmd_gateway(SimpleNamespace(gateway_cmd="serve", host="127.0.0.1", port=8765, token_file=None), None)
+
+    assert result == 0
+    assert events == [("serve", None), ("close", "1")]
+    assert host.lifecycle.restart_enabled
+    assert exec_calls == [
+        (gateway_command.sys.executable, [gateway_command.sys.executable, "-m", "audiagentic.launcher", "gateway", "serve", "--port", "8765"])
+    ]
+    assert "AUDIAGENTIC_GATEWAY_RESTART_HANDOFF" not in os.environ
 
 
 def test_restart_reexecutes_after_close_with_original_args(monkeypatch):
@@ -23,10 +59,12 @@ def test_restart_reexecutes_after_close_with_original_args(monkeypatch):
     monkeypatch.setenv("AUDIAGENTIC_SERVICE_OWNER_EPOCH", "old")
     launches = []
     monkeypatch.setattr(process.subprocess, "Popen", lambda args, **kwargs: (events.append(args), launches.append(kwargs)))
+    monkeypatch.setattr(process.os, "_exit", lambda code: events.append(("exit", code)))
     args = ["--port", "8765", "--token-file", "token", "--service-root", "custom"]
     process.main(args)
     assert events[:2] == ["serve", "close"]
     assert events[2][3:] == args
+    assert events[3:] == [("exit", 0)]
     assert "AUDIAGENTIC_SERVICE_OWNER_EPOCH" not in launches[0]["env"]
     assert launches[0]["stdin"] == process.subprocess.DEVNULL
     assert launches[0]["stdout"] == process.subprocess.DEVNULL
@@ -34,6 +72,33 @@ def test_restart_reexecutes_after_close_with_original_args(monkeypatch):
     if process.sys.platform == "win32":
         assert launches[0]["creationflags"] == process.subprocess.CREATE_NO_WINDOW
     assert host.lifecycle.restart_enabled
+
+
+def test_unexpected_server_exit_relaunches_the_gateway(monkeypatch):
+    events = []
+    host = SimpleNamespace(
+        lifecycle=SimpleNamespace(restart_requested=False, exit_reason=None),
+        serve_forever=lambda: events.append("serve"),
+        close=lambda: events.append("close"),
+    )
+    monkeypatch.setattr(process.GatewayServiceHost, "create", lambda **kwargs: host)
+    launches = []
+    monkeypatch.setattr(process.subprocess, "Popen", lambda args, **kwargs: launches.append((args, kwargs)))
+    monkeypatch.setattr(process.os, "_exit", lambda code: events.append(("exit", code)))
+
+    process.main(["--port", "8765", "--token-file", "token"])
+
+    assert events == ["serve", "close", ("exit", 0)]
+    assert launches
+    assert host.lifecycle.restart_requested
+
+
+def test_close_deadline_reports_a_stranded_host(monkeypatch):
+    never = threading.Event()
+    host = SimpleNamespace(close=lambda: never.wait())
+    monkeypatch.setattr(process, "_CLOSE_DEADLINE_SECONDS", 0.01)
+
+    assert process._close_host_with_deadline(host) is False
 
 
 @pytest.mark.parametrize("action", ["restart", "cancel-request", "project-image"])

@@ -84,10 +84,37 @@ _NON_WORK_ACTIVITY_LABELS = frozenset({
     "worker-heartbeat",
     "process-heartbeat",
     "provider-turn-pending",
+    # Readiness inspection is not proof that the request was submitted.
+    "preflight-inspected",
+    "preflight-evaluated",
+    # Response polling keeps the owner lease alive, but is not proof that the
+    # provider DOM or response has changed.
+    "response-observing",
+    "delivery-timeout-retry",
     "transport-unknown",
+    # Recovery attempts are owner/observer liveness, not provider progress.
+    # In particular, reconstructed observers may emit this for an unchanged
+    # DOM while the request remains unresolved.
+    "recovery-observing",
 })
 _WORK_ACTIVITY_LABELS = frozenset({
+    # Provider-neutral DOM progress labels.  GPT-auto projects these from
+    # bounded, request-owned progress blocks; they are real work even when
+    # the assistant response text has not changed yet.
+    "inspected",
+    "fetching",
+    "analyzing",
+    "evaluated",
+    "dom-status",
+    "dom-progress",
+    "dom-tool-result",
+    "dom-connector",
+    "dom-citation",
+    "dom-table",
+    "dom-materialization",
+    "dom-activity",
     "thinking",
+    "generating",
     "searching-web",
     "searching-the-web",
     "read-resource",
@@ -98,28 +125,33 @@ _WORK_ACTIVITY_LABELS = frozenset({
     "tool-result",
     "tool-finished",
     "response-progress",
-    "response-observed",
     "response-started",
     "assistant-message",
     "thought",
     "in-progress",
+    # soft-liveness is an observer/client-lease signal. It is retained
+    # in the activity timeline, but is deliberately not provider-work proof.
+    # Provider-neutral tool progress used by ACP and other adapters.
+    "tool-progress",
+    "provider-progress",
+    "acp-progress",
+    "mcp-a2a-progress",
 })
 
 
 def is_meaningful_activity_label(value: str | None) -> bool:
     """Return whether *value* is evidence of actual provider work.
 
-    Heartbeats and contextual flags deliberately do not renew execution
-    liveness.  Progress labels are extensible by suffix so provider-neutral
-    values such as ``acp-progress`` remain valid without importing a provider
-    vocabulary into Foundation.
+    Heartbeats, contextual flags, and synthetic observer signals deliberately
+    do not renew execution liveness. The allowlist is intentionally explicit:
+    an arbitrary *-progress label must not become proof of provider work.
     """
     if not isinstance(value, str) or not value.strip():
         return False
     label = value.strip().lower().replace("_", "-").replace(" ", "-")
     if label in _NON_WORK_ACTIVITY_LABELS:
         return False
-    return label in _WORK_ACTIVITY_LABELS or label.endswith("-progress")
+    return label in _WORK_ACTIVITY_LABELS
 
 
 def is_meaningful_activity(source: str | None, phase: str | None = None) -> bool:
@@ -167,7 +199,13 @@ _ALLOWED_ATTRIBUTE_KEYS: Mapping[TransportObservationKind, frozenset[str]] = {
             "model_activity",  # e.g. "generating", "thinking" — proven only
         }
     ),
-    TransportObservationKind.TIMING: frozenset({"timing-event"}),
+    TransportObservationKind.TIMING: frozenset(
+        {
+            "timing-event",
+            "diagnostic-signature",
+            "diagnostic-details",
+        }
+    ),
     TransportObservationKind.TERMINAL: frozenset({"stop_reason", "error_code"}),
     TransportObservationKind.TRANSPORT_ERROR: frozenset({"error_code", "reason"}),
     TransportObservationKind.TRANSPORT_CLOSED: frozenset({}),
@@ -229,6 +267,7 @@ class SessionFailureDisposition(StrEnum):
     """
 
     RETAIN = "retain"
+    TERMINAL_FAILED = "terminal-failed"
     TERMINATE = "terminate"
 
 
@@ -460,8 +499,8 @@ class SessionTurnResult:
     """Bounded result of one prompt turn.
 
     Carries only the terminal stop reason, observed correlation quality, and
-    counts — no raw events, output text, or provider-native details. Output
-    delivery is the responsibility of the observation sink (AS21).
+    counts. A bounded terminal result may also carry canonical assistant text
+    plus its media type, but never raw provider events or native payloads.
     """
 
     turn_id: str
@@ -471,6 +510,7 @@ class SessionTurnResult:
     correlation_quality: CorrelationQuality = CorrelationQuality.REQUEST_SCOPED
     error_code: str | None = None
     final_summary: str | None = None
+    final_media_type: str | None = None
     metadata: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:

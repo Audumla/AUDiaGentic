@@ -24,13 +24,13 @@ def _upsert_ag_rig_source(project_root: Path, harness_cfg: dict) -> None:
         load_model_sources,
         write_model_sources,
     )
-    from audiagentic.foundation.config.harness import (
-        require_harness_rig_port,
-    )
+    from audiagentic.foundation.config.local_runtime import local_rig_port
 
     rig_section = harness_cfg.get("rig", {})
     model_name = rig_section.get("model") or "qwen3.5-0.8b"
-    port = require_harness_rig_port(harness_cfg)
+    # Persist only portable defaults. Machine overrides are resolved by the
+    # projection builder through base-url-env and must never be serialized.
+    port = local_rig_port(rig_section.get("port", 42001), use_env=False)
     document = load_model_sources(project_root)
     sources = document.setdefault("sources", {})
     desired = {
@@ -39,6 +39,7 @@ def _upsert_ag_rig_source(project_root: Path, harness_cfg: dict) -> None:
         "connector": "openai-compatible",
         "model-id": str(model_name),
         "base-url": f"http://127.0.0.1:{port}/v1",
+        "base-url-env": "AUDIAGENTIC_RIG_BASE_URL",
         "provider-overrides": {"provider-id": rig_section.get("provider", "audiagentic")},
         "enabled": True,
     }

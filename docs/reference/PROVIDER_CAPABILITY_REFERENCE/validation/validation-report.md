@@ -1,6 +1,10 @@
 # Validation Report
 
-Validated: 2026-07-17
+Validated: 2026-07-17 (historical package-validation snapshot)
+
+This report proves the package state checked on that date. It does not prove
+that upstream tools, installed versions, or runtime capabilities remain
+unchanged; revalidate those facts before relying on them today.
 
 ## Structural validation
 

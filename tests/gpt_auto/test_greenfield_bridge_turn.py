@@ -7,7 +7,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from audiagentic.components.providers.adapters.gpt_auto.chat import ChatState
+from audiagentic.components.providers.adapters.gpt_auto.chat import (
+    ChatState,
+    ProviderBindingIntegrityError,
+)
 from audiagentic.components.providers.adapters.gpt_auto.config import GptAutoConfig
 from audiagentic.components.providers.adapters.gpt_auto.gpt_auto_cdp import (
     ComposerSubmissionTimeout,
@@ -25,7 +28,12 @@ from audiagentic.components.providers.adapters.gpt_auto.turn import (
     TurnState,
     _facts,
     _progress_activity_labels,
+    _same_response_slot_replacement,
+    _terminal_same_response_slot_replacement,
     _scope_response_snapshot,
+)
+from audiagentic.components.providers.adapters.gpt_auto.urls import (
+    parse_provider_session_id,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.transports.agent_session import (
@@ -46,16 +54,21 @@ def snap(
     assistants=0,
     user=None,
     assistant=None,
+    assistant_markdown=None,
     assistant_id=None,
     user_id=None,
     generating=False,
     complete=False,
+    completion_signals=("completion-control", "more-actions-menu"),
     extra_signals=(),
     composer_editable=True,
     tool_activity_counts=(),
     progress_blocks=None,
+    dom_activity_digest=None,
     user_correlation=None,
     structural_hr_count=0,
+    error_alert_occurrences=(),
+    url="https://chatgpt.com/g/g-p-project/c/conversation-1",
 ):
     signals = set(extra_signals)
     if generating:
@@ -68,8 +81,7 @@ def snap(
         # deliberately not used: they can appear while output is still
         # streaming. Set the independently validated action-bar pair so
         # `complete=True` means "genuinely done" in happy-path fixtures.
-        signals.add("completion-control")
-        signals.add("more-actions-menu")
+        signals.update(completion_signals)
     resolved_user_id = user_id or (f"prompt-{users}" if users else None)
     resolved_assistant_id = assistant_id or (f"assistant-{assistants}" if assistants else None)
     # GP30: message_refs is the true-DOM-order sequence _await_response()'s
@@ -92,7 +104,13 @@ def snap(
         )
     if assistants and resolved_assistant_id:
         message_refs.append(
-            ChatMessageRef(role="assistant", message_id=resolved_assistant_id, text=assistant, sequence=1)
+            ChatMessageRef(
+                role="assistant",
+                message_id=resolved_assistant_id,
+                text=assistant,
+                sequence=1,
+                markdown=assistant_markdown,
+            )
         )
     if progress_blocks is None:
         progress_blocks = tuple(
@@ -106,7 +124,7 @@ def snap(
             for _ in range(count)
         )
     return ChatSnapshot(
-        url="https://chatgpt.com/g/g-p-project/c/conversation-1",
+        url=url,
         composer_present=True,
         composer_editable=composer_editable,
         user_count=users,
@@ -127,6 +145,9 @@ def snap(
         message_refs=tuple(message_refs),
         tool_activity_counts=tuple(tool_activity_counts),
         progress_blocks=tuple(progress_blocks),
+        dom_activity_digest=dom_activity_digest,
+        dom_activity_owner_prompt_id=resolved_user_id if dom_activity_digest else None,
+        error_alert_occurrences=tuple(error_alert_occurrences),
     )
 
 
@@ -229,12 +250,12 @@ class _Chat:
             ]
         )
         self.checkpoint_updates = []
-
+        self._page_mutation_owner_probe = None
     async def snapshot(self):
         return next(self._snapshots)
 
     async def acquire_provider_identity(self, initial):
-        self.provider_session_id = "conversation-1"
+        self.provider_session_id = parse_provider_session_id(initial.url)
         self.chat_url = initial.url
         self.state = ChatState.BUSY
         return initial
@@ -242,6 +263,9 @@ class _Chat:
     def mark_submission_unresolved(self, prompt_text=None):
         self.unresolved_turn_pending = True
         self.prompt_text = prompt_text
+
+    def set_page_mutation_owner_probe(self, probe):
+        self._page_mutation_owner_probe = probe
 
     def mark_prompt_submitted(self, prompt_id, assistant_before_id, prompt_text=None):
         self.unresolved_turn_pending = True
@@ -264,6 +288,22 @@ class _Chat:
 
     async def persist_unresolved_clear(self):
         self.checkpoint_updates.append({"unresolved-turn-pending": False})
+
+
+@pytest.mark.asyncio
+async def test_snapshot_for_observation_is_bounded_without_turn_deadline():
+    """A wedged CDP read must return control to recovery, not wedge the turn."""
+    chat = _Chat()
+    chat.config.cdp = SimpleNamespace(protocol_timeout_seconds=0.01)
+
+    async def hanging_snapshot():
+        await asyncio.Event().wait()
+
+    chat.snapshot = hanging_snapshot
+    turn = GptAutoTurn(chat, SessionPrompt(turn_id="snapshot-timeout", body="prompt"), lambda _: None)
+
+    with pytest.raises(asyncio.TimeoutError):
+        await turn._snapshot_for_observation()
 
 
 @pytest.mark.asyncio
@@ -339,9 +379,9 @@ async def test_await_response_never_returns_a_later_foreign_turns_answer():
 
     chat._snapshots = _snapshots_gen()
     turn = GptAutoTurn(chat, SessionPrompt(turn_id="turn-1", body="Review AU01"), lambda _: None)
-    with pytest.raises(AudiaGenticError, match="response recovery exhausted"):
-        await turn.run()
-    assert turn._response_message_id == "assistant-own"
+    with pytest.raises(asyncio.TimeoutError):
+        await asyncio.wait_for(turn.run(), timeout=0.5)
+    assert turn._response_message_id != "assistant-foreign"
 
 
 @pytest.mark.asyncio
@@ -362,6 +402,46 @@ async def test_submission_proof_reports_observation_failure_instead_of_unbound_l
     )
     with pytest.raises(AudiaGenticError, match="RuntimeError: CDP observation unavailable"):
         await turn._await_submission_proof(snap(users=1, user="Review AU01"))
+
+
+@pytest.mark.asyncio
+async def test_submission_proof_materializes_missing_first_render_without_resend():
+    """A new local-chatgpt view may mount Working before message nodes."""
+    chat = _Chat()
+    chat.provider_session_id = "conversation-1"
+    chat.chat_url = "https://chatgpt.com/g/g-p-project/c/conversation-1"
+    refreshed = []
+    activities = []
+
+    async def refresh_bound_conversation(**kwargs):
+        refreshed.append(kwargs)
+        chat._snapshots = iter(
+            [
+                snap(dom_activity_digest="render-1"),
+                snap(users=1, user="Review AU01"),
+                snap(users=1, user="Review AU01"),
+            ]
+        )
+        return True
+
+    chat.refresh_bound_conversation = refresh_bound_conversation
+    chat._snapshots = iter([snap()])
+    turn = GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="turn-materialize-first-render", body="Review AU01"),
+        activities.append,
+    )
+
+    result = await turn._await_submission_proof(snap())
+
+    assert result is not None
+    assert len(refreshed) == 1
+    assert refreshed[0]["trigger"] == "submission-proof-materialization"
+    assert turn._initial_refresh_succeeded is True
+    assert any(
+        getattr(item, "attributes", {}).get("model_activity") == "dom-activity"
+        for item in activities
+    )
 
 
 @pytest.mark.asyncio
@@ -387,12 +467,21 @@ async def test_turn_proves_submission_once_and_completes_from_atomic_snapshots()
         for observation in observations
         if observation.kind is TransportObservationKind.TIMING
     ]
-    assert [observation.attributes["timing-event"] for observation in timing] == [
-        "attempt-start",
-        "submit-confirmed",
-        "first-assistant-text",
-    ]
-    assert all(set(observation.attributes) == {"timing-event"} for observation in timing)
+    timing_events = [observation.attributes["timing-event"] for observation in timing]
+    assert timing_events[:2] == ["attempt-start", "submit-confirmed"]
+    assert timing_events.count("first-assistant-text") == 1
+    assert "response-decision" in timing_events
+    assert all(
+        set(observation.attributes) == {"timing-event"}
+        for observation in timing
+        if observation.attributes["timing-event"] != "response-decision"
+    )
+    assert all(
+        {"timing-event", "diagnostic-signature", "diagnostic-details"}
+        <= set(observation.attributes)
+        for observation in timing
+        if observation.attributes["timing-event"] == "response-decision"
+    )
 
 
 @pytest.mark.asyncio
@@ -466,11 +555,38 @@ async def test_initial_blank_page_settings_do_not_authorize_a_refresh():
     )
     turn.state = TurnState.AWAITING_RESPONSE
     turn._prompt_message_id = "prompt-1"
-    with pytest.raises(AudiaGenticError, match="response recovery exhausted"):
+    with pytest.raises(ProviderBindingIntegrityError, match="conversation changed"):
         await turn._await_response(snap(users=1, user="Review AU01"), blank)
 
-    assert refreshes == [True]
+    assert refreshes == []
     assert turn._initial_refresh_attempted is False
+
+
+def test_response_scope_rejects_pinned_conversation_when_route_disappears():
+    baseline = snap(
+        users=1,
+        user="Request A",
+        user_id="prompt-a",
+        url="https://chatgpt.com/g/g-p-project/c/conversation-a",
+    )
+    retained_completion = snap(
+        users=1,
+        user="Request A",
+        user_id="prompt-a",
+        assistants=1,
+        assistant="Retained completed answer",
+        assistant_id="assistant-a",
+        complete=True,
+        url="https://chatgpt.com/g/g-p-project/project",
+    )
+
+    with pytest.raises(ProviderBindingIntegrityError, match="conversation changed"):
+        _scope_response_snapshot(
+            baseline,
+            retained_completion,
+            prompt_message_id="prompt-a",
+            prompt_text="Request A",
+        )
 
 
 @pytest.mark.asyncio
@@ -559,6 +675,143 @@ async def test_connection_interrupted_emits_synthetic_activity_until_completion(
     ]
     assert len(connection_activity) == 2
     assert all(observation.kind is TransportObservationKind.ACTIVITY for observation in connection_activity)
+
+
+@pytest.mark.asyncio
+async def test_connection_interrupted_overrides_partial_completion_controls():
+    """A partial answer with Copy/Stop evidence must still enter recovery."""
+    chat = _Chat()
+    chat.runtime.config.turn.response_refresh_attempts = 6
+    chat.runtime.config.turn.response_no_activity_refresh_seconds = 240
+    chat.runtime.config.turn.response_interruption_activity_interval_seconds = 0
+    interrupted_partial = replace(
+        snap(
+            users=1,
+            assistants=1,
+            user="Review AU01",
+            assistant="Partial answer before connection loss",
+            complete=True,
+            generating=True,
+        ),
+        dom_signals=frozenset({"provider-interruption", "response-complete"}),
+    )
+    completed = snap(
+        users=1,
+        assistants=1,
+        user="Review AU01",
+        assistant="Recovered complete answer",
+        complete=True,
+    )
+    chat._snapshots = iter([interrupted_partial, completed, completed, completed])
+    refreshes: list[bool] = []
+    observations = []
+
+    async def refresh() -> bool:
+        refreshes.append(True)
+        return True
+
+    chat._refresh_for_response_recovery = refresh
+    turn = GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="turn-interrupted-partial", body="Review AU01"),
+        observations.append,
+    )
+    turn.state = TurnState.AWAITING_RESPONSE
+    turn._prompt_message_id = "prompt-1"
+
+    assert (
+        await turn._await_response(
+            snap(users=1, user="Review AU01"), interrupted_partial
+        )
+        == "Recovered complete answer"
+    )
+    assert refreshes == [True]
+    assert any(
+        observation.attributes.get("model_activity") == "connection-refreshing"
+        for observation in observations
+    )
+
+
+@pytest.mark.asyncio
+async def test_provider_busy_heartbeat_does_not_renew_real_session_activity():
+    from unittest.mock import Mock
+    chat = _Chat()
+    chat.mark_validated_activity = Mock()
+    observations = []
+    turn = GptAutoTurn(chat, SessionPrompt(turn_id="busy-lease", body="prompt"), observations.append)
+    await turn._emit(TransportObservationKind.ACTIVITY, {"model_activity": "provider-busy"})
+    chat.mark_validated_activity.assert_not_called()
+    assert observations[-1].attributes['model_activity'] == 'provider-busy'
+
+
+@pytest.mark.asyncio
+async def test_soft_liveness_does_not_renew_physical_tab_activity():
+    from unittest.mock import Mock
+
+    chat = _Chat()
+    chat.mark_validated_activity = Mock()
+    observations = []
+    turn = GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="soft-lease", body="prompt"),
+        observations.append,
+    )
+
+    await turn._emit(
+        TransportObservationKind.ACTIVITY,
+        {"model_activity": "soft-liveness"},
+    )
+
+    chat.mark_validated_activity.assert_not_called()
+    assert observations[-1].attributes["model_activity"] == "soft-liveness"
+
+@pytest.mark.asyncio
+async def test_response_observer_emits_busy_lease_for_current_prompt():
+    chat = _Chat()
+    busy = snap(users=1, user="Review AU01", generating=True)
+    completed = snap(users=1, assistants=1, user="Review AU01", assistant="done", complete=True)
+    chat._snapshots = iter([busy, busy, completed, completed, completed])
+    observations = []
+    turn = GptAutoTurn(chat, SessionPrompt(turn_id="busy-observer", body="Review AU01"), observations.append)
+    turn._HEARTBEAT_INTERVAL_SECONDS = 0
+    turn.state = TurnState.AWAITING_RESPONSE
+    turn._prompt_message_id = "prompt-1"
+    assert await turn._await_response(snap(users=1, user="Review AU01"), busy) == "done"
+    assert any(item.attributes.get('model_activity') == 'provider-busy' for item in observations)
+
+
+@pytest.mark.asyncio
+async def test_response_observer_renews_lease_when_generating_flag_is_temporarily_absent():
+    """A started response can be busy while the DOM briefly loses ``generating``.
+
+    The observer must keep the request lease alive without treating polling as
+    model progress or resetting the physical-tab inactivity clock.
+    """
+    chat = _Chat()
+    working = snap(users=1, assistants=1, user="Review AU01", assistant="Working")
+    completed = snap(
+        users=1,
+        assistants=1,
+        user="Review AU01",
+        assistant="done",
+        complete=True,
+    )
+    chat._snapshots = iter([working, working, completed, completed, completed])
+    observations = []
+    turn = GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="observing-lease", body="Review AU01"),
+        observations.append,
+    )
+    turn._HEARTBEAT_INTERVAL_SECONDS = 0
+    turn.state = TurnState.AWAITING_RESPONSE
+    turn._prompt_message_id = "prompt-1"
+
+    assert await turn._await_response(snap(users=1, user="Review AU01"), working) == "done"
+    assert any(
+        item.attributes.get("model_activity") == "response-observing"
+        for item in observations
+    )
 
 
 @pytest.mark.asyncio
@@ -671,6 +924,69 @@ async def test_interruption_does_not_mask_terminal_provider_error(error_signal):
     assert caught.value.details["failure-reason"] == "provider-failure-policy-matched"
     assert error_signal in caught.value.details["evidence"]
 
+@pytest.mark.asyncio
+async def test_fresh_request_error_overrides_copy_regenerate_completion_shape():
+    """A fresh request-owned provider error must not be returned as success
+    merely because a partial answer exposes Copy/Regenerate controls."""
+    chat = _Chat()
+    baseline = snap(users=1, user="Review AU01", user_id="prompt-1")
+    failed_partial = snap(
+        users=1,
+        assistants=1,
+        user="Review AU01",
+        user_id="prompt-1",
+        assistant="Partial answer before provider failure",
+        assistant_id="assistant-1",
+        complete=True,
+        extra_signals=("error-alert", "request-error-alert"),
+        error_alert_occurrences=(("fresh-error", "prompt-1"),),
+    )
+    chat._snapshots = iter([failed_partial])
+    turn = GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="turn-fresh-error", body="Review AU01"),
+        lambda _: None,
+    )
+    turn.state = TurnState.AWAITING_RESPONSE
+    turn._prompt_message_id = "prompt-1"
+
+    with pytest.raises(AudiaGenticError) as caught:
+        await turn._await_response(baseline, baseline)
+
+    assert caught.value.details["failure-reason"] == "provider-failure-policy-matched"
+    assert "request-error-alert" in caught.value.details["evidence"]
+
+
+
+@pytest.mark.asyncio
+async def test_body_only_network_error_overrides_copy_regenerate_completion_shape():
+    """A document-level network error must remain request-owned with partial text."""
+    chat = _Chat()
+    baseline = snap(users=1, user="Review AU01", user_id="prompt-1")
+    failed_partial = snap(
+        users=1,
+        assistants=1,
+        user="Review AU01",
+        user_id="prompt-1",
+        assistant="Partial answer before network failure",
+        assistant_id="assistant-1",
+        complete=True,
+        extra_signals=("network-error-alert",),
+    )
+    chat._snapshots = iter([failed_partial])
+    turn = GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="turn-body-network-error", body="Review AU01"),
+        lambda _: None,
+    )
+    turn.state = TurnState.AWAITING_RESPONSE
+    turn._prompt_message_id = "prompt-1"
+
+    with pytest.raises(AudiaGenticError) as caught:
+        await turn._await_response(baseline, baseline)
+
+    assert caught.value.details["failure-reason"] == "provider-failure-policy-matched"
+    assert "network-error-alert" in caught.value.details["evidence"]
 
 @pytest.mark.asyncio
 async def test_watchdog_revalidates_but_does_not_refresh_active_turn():
@@ -768,6 +1084,52 @@ async def test_active_turn_does_not_click_foreign_delivery_retry_control():
 
 
 @pytest.mark.asyncio
+async def test_delivery_timeout_retry_failure_does_not_terminal_fail_immediately():
+    """A retry click that finds no matching button (DOM flicker, or the
+    control not yet mounted/already gone) must not fall through to
+    evaluate response-failed against the same stale pre-click snapshot --
+    that would terminal-fail the turn on a transient timing race rather
+    than genuine provider failure. It must get one more poll to observe a
+    real recovery first."""
+    chat = _Chat()
+    baseline = snap(users=1, user="Review AU01")
+    timeout_snap = replace(
+        baseline,
+        dom_signals=frozenset({"delivery-timeout-retry", "error-alert"}),
+    )
+    recovered = snap(users=1, assistants=1, user="Review AU01", assistant="Recovered", complete=True)
+    chat._snapshots = iter([timeout_snap, recovered, recovered, recovered, recovered])
+    observations = []
+    retry_calls = 0
+
+    async def retry() -> bool:
+        nonlocal retry_calls
+        retry_calls += 1
+        return False
+
+    chat.retry_delivery_timeout = retry
+    turn = GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="turn-timeout-then-recovers", body="Review AU01"),
+        observations.append,
+    )
+    turn.state = TurnState.AWAITING_RESPONSE
+    turn._prompt_message_id = "prompt-1"
+
+    result = await turn._await_response(baseline, timeout_snap)
+
+    assert result == "Recovered"
+    assert retry_calls == 1
+    assert turn._delivery_timeout_retry_probe_failed is True
+    # The one-shot flag is only consumed by an actual click; a failed probe
+    # must not permanently block a later genuine retry within this turn.
+    assert turn._delivery_timeout_retry_attempted is False
+    assert "delivery-timeout-retry" not in [
+        observation.attributes.get("model_activity") for observation in observations
+    ]
+
+
+@pytest.mark.asyncio
 async def test_active_turn_does_not_click_retry_present_before_submission():
     chat = _Chat()
     stale_retry = replace(
@@ -843,20 +1205,19 @@ async def test_stale_progress_focus_probe_is_configurable_and_disabled():
     )
     turn.state = TurnState.AWAITING_RESPONSE
     turn._prompt_message_id = "prompt-1"
-    with pytest.raises(AudiaGenticError):
-        await turn._await_response(stale, stale)
+    with pytest.raises(asyncio.TimeoutError):
+        await asyncio.wait_for(turn._await_response(stale, stale), timeout=0.05)
     assert focused == []
     assert turn._stale_progress_focus_attempted is False
 
 
 @pytest.mark.asyncio
-async def test_stale_dom_response_conflict_refreshes_without_resubmitting() -> None:
-    """A renderer bump must recover the original turn, not fail it.
+async def test_terminal_response_slot_id_replacement_fails_closed() -> None:
+    """A terminal renderer ID bump must not adopt an unproven response node.
 
-    The first terminal-looking snapshot exposes a provisional assistant id;
-    refreshing the same retained conversation exposes the final id.  The
-    gateway must perform that read-only recovery exactly once and complete the
-    original request with one provider submission.
+    The first terminal-looking snapshot exposes a provisional assistant ID;
+    the next snapshot exposes a different ID in the same exact prompt-owned
+    response slot. This must not consume recovery or submit the prompt again.
     """
     chat = _Chat()
     final_snapshot = snap(
@@ -893,29 +1254,336 @@ async def test_stale_dom_response_conflict_refreshes_without_resubmitting() -> N
     )
     refresh_calls = 0
 
-    async def refresh_same_conversation() -> bool:
+    async def refresh_same_conversation(*_args, **_kwargs) -> bool:
         nonlocal refresh_calls
         refresh_calls += 1
         return True
 
-    chat._refresh_for_reconciliation = refresh_same_conversation
+    chat.refresh_bound_conversation = refresh_same_conversation
     turn = GptAutoTurn(
         chat,
         SessionPrompt(turn_id="turn-stale-dom", body="Review AU01"),
         lambda _observation: None,
     )
 
-    result = await turn.run()
-
-    assert result.final_summary == "final response"
+    with pytest.raises(AudiaGenticError, match="assistant identity changed"):
+        await turn.run()
     assert chat.runtime.bridge.submit_calls == 1
-    assert refresh_calls == 1
-    assert turn._response_message_id == "assistant-final"
+    assert refresh_calls == 0
 
 
 @pytest.mark.asyncio
-async def test_terminal_verification_conflict_uses_same_refresh_path() -> None:
-    """The independent verification read must not bypass identity recovery."""
+async def test_nonterminal_response_slot_id_replacement_fails_before_controls_appear() -> None:
+    """A remount must fail on the first changed-ID poll, not later at completion."""
+    chat = _Chat()
+    chat._snapshots = iter(
+        [
+            snap(),
+            snap(users=1, user="Review AU01"),
+            snap(users=1, user="Review AU01"),
+            snap(users=1, user="Review AU01", generating=True),
+            snap(
+                users=1,
+                assistants=1,
+                user="Review AU01",
+                assistant="partial",
+                assistant_id="assistant-a",
+            ),
+            snap(
+                users=1,
+                assistants=1,
+                user="Review AU01",
+                assistant="partial",
+                assistant_id="assistant-b",
+            ),
+            snap(
+                users=1,
+                assistants=1,
+                user="Review AU01",
+                assistant="complete later",
+                assistant_id="assistant-b",
+                complete=True,
+            ),
+        ]
+    )
+    turn = GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="turn-nonterminal-replacement", body="Review AU01"),
+        lambda _observation: None,
+    )
+
+    with pytest.raises(AudiaGenticError, match="assistant identity changed"):
+        await turn.run()
+
+
+@pytest.mark.asyncio
+async def test_terminal_replacement_after_recovery_budget_fails_closed() -> None:
+    """A replacement with new text cannot bypass the identity boundary."""
+    chat = _Chat()
+    final_snapshot = snap(
+        users=1,
+        assistants=1,
+        user="Review AU01",
+        assistant="final response",
+        assistant_id="assistant-final",
+        complete=True,
+    )
+    chat._snapshots = iter(
+        [
+            snap(),
+            snap(users=1, user="Review AU01"),
+            snap(users=1, user="Review AU01"),
+            snap(users=1, user="Review AU01", generating=True),
+            snap(
+                users=1,
+                assistants=1,
+                user="Review AU01",
+                assistant="partial response",
+                assistant_id="assistant-provisional",
+            ),
+            final_snapshot,
+        ]
+        + [final_snapshot] * 20
+    )
+    refresh_calls = 0
+
+    async def refresh_same_conversation(*_args, **_kwargs) -> bool:
+        nonlocal refresh_calls
+        refresh_calls += 1
+        return True
+
+    chat.refresh_bound_conversation = refresh_same_conversation
+    turn = GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="turn-replacement-after-recovery", body="Review AU01"),
+        lambda _observation: None,
+    )
+
+    original_snapshot = chat.snapshot
+
+    async def snapshot_with_exhausted_recovery():
+        observed = await original_snapshot()
+        if observed.latest_assistant_id == "assistant-provisional":
+            turn._response_recovery_refresh_attempts = 1
+            turn._response_recovery_final_grace_started_at = 0.0
+        return observed
+
+    chat.snapshot = snapshot_with_exhausted_recovery
+
+    with pytest.raises(AudiaGenticError, match="assistant identity changed"):
+        await turn.run()
+    assert refresh_calls == 0
+    assert chat.runtime.bridge.submit_calls == 1
+
+
+def test_same_response_slot_replacement_requires_one_prompt_owned_assistant() -> None:
+    current = replace(
+        snap(
+            users=1,
+            assistants=1,
+            user="Review AU01",
+            assistant="final",
+            assistant_id="assistant-new",
+        ),
+        latest_user_id="prompt-1",
+        message_refs=(
+            ChatMessageRef(role="user", message_id="prompt-1", text="Review AU01", sequence=0),
+            ChatMessageRef(role="assistant", message_id="assistant-new", text="final", sequence=1),
+        ),
+    )
+
+    assert _same_response_slot_replacement(
+        current,
+        prompt_message_id="prompt-1",
+        old_assistant_id="assistant-old",
+        new_assistant_id="assistant-new",
+    )
+
+    with_later_user = replace(
+        current,
+        user_count=2,
+        latest_user_id="prompt-2",
+        message_refs=current.message_refs
+        + (
+            ChatMessageRef(role="user", message_id="prompt-2", text="Later", sequence=2),
+        ),
+    )
+    assert not _same_response_slot_replacement(
+        with_later_user,
+        prompt_message_id="prompt-1",
+        old_assistant_id="assistant-old",
+        new_assistant_id="assistant-new",
+    )
+
+    with_two_assistants = replace(
+        current,
+        message_refs=current.message_refs
+        + (
+            ChatMessageRef(role="assistant", message_id="assistant-other", text="Other", sequence=2),
+        ),
+    )
+    assert not _same_response_slot_replacement(
+        with_two_assistants,
+        prompt_message_id="prompt-1",
+        old_assistant_id="assistant-old",
+        new_assistant_id="assistant-new",
+    )
+
+
+def test_durable_assistant_remount_is_adopted_only_with_terminal_dom_witness() -> None:
+    terminal = replace(
+        snap(
+            users=1,
+            assistants=1,
+            user="Review AU01",
+            user_id="prompt-1",
+            assistant="final response",
+            assistant_id="assistant-new",
+            complete=True,
+        ),
+        message_refs=(
+            ChatMessageRef(role="user", message_id="prompt-1", text="Review AU01", sequence=0),
+            ChatMessageRef(
+                role="assistant",
+                message_id="assistant-new",
+                text="final response",
+                sequence=1,
+            ),
+        ),
+    )
+
+    assert _terminal_same_response_slot_replacement(
+        terminal,
+        prompt_message_id="prompt-1",
+        old_assistant_id="assistant-old",
+        new_assistant_id="assistant-new",
+    )
+
+    assert not _terminal_same_response_slot_replacement(
+        replace(terminal, generating=True, dom_signals=frozenset({"stop-control"})),
+        prompt_message_id="prompt-1",
+        old_assistant_id="assistant-old",
+        new_assistant_id="assistant-new",
+    )
+
+
+def test_fallback_assistant_remount_is_accepted_only_for_same_prompt_slot() -> None:
+    baseline = replace(
+        snap(
+            users=1,
+            assistants=1,
+            user="Review AU01",
+            assistant="partial",
+            assistant_id="fallback-assistant-0",
+        ),
+        latest_user_id="prompt-1",
+        message_refs=(
+            ChatMessageRef(role="user", message_id="prompt-1", text="Review AU01", sequence=0),
+            ChatMessageRef(
+                role="assistant",
+                message_id="fallback-assistant-0",
+                text="partial",
+                sequence=1,
+            ),
+        ),
+    )
+    current = replace(
+        baseline,
+        latest_assistant_id="fallback-assistant-1",
+        latest_assistant_text="final",
+        message_refs=(
+            baseline.message_refs[0],
+            ChatMessageRef(
+                role="assistant",
+                message_id="fallback-assistant-1",
+                text="final",
+                sequence=1,
+            ),
+        ),
+    )
+
+    scoped, response_ref = _scope_response_snapshot(
+        baseline,
+        current,
+        prompt_message_id="prompt-1",
+        prompt_text="Review AU01",
+        virtualized_assistant_id="fallback-assistant-0",
+        bound_assistant_id="fallback-assistant-0",
+    )
+
+    assert scoped.latest_assistant_id == "fallback-assistant-1"
+    assert response_ref is not None
+    assert response_ref.message_id == "fallback-assistant-1"
+
+@pytest.mark.asyncio
+async def test_repeated_id_only_replacements_cannot_bypass_recovery() -> None:
+    """Renderer churn alone must not reset the no-activity recovery budget."""
+    chat = _Chat()
+    chat.config.turn.response_no_activity_refresh_seconds = 0.01
+    chat.config.turn.response_refresh_attempts = 1
+    chat.config.turn.response_refresh_final_grace_seconds = 0
+    churn = [
+        snap(
+            users=1,
+            assistants=1,
+            user="Review AU01",
+            assistant="same response",
+            assistant_id=f"assistant-churn-{index}",
+            complete=True,
+        )
+        for index in range(2, 32)
+    ]
+    prefix = [
+        snap(),
+        snap(users=1, user="Review AU01"),
+        snap(users=1, user="Review AU01"),
+        snap(users=1, user="Review AU01", generating=True),
+        snap(
+            users=1,
+            assistants=1,
+            user="Review AU01",
+            assistant="same response",
+            assistant_id="assistant-churn-1",
+        ),
+        snap(
+            users=1,
+            assistants=1,
+            user="Review AU01",
+            assistant="same response",
+            assistant_id="assistant-churn-1",
+            complete=True,
+        ),
+    ]
+
+    def snapshot_stream():
+        yield from prefix
+        while True:
+            yield from churn
+
+    chat._snapshots = iter(snapshot_stream())
+    refresh_calls = 0
+
+    async def refresh_same_conversation(*_args, **_kwargs) -> bool:
+        nonlocal refresh_calls
+        refresh_calls += 1
+        return True
+
+    chat.refresh_bound_conversation = refresh_same_conversation
+    turn = GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="turn-repeated-id-churn", body="Review AU01"),
+        lambda _observation: None,
+    )
+
+    with pytest.raises(AudiaGenticError, match="assistant identity changed"):
+        await turn.run()
+    assert refresh_calls == 0
+    assert chat.runtime.bridge.submit_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_terminal_verification_rejects_same_response_slot_replacement() -> None:
+    """Terminal verification must reject a changed assistant identity."""
     chat = _Chat()
     final_snapshot = snap(
         users=1,
@@ -946,8 +1614,8 @@ async def test_terminal_verification_conflict_uses_same_refresh_path() -> None:
                 assistant_id="assistant-candidate",
                 complete=True,
             ),
-            # The independent verification read sees a different DOM id but
-            # identical text; this must trigger the same bounded refresh.
+            # The independent verification read sees a different DOM ID but
+            # identical text in the same prompt-owned slot.
             snap(
                 users=1,
                 assistants=1,
@@ -973,18 +1641,85 @@ async def test_terminal_verification_conflict_uses_same_refresh_path() -> None:
         lambda _observation: None,
     )
 
-    result = await turn.run()
-
-    assert result.final_summary == "final response"
+    with pytest.raises(AudiaGenticError, match="assistant identity changed"):
+        await turn.run()
     assert chat.runtime.bridge.submit_calls == 1
-    assert refresh_calls == 1
-    assert turn._response_message_id == "assistant-final"
+    assert refresh_calls == 0
 
 
 @pytest.mark.asyncio
-async def test_second_response_conflict_fails_without_second_refresh_or_submit() -> None:
-    """A bounded refresh cannot turn correlation ambiguity into a loop."""
+async def test_stale_error_does_not_mask_id_only_remount_failure() -> None:
+    """A stale error cannot make an assistant identity change safe."""
     chat = _Chat()
+    final_snapshot = snap(
+        users=1,
+        assistants=1,
+        user="Review AU01",
+        assistant="final response",
+        assistant_id="assistant-final",
+        complete=True,
+    )
+    stale_remount = snap(
+        users=1,
+        assistants=1,
+        user="Review AU01",
+        assistant="final response",
+        assistant_id="assistant-final",
+        complete=True,
+        extra_signals=("error-page",),
+    )
+    chat._snapshots = iter(
+        [
+            snap(),
+            snap(users=1, user="Review AU01"),
+            snap(users=1, user="Review AU01"),
+            snap(users=1, user="Review AU01", generating=True),
+            snap(
+                users=1,
+                assistants=1,
+                user="Review AU01",
+                assistant="final response",
+                assistant_id="assistant-candidate",
+                complete=True,
+                extra_signals=("error-page",),
+            ),
+            stale_remount,
+            final_snapshot,
+        ]
+        + [final_snapshot] * 20
+    )
+    turn = GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="turn-stale-error-remount", body="Review AU01"),
+        lambda _observation: None,
+    )
+
+    with pytest.raises(AudiaGenticError, match="assistant identity changed"):
+        await turn.run()
+    assert chat.runtime.bridge.submit_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_ambiguous_response_identity_fails_closed_immediately() -> None:
+    """Coexisting assistant nodes fail closed without recovery adoption."""
+    chat = _Chat()
+    ambiguous = replace(
+        snap(
+            users=1,
+            assistants=2,
+            user="Review AU01",
+            assistant="final",
+            assistant_id="assistant-b",
+            complete=True,
+        ),
+        latest_assistant_id="assistant-c",
+        message_refs=(
+            ChatMessageRef(role="user", message_id="prompt-1", text="Review AU01", sequence=0),
+            ChatMessageRef(role="assistant", message_id="assistant-b", text="final", sequence=1),
+            ChatMessageRef(role="assistant", message_id="assistant-c", text="final", sequence=2),
+        ),
+        terminal_witness_assistant_id="assistant-c",
+    )
     chat._snapshots = iter(
         [
             snap(),
@@ -998,32 +1733,10 @@ async def test_second_response_conflict_fails_without_second_refresh_or_submit()
                 assistant="partial",
                 assistant_id="assistant-a",
             ),
-            snap(
-                users=1,
-                assistants=1,
-                user="Review AU01",
-                assistant="final",
-                assistant_id="assistant-b",
-                complete=True,
-            ),
+            ambiguous,
         ]
         + [
-            snap(
-                users=1,
-                assistants=1,
-                user="Review AU01",
-                assistant="final",
-                assistant_id="assistant-b",
-                complete=True,
-            ),
-            snap(
-                users=1,
-                assistants=1,
-                user="Review AU01",
-                assistant="final",
-                assistant_id="assistant-c",
-                complete=True,
-            )
+            ambiguous,
         ]
         * 20
     )
@@ -1041,12 +1754,9 @@ async def test_second_response_conflict_fails_without_second_refresh_or_submit()
         lambda _observation: None,
     )
 
-    with pytest.raises(AudiaGenticError) as captured:
+    with pytest.raises(AudiaGenticError, match="assistant identity changed"):
         await turn.run()
-
-    assert captured.value.code == "EXT-GPTAUTO-004"
-    assert captured.value.details["failure-reason"] == "frozen-response-correlation-conflict"
-    assert refresh_invocations == 2  # second call is the guard check, not a second refresh
+    assert refresh_invocations == 0
     assert chat.runtime.bridge.submit_calls == 1
 
 
@@ -1206,6 +1916,49 @@ async def test_tool_app_activity_emits_progress_when_response_text_is_unchanged(
     assert {obs.attributes.get("model_activity") for obs in tool_progress} >= {
         "called-tool", "talked-to-app"
     }
+
+
+@pytest.mark.asyncio
+async def test_dom_activity_emits_progress_when_text_and_known_rows_are_unchanged():
+    """Structural/ARIA DOM mutations renew a long-running response."""
+    chat = _Chat()
+    observations = []
+    chat._snapshots = iter(
+        [
+            snap(),
+            snap(users=1, user="Review AU01"),
+            snap(users=1, user="Review AU01"),
+            snap(users=1, user="Review AU01", generating=True),
+            snap(
+                users=1,
+                assistants=1,
+                user="Review AU01",
+                assistant="Working",
+                dom_activity_digest="dom-state-1",
+            ),
+            snap(
+                users=1,
+                assistants=1,
+                user="Review AU01",
+                assistant="Working",
+                dom_activity_digest="dom-state-2",
+            ),
+            snap(users=1, assistants=1, user="Review AU01", assistant="Done", complete=True),
+            snap(users=1, assistants=1, user="Review AU01", assistant="Done", complete=True),
+            snap(users=1, assistants=1, user="Review AU01", assistant="Done", complete=True),
+        ]
+    )
+
+    result = await GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="turn-dom-activity", body="Review AU01"),
+        observations.append,
+    ).run()
+
+    assert result.stop_reason == "end-turn"
+    assert any(
+        obs.attributes.get("model_activity") == "dom-activity" for obs in observations
+    )
 
 
 @pytest.mark.asyncio
@@ -1428,6 +2181,872 @@ def test_progress_digest_change_is_activity_even_when_row_count_is_constant():
     assert _progress_activity_labels(snap(progress_blocks=(changed,)), seen) == ()
 
 
+def test_progress_remove_then_same_remount_does_not_renew_activity():
+    seen: Counter[ChatProgressBlock] = Counter()
+    block = ChatProgressBlock("prompt-1", "assistant-1", "dom-tool-result", "1111111111111111")
+    changed = ChatProgressBlock("prompt-1", "assistant-1", "dom-tool-result", "2222222222222222")
+
+    assert _progress_activity_labels(snap(progress_blocks=(block,)), seen) == ("dom-tool-result",)
+    assert _progress_activity_labels(snap(progress_blocks=()), seen) == ()
+    assert _progress_activity_labels(snap(progress_blocks=(block,)), seen) == ()
+    assert _progress_activity_labels(snap(progress_blocks=(changed,)), seen) == ("dom-tool-result",)
+    assert _progress_activity_labels(snap(progress_blocks=(changed,)), seen) == ()
+
+
+def test_progress_scope_rejects_foreign_and_unproven_assistant_ownership():
+    baseline = snap(users=1, user="Request A", user_id="prompt-a")
+    pre_assistant = ChatProgressBlock("prompt-a", None, "dom-status", "1111111111111111")
+    matching = ChatProgressBlock("prompt-a", "assistant-a", "dom-tool-result", "2222222222222222")
+    wrong_assistant = ChatProgressBlock("prompt-a", "assistant-foreign", "dom-connector", "3333333333333333")
+    foreign_prompt = ChatProgressBlock("prompt-foreign", None, "dom-table", "4444444444444444")
+    raw = replace(
+        snap(users=1, assistants=1, user="Request A", user_id="prompt-a", assistant="Answer A", assistant_id="assistant-a"),
+        message_refs=(
+            ChatMessageRef("user", "prompt-a", "Request A", 0),
+            ChatMessageRef("assistant", "assistant-a", "Answer A", 1),
+        ),
+        progress_blocks=(pre_assistant, matching, wrong_assistant, foreign_prompt),
+        tool_activity_counts=(("called-tool", 99),),
+    )
+    scoped, response_ref = _scope_response_snapshot(baseline, raw, prompt_message_id="prompt-a")
+    assert response_ref is not None and response_ref.message_id == "assistant-a"
+    assert scoped.progress_blocks == (pre_assistant, matching)
+    assert scoped.tool_activity_counts == ()
+
+
+def test_scope_fails_when_bound_assistant_is_hidden_by_later_turn():
+    baseline = snap(users=1, user="Request A", user_id="prompt-a")
+    raw = replace(
+        baseline,
+        user_count=2,
+        assistant_count=2,
+        latest_user_id="prompt-b",
+        latest_assistant_id="assistant-b",
+        latest_assistant_text="Later answer",
+        message_refs=(
+            ChatMessageRef("user", "prompt-a", "Request A", 0),
+            ChatMessageRef("user", "prompt-b", "Later request", 1),
+            ChatMessageRef("assistant", "assistant-b", "Later answer", 2),
+        ),
+    )
+
+    with pytest.raises(
+        ProviderBindingIntegrityError,
+        match="assistant identity changed",
+    ):
+        _scope_response_snapshot(
+            baseline,
+            raw,
+            prompt_message_id="prompt-a",
+            bound_assistant_id="assistant-a",
+        )
+
+
+def test_scope_fails_when_bound_prompt_and_assistant_are_both_virtualized():
+    baseline = snap(users=1, user="Request A", user_id="prompt-a")
+    raw = replace(
+        baseline,
+        user_count=1,
+        assistant_count=1,
+        latest_user_id="prompt-b",
+        latest_assistant_id="assistant-b",
+        latest_assistant_text="Later answer",
+        message_refs=(
+            ChatMessageRef("user", "prompt-b", "Later request", 0),
+            ChatMessageRef("assistant", "assistant-b", "Later answer", 1),
+        ),
+    )
+
+    with pytest.raises(
+        ProviderBindingIntegrityError,
+        match="assistant identity changed",
+    ):
+        _scope_response_snapshot(
+            baseline,
+            raw,
+            prompt_message_id="prompt-a",
+            bound_assistant_id="assistant-a",
+        )
+
+
+def test_scope_does_not_rebind_a_real_prompt_id_by_text():
+    baseline = snap(users=1, user="Request A", user_id="prompt-a")
+    raw = replace(
+        baseline,
+        user_count=1,
+        assistant_count=1,
+        latest_user_id="prompt-b",
+        latest_assistant_id="assistant-b",
+        latest_assistant_text="Answer B",
+        message_refs=(
+            ChatMessageRef("user", "prompt-b", "Request A", 0),
+            ChatMessageRef("assistant", "assistant-b", "Answer B", 1),
+        ),
+    )
+
+    scoped, response_ref = _scope_response_snapshot(
+        baseline,
+        raw,
+        prompt_message_id="real-prompt-a",
+        prompt_text="Request A",
+    )
+
+    assert response_ref is None
+    assert scoped.latest_assistant_id == baseline.latest_assistant_id
+
+
+def test_scope_rejects_unpinned_prompt_unmounted_completion():
+    baseline = snap(users=1, user="Request A", user_id="prompt-a")
+    raw = replace(
+        baseline,
+        user_count=0,
+        assistant_count=1,
+        latest_user_id=None,
+        latest_assistant_id="assistant-b",
+        latest_assistant_text="Later answer",
+        terminal_witness_assistant_id="assistant-b",
+        message_refs=(ChatMessageRef("assistant", "assistant-b", "Later answer", 0),),
+    )
+
+    with pytest.raises(
+        ProviderBindingIntegrityError,
+        match="unpinned after prompt virtualization",
+    ):
+        _scope_response_snapshot(
+            baseline,
+            raw,
+            prompt_message_id="prompt-a",
+            allow_virtualized_prompt=True,
+        )
+
+
+def test_scope_pins_first_terminal_assistant_after_empty_baseline_prompt_virtualization():
+    assistant_id = "76f09062-4cd7-4179-84f2-4da57cf8ac62"
+    baseline = snap()
+    raw = replace(
+        snap(
+            assistants=1,
+            assistant="Completed answer",
+            assistant_id=assistant_id,
+            complete=True,
+        ),
+        assistant_message_ids=(assistant_id,),
+        assistant_message_texts=("Completed answer",),
+    )
+
+    scoped, response_ref = _scope_response_snapshot(
+        baseline,
+        raw,
+        prompt_message_id="virtualized-prompt",
+        allow_virtualized_prompt=True,
+        allow_empty_baseline_virtualized_assistant=True,
+    )
+
+    assert response_ref is not None
+    assert response_ref.message_id == assistant_id
+    assert scoped.latest_assistant_id == assistant_id
+    assert scoped.latest_assistant_text == "Completed answer"
+
+
+@pytest.mark.parametrize(
+    ("baseline", "raw"),
+    (
+        pytest.param(
+            snap(users=1, user="Earlier prompt", user_id="earlier-prompt"),
+            replace(
+                snap(
+                    assistants=1,
+                    assistant="Answer",
+                    assistant_id="76f09062-4cd7-4179-84f2-4da57cf8ac62",
+                    complete=True,
+                ),
+                assistant_message_ids=("76f09062-4cd7-4179-84f2-4da57cf8ac62",),
+            ),
+            id="nonempty-baseline",
+        ),
+        pytest.param(
+            snap(),
+            replace(
+                snap(
+                    assistants=2,
+                    assistant="Newest answer",
+                    assistant_id="76f09062-4cd7-4179-84f2-4da57cf8ac62",
+                    complete=True,
+                ),
+                assistant_message_ids=(
+                    "4e6a06b1-ff8a-4ba7-9944-4d0edfeab521",
+                    "76f09062-4cd7-4179-84f2-4da57cf8ac62",
+                ),
+                message_refs=(
+                    ChatMessageRef(
+                        "assistant",
+                        "4e6a06b1-ff8a-4ba7-9944-4d0edfeab521",
+                        "Earlier answer",
+                        0,
+                    ),
+                    ChatMessageRef(
+                        "assistant",
+                        "76f09062-4cd7-4179-84f2-4da57cf8ac62",
+                        "Newest answer",
+                        1,
+                    ),
+                ),
+            ),
+            id="multiple-assistants",
+        ),
+        pytest.param(
+            snap(),
+            replace(
+                snap(
+                    assistants=1,
+                    assistant="Answer",
+                    assistant_id="fallback-assistant-0",
+                    complete=True,
+                ),
+                assistant_message_ids=("fallback-assistant-0",),
+            ),
+            id="nondurable-assistant",
+        ),
+    ),
+)
+def test_scope_rejects_ambiguous_empty_baseline_virtualized_assistant(baseline, raw):
+    with pytest.raises(
+        ProviderBindingIntegrityError,
+        match="unpinned after prompt virtualization",
+    ):
+        _scope_response_snapshot(
+            baseline,
+            raw,
+            prompt_message_id="virtualized-prompt",
+            allow_virtualized_prompt=True,
+            allow_empty_baseline_virtualized_assistant=True,
+        )
+
+
+def test_scope_rejects_empty_baseline_virtualized_assistant_route_drift():
+    assistant_id = "76f09062-4cd7-4179-84f2-4da57cf8ac62"
+    baseline = snap()
+    raw = replace(
+        snap(
+            assistants=1,
+            assistant="Answer",
+            assistant_id=assistant_id,
+            complete=True,
+            url="https://chatgpt.com/g/g-p-project/c/foreign-conversation",
+        ),
+        assistant_message_ids=(assistant_id,),
+    )
+
+    with pytest.raises(
+        ProviderBindingIntegrityError,
+        match="conversation changed",
+    ):
+        _scope_response_snapshot(
+            baseline,
+            raw,
+            prompt_message_id="virtualized-prompt",
+            allow_virtualized_prompt=True,
+            allow_empty_baseline_virtualized_assistant=True,
+        )
+
+
+def test_scope_does_not_correlate_across_later_user_boundary():
+    assistant_id = "76f09062-4cd7-4179-84f2-4da57cf8ac62"
+    raw = replace(
+        snap(
+            users=1,
+            assistants=1,
+            user="Later prompt",
+            user_id="later-prompt",
+            assistant="Answer",
+            assistant_id=assistant_id,
+            complete=True,
+        ),
+        assistant_message_ids=(assistant_id,),
+    )
+
+    scoped, response_ref = _scope_response_snapshot(
+        snap(),
+        raw,
+        prompt_message_id="virtualized-prompt",
+        allow_virtualized_prompt=True,
+        allow_empty_baseline_virtualized_assistant=True,
+    )
+
+    assert response_ref is None
+    assert scoped.latest_assistant_id is None
+    assert scoped.latest_assistant_text is None
+
+
+def test_scope_rejects_reused_fallback_assistant_after_virtualization():
+    baseline = snap(users=1, user="Request A", user_id="prompt-a")
+    raw = replace(
+        baseline,
+        user_count=0,
+        assistant_count=1,
+        latest_user_id=None,
+        latest_assistant_id="fallback-assistant-0",
+        latest_assistant_text="Later answer",
+        terminal_witness_assistant_id="fallback-assistant-0",
+        message_refs=(
+            ChatMessageRef("assistant", "fallback-assistant-0", "Later answer", 0),
+        ),
+    )
+
+    with pytest.raises(
+        ProviderBindingIntegrityError,
+        match="unpinned after prompt virtualization",
+    ):
+        _scope_response_snapshot(
+            baseline,
+            raw,
+            prompt_message_id="prompt-a",
+            allow_virtualized_prompt=True,
+            virtualized_assistant_id=None,
+        )
+
+
+def test_error_alert_scope_ignores_stale_and_foreign_occurrences():
+    baseline = replace(
+        snap(users=1, user="Request A", user_id="prompt-a", extra_signals=("error-alert",)),
+        error_alert_occurrences=(("old-alert", None),),
+    )
+    foreign = replace(
+        baseline,
+        error_alert_occurrences=(("old-alert", None), ("foreign-alert", "prompt-b")),
+    )
+    scoped, _ = _scope_response_snapshot(baseline, foreign, prompt_message_id="prompt-a")
+    assert "error-alert" in scoped.dom_signals
+    assert "request-error-alert" not in scoped.dom_signals
+    assert "request-error-alert" not in _facts(baseline, baseline, scoped)
+
+
+def test_stream_cache_expired_scope_ignores_stale_document_signal():
+    baseline = snap(
+        users=1,
+        user="Request A",
+        user_id="prompt-a",
+        extra_signals=("stream-cache-expired",),
+    )
+    current = replace(baseline, dom_signals=frozenset({"stream-cache-expired"}))
+
+    scoped, _ = _scope_response_snapshot(
+        baseline,
+        current,
+        prompt_message_id="prompt-a",
+        prompt_text="Request A",
+        allow_virtualized_prompt=True,
+    )
+
+    assert "stream-cache-expired" not in scoped.dom_signals
+    assert "stream-cache-expired" not in _facts(baseline, baseline, scoped)
+
+
+def test_stream_cache_expired_scope_accepts_new_signal_for_current_prompt():
+    baseline = snap(users=1, user="Earlier", user_id="prompt-old")
+    current = snap(
+        users=2,
+        user="Request A",
+        user_id="prompt-a",
+        extra_signals=("stream-cache-expired",),
+    )
+
+    scoped, _ = _scope_response_snapshot(
+        baseline,
+        current,
+        prompt_message_id="prompt-a",
+        prompt_text="Request A",
+    )
+
+    assert "stream-cache-expired" in scoped.dom_signals
+    assert "stream-cache-expired" in _facts(baseline, baseline, scoped)
+
+
+def test_stream_cache_expired_scope_accepts_fresh_virtualized_prompt():
+    conversation_url = "https://chatgpt.com/g/g-p-project/c/conversation-a"
+    baseline = snap(
+        users=1,
+        user="Request A",
+        user_id="prompt-a",
+        url=conversation_url,
+    )
+    current = snap(
+        url=conversation_url,
+        extra_signals=("stream-cache-expired",),
+    )
+
+    scoped, response_ref = _scope_response_snapshot(
+        baseline,
+        current,
+        prompt_message_id="prompt-a",
+        prompt_text="Request A",
+        allow_virtualized_prompt=True,
+    )
+
+    assert response_ref is None
+    assert "stream-cache-expired" in scoped.dom_signals
+    assert "stream-cache-expired" in _facts(baseline, baseline, scoped)
+
+
+def test_stream_cache_expired_scope_rejects_virtualized_prompt_for_recovered_turn():
+    conversation_url = "https://chatgpt.com/g/g-p-project/c/conversation-a"
+    baseline = snap(
+        users=1,
+        user="Request A",
+        user_id="prompt-a",
+        url=conversation_url,
+    )
+    current = snap(
+        url=conversation_url,
+        extra_signals=("stream-cache-expired",),
+    )
+
+    scoped, response_ref = _scope_response_snapshot(
+        baseline,
+        current,
+        prompt_message_id="prompt-a",
+        prompt_text="Request A",
+        allow_virtualized_prompt=False,
+    )
+
+    assert response_ref is None
+    assert "stream-cache-expired" not in scoped.dom_signals
+    assert "stream-cache-expired" not in _facts(baseline, baseline, scoped)
+
+
+def test_stream_cache_expired_scope_ignores_new_signal_for_later_prompt():
+    baseline = snap(users=1, user="Request A", user_id="prompt-a")
+    current = snap(
+        users=2,
+        user="Later request",
+        user_id="prompt-b",
+        extra_signals=("stream-cache-expired",),
+    )
+
+    scoped, _ = _scope_response_snapshot(
+        baseline,
+        current,
+        prompt_message_id="prompt-a",
+        prompt_text="Request A",
+        allow_virtualized_prompt=True,
+    )
+
+    assert "stream-cache-expired" not in scoped.dom_signals
+    assert "stream-cache-expired" not in _facts(baseline, baseline, scoped)
+
+
+def test_error_alert_scope_accepts_new_owned_or_unowned_occurrence():
+    baseline = replace(
+        snap(users=1, user="Request A", user_id="prompt-a"),
+        error_alert_occurrences=(("old-alert", None),),
+    )
+    owned = replace(
+        baseline,
+        dom_signals=frozenset({"error-alert"}),
+        error_alert_occurrences=(("old-alert", None), ("new-alert", "prompt-a")),
+    )
+    unowned_new = replace(
+        baseline,
+        dom_signals=frozenset({"error-alert"}),
+        error_alert_occurrences=(("old-alert", None), ("same-text-new-node", None)),
+    )
+    for current in (owned, unowned_new):
+        scoped, _ = _scope_response_snapshot(baseline, current, prompt_message_id="prompt-a")
+        assert "request-error-alert" in scoped.dom_signals
+        assert "request-error-alert" in _facts(baseline, baseline, scoped)
+
+
+def test_error_alert_scope_does_not_accept_unproven_baseline_alert():
+    baseline = replace(
+        snap(users=1, user="Request A", user_id="prompt-a", extra_signals=("error-alert",)),
+        error_alert_occurrences=(("old-alert", None),),
+    )
+    current = replace(baseline, dom_signals=frozenset({"error-alert"}))
+    scoped, _ = _scope_response_snapshot(baseline, current, prompt_message_id="prompt-a")
+    assert "request-error-alert" not in scoped.dom_signals
+
+
+def test_error_alert_owner_recomputation_does_not_create_new_occurrence():
+    baseline = replace(
+        snap(users=1, user="Request A", user_id="prompt-a"),
+        error_alert_occurrences=(("stable-node", "prompt-old"),),
+    )
+    current = replace(
+        baseline,
+        dom_signals=frozenset({"error-alert"}),
+        error_alert_occurrences=(("stable-node", "prompt-a"),),
+    )
+    scoped, _ = _scope_response_snapshot(baseline, current, prompt_message_id="prompt-a")
+    assert "request-error-alert" not in scoped.dom_signals
+
+
+def test_error_alert_occurrence_parser_fails_closed_for_bad_shape_and_oversize():
+    base = {
+        "url": "https://chatgpt.com/c/one",
+        "composerPresent": True,
+        "composerEditable": True,
+        "domSignals": {},
+        "errorAlertOccurrences": [
+            {"digest": "one", "ownerPromptMessageId": None},
+            {"digest": "two", "ownerPromptMessageId": 7},
+        ],
+    }
+    assert ChatSnapshot.from_bridge(base).error_alert_occurrences == ()
+    oversized = dict(base, errorAlertOccurrences=[{"digest": str(i)} for i in range(33)])
+    assert ChatSnapshot.from_bridge(oversized).error_alert_occurrences == ()
+
+
+def test_error_alert_multiset_ignores_foreign_insertion_and_detects_same_signature_extra():
+    baseline = replace(
+        snap(users=1, user="Request A", user_id="prompt-a"),
+        error_alert_occurrences=(("same", None),),
+    )
+    foreign_inserted = replace(
+        baseline,
+        dom_signals=frozenset({"error-alert"}),
+        error_alert_occurrences=(("foreign", "prompt-b"), ("same", None)),
+    )
+    extra_same = replace(
+        baseline,
+        dom_signals=frozenset({"error-alert"}),
+        error_alert_occurrences=(("same", None), ("same", None)),
+    )
+    shifted, _ = _scope_response_snapshot(
+        baseline, foreign_inserted, prompt_message_id="prompt-a"
+    )
+    added, _ = _scope_response_snapshot(
+        baseline, extra_same, prompt_message_id="prompt-a"
+    )
+    assert "request-error-alert" not in shifted.dom_signals
+    assert "request-error-alert" in added.dom_signals
+
+
+def test_error_alert_multiset_fails_closed_on_owner_redistribution():
+    baseline = replace(
+        snap(users=1, user="Request A", user_id="prompt-a"),
+        error_alert_occurrences=(("same", None),),
+    )
+    current = replace(
+        baseline,
+        dom_signals=frozenset({"error-alert"}),
+        error_alert_occurrences=(("same", "prompt-a"), ("same", "prompt-b")),
+    )
+    scoped, _ = _scope_response_snapshot(baseline, current, prompt_message_id="prompt-a")
+    assert "request-error-alert" not in scoped.dom_signals
+
+
+def test_legacy_resume_allows_only_structurally_owned_error_alert():
+    baseline = snap(users=1, user="Request A", user_id="prompt-a")
+    owned = replace(
+        baseline,
+        dom_signals=frozenset({"error-alert"}),
+        error_alert_occurrences=(("existing", "prompt-a"),),
+    )
+    foreign = replace(
+        baseline,
+        dom_signals=frozenset({"error-alert"}),
+        error_alert_occurrences=(("existing", "prompt-b"),),
+    )
+    owned_scoped, _ = _scope_response_snapshot(
+        baseline,
+        owned,
+        prompt_message_id="prompt-a",
+        allow_legacy_owned_error_alert=True,
+    )
+    foreign_scoped, _ = _scope_response_snapshot(
+        baseline,
+        foreign,
+        prompt_message_id="prompt-a",
+        allow_legacy_owned_error_alert=True,
+    )
+    assert "request-error-alert" in owned_scoped.dom_signals
+    assert "request-error-alert" not in foreign_scoped.dom_signals
+
+
+def test_pre_assistant_progress_requires_null_assistant_owner():
+    baseline = snap(users=1, user="Request A", user_id="prompt-a")
+    valid = ChatProgressBlock("prompt-a", None, "dom-status", "1111111111111111")
+    unproven = ChatProgressBlock("prompt-a", "assistant-unproven", "dom-tool-result", "2222222222222222")
+    raw = replace(
+        baseline,
+        message_refs=(ChatMessageRef("user", "prompt-a", "Request A", 0),),
+        progress_blocks=(valid, unproven),
+    )
+    scoped, response_ref = _scope_response_snapshot(baseline, raw, prompt_message_id="prompt-a")
+    assert response_ref is None
+    assert scoped.progress_blocks == (valid,)
+
+
+def test_response_scope_accepts_confirmed_prompt_when_project_renderer_unmounts_user_node():
+    """A confirmed prompt may disappear while its fresh answer remains mounted."""
+    baseline = snap(users=1, user="Request A", user_id="prompt-a")
+    raw = replace(
+        snap(
+            users=0,
+            assistants=1,
+            assistant="Answer A",
+            assistant_id="assistant-a",
+            complete=True,
+        ),
+        message_refs=(ChatMessageRef("assistant", "assistant-a", "Answer A", 0),),
+        latest_user_id=None,
+        latest_user_text=None,
+        user_message_ids=(),
+        user_message_texts=(),
+    )
+
+    scoped, response_ref = _scope_response_snapshot(
+        baseline,
+        raw,
+        prompt_message_id="prompt-a",
+        allow_virtualized_prompt=True,
+        virtualized_assistant_id="assistant-a",
+    )
+
+    assert response_ref is not None
+    assert response_ref.message_id == "assistant-a"
+    assert scoped.latest_assistant_id == "assistant-a"
+
+
+def test_response_scope_rejects_unpinned_virtualized_assistant_remount():
+    baseline = snap(users=1, user="Request A", user_id="prompt-a")
+    raw = replace(
+        snap(
+            users=0,
+            assistants=1,
+            assistant="Later answer",
+            assistant_id="assistant-b",
+            complete=True,
+        ),
+        message_refs=(ChatMessageRef("assistant", "assistant-b", "Later answer", 0),),
+        latest_user_id=None,
+        latest_user_text=None,
+        user_message_ids=(),
+        user_message_texts=(),
+    )
+
+    with pytest.raises(ProviderBindingIntegrityError, match="assistant identity changed"):
+        _scope_response_snapshot(
+            baseline,
+            raw,
+            prompt_message_id="prompt-a",
+            allow_virtualized_prompt=True,
+            virtualized_assistant_id="assistant-a",
+        )
+
+
+def test_response_scope_rejects_nonterminal_virtualized_assistant_remount():
+    baseline = snap(users=1, user="Request A", user_id="prompt-a")
+    raw = replace(
+        snap(
+            users=0,
+            assistants=1,
+            assistant="Still working after remount",
+            assistant_id="assistant-b",
+        ),
+        message_refs=(ChatMessageRef("assistant", "assistant-b", "Still working after remount", 0),),
+        latest_user_id=None,
+        latest_user_text=None,
+        user_message_ids=(),
+        user_message_texts=(),
+    )
+
+    with pytest.raises(ProviderBindingIntegrityError, match="assistant identity changed"):
+        _scope_response_snapshot(
+            baseline,
+            raw,
+            prompt_message_id="prompt-a",
+            allow_virtualized_prompt=True,
+            virtualized_assistant_id="assistant-a",
+        )
+
+
+def test_response_scope_rebinds_real_prompt_id_and_reused_fallback_assistant_slot():
+    baseline = snap(
+        users=1,
+        assistants=1,
+        user="Old prompt",
+        user_id="fallback-user-4",
+        assistant="Old answer",
+        assistant_id="fallback-assistant-4",
+    )
+    raw = replace(
+        snap(
+            users=1,
+            assistants=1,
+            user="New prompt",
+            user_id="real-user-uuid",
+            assistant="New answer",
+            assistant_id="fallback-assistant-4",
+            complete=True,
+        ),
+        message_refs=(
+            ChatMessageRef("user", "real-user-uuid", "New prompt", 0),
+            ChatMessageRef("assistant", "fallback-assistant-4", "New answer", 1),
+        ),
+        latest_user_id="real-user-uuid",
+        latest_user_text="New prompt",
+        user_message_ids=("real-user-uuid",),
+        user_message_texts=("New prompt",),
+    )
+
+    scoped, response_ref = _scope_response_snapshot(
+        baseline,
+        raw,
+        prompt_message_id="fallback-user-4",
+        prompt_text="New prompt",
+    )
+
+    assert response_ref is not None
+    assert response_ref.message_id.startswith("fallback-assistant-4:prompt-")
+    assert scoped.terminal_witness_assistant_id == response_ref.message_id
+
+
+def test_response_scope_rebind_uses_prompt_correlation_text():
+    baseline = snap(
+        users=1,
+        assistants=0,
+        user_id="fallback-user-0",
+        user="Old renderer text",
+    )
+    raw = replace(
+        snap(
+            users=1,
+            assistants=1,
+            user="Rendered prompt text",
+            user_id="real-user-uuid",
+            assistant="PASS",
+            assistant_id="fallback-assistant-0",
+            complete=True,
+        ),
+        message_refs=(
+            ChatMessageRef(
+                "user",
+                "real-user-uuid",
+                "Rendered prompt text",
+                0,
+                correlation_text="Original prompt with renderer-only formatting",
+            ),
+            ChatMessageRef("assistant", "fallback-assistant-0", "PASS", 1),
+        ),
+        latest_user_id="real-user-uuid",
+        latest_user_text="Rendered prompt text",
+        user_message_ids=("real-user-uuid",),
+        user_message_texts=("Rendered prompt text",),
+    )
+
+    scoped, response_ref = _scope_response_snapshot(
+        baseline,
+        raw,
+        prompt_message_id="fallback-user-0",
+        prompt_text="Original prompt with renderer-only formatting",
+    )
+
+    assert response_ref is not None
+    assert response_ref.message_id == "fallback-assistant-0"
+    assert scoped.latest_assistant_text == "PASS"
+
+
+def test_response_scope_rejects_prompt_rebind_to_unpinned_assistant():
+    baseline = snap(users=1, user="Request A", user_id="prompt-a")
+    raw = replace(
+        snap(
+            users=1,
+            assistants=1,
+            user="Request A",
+            user_id="real-user-uuid",
+            assistant="Foreign answer",
+            assistant_id="assistant-b",
+            complete=True,
+        ),
+        message_refs=(
+            ChatMessageRef("user", "real-user-uuid", "Request A", 0),
+            ChatMessageRef("assistant", "assistant-b", "Foreign answer", 1),
+        ),
+    )
+
+    with pytest.raises(ProviderBindingIntegrityError, match="assistant identity changed"):
+        _scope_response_snapshot(
+            baseline,
+            raw,
+            prompt_message_id="prompt-a",
+            prompt_text="Request A",
+            virtualized_assistant_id="assistant-a",
+        )
+
+
+def test_response_scope_rejects_same_project_conversation_drift_before_rebinding():
+    baseline = snap(
+        users=1,
+        user="Request A",
+        user_id="prompt-a",
+        url="https://chatgpt.com/g/g-p-project/c/conversation-a",
+    )
+    foreign = replace(
+        snap(
+            users=1,
+            assistants=1,
+            user="Request A",
+            user_id="foreign-prompt",
+            assistant="Foreign answer",
+            assistant_id="assistant-b",
+            complete=True,
+            url="https://chatgpt.com/g/g-p-project/c/conversation-b",
+        ),
+        message_refs=(
+            ChatMessageRef("user", "foreign-prompt", "Request A", 0),
+            ChatMessageRef("assistant", "assistant-b", "Foreign answer", 1),
+        ),
+    )
+
+    with pytest.raises(ProviderBindingIntegrityError, match="conversation changed"):
+        _scope_response_snapshot(
+            baseline,
+            foreign,
+            prompt_message_id="prompt-a",
+            prompt_text="Request A",
+        )
+
+
+def test_response_scope_rebinds_reused_fallback_slot_when_prompt_ordinal_is_unchanged():
+    baseline = snap(
+        users=1,
+        assistants=1,
+        user="Old prompt",
+        user_id="fallback-user-4",
+        assistant="Old answer",
+        assistant_id="fallback-assistant-4",
+    )
+    raw = replace(
+        snap(
+            users=1,
+            assistants=1,
+            user="New prompt",
+            user_id="fallback-user-4",
+            assistant="New answer",
+            assistant_id="fallback-assistant-4",
+            complete=True,
+        ),
+        message_refs=(
+            ChatMessageRef("user", "fallback-user-4", "New prompt", 0),
+            ChatMessageRef("assistant", "fallback-assistant-4", "New answer", 1),
+        ),
+        latest_user_id="fallback-user-4",
+        latest_user_text="New prompt",
+        user_message_ids=("fallback-user-4",),
+        user_message_texts=("New prompt",),
+    )
+
+    scoped, response_ref = _scope_response_snapshot(
+        baseline,
+        raw,
+        prompt_message_id="fallback-user-4",
+        prompt_text="New prompt",
+    )
+
+    assert response_ref is None
+
+
 @pytest.mark.asyncio
 async def test_submission_proof_resolves_ambiguous_not_hung_when_text_never_exactly_matches():
     """GP07: a real bug found live -- a new user message can appear with a
@@ -1521,7 +3140,7 @@ async def test_completed_response_rescues_submission_proof_after_dom_mismatch():
             assistants=1,
             user="Review AU01 rendered with presentation spacing",
             assistant="Complete answer",
-            complete=True,
+           complete=True,
         )
         # Let the proof tracker reach unresolved-stall, then make the final
         # snapshot the correctly correlated, already-completed response.
@@ -1549,6 +3168,611 @@ async def test_completed_response_rescues_submission_proof_after_dom_mismatch():
     assert result.stop_reason == "end-turn"
     assert result.final_summary == "Complete answer"
     assert turn.submission_confirmed
+    assert chat.runtime.bridge.submit_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_completed_response_proves_submission_when_user_turn_is_unmounted():
+    """The current renderer may unmount the user block after a long turn.
+
+    A confirmed send plus a fresh, same-conversation assistant with bound
+    completion controls is the only accepted prompt-unmounted proof.  This
+    reproduces the live CDP shape that previously waited for the 15-minute
+    submission-proof ceiling and then failed with EXT-GPTAUTO-003.
+    """
+    chat = _Chat()
+    completed = snap(
+        assistants=1,
+        assistant_id="assistant-new",
+        assistant="Complete answer",
+        assistant_markdown="# Complete answer\n\nRendered **answer**.",
+        complete=True,
+        url="https://chatgpt.com/g/g-p-project/c/conversation-2",
+    )
+    landing = snap(url="https://chatgpt.com/g/g-p-project/project")
+    chat._snapshots = iter([landing, completed, completed, completed, completed])
+
+    turn = GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="turn-unmounted-user", body="Review AU01"),
+        lambda _: None,
+    )
+
+    result = await turn.run()
+
+    assert result.stop_reason == "end-turn"
+    assert result.final_summary == "# Complete answer\n\nRendered **answer**."
+    assert result.final_media_type == "text/markdown; charset=utf-8"
+    assert turn.state is TurnState.COMPLETE
+    assert chat.runtime.bridge.submit_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_full_turn_correlates_first_assistant_after_prompt_virtualizes_post_acceptance():
+    """A fresh conversation may unmount its prompt after TURN_ACCEPTED.
+
+    Submission proof owns the real user identity, but the first response
+    observation contains only the one terminal assistant.  The full turn
+    must carry explicit fresh-conversation intent into every response
+    projection and complete without entering refresh recovery.
+    """
+    chat = _Chat()
+    landing = snap(url="https://chatgpt.com/g/g-p-project/project")
+    conversation_url = "https://chatgpt.com/g/g-p-project/c/conversation-fresh"
+    prompt_id = "8c813b3d-f6b9-4f04-91a5-7d827ad7c599"
+    assistant_id = "76f09062-4cd7-4179-84f2-4da57cf8ac62"
+    proof = replace(
+        snap(
+            users=1,
+            user="Review AU01",
+            user_id=prompt_id,
+            url=conversation_url,
+        ),
+        user_message_ids=(prompt_id,),
+        user_message_texts=("Review AU01",),
+    )
+    completed = replace(
+        snap(
+            assistants=1,
+            assistant="Fresh virtualized response",
+            assistant_id=assistant_id,
+            complete=True,
+            url=conversation_url,
+        ),
+        assistant_message_ids=(assistant_id,),
+        assistant_message_texts=("Fresh virtualized response",),
+        message_refs=(
+            ChatMessageRef(
+                "assistant",
+                assistant_id,
+                "Fresh virtualized response",
+                0,
+            ),
+        ),
+    )
+
+    def snapshots():
+        yield landing
+        yield proof
+        yield proof
+        while True:
+            yield completed
+
+    recovery_calls = []
+
+    async def refresh_bound_conversation(**kwargs):
+        recovery_calls.append(kwargs)
+        raise AssertionError("completed fresh response must not enter recovery")
+
+    chat._snapshots = snapshots()
+    chat.refresh_bound_conversation = refresh_bound_conversation
+    turn = GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="turn-post-accept-prompt-virtualized", body="Review AU01"),
+        lambda _: None,
+    )
+
+    result = await asyncio.wait_for(turn.run(), timeout=1.0)
+
+    assert result.stop_reason == "end-turn"
+    assert result.final_summary == "Fresh virtualized response"
+    assert result.metadata["prompt-message-id"] == prompt_id
+    assert result.metadata["assistant-message-id"] == assistant_id
+    assert turn.state is TurnState.COMPLETE
+    assert turn.submission_confirmed
+    assert chat.runtime.bridge.submit_calls == 1
+    assert recovery_calls == []
+
+
+@pytest.mark.asyncio
+async def test_post_submission_identity_pins_conversation_when_proof_path_did_not():
+    """A valid proof snapshot may return before its URL was turn-locally pinned."""
+    chat = _Chat()
+    landing = snap(url="https://chatgpt.com/g/g-p-project/project")
+    conversation_url = "https://chatgpt.com/g/g-p-project/c/conversation-unpinned"
+    prompt_id = "8c813b3d-f6b9-4f04-91a5-7d827ad7c599"
+    assistant_id = "76f09062-4cd7-4179-84f2-4da57cf8ac62"
+    proof = replace(
+        snap(
+            users=1,
+            user="Review AU01",
+            user_id=prompt_id,
+            url=conversation_url,
+        ),
+        user_message_ids=(prompt_id,),
+        user_message_texts=("Review AU01",),
+    )
+    completed = replace(
+        snap(
+            assistants=1,
+            assistant="Pinned boundary response",
+            assistant_id=assistant_id,
+            complete=True,
+            url=conversation_url,
+        ),
+        assistant_message_ids=(assistant_id,),
+        assistant_message_texts=("Pinned boundary response",),
+        message_refs=(
+            ChatMessageRef("assistant", assistant_id, "Pinned boundary response", 0),
+        ),
+    )
+
+    def snapshots():
+        yield landing
+        while True:
+            yield completed
+
+    chat._snapshots = snapshots()
+    turn = GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="turn-post-submit-pin", body="Review AU01"),
+        lambda _: None,
+    )
+
+    async def proof_without_url_pin(_baseline):
+        turn._prompt_message_id = prompt_id
+        assert turn._submission_proof_url is None
+        return proof
+
+    turn._await_submission_proof = proof_without_url_pin
+
+    result = await asyncio.wait_for(turn.run(), timeout=1.0)
+
+    assert result.stop_reason == "end-turn"
+    assert result.final_summary == "Pinned boundary response"
+    assert turn._submission_proof_url == conversation_url
+    assert result.metadata["assistant-message-id"] == assistant_id
+
+
+@pytest.mark.asyncio
+async def test_post_submission_identity_rejects_conflicting_existing_conversation_pin():
+    chat = _Chat()
+    landing = snap(url="https://chatgpt.com/g/g-p-project/project")
+    proof = snap(
+        users=1,
+        user="Review AU01",
+        user_id="8c813b3d-f6b9-4f04-91a5-7d827ad7c599",
+        url="https://chatgpt.com/g/g-p-project/c/conversation-proven",
+    )
+    chat._snapshots = iter([landing])
+    turn = GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="turn-post-submit-pin-conflict", body="Review AU01"),
+        lambda _: None,
+    )
+    turn._submission_proof_url = (
+        "https://chatgpt.com/g/g-p-project/c/conversation-conflicting"
+    )
+
+    async def conflicting_proof(_baseline):
+        turn._prompt_message_id = proof.latest_user_id
+        return proof
+
+    turn._await_submission_proof = conflicting_proof
+
+    with pytest.raises(
+        AudiaGenticError,
+        match="conversation changed after proof",
+    ) as raised:
+        await turn.run()
+    assert raised.value.code == "EXT-GPTAUTO-004"
+    assert raised.value.details["cause-type"] == "ProviderBindingIntegrityError"
+
+
+@pytest.mark.asyncio
+async def test_full_turn_diagnostics_expose_worker_dom_change_after_refresh(caplog):
+    """Model the live 240-second shape with a shortened refresh threshold.
+
+    The bound target sees the request-owned assistant text but not its
+    terminal controls until refresh. This is one possible explanation, not
+    the presumed live root cause: diagnostics must distinguish this DOM
+    mismatch from a correlation rejection without logging content.
+    """
+    chat = _Chat()
+    chat.config.turn.response_no_activity_refresh_seconds = 0.001
+    chat.config.turn.response_refresh_attempts = 1
+    chat.config.turn.response_refresh_final_grace_seconds = 0
+    landing = snap(url="https://chatgpt.com/g/g-p-project/project")
+    conversation_url = "https://chatgpt.com/g/g-p-project/c/conversation-1"
+    prompt_id = "8c813b3d-f6b9-4f04-91a5-7d827ad7c599"
+    assistant_id = "76f09062-4cd7-4179-84f2-4da57cf8ac62"
+    proof = replace(
+        snap(
+            users=1,
+            user="Review AU01",
+            user_id=prompt_id,
+            url=conversation_url,
+        ),
+        user_message_ids=(prompt_id,),
+        user_message_texts=("Review AU01",),
+    )
+    stale = replace(
+        snap(
+            users=1,
+            assistants=1,
+            user="Review AU01",
+            user_id=prompt_id,
+            assistant="Terminal answer hidden behind stale target DOM",
+            assistant_id=assistant_id,
+            url=conversation_url,
+        ),
+        user_message_ids=(prompt_id,),
+        user_message_texts=("Review AU01",),
+        assistant_message_ids=(assistant_id,),
+        assistant_message_texts=("Terminal answer hidden behind stale target DOM",),
+    )
+    completed = replace(
+        stale,
+        dom_signals=frozenset({"completion-control", "more-actions-menu"}),
+        terminal_witness_assistant_id=assistant_id,
+    )
+
+    def initial_snapshots():
+        yield landing
+        yield proof
+        yield proof
+        while True:
+            yield stale
+
+    def completed_snapshots():
+        while True:
+            yield completed
+
+    recovery_calls = []
+    observations = []
+
+    async def refresh_bound_conversation(**kwargs):
+        recovery_calls.append(kwargs)
+        chat._snapshots = completed_snapshots()
+        return True
+
+    chat._snapshots = initial_snapshots()
+    chat.refresh_bound_conversation = refresh_bound_conversation
+    turn = GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="turn-stale-target-diagnostics", body="Review AU01"),
+        observations.append,
+    )
+    caplog.set_level(
+        "INFO",
+        logger="audiagentic.components.providers.adapters.gpt_auto.turn",
+    )
+
+    result = await asyncio.wait_for(turn.run(), timeout=1.0)
+
+    assert result.stop_reason == "end-turn"
+    assert result.final_summary == "Terminal answer hidden behind stale target DOM"
+    assert len(recovery_calls) == 1
+    decision_records = [
+        record
+        for record in caplog.records
+        if record.msg == "gpt-auto response decision gates=%s"
+    ]
+    assert len(decision_records) == 2
+    decisions = [record.args for record in decision_records]
+    stale_decision = next(
+        decision
+        for decision in decisions
+        if decision["response-ref-present"] and not decision["completion-satisfied"]
+    )
+    assert stale_decision["raw-same-bound-conversation"] is True
+    assert stale_decision["raw-matches-provider-session"] is True
+    assert stale_decision["terminal-witness-present"] is False
+    assert stale_decision["completion-gates"]["completion-control"] is False
+    assert stale_decision["completion-gates"]["not-generating"] is True
+    assert stale_decision["raw-text-length"] > 0
+    assert "Terminal answer" not in str(stale_decision)
+    assert stale_decision["allowance-predicates"]["explicitly-allowed"] is True
+    assert (
+        stale_decision["allowance-predicates"]["baseline-assistant-count-zero"]
+        is True
+    )
+    completed_decision = next(
+        decision for decision in decisions if decision["completion-satisfied"]
+    )
+    assert completed_decision["terminal-witness-is-response"] is True
+    assert completed_decision["completion-gates"]["completion-control"] is True
+    assert completed_decision["completion-gates"]["more-actions-menu"] is True
+    decision_observations = [
+        observation
+        for observation in observations
+        if observation.kind is TransportObservationKind.TIMING
+        and observation.attributes.get("timing-event") == "response-decision"
+    ]
+    assert len(decision_observations) == 2
+    assert all(
+        len(observation.attributes["diagnostic-signature"]) == 16
+        for observation in decision_observations
+    )
+    assert all(
+        "Terminal answer hidden behind stale target DOM"
+        not in observation.attributes["diagnostic-details"]
+        for observation in decision_observations
+    )
+
+
+@pytest.mark.asyncio
+async def test_response_diagnostics_expose_empty_baseline_correlation_rejection(caplog):
+    chat = _Chat()
+    conversation_url = "https://chatgpt.com/g/g-p-project/c/conversation-1"
+    prompt_id = "8c813b3d-f6b9-4f04-91a5-7d827ad7c599"
+    assistant_id = "76f09062-4cd7-4179-84f2-4da57cf8ac62"
+    baseline = snap(url=conversation_url)
+    proof = replace(
+        snap(
+            users=1,
+            user="Review AU01",
+            user_id=prompt_id,
+            url=conversation_url,
+        ),
+        user_message_ids=(prompt_id,),
+    )
+    unpinned = snap(
+        assistants=1,
+        assistant="Completed but structurally ambiguous",
+        assistant_id=assistant_id,
+        complete=True,
+        url=conversation_url,
+    )
+    chat.provider_session_id = "conversation-1"
+    chat.chat_url = conversation_url
+    chat._snapshots = iter([unpinned])
+    turn = GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="turn-correlation-rejection-diagnostics", body="Review AU01"),
+        lambda _: None,
+    )
+    turn.state = TurnState.AWAITING_RESPONSE
+    turn._prompt_message_id = prompt_id
+    caplog.set_level(
+        "INFO",
+        logger="audiagentic.components.providers.adapters.gpt_auto.turn",
+    )
+
+    with pytest.raises(
+        ProviderBindingIntegrityError,
+        match="unpinned after prompt virtualization",
+    ):
+        await turn._await_response(
+            baseline,
+            proof,
+            allow_empty_baseline_virtualized_assistant=True,
+        )
+
+    decision = next(
+        record.args
+        for record in caplog.records
+        if record.msg == "gpt-auto response decision gates=%s"
+    )
+    assert decision["correlation-error"] == (
+        "provider assistant identity is unpinned after prompt virtualization"
+    )
+    assert decision["completion-satisfied"] is False
+    assert decision["terminal-witness-is-latest"] is True
+    assert (
+        decision["allowance-predicates"]["raw-assistant-id-count-one"]
+        is False
+    )
+    assert decision["allowance-predicates"]["raw-assistant-ref-count-one"] is True
+    assert "Completed but structurally ambiguous" not in str(decision)
+
+
+@pytest.mark.asyncio
+async def test_completed_new_conversation_proves_submission_despite_prompt_rendering_drift():
+    """Real provider-paired terminal IDs outrank presentation-only text drift."""
+    chat = _Chat()
+    completed = snap(
+        users=1,
+        user="Rendered prompt with provider whitespace drift",
+        assistants=1,
+        assistant_id="assistant-new",
+        assistant="Complete answer",
+        assistant_markdown="# Complete answer\n\nRendered **answer**.",
+       complete=True,
+        url="https://chatgpt.com/g/g-p-project/c/conversation-2",
+    )
+    landing = snap(url="https://chatgpt.com/g/g-p-project/project")
+
+    def snapshots():
+        yield landing
+        while True:
+            yield completed
+
+    chat._snapshots = snapshots()
+
+    turn = GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="turn-mounted-complete", body="Review AU01"),
+        lambda _: None,
+    )
+
+    result = await turn.run()
+
+    assert result.stop_reason == "end-turn"
+    assert result.final_summary == "# Complete answer\n\nRendered **answer**."
+    assert result.final_media_type == "text/markdown; charset=utf-8"
+    assert turn.state is TurnState.COMPLETE
+    assert turn.submission_confirmed
+    assert chat.runtime.bridge.submit_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_project_root_baseline_accepts_mounted_decisive_completion():
+    chat = _Chat()
+    completed = snap(
+        users=1,
+        user="Rendered prompt with provider whitespace drift",
+        assistants=1,
+        assistant_id="assistant-new",
+        assistant="Complete answer",
+        complete=True,
+        url="https://chatgpt.com/g/g-p-project/c/conversation-2",
+    )
+    landing = snap(url="https://chatgpt.com/g/g-p-project")
+
+    def snapshots():
+        yield landing
+        while True:
+            yield completed
+
+    chat._snapshots = snapshots()
+    turn = GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="turn-root-mounted-complete", body="Review AU01"),
+        lambda _: None,
+    )
+
+    result = await turn.run()
+
+    assert result.stop_reason == "end-turn"
+    assert result.final_summary == "Complete answer"
+    assert turn.submission_confirmed
+    assert chat.runtime.bridge.submit_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_project_root_baseline_accepts_prompt_unmounted_decisive_completion():
+    chat = _Chat()
+    completed = snap(
+        assistants=1,
+        assistant_id="assistant-new",
+        assistant="Complete answer",
+        complete=True,
+        url="https://chatgpt.com/g/g-p-project/c/conversation-2",
+    )
+    landing = snap(url="https://chatgpt.com/g/g-p-project")
+    chat._snapshots = iter([landing, completed, completed, completed, completed])
+
+    turn = GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="turn-root-unmounted-complete", body="Review AU01"),
+        lambda _: None,
+    )
+
+    result = await turn.run()
+
+    assert result.stop_reason == "end-turn"
+    assert result.final_summary == "Complete answer"
+    assert turn.submission_confirmed
+    assert chat.runtime.bridge.submit_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_final_submission_proof_accepts_fresh_terminal_response_when_prompt_virtualized():
+    chat = _Chat()
+    landing = snap(url="https://chatgpt.com/g/g-p-project")
+    completed = snap(
+        assistants=1,
+        assistant_id="assistant-new",
+        assistant="Complete answer",
+        complete=True,
+        url="https://chatgpt.com/g/g-p-project/c/conversation-2",
+    )
+    chat._snapshots = iter([completed])
+    turn = GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="turn-fresh-virtualized-complete", body="Review AU01"),
+        lambda _: None,
+    )
+    turn.side_effect_attempted = True
+
+    result = await turn._final_submission_proof(landing)
+
+    assert result is completed
+    assert turn._submission_proof_url == completed.url
+    assert turn._submission_proof_assistant_id == "assistant-new"
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "landing_url",
+    [
+        "https://chatgpt.com/g/g-p-project/project",
+        "https://chatgpt.com/g/g-p-project",
+    ],
+)
+async def test_submission_proof_rejects_same_project_conversation_route_drift(
+    landing_url,
+):
+    """A new project turn must stay on its first durable conversation route."""
+    chat = _Chat()
+    working_a = snap(
+        users=1,
+        user="Review AU01",
+        assistants=1,
+        assistant="Working in conversation A",
+        assistant_id="assistant-a",
+        generating=True,
+        url="https://chatgpt.com/g/g-p-project/c/conversation-a",
+    )
+    completed_b = snap(
+        assistants=1,
+        assistant="Completed in conversation B",
+        assistant_id="assistant-b",
+        complete=True,
+        url="https://chatgpt.com/g/g-p-project/c/conversation-b",
+    )
+    chat._snapshots = iter(
+        [
+            snap(url=landing_url),
+            working_a,
+            completed_b,
+        ]
+    )
+    turn = GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="turn-route-drift", body="Review AU01"),
+        lambda _: None,
+    )
+
+    with pytest.raises(ProviderBindingIntegrityError, match="conversation changed"):
+        await turn._await_submission_proof(snap(url=landing_url))
+    assert turn._submission_proof_url == (
+        "https://chatgpt.com/g/g-p-project/c/conversation-a"
+    )
+
+
+@pytest.mark.asyncio
+async def test_unmounted_completion_does_not_adopt_retained_conversation_turn():
+    """A retained conversation still needs an observable request anchor."""
+    chat = _Chat()
+    chat.runtime.config.turn.submission_proof_progress_lease_seconds = 0.01
+    chat.runtime.config.turn.submission_proof_absolute_ceiling_seconds = 0.05
+    completed = snap(
+        assistants=1,
+        assistant_id="assistant-later",
+        assistant="A later response",
+        complete=True,
+    )
+    chat._snapshots = iter([snap(), completed, completed, completed, completed])
+
+    turn = GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="turn-retained-unmounted", body="Review AU01"),
+        lambda _: None,
+    )
+
+    with pytest.raises(AudiaGenticError, match="submission-proof-not-observed-before-deadline"):
+        await turn.run()
     assert chat.runtime.bridge.submit_calls == 1
 
 
@@ -1602,6 +3826,78 @@ async def test_turn_completes_despite_stuck_stop_control_signal():
         chat, SessionPrompt(turn_id="turn-stuck-stop-control", body="Review AU01"), lambda _: None
     )
     result = await turn.run()
+    assert result.stop_reason == "end-turn"
+    assert result.final_summary == "Looks sound"
+    assert turn.state is TurnState.COMPLETE
+
+
+@pytest.mark.asyncio
+async def test_turn_completes_with_current_copy_control_without_more_actions_menu():
+    """GP52: the current ChatGPT renderer exposes Copy message after a
+    completed response but omits the historical response-level More actions
+    control.  Stable request-correlated text plus not-generating must still
+    terminalize the turn."""
+    chat = _Chat()
+    chat._snapshots = iter(
+        [
+            snap(),
+            snap(users=1, user="Review AU01"),
+            snap(
+                users=1,
+                assistants=1,
+                user="Review AU01",
+                assistant="Looks sound",
+                complete=True,
+                completion_signals=("completion-control",),
+            ),
+            snap(
+                users=1,
+                assistants=1,
+                user="Review AU01",
+                assistant="Looks sound",
+                complete=True,
+                completion_signals=("completion-control",),
+            ),
+            snap(
+                users=1,
+                assistants=1,
+                user="Review AU01",
+                assistant="Looks sound",
+                complete=True,
+                completion_signals=("completion-control",),
+            ),
+            snap(
+                users=1,
+                assistants=1,
+                user="Review AU01",
+                assistant="Looks sound",
+                complete=True,
+                completion_signals=("completion-control",),
+            ),
+            snap(
+                users=1,
+                assistants=1,
+                user="Review AU01",
+                assistant="Looks sound",
+                complete=True,
+                completion_signals=("completion-control",),
+            ),
+            snap(
+                users=1,
+                assistants=1,
+                user="Review AU01",
+                assistant="Looks sound",
+                complete=True,
+                completion_signals=("completion-control",),
+            ),
+        ]
+    )
+    turn = GptAutoTurn(
+        chat, SessionPrompt(turn_id="turn-copy-control-only", body="Review AU01"), lambda _: None
+    )
+
+    result = await turn.run()
+
     assert result.stop_reason == "end-turn"
     assert result.final_summary == "Looks sound"
     assert turn.state is TurnState.COMPLETE
@@ -1717,8 +4013,8 @@ async def test_turn_does_not_complete_while_text_is_still_changing_even_without_
     turn = GptAutoTurn(
         chat, SessionPrompt(turn_id="turn-still-changing", body="Review AU01"), lambda _: None
     )
-    with pytest.raises(AudiaGenticError, match="response recovery exhausted"):
-        await turn.run()
+    with pytest.raises(asyncio.TimeoutError):
+        await asyncio.wait_for(turn.run(), timeout=0.05)
     assert turn.state is not TurnState.COMPLETE
 
 
@@ -1746,8 +4042,8 @@ async def test_response_wait_stalls_correctly_despite_flapping_soft_liveness_wid
     turn = GptAutoTurn(
         chat, SessionPrompt(turn_id="turn-flapping-widget", body="Review AU01"), lambda _: None
     )
-    with pytest.raises(AudiaGenticError, match="response recovery exhausted"):
-        await turn.run()
+    with pytest.raises(asyncio.TimeoutError):
+        await asyncio.wait_for(turn.run(), timeout=0.05)
     assert turn.state is not TurnState.COMPLETE
 
 
@@ -1764,6 +4060,81 @@ async def test_prompt_and_response_message_ids_are_published_for_resume_metadata
 
     assert any(update.metadata.get("prompt-message-id") == "prompt-1" for update in updates)
     assert any(update.metadata.get("assistant-message-id") == "assistant-1" for update in updates)
+
+
+@pytest.mark.asyncio
+async def test_structured_checkpoint_metadata_is_request_owned_not_binding_metadata():
+    chat = _Chat()
+    chat.provider_session_id = "conversation-1"
+    binding_updates = []
+    request_updates = []
+    chat.binding_sink = binding_updates.append
+
+    async def persist_request_metadata(metadata):
+        request_updates.append(metadata)
+
+    chat.persist_request_metadata = persist_request_metadata
+    chat.unresolved_metadata = lambda: {
+        "unresolved-turn-pending": True,
+        "submission-proven": True,
+        "unresolved-baseline-error-alert-occurrences": [
+            {"digest": "alert", "ownerPromptMessageId": None}
+        ],
+    }
+    turn = GptAutoTurn(
+        chat, SessionPrompt(turn_id="turn-structured-checkpoint", body="Review AU01"), lambda _: None
+    )
+    turn._prompt_message_id = "prompt-1"
+
+    await turn._publish_message_ids(strict=True)
+
+    assert binding_updates[0].metadata == {
+        "prompt-message-id": "prompt-1",
+        "unresolved-turn-pending": True,
+        "submission-proven": True,
+    }
+    assert request_updates[0]["unresolved-baseline-error-alert-occurrences"]
+
+
+@pytest.mark.asyncio
+async def test_publish_message_ids_strict_binding_failure_raises():
+    chat = _Chat()
+    chat.provider_session_id = "conversation-1"
+
+    def failed_binding(_update):
+        raise RuntimeError("binding unavailable")
+
+    chat.binding_sink = failed_binding
+    turn = GptAutoTurn(
+        chat, SessionPrompt(turn_id="turn-binding-failure", body="Review AU01"), lambda _: None
+    )
+    turn._prompt_message_id = "prompt-1"
+
+    with pytest.raises(AudiaGenticError, match="provider message identity") as captured:
+        await turn._publish_message_ids(strict=True)
+
+    assert captured.value.code == "EXT-GPTAUTO-004"
+
+
+@pytest.mark.asyncio
+async def test_publish_message_ids_strict_request_metadata_failure_raises():
+    chat = _Chat()
+    chat.provider_session_id = "conversation-1"
+    chat.binding_sink = lambda _update: None
+
+    async def failed_request_metadata(_metadata):
+        raise RuntimeError("request checkpoint unavailable")
+
+    chat.persist_request_metadata = failed_request_metadata
+    turn = GptAutoTurn(
+        chat, SessionPrompt(turn_id="turn-request-metadata-failure", body="Review AU01"), lambda _: None
+    )
+    turn._prompt_message_id = "prompt-1"
+
+    with pytest.raises(AudiaGenticError, match="provider message identity") as captured:
+        await turn._publish_message_ids(strict=True)
+
+    assert captured.value.code == "EXT-GPTAUTO-004"
 
 
 @pytest.mark.asyncio
@@ -1949,6 +4320,43 @@ async def test_staged_timeout_only_clears_proven_unsent_turn(send_attempted):
     assert chat.state is (ChatState.FAILED if send_attempted else ChatState.READY)
     if not send_attempted:
         assert chat.checkpoint_updates[-1] == {"unresolved-turn-pending": False}
+
+
+@pytest.mark.asyncio
+async def test_loading_page_composer_failure_is_proven_unsent_and_clears_fence():
+    class Browser:
+        async def page_by_handle(self, handle):
+            return handle
+
+        async def submit(self, *args, **kwargs):
+            raise RuntimeError("composer not found")
+
+    chat = _Chat()
+    chat.runtime.gpt_browser = Browser()
+    chat.runtime.config.turn.submission_timeout_seconds = 0
+    chat._snapshots = iter([
+        replace(snap(), composer_present=False, composer_editable=False),
+    ])
+
+    turn = GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="turn-loading-page", body="Review recovery"),
+        lambda _observation: None,
+    )
+
+    with pytest.raises(AudiaGenticError) as captured:
+        await turn.run()
+
+    details = captured.value.details
+    assert details["failure-reason"] == "composer-not-found-before-submission"
+    assert details["failure-stage"] == "submission"
+    assert details["submission-state"] == "not_started"
+    assert details["submission-proven"] is False
+    assert details["submission-ambiguous"] is False
+    assert details["retryable-same-session"] is True
+    assert chat.state is ChatState.READY
+    assert chat.unresolved_turn_pending is False
+    assert chat.checkpoint_updates[-1] == {"unresolved-turn-pending": False}
 
 
 @pytest.mark.asyncio
@@ -2236,6 +4644,31 @@ async def test_cancel_after_submit_blocks_ready_when_quiescence_is_unproven():
 
 
 @pytest.mark.asyncio
+async def test_cancellation_does_not_wait_forever_for_hung_provider_stop():
+    chat = _Chat()
+    chat.state = ChatState.BUSY
+    turn = GptAutoTurn(chat, SessionPrompt(turn_id="turn-1", body="Review"), lambda _: None)
+    turn.state = TurnState.AWAITING_RESPONSE
+    turn.side_effect_attempted = True
+
+    async def hung_stop():
+        await asyncio.sleep(60)
+
+    turn._stop_generation_best_effort = hung_stop
+    turn._cancellation_settle_timeout_seconds = lambda: 0.01
+    turn.cancel()
+
+    result = await asyncio.wait_for(
+        turn._await_response(snap(), snap()),
+        timeout=2.0,
+    )
+
+    assert result is None
+    assert turn.state is TurnState.CANCELLED
+    assert chat.state is ChatState.RECOVERING
+
+
+@pytest.mark.asyncio
 async def test_delayed_cancel_for_old_turn_does_not_cancel_active_turn():
     chat = _Chat()
     transport = GptAutoSessionTransport(chat)
@@ -2249,7 +4682,7 @@ async def test_delayed_cancel_for_old_turn_does_not_cancel_active_turn():
 
     result = await transport.control(request)
 
-    assert result.disposition is ControlDisposition.ALREADY_TERMINAL
+    assert result.disposition is ControlDisposition.UNCERTAIN
     assert not active.cancel_event.is_set()
 
 
@@ -2266,7 +4699,9 @@ async def test_admission_failure_marks_recoverable_session_for_gateway_retention
         raise admission_error
 
     async def retain_after_turn_failure(error):
-        assert error is admission_error
+        assert error.code == admission_error.code
+        assert error.details["failure-stage"] == "readiness"
+        assert error.details["submission-state"] == "not_started"
         return True
 
     chat.ensure_ready = ensure_ready
@@ -2342,8 +4777,8 @@ async def test_turn_does_not_complete_on_more_actions_menu_alone_without_complet
     turn = GptAutoTurn(
         chat, SessionPrompt(turn_id="turn-more-actions-menu-alone", body="Review AU01"), lambda _: None
     )
-    with pytest.raises(AudiaGenticError, match="response recovery exhausted"):
-        await turn.run()
+    with pytest.raises(asyncio.TimeoutError):
+        await asyncio.wait_for(turn.run(), timeout=0.05)
 
 
 @pytest.mark.asyncio

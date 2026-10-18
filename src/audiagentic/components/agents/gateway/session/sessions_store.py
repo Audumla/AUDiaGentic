@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import logging
 import uuid
+from contextlib import ExitStack, contextmanager
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -26,9 +28,10 @@ from audiagentic.components.agents.agents_paths import (
     gateway_sessions_root,
 )
 from audiagentic.components.agents.gateway.session import bindings as bindings
+from audiagentic.components.agents.gateway.store._shared import _request_lock
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.contracts.schema_registry import validate_with_schema
-from audiagentic.foundation.io import atomic_write_json, load_ndjson
+from audiagentic.foundation.io import atomic_write_json, iter_ndjson
 from audiagentic.foundation.observability import record_timeline_event
 from audiagentic.foundation.system.process import StartupLock
 from audiagentic.foundation.time import now_iso_z
@@ -134,6 +137,350 @@ def session_max_lifetime_seconds(record: dict[str, Any]) -> float | None:
     return (record.get("policy") or {}).get("max-lifetime-seconds")
 
 
+def session_created_age_seconds(
+    record: dict[str, Any], *, now: datetime | None = None
+) -> float | None:
+    """Return the durable age of a session, or ``None`` for invalid metadata."""
+    created_at = session_created_at(record)
+    if not isinstance(created_at, str) or not created_at.strip():
+        return None
+    try:
+        created = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    if created.tzinfo is None:
+        created = created.replace(tzinfo=timezone.utc)
+    current = now or datetime.now(timezone.utc)
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=timezone.utc)
+    return max(0.0, (current.astimezone(timezone.utc) - created.astimezone(timezone.utc)).total_seconds())
+
+
+def session_lifetime_expiry(record: dict[str, Any]) -> datetime | None:
+    """Derive the absolute max-lifetime expiry from durable session fields."""
+    age = session_created_age_seconds(record)
+    max_lifetime = session_max_lifetime_seconds(record)
+    created_at = session_created_at(record)
+    if age is None or not isinstance(created_at, str):
+        return None
+    try:
+        cap = float(max_lifetime) if max_lifetime is not None else 0.0
+        created = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    if cap <= 0:
+        return None
+    if created.tzinfo is None:
+        created = created.replace(tzinfo=timezone.utc)
+    return created.astimezone(timezone.utc) + timedelta(seconds=cap)
+
+
+def session_lifetime_expired(
+    record: dict[str, Any], *, now: datetime | None = None
+) -> bool:
+    """Return whether the durable absolute max-lifetime has elapsed."""
+    expiry = session_lifetime_expiry(record)
+    if expiry is None:
+        return False
+    current = now or datetime.now(timezone.utc)
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=timezone.utc)
+    return current.astimezone(timezone.utc) > expiry
+
+
+def session_idle_expired(
+    record: dict[str, Any], *, now: datetime | None = None
+) -> bool:
+    """Return whether a durable, non-live session exceeded its idle policy."""
+    value = session_idle_timeout_seconds(record)
+    if value is None:
+        # Legacy GPT-auto records predate persisted policy fields.  Their
+        # admission path used gpt_idle_grace's 30-minute default; interpreting
+        # the missing value as disabled leaves those records active forever.
+        provider_id = session_provider_id(record) or ""
+        if provider_id.startswith("gpt-auto"):
+            value = 1800.0
+    try:
+        cap = float(value) if value is not None else 0.0
+    except (TypeError, ValueError):
+        return False
+    if cap <= 0:
+        return False
+    timestamp = (record.get("timing") or {}).get("last-activity-at")
+    if not isinstance(timestamp, str) or not timestamp.strip():
+        return False
+    try:
+        activity = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return False
+    if activity.tzinfo is None:
+        activity = activity.replace(tzinfo=timezone.utc)
+    current = now or datetime.now(timezone.utc)
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=timezone.utc)
+    return (current.astimezone(timezone.utc) - activity.astimezone(timezone.utc)).total_seconds() > cap
+
+
+def expire_session_if_policy_exceeded(
+    project_root: Path, session_id: str
+) -> dict[str, Any]:
+    """Apply durable max-lifetime and idle bounds before reuse or projection."""
+    record = read_session_record(project_root, session_id)
+    if record.get("state") in SESSION_TERMINAL_STATES:
+        return record
+    reason = None
+    if session_lifetime_expired(record):
+        reason = "max-lifetime"
+    elif session_idle_expired(record):
+        reason = "idle-timeout"
+    if reason is None:
+        return record
+    # Serialize the request preflight, request terminalization, and session
+    # retirement under the same project retention fence.  Per-request CAS is
+    # still required, but without this logical-operation lock another writer
+    # could change a later request between the all-request preflight and the
+    # session transition, leaving a partially reconciled session.
+    with StartupLock(gateway_retention_lock_path(project_root)):
+        current = read_session_record(project_root, session_id)
+        if current.get("state") in SESSION_TERMINAL_STATES:
+            return current
+        # The session may have been refreshed while this sweep waited for the
+        # project fence. Re-evaluate policy from the locked record.
+        reason = None
+        if session_lifetime_expired(current):
+            reason = "max-lifetime"
+        elif session_idle_expired(current):
+            reason = "idle-timeout"
+        if reason is None:
+            return current
+        expired = _reconcile_nonterminal_requests_before_expiry(project_root, current, reason=reason)
+        if expired is None:
+            return current
+    try:
+        record_session_timeline(
+            project_root,
+            session_id,
+            "session.expired",
+            state="expired",
+            attributes={"close-reason": reason},
+        )
+    except Exception:  # noqa: BLE001 - expiry state is already authoritative
+        logger.warning("failed to record durable session expiry timeline", exc_info=True)
+    return expired
+
+
+def _reconcile_nonterminal_requests_before_expiry(
+    project_root: Path,
+    session: dict[str, Any],
+    *,
+    reason: str,
+) -> dict[str, Any] | None:
+    """Retire request records whose provider session has durably expired.
+
+    A previous protection rule refused to expire any session carrying a
+    non-terminal request.  That avoided a broken session/request pair, but it
+    also left stale non-live sessions and running requests immortal after a
+    gateway restart.  Request terminalization is deliberately performed
+    before the session transition; if a request fence changes, the session is
+    left active for a later safe sweep.
+
+    This is deliberately not a success/capture path.  A visible response may
+    belong to another turn or another target; operator/provider reconciliation
+    remains responsible for proving and capturing it later.
+    """
+    from audiagentic.components.agents.gateway import store
+
+    session_id = session.get("session-id")
+    if not isinstance(session_id, str) or not session_id:
+        return None
+    request_ids = set(session_request_ids(session))
+    try:
+        records = store.list_records(project_root, include_output=False)
+    except Exception:  # noqa: BLE001 - expiry state remains authoritative
+        logger.warning(
+            "could not enumerate requests for expired session",
+            extra={"session-id": session_id},
+            exc_info=True,
+        )
+        return None
+    request_ids.update(
+        str(record.get("request-id"))
+        for record in records
+        if record.get("session-id") == session_id and record.get("request-id")
+    )
+    nonterminal: list[dict[str, Any]] = []
+    for request_id in sorted(request_ids):
+        try:
+            record = store.read_record(project_root, request_id)
+            if record.get("state") not in store.TERMINAL_STATES:
+                nonterminal.append(record)
+        except Exception:  # noqa: BLE001 - one record must not block expiry
+            logger.warning(
+                "could not inspect request owned by expiring session",
+                extra={"request-id": request_id, "session-id": session_id},
+                exc_info=True,
+            )
+            return None
+
+    if not nonterminal:
+        # No request mutation or provider ownership proof is needed for an
+        # empty stale session. Retire it under the caller's retention fence.
+        expired = transition_session_record(
+            project_root,
+            session_id,
+            "expired",
+            updates={"close-reason": reason, "closed-at": now_iso_z()},
+        )
+        bindings.retire_binding(project_root, expired, state="expired")
+        return expired
+
+    eligible: list[dict[str, Any]] = []
+    session_provider_metadata_value = session_provider_metadata(session)
+    session_provider_session_id = session_provider_metadata_value.get("provider-session-id")
+    session_provider_id_value = session_provider_id(session)
+    binding = session.get("binding")
+    binding_provider_id = binding.get("provider-id") if isinstance(binding, dict) else None
+    binding_provider_session_ref = binding.get("provider-session-ref") if isinstance(binding, dict) else None
+    if (
+        not isinstance(session_provider_session_id, str)
+        or not session_provider_session_id.strip()
+        or not isinstance(session_provider_id_value, str)
+        or not session_provider_id_value.strip()
+        or binding_provider_id != session_provider_id_value
+        or binding_provider_session_ref != session_provider_session_id
+    ):
+        return None
+    for record in nonterminal:
+        request_metadata = record.get("provider-metadata")
+        if not isinstance(request_metadata, dict):
+            return None
+        request_provider_session_id = request_metadata.get("provider-session-id")
+        if (
+            not isinstance(request_provider_session_id, str)
+            or not request_provider_session_id.strip()
+            or request_provider_session_id != session_provider_session_id
+            or record.get("resolved-provider-id") != session_provider_id_value
+        ):
+            return None
+        activity = record.get("activity")
+        provider_activity = activity.get("provider") if isinstance(activity, dict) else None
+        # The legacy top-level lease is the gateway owner/synthetic lease.  It
+        # must never keep a provider session alive during expiry reconciliation.
+        lease = provider_activity.get("lease-expires-at") if isinstance(provider_activity, dict) else None
+        if isinstance(lease, str) and lease.strip():
+            try:
+                lease_at = datetime.fromisoformat(lease.replace("Z", "+00:00"))
+                if lease_at.tzinfo is None:
+                    lease_at = lease_at.replace(tzinfo=timezone.utc)
+                if lease_at > datetime.now(timezone.utc):
+                    return None
+            except (TypeError, ValueError):
+                # An invalid lease is not meaningful proof of liveness.
+                pass
+        eligible.append(record)
+
+    with ExitStack() as request_locks:
+        # Hold every request mutation lock through the session transition's
+        # logical operation. Activity/cancellation writers use these same
+        # locks, so request B cannot advance after request A is terminalized.
+        for record in eligible:
+            request_locks.enter_context(_request_lock(project_root, str(record.get("request-id"))))
+
+        # Hold the session mutation fence before the final policy check and
+        # keep it through request terminalization and session transition.
+        # Activity refreshes use this same lock, so a refresh cannot land
+        # between the policy check and expiry.
+        with _session_lock(project_root, session_id):
+            current_session = read_session_record(project_root, session_id)
+            if current_session.get("state") in SESSION_TERMINAL_STATES:
+                return current_session
+            reason = None
+            if session_lifetime_expired(current_session):
+                reason = "max-lifetime"
+            elif session_idle_expired(current_session):
+                reason = "idle-timeout"
+            if reason is None:
+                return current_session
+
+            for record in eligible:
+                current = store.read_record(project_root, str(record.get("request-id")))
+                if (
+                    current.get("state") in store.TERMINAL_STATES
+                    or current.get("revision") != record.get("revision")
+                ):
+                    return None
+
+            for record in eligible:
+                request_id = str(record.get("request-id"))
+                try:
+                    side_effect_state = "may-have-started"
+                    diagnostics = record.get("diagnostics")
+                    if isinstance(diagnostics, dict):
+                        side_effect_state = diagnostics.get("side-effect-state") or side_effect_state
+                    error = {
+                        "code": "CON-AGW-084",
+                        "kind": "agents",
+                        "message": "provider session expired before the request reached a terminal state",
+                        "details": {
+                            "session-id": session_id,
+                            "session-close-reason": reason,
+                            "failure-reason": "provider-session-expired",
+                            "side-effect-state": side_effect_state,
+                            "watchdog-classification": "expired-provider-session",
+                            "reconciliation": "provider-capture-required",
+                            "retry-safe": False,
+                        },
+                    }
+                    updated = store.transition_recovered_terminal(
+                        project_root,
+                        request_id,
+                        "interrupted",
+                        error=error,
+                        stale_epoch=record.get("dispatch-owner-epoch") or None,
+                        expected_revision=record.get("revision"),
+                        replay_required=False,
+                        replay_reason="provider-session-expired; reconcile or operator-capture before retry",
+                        _request_lock_held=True,
+                    )
+                    store.record_gateway_timeline(
+                        project_root,
+                        request_id,
+                        "request.interrupted",
+                        state=updated.get("state"),
+                        attributes={
+                            "source": "session-expiry-reconciliation",
+                            "session-id": session_id,
+                            "session-close-reason": reason,
+                        },
+                    )
+                except Exception:  # noqa: BLE001 - one record must not block session expiry
+                    logger.warning(
+                        "could not reconcile request owned by expired session",
+                        extra={"request-id": request_id, "session-id": session_id},
+                        exc_info=True,
+                    )
+                    return None
+            expired = _transition_session_record_locked(
+                project_root,
+                session_id,
+                current_session,
+                "expired",
+                updates={"close-reason": reason, "closed-at": now_iso_z()},
+            )
+            bindings.retire_binding(project_root, expired, state="expired")
+            return expired
+
+
+def expire_session_if_lifetime_exceeded(
+    project_root: Path, session_id: str
+) -> dict[str, Any]:
+    """Persist expiry before recovery can re-open an over-age session."""
+    record = read_session_record(project_root, session_id)
+    if record.get("state") in SESSION_TERMINAL_STATES or not session_lifetime_expired(record):
+        return record
+    return expire_session_if_policy_exceeded(project_root, session_id)
+
+
 def record_session_timeline(
     project_root: Path,
     session_id: str,
@@ -166,6 +513,14 @@ def _session_lock(project_root: Path, session_id: str) -> StartupLock:
     safe across processes as well as threads.
     """
     return StartupLock(gateway_session_path(project_root, session_id).with_name("mutation.lock"))
+
+
+@contextmanager
+def _ordered_session_mutation_lock(project_root: Path, session_id: str):
+    """Acquire shared retention state before the per-session mutation lock."""
+    with StartupLock(gateway_retention_lock_path(project_root)):
+        with _session_lock(project_root, session_id):
+            yield
 
 
 def generate_session_id() -> str:
@@ -513,7 +868,7 @@ def install_initial_provider_binding(
     provider metadata. A different reference is a generation conflict and is
     never written in place.
     """
-    with _session_lock(project_root, session_id):
+    with _ordered_session_mutation_lock(project_root, session_id):
         record = read_session_record(project_root, session_id)
         current = record.get("binding")
         if isinstance(current, dict):
@@ -554,8 +909,7 @@ def install_initial_provider_binding(
         # Register first so a retry repairs either side of a partial caller
         # failure without ever permitting a conflicting provider reference.
         bindings.register_open_binding(project_root, record)
-        with StartupLock(gateway_retention_lock_path(project_root)):
-            atomic_write_json(gateway_session_path(project_root, session_id), record)
+        atomic_write_json(gateway_session_path(project_root, session_id), record)
         return record
 
 
@@ -591,7 +945,7 @@ def latest_turn_quality_summary(
     returned — only bounded scalar facts (AS36 step 4).
     """
     try:
-        entries = load_ndjson(gateway_session_timeline_path(project_root, session_id))
+        entries = iter_ndjson(gateway_session_timeline_path(project_root, session_id))
     except (OSError, ValueError):
         logger.warning(
             "failed to read gateway session timeline for quality summary",
@@ -682,11 +1036,12 @@ def latest_turn_projection(
     native frames, or binding internals.
     """
     try:
-        entries = load_ndjson(gateway_session_timeline_path(project_root, session_id))
+        entries = iter_ndjson(gateway_session_timeline_path(project_root, session_id))
     except (OSError, ValueError):
         logger.warning("failed to read gateway session timeline", extra={"session-id": session_id})
         return None
-    for entry in reversed(entries):
+    latest: dict[str, Any] | None = None
+    for entry in entries:
         event = entry.get("event")
         if not isinstance(event, str) or not event.startswith("session.turn."):
             continue
@@ -715,8 +1070,8 @@ def latest_turn_projection(
             value = attrs.get(key)
             if isinstance(value, (str, int, float, bool)):
                 projected[key] = value
-        return projected
-    return None
+        latest = projected
+    return latest
 
 
 def build_session_progress_summary(
@@ -739,7 +1094,7 @@ def build_session_progress_summary(
     Only scalar fields — no text, provider refs, tool args, or raw payloads.
     """
     try:
-        entries = load_ndjson(gateway_session_timeline_path(project_root, session_id))
+        entries = iter_ndjson(gateway_session_timeline_path(project_root, session_id))
     except (OSError, ValueError):
         logger.warning(
             "failed to read gateway session timeline for progress summary",
@@ -900,44 +1255,58 @@ def transition_session_record(
         )
     with _session_lock(project_root, session_id):
         record = read_session_record(project_root, session_id)
-        ensure_session_transition(record["state"], new_state)
-        updated = dict(record)
-        updated["state"] = new_state
-        timing = dict(updated.get("timing") or {})
-        timing["updated-at"] = now_iso_z()
-        for key, value in (updates or {}).items():
-            key = key.replace("_", "-")
-            if key in ("closed-at", "last-activity-at"):
-                if value is None:
-                    timing.pop(key, None)
-                else:
-                    timing[key] = value
-            elif key == "close-reason":
-                if value is None:
-                    updated.pop("close-reason", None)
-                else:
-                    updated["close-reason"] = value
-            elif key == "error":
-                redacted = _redact_error(value)
-                if redacted is None:
-                    updated.pop("error", None)
-                else:
-                    updated["error"] = redacted
-        updated["timing"] = timing
-        write_session_record(project_root, updated)
-        record_session_timeline(
-            project_root,
-            session_id,
-            "state.changed",
-            state=new_state,
-            attributes={
-                "from": record["state"],
-                "to": new_state,
-                "close-reason": updated.get("close-reason"),
-                "updated-keys": sorted((updates or {}).keys()),
-            },
+        return _transition_session_record_locked(
+            project_root, session_id, record, new_state, updates=updates
         )
-        return updated
+
+
+def _transition_session_record_locked(
+    project_root: Path,
+    session_id: str,
+    record: dict[str, Any],
+    new_state: str,
+    *,
+    updates: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Apply a session transition while the caller holds the session lock."""
+    ensure_session_transition(record["state"], new_state)
+    updated = dict(record)
+    updated["state"] = new_state
+    timing = dict(updated.get("timing") or {})
+    timing["updated-at"] = now_iso_z()
+    for key, value in (updates or {}).items():
+        key = key.replace("_", "-")
+        if key in ("closed-at", "last-activity-at"):
+            if value is None:
+                timing.pop(key, None)
+            else:
+                timing[key] = value
+        elif key == "close-reason":
+            if value is None:
+                updated.pop("close-reason", None)
+            else:
+                updated["close-reason"] = value
+        elif key == "error":
+            redacted = _redact_error(value)
+            if redacted is None:
+                updated.pop("error", None)
+            else:
+                updated["error"] = redacted
+    updated["timing"] = timing
+    write_session_record(project_root, updated)
+    record_session_timeline(
+        project_root,
+        session_id,
+        "state.changed",
+        state=new_state,
+        attributes={
+            "from": record["state"],
+            "to": new_state,
+            "close-reason": updated.get("close-reason"),
+            "updated-keys": sorted((updates or {}).keys()),
+        },
+    )
+    return updated
 
 
 def record_session_turn(
@@ -962,7 +1331,25 @@ def record_session_turn(
                 return record
             updated = dict(record)
             provider = dict(updated.get("provider") or {})
-            provider["metadata"] = dict(provider_metadata)
+            current_metadata = dict(provider.get("metadata") or {})
+            current_metadata.update(provider_metadata)
+            if (
+                current_metadata.get("unresolved-turn-pending") is True
+                and isinstance(current_metadata.get("terminal-evidence"), dict)
+            ):
+                current_metadata["unresolved-turn-pending"] = False
+                for key in (
+                    "recovery-state",
+                    "unresolved-turn-id",
+                    "unresolved-baseline-user-id",
+                    "unresolved-baseline-assistant-id",
+                    "unresolved-baseline-user-count",
+                    "unresolved-baseline-assistant-count",
+                    "unresolved-baseline-error-alert-occurrences",
+                    "terminal-evidence",
+                ):
+                    current_metadata.pop(key, None)
+            provider["metadata"] = current_metadata
             updated["provider"] = provider
             timing = dict(updated.get("timing") or {})
             timing["updated-at"] = now_iso_z()
@@ -985,7 +1372,31 @@ def record_session_turn(
         timestamp = now_iso_z()
         if provider_metadata is not None:
             provider = dict(updated.get("provider") or {})
-            provider["metadata"] = dict(provider_metadata)
+            current_metadata = dict(provider.get("metadata") or {})
+            current_metadata.update(provider_metadata)
+            # The provider result is assembled from the turn's checkpoint
+            # snapshot.  A successful turn may therefore still carry the
+            # pre-send unresolved marker even though terminal proof already
+            # cleared it through the checkpoint sink.  Terminal evidence is
+            # the authoritative proof here; do not resurrect a stale fence
+            # while recording the completed turn.
+            if (
+                current_metadata.get("unresolved-turn-pending") is True
+                and isinstance(current_metadata.get("terminal-evidence"), dict)
+            ):
+                current_metadata["unresolved-turn-pending"] = False
+                for key in (
+                    "recovery-state",
+                    "unresolved-turn-id",
+                    "unresolved-baseline-user-id",
+                    "unresolved-baseline-assistant-id",
+                    "unresolved-baseline-user-count",
+                    "unresolved-baseline-assistant-count",
+                    "unresolved-baseline-error-alert-occurrences",
+                    "terminal-evidence",
+                ):
+                    current_metadata.pop(key, None)
+            provider["metadata"] = current_metadata
             updated["provider"] = provider
         timing = dict(updated.get("timing") or {})
         timing["last-activity-at"] = timestamp

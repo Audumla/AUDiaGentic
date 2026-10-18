@@ -90,7 +90,7 @@ async def test_initial_chat_discovers_project_by_active_project_name(monkeypatch
         "find_project_url",
         "navigate",
     ]
-    assert runtime.bridge.calls[1][1]["url"] == "https://chatgpt.com/projects"
+    assert runtime.bridge.calls[1][1]["url"] == "https://chatgpt.com/"
     assert runtime.bridge.calls[3][1]["url"] == chat.project_url
 
 
@@ -123,6 +123,34 @@ def test_session_transport_uses_admitted_project_name(monkeypatch, tmp_path: Pat
     )
 
     assert captured["project_name"] == "Workspace Name"
+
+
+def test_session_transport_uses_provider_project_name_for_pinned_profile(
+    monkeypatch, tmp_path: Path
+):
+    captured: dict[str, object] = {}
+
+    class FakeChat:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+    monkeypatch.setattr(session_transport, "PersistentChat", FakeChat)
+    monkeypatch.setattr(session_transport, "get_runtime", lambda *_args: object())
+    config = valid_config()
+    config["project-name"] = "gpt-t2"
+    config["project-url"] = (
+        "https://chatgpt.com/g/g-p-6a897f6df91081919747556a86ea4d82/project"
+    )
+
+    session_transport.build_session_transport(
+        tmp_path,
+        config=config,
+        ag_session_id="session-1",
+        binding_sink=lambda _update: None,
+        project_name="AUDiaGentic",
+    )
+
+    assert captured["project_name"] == "gpt-t2"
 
 
 @pytest.mark.asyncio
