@@ -1,8 +1,11 @@
 from types import SimpleNamespace
+
 import pytest
+
 from audiagentic.components.providers.adapters.gpt_auto.chat import PersistentChat
 from audiagentic.components.providers.adapters.gpt_auto.config import GptAutoConfig
 from audiagentic.components.providers.adapters.gpt_auto.prompt_fingerprint import PromptFingerprint
+
 from .test_greenfield_config_urls import valid_config
 
 

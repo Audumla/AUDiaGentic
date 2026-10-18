@@ -62,6 +62,7 @@ CAPABILITIES = (
     "requests.diagnostics",
     "requests.recover",
     "requests.response",
+    "requests.complete-from-provider",
     "conversations.focus-existing",
     "requests.wait",
     "requests.cancel",
@@ -142,7 +143,11 @@ class GatewayServiceApplication:
         return self._dashboard_action_token
 
     def dashboard_project_image(self, project_id: str, encoded: str | None = None) -> bytes:
-        from audiagentic.components.agents.gateway.service.dashboard_images import image_path, project_image_id, save_image
+        from audiagentic.components.agents.gateway.service.dashboard_images import (
+            image_path,
+            project_image_id,
+            save_image,
+        )
         from audiagentic.components.agents.gateway.service.known_projects import load_known_projects
 
         known = load_known_projects(self._service_store.root / "known-projects.json")
@@ -165,6 +170,17 @@ class GatewayServiceApplication:
             }
         return self._application.focus_execution_chat(matches[0], request_id)
 
+    def focus_dashboard_session(self, session_id: str) -> dict[str, Any]:
+        """Resolve a dashboard session id across known projects and focus it."""
+        matches = self._dashboard_session_projects(session_id)
+        if len(matches) != 1:
+            return {
+                "session-id": session_id,
+                "outcome": "not-found" if not matches else "ambiguous",
+                "reason": "session-project-not-found" if not matches else "session-id-not-unique",
+            }
+        return self._application.focus_execution_session(matches[0], session_id)
+
     def cancel_dashboard_request(self, request_id: str) -> dict[str, Any]:
         """Cancel through the canonical API; never accept a client-supplied root."""
         matches = self._dashboard_request_projects(request_id)
@@ -172,6 +188,12 @@ class GatewayServiceApplication:
             raise service_conflict_error(30, "request not found or request id is ambiguous")
         self._application.cancel_execution_request(matches[0], request_id)
         return {"request-id": request_id, "outcome": "cancellation-requested"}
+
+    def complete_dashboard_request(self, request_id: str) -> dict[str, Any]:
+        matches = self._dashboard_request_projects(request_id)
+        if len(matches) != 1:
+            raise service_conflict_error(31, "request not found or request id is ambiguous")
+        return self._application.complete_execution_from_provider(matches[0], request_id)
 
     def _dashboard_request_projects(self, request_id: str) -> list[Path]:
         from audiagentic.components.agents.gateway.service.known_projects import load_known_projects
@@ -192,6 +214,16 @@ class GatewayServiceApplication:
 
     def purge_dashboard_session(self, session_id: str) -> dict[str, Any]:
         """Purge one dashboard session after resolving its owning project."""
+        matches = self._dashboard_session_projects(session_id)
+        if len(matches) != 1:
+            return {
+                "session-id": session_id,
+                "outcome": "not-found" if not matches else "ambiguous",
+                "reason": "session-project-not-found" if not matches else "session-id-not-unique",
+            }
+        return self._application.purge_execution_session(matches[0], session_id)
+
+    def _dashboard_session_projects(self, session_id: str) -> list[Path]:
         from audiagentic.components.agents.gateway.service.known_projects import load_known_projects
 
         matches = []
@@ -206,13 +238,7 @@ class GatewayServiceApplication:
             except Exception:  # noqa: BLE001 - skip projects without this session
                 continue
             matches.append(known.project_root)
-        if len(matches) != 1:
-            return {
-                "session-id": session_id,
-                "outcome": "not-found" if not matches else "ambiguous",
-                "reason": "session-project-not-found" if not matches else "session-id-not-unique",
-            }
-        return self._application.purge_execution_session(matches[0], session_id)
+        return matches
 
     def acquire_client(
         self,
@@ -318,8 +344,11 @@ class GatewayServiceApplication:
                 _dispatch_service_root=str(self._service_store.root),
             )
         if operation == "get_execution_request":
-            _reject_unknown(arguments, {"request_id"})
-            return self._application.get_execution_request(root, _required(arguments, "request_id"))
+            _reject_unknown(arguments, {"request_id", "include_response"})
+            include_response = arguments.get("include_response", False)
+            if not isinstance(include_response, bool):
+                raise service_validation_error(35, "include_response must be a boolean")
+            return self._application.get_execution_request(root, _required(arguments, "request_id"), include_response=include_response)
         if operation == "get_execution_diagnostics":
             _reject_unknown(arguments, {"request_id", "limit"})
             limit = arguments.get("limit", 25)
@@ -342,9 +371,18 @@ class GatewayServiceApplication:
         if operation == "get_execution_response":
             _reject_unknown(arguments, {"request_id"})
             return self._application.get_execution_response(root, _required(arguments, "request_id"))
+        if operation == "get_execution_response_payload":
+            _reject_unknown(arguments, {"request_id"})
+            return self._application.get_execution_response_payload(root, _required(arguments, "request_id"))
+        if operation == "get_execution_failure_response":
+            _reject_unknown(arguments, {"request_id"})
+            return self._application.get_execution_failure_response(root, _required(arguments, "request_id"))
         if operation == "focus_execution_chat":
             _reject_unknown(arguments, {"request_id"})
             return self._application.focus_execution_chat(root, _required(arguments, "request_id"))
+        if operation == "complete_execution_from_provider":
+            _reject_unknown(arguments, {"request_id"})
+            return self._application.complete_execution_from_provider(root, _required(arguments, "request_id"))
         if operation == "wait_execution_request":
             _reject_unknown(arguments, {"request_id", "timeout_seconds"})
             return self._application.wait_execution_request(
@@ -355,7 +393,55 @@ class GatewayServiceApplication:
                 root, _required(arguments, "request_id")
             )
         if operation == "request_runtime_status":
+            _reject_unknown(arguments, {"request_id"})
             return self._application.request_runtime_status(
+                root, _required(arguments, "request_id")
+            )
+        if operation == "get_execution_observations":
+            _reject_unknown(arguments, {"request_id", "limit", "cursor", "since_sequence", "tail"})
+            limit = _optional_positive_int(arguments, "limit") or 25
+            since_sequence = arguments.get("since_sequence")
+            tail = arguments.get("tail")
+            if since_sequence is not None and (isinstance(since_sequence, bool) or not isinstance(since_sequence, int)):
+                raise service_validation_error(36, "since_sequence must be an integer")
+            if tail is not None and (isinstance(tail, bool) or not isinstance(tail, int)):
+                raise service_validation_error(37, "tail must be an integer")
+            return self._application.get_execution_observations(
+                root,
+                _required(arguments, "request_id"),
+                limit=limit,
+                cursor=_optional_string(arguments, "cursor"),
+                since_sequence=since_sequence,
+                tail=tail,
+            )
+        if operation == "get_execution_evidence":
+            _reject_unknown(
+                arguments,
+                {"request_id", "include_observations", "include_history", "include_recovery", "limit", "cursor", "observation_cursor", "recovery_cursor", "history_cursor", "since_sequence"},
+            )
+            for key in ("include_observations", "include_history", "include_recovery"):
+                if key in arguments and not isinstance(arguments[key], bool):
+                    raise service_validation_error(37, f"{key} must be a boolean")
+            limit = _optional_positive_int(arguments, "limit") or 25
+            since_sequence = arguments.get("since_sequence")
+            if since_sequence is not None and (isinstance(since_sequence, bool) or not isinstance(since_sequence, int)):
+                raise service_validation_error(38, "since_sequence must be an integer")
+            return self._application.get_execution_evidence(
+                root,
+                _required(arguments, "request_id"),
+                include_observations=arguments.get("include_observations", False),
+                include_history=arguments.get("include_history", False),
+                include_recovery=arguments.get("include_recovery", False),
+                limit=limit,
+                cursor=_optional_string(arguments, "cursor"),
+                observation_cursor=_optional_string(arguments, "observation_cursor"),
+                recovery_cursor=_optional_string(arguments, "recovery_cursor"),
+                history_cursor=_optional_string(arguments, "history_cursor"),
+                since_sequence=since_sequence,
+            )
+        if operation == "replay_execution_observations":
+            _reject_unknown(arguments, {"request_id"})
+            return self._application.replay_execution_observations(
                 root, _required(arguments, "request_id")
             )
         if operation == "run_execution_request":
@@ -383,6 +469,25 @@ class GatewayServiceApplication:
         if operation == "close_execution_session":
             return self._application.close_execution_session(
                 root, _required(arguments, "session_id")
+            )
+        if operation == "purge_execution_session":
+            _reject_unknown(arguments, {"session_id"})
+            return self._application.purge_execution_session(
+                root, _required(arguments, "session_id")
+            )
+        if operation == "purge_execution_sessions":
+            _reject_unknown(arguments, {"dry_run", "session_ids"})
+            session_ids = arguments.get("session_ids")
+            if session_ids is not None and (
+                not isinstance(session_ids, list)
+                or any(not isinstance(value, str) or not value for value in session_ids)
+            ):
+                raise service_validation_error(32, "session_ids must be a list of non-empty strings")
+            dry_run = arguments.get("dry_run", True)
+            if not isinstance(dry_run, bool):
+                raise service_validation_error(33, "dry_run must be a boolean")
+            return self._application.purge_execution_sessions(
+                root, dry_run=dry_run, session_ids=session_ids
             )
         if operation == "control_execution_session":
             _reject_unknown(arguments, {"session_id", "turn_id", "action", "control_id", "payload"})
@@ -487,6 +592,17 @@ class GatewayServiceApplication:
             if not isinstance(force, bool):
                 raise service_validation_error(26, "service_stop force must be a boolean")
             return self._lifecycle_controller().request_stop(force=force)
+        if operation == "service_restart":
+            _reject_unknown(arguments, set())
+            if self._operations_active():
+                raise service_conflict_error(30, "gateway has active operator operations; retry when idle")
+            epoch = self._service_store.read().owner_epoch
+            return {
+                **self._lifecycle_controller().request_restart(
+                    initiating_lease_id=lease_id
+                ),
+                "owner-epoch": epoch,
+            }
         raise service_validation_error(1, "unknown gateway service operation", operation=operation)
 
     def restart_dashboard_gateway(self) -> dict[str, Any]:

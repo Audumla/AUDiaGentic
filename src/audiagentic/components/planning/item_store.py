@@ -371,7 +371,24 @@ def validate_record_path(path: Path, fm: dict[str, Any], kind: str) -> None:
             state not in VALID_STATES
             or path.parent.parent.name != placement_for_state("item", state)
         ):
-            raise PlanningIntegrityError("item state does not match its canonical placement")
+            expected_bucket = placement_for_state("item", state) if state in VALID_STATES else None
+            raise PlanningIntegrityError(
+                "item state does not match its canonical placement",
+                details={
+                    "record_type": "item",
+                    "id": record_id,
+                    "plan": plan,
+                    "declared_state": state,
+                    "actual_path": str(path),
+                    "expected_placement": f"{expected_bucket}/{plan}/{record_id}.md"
+                    if expected_bucket
+                    else None,
+                    "repair": {
+                        "tool": "plan_set_state",
+                        "arguments": {"item_id": record_id, "new_state": state},
+                    },
+                },
+            )
         return
     if kind == "review":
         validate_review_id(record_id)
@@ -391,7 +408,22 @@ def validate_record_path(path: Path, fm: dict[str, Any], kind: str) -> None:
         ):
             raise PlanningIntegrityError("review has an unknown workflow state")
         if path.parent.parent.parent.parent.name != placement_for_state("review", state):
-            raise PlanningIntegrityError("review state does not match its canonical placement")
+            expected_bucket = placement_for_state("review", state)
+            raise PlanningIntegrityError(
+                "review state does not match its canonical placement",
+                details={
+                    "record_type": "review",
+                    "id": record_id,
+                    "plan": plan,
+                    "declared_state": state,
+                    "actual_path": str(path),
+                    "expected_placement": f"{expected_bucket}/{plan}/reviews/{parent_id}/{record_id}.md",
+                    "repair": {
+                        "tool": "plan_set_review_state",
+                        "arguments": {"review_id": record_id, "new_state": state},
+                    },
+                },
+            )
         return
     raise AudiaGenticError(
         code="VAL-PLN-035", kind="validation", message=f"unknown planning record kind: {kind}"
@@ -568,7 +600,7 @@ def next_review_id(project_root: Path, slug: str, parent_id: str) -> str:
     return f"RV{max_num + 1:02d}"
 
 
-def find_item(project_root: Path, item_id: str) -> Path | None:
+def find_item(project_root: Path, item_id: str, *, allow_placement_repair: bool = False) -> Path | None:
     validate_record_id(item_id)
     matches: list[Path] = []
     for directory in (
@@ -593,6 +625,17 @@ def find_item(project_root: Path, item_id: str) -> Path | None:
                 # suppress corruption when the path or frontmatter names the
                 # requested record itself.
                 if path.stem == item_id or frontmatter.get("id") == item_id:
+                    if (
+                        allow_placement_repair
+                        and path.stem == item_id
+                        and frontmatter.get("id") == item_id
+                        and isinstance(frontmatter.get("plan"), str)
+                        and path.parent.name == frontmatter["plan"]
+                        and frontmatter.get("state") in VALID_STATES
+                        and path.parent.parent.name != placement_for_state("item", frontmatter["state"])
+                    ):
+                        matches.append(path)
+                        continue
                     raise
                 continue
             if path.stem != item_id:
@@ -603,8 +646,8 @@ def find_item(project_root: Path, item_id: str) -> Path | None:
     return matches[0] if matches else None
 
 
-def require_item(project_root: Path, item_id: str) -> Path:
-    path = find_item(project_root, item_id)
+def require_item(project_root: Path, item_id: str, *, allow_placement_repair: bool = False) -> Path:
+    path = find_item(project_root, item_id, allow_placement_repair=allow_placement_repair)
     if path is None:
         raise AudiaGenticError(
             code="VAL-PLN-001",

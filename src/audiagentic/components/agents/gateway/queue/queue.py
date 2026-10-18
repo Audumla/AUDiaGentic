@@ -13,13 +13,17 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 import threading
 import time
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+from audiagentic.foundation.transports.agent_session import is_meaningful_activity
 
 from audiagentic.components.agents.agents_paths import gateway_request_path
 from audiagentic.components.agents.gateway import profiles as profiles_mod
@@ -45,6 +49,7 @@ from audiagentic.components.agents.gateway.queue.capacity_policy import (
     resolve_pending_capacity,
 )
 from audiagentic.components.agents.gateway.queue.pending import PendingAuthority
+from audiagentic.components.agents.gateway.queue.recovery_control import RecoveryDeferred
 from audiagentic.components.agents.gateway.queue.watchdog_registry import watchdog_registry
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.time import now_iso_z
@@ -54,6 +59,10 @@ logger = logging.getLogger(__name__)
 
 _WAIT_INITIAL_BACKOFF_SECONDS = 0.05
 _WAIT_MAX_BACKOFF_SECONDS = 0.5
+_RECOVERY_RETRY_INITIAL_SECONDS = 0.5
+_RECOVERY_RETRY_MAX_SECONDS = 15.0
+_RECOVERY_RETRY_MAX_ATTEMPTS = 6
+_FOLLOWUP_RECOVERY_DEFAULT_MAX_ATTEMPTS = max(_RECOVERY_RETRY_MAX_ATTEMPTS * 4, 24)
 
 # SH07 crash-matrix test-only hook: widens the claim-to-start control-plane
 # window so a real OS process kill can be observed landing inside it (the
@@ -62,6 +71,131 @@ _WAIT_MAX_BACKOFF_SECONDS = 0.5
 # No-op unless explicitly set; reading an unset env var costs nothing and
 # changes no production behavior. See gateway_docker_harness.py callers.
 _ENV_TEST_STALL_CLAIM_TO_START_MS = "AUDIAGENTIC_GATEWAY_TEST_STALL_CLAIM_TO_START_MS"
+
+
+def _has_durable_provider_identity(project_root: Path, record: dict[str, Any]) -> bool:
+    """Check the session record when the request projection lags provider metadata."""
+    provider_metadata = record.get("provider-metadata")
+    if isinstance(provider_metadata, dict) and (
+        provider_metadata.get("chat-url")
+        or provider_metadata.get("provider-session-id")
+        or record.get("provider-chat-url")
+    ):
+        return True
+    session_id = record.get("session-id")
+    if not isinstance(session_id, str) or not session_id:
+        return False
+    try:
+        from audiagentic.components.agents.gateway.session import sessions_store
+
+        binding = sessions_store.read_session_binding(project_root, session_id) or {}
+        provider_ref = binding.get("provider-session-ref")
+        if isinstance(provider_ref, str) and provider_ref.strip():
+            return True
+        session_record = sessions_store.read_session_record(project_root, session_id)
+        metadata = sessions_store.session_provider_metadata(session_record)
+        return isinstance(metadata, dict) and bool(
+            metadata.get("chat-url") or metadata.get("provider-session-id")
+        )
+    except Exception:  # noqa: BLE001 - recovery safety must fail closed
+        return False
+
+
+def _durable_provider_session_is_active(project_root: Path, record: dict[str, Any]) -> bool:
+    """Return whether the durable session may still be retried in place.
+
+    A provider identity is not enough to justify an unbounded recovery loop.
+    The session record is the lifecycle authority; once it is terminal, keep
+    the request's ambiguous provider outcome fail-closed instead of repeatedly
+    trying to rehydrate a session that cannot accept work. Missing or unreadable
+    records are not eligible for the unbounded durable-session exception; the
+    normal bounded recovery policy must decide their outcome.
+    """
+    session_id = record.get("session-id")
+    if not isinstance(session_id, str) or not session_id:
+        return False
+    try:
+        from audiagentic.components.agents.gateway.session import sessions_store
+
+        session_record = sessions_store.expire_session_if_policy_exceeded(
+            project_root, session_id
+        )
+    except Exception:
+        logger.warning(
+            "could not read durable session lifecycle during recovery; using bounded retry",
+            extra={"session-id": session_id, "request-id": record.get("request-id")},
+            exc_info=True,
+        )
+        return False
+    lifecycle_state = session_record.get("state")
+    if lifecycle_state == "expired":
+        return False
+
+    # A gateway generation can mark its local observer failed while the
+    # provider conversation and unresolved turn remain durable.  In that
+    # narrow restart/owner-loss case, the provider binding is still the
+    # recovery seam: the next attempt can create an exact-session successor
+    # and observe the existing turn without replaying the prompt.  Do not
+    # extend this exception to ordinary provider/session failures.
+    #
+    # The exception is bounded by the request-owned provider activity lease
+    # for every non-terminal session state. An active durable session can
+    # outlive its browser tab too; once the last meaningful activity lease has
+    # expired, repeated rehydrate failures must fall through to bounded
+    # recovery instead of keeping the request running forever.
+    activity = record.get("activity")
+    provider_activity = activity.get("provider") if isinstance(activity, dict) else None
+    provider_phase = (
+        provider_activity.get("phase")
+        if isinstance(provider_activity, dict)
+        else None
+    )
+    provider_activity_is_real = (
+        (provider_phase is None and not provider_activity.get("source"))
+        or is_meaningful_activity(provider_activity.get("source"), provider_phase)
+    )
+    if record.get("provider-transport-kind") == "provider-session":
+        # Provider-session recovery must be fenced by current provider work.
+        # Legacy synthetic phases cannot keep the session retryable.
+        lease_expires_at = (
+            provider_activity.get("lease-expires-at")
+            if provider_activity_is_real and isinstance(provider_activity, dict)
+            else None
+        )
+    else:
+        lease_expires_at = (
+            provider_activity.get("lease-expires-at")
+            if isinstance(provider_activity, dict)
+            else None
+        ) or record.get("activity-lease-expires-at")
+    if not isinstance(lease_expires_at, str) or not lease_expires_at:
+        return False
+    try:
+        from datetime import datetime, timezone
+
+        lease_expires = datetime.fromisoformat(lease_expires_at.replace("Z", "+00:00"))
+        if lease_expires.tzinfo is None:
+            lease_expires = lease_expires.replace(tzinfo=timezone.utc)
+        if lease_expires <= datetime.now(timezone.utc):
+            return False
+    except (TypeError, ValueError, OverflowError):
+        return False
+    if lifecycle_state == "active":
+        return True
+    # The request projection can lag or retain an older checkpoint across a
+    # gateway restart. The session record owns the unresolved-turn fence;
+    # never use request metadata to authorize an unbounded observation loop.
+    session_metadata = sessions_store.session_provider_metadata(session_record)
+    recovery = record.get("recovery")
+    recovery_reason = recovery.get("reason") if isinstance(recovery, dict) else None
+    binding = sessions_store.read_session_binding(project_root, session_id) or {}
+    provider_ref = binding.get("provider-session-ref")
+    return (
+        isinstance(provider_ref, str)
+        and bool(provider_ref.strip())
+        and session_metadata.get("unresolved-turn-pending") is True
+        and recovery_reason in {"gateway-restart", "owner-loss", "service-restart"}
+    )
 
 
 def _test_stall_claim_to_start() -> None:
@@ -342,6 +476,19 @@ class GatewayQueueManager:
         # session/compatibility state; they no longer own pending work.
         self._pending_authority: PendingAuthority[QueuedDispatch] = PendingAuthority()
         self._active_requests: dict[str, tuple[Path, str]] = {}
+        self._recovery_timers: dict[str, threading.Timer] = {}
+        self._recovery_pending: dict[str, Path] = {}
+        self._shutdown_event = threading.Event()
+
+    def shutdown(self) -> None:
+        """Stop delayed recovery work owned by this queue generation."""
+        self._shutdown_event.set()
+        with self._manager_lock:
+            timers = tuple(self._recovery_timers.values())
+            self._recovery_timers.clear()
+            self._recovery_pending.clear()
+        for timer in timers:
+            timer.cancel()
 
     def _runtime_state(self, snapshot: profiles_mod.ResolvedExecutionProfile) -> _RuntimeState:
         profile_identity = ProfileGenerationIdentity(
@@ -606,7 +753,7 @@ class GatewayQueueManager:
         authority rotates only the project that actually starts work, so an
         unavailable project head cannot starve another project with capacity.
         """
-        while True:
+        while not self._shutdown_event.is_set():
             started = False
             for candidate in self._pending_authority.candidates():
                 entry = candidate.value
@@ -637,6 +784,168 @@ class GatewayQueueManager:
                 break
             if not started:
                 return
+
+    def enqueue_recovered_running(
+        self,
+        project_root: Path,
+        record: dict[str, Any],
+        params: dict[str, Any],
+        runner: RequestRunner,
+        *,
+        dispatch_owner_epoch: str,
+        dispatch_service_root: Path,
+    ) -> None:
+        """Schedule a taken-over running request without a fresh claim/start.
+
+        The request is already in the running state and its provider-side
+        effect may already exist.  It therefore uses the normal worker
+        lifecycle only for capacity, observation, and terminal persistence;
+        the claim path returns a private recovery marker and never replays a
+        queued dispatch transition.
+        """
+        snapshot = profiles_mod.snapshot_from_record(record)
+        if snapshot is None:
+            raise AudiaGenticError(
+                "CON-AGW-101", "agents", "recovered request has no immutable profile snapshot", {}
+            )
+        from audiagentic.components.agents.gateway.instances import resolve_instance_facts
+
+        instance_facts = resolve_instance_facts(project_root, snapshot.instances)
+        entry = QueuedDispatch(
+            request_id=record["request-id"],
+            project_root=project_root,
+            execution_profile_id=record["execution-profile-id"],
+            snapshot=snapshot,
+            instance_facts=instance_facts,
+            project_key=str(project_root.resolve()),
+            session_key=str(record.get("session-id")) if record.get("session-id") else None,
+            runner=runner,
+            owner_epoch=dispatch_owner_epoch,
+            service_root=dispatch_service_root,
+            session_source_id=(
+                self._durable_session_source_id(project_root, record.get("session-id"))
+                or record.get("resolved-source-id")
+            ),
+        )
+        pq = self._runtime_state(snapshot)
+        # Keep recovered provider sessions visible even while a bounded retry
+        # is waiting; the watchdog must continue to observe cancellation and
+        # stale transport state during the backoff window.
+        if record.get("provider-transport-kind") == "provider-session":
+            watchdog_registry().register(project_root, record)
+        recovery = record.get("recovery")
+        next_retry_at = recovery.get("next-retry-at") if isinstance(recovery, dict) else None
+        if isinstance(next_retry_at, str) and next_retry_at:
+            try:
+                due_at = datetime.fromisoformat(next_retry_at.replace("Z", "+00:00"))
+                if due_at.tzinfo is None:
+                    due_at = due_at.replace(tzinfo=timezone.utc)
+                remaining = max(0.0, due_at.timestamp() - time.time())
+            except (TypeError, ValueError, OverflowError):
+                remaining = 0.0
+            if remaining > 0:
+                self._schedule_recovery_retry(
+                    pq,
+                    entry,
+                    remaining,
+                    worker_id=str(record.get("worker-id") or ""),
+                    attempt_epoch=int(record.get("attempt-epoch") or 0),
+                )
+                return
+        # Recovery bypasses the normal queued -> running/session-attempt
+        # transition. Register the durable running record immediately so the
+        # host watchdog can observe an attached session before the recovery
+        # worker reaches its first provider callback.
+        if record.get("provider-transport-kind") == "provider-session":
+            watchdog_registry().register(project_root, record)
+        with pq.lock:
+            pq.running.add(entry.request_id)
+            self._active_requests[entry.request_id] = (
+                project_root, record["execution-profile-id"]
+            )
+
+        def _recover() -> None:
+            bound: _QueueReservation | None = None
+            entered_worker = False
+            try:
+                while bound is None:
+                    if self._shutdown_event.is_set():
+                        return
+                    current = store.read_record(project_root, entry.request_id)
+                    if self._terminalize_recovered_cancel(entry, current):
+                        return
+                    with pq.lock:
+                        bound = self._try_reserve_source(entry, pq)
+                    if bound is None:
+                        time.sleep(0.1)
+                if self._shutdown_event.is_set():
+                    return
+                entered_worker = True
+                if current.get("provider-transport-kind") == "provider-session":
+                    watchdog_registry().register(entry.project_root, current)
+                self._run_one(pq, entry, bound)
+            except Exception:  # noqa: BLE001 - recovery must not kill the service
+                logger.exception(
+                    "recovered gateway request could not be scheduled",
+                    extra={"request-id": entry.request_id},
+                )
+            finally:
+                if not entered_worker:
+                    if bound is not None:
+                        self._release_reservation(bound)
+                    with pq.lock:
+                        pq.running.discard(entry.request_id)
+                    self._active_requests.pop(entry.request_id, None)
+
+        threading.Thread(
+            target=_recover,
+            daemon=True,
+            name=f"gateway-recovery-{entry.request_id}",
+        ).start()
+
+    def enqueue_recovered_queued(
+        self,
+        project_root: Path,
+        record: dict[str, Any],
+        params: dict[str, Any],
+        runner: RequestRunner,
+        *,
+        dispatch_owner_epoch: str,
+        dispatch_service_root: Path,
+    ) -> None:
+        """Reinsert an admitted queued request exactly once after startup."""
+        if record.get("state") != "queued" or record.get("dispatch-owner-epoch") != dispatch_owner_epoch:
+            return
+        snapshot = profiles_mod.snapshot_from_record(record)
+        if snapshot is None:
+            raise AudiaGenticError(
+                "CON-AGW-101", "agents", "recovered request has no immutable profile snapshot", {}
+            )
+        from audiagentic.components.agents.gateway.instances import resolve_instance_facts
+
+        entry = QueuedDispatch(
+            request_id=record["request-id"],
+            project_root=project_root,
+            execution_profile_id=record["execution-profile-id"],
+            snapshot=snapshot,
+            instance_facts=resolve_instance_facts(project_root, snapshot.instances),
+            project_key=str(project_root.resolve()),
+            session_key=str(record.get("session-id")) if record.get("session-id") else None,
+            runner=runner,
+            owner_epoch=dispatch_owner_epoch,
+            service_root=dispatch_service_root,
+            session_source_id=self._durable_session_source_id(project_root, record.get("session-id")),
+        )
+        pq = self._runtime_state(snapshot)
+        with pq.lock:
+            if self._pending_authority.get(record["request-id"]) is not None:
+                return
+            self._pending_authority.enqueue(
+                request_id=entry.request_id,
+                project_key=entry.project_key,
+                value=entry,
+            )
+        self._drain_all()
 
     def _try_reserve_source(
         self, entry: QueuedDispatch, pq: _RuntimeState,
@@ -742,6 +1051,219 @@ class GatewayQueueManager:
         self._capacity.release(reservation.source)
         self._scoped_capacity.release(reservation.overlay)
 
+    @staticmethod
+    def _recovery_retry_delay(entry: QueuedDispatch, recovery_attempt: int) -> float:
+        """Resolve bounded recovery backoff from the admitted profile params."""
+        params = dict(entry.snapshot.execution_params)
+        try:
+            initial = float(
+                params.get(
+                    "provider-session-recovery-initial-delay-seconds",
+                    _RECOVERY_RETRY_INITIAL_SECONDS,
+                )
+            )
+        except (TypeError, ValueError):
+            initial = _RECOVERY_RETRY_INITIAL_SECONDS
+        try:
+            maximum = float(
+                params.get(
+                    "provider-session-recovery-max-delay-seconds",
+                    _RECOVERY_RETRY_MAX_SECONDS,
+                )
+            )
+        except (TypeError, ValueError):
+            maximum = _RECOVERY_RETRY_MAX_SECONDS
+        initial = (
+            initial
+            if math.isfinite(initial) and initial > 0
+            else _RECOVERY_RETRY_INITIAL_SECONDS
+        )
+        maximum = (
+            maximum
+            if math.isfinite(maximum) and maximum >= initial
+            else _RECOVERY_RETRY_MAX_SECONDS
+        )
+        return min(maximum, initial * (2 ** max(0, recovery_attempt - 1)))
+
+    @staticmethod
+    def _recovery_retry_max_attempts(entry: QueuedDispatch) -> int:
+        """Resolve the finite observation-only recovery bound.
+
+        A provider-session recovery may not resend an ambiguous prompt, but it
+        also may not keep a durable request in ``running`` forever when the
+        provider target has disappeared.  The bound is admission-scoped with
+        the rest of the profile parameters so a request cannot be changed by
+        a later profile reload.  Proven-unsent pre-submit reconciliation is
+        intentionally handled separately by the caller: it is safe queued
+        work, not an ambiguous provider recovery attempt.
+        """
+        params = dict(entry.snapshot.execution_params)
+        value = params.get("provider-session-recovery-max-attempts", _RECOVERY_RETRY_MAX_ATTEMPTS)
+        if isinstance(value, bool):
+            return _RECOVERY_RETRY_MAX_ATTEMPTS
+        try:
+            value = int(value)
+        except (TypeError, ValueError):
+            return _RECOVERY_RETRY_MAX_ATTEMPTS
+        return value if value > 0 else _RECOVERY_RETRY_MAX_ATTEMPTS
+
+    @staticmethod
+    def _recovery_followup_max_attempts(entry: QueuedDispatch) -> int:
+        """Bound follow-up reconciliation independently of the generic retry cap."""
+        params = dict(entry.snapshot.execution_params)
+        value = params.get(
+            "provider-session-followup-recovery-max-attempts",
+            _FOLLOWUP_RECOVERY_DEFAULT_MAX_ATTEMPTS,
+        )
+        if isinstance(value, bool):
+            return max(_RECOVERY_RETRY_MAX_ATTEMPTS * 4, 24)
+        try:
+            value = int(value)
+        except (TypeError, ValueError):
+            return max(_RECOVERY_RETRY_MAX_ATTEMPTS * 4, 24)
+        return value if value > 0 else max(_RECOVERY_RETRY_MAX_ATTEMPTS * 4, 24)
+
+
+    def _schedule_recovery_retry(
+        self,
+        pq: _RuntimeState,
+        entry: QueuedDispatch,
+        delay_seconds: float,
+        *,
+        worker_id: str,
+        attempt_epoch: int,
+    ) -> None:
+        """Re-enqueue one fenced recovery attempt after a short backoff."""
+        def _launch() -> None:
+            with self._manager_lock:
+                self._recovery_timers.pop(entry.request_id, None)
+                self._recovery_pending.pop(entry.request_id, None)
+            bound: _QueueReservation | None = None
+            entered_worker = False
+            try:
+                if self._shutdown_event.is_set():
+                    return
+                current = store.read_record(entry.project_root, entry.request_id)
+                if (
+                    current.get("state") not in {"queued", "running"}
+                    or current.get("dispatch-owner-epoch") != entry.owner_epoch
+                    or current.get("worker-id") != worker_id
+                    or current.get("attempt-epoch") != attempt_epoch
+                ):
+                    return
+                while bound is None:
+                    if self._shutdown_event.is_set():
+                        return
+                    current = store.read_record(entry.project_root, entry.request_id)
+                    if self._terminalize_recovered_cancel(entry, current):
+                        return
+                    if (
+                        current.get("state") not in {"queued", "running"}
+                        or current.get("dispatch-owner-epoch") != entry.owner_epoch
+                        or current.get("worker-id") != worker_id
+                        or current.get("attempt-epoch") != attempt_epoch
+                    ):
+                        return
+                    with pq.lock:
+                        bound = self._try_reserve_source(entry, pq)
+                    if bound is None:
+                        time.sleep(0.1)
+                with pq.lock:
+                    if entry.request_id in pq.running:
+                        return
+                    pq.running.add(entry.request_id)
+                    self._active_requests[entry.request_id] = (
+                        entry.project_root, entry.execution_profile_id
+                    )
+                if self._shutdown_event.is_set():
+                    return
+                entered_worker = True
+                if current.get("provider-transport-kind") == "provider-session":
+                    watchdog_registry().register(entry.project_root, current)
+                self._run_one(pq, entry, bound)
+            except Exception:  # noqa: BLE001 - recovery must not kill the service
+                logger.exception(
+                    "scheduled gateway recovery retry could not be started",
+                    extra={"request-id": entry.request_id},
+                )
+                if not entered_worker:
+                    with pq.lock:
+                        pq.running.discard(entry.request_id)
+                    self._active_requests.pop(entry.request_id, None)
+                    # Timer bookkeeping is removed before launch. If a
+                    # transient scheduler/store/capacity exception occurs
+                    # here, restore a delayed retry or the durable request
+                    # can remain running forever with no pending timer.
+                    if not self._shutdown_event.is_set():
+                        try:
+                            self._schedule_recovery_retry(
+                                pq,
+                                entry,
+                                max(0.1, delay_seconds),
+                                worker_id=worker_id,
+                                attempt_epoch=attempt_epoch,
+                            )
+                        except Exception:  # noqa: BLE001 - preserve the original failure
+                            logger.exception(
+                                "could not reschedule gateway recovery retry",
+                                extra={"request-id": entry.request_id},
+                            )
+            finally:
+                if not entered_worker and bound is not None:
+                    self._release_reservation(bound)
+
+        timer = threading.Timer(max(0.0, delay_seconds), _launch)
+        timer.daemon = True
+        with self._manager_lock:
+            if self._shutdown_event.is_set():
+                return
+            existing = self._recovery_timers.get(entry.request_id)
+            if existing is not None:
+                return
+            self._recovery_timers[entry.request_id] = timer
+            self._recovery_pending[entry.request_id] = entry.project_root
+        timer.start()
+
+    def recovery_pending_count(self, project_root: Path | None = None) -> int:
+        """Count requests waiting for delayed recovery, excluding capacity work."""
+        with self._manager_lock:
+            if project_root is None:
+                return len(self._recovery_pending)
+            project_key = project_root.resolve()
+            return sum(
+                1 for root in self._recovery_pending.values()
+                if root.resolve() == project_key
+            )
+
+    def _terminalize_recovered_cancel(
+        self, entry: QueuedDispatch, current: dict[str, Any]
+    ) -> bool:
+        """Finish a cancelled provider-less recovery before waiting for capacity."""
+        if current.get("state") != "running" or not current.get("cancel-requested"):
+            return False
+        if current.get("provider-transport-kind") == "provider-session":
+            # A provider-side turn may still exist after the gateway/session
+            # wrapper disappears. Let session recovery prove cancellation.
+            return False
+        cancelled = store.transition_owned_terminal(
+            entry.project_root,
+            entry.request_id,
+            "cancelled",
+            updates={
+                "error": {
+                    "code": "CON-AGW-CANCELLED",
+                    "kind": "agents",
+                    "message": "gateway request cancelled during recovery",
+                },
+                "finished-at": now_iso_z(),
+            },
+            owner_epoch=current.get("dispatch-owner-epoch") or entry.owner_epoch,
+            worker_id=str(current.get("worker-id") or ""),
+            attempt_epoch=int(current.get("attempt-epoch") or 0),
+        )
+        _publish_lifecycle_event("cancelled", cancelled)
+        return True
+
     def _reserve_session_when_available(
         self, entry: QueuedDispatch, pq: _RuntimeState, template: _QueueReservation,
         cancelled: threading.Event | None = None,
@@ -774,8 +1296,42 @@ class GatewayQueueManager:
         lane_label = f"{entry.snapshot.profile_id}/{entry.snapshot.generation}"
 
         is_session = False
+        retry_plan: tuple[float, str, int] | None = None
         try:
-            if request_id in pq.cancel_requested:
+            current = store.read_record(project_root, request_id)
+            recovered_running = (
+                current.get("state") == "running"
+                and current.get("recovery-required") is True
+                and current.get("dispatch-owner-epoch") == owner_epoch
+            )
+            if (
+                recovered_running
+                and current.get("cancel-requested")
+                and current.get("provider-transport-kind") != "provider-session"
+            ):
+                # A recovered provider-session request may be waiting on a
+                # delayed reattach retry.  Cancellation must be terminalized
+                # before invoking the runner; otherwise a non-live session
+                # can remain in running/cancelling forever.
+                cancelled = store.transition_owned_terminal(
+                    project_root,
+                    request_id,
+                    "cancelled",
+                    updates={
+                        "error": {
+                            "code": "CON-AGW-CANCELLED",
+                            "kind": "agents",
+                            "message": "gateway request cancelled during recovery",
+                        },
+                        "finished-at": now_iso_z(),
+                    },
+                    owner_epoch=current["dispatch-owner-epoch"],
+                    worker_id=current["worker-id"],
+                    attempt_epoch=current["attempt-epoch"],
+                )
+                _publish_lifecycle_event("cancelled", cancelled)
+                return
+            if request_id in pq.cancel_requested and not recovered_running:
                 logger.info(
                     "gateway request cancelled before dispatch", extra={"request-id": request_id}
                 )
@@ -795,7 +1351,7 @@ class GatewayQueueManager:
             # if the gateway profile changed while this request was pending,
             # reject it terminally with CON-AGW-101 resubmit-required.
             validator = profiles_mod.get_snapshot_validator()
-            if not validator.validate_snapshot_current(entry.snapshot):
+            if not recovered_running and not validator.validate_snapshot_current(entry.snapshot):
                 logger.info(
                     "gateway request rejected before dispatch: stale profile snapshot",
                     extra={"request-id": request_id, "profile": lane_label},
@@ -852,16 +1408,23 @@ class GatewayQueueManager:
                     _publish_lifecycle_event("cancelled", latest)
                     return
                 raise
-            if claimed["state"] != "queued":
+            recovered = claimed.get("_recovered-dispatch") is True
+            if not recovered and claimed["state"] != "queued":
                 return
             _test_stall_claim_to_start()
-            worker_id = f"worker_{uuid.uuid4().hex[:16]}"
+            worker_id = str(claimed.get("worker-id") or f"worker_{uuid.uuid4().hex[:16]}")
             # A provider-session worker may be admitted before it owns the
             # session's turn lock. Keep it durably queued until the runtime
             # performs the lock-protected start CAS. Plain requests have no
             # second ownership boundary and retain the existing path.
-            is_session = bool(claimed.get("session-id")) or claimed.get("provider-transport-kind") == "provider-session"
-            if is_session:
+            # Only provider-session transport owns the session turn boundary.
+            # Worker requests may still retain a durable session id for
+            # provenance, but dispatches through the ordinary worker path and
+            # must be durably started before the runner is invoked.
+            is_session = claimed.get("provider-transport-kind") == "provider-session"
+            if recovered:
+                record = claimed
+            elif is_session:
                 record = store.prepare_owned_session_attempt(
                     project_root,
                     request_id,
@@ -924,7 +1487,7 @@ class GatewayQueueManager:
             # treating those as ordinary one-phase work deadlocks the second
             # worker behind the profile reservation before it can register
             # its turn callback.
-            is_session = bool(record.get("session-id")) or record.get("provider-transport-kind") == "provider-session"
+            is_session = record.get("provider-transport-kind") == "provider-session"
             if is_session:
                 # Admission only proves the session can start. Capacity is
                 # held by the request-specific callbacks around actual turns,
@@ -998,6 +1561,15 @@ class GatewayQueueManager:
                 self._drain_all()
             # Every non-session dispatch has a source reservation from the
             # common capacity authority; there is no ungated semaphore path.
+            # A cancellation can linearize after the recovery worker claims
+            # and starts its retry but before the runner call. Re-read the
+            # durable record at this final side-effect boundary so a cancelled
+            # provider-less recovery is terminalized instead of re-entering
+            # the provider runner.
+            if not is_session and record.get("recovery-required") is True:
+                latest_before_runner = store.read_record(project_root, request_id)
+                if self._terminalize_recovered_cancel(entry, latest_before_runner):
+                    return
 
             try:
                 if is_session:
@@ -1034,13 +1606,321 @@ class GatewayQueueManager:
                     # attempt attribution.
                     terminal_record = store.read_record(project_root, request_id)
                     _publish_lifecycle_event(terminal_record["state"], terminal_record)
+            except RecoveryDeferred as deferred:
+                # Rehydration/open failure after a possible provider-side
+                # Send is non-terminal.  Keep the same request and session
+                # in durable recovery and retry only the observation path.
+                current = store.read_record(project_root, request_id)
+                if (
+                    current.get("cancel-requested")
+                    and current.get("state") == "running"
+                    and current.get("provider-transport-kind") != "provider-session"
+                ):
+                    # Cancellation is an explicit client disposition.  It
+                    # must win over another recovery retry; otherwise a
+                    # non-live session can leave a cancelled request in
+                    # running/cancelling indefinitely.
+                    prior_recovery = current.get("recovery")
+                    prior_recovery = prior_recovery if isinstance(prior_recovery, dict) else {}
+                    prior_diagnosis = {
+                        key: prior_recovery.get(key)
+                        for key in ("last-error-code", "last-error", "phase", "side-effect-state", "attempt")
+                        if prior_recovery.get(key) is not None
+                    }
+                    fresh_diagnosis = {
+                        "last-error-code": getattr(deferred.error, "code", None),
+                        "last-error": str(getattr(deferred.error, "message", deferred.error))[:512],
+                        "phase": deferred.phase,
+                        "side-effect-state": deferred.side_effect_state,
+                    }
+                    fresh_diagnosis = {key: value for key, value in fresh_diagnosis.items() if value is not None}
+                    recovery_diagnosis = dict(fresh_diagnosis)
+                    if prior_diagnosis:
+                        recovery_diagnosis["prior-recovery"] = prior_diagnosis
+                    cancelled = store.transition_owned_terminal(
+                        project_root,
+                        request_id,
+                        "cancelled",
+                        updates={
+                            "error": {
+                                "code": "CON-AGW-CANCELLED",
+                                "kind": "agents",
+                                "message": "gateway request cancelled during recovery",
+                                "details": {"recovery-diagnosis": recovery_diagnosis, "side-effect-state": deferred.side_effect_state, "recovery-phase": deferred.phase},
+                            },
+                            "finished-at": now_iso_z(),
+                        },
+                        owner_epoch=record["dispatch-owner-epoch"],
+                        worker_id=record["worker-id"],
+                        attempt_epoch=record["attempt-epoch"],
+                    )
+                    _publish_lifecycle_event("cancelled", cancelled)
+                    return
+                delay = self._recovery_retry_delay(
+                    entry,
+                    int((current.get("recovery") or {}).get("attempt", 0)) + 1,
+                )
+                previous_recovery = current.get("recovery")
+                previous_recovery = previous_recovery if isinstance(previous_recovery, dict) else {}
+                recovery_attempt = int(previous_recovery.get("attempt", 0)) + 1
+                max_recovery_attempts = self._recovery_retry_max_attempts(entry)
+                # A presubmit reconciliation is different from uncertain
+                # provider-side recovery: the current request has proven that
+                # Send was never reached, so retrying it cannot duplicate a
+                # prompt.  Keep it queued behind the unresolved predecessor
+                # until the session becomes admissible (or an explicit outer
+                # timeout/cancellation ends it).  Applying the generic finite
+                # recovery bound here incorrectly converted safe queued work
+                # into CON-AGW-084 after five observations.
+                wait_for_previous_turn = (
+                    deferred.phase == "presubmit-reconcile"
+                    and deferred.side_effect_state == "not-started"
+                )
+                followup_reconciliation = deferred.phase == "followup-reconcile"
+                followup_max_attempts = self._recovery_followup_max_attempts(entry)
+                followup_attempt = int(previous_recovery.get("followup-attempt", 0))
+                if followup_reconciliation:
+                    followup_attempt += 1
+                followup_recovery_exhausted = (
+                    followup_reconciliation
+                    and followup_attempt >= followup_max_attempts
+                )
+                effective_recovery_max_attempts = (
+                    followup_max_attempts if followup_reconciliation else max_recovery_attempts
+                )
+                conversation_load_reconciliation = (
+                    deferred.phase == "conversation-load-reconcile"
+                    and current.get("provider-transport-kind") == "provider-session"
+                    and _has_durable_provider_identity(project_root, current)
+                    and _durable_provider_session_is_active(project_root, current)
+                )
+                # A durable provider-session has an independent provider
+                # execution that survives this gateway generation.  A CDP
+                # bridge restart, browser startup race, or tab reattachment
+                # delay must not turn that still-running provider work into
+                # an interrupted request merely because the generic retry
+                # budget elapsed.  The provider resume path remains
+                # observation-only and will still terminalize on a proven
+                # provider failure, cancellation, or the outer session
+                # lifetime/idle policy.  Keep the finite bound for workers
+                # that have no provider-session attach seam.
+                durable_provider_recovery = (
+                    recovered_running
+                    and current.get("provider-transport-kind") == "provider-session"
+                    and _has_durable_provider_identity(project_root, current)
+                    and _durable_provider_session_is_active(project_root, current)
+                )
+                prompt_unavailable_recovery = (
+                    getattr(deferred.error, "code", None) == "RES-AGW-004"
+                    and deferred.phase == "rehydrate-retry"
+                )
+                if (
+                    (
+                        (
+                            recovery_attempt >= max_recovery_attempts
+                            and not wait_for_previous_turn
+                            and not followup_reconciliation
+                        )
+                        or followup_recovery_exhausted
+                    )
+                    and not conversation_load_reconciliation
+                    and not (
+                        durable_provider_recovery
+                        and not prompt_unavailable_recovery
+                        and not followup_recovery_exhausted
+                    )
+                ):
+                    recovery_metadata = dict(current.get("recovery") or {})
+                    recovery_metadata.update(
+                        {
+                            "outcome": "bounded-recovery-exhausted",
+                            "phase": deferred.phase,
+                            "side-effect-state": deferred.side_effect_state,
+                            "next-retry-at": None,
+                            "retry-delay-seconds": 0,
+                        }
+                    )
+                    if prompt_unavailable_recovery and current.get("session-id"):
+                        # The provider turn was not safely recoverable after
+                        # the bounded observation window. Release only this
+                        # stale session fence so later queued work cannot be
+                        # held behind an owner that no longer exists; the
+                        # interrupted request remains explicitly ambiguous
+                        # and is never replayed automatically.
+                        try:
+                            from audiagentic.components.agents.gateway.session import sessions_store
+
+                            sessions_store.update_provider_metadata(
+                                project_root,
+                                str(current["session-id"]),
+                                {
+                                    "unresolved-turn-pending": False,
+                                    "recovery-state": "bounded-recovery-exhausted",
+                                    "stale-predecessor-request-id": request_id,
+                                },
+                                remove_keys=(
+                                    "unresolved-turn-id",
+                                    "prompt-message-id",
+                                    "assistant-message-id",
+                                    "assistant-before-message-id",
+                                    "assistant-before-id",
+                                    "prompt-text-digest",
+                                    "submission-proven",
+                                    "terminal-evidence",
+                                ),
+                            )
+                            store.record_gateway_timeline(
+                                project_root,
+                                request_id,
+                                "provider.unresolved-fence-cleared",
+                                state="running",
+                                attributes={"reason": "bounded-promptless-recovery-exhausted"},
+                            )
+                        except Exception:  # noqa: BLE001 - terminal request state remains authoritative
+                            logger.warning(
+                                "could not clear exhausted provider fence",
+                                extra={"request-id": request_id, "session-id": current.get("session-id")},
+                                exc_info=True,
+                            )
+                    session_fence_state = None
+                    if followup_reconciliation and current.get("session-id"):
+                        # The provider outcome is still ambiguous after the
+                        # observation-only follow-up bound. Keep the fence so
+                        # later prompts cannot duplicate the unresolved turn,
+                        # but make the required operator action explicit.
+                        session_fence_state = "manual-reconcile-required"
+                        try:
+                            from audiagentic.components.agents.gateway.session import sessions_store
+
+                            sessions_store.update_provider_metadata(
+                                project_root,
+                                str(current["session-id"]),
+                                {"recovery-state": session_fence_state},
+                            )
+                        except Exception:  # noqa: BLE001 - terminal request state remains authoritative
+                            logger.warning(
+                                "could not persist manual-reconcile fence state",
+                                extra={
+                                    "request-id": request_id,
+                                    "session-id": current.get("session-id"),
+                                },
+                                exc_info=True,
+                            )
+
+                    interrupted = store.transition_owned_terminal(
+                        project_root,
+                        request_id,
+                        "interrupted",
+                        updates={
+                            "error": {
+                                "code": "CON-AGW-084",
+                                "kind": "agents",
+                                "message": (
+                                    "bounded provider-session recovery exhausted; "
+                                    "provider outcome remains unresolved"
+                                ),
+                                "details": {
+                                    "recovery-attempt": recovery_attempt,
+                                    "recovery-max-attempts": effective_recovery_max_attempts,
+                                    "recovery-phase": deferred.phase,
+                                    "side-effect-state": deferred.side_effect_state,
+                                    "session-fence-state": session_fence_state,
+                                    "submission-proven": (
+                                        (current.get("provider-metadata") or {}).get("submission-proven")
+                                        is True
+                                    ),
+                                    # Bounded root recovery error (code/type/kind/
+                                    # redacted details) so the interruption
+                                    # explains the underlying failure instead of
+                                    # only the exhausted retry budget.
+                                    "root-recovery-error": store.bounded_recovery_error(deferred.error),
+                                },
+                            },
+                            "finished-at": now_iso_z(),
+                            "recovery": recovery_metadata,
+                        },
+                        owner_epoch=record["dispatch-owner-epoch"],
+                        worker_id=record["worker-id"],
+                        attempt_epoch=record["attempt-epoch"],
+                        service_root=service_root,
+                    )
+                    session_id = current.get("session-id")
+                    if isinstance(session_id, str) and session_id:
+                        try:
+                            from audiagentic.components.agents.gateway.session import sessions_store
+                            sessions_store.expire_session_if_policy_exceeded(project_root, session_id)
+                        except Exception:  # noqa: BLE001 - request interruption remains authoritative
+                            logger.warning(
+                                "could not expire exhausted recovery session",
+                                extra={"request-id": request_id, "session-id": session_id},
+                                exc_info=True,
+                            )
+                    _publish_lifecycle_event("interrupted", interrupted)
+                    logger.warning(
+                        "gateway request recovery exhausted; request interrupted",
+                        extra={
+                            "request-id": request_id,
+                            "recovery-attempts": recovery_attempt,
+                            "recovery-max-attempts": effective_recovery_max_attempts,
+                        },
+                    )
+                    return
+                try:
+                    defer_recovery = (
+                        store.defer_owned_queued_recovery
+                        if current.get("state") == "queued"
+                        else store.defer_owned_recovery
+                    )
+                    deferred_record = defer_recovery(
+                        project_root,
+                        request_id,
+                        owner_epoch=record["dispatch-owner-epoch"],
+                        worker_id=record["worker-id"],
+                        attempt_epoch=record["attempt-epoch"],
+                        error=deferred.error,
+                        phase=deferred.phase,
+                        side_effect_state=deferred.side_effect_state,
+                        retry_delay_seconds=delay,
+                        continuation=deferred.continuation,
+                    )
+                except AudiaGenticError:
+                    latest = store.read_record(project_root, request_id)
+                    same_owner = (
+                        latest.get("state") in {"queued", "running"}
+                        and latest.get("dispatch-owner-epoch") == record["dispatch-owner-epoch"]
+                        and latest.get("worker-id") == record["worker-id"]
+                        and latest.get("attempt-epoch") == record["attempt-epoch"]
+                    )
+                    if not same_owner:
+                        logger.info(
+                            "recovery retry lost its durable ownership fence",
+                            extra={"request-id": request_id},
+                            exc_info=True,
+                        )
+                    else:
+                        retry_plan = (delay, record["worker-id"], record["attempt-epoch"])
+                        logger.warning(
+                            "recovery retry metadata write failed; retry retained",
+                            extra={"request-id": request_id},
+                            exc_info=True,
+                        )
+                else:
+                    logger.info(
+                        "gateway request recovery deferred",
+                        extra={
+                            "request-id": request_id,
+                            "retry-delay-seconds": delay,
+                            "recovery-attempt": (deferred_record.get("recovery") or {}).get("attempt"),
+                        },
+                    )
+                    retry_plan = (delay, record["worker-id"], record["attempt-epoch"])
             except AudiaGenticError as exc:
                 logger.error(
                     "gateway request runner raised", extra={"request-id": request_id}, exc_info=True
                 )
                 current = store.read_record(project_root, request_id)
                 cancellation_boundary = (
-                    getattr(exc, "code", None) == "CON-AGW-CANCELLED"
+                    getattr(exc, "code", None) in {"CON-AGW-CANCELLED", "CON-AGW-099"}
                     or current.get("cancel-requested", False)
                 )
                 if cancellation_boundary and current["state"] == "queued":
@@ -1099,7 +1979,17 @@ class GatewayQueueManager:
                     )
                     _publish_lifecycle_event("failed", failed)
         finally:
-            watchdog_registry().unregister(project_root, request_id)
+            if retry_plan is not None and record.get("provider-transport-kind") == "provider-session":
+                try:
+                    retained = store.read_record(project_root, request_id)
+                except Exception:  # noqa: BLE001 - keep the last fenced observation
+                    retained = record
+                if retained.get("state") == "running":
+                    watchdog_registry().register(project_root, retained)
+                else:
+                    watchdog_registry().unregister(project_root, request_id)
+            else:
+                watchdog_registry().unregister(project_root, request_id)
             if bound is not None:
                 self._release_reservation(bound)
             with pq.lock:
@@ -1107,8 +1997,24 @@ class GatewayQueueManager:
                 pq.idle.discard(request_id)
                 pq.cancel_requested.discard(request_id)
             self._active_requests.pop(request_id, None)
+            # Preparation may fail before registering a session waiter. Do
+            # not retain that request's pre-registration cancel signal forever.
+            from audiagentic.components.agents.gateway.session.sessions import peek_session_runtime
+
+            runtime = peek_session_runtime()
+            if runtime is not None:
+                runtime.forget_request_cancel(request_id)
             _TURNCB.clear(request_id)
-            self._drain_all()
+            if not self._shutdown_event.is_set():
+                self._drain_all()
+            if retry_plan is not None:
+                self._schedule_recovery_retry(
+                    pq,
+                    entry,
+                    retry_plan[0],
+                    worker_id=retry_plan[1],
+                    attempt_epoch=retry_plan[2],
+                )
 
     def _find_profile_for_request(
         self, execution_profile_id: str, request_id: str
@@ -1164,6 +2070,17 @@ class GatewayQueueManager:
                 project_root, request_id, source="api", actor_type="client", reason="client-request"
             )
             if updated["state"] == "cancelled":
+                # The worker can already be waiting on a session FIFO lock
+                # even though its durable request is still queued. Signal only
+                # that request's local event; never cancel the active provider
+                # turn belonging to its predecessor.
+                from audiagentic.components.agents.gateway.session.sessions import (
+                    peek_session_runtime,
+                )
+
+                runtime = peek_session_runtime()
+                if runtime is not None:
+                    runtime.request_cancel(request_id)
                 logger.info(
                     "gateway request cancelled before running", extra={"request-id": request_id}
                 )
@@ -1218,6 +2135,25 @@ class GatewayQueueManager:
 
         while True:
             if record["state"] in store.TERMINAL_STATES:
+                recovery = record.get("recovery") if isinstance(record.get("recovery"), dict) else {}
+                if (
+                    record.get("state") == "interrupted"
+                    and recovery.get("outcome") == "bounded-recovery-exhausted"
+                    and record.get("provider-transport-kind") == "provider-session"
+                    and isinstance(record.get("session-id"), str)
+                ):
+                    from audiagentic.components.agents.gateway.session import sessions_store
+                    session = sessions_store.expire_session_if_policy_exceeded(
+                        project_root, record["session-id"]
+                    )
+                    if isinstance(session, dict) and session.get("state") not in sessions_store.SESSION_TERMINAL_STATES:
+                        now = time.monotonic()
+                        if deadline is not None and now >= deadline:
+                            return record
+                        time.sleep(min(_WAIT_INITIAL_BACKOFF_SECONDS, max(0.0, (deadline - now) if deadline is not None else _WAIT_INITIAL_BACKOFF_SECONDS)))
+                        record = store.read_record(project_root, request_id)
+                        continue
+                    record = store.read_record(project_root, request_id)
                 return record
             now = time.monotonic()
             if deadline is not None and now >= deadline:

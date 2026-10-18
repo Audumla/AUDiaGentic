@@ -11,6 +11,7 @@ reader/writer/remover — RV271).
 """
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
@@ -73,6 +74,10 @@ def materialize_local_endpoint_sources(document: dict[str, Any]) -> list[Materia
         endpoint: dict[str, Any] = {"single-model": True}
         if source.get("base-url"):
             endpoint["base-url"] = source["base-url"]
+        if source.get("base-url-env"):
+            env_name = str(source["base-url-env"])
+            if value := os.environ.get(env_name):
+                endpoint["base-url"] = value.rstrip("/")
         if source.get("connector-options"):
             endpoint["connector-options"] = dict(source["connector-options"])
         if source.get("provider-overrides"):

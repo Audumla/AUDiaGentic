@@ -6,12 +6,10 @@ import pytest
 from audiagentic.components.agents.agents_paths import global_agents_config_path
 from audiagentic.components.agents.configuration.management import (
     get_agent_definition,
+    get_execution_profile,
+    get_role,
     resolve_agent_definition,
 )
-from audiagentic.components.agents.configuration.management import (
-    get_execution_profile,
-)
-from audiagentic.components.agents.configuration.management import get_role
 from audiagentic.foundation.paths.package import PACKAGE_ROOT
 
 REPO_ROOT = PACKAGE_ROOT.parent.parent

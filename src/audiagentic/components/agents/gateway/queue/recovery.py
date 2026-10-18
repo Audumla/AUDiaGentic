@@ -3,15 +3,15 @@ from __future__ import annotations
 
 import json
 import logging
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from audiagentic.components.agents.gateway import store as store
 from audiagentic.components.agents.gateway.queue import work_index as work_index
-from audiagentic.components.agents.gateway.queue.queue import (
-    _publish_lifecycle_event,
-)
+from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.foundation.time import now_iso_z
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +24,9 @@ class RecoveryReport:
     cleared: int = 0
     skipped_live: int = 0
     quarantined: int = 0
+    queued: tuple[tuple[Path, str], ...] = ()
+    running: tuple[tuple[Path, str], ...] = ()
+    deferred: tuple[tuple[Path, str], ...] = ()
 
 
 def _quarantine_entry(path: Path, *, reason_code: str) -> None:
@@ -55,59 +58,449 @@ def _read_entry(path: Path) -> dict[str, Any] | None:
     return value
 
 
-def _terminalize_stale_request(
+def _takeover_stale_request(
     service_root: Path,
     project_root: Path,
     request_id: str,
     record_epoch: str | None = None,
-) -> tuple[int, int]:
-    """Terminalize a stale non-terminal request found by recovery.
-
-    Returns (replay_required_count, interrupted_count).  -1 means the request
-    was already terminal or otherwise handled, and no count increment occurred.
-    """
+    *,
+    live_owner_epoch: str,
+) -> tuple[str | None, tuple[Path, str] | None]:
+    """Take over stale non-terminal work without changing request identity/state."""
     try:
         record = store.read_record(project_root, request_id)
     except Exception:  # noqa: BLE001
         logger.warning("gateway entry points to unreadable request", extra={"request-id": request_id})
-        return -1, -1
+        return None, None
 
     if record["state"] in store.TERMINAL_STATES:
         store.clear_active_work(service_root, request_id)
         work_index.clear_stale_terminal_index(service_root, request_id)
-        return 0, 0
+        return None, None
 
-    if record["state"] == "queued":
-        terminal = store.transition_recovered_terminal(
-            project_root, request_id, "interrupted",
-            error={
-                "code": "CON-AGW-102",
-                "kind": "agents",
-                "message": "replay required after gateway recovery",
-            },
-            stale_epoch=record_epoch,
-            replay_required=True,
-            replay_reason="gateway-recovered-without-work-payload",
+    if record["state"] not in {"queued", "running"}:
+        return None, None
+    if record.get("cancel-requested") is True:
+        # A cancellation persisted before a gateway restart is authoritative.
+        # Do not rehydrate or re-enqueue the provider session: doing so can
+        # restart its recovery loop and keep driving browser tabs forever.
+        worker_id = f"recovery_{uuid.uuid4().hex[:16]}"
+        updated = store.takeover_nonterminal_owner(
+            project_root,
+            request_id,
+            expected_owner_epoch=record_epoch,
+            new_owner_epoch=live_owner_epoch,
+            new_worker_id=worker_id,
+            handoff_id=(record.get("recovery") or {}).get("handoff-id")
+            if isinstance(record.get("recovery"), dict)
+            else None,
         )
-        store.clear_active_work(service_root, request_id)
-        work_index.clear_stale_terminal_index(service_root, request_id)
-        _publish_lifecycle_event("interrupted", terminal)
-        return 1, 0
-    elif record["state"] == "running":
-        terminal = store.transition_recovered_terminal(
-            project_root, request_id, "interrupted",
-            error={
-                "code": "CON-AGW-084",
-                "kind": "agents",
-                "message": "owning service generation is gone",
+        cancelled = store.transition_owned_terminal(
+            project_root,
+            request_id,
+            "cancelled",
+            updates={
+                "error": {
+                    "code": "CON-AGW-085",
+                    "kind": "agents",
+                    "message": "request was cancelled before gateway restart recovery",
+                    "details": {"recovery-phase": "restart-cancel-requested"},
+                },
+                "recovery": {
+                    "reason": "owner-loss",
+                    "outcome": "in-place",
+                    "phase": "restart-cancel-requested",
+                },
+                "finished-at": now_iso_z(),
             },
-            stale_epoch=record_epoch,
+            owner_epoch=str(updated.get("dispatch-owner-epoch") or live_owner_epoch),
+            worker_id=str(updated.get("worker-id") or worker_id),
+            attempt_epoch=int(updated.get("attempt-epoch") or 0),
+            service_root=service_root,
         )
-        store.clear_active_work(service_root, request_id)
-        work_index.clear_stale_terminal_index(service_root, request_id)
-        _publish_lifecycle_event("interrupted", terminal)
-        return 0, 1
-    return 0, 0
+        from audiagentic.components.agents.gateway.queue.queue import _publish_lifecycle_event
+        _publish_lifecycle_event("cancelled", cancelled)
+        logger.info(
+            "discarded restart recovery for previously cancelled request",
+            extra={"request-id": request_id},
+        )
+        return None, None
+    if (
+        record["state"] == "running"
+        and record.get("provider-transport-kind") != "provider-session"
+    ):
+        # An isolated worker has no attach/resume seam. Once its owning
+        # gateway generation is gone, keeping the durable request in
+        # running would make clients believe a live worker still exists.
+        # Take ownership only long enough to record an explicit interruption;
+        # preserve ambiguous side-effect evidence and never replay the
+        # frozen prompt automatically.
+        worker_id = f"recovery_{uuid.uuid4().hex[:16]}"
+        updated = store.takeover_nonterminal_owner(
+            project_root,
+            request_id,
+            expected_owner_epoch=record_epoch,
+            new_owner_epoch=live_owner_epoch,
+            new_worker_id=worker_id,
+            handoff_id=(record.get("recovery") or {}).get("handoff-id")
+            if isinstance(record.get("recovery"), dict)
+            else None,
+        )
+        interrupted = store.transition_owned_terminal(
+            project_root,
+            request_id,
+            "interrupted",
+            updates={
+                "error": {
+                    "code": "CON-AGW-084",
+                    "kind": "agents",
+                    "message": "worker-backed request interrupted because its gateway owner was lost",
+                    "details": {
+                        "recovery-phase": "restart-unreattachable-worker",
+                        "side-effect-state": "may-have-started",
+                        "provider-transport-kind": record.get("provider-transport-kind") or "worker",
+                        "submission-proven": (
+                            (record.get("provider-metadata") or {}).get("submission-proven") is True
+                        ),
+                    },
+                },
+                "recovery": {
+                    "reason": "owner-loss",
+                    "outcome": "manual-review-required",
+                    "phase": "restart-unreattachable-worker",
+                    "side-effect-state": "may-have-started",
+                },
+                "finished-at": now_iso_z(),
+            },
+            owner_epoch=updated.get("dispatch-owner-epoch") or live_owner_epoch,
+            worker_id=str(updated.get("worker-id") or worker_id),
+            attempt_epoch=int(updated.get("attempt-epoch") or 0),
+        )
+        from audiagentic.components.agents.gateway.queue.queue import _publish_lifecycle_event
+
+        _publish_lifecycle_event("interrupted", interrupted)
+        logger.warning(
+            "interrupted stale worker request because execution cannot be reattached",
+            extra={"request-id": request_id},
+        )
+        return "interrupted", (project_root, request_id)
+    worker_id = f"recovery_{uuid.uuid4().hex[:16]}" if record["state"] == "running" else None
+    try:
+        updated = store.takeover_nonterminal_owner(
+            project_root,
+            request_id,
+            expected_owner_epoch=record_epoch,
+            new_owner_epoch=live_owner_epoch,
+            new_worker_id=worker_id,
+            handoff_id=(record.get("recovery") or {}).get("handoff-id") if isinstance(record.get("recovery"), dict) else None,
+        )
+    except AudiaGenticError as exc:
+        # A prior generation may have committed the request half of takeover
+        # before crashing. Treat the already-current owner as idempotent and
+        # repair the remaining durable markers below; never overwrite a
+        # different live owner.
+        if exc.code != "CON-AGW-083":
+            raise
+        updated = store.read_record(project_root, request_id)
+        if updated.get("dispatch-owner-epoch") != live_owner_epoch:
+            raise
+    try:
+        work_index.takeover_owner(
+            service_root,
+            request_id,
+            expected_owner_epoch=record_epoch,
+            new_owner_epoch=live_owner_epoch,
+        )
+    except AudiaGenticError as exc:
+        if exc.code != "CON-AGW-106":
+            raise
+        # The request record is the authoritative owner fence. A crash between
+        # the two writes leaves an older index epoch; repair it under the
+        # exclusive current service owner rather than losing the work item.
+        work_index.takeover_owner(
+            service_root,
+            request_id,
+            expected_owner_epoch=None,
+            new_owner_epoch=live_owner_epoch,
+        )
+    # Keep the hashed active-work marker aligned as well. This write is
+    # idempotent and lets the next generation recover after any later crash.
+    store.record_active_work(
+        service_root, project_root, request_id, owner_epoch=live_owner_epoch
+    )
+    return updated["state"], (project_root, request_id)
+
+
+_TURN_EVIDENCE_KEYS = (
+    "unresolved-turn-pending",
+    "unresolved-turn-id",
+    "unresolved-baseline-user-id",
+    "unresolved-baseline-assistant-id",
+    "unresolved-baseline-user-count",
+    "unresolved-baseline-assistant-count",
+    "submission-proven",
+    "prompt-message-id",
+    "assistant-message-id",
+    "assistant-before-message-id",
+    "assistant-before-id",
+    "prompt-text-digest",
+    "terminal-evidence",
+    "recovery-state",
+)
+
+_RECOVERABLE_SIDE_EFFECTS = {
+    "may-have-started": 1,
+    "submission-proven": 2,
+    "terminal-evidence-seen": 3,
+}
+
+
+def resolve_effective_turn_evidence(
+    record: dict[str, Any],
+    session_metadata: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Use session turn evidence only when it explicitly owns this request."""
+    effective = dict(record.get("provider-metadata") or {})
+    if (
+        not isinstance(session_metadata, dict)
+        or session_metadata.get("unresolved-turn-id") != record.get("request-id")
+    ):
+        return effective
+    for key in _TURN_EVIDENCE_KEYS:
+        effective.pop(key, None)
+    for key in _TURN_EVIDENCE_KEYS:
+        if key in session_metadata:
+            effective[key] = session_metadata[key]
+    return effective
+
+
+def recoverable_reconcile_diagnostics(
+    project_root: Path,
+    record: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Recover a reconcile-only rollup from existing durable evidence."""
+    request_id = record.get("request-id")
+    strongest: str | None = None
+
+    def consider(value: Any) -> None:
+        nonlocal strongest
+        if value not in _RECOVERABLE_SIDE_EFFECTS:
+            return
+        if strongest is None or _RECOVERABLE_SIDE_EFFECTS[value] > _RECOVERABLE_SIDE_EFFECTS[strongest]:
+            strongest = value
+
+    recovery = record.get("recovery")
+    if isinstance(recovery, dict) and isinstance(recovery.get("phase"), str) and recovery.get("phase"):
+        consider(recovery.get("side-effect-state"))
+
+    evidence_count = 0
+    evidence = record.get("diagnostic-evidence")
+    if isinstance(evidence, list):
+        for item in evidence:
+            if not isinstance(item, dict):
+                continue
+            if item.get("request-id") not in (None, request_id):
+                continue
+            if item.get("certainty") not in {"strong", "definitive"}:
+                continue
+            if item.get("side-effect-state") in _RECOVERABLE_SIDE_EFFECTS:
+                evidence_count += 1
+                consider(item.get("side-effect-state"))
+
+    session_id = record.get("session-id")
+    if isinstance(session_id, str) and session_id:
+        from audiagentic.components.agents.gateway.session import sessions_store
+        try:
+            session_record = sessions_store.read_session_record(project_root, session_id)
+            session_metadata = sessions_store.session_provider_metadata(session_record)
+        except Exception:  # noqa: BLE001
+            session_metadata = None
+        if (
+            isinstance(session_metadata, dict)
+            and session_metadata.get("unresolved-turn-id") == request_id
+            and session_metadata.get("unresolved-turn-pending") is True
+        ):
+            consider(
+                "terminal-evidence-seen"
+                if session_metadata.get("terminal-evidence")
+                else "submission-proven"
+                if session_metadata.get("submission-proven") is True
+                else "may-have-started"
+            )
+
+    if strongest is None:
+        return None
+    return {
+        "version": 1,
+        "classification": "ambiguous-side-effect",
+        "certainty": "strong",
+        "phase": "reconciliation",
+        "side-effect-state": strongest,
+        "resolution-state": "unresolved",
+        "failure-code": None,
+        "reason-code": "durable-recovery-evidence",
+        "provider-signals": [],
+        "evidence-count": max(1, evidence_count),
+        "coalesced-observation-count": 0,
+        "recovery": {
+            "disposition": "reconcile-required",
+            "allowed-actions": ["reconcile", "abandon"],
+        },
+    }
+
+
+def recovery_runner(record: dict[str, Any], *, project_root: Path | None = None):
+    """Rebuild the immutable runner from admission-time record facts."""
+    import functools
+
+    from audiagentic.components.agents.gateway.api import _resolve_provider_isolation_tier
+    from audiagentic.components.agents.gateway.queue import dispatch as _dispatch
+
+    runtime = record.get("gateway-profile-runtime")
+    if not isinstance(runtime, dict):
+        raise ValueError("recovered request has no gateway profile runtime snapshot")
+    provider_id = record.get("resolved-provider-id") or runtime.get("provider-id")
+    if not isinstance(provider_id, str) or not provider_id:
+        raise ValueError("recovered request has no resolved provider")
+    session_metadata: dict[str, Any] | None = None
+    session_checkpoint_available = False
+    if project_root is not None and isinstance(record.get("session-id"), str):
+        # GPT checkpoint metadata is owned by the durable session record. The
+        # request projection may not have received the last provider update
+        # before the gateway generation ended, so never infer proven-unsent
+        # from a missing request-level copy.
+        from audiagentic.components.agents.gateway.session import sessions_store
+
+        try:
+            session_record = sessions_store.read_session_record(
+                project_root, record["session-id"]
+            )
+        except Exception:  # noqa: BLE001 - recovery will fail closed later
+            session_record = None
+        if session_record is not None:
+            session_checkpoint_available = True
+            # The session record owns the pre-Send side-effect fence.  The
+            # request-level provider metadata is only a best-effort relay and
+            # may be stale or absent when the gateway generation ends.
+            session_metadata = sessions_store.session_provider_metadata(session_record)
+    provider_session = (
+        record.get("state") == "running"
+        and record.get("provider-transport-kind") == "provider-session"
+    )
+    if provider_session and not isinstance(session_metadata, dict):
+        # Keep the request in observation-only recovery when the session
+        # metadata read is unavailable.  Startup must not fail the gateway or
+        # fall back to a potentially duplicating ordinary prompt dispatch.
+        session_metadata = {}
+
+    # GPT-auto session preparation requires the admitted ChatGPT project name
+    # even when it is reopening an existing provider conversation.  The normal
+    # dispatch path derives this from the frozen template context, but restart
+    # recovery reconstructs the runner here and previously dropped that value.
+    # Prefer the same immutable context, with the request's operator target as
+    # a compatibility fallback for older records whose template context did
+    # not carry the workspace label.
+    project_name: str | None = None
+    template_context = record.get("template-context")
+    project = template_context.get("project") if isinstance(template_context, dict) else None
+    candidate = project.get("name") if isinstance(project, dict) else None
+    if isinstance(candidate, str) and candidate.strip():
+        project_name = candidate.strip()
+    if project_name is None:
+        request_metadata = record.get("metadata")
+        candidate = request_metadata.get("target") if isinstance(request_metadata, dict) else None
+        if isinstance(candidate, str) and candidate.strip():
+            project_name = candidate.strip()
+
+    recovery_metadata = record.get("recovery")
+    recovery_metadata = recovery_metadata if isinstance(recovery_metadata, dict) else {}
+    # A request can be durable-running while its own prompt is proven not to
+    # have reached Send yet: it may be waiting behind an unresolved predecessor
+    # in the same provider session. Restart recovery must reload that frozen
+    # prompt and let the normal presubmit-reconcile path continue it. Treating
+    # every running provider-session record as observation-only loses the only
+    # safe replay path and eventually turns the request into CON-AGW-084.
+    checkpoint_has_current_turn = (
+        isinstance(session_metadata, dict)
+        and session_metadata.get("unresolved-turn-id") == record.get("request-id")
+    )
+    checkpoint_has_uncorrelated_pending_turn = (
+        isinstance(session_metadata, dict)
+        and session_metadata.get("unresolved-turn-pending") is True
+        and not isinstance(session_metadata.get("unresolved-turn-id"), str)
+    )
+    checkpoint_turn_id = (
+        session_metadata.get("unresolved-turn-id")
+        if isinstance(session_metadata, dict)
+        else None
+    )
+    checkpoint_has_foreign_pending_turn = (
+        isinstance(session_metadata, dict)
+        and session_metadata.get("unresolved-turn-pending") is True
+        and isinstance(checkpoint_turn_id, str)
+        and checkpoint_turn_id != record.get("request-id")
+    )
+    checkpoint_submission_proven_for_current_turn = (
+        isinstance(session_metadata, dict)
+        and session_metadata.get("submission-proven") is True
+        and (
+            checkpoint_turn_id == record.get("request-id")
+            or (
+                session_metadata.get("unresolved-turn-pending") is True
+                and not isinstance(checkpoint_turn_id, str)
+            )
+        )
+    )
+    checkpoint_side_effect_started_without_foreign_predecessor = (
+        isinstance(session_metadata, dict)
+        and session_metadata.get("recovery-state") == "side-effect-may-have-started"
+        and not checkpoint_has_foreign_pending_turn
+    )
+    checkpoint_proves_current_turn_not_pending = (
+        isinstance(session_metadata, dict)
+        and (
+            session_metadata.get("unresolved-turn-pending") is False
+            or checkpoint_has_foreign_pending_turn
+        )
+    )
+    safe_presubmit_recovery = (
+        provider_session
+        and session_checkpoint_available
+        and recovery_metadata.get("phase") in {"presubmit-reconcile", "presubmit-retry"}
+        and recovery_metadata.get("side-effect-state") == "not-started"
+        and checkpoint_proves_current_turn_not_pending
+        and not checkpoint_has_current_turn
+        and not checkpoint_has_uncorrelated_pending_turn
+        and not checkpoint_submission_proven_for_current_turn
+        and not checkpoint_side_effect_started_without_foreign_predecessor
+    )
+
+    return functools.partial(
+        _dispatch.dispatch_request,
+        dispatch_prompt="",
+        preallocated_session_id=None,
+        manifest_id=str(record.get("manifest-id") or "recovered"),
+        context_fingerprint=str(record.get("context-fingerprint") or ""),
+        component_profile="",
+        provider_isolation_tier=_resolve_provider_isolation_tier(provider_id),
+        worker_timeout_seconds=float(record.get("timeout-seconds") or 300.0),
+        project_name=project_name,
+        # A submitted/ambiguous provider-session turn is observation-only.
+        # The one exception is a durable presubmit reconciliation whose
+        # side-effect fence proves Send was not reached and whose authoritative
+        # session checkpoint explicitly clears pending work or names a different
+        # predecessor. Missing/empty/unreadable checkpoint evidence stays
+        # observation-only; it must never authorize prompt replay.
+        # Worker-backed work is deferred above.
+        resume_existing=(
+            bool(record.get("recovery-required"))
+            and provider_session
+            and (
+                not session_checkpoint_available
+                or not safe_presubmit_recovery
+            )
+        ),
+    )
 
 
 def recover_gateway_requests(service_root: Path, *, live_owner_epoch: str) -> RecoveryReport:
@@ -124,6 +517,9 @@ def recover_gateway_requests(service_root: Path, *, live_owner_epoch: str) -> Re
     work_index.clear_expired_quarantine_entries(service_root)
 
     examined = replay_required = interrupted = cleared = skipped_live = quarantined = 0
+    recovered_queued: list[tuple[Path, str]] = []
+    recovered_running: list[tuple[Path, str]] = []
+    deferred: list[tuple[Path, str]] = []
     processed_request_ids: set[str] = set()
 
     # --- Path 1: active-work entries (existing, hashed filenames) ---------------
@@ -164,11 +560,19 @@ def recover_gateway_requests(service_root: Path, *, live_owner_epoch: str) -> Re
                 cleared += 1
                 continue
 
-            rr, it = _terminalize_stale_request(service_root, project_root, request_id, record_epoch)
-            if rr > 0:
-                replay_required += rr
-            if it > 0:
-                interrupted += it
+            state, item = _takeover_stale_request(
+                service_root, project_root, request_id, record_epoch,
+                live_owner_epoch=live_owner_epoch,
+            )
+            if item is not None:
+                if state == "queued":
+                    recovered_queued.append(item)
+                elif state == "running":
+                    recovered_running.append(item)
+                elif state == "interrupted":
+                    interrupted += 1
+                else:
+                    deferred.append(item)
 
     # --- Path 2: work-index entries (C7: admission-before-claim gap) -------------
     index_entries, idx_quarantined = work_index.recover_work_index_entries(
@@ -178,8 +582,9 @@ def recover_gateway_requests(service_root: Path, *, live_owner_epoch: str) -> Re
 
     for widx in index_entries:
         if widx.request_id in processed_request_ids:
-            # Already handled via active-work path; clear the index entry.
-            work_index.clear_work_index_entry(service_root, widx.request_id)
+            # Already handled via active-work path.  Keep the index entry as
+            # the durable startup marker; the live owner must still schedule
+            # the request after this discovery pass.
             continue
 
         examined += 1
@@ -213,15 +618,20 @@ def recover_gateway_requests(service_root: Path, *, live_owner_epoch: str) -> Re
             skipped_live += 1
             continue
 
-        # C7: admitted-but-unclaimed entries have no owner epoch.  They are
-        # stale (the owning service generation is gone) and must be terminalized
-        # as replay-required, not cleared silently.  Pass None for stale_epoch
-        # so transition_recovered_terminal skips ownership fencing.
-        rr, it = _terminalize_stale_request(service_root, project_root, widx.request_id, record_epoch if record_epoch else None)
-        if rr > 0:
-            replay_required += rr
-        if it > 0:
-            interrupted += it
+        state, item = _takeover_stale_request(
+            service_root, project_root, widx.request_id,
+            record_epoch if record_epoch else None,
+            live_owner_epoch=live_owner_epoch,
+        )
+        if item is not None:
+            if state == "queued":
+                recovered_queued.append(item)
+            elif state == "running":
+                recovered_running.append(item)
+            elif state == "interrupted":
+                interrupted += 1
+            else:
+                deferred.append(item)
 
     return RecoveryReport(
         examined=examined,
@@ -230,4 +640,7 @@ def recover_gateway_requests(service_root: Path, *, live_owner_epoch: str) -> Re
         cleared=cleared,
         skipped_live=skipped_live,
         quarantined=quarantined,
+        queued=tuple(recovered_queued),
+        running=tuple(recovered_running),
+        deferred=tuple(deferred),
     )

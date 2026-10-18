@@ -1,5 +1,10 @@
 # Reference Architecture
 
+Status: architecture reference baseline. This document defines the normalized
+capability vocabulary and evidence model; it is not runtime configuration or a
+provider-support guarantee. Runtime behavior remains owned by provider
+descriptors and their validated capability facts.
+
 ## Purpose
 
 AUDiaGentic needs a normalized resource that answers five separate questions:
@@ -78,4 +83,4 @@ limitations: [string]
 
 Human-readable matrices are derived views. They must not become a second source of truth.
 
-Runtime code consumes **provider descriptors** (`config/providers/*.yaml` — MA20 declarations plus MA19 `capability_facts`), never this package (RV560; MA19 forbids runtime imports of reference views). The registries and schemas here structure the evidence that gets projected into those descriptors; people use the domain documents and generated matrices.
+Runtime code consumes **provider descriptors** (`src/audiagentic/config/providers/*.yaml` — MA20 declarations plus MA19 `capability_facts`), never this package (RV560; MA19 forbids runtime imports of reference views). The registries and schemas here structure the evidence that gets projected into those descriptors; people use the domain documents and generated matrices.

@@ -39,7 +39,7 @@ wiring instead.
 ## 3. Error, Logging, and Redaction Practice
 
 - Register each public `AudiaGenticError` code in the owning component's
-  `config/components/<component>/error-resolutions.yaml` before use.
+  `src/audiagentic/config/components/<component>/error-resolutions.yaml` before use.
 - At process, remote-service, subprocess, and event-handler boundaries, log or
   normalize unexpected failures with safe context. Local expected recovery does
   not require noisy logging.

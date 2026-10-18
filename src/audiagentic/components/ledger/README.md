@@ -32,6 +32,19 @@ Governs the release lifecycle:
 - **ledger_api.py**: Ledger API surface
 - **archive.py**: Ledger history archiving
 
+## Release boundary
+
+`archive_for_release(project_root, release_id)` is the only release archival
+boundary. It synchronizes pending fragments, stamps the selected current
+events, and returns their immutable event IDs for release rendering. A retry
+for an already archived release is read-only and cannot claim events that
+arrived for the next release. Conflicting historical event IDs and malformed
+persisted records fail closed with typed ledger errors.
+
+Source-control commit stamping is deliberately disabled by default. Release
+finalization must never stamp its own generated commit back into the ledger;
+otherwise archive output changes after the commit and creates a feedback loop.
+
 ## Must not own
 
 - Job orchestration

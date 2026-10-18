@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from pathlib import Path
 from unittest.mock import patch
 
@@ -99,11 +100,62 @@ def test_agent_task_status_delegates():
             "activity_seq": 3,
             "activity_at": "2026-08-24T07:12:31Z",
             "outcome": "success",
+            "response": {
+                "text": "## done",
+                "bytes": 7,
+                "format": "markdown",
+                "media_type": "text/markdown; charset=utf-8",
+            },
         }
         result = agents_gateway_mcp.agent_task_status("req_x")
-    assert result == mock_call.return_value
+    assert result["contract-version"] == "task-status.v4-compact"
+    assert result["task_id"] == mock_call.return_value["task_id"]
+    mock_call.assert_called_once_with("get_execution_request", _ROOT, "req_x")
+
+
+def test_status_and_submit_dtos_drop_raw_metadata_and_status_has_session_id():
+    with (
+        _patch_root(),
+        patch("audiagentic.components.agents.mcp.gateway_mcp.call_gateway_method") as mock_call,
+    ):
+        mock_call.return_value = {
+            "task_id": "req_x",
+            "lifecycle": "running",
+            "session-id": "ses_x",
+            "metadata": {"prompt": "secret"},
+            "provider-metadata": {"target-id": "raw"},
+        }
+        status = agents_gateway_mcp.agent_task_status("req_x")
+        mock_call.return_value = {
+            "request-id": "req_x",
+            "state": "queued",
+            "session-id": "ses_x",
+            "metadata": {"prompt": "secret"},
+            "provider-metadata": {"target-id": "raw"},
+        }
+        submitted = agents_gateway_mcp.agent_task_submit("reviewer-agent", prompt_body="hi")
+    assert status["session_id"] == "ses_x"
+    assert "metadata" not in status and "provider-metadata" not in status
+    assert submitted == {"request-id": "req_x", "state": "queued", "session-id": "ses_x"}
+def test_agent_task_session_purge_delegates():
+    with _patch_root(), patch(
+        "audiagentic.components.agents.mcp.gateway_mcp.call_gateway_method",
+        return_value={"session-id": "ses_x", "outcome": "purged"},
+    ) as mock_call:
+        result = agents_gateway_mcp.agent_task_session_purge("ses_x")
+    assert result == {"session-id": "ses_x", "outcome": "purged"}
+    mock_call.assert_called_once_with("purge_execution_session", _ROOT, "ses_x")
+
+
+def test_agent_task_gateway_purge_defaults_to_dry_run():
+    with _patch_root(), patch(
+        "audiagentic.components.agents.mcp.gateway_mcp.call_gateway_method",
+        return_value={"outcome": "dry-run", "dry-run": True},
+    ) as mock_call:
+        result = agents_gateway_mcp.agent_task_gateway_purge()
+    assert result == {"outcome": "dry-run", "dry-run": True}
     mock_call.assert_called_once_with(
-        "get_execution_request", _ROOT, "req_x"
+        "purge_execution_sessions", _ROOT, dry_run=True, session_ids=None
     )
 
 
@@ -112,18 +164,18 @@ def test_agent_task_response_returns_small_verified_response_inline():
         _patch_root(),
         patch("audiagentic.components.agents.mcp.gateway_mcp.call_gateway_method") as mock_call,
     ):
-        mock_call.side_effect = [
-            "hello",
-            {"request-id": "req_x", "state": "completed", "diagnostics": {}},
-        ]
+        mock_call.return_value = {
+            "text": "hello",
+            "bytes": 5,
+            "format": "text",
+            "media_type": "text/plain; charset=utf-8",
+            "state": "completed",
+        }
         result = agents_gateway_mcp.agent_task_response("req_x")
-
     assert result["delivery"] == "inline"
     assert result["text"] == "hello"
     assert result["bytes"] == 5
-    assert mock_call.call_args_list[0].args == ("get_execution_response", _ROOT, "req_x")
-    assert mock_call.call_args_list[1].args == ("get_execution_diagnostics", _ROOT, "req_x")
-    assert mock_call.call_args_list[1].kwargs == {"limit": 1}
+    mock_call.assert_called_once_with("get_execution_response_payload", _ROOT, "req_x")
 
 
 def test_agent_task_response_returns_large_response_without_a_path():
@@ -131,23 +183,22 @@ def test_agent_task_response_returns_large_response_without_a_path():
         _patch_root(),
         patch("audiagentic.components.agents.mcp.gateway_mcp.call_gateway_method") as mock_call,
     ):
-        mock_call.side_effect = [
-            "x" * 100_000,
-            {
-                "request-id": "req_x",
-                "state": "failed",
-                "diagnostics": {"failure-code": "EXT-ACP-TOOL-001"},
-            },
-        ]
+        mock_call.return_value = {
+            "text": "x" * 100_000,
+            "bytes": 100_000,
+            "format": "text",
+            "media_type": "text/plain; charset=utf-8",
+            "state": "failed",
+            "error_code": "EXT-ACP-TOOL-001",
+        }
         result = agents_gateway_mcp.agent_task_response("req_x")
-
     assert result["delivery"] == "inline"
     assert result["bytes"] == 100_000
     assert result["state"] == "failed"
     assert result["error-code"] == "EXT-ACP-TOOL-001"
     assert "artifact-path" not in result
     assert "response-artifact" not in result
-    assert mock_call.call_args_list[0].args == ("get_execution_response", _ROOT, "req_x")
+    mock_call.assert_called_once_with("get_execution_response_payload", _ROOT, "req_x")
 
 
 def test_agent_task_response_includes_provider_failure_code_with_full_output():
@@ -155,29 +206,28 @@ def test_agent_task_response_includes_provider_failure_code_with_full_output():
         _patch_root(),
         patch("audiagentic.components.agents.mcp.gateway_mcp.call_gateway_method") as mock_call,
     ):
-        mock_call.side_effect = [
-            "partial assistant output",
-            {
-                "request-id": "req_x",
-                "state": "failed",
-                "diagnostics": {
-                    "failure-code": "EXT-ACP-TOOL-001",
-                    "reason-code": "provider-cancelled-after-tool-failure",
-                    "evidence": [{"tool": "not returned"}],
-                },
-            },
-        ]
+        mock_call.return_value = {
+            "text": "partial assistant output",
+            "bytes": len(b"partial assistant output"),
+            "format": "text",
+            "media_type": "text/plain; charset=utf-8",
+            "state": "failed",
+            "error_code": "EXT-ACP-TOOL-001",
+            "error_reason": "provider-cancelled-after-tool-failure",
+        }
         result = agents_gateway_mcp.agent_task_response("req_x")
-
     assert result == {
         "request-id": "req_x",
         "delivery": "inline",
         "text": "partial assistant output",
-        "bytes": len("partial assistant output".encode("utf-8")),
+        "bytes": len(b"partial assistant output"),
+        "format": "text",
+        "media-type": "text/plain; charset=utf-8",
         "state": "failed",
         "error-code": "EXT-ACP-TOOL-001",
         "error-reason": "provider-cancelled-after-tool-failure",
     }
+    mock_call.assert_called_once_with("get_execution_response_payload", _ROOT, "req_x")
 
 
 def test_agent_task_cancel_delegates():
@@ -210,6 +260,31 @@ def test_agent_task_session_resume_delegates_to_gateway_client():
     )
 
 
+def test_agent_task_session_resume_routes_to_session_owning_checkout():
+    owning_root = Path("C:/example-dev-root/bigcherry")
+    with (
+        _patch_root(),
+        patch(
+            "audiagentic.components.agents.mcp.gateway_mcp._session_project_root",
+            return_value=owning_root,
+        ),
+        patch("audiagentic.components.agents.mcp.gateway_mcp.call_gateway_method") as mock_call,
+    ):
+        mock_call.return_value = {"session-id": "ses_new", "state": "active"}
+        result = agents_gateway_mcp.agent_task_session_resume(
+            "ses_bigcherry", "ctl_002", model_id="chatgpt"
+        )
+
+    assert result["session-id"] == "ses_new"
+    mock_call.assert_called_once_with(
+        "resume_execution_session",
+        owning_root,
+        "ses_bigcherry",
+        control_id="ctl_002",
+        model_id="chatgpt",
+    )
+
+
 def test_agent_task_session_control_delegates_to_gateway_client():
     with (
         _patch_root(),
@@ -229,6 +304,50 @@ def test_agent_task_session_control_delegates_to_gateway_client():
         turn_id="req_1",
         payload=None,
     )
+
+
+def test_agent_task_session_list_defaults_to_active_sessions():
+    with (
+        _patch_root(),
+        patch("audiagentic.components.agents.mcp.gateway_mcp.call_gateway_method") as mock_call,
+    ):
+        mock_call.return_value = [{"session-id": "ses_active", "state": "active"}]
+        result = agents_gateway_mcp.agent_task_session_list()
+
+    assert result == [{"session-id": "ses_active", "state": "active"}]
+    mock_call.assert_called_once_with("list_execution_sessions", _ROOT, state="active")
+
+
+def test_agent_task_session_list_all_removes_state_filter():
+    with (
+        _patch_root(),
+        patch("audiagentic.components.agents.mcp.gateway_mcp.call_gateway_method") as mock_call,
+    ):
+        mock_call.return_value = []
+        agents_gateway_mcp.agent_task_session_list(state="all")
+
+    mock_call.assert_called_once_with("list_execution_sessions", _ROOT, state=None)
+
+
+def test_gateway_mcp_returns_structured_content_without_text_duplicate():
+    from mcp.types import CallToolResult
+
+    async def invoke():
+        with (
+            _patch_root(),
+            patch(
+                "audiagentic.components.agents.mcp.gateway_mcp.call_gateway_method",
+                return_value=[{"session-id": "ses_active", "state": "active"}],
+            ),
+        ):
+            return await agents_gateway_mcp.mcp.call_tool("agent_task_session_list", {})
+
+    result = asyncio.run(invoke())
+    assert isinstance(result, CallToolResult)
+    assert result.content == []
+    assert result.structuredContent == {
+        "result": [{"session-id": "ses_active", "state": "active"}]
+    }
 
 
 def test_agent_task_list_requests_delegates():
@@ -330,3 +449,46 @@ def test_agent_task_submit_forwards_provider_chat_url():
         )
 
     assert mock_call.call_args.kwargs["provider_chat_url"].endswith("/c/conversation-1")
+
+def test_agent_task_status_include_response_preserves_canonical_response():
+    with _patch_root(), patch(
+        "audiagentic.components.agents.mcp.gateway_mcp.call_gateway_method",
+        return_value={
+            "task_id": "req_x", "request_id": "req_x", "session_id": "ses_x",
+            "lifecycle": "terminal", "activity_seq": 4, "activity_at": "2026-10-15T00:00:00Z",
+            "activity": None, "outcome": "success",
+            "response": {"text": "done", "bytes": 4, "format": "text", "media_type": "text/plain"},
+        },
+    ) as mock_call:
+        result = agents_gateway_mcp.agent_task_status("req_x", include_response=True)
+    assert result["request_id"] == "req_x"
+    assert result["session_id"] == "ses_x"
+    assert result["response"] == {"text": "done", "bytes": 4, "format": "text", "media_type": "text/plain"}
+    mock_call.assert_called_once_with("get_execution_request", _ROOT, "req_x", include_response=True)
+
+def test_agent_task_list_requests_preserves_api_v4_progress_fields():
+    with _patch_root(), patch(
+        "audiagentic.components.agents.mcp.gateway_mcp.call_gateway_method",
+        return_value=[{
+            "task_id": "req_x", "request_id": "req_x", "session_id": "ses_x",
+            "lifecycle": "active", "activity": "running", "activity_type": "provider-progress",
+            "activity_seq": 7, "activity_at": "2026-10-15T00:00:00Z", "outcome": None,
+            "metadata": {"prompt": "secret"},
+        }],
+    ):
+        result = agents_gateway_mcp.agent_task_list_requests(limit=1)
+    assert result == [{
+        "task_id": "req_x", "request_id": "req_x", "session_id": "ses_x",
+        "lifecycle": "active", "activity": "running", "activity_type": "provider-progress",
+        "activity_seq": 7, "activity_at": "2026-10-15T00:00:00Z",
+    }]
+
+def test_agent_task_evidence_reapplies_public_allowlist_before_mcp_output():
+    with _patch_root(), patch(
+        "audiagentic.components.agents.mcp.gateway_mcp.call_gateway_method",
+        return_value={"schema_version": "gateway-evidence.v1", "request-id": "req_x", "state": "running", "diagnostics": {"classification": "watchdog", "prompt": "secret"}, "evidence": [{"phase": "running", "raw-dom": "secret"}], "observation-summary": {"count": 1, "latest": {"facts": {"message": "secret"}}}, "latest-transition": {"event": "running", "timestamp": "now"}, "provider-metadata": {"target-id": "secret"}},
+    ):
+        result = agents_gateway_mcp.agent_task_evidence("req_x")
+    encoded = json.dumps(result)
+    assert "secret" not in encoded
+    assert result["request-id"] == "req_x"

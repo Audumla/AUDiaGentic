@@ -1,7 +1,7 @@
 # Provider Telemetry Capability Model
 
-Status: authoritative reference candidate  
-Last validated: 2026-07-17  
+Status: evidence-backed reference snapshot
+Last validated: 2026-07-17 (revalidation required before current decisions)
 Planning set: `docs/planning/active/ptm-telemetry/PT01..PT02`
 
 This document defines the multi-dimensional provider telemetry model and per-harness capability matrix that replaces the binary `supports_credits` flag. Every provider declares which telemetry categories it can expose, and every harness is evaluated for its ability to monitor, budget, and schedule work across providers.

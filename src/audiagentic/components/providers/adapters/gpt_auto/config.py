@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 import os
 import sys
 from dataclasses import dataclass
@@ -127,10 +128,21 @@ class BrowserConfig:
 
 @dataclass(frozen=True)
 class CdpConfig:
+    endpoint: str
     connect_timeout_seconds: float
     protocol_timeout_seconds: float
     recovery_timeout_seconds: float
     devtools_active_port_file: Path | None
+
+    @property
+    def is_remote(self) -> bool:
+        hostname = urlparse(self.endpoint).hostname
+        if hostname is None or hostname.lower() == "localhost":
+            return False
+        try:
+            return not ipaddress.ip_address(hostname).is_loopback
+        except ValueError:
+            return True
 
 
 @dataclass(frozen=True)
@@ -194,9 +206,25 @@ class DomSignalConfig:
 
 
 @dataclass(frozen=True)
+class GptAutoRecoveryConfig:
+    """Workflow-owned policy for provider recovery actions."""
+
+    network_error_followup_enabled: bool
+    network_error_followup_max_attempts: int
+    network_error_followup_prompt_template: str
+    provider_error_followup_enabled: bool
+    provider_error_followup_max_attempts: int
+    provider_error_followup_prompt_template: str
+    conversation_load_failure_recovery_enabled: bool
+    conversation_load_failure_max_attempts: int
+    action_pause_seconds: float
+
+
+@dataclass(frozen=True)
 class TurnWorkflowConfig:
     dom_signals: tuple[DomSignalConfig, ...]
     evidence_policies: tuple[tuple[str, EvidencePolicy], ...]
+    recovery: GptAutoRecoveryConfig
 
     def policy(self, name: str) -> EvidencePolicy:
         for policy_name, policy in self.evidence_policies:
@@ -223,6 +251,9 @@ class TurnWorkflowConfig:
 @dataclass(frozen=True)
 class GptAutoConfig:
     contract_version: str
+    # ChatGPT's display name, when this profile is pinned to a provider
+    # project. This is distinct from the admitted repository/workspace name.
+    project_name: str | None
     project_url: str | None
     browser: BrowserConfig
     cdp: CdpConfig
@@ -232,7 +263,7 @@ class GptAutoConfig:
 
     @property
     def cdp_url(self) -> str:
-        return f"http://127.0.0.1:{self.browser.remote_debugging_port}"
+        return self.cdp.endpoint
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> GptAutoConfig:
@@ -241,7 +272,16 @@ class GptAutoConfig:
             _invalid("settings must be a mapping")
         _exact_keys(
             settings,
-            {"contract-version", "project-url", "browser", "cdp", "chat", "turn", "workflow"},
+            {
+                "contract-version",
+                "project-name",
+                "project-url",
+                "browser",
+                "cdp",
+                "chat",
+                "turn",
+                "workflow",
+            },
             "settings",
             required={"contract-version", "browser", "cdp", "chat", "turn", "workflow"},
         )
@@ -256,6 +296,11 @@ class GptAutoConfig:
         project_url = (
             _chatgpt_url(settings.get("project-url"))
             if settings.get("project-url") is not None
+            else None
+        )
+        project_name = (
+            _string(settings, "project-name")
+            if settings.get("project-name") is not None
             else None
         )
 
@@ -284,13 +329,6 @@ class GptAutoConfig:
             },
         )
         executable = Path(_string(browser_data, "executable"))
-        if not executable.is_file():
-            candidates = discover_browser_candidates()
-            if candidates:
-                hint = "; detected on this machine: " + ", ".join(str(c) for c in candidates)
-            else:
-                hint = "; no supported browser (Brave/Chrome) was detected on this machine"
-            _invalid(f"browser.executable must name an existing file (got {executable}){hint}")
         port = _integer(browser_data, "remote-debugging-port")
         if not 1 <= port <= 65535:
             _invalid("browser.remote-debugging-port must be between 1 and 65535")
@@ -322,6 +360,7 @@ class GptAutoConfig:
         _exact_keys(
             cdp_data,
             {
+                "endpoint",
                 "connect-timeout-seconds",
                 "protocol-timeout-seconds",
                 "recovery-timeout-seconds",
@@ -329,17 +368,28 @@ class GptAutoConfig:
             },
             "cdp",
         )
+        endpoint = _cdp_endpoint(_string(cdp_data, "endpoint"))
         active_port = cdp_data.get("devtools-active-port-file")
         if active_port is not None and (
             not isinstance(active_port, str) or not active_port or "\x00" in active_port
         ):
             _invalid("cdp.devtools-active-port-file must be null or a valid path string")
         cdp = CdpConfig(
+            endpoint=endpoint,
             connect_timeout_seconds=_positive(cdp_data, "connect-timeout-seconds"),
             protocol_timeout_seconds=_positive(cdp_data, "protocol-timeout-seconds"),
             recovery_timeout_seconds=_positive(cdp_data, "recovery-timeout-seconds"),
             devtools_active_port_file=Path(active_port) if active_port else None,
         )
+        if not cdp.is_remote and not executable.is_file():
+            candidates = discover_browser_candidates()
+            if candidates:
+                hint = "; detected on this machine: " + ", ".join(str(c) for c in candidates)
+            else:
+                hint = "; no supported browser (Brave/Chrome) was detected on this machine"
+            _invalid(f"browser.executable must name an existing file (got {executable}){hint}")
+        if cdp.is_remote and active_port:
+            _invalid("cdp.devtools-active-port-file is only valid for a local CDP endpoint")
 
         chat_data = _mapping(settings, "chat")
         _exact_keys(chat_data, {"ready-timeout-seconds", "navigation-timeout-seconds"}, "chat")
@@ -440,7 +490,16 @@ class GptAutoConfig:
             ),
         )
         workflow = _workflow_config(_mapping(settings, "workflow"))
-        return cls(CURRENT_CONTRACT_VERSION, project_url, browser, cdp, chat, turn, workflow)
+        return cls(
+            CURRENT_CONTRACT_VERSION,
+            project_name,
+            project_url,
+            browser,
+            cdp,
+            chat,
+            turn,
+            workflow,
+        )
 
     @classmethod
     def from_project_dict(cls, data: dict[str, Any]) -> GptAutoConfig:
@@ -716,7 +775,12 @@ def _non_negative(data: dict[str, Any], key: str) -> float:
 
 
 def _workflow_config(data: dict[str, Any]) -> TurnWorkflowConfig:
-    _exact_keys(data, {"dom-signals", "evidence-policies"}, "workflow")
+    _exact_keys(
+        data,
+        {"dom-signals", "evidence-policies", "recovery"},
+        "workflow",
+        required={"dom-signals", "evidence-policies"},
+    )
     signal_data = _mapping(data, "dom-signals")
     signals: list[DomSignalConfig] = []
     for name, raw in signal_data.items():
@@ -766,6 +830,13 @@ def _workflow_config(data: dict[str, Any]) -> TurnWorkflowConfig:
         "composer-present",
         "composer-editable",
         "composer-unavailable",
+        # Derived by turn.py from request-owned post-baseline document
+        # evidence; the raw document-scoped signals remain diagnostic until
+        # the response scoper proves that the current prompt owns them.
+        "request-error-alert",
+        "network-error-alert",
+        "stream-cache-expired",
+        "conversation-load-failed",
         # GP34 code-review follow-up: derived from ChatSnapshot.generating
         # directly (the raw stop/streaming/thinking/aria-busy check), not a
         # dom-signal selector. Lets a policy require the ABSENCE of active
@@ -789,7 +860,75 @@ def _workflow_config(data: dict[str, Any]) -> TurnWorkflowConfig:
         if unknown:
             _invalid(f"workflow.evidence-policies.{name} references unknown facts")
         policies.append((name, policy))
-    return TurnWorkflowConfig(tuple(signals), tuple(policies))
+    recovery_data = data.get("recovery", {})
+    if not isinstance(recovery_data, dict):
+        _invalid("workflow.recovery must be a mapping")
+    _exact_keys(
+        recovery_data,
+        {
+            "network-error-followup-enabled",
+            "network-error-followup-max-attempts",
+            "network-error-followup-prompt-template",
+            "provider-error-followup-enabled",
+            "provider-error-followup-max-attempts",
+            "provider-error-followup-prompt-template",
+            "conversation-load-failure-recovery-enabled",
+            "conversation-load-failure-max-attempts",
+            "action-pause-seconds",
+        },
+        "workflow.recovery",
+        required=set(),
+    )
+    prompt_template = recovery_data.get(
+        "network-error-followup-prompt-template",
+        "Complete the previous request. The previous response was interrupted by a "
+        "network error. Continue from the work already done and provide the complete "
+        "answer.\\n\\nOriginal request:\\n{original_request}",
+    )
+    if not isinstance(prompt_template, str) or not prompt_template:
+        _invalid("workflow.recovery.network-error-followup-prompt-template must be a string")
+    if "{original_request}" not in prompt_template:
+        _invalid(
+            "workflow.recovery.network-error-followup-prompt-template must contain {original_request}"
+        )
+    provider_prompt_template = recovery_data.get(
+        "provider-error-followup-prompt-template",
+        "Complete the previous request. ChatGPT reported a temporary request error. "
+        "Continue from the work already done and provide the complete answer.\n\n"
+        "Original request:\n{original_request}",
+    )
+    if not isinstance(provider_prompt_template, str) or not provider_prompt_template:
+        _invalid("workflow.recovery.provider-error-followup-prompt-template must be a string")
+    if "{original_request}" not in provider_prompt_template:
+        _invalid(
+            "workflow.recovery.provider-error-followup-prompt-template must contain {original_request}"
+        )
+    recovery = GptAutoRecoveryConfig(
+        network_error_followup_enabled=_optional_boolean(
+            recovery_data, "network-error-followup-enabled", default=True
+        ),
+        network_error_followup_max_attempts=_optional_non_negative_int(
+            recovery_data, "network-error-followup-max-attempts", default=1
+        ),
+        network_error_followup_prompt_template=prompt_template,
+        provider_error_followup_enabled=_optional_boolean(
+            recovery_data, "provider-error-followup-enabled", default=True
+        ),
+        provider_error_followup_max_attempts=_optional_non_negative_int(
+            recovery_data, "provider-error-followup-max-attempts", default=1
+        ),
+        provider_error_followup_prompt_template=provider_prompt_template,
+        conversation_load_failure_recovery_enabled=_optional_boolean(
+            recovery_data, "conversation-load-failure-recovery-enabled", default=True
+        ),
+        conversation_load_failure_max_attempts=_optional_non_negative_int(
+            recovery_data, "conversation-load-failure-max-attempts", default=2
+        ),
+        action_pause_seconds=_optional_non_negative(
+            recovery_data, "action-pause-seconds", default=0.15
+        ),
+    )
+    return TurnWorkflowConfig(tuple(signals), tuple(policies), recovery)
 
 
 def _chatgpt_url(value: Any) -> str:
@@ -800,5 +939,22 @@ def _chatgpt_url(value: Any) -> str:
         _invalid("project-url must be a ChatGPT URL")
     if not parse_project_id(value):
         _invalid("project-url must identify a ChatGPT Project")
+    return value.rstrip("/")
+
+
+def _cdp_endpoint(value: str) -> str:
+    parsed = urlparse(value)
+    if parsed.scheme not in {"http", "https", "ws", "wss"}:
+        _invalid("cdp.endpoint must use http, https, ws, or wss")
+    if parsed.hostname is None or parsed.username or parsed.password:
+        _invalid("cdp.endpoint must contain a host and no user credentials")
+    if parsed.path not in {"", "/"} or parsed.params or parsed.query or parsed.fragment:
+        _invalid("cdp.endpoint must identify the CDP origin without a path or query")
+    try:
+        port = parsed.port
+    except ValueError:
+        _invalid("cdp.endpoint must contain a valid port")
+    if port is not None and not 1 <= port <= 65535:
+        _invalid("cdp.endpoint port must be between 1 and 65535")
     return value.rstrip("/")
 

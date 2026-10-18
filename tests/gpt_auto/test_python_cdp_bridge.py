@@ -137,6 +137,68 @@ async def test_session_command_retries_once_when_reconnect_happens_between_sessi
 
 
 @pytest.mark.asyncio
+async def test_create_page_in_window_repairs_target_created_in_active_window():
+    bridge = PythonCdpBridge(GptAutoConfig.from_dict(valid_config()))
+    fake = _FakeClient()
+    fake.created_target = None
+
+    async def command(method, params=None, *, session_id=None, timeout=None, required_generation=None):
+        params = params or {}
+        fake.calls.append((method, params, session_id))
+        if method == "Target.createTarget":
+            fake.created_target = "target-misplaced"
+            return {"targetId": fake.created_target}
+        if method == "Browser.getWindowForTarget":
+            return {"windowId": 99 if params["targetId"] == "target-misplaced" else 42}
+        if method == "Target.getTargets":
+            if fake.created_target == "target-misplaced":
+                return {
+                    "targetInfos": [
+                        {
+                            "targetId": "target-repaired",
+                            "type": "page",
+                            "url": "https://chatgpt.com/g/g-p-project",
+                            "openerId": "target-anchor",
+                        }
+                    ]
+                }
+            return {"targetInfos": []}
+        if method == "Target.attachToTarget":
+            return {"sessionId": "session-anchor"}
+        if method in {"Page.enable", "Page.setLifecycleEventsEnabled", "Target.closeTarget"}:
+            return {}
+        if method == "Runtime.evaluate":
+            return {"result": {"value": {}}}
+        return await _FakeClient.command(
+            fake,
+            method,
+            params,
+            session_id=session_id,
+            timeout=timeout,
+            required_generation=required_generation,
+        )
+
+    fake.command = command
+    bridge._client = fake
+    bridge._pages["page-anchor"] = "target-anchor"
+
+    result = await bridge.call(
+        "create_page_in_window",
+        {"anchorPageHandle": "page-anchor", "url": "https://chatgpt.com/g/g-p-project"},
+    )
+
+    assert result["targetId"] == "target-repaired"
+    assert result["windowId"] == 42
+    assert any(
+        method == "Runtime.evaluate" and "window.open" in params["expression"]
+        for method, params, _ in fake.calls
+    )
+    assert any(
+        method == "Target.closeTarget" and params["targetId"] == "target-misplaced"
+        for method, params, _ in fake.calls
+    )
+
+@pytest.mark.asyncio
 async def test_python_bridge_serializes_page_creation_and_returns_window_identity():
     bridge = PythonCdpBridge(GptAutoConfig.from_dict(valid_config()))
     fake = _FakeClient()
@@ -266,6 +328,7 @@ async def test_get_page_resolves_single_target_without_enumerating_all_tabs():
         "title": "",
         "targetId": "target-1",
         "windowId": 42,
+        "openerId": "",
     }
     assert get_targets_calls == 0
 
@@ -416,11 +479,17 @@ async def test_python_bridge_exposes_browser_window_and_target_api_operations():
     )
     target_info = await bridge.call("target_info", {"pageHandle": page["pageHandle"]})
     assert target_info["targetInfo"]["type"] == "page"
-    await bridge.call("activate_target", {"pageHandle": page["pageHandle"]})
+    blocked = await bridge.call("activate_target", {"pageHandle": page["pageHandle"]})
+    assert blocked == {"activated": False, "reason": "foreground-activation-not-authorized"}
+    await bridge.call("activate_target", {"pageHandle": page["pageHandle"], "operator": True, "operator_reason": "dashboard-focus"})
+    keep_result = await bridge.call("keep_page_active", {"pageHandle": page["pageHandle"]})
     methods = [call[0] for call in fake.calls]
     assert "Browser.getVersion" in methods
     assert "Browser.setWindowBounds" in methods
     assert "Target.activateTarget" in methods
+    assert keep_result == {"ok": True, "foreground": False}
+    assert "Runtime.evaluate" in methods
+    assert "Page.bringToFront" not in methods
 
 
 @pytest.mark.asyncio
@@ -456,7 +525,7 @@ async def test_python_bridge_uses_chromium_http_activation_assist(monkeypatch):
         "audiagentic.components.providers.adapters.gpt_auto.cdp.bridge.urllib.request.urlopen",
         _urlopen,
     )
-    result = await bridge.call("activate_target", {"pageHandle": page["pageHandle"]})
+    result = await bridge.call("activate_target", {"pageHandle": page["pageHandle"], "operator": True, "operator_reason": "dashboard-focus"})
 
     assert result["activated"] is True
     assert result["transport"] == "cdp+http"
@@ -479,6 +548,100 @@ async def test_typed_browser_api_validates_and_wraps_page_operations():
         await api.navigate(page, "/relative")
     with pytest.raises(TypeError, match="CdpPageRef"):
         await api.close("page-1")  # type: ignore[arg-type]
+
+
+@pytest.mark.asyncio
+async def test_bridge_insert_text_uses_native_cdp_input():
+    bridge = PythonCdpBridge(GptAutoConfig.from_dict(valid_config()))
+    fake = _FakeClient()
+    bridge._client = fake
+    page = await bridge.call("create_page")
+
+    result = await bridge.call(
+        "insert_text", {"pageHandle": page["pageHandle"], "text": "native input"}
+    )
+
+    assert result == {"inserted": True}
+    assert any(
+        method == "Input.insertText" and params == {"text": "native input"}
+        for method, params, _session in fake.calls
+    )
+
+
+@pytest.mark.asyncio
+async def test_bridge_hover_uses_native_cdp_mouse_event():
+    bridge = PythonCdpBridge(GptAutoConfig.from_dict(valid_config()))
+    fake = _FakeClient()
+    bridge._client = fake
+    page = await bridge.call("create_page")
+
+    result = await bridge.call(
+        "hover", {"pageHandle": page["pageHandle"], "x": 42, "y": 17}
+    )
+
+    assert result == {"hovered": True}
+    assert any(
+        method == "Input.dispatchMouseEvent"
+        and params == {
+            "type": "mouseMoved",
+            "x": 42.0,
+            "y": 17.0,
+            "pointerType": "mouse",
+        }
+        for method, params, _session in fake.calls
+    )
+
+
+@pytest.mark.asyncio
+async def test_bridge_click_uses_native_cdp_mouse_press_and_release():
+    bridge = PythonCdpBridge(GptAutoConfig.from_dict(valid_config()))
+    fake = _FakeClient()
+    bridge._client = fake
+    page = await bridge.call("create_page")
+
+    assert await bridge.call("click", {"pageHandle": page["pageHandle"], "x": 11, "y": 23}) == {
+        "clicked": True
+    }
+    assert [
+        (method, params)
+        for method, params, _session in fake.calls
+        if method == "Input.dispatchMouseEvent"
+    ] == [
+        (
+            "Input.dispatchMouseEvent",
+            {
+                "type": "mouseMoved",
+                "x": 11.0,
+                "y": 23.0,
+                "buttons": 0,
+                "pointerType": "mouse",
+            },
+        ),
+        (
+            "Input.dispatchMouseEvent",
+            {
+                "type": "mousePressed",
+                "x": 11.0,
+                "y": 23.0,
+                "button": "left",
+                "buttons": 1,
+                "clickCount": 1,
+                "pointerType": "mouse",
+            },
+        ),
+        (
+            "Input.dispatchMouseEvent",
+            {
+                "type": "mouseReleased",
+                "x": 11.0,
+                "y": 23.0,
+                "button": "left",
+                "buttons": 0,
+                "clickCount": 1,
+                "pointerType": "mouse",
+            },
+        ),
+    ]
 
 
 @pytest.mark.asyncio
@@ -520,7 +683,7 @@ async def test_python_bridge_live_page_and_window_lifecycle():
         await bridge.call(
             "set_window_bounds", {"pageHandle": page["pageHandle"], "bounds": bounds["bounds"]}
         )
-        await bridge.call("activate_target", {"pageHandle": page["pageHandle"]})
+        await bridge.call("activate_target", {"pageHandle": page["pageHandle"], "operator": True, "operator_reason": "dashboard-focus"})
         in_window = await bridge.call(
             "create_page_in_window", {"anchorPageHandle": page["pageHandle"]}
         )
@@ -531,6 +694,7 @@ async def test_python_bridge_live_page_and_window_lifecycle():
         html = (
             "data:text/html,<html><body>"
             "<div id='prompt-textarea' class='ProseMirror' contenteditable='true'></div>"
+            "<button data-testid='send-button' type='button'>Send</button>"
             "</body></html>"
         )
         await bridge.call("navigate", {"pageHandle": page["pageHandle"], "url": html})
@@ -543,6 +707,8 @@ async def test_python_bridge_live_page_and_window_lifecycle():
         assert submitted == {
             "actionComplete": True,
             "typedText": "CDP bridge live smoke",
+            "sendButtonClicked": True,
+            "enterDispatched": False,
         }
         stopped = await api.stop_generation(page_ref)
         assert stopped["stopped"] is False

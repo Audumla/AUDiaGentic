@@ -14,13 +14,7 @@ mcp = mcp_server(__name__)
 @mcp.tool()
 @tool_boundary
 def record_change_event(event: dict | list[dict]) -> dict:
-    """Record one or more change event fragments.
-
-    Accepts a single dict or a list of dicts (batch mode — one call,
-    one trailing sync). Required per event: change-class, files,
-    technical-summary, user-summary-candidate, status ('unreleased').
-    Optional: plan-item-ids (array of plan item IDs for automatic linkage).
-    """
+    """Record one event or a batch; each event needs class, files, technical and user summaries, and status=unreleased. Batches sync once; plan-item-ids is optional."""
     project_root = project_root_from_env()
     if isinstance(event, list):
         return ledger_api.record_changes(project_root, event, sync=True)
@@ -30,40 +24,35 @@ def record_change_event(event: dict | list[dict]) -> dict:
 @mcp.tool()
 @tool_boundary
 def get_pending_events(group_by: str = "plan-items") -> dict:
-    """Return pending (unreleased) events grouped for commit decisions.
-
-    group_by: "plan-items" (default, cluster by shared plan-item-ids),
-    "files" (cluster by file overlap), or "flat" (raw ungrouped list).
-    """
+    """List unreleased events grouped by plan-items, files, or flat."""
     return ledger_api.get_pending_events(project_root_from_env(), group_by)
 
 
 @mcp.tool()
 @tool_boundary
 def get_fragment(event_id: str) -> dict:
-    """Retrieve a single change event by event-id.
-
-    Looks in the current ledger; returns the full event dict or raises
-    if not found.
-    """
+    """Return one current-ledger event by event-id."""
     return ledger_api.get_fragment(event_id, project_root_from_env())
 
 
 @mcp.tool()
 @tool_boundary
 def get_current_summary() -> str:
+    """Return the generated current-release summary."""
     return ledger_api.get_current_summary(project_root_from_env())
 
 
 @mcp.tool()
 @tool_boundary
 def sync_ledger() -> dict:
+    """Merge pending fragments into the current ledger."""
     return ledger_api.sync(project_root_from_env())
 
 
 @mcp.tool()
 @tool_boundary
 def get_audit_report() -> dict:
+    """Regenerate and return release audit/check-in document paths."""
     return ledger_api.generate_audit(project_root_from_env())
 
 

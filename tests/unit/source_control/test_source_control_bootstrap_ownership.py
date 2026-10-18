@@ -147,6 +147,20 @@ class TestHookInstallOwnership:
         assert result["reason"] == "post-commit ledger stamping disabled by policy"
         assert not (tmp_path / ".git" / "hooks" / "post-commit").exists()
 
+    def test_commit_stamp_runtime_guard_blocks_stale_hook(self, tmp_path: Path, monkeypatch) -> None:
+        from audiagentic.components.source_control import git_commits
+
+        ledger = tmp_path / "docs" / "releases"
+        ledger.mkdir(parents=True)
+        (ledger / "CURRENT_RELEASE_LEDGER.ndjson").write_text(
+            '{"event-id":"chg_stale","files":["src/example.py"]}\n', encoding="utf-8"
+        )
+        monkeypatch.setattr(git_commits, "_get_head_sha", lambda root: "abcdef1234567")
+        monkeypatch.setattr(git_commits, "_get_committed_files", lambda root: {"src/example.py"})
+
+        assert git_commits.stamp_ledger_for_commit(tmp_path) == {}
+        assert "git-commits" not in (ledger / "CURRENT_RELEASE_LEDGER.ndjson").read_text()
+
     def test_fb_absent_creates_whole_owned(self, tmp_path: Path, monkeypatch) -> None:
         """FxB-S1: hook absent → create whole-owned file with shebang + block."""
         self._setup_ledger_project(tmp_path, monkeypatch)

@@ -9,9 +9,10 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import re
 import uuid
-from pathlib import Path
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 from audiagentic.components.agents.agents_paths import (
@@ -59,6 +60,27 @@ def clear_active_work(service_root: Path | None, request_id: str) -> None:
     if service_root is None:
         return
     active_work_path(service_root, request_id).unlink(missing_ok=True)
+
+
+def count_active_work(service_root: Path) -> int:
+    """Count valid durable non-terminal work across all gateway projects."""
+    count = 0
+    active_root = service_root / _shared.ACTIVE_WORK_DIR
+    if not active_root.exists():
+        return 0
+    for path in active_root.glob("req_*.json"):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            project_value = payload.get("project-root")
+            request_id = payload.get("request-id")
+            if not isinstance(project_value, str) or not isinstance(request_id, str):
+                continue
+            record = _records.read_record(Path(project_value), request_id)
+        except (OSError, ValueError, AudiaGenticError):
+            continue
+        if record.get("state") in {"queued", "running"}:
+            count += 1
+    return count
 
 
 def hash_idempotency_key(idempotency_key: str) -> str:
@@ -239,11 +261,16 @@ def admit_record(
         return candidate, True
 
 
-def generate_request_id() -> str:
-    """Return a new request ID.
+def generate_request_id(project_root: Path | str | None = None) -> str:
+    """Return a new project-scoped request ID.
 
-    UUID-based (not a sequential directory scan like agent-jobs' job IDs)
-    because requests are created concurrently by queue workers across
-    profiles — a scan-and-increment generator would race under concurrency.
+    The bounded project slug is an operator-facing routing hint. The random
+    suffix remains the uniqueness authority and is never used as a lookup key.
     """
-    return f"req_{uuid.uuid4().hex[:16]}"
+    slug = "project"
+    if project_root is not None:
+        candidate = Path(project_root).name.lower()
+        candidate = re.sub(r"[^a-z0-9]+", "-", candidate).strip("-")
+        if candidate:
+            slug = candidate[:24]
+    return f"req_{slug}_{uuid.uuid4().hex[:12]}"

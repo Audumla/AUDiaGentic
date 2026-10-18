@@ -53,12 +53,13 @@ def _normalize_context_window(raw: Any, provider_cfg: dict[str, Any]) -> int:
 
 def _fetch_catalog(provider_cfg: dict[str, Any]) -> list[dict[str, Any]]:
     """Fetch available models from the OpenAI-compatible endpoint."""
-    base_url = (
+    configured = (
         provider_cfg.get("api-base-url")
         or provider_cfg.get("apiBaseUrl")
         or provider_cfg.get("api_base_url")
-        or "https://api.openai.com"
     )
+    from audiagentic.foundation.config.local_runtime import local_provider_base_url
+    base_url = local_provider_base_url(configured)
     secret_ref = provider_cfg.get("auth-ref") or provider_cfg.get("api-key-ref")
     try:
         api_key = resolve_secret_ref(secret_ref) if secret_ref else None

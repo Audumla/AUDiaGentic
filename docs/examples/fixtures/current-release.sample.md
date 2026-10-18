@@ -1,3 +1,0 @@
-# Current Release
-
-- sample summary

@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import logging
 from collections import Counter
 from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import Any, NoReturn
+from urllib.parse import urlsplit
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.time import now_iso_z
@@ -26,7 +28,7 @@ from audiagentic.foundation.transports.session_binding import (
 )
 from audiagentic.foundation.workflow import TransitionConfig, TransitionEngine
 
-from .chat import ChatState, PersistentChat
+from .chat import ChatState, PersistentChat, ProviderBindingIntegrityError
 from .observation_engine import (
     EvidenceCapability,
     Observation,
@@ -34,10 +36,72 @@ from .observation_engine import (
     ObservationTracker,
 )
 from .prompt_fingerprint import PromptFingerprint, match_prompt
-from .snapshot import ChatMessageRef, ChatProgressBlock, ChatSnapshot
-from .urls import canonical_project_url, parse_project_id, parse_provider_session_id
+from .snapshot import (
+    ChatMessageRef,
+    ChatProgressBlock,
+    ChatSnapshot,
+    _error_alert_occurrences,
+)
+from .urls import (
+    canonical_chat_url,
+    canonical_project_url,
+    parse_project_id,
+    parse_provider_session_id,
+    same_chat_identity,
+    url_matches_provider_session,
+)
 
 logger = logging.getLogger(__name__)
+
+
+def _is_fallback_assistant_message_id(message_id: str | None) -> bool:
+    """Return whether an assistant ID is a renderer-local fallback ordinal."""
+    return bool(message_id and message_id.startswith("fallback-assistant-"))
+
+
+def _fallback_prompt_anchor_is_stable(
+    baseline: ChatSnapshot,
+    snapshot: ChatSnapshot,
+    prompt_message_id: str,
+    *,
+    prompt_text: str | None = None,
+) -> bool:
+    """Prove a fallback user ordinal remains the requested logical turn."""
+    if not prompt_message_id.startswith("fallback-user-"):
+        return True
+    prompt_refs = [
+        ref
+        for ref in snapshot.message_refs
+        if ref.role == "user" and ref.message_id == prompt_message_id
+    ]
+    if len(prompt_refs) != 1 or snapshot.latest_user_id != prompt_message_id:
+        return False
+    current_text = prompt_refs[0].correlation_text or prompt_refs[0].text or ""
+    if prompt_text and not PromptFingerprint.from_text(prompt_text).matches_text(current_text):
+        return False
+    baseline_refs = [
+        ref
+        for ref in baseline.message_refs
+        if ref.role == "user" and ref.message_id == prompt_message_id
+    ]
+    if baseline.user_count == snapshot.user_count:
+        # Restart recovery already has the prompt in its baseline. Require
+        # the same ordinal and text to remain the only latest turn.
+        if len(baseline_refs) != 1:
+            return False
+        baseline_text = baseline_refs[0].correlation_text or baseline_refs[0].text or ""
+        return PromptFingerprint.from_text(baseline_text).matches_text(current_text)
+    # Fresh submission: the requested prompt must be the one new user turn.
+    return snapshot.user_count == baseline.user_count + 1 and not baseline_refs
+
+def _is_durable_assistant_message_id(message_id: str | None) -> bool:
+    """Return whether an assistant ID can survive renderer virtualization."""
+    return bool(message_id and not message_id.startswith("fallback-assistant-"))
+
+
+_REMOUNT_TERMINAL_WITNESS_SIGNALS = frozenset(
+    {"completion-control", "more-actions-menu", "response-complete-status"}
+)
 
 
 def _text_digest(text: str | None) -> str | None:
@@ -265,8 +329,18 @@ class GptAutoTurn:
         self._delivered = 0
         self._phase = "initialization"
         self._composer_verification_mismatch: dict[str, Any] | None = None
+        # The browser submit action itself is a prerequisite for the
+        # prompt-unmounted completion proof.  Keep it separate from
+        # side_effect_attempted, which also covers ambiguous pre-ack failures.
+        self._composer_action_confirmed = False
         self._prompt_message_id: str | None = None
         self._response_message_id: str | None = None
+        self._submission_proof_url: str | None = None
+        self._submission_proof_assistant_id: str | None = None
+        # Normal turns may retain a confirmed prompt anchor while ChatGPT
+        # virtualizes that user node out of later snapshots. Recovery turns
+        # remain stricter and use the existing unresolved-correlation rules.
+        self._recovered_existing_turn = False
         self._submission_settled = asyncio.Event()
         self._done = asyncio.Event()
         # Keep the last bounded observation locally so an unprovable provider
@@ -278,6 +352,7 @@ class GptAutoTurn:
         self._baseline_snapshot: ChatSnapshot | None = None
         self._submission_recovery_proof: ChatSnapshot | None = None
         self._terminal_evidence: dict[str, Any] = {}
+        self._final_media_type: str | None = None
         # ChatGPT may virtualize the tail of a long conversation.  Keep one
         # bounded attempt per turn to mount the latest assistant action bar;
         # repeated scrolling would be noisy and could fight the operator's
@@ -285,6 +360,11 @@ class GptAutoTurn:
         self._completion_materialization_attempted = False
         self._completion_materialization_succeeded = False
         self._delivery_timeout_retry_attempted = False
+        self._delivery_timeout_retry_probe_failed = False
+        self._conversation_load_retry_attempts = 0
+        self._conversation_load_retry_clicks = 0
+        self._conversation_load_retry_last_error: str | None = None
+        self._conversation_load_retry_last_delay: float | None = None
         self._timing_events: set[str] = set()
         self._initial_refresh_attempted = False
         self._initial_refresh_succeeded: bool | None = None
@@ -300,6 +380,7 @@ class GptAutoTurn:
         self._response_recovery_last_refresh_at: float | None = None
         self._response_recovery_final_grace_started_at: float | None = None
         self._dropped_observations = 0
+        self._last_response_decision_diagnostics: dict[str, Any] | None = None
 
     def _move(self, target: TurnState) -> None:
         failure = _ENGINE.check(self.state.value, target.value)
@@ -307,7 +388,39 @@ class GptAutoTurn:
             raise RuntimeError(f"illegal turn transition {self.state}->{target}: {failure}")
         self.state = target
 
+    @staticmethod
+    def _prompt_id_for_snapshot(snapshot: ChatSnapshot) -> str | None:
+        if snapshot.latest_user_id:
+            return snapshot.latest_user_id
+        if snapshot.user_count > 0:
+            return f"fallback-user-{snapshot.user_count - 1}"
+        return None
+
+    def _virtualized_assistant_id(self) -> str | None:
+        """Return the durable request-owned assistant identity, if known."""
+        for candidate in (self._submission_proof_assistant_id, self._response_message_id):
+            if _is_durable_assistant_message_id(candidate):
+                return candidate
+        return None
+
     async def _emit(self, kind: TransportObservationKind, attributes: dict[str, Any]) -> None:
+        # The physical-tab reaper is driven by real request/session activity,
+        # not by polling or synthetic connection-refreshing lease ticks.
+        if kind is not TransportObservationKind.TIMING and attributes.get(
+            "model_activity"
+        ) not in {
+            "connection-refreshing",
+            "provider-busy",
+            "response-observing",
+            "recovery-observing",
+            "soft-liveness",
+            "delivery-timeout-retry",
+            "preflight-inspected",
+            "preflight-evaluated",
+        }:
+            mark_activity = getattr(self.chat, "mark_validated_activity", None)
+            if callable(mark_activity):
+                mark_activity()
         value = TransportObservation(
             ag_session_id=self.chat.ag_session_id,
             turn_id=self.request.turn_id,
@@ -322,6 +435,34 @@ class GptAutoTurn:
         if asyncio.iscoroutine(result):
             await result
         self._delivered += 1
+
+    async def _log_response_decision_diagnostics(
+        self, diagnostics: dict[str, Any]
+    ) -> None:
+        """Log content-free response gates only when their state changes."""
+        if diagnostics == self._last_response_decision_diagnostics:
+            return
+        self._last_response_decision_diagnostics = diagnostics
+        encoded = json.dumps(
+            diagnostics,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        logger.info(
+            "gpt-auto response decision gates=%s",
+            diagnostics,
+            extra={"turn-id": self.request.turn_id},
+        )
+        await self._emit(
+            TransportObservationKind.TIMING,
+            {
+                "timing-event": "response-decision",
+                "diagnostic-signature": hashlib.sha256(
+                    encoded.encode("utf-8")
+                ).hexdigest()[:16],
+                "diagnostic-details": encoded,
+            },
+        )
 
     async def _emit_timing(self, event: str) -> None:
         """Record a one-shot timing milestone without liveness semantics."""
@@ -352,13 +493,35 @@ class GptAutoTurn:
         except Exception as exc:
             if not _ENGINE.is_terminal(self.state.value):
                 self._move(TurnState.FAILED)
+            proven_unsent = self._proven_unsent_submission_boundary(exc)
+            if proven_unsent:
+                try:
+                    await self._persist_and_clear_unresolved()
+                except Exception:  # noqa: BLE001 - fail closed if the fence cannot persist
+                    proven_unsent = False
+                    logger.exception(
+                        "gpt-auto could not persist the proven-unsent submission fence clear",
+                        extra={"turn-id": self.request.turn_id},
+                    )
             if self.chat.state not in {ChatState.FAILED, ChatState.CLOSED}:
-                proven_unsent = (
+                proven_unsent = proven_unsent or (
                     isinstance(exc, AudiaGenticError)
                     and exc.code == "EXT-GPTAUTO-003"
                     and exc.details.get("submission-ambiguous") is False
                 )
                 self._set_chat_state(ChatState.READY if proven_unsent else ChatState.FAILED)
+            if isinstance(exc, AudiaGenticError):
+                details = dict(exc.details or {})
+                details.update(self._failure_response_details())
+                dom_signals = details.get("dom-signals") or ()
+                if "conversation-load-failed" in dom_signals:
+                    details["failure-reason"] = "conversation-load-failed"
+                raise AudiaGenticError(
+                    code=exc.code,
+                    kind=exc.kind,
+                    message=exc.message,
+                    details=details,
+                ) from exc
             if self.side_effect_attempted and not isinstance(exc, AudiaGenticError):
                 cause = str(exc).strip() or "no exception message"
                 observation_failure = self._phase in {
@@ -376,11 +539,26 @@ class GptAutoTurn:
                     ),
                     details={
                         "turn-id": self.request.turn_id,
-                        "failure-reason": "unclassified-provider-boundary-exception",
+                        "failure-reason": (
+                            "composer-not-found-before-submission"
+                            if proven_unsent
+                            else "unclassified-provider-boundary-exception"
+                        ),
                         "cause-type": type(exc).__name__,
                         "cause-message": cause,
+                        **self._failure_response_details(),
                         "submission-attempted": True,
                         "submission-proven": self.submission_confirmed,
+                        "submission-ambiguous": not proven_unsent,
+                        **(
+                            {
+                                "failure-stage": "submission",
+                                "submission-state": "not_started",
+                                "retryable-same-session": True,
+                            }
+                            if proven_unsent
+                            else {}
+                        ),
                         **self._diagnostics(),
                     },
                 ) from exc
@@ -403,15 +581,206 @@ class GptAutoTurn:
                 self._set_chat_state(ChatState.READY)
             self._done.set()
 
+    async def resume_existing(self) -> SessionTurnResult:
+        """Resume observation of a previously submitted turn, with zero send."""
+        self._recovered_existing_turn = True
+        self.chat.active_turn_id = self.request.turn_id
+        try:
+            await self._emit_timing("restart-recovery-start")
+            checkpoint = self.chat.unresolved_metadata()
+            defer_recovery = getattr(self.chat, "defer_unresolved_reconciliation", None)
+            if callable(defer_recovery):
+                defer_recovery()
+            # Rehydration opens the exact retained conversation in READY.  Do
+            # binding/readiness validation before BUSY; ensure_ready() is not
+            # legal once the turn has entered BUSY.
+            await self.chat.ensure_ready()
+            self._set_chat_state(ChatState.BUSY)
+            self._prompt_message_id = checkpoint.get("prompt-message-id")
+            self._response_message_id = checkpoint.get("assistant-message-id")
+            unresolved_turn_id = checkpoint.get("unresolved-turn-id")
+            derived_prompt_id = False
+            if unresolved_turn_id != self.request.turn_id:
+                raise AudiaGenticError(
+                    "EXT-GPTAUTO-004", "providers",
+                    "gpt-auto unresolved checkpoint does not match the recovered request",
+                    {"failure-reason": "unresolved-turn-request-mismatch", **self._diagnostics()},
+                )
+            self.side_effect_attempted = True
+            self.submission_confirmed = True
+            # A cancel can be latched before recovery creates this turn.  The
+            # initial cancel task may have observed the pre-recovery state and
+            # returned before the retained provider side effect was attached;
+            # re-arm stop settlement now that recovery has established it.
+            if self.cancel_event.is_set() and (
+                self._stop_task is None or self._stop_task.done()
+            ):
+                self._stop_task = asyncio.create_task(
+                    self._stop_generation_best_effort()
+                )
+            if self.cancel_event.is_set():
+                self._move(TurnState.SUBMITTING)
+                self._move(TurnState.SIDE_EFFECT_ATTEMPTED)
+                return await self._cancelled_result()
+            # Recovered observation starts at PREPARING, but the durable
+            # checkpoint proves the provider-side Send may already have run.
+            # Advance through the same lifecycle states as normal submission
+            # without calling the browser composer or sending the prompt.
+            self._move(TurnState.SUBMITTING)
+            self._move(TurnState.SIDE_EFFECT_ATTEMPTED)
+            current = await self._snapshot_for_observation()
+            persisted_alerts = checkpoint.get(
+                "unresolved-baseline-error-alert-occurrences"
+            )
+            legacy_alert_baseline = persisted_alerts is None
+            if not isinstance(self._prompt_message_id, str) or not self._prompt_message_id:
+                # The checkpoint is written before Send and prompt identity is
+                # published afterward. If the generation ended in that small
+                # window, recover the latest *new* user node only when its
+                # content and baseline count match this request; otherwise
+                # remain unresolved without clicking Send.
+                current = await self._await_recovered_prompt_identity(
+                    checkpoint, current
+                )
+                self._prompt_message_id = self._prompt_id_for_snapshot(current)
+                derived_prompt_id = True
+                mark_prompt = getattr(self.chat, "mark_prompt_submitted", None)
+                if mark_prompt is not None and self._prompt_message_id is not None:
+                    mark_prompt(
+                        self._prompt_message_id,
+                        checkpoint.get("unresolved-baseline-assistant-id"),
+                        self.request.body,
+                    )
+            response_ref = _response_ref_for_prompt(current, self._prompt_message_id)
+            # Build a synthetic pre-response baseline when the assistant
+            # already exists. This lets the normal response observer prove a
+            # response that completed while the gateway was down without
+            # mistaking the existing answer for an unrelated old turn.
+            baseline = current
+            if not legacy_alert_baseline:
+                baseline = replace(
+                    baseline,
+                    error_alert_occurrences=_error_alert_occurrences(persisted_alerts),
+                )
+            if response_ref is not None:
+                response_index = next(
+                    index for index, ref in enumerate(current.message_refs)
+                    if ref is response_ref
+                )
+                prior_refs = current.message_refs[:response_index]
+                prior_assistants = tuple(ref for ref in prior_refs if ref.role == "assistant")
+                baseline = replace(
+                    current,
+                    assistant_count=max(0, current.assistant_count - 1),
+                    latest_assistant_id=prior_assistants[-1].message_id if prior_assistants else None,
+                    latest_assistant_text=prior_assistants[-1].text if prior_assistants else None,
+                    assistant_message_ids=tuple(ref.message_id for ref in prior_assistants if ref.message_id),
+                    assistant_message_texts=tuple(ref.text or "" for ref in prior_assistants),
+                    message_refs=prior_refs,
+                )
+                self._response_message_id = response_ref.message_id
+            self._baseline_snapshot = baseline
+            if derived_prompt_id:
+                persist_identity = getattr(self.chat, "persist_unresolved_identity", None)
+                if persist_identity is not None:
+                    await persist_identity()
+            self._move(TurnState.SUBMITTED)
+            self._move(TurnState.AWAITING_RESPONSE)
+            final = await self._await_response(
+                baseline,
+                current,
+                allow_legacy_owned_error_alert=legacy_alert_baseline,
+            )
+            if self.state is TurnState.CANCELLED or self.cancel_event.is_set():
+                return self._result("cancelled")
+            if final is None:
+                raise RuntimeError("recovered response observation ended without a result")
+            await self._publish_message_ids(strict=False)
+            await self._persist_and_clear_unresolved()
+            self._move(TurnState.COMPLETE)
+            await self._emit(TransportObservationKind.TERMINAL, {"stop_reason": "end-turn"})
+            result = self._result("end-turn")
+            return SessionTurnResult(**{**result.__dict__, "final_summary": final, "final_media_type": self._final_media_type})
+        except asyncio.CancelledError:
+            if not _ENGINE.is_terminal(self.state.value):
+                self._move(TurnState.CANCELLED)
+            raise
+        finally:
+            self.chat.active_turn_id = None
+            if self.chat.state not in {ChatState.FAILED, ChatState.CLOSED, ChatState.RECOVERING}:
+                self._set_chat_state(ChatState.READY)
+            self._done.set()
+
+    async def _await_recovered_prompt_identity(
+        self, checkpoint: dict[str, object], initial: ChatSnapshot
+    ) -> ChatSnapshot:
+        """Wait through renderer lag before classifying a pre-ID recovery."""
+        baseline_count = checkpoint.get("unresolved-baseline-user-count")
+        try:
+            baseline_count_value = int(baseline_count)
+        except (TypeError, ValueError) as exc:
+            raise AudiaGenticError(
+                "EXT-GPTAUTO-004", "providers",
+                "gpt-auto could not correlate the recovered prompt safely",
+                {"failure-reason": "recovery-baseline-unavailable", **self._diagnostics()},
+            ) from exc
+        loop = asyncio.get_running_loop()
+        ceiling = max(
+            self.chat.config.turn.poll_interval_seconds,
+            self.chat.config.turn.submission_proof_absolute_ceiling_seconds,
+        )
+        deadline = loop.time() + ceiling
+        current = initial
+        while True:
+            candidate_id = current.latest_user_id
+            candidate_text = current.latest_user_correlation_text() or ""
+            if current.user_count > baseline_count_value and candidate_id:
+                if not match_prompt(self.request.body, candidate_text):
+                    raise AudiaGenticError(
+                        "EXT-GPTAUTO-004", "providers",
+                        "gpt-auto recovered a conflicting prompt identity",
+                        {"failure-reason": "recovered-prompt-mismatch", **self._diagnostics()},
+                    )
+                return current
+            if loop.time() >= deadline:
+                raise AudiaGenticError(
+                    "EXT-GPTAUTO-004", "providers",
+                    "gpt-auto could not correlate the recovered prompt safely",
+                    {"failure-reason": "prompt-identity-unavailable", **self._diagnostics()},
+                )
+            await asyncio.sleep(self.chat.config.turn.poll_interval_seconds)
+            try:
+                current = await self._snapshot_for_observation()
+            except Exception:  # noqa: BLE001 - renderer lag is not proof of failure
+                continue
+
     async def wait_done(self, timeout: float) -> None:
         await asyncio.wait_for(self._done.wait(), timeout=timeout)
+
+    async def _snapshot_for_observation(self) -> ChatSnapshot:
+        """Keep one CDP observation from wedging the whole turn forever.
+
+        Response observation intentionally has no total-duration deadline: a
+        healthy provider turn may run for an arbitrary amount of time.  Each
+        individual browser snapshot is different, however.  If its CDP call
+        hangs, the turn must regain control so the existing recovery/watchdog
+        path can record the loss of observation and decide what to do.  This
+        is an observation bound only; it never submits or retries a prompt.
+        """
+        cdp_config = getattr(self.chat.config, "cdp", None)
+        protocol_timeout = float(
+            getattr(cdp_config, "protocol_timeout_seconds", 30.0)
+        )
+        if protocol_timeout <= 0:
+            protocol_timeout = 30.0
+        return await asyncio.wait_for(self.chat.snapshot(), timeout=protocol_timeout)
 
     async def _run(self) -> SessionTurnResult:
         if self.cancel_event.is_set():
             self._move(TurnState.CANCELLED)
             return self._result("cancelled")
         self._phase = "baseline-observation"
-        baseline = await self.chat.snapshot()
+        baseline = await self._snapshot_for_observation()
         baseline = await self._ensure_admitted_project(baseline)
         if baseline.generating or not baseline.composer_editable:
             baseline = await self._await_composer_settled(baseline)
@@ -466,10 +835,11 @@ class GptAutoTurn:
         mark_activity = getattr(self.chat, "mark_validated_activity", None)
         if callable(mark_activity):
             mark_activity()
-        if proof.latest_user_id:
+        prompt_id = self._prompt_message_id or self._prompt_id_for_snapshot(proof)
+        if prompt_id:
             mark_prompt = getattr(self.chat, "mark_prompt_submitted", None)
             if mark_prompt is not None:
-                mark_prompt(proof.latest_user_id, baseline.latest_assistant_id, self.request.body)
+                mark_prompt(prompt_id, baseline.latest_assistant_id, self.request.body)
                 persist_checkpoint = getattr(self.chat, "persist_unresolved_checkpoint", None)
                 if persist_checkpoint is not None:
                     await persist_checkpoint(turn_id=self.request.turn_id, baseline=baseline)
@@ -479,12 +849,60 @@ class GptAutoTurn:
         if self.chat.provider_session_id is None:
             proof = await self.chat.acquire_provider_identity(proof)
         self._require_admitted_project(proof, phase="post-submission")
+        proven_conversation_url = canonical_chat_url(proof.url)
+        proven_provider_session_id = parse_provider_session_id(proof.url)
+        if (
+            proven_conversation_url is None
+            or proven_provider_session_id is None
+            or not self.chat.provider_session_id
+            or not url_matches_provider_session(
+                proven_conversation_url,
+                self.chat.provider_session_id,
+            )
+        ):
+            raise ProviderBindingIntegrityError(
+                "post-submit provider conversation identity is unavailable"
+            )
+        if (
+            self._submission_proof_url is not None
+            and self._submission_proof_url != proven_conversation_url
+        ):
+            raise ProviderBindingIntegrityError(
+                "post-submit provider conversation changed after proof"
+            )
+        self._submission_proof_url = proven_conversation_url
         await self._publish_message_ids(strict=True)
         if self.state is TurnState.CANCELLED:
             return self._result("cancelled")
         self._move(TurnState.AWAITING_RESPONSE)
         self._phase = "response-observation"
-        final = await self._await_response(baseline, proof)
+        # A new session starts on the project landing route and becomes a
+        # conversation route only after ChatGPT accepts the prompt. Preserve
+        # that post-submit conversation identity for response scoping while
+        # retaining the original baseline's message IDs.
+        response_baseline = (
+            replace(baseline, url=self._submission_proof_url)
+            if self._submission_proof_url and not parse_provider_session_id(baseline.url)
+            else baseline
+        )
+        allow_empty_baseline_virtualized_assistant = (
+            self._composer_action_confirmed
+            and not self._recovered_existing_turn
+            and not parse_provider_session_id(baseline.url)
+            and baseline.user_count == 0
+            and baseline.assistant_count == 0
+            and not baseline.user_message_ids
+            and not baseline.assistant_message_ids
+            and self._submission_proof_url is not None
+            and same_chat_identity(response_baseline.url, self._submission_proof_url)
+        )
+        final = await self._await_response(
+            response_baseline,
+            proof,
+            allow_empty_baseline_virtualized_assistant=(
+                allow_empty_baseline_virtualized_assistant
+            ),
+        )
         if self.state is TurnState.CANCELLED:
             return self._result("cancelled")
         if final is None:
@@ -530,7 +948,7 @@ class GptAutoTurn:
                 extra={"turn-id": self.request.turn_id},
             )
         result = self._result("end-turn")
-        return SessionTurnResult(**{**result.__dict__, "final_summary": final})
+        return SessionTurnResult(**{**result.__dict__, "final_summary": final, "final_media_type": self._final_media_type})
 
     def _require_admitted_project(self, snapshot: ChatSnapshot, *, phase: str) -> None:
         """Fence every browser side effect to the admitted ChatGPT Project."""
@@ -569,14 +987,14 @@ class GptAutoTurn:
             page,
             timeout=self.chat.config.chat.ready_timeout_seconds,
         )
-        repaired = await self.chat.snapshot()
+        repaired = await self._snapshot_for_observation()
         self._require_admitted_project(repaired, phase="pre-submission-recovery")
         return repaired
 
     async def _capture_provider_identity_after_ambiguous_submission(self) -> None:
         """Persist a conversation URL observed after an ambiguous submit."""
         try:
-            current = await self.chat.snapshot()
+            current = await self._snapshot_for_observation()
             self._remember_snapshot(current)
             is_new = _new_user_message(self._baseline_snapshot, current) if self._baseline_snapshot else True
             if (
@@ -584,13 +1002,12 @@ class GptAutoTurn:
                 and match_prompt(
                     self.request.body, current.latest_user_correlation_text() or ""
                 )
-                and current.latest_user_id
             ):
-                self._prompt_message_id = current.latest_user_id
+                self._prompt_message_id = self._prompt_id_for_snapshot(current)
                 mark_prompt = getattr(self.chat, "mark_prompt_submitted", None)
-                if mark_prompt is not None:
+                if mark_prompt is not None and self._prompt_message_id is not None:
                     mark_prompt(
-                        current.latest_user_id,
+                        self._prompt_message_id,
                         self._baseline_snapshot.latest_assistant_id
                         if self._baseline_snapshot
                         else None,
@@ -633,7 +1050,7 @@ class GptAutoTurn:
             except Exception as exc:  # noqa: BLE001 - preserve proof fallback
                 self._last_observation_error = exc
         try:
-            final_snapshot = await self.chat.snapshot()
+            final_snapshot = await self._snapshot_for_observation()
         except Exception as exc:  # noqa: BLE001 - retain bounded failure evidence
             self._last_observation_error = exc
 
@@ -646,10 +1063,45 @@ class GptAutoTurn:
                     final_snapshot.latest_user_correlation_text() or "",
                 )
             ):
-                if final_snapshot.latest_user_id:
-                    self._prompt_message_id = final_snapshot.latest_user_id
+                self._prompt_message_id = self._prompt_id_for_snapshot(final_snapshot)
                 return final_snapshot
 
+        # A fresh project conversation can virtualize both the user message and
+        # its prompt node after the assistant answer is complete. If the submit
+        # operation attempted a side effect and this page has no baseline
+        # assistant, a newly-created durable assistant with terminal controls is
+        # sufficient to prove this request reached a terminal provider turn.
+        # Keep this fenced to a new project conversation; retained conversations
+        # still require the explicit request anchor to prevent adopting another
+        # turn.
+        if final_snapshot is not None:
+            baseline_project_id = parse_project_id(baseline.url)
+            fresh_project_terminal = (
+                self.side_effect_attempted
+                and not parse_provider_session_id(baseline.url)
+                and baseline.user_count == 0
+                and baseline.assistant_count == 0
+                and parse_provider_session_id(final_snapshot.url)
+                and parse_project_id(final_snapshot.url) == baseline_project_id
+                and not final_snapshot.generating
+                and final_snapshot.latest_assistant_id
+                and final_snapshot.latest_assistant_id not in baseline.assistant_message_ids
+                and _is_durable_assistant_message_id(final_snapshot.latest_assistant_id)
+                and final_snapshot.latest_assistant_text
+                and final_snapshot.terminal_witness_assistant_id
+                == final_snapshot.latest_assistant_id
+                and (
+                    not self._submission_proof_url
+                    or canonical_chat_url(final_snapshot.url) == self._submission_proof_url
+                )
+            )
+            if fresh_project_terminal:
+                self._prompt_message_id = (
+                    f"virtualized-prompt-for-{final_snapshot.latest_assistant_id}"
+                )
+                self._submission_proof_url = canonical_chat_url(final_snapshot.url)
+                self._submission_proof_assistant_id = final_snapshot.latest_assistant_id
+                return final_snapshot
         # A retained duplicate tab may have the accepted prompt mounted even
         # when the originally-bound page was stale or virtualised.  This is a
         # read-only correlation lookup; it never resubmits the prompt.
@@ -661,8 +1113,7 @@ class GptAutoTurn:
                 self._last_observation_error = exc
                 alternate = None
             if alternate is not None:
-                if alternate.latest_user_id:
-                    self._prompt_message_id = alternate.latest_user_id
+                self._prompt_message_id = self._prompt_id_for_snapshot(alternate)
                 return alternate
         return None
 
@@ -684,7 +1135,7 @@ class GptAutoTurn:
             if loop.time() >= deadline:
                 break
             await asyncio.sleep(poll_interval)
-            current = await self.chat.snapshot()
+            current = await self._snapshot_for_observation()
         return current
 
     async def _submit_once(self) -> None:
@@ -737,12 +1188,7 @@ class GptAutoTurn:
                 return
             if proven_unsent:
                 self.side_effect_attempted = False
-                clear_unresolved = getattr(self.chat, "clear_unresolved_turn", None)
-                if clear_unresolved is not None:
-                    clear_unresolved()
-                persist_clear = getattr(self.chat, "persist_unresolved_clear", None)
-                if persist_clear is not None:
-                    await persist_clear()
+                await self._persist_and_clear_unresolved()
                 await self._publish_message_ids(strict=True)
             raise AudiaGenticError(
                 code="EXT-GPTAUTO-003",
@@ -752,6 +1198,8 @@ class GptAutoTurn:
                     "turn-id": self.request.turn_id,
                     "failure-reason": "composer-operation-timeout",
                     "submission-ambiguous": not proven_unsent,
+                    "submission-state": "not_started" if proven_unsent else "ambiguous",
+                    "submission-proven": False,
                     "submission-stage": exc.stage if isinstance(exc, ComposerSubmissionTimeout) else "unknown",
                     **self._diagnostics(expected_prompt=self.request.body),
                 },
@@ -762,13 +1210,11 @@ class GptAutoTurn:
         action_complete = result.get("actionComplete") if isinstance(result, dict) else None
         if action_complete is not True:
             enter_dispatched = bool(result.get("enterDispatched")) if isinstance(result, dict) else False
-            clear_unresolved = getattr(self.chat, "clear_unresolved_turn", None)
-            if clear_unresolved is not None and not enter_dispatched:
+            if not enter_dispatched:
                 # The browser only entered the text or attempted Enter; it
-                # did not attempt a provider submission.  Do not strand the
-                # session as unresolved when no provider message could have
-                # been sent.
-                clear_unresolved()
+                # did not attempt a provider submission. Persist the clear
+                # before releasing the in-memory unresolved fence.
+                await self._persist_and_clear_unresolved()
             raise AudiaGenticError(
                 code="EXT-GPTAUTO-003",
                 kind="providers",
@@ -777,6 +1223,9 @@ class GptAutoTurn:
                     "turn-id": self.request.turn_id,
                     "failure-reason": "composer-action-not-confirmed",
                     "action-complete": action_complete,
+                    "submission-ambiguous": enter_dispatched,
+                    "submission-state": "ambiguous" if enter_dispatched else "not_started",
+                    "submission-proven": False,
                     "send-button-clicked": result.get("sendButtonClicked")
                     if isinstance(result, dict)
                     else None,
@@ -786,6 +1235,7 @@ class GptAutoTurn:
                     **self._diagnostics(expected_prompt=self.request.body),
                 },
             )
+        self._composer_action_confirmed = True
         if not match_prompt(self.request.body, str(typed_text or "")):
             # The browser has already reported a completed send action.  The
             # editor's read-back text is only a local pre-flight signal and
@@ -833,6 +1283,14 @@ class GptAutoTurn:
         previous_dom_signals = baseline.dom_signals
         previous_assistant_id = baseline.latest_assistant_id
         previous_assistant_text = baseline.latest_assistant_text
+        previous_dom_activity_digest = baseline.dom_activity_digest
+        baseline_project_id = parse_project_id(baseline.url)
+        configured_project_id = parse_project_id(self.chat.project_url or "")
+        baseline_is_admitted_project_entry = (
+            not parse_provider_session_id(baseline.url)
+            and bool(baseline_project_id)
+            and baseline_project_id == configured_project_id
+        )
         # Keep the local classification variable initialized even when the
         # first post-submit snapshot fails. Without this, the exhaustion
         # path itself raised UnboundLocalError and discarded the real CDP
@@ -843,7 +1301,7 @@ class GptAutoTurn:
                 self._move(TurnState.CANCELLED)
                 return None
             try:
-                snap = await self.chat.snapshot()
+                snap = await self._snapshot_for_observation()
             except Exception as exc:  # noqa: BLE001 - reconcile after attempted side effect
                 self._last_observation_error = exc
                 last_observation_error = exc
@@ -869,6 +1327,62 @@ class GptAutoTurn:
                 continue
             last_observation_error = None
             self._remember_snapshot(snap)
+            # Once an admitted project entry creates a conversation, pin the
+            # first durable route. A later same-project route is not causal
+            # proof for this Send and must fail closed rather than allowing a
+            # foreign/human turn to be adopted.
+            if baseline_is_admitted_project_entry:
+                observed_conversation_url = canonical_chat_url(snap.url)
+                if observed_conversation_url:
+                    if (
+                        self._submission_proof_url
+                        and observed_conversation_url != self._submission_proof_url
+                    ):
+                        raise ProviderBindingIntegrityError(
+                            "post-submit provider conversation changed before proof"
+                        )
+                    self._submission_proof_url = observed_conversation_url
+            if (
+                not self._initial_refresh_attempted
+                and snap.user_count == 0
+                and snap.assistant_count == 0
+            ):
+                # A freshly-created local-chatgpt renderer can show the
+                # request as Working before it mounts either message node.
+                # The submission checkpoint is already durable at this point,
+                # so one identity-bound refresh can materialize the same
+                # conversation without retyping or resending the prompt.
+                refresh = getattr(self.chat, "refresh_bound_conversation", None)
+                if callable(refresh):
+                    self._initial_refresh_attempted = True
+                    try:
+                        binding_token = getattr(self.chat, "_binding_token", None)
+                        self._initial_refresh_succeeded = bool(
+                            await refresh(
+                                request_id=self.request.turn_id,
+                                expected_binding=(
+                                    binding_token(snap)
+                                    if callable(binding_token)
+                                    else None
+                                ),
+                                trigger="submission-proof-materialization",
+                            )
+                        )
+                    except Exception as exc:  # noqa: BLE001 - proof loop owns recovery
+                        self._initial_refresh_succeeded = False
+                        self._last_observation_error = exc
+                    if self._initial_refresh_succeeded:
+                        try:
+                            await self._emit(
+                                TransportObservationKind.ACTIVITY,
+                                {"model_activity": "dom-materialization"},
+                            )
+                        except Exception:  # noqa: BLE001 - activity is advisory
+                            logger.debug(
+                                "gpt-auto submission materialization activity relay failed",
+                                extra={"turn-id": self.request.turn_id},
+                                exc_info=True,
+                            )
             publish_title = getattr(self.chat, "publish_conversation_title", None)
             if callable(publish_title):
                 try:
@@ -897,8 +1411,102 @@ class GptAutoTurn:
                 snap.latest_assistant_id != previous_assistant_id
                 or snap.latest_assistant_text != previous_assistant_text
             )
+            dom_activity_changed = (
+                snap.dom_activity_digest is not None
+                and snap.dom_activity_digest != previous_dom_activity_digest
+            )
+            # The current labelled renderer can unmount the user block after
+            # a long response while retaining the fresh assistant and its
+            # completed action bar.  In that state exact prompt proof is no
+            # longer observable, but treating the request as ambiguous until
+            # the absolute ceiling discards a response that is already
+            # visibly complete.  Accept only the tightly fenced combination
+            # of a confirmed browser send, a fresh assistant identity, the
+            # bound conversation, no mounted user nodes, and a terminal
+            # witness.  This never applies to an unacknowledged/ambiguous
+            # submit and never treats a generating or unbound response as
+            # proof.
+            baseline_provider_session = parse_provider_session_id(baseline.url)
+            same_admitted_project = (
+                parse_project_id(snap.url) == parse_project_id(baseline.url)
+                and parse_project_id(snap.url) == parse_project_id(self.chat.project_url or snap.url)
+            )
+            same_bound_conversation = (
+                canonical_chat_url(snap.url) == canonical_chat_url(baseline.url)
+                if baseline_provider_session
+                else (
+                    canonical_chat_url(snap.url) == self._submission_proof_url
+                    if self._submission_proof_url
+                    else same_admitted_project
+                )
+            )
+            proof_user_ref = snap.latest_user_ref()
+            proof_assistant_ref = next(
+                (
+                    ref
+                    for ref in reversed(snap.message_refs)
+                    if ref.role == "assistant"
+                ),
+                None,
+            )
+            mounted_completed_new_conversation = (
+                self._composer_action_confirmed
+                and not baseline_provider_session
+                and same_admitted_project
+                and parse_provider_session_id(snap.url)
+                and new_msg
+                and snap.latest_user_id
+                and not snap.latest_user_id.startswith("fallback-")
+                and snap.latest_assistant_id
+                and snap.latest_assistant_id != baseline.latest_assistant_id
+                and snap.latest_assistant_id not in baseline.assistant_message_ids
+                and _is_durable_assistant_message_id(snap.latest_assistant_id)
+                and snap.latest_assistant_text
+                and not snap.generating
+                and same_bound_conversation
+                and proof_user_ref is not None
+                and proof_assistant_ref is not None
+                and proof_user_ref.sequence < proof_assistant_ref.sequence
+                and snap.terminal_witness_assistant_id == snap.latest_assistant_id
+            )
+            if mounted_completed_new_conversation:
+                # A newly-created conversation with real prompt/assistant IDs,
+                # provider-paired ordering, and assistant-owned completion
+                # controls is decisive provider evidence. Do not strand the
+                # request on presentation-only prompt text normalization.
+                self._prompt_message_id = snap.latest_user_id
+                self._submission_proof_url = canonical_chat_url(snap.url)
+                self._submission_proof_assistant_id = snap.latest_assistant_id
+                return snap
+            prompt_unmounted_completion = (
+                self._composer_action_confirmed
+                and not baseline_provider_session
+                and same_admitted_project
+                and parse_provider_session_id(snap.url)
+                and not snap.generating
+                and snap.latest_assistant_id
+                and snap.latest_assistant_id != baseline.latest_assistant_id
+                and snap.latest_assistant_id not in baseline.assistant_message_ids
+                and _is_durable_assistant_message_id(snap.latest_assistant_id)
+                and snap.latest_assistant_text
+                and snap.user_count == 0
+                and not snap.user_message_ids
+                and same_bound_conversation
+                and snap.terminal_witness_assistant_id == snap.latest_assistant_id
+            )
+            if prompt_unmounted_completion:
+                # _scope_response_snapshot already has the corresponding
+                # virtualized-prompt safety fence.  Give it a request-local
+                # anchor so the normal response observer can correlate the
+                # fresh assistant without inventing a provider message ID.
+                self._prompt_message_id = (
+                    f"virtualized-prompt-for-{snap.latest_assistant_id}"
+                )
+                self._submission_proof_url = canonical_chat_url(snap.url)
+                self._submission_proof_assistant_id = snap.latest_assistant_id
+                return snap
             caps = EvidenceCapability.NONE
-            if (new_msg and user_id_changed) or assistant_progress:
+            if (new_msg and user_id_changed) or assistant_progress or dom_activity_changed:
                 caps |= EvidenceCapability.PROGRESS
             # GP19: sustained generating=True is real, ongoing evidence of
             # activity, not just the moment it first became true -- a level
@@ -923,7 +1531,11 @@ class GptAutoTurn:
                 try:
                     await self._emit(
                         TransportObservationKind.ACTIVITY,
-                        {"model_activity": "response-progress"},
+                        {
+                            "model_activity": (
+                                "dom-activity" if dom_activity_changed else "response-progress"
+                            )
+                        },
                     )
                 except Exception:  # noqa: BLE001 - activity is advisory
                     logger.debug(
@@ -936,8 +1548,9 @@ class GptAutoTurn:
             previous_dom_signals = snap.dom_signals
             previous_assistant_id = snap.latest_assistant_id
             previous_assistant_text = snap.latest_assistant_text
+            previous_dom_activity_digest = snap.dom_activity_digest
             if text_matches:
-                self._prompt_message_id = snap.latest_user_id
+                self._prompt_message_id = self._prompt_id_for_snapshot(snap)
             outcome = _advance_with_trace(
                 tracker,
                 observation,
@@ -955,7 +1568,7 @@ class GptAutoTurn:
             if finder is not None:
                 alternate = await finder(baseline, self.request.body)
                 if alternate is not None:
-                    self._prompt_message_id = alternate.latest_user_id
+                    self._prompt_message_id = self._prompt_id_for_snapshot(alternate)
                     return alternate
             await asyncio.sleep(0.2)
         # The last poll can observe a completed assistant answer while the
@@ -988,6 +1601,19 @@ class GptAutoTurn:
     _SOFT_LIVENESS_SIGNALS = frozenset(
         {"stop-control", "streaming-indicator", "thinking-indicator", "busy-indicator"}
     )
+    # A stale/visible provider error can coexist with old renderer widgets.
+    # Those widgets are not evidence that the request is still progressing.
+    _SOFT_LIVENESS_FAILURE_SIGNALS = frozenset(
+        {
+            "error-page",
+            "error-alert",
+            "request-error-alert",
+            "network-error-alert",
+            "stream-cache-expired",
+            "conversation-load-failed",
+            "auth-required",
+        }
+    )
     # Renderer-position DOM markers (data-is-last-node/data-is-only-node)
     # describe the last node rendered so far, not the end of the provider
     # turn. They have appeared while substantial output was still streaming,
@@ -1005,7 +1631,9 @@ class GptAutoTurn:
     # "both plus not currently generating", so canvas completion is left
     # entirely to response-complete's own properly-guarded group instead
     # of being approximated here.
-    _TERMINAL_WITNESS_SIGNALS = frozenset({"completion-control", "more-actions-menu"})
+    _TERMINAL_WITNESS_SIGNALS = frozenset(
+        {"completion-control", "more-actions-menu", "response-complete-status"}
+    )
     # GP47: cadence for the poll-loop heartbeat log, independent of tracker
     # state transitions -- see _await_response's heartbeat comment.
     _HEARTBEAT_INTERVAL_SECONDS = 30.0
@@ -1013,7 +1641,55 @@ class GptAutoTurn:
     # while the provider is still working. Edge-only detection then stops
     # renewing the gateway lease even though the browser is visibly busy.
 
-    async def _await_response(self, baseline: ChatSnapshot, current: ChatSnapshot) -> str | None:
+    async def _response_observation_heartbeat(self) -> None:
+        """Keep the client lease alive independently of a CDP snapshot."""
+        interval = max(0.01, float(self._HEARTBEAT_INTERVAL_SECONDS))
+        while True:
+            await asyncio.sleep(interval)
+            if self.cancel_event.is_set():
+                return
+            try:
+                await self._emit(
+                    TransportObservationKind.ACTIVITY,
+                    {"model_activity": "response-observing"},
+                )
+            except Exception:  # noqa: BLE001 - heartbeat is advisory
+                logger.debug(
+                    "gpt-auto response observation heartbeat relay failed",
+                    extra={"turn-id": self.request.turn_id},
+                    exc_info=True,
+                )
+
+    async def _await_response(
+        self,
+        baseline: ChatSnapshot,
+        current: ChatSnapshot,
+        *,
+        allow_legacy_owned_error_alert: bool = False,
+        allow_empty_baseline_virtualized_assistant: bool = False,
+    ) -> str | None:
+        heartbeat = asyncio.create_task(self._response_observation_heartbeat())
+        try:
+            return await self._await_response_impl(
+                baseline,
+                current,
+                allow_legacy_owned_error_alert=allow_legacy_owned_error_alert,
+                allow_empty_baseline_virtualized_assistant=(
+                    allow_empty_baseline_virtualized_assistant
+                ),
+            )
+        finally:
+            heartbeat.cancel()
+            await asyncio.gather(heartbeat, return_exceptions=True)
+
+    async def _await_response_impl(
+        self,
+        baseline: ChatSnapshot,
+        current: ChatSnapshot,
+        *,
+        allow_legacy_owned_error_alert: bool = False,
+        allow_empty_baseline_virtualized_assistant: bool = False,
+    ) -> str | None:
         """GP07: re-expresses the previously-bespoke start/stall/total timer
         loop through the shared observation engine. Closes a real latent
         hole the old loop had: last_activity_at could be reset by
@@ -1060,6 +1736,90 @@ class GptAutoTurn:
         request_activity_response_text = (
             initial_response_ref.text if initial_response_ref is not None else None
         )
+        async def _scope_observation(
+            raw: ChatSnapshot,
+            *,
+            allow_legacy_error: bool = False,
+        ) -> tuple[ChatSnapshot, ChatMessageRef | None]:
+            try:
+                return _scope_response_snapshot(
+                    baseline,
+                    raw,
+                    prompt_message_id=prompt_message_id or "",
+                    prompt_text=self.request.body,
+                    allow_virtualized_prompt=not self._recovered_existing_turn,
+                    virtualized_assistant_id=self._virtualized_assistant_id(),
+                    bound_assistant_id=self._response_message_id,
+                    allow_legacy_owned_error_alert=allow_legacy_error,
+                    allow_empty_baseline_virtualized_assistant=(
+                        allow_empty_baseline_virtualized_assistant
+                    ),
+                )
+            except ProviderBindingIntegrityError as exc:
+                await self._log_response_decision_diagnostics(
+                    _response_decision_diagnostics(
+                        baseline,
+                        raw,
+                        None,
+                        prompt_message_id=prompt_message_id,
+                        response_ref=None,
+                        bound_assistant_id=self._response_message_id,
+                        virtualized_assistant_id=self._virtualized_assistant_id(),
+                        allow_empty_baseline_virtualized_assistant=(
+                            allow_empty_baseline_virtualized_assistant
+                        ),
+                        chat_url=self.chat.chat_url,
+                        provider_session_id=self.chat.provider_session_id,
+                        page_handle=getattr(self.chat, "page_handle", None),
+                        facts=None,
+                        completion_satisfied=False,
+                        completion_matched=(),
+                        correlation_error=str(exc),
+                    )
+                )
+                raise
+
+        def _replacement_proven(raw: ChatSnapshot, new_id: str) -> bool:
+            """Require both the ordered turn boundary and bound conversation."""
+            old_id = self._response_message_id
+            provider_id = self.chat.provider_session_id
+            if not old_id or not prompt_message_id or not provider_id:
+                return False
+            if not url_matches_provider_session(raw.url, provider_id):
+                return False
+            observed_url = canonical_chat_url(raw.url)
+            bound_url = canonical_chat_url(self.chat.chat_url or "")
+            if (
+                observed_url is None
+                or not bound_url
+                or parse_project_id(raw.url) != parse_project_id(self.chat.chat_url or "")
+            ):
+                return False
+            return (
+                _fallback_prompt_anchor_is_stable(
+                    baseline, raw, prompt_message_id, prompt_text=self.request.body
+                )
+                and (
+                    _is_fallback_assistant_message_id(old_id)
+                    or _terminal_same_response_slot_replacement(
+                        raw,
+                        prompt_message_id=prompt_message_id,
+                        old_assistant_id=old_id,
+                        new_assistant_id=new_id,
+                    )
+                )
+                and (
+                    _is_fallback_assistant_message_id(new_id)
+                    or _is_durable_assistant_message_id(new_id)
+                )
+                and _same_response_slot_replacement(
+                    raw,
+                    prompt_message_id=prompt_message_id,
+                    old_assistant_id=old_id,
+                    new_assistant_id=new_id,
+                )
+            )
+
         seen_progress_blocks: Counter[ChatProgressBlock] = Counter()
         # GP47 (2026-08-19): _advance_with_trace only logs on a tracker STATE
         # TRANSITION. A turn that stalls for the full response-total-timeout
@@ -1212,18 +1972,25 @@ class GptAutoTurn:
                 and now - final_recovery_grace_started_at >= final_grace_seconds
                 and not completion_candidate
             ):
-                self._raise_response_recovery_exhausted(recovery_refresh_attempts)
+                # Inactivity is not terminal authority.  Once the bounded
+                # refresh budget and grace phase are exhausted, remain in
+                # passive observation until an explicit outer timeout,
+                # provider error, cancellation, or unrecoverable protocol /
+                # session failure decides the request.  Request-owned
+                # progress still resets this epoch above and permits a new
+                # bounded recovery sequence.
+                logger.info(
+                    "gpt-auto response recovery exhausted; continuing passive observation",
+                    extra={"turn-id": self.request.turn_id, "refresh-attempts": recovery_refresh_attempts},
+                )
             return False
 
         while True:
             if self.cancel_event.is_set():
-                if self._stop_task is None:
-                    self._stop_task = asyncio.create_task(self._stop_generation_best_effort())
-                await asyncio.gather(self._stop_task, return_exceptions=True)
-                self._move(TurnState.CANCELLED)
+                await self._cancelled_result()
                 return None
             try:
-                raw_current = await self.chat.snapshot()
+                raw_current = await self._snapshot_for_observation()
             except Exception as exc:  # noqa: BLE001 - never re-submit after an attempted send
                 self._last_observation_error = exc
                 logger.info(
@@ -1267,8 +2034,9 @@ class GptAutoTurn:
                         exc_info=True,
                     )
             if prompt_message_id:
-                current, response_ref = _scope_response_snapshot(
-                    baseline, raw_current, prompt_message_id=prompt_message_id
+                current, response_ref = await _scope_observation(
+                    raw_current,
+                    allow_legacy_error=allow_legacy_owned_error_alert,
                 )
             else:
                 # Defensive fallback only -- _await_submission_proof() and
@@ -1278,6 +2046,7 @@ class GptAutoTurn:
             if (
                 current.generating
                 or bool(current.progress_blocks)
+                or bool(current.dom_activity_digest)
                 or bool(response_ref is not None and response_ref.text)
                 or response_started
             ):
@@ -1322,20 +2091,18 @@ class GptAutoTurn:
                         )
                     if self._completion_materialization_succeeded:
                         try:
-                            raw_current = await self.chat.snapshot()
+                            raw_current = await self._snapshot_for_observation()
                             self._remember_snapshot(raw_current)
                             # Re-scope the materialized observation immediately;
                             # otherwise this poll would continue evaluating the
                             # pre-materialization snapshot and consume an extra
                             # browser observation before seeing completion.
                             if prompt_message_id:
-                                current, response_ref = _scope_response_snapshot(
-                                    baseline,
-                                    raw_current,
-                                    prompt_message_id=prompt_message_id,
-                                )
+                                current, response_ref = await _scope_observation(raw_current)
                             else:
                                 current, response_ref = raw_current, None
+                        except ProviderBindingIntegrityError:
+                            raise
                         except Exception as exc:  # noqa: BLE001 - next poll retries evidence
                             self._last_observation_error = exc
                             logger.info(
@@ -1355,6 +2122,8 @@ class GptAutoTurn:
                                 exc_info=True,
                             )
             now = loop.time()
+            adopted_same_slot_replacement = False
+            verification_replacement_adopted = False
             if response_ref is not None and response_ref.message_id:
                 if self._response_message_id is None:
                     self._response_message_id = response_ref.message_id
@@ -1363,59 +2132,38 @@ class GptAutoTurn:
                         mark_assistant(response_ref.message_id)
                     await self._publish_message_ids(strict=True)
                 elif self._response_message_id != response_ref.message_id:
-                    # A stale ChatGPT DOM can expose a provisional assistant
-                    # node and then expose the final node after the retained
-                    # conversation is refreshed.  Treat that as an
-                    # observation conflict, not proof that the provider turn
-                    # died: perform one bounded same-URL refresh and restart
-                    # correlation without ever submitting the prompt again.
-                    expected_assistant_id = self._response_message_id
-                    if await self._refresh_after_response_correlation_conflict():
-                        self._response_message_id = None
-                        logger.info(
-                            "gpt-auto refreshed retained conversation after response "
-                            "correlation conflict; continuing the original turn",
-                            extra={
-                                "turn-id": self.request.turn_id,
-                                "expected-assistant-id": expected_assistant_id,
-                                "observed-assistant-id": response_ref.message_id,
-                            },
+                    if _replacement_proven(raw_current, response_ref.message_id):
+                        adopted_same_slot_replacement = True
+                        self._response_message_id = response_ref.message_id
+                        mark_assistant = getattr(self.chat, "mark_assistant_observed", None)
+                        if mark_assistant is not None:
+                            mark_assistant(response_ref.message_id)
+                        await self._publish_message_ids(strict=True)
+                    else:
+                        raise ProviderBindingIntegrityError(
+                            "provider assistant identity changed during response observation"
                         )
-                        continue
-                    # Never silently follow a later, unrelated turn once the
-                    # single refresh allowance is exhausted.  The transport
-                    # retains the binding and reports this as recoverable
-                    # observation uncertainty to the gateway.
-                    raise AudiaGenticError(
-                        code="EXT-GPTAUTO-004",
-                        kind="providers",
-                        message="gpt-auto observed a conflicting response correlation",
-                        details={
-                            "turn-id": self.request.turn_id,
-                            "failure-reason": "frozen-response-correlation-conflict",
-                            "expected-assistant-id": expected_assistant_id,
-                            "observed-assistant-id": response_ref.message_id,
-                            **self._diagnostics(),
-                        },
-                    )
                 if response_ref.text:
                     await self._emit_timing("first-assistant-text")
             # Recovery clocks are reset only by evidence correlated to this
-            # request's assistant turn.  Conversation-global counts, DOM
-            # marker changes, generating toggles, and foreign activity are
-            # intentionally excluded.
+            # request's assistant turn.  Conversation-global counts and
+            # foreign activity remain excluded, but a changed bounded DOM
+            # digest is request-owned evidence when the bridge assigned it to
+            # this prompt.  This covers ChatGPT status/card/ARIA mutations
+            # that do not change response text or known tool counters.
             progress_labels = _progress_activity_labels(current, seen_progress_blocks)
-            request_owned_activity = bool(progress_labels)
+            dom_activity_changed = bool(
+                current.dom_activity_digest
+                and current.dom_activity_digest != previous.dom_activity_digest
+            )
+            request_owned_activity = bool(progress_labels) or dom_activity_changed
             if response_ref is not None:
+                # A fallback-ID remount is not provider progress by itself.
+                # Only changed request-owned content counts as real response
+                # activity; otherwise ordinal churn can defer recovery forever.
                 request_owned_activity = request_owned_activity or bool(
-                    (
-                        response_ref.message_id
-                        and response_ref.message_id != request_activity_response_id
-                    )
-                    or (
-                        response_ref.text
-                        and response_ref.text != request_activity_response_text
-                    )
+                    response_ref.text
+                    and response_ref.text != request_activity_response_text
                 )
                 request_activity_response_id = response_ref.message_id
                 request_activity_response_text = response_ref.text
@@ -1425,7 +2173,37 @@ class GptAutoTurn:
             # answer that already satisfies the request-owned completion
             # witness.
             complete = self.chat.config.workflow.policy("response-complete").evaluate(facts)
-            completion_candidate = complete.satisfied and bool(current.latest_assistant_text)
+            await self._log_response_decision_diagnostics(
+                _response_decision_diagnostics(
+                    baseline,
+                    raw_current,
+                    current,
+                    prompt_message_id=prompt_message_id,
+                    response_ref=response_ref,
+                    bound_assistant_id=self._response_message_id,
+                    virtualized_assistant_id=self._virtualized_assistant_id(),
+                    allow_empty_baseline_virtualized_assistant=(
+                        allow_empty_baseline_virtualized_assistant
+                    ),
+                    chat_url=self.chat.chat_url,
+                    provider_session_id=self.chat.provider_session_id,
+                    page_handle=getattr(self.chat, "page_handle", None),
+                    facts=facts,
+                    completion_satisfied=complete.satisfied,
+                    completion_matched=complete.matched,
+                    correlation_error=None,
+                )
+            )
+            id_only_replacement = (
+                adopted_same_slot_replacement
+                and current.latest_assistant_text == previous.latest_assistant_text
+            )
+            completion_candidate = (
+                complete.satisfied
+                and bool(current.latest_assistant_text)
+                and not id_only_replacement
+            )
+            completion_evidence_present = complete.satisfied and bool(current.latest_assistant_text)
             # Authentication is a hard veto even for reduced/test workflow
             # configurations that do not declare a standalone auth policy.
             if facts.get("auth-required"):
@@ -1440,15 +2218,29 @@ class GptAutoTurn:
                         **self._diagnostics(),
                     },
                 )
-            if (
+            # "delivery-timeout-retry" (attribute-identified control) and
+            # "delivery-timeout-alert" (the current renderer's plain-text
+            # control, identified by its alert's own known message text
+            # instead -- see gpt-auto-defaults.yaml) are two independent
+            # detections of the same recovery opportunity; either is
+            # sufficient to attempt the click.
+            delivery_timeout_signal_now = (
                 "delivery-timeout-retry" in current.dom_signals
+                or "delivery-timeout-alert" in current.dom_signals
+            )
+            delivery_timeout_signal_at_baseline = (
+                "delivery-timeout-retry" in baseline.dom_signals
+                or "delivery-timeout-alert" in baseline.dom_signals
+            )
+            if (
+                delivery_timeout_signal_now
                 and not self._delivery_timeout_retry_attempted
                 and response_ref is None
                 and not completion_candidate
                 # A control already present at the request baseline belongs
                 # to an earlier/provider turn; only a post-submit edge may
                 # be activated by this observer.
-                and "delivery-timeout-retry" not in baseline.dom_signals
+                and not delivery_timeout_signal_at_baseline
             ):
                 # Retry controls are document-scoped in ChatGPT's DOM. Only
                 # activate one when the current latest user node is this
@@ -1459,30 +2251,136 @@ class GptAutoTurn:
                     and current.latest_user_id == prompt_message_id
                 )
                 if retry_is_request_owned:
-                    self._delivery_timeout_retry_attempted = True
                     retry = getattr(self.chat, "retry_delivery_timeout", None)
                     retried = bool(await retry()) if callable(retry) else False
+                    # Only consume the one-shot attempt on an actual click.
+                    # A signal that fired without a matching button (e.g. a
+                    # transient DOM state between polls) has caused no page
+                    # side effect, so a later poll must still be allowed to
+                    # retry once a real recovery control is present.
+                    if retried:
+                        self._delivery_timeout_retry_attempted = True
                     logger.info(
                         "gpt-auto delivery-timeout recovery attempted=%s",
                         retried,
                         extra={"turn-id": self.request.turn_id},
                     )
-                    await self._emit(
-                        TransportObservationKind.IN_PROGRESS,
-                        {
-                            "model_activity": "delivery-timeout-retry",
-                        },
-                    )
                     if retried:
+                        # Count only an actual provider retry click as work.
+                        # A failed probe found no matching control and must not
+                        # renew the durable activity lease or physical tab idle
+                        # clock.
+                        await self._emit(
+                            TransportObservationKind.IN_PROGRESS,
+                            {
+                                "model_activity": "delivery-timeout-retry",
+                            },
+                        )
                         await asyncio.sleep(self.chat.config.turn.poll_interval_seconds)
                         continue
+                    if not self._delivery_timeout_retry_probe_failed:
+                        # The click found no matching button this poll (DOM
+                        # flicker, or the control not yet mounted/already
+                        # gone). `facts` below was computed from this same
+                        # stale pre-click snapshot, so falling through to
+                        # evaluate provider failure now would risk a
+                        # terminal failure the very next line based on a
+                        # transient timing race, not a real dead end. Give
+                        # the DOM exactly one more poll to settle before
+                        # that evaluation runs -- bounded to once per turn
+                        # so a genuinely un-clickable, persistent alert still
+                        # reaches failure evaluation instead of stalling.
+                        self._delivery_timeout_retry_probe_failed = True
+                        await asyncio.sleep(self.chat.config.turn.poll_interval_seconds)
+                        continue
+            conversation_load_failed = "conversation-load-failed" in current.dom_signals
+            if not conversation_load_failed:
+                self._conversation_load_retry_attempts = 0
+                self._conversation_load_retry_last_error = None
+                self._conversation_load_retry_last_delay = None
+            if (
+                conversation_load_failed
+                and not completion_candidate
+                and (
+                    self.side_effect_attempted
+                    or self.submission_confirmed
+                    or self._recovered_existing_turn
+                )
+            ):
+                # A load page is readiness loss, not prompt-owned failure.
+                # Retry only the provider-owned control in this conversation;
+                # never replace the session or replay the prompt.
+                self._conversation_load_retry_attempts += 1
+                retry = getattr(self.chat, "retry_conversation_load", None)
+                retried = False
+                try:
+                    retried = bool(await retry()) if callable(retry) else False
+                    if retried:
+                        self._conversation_load_retry_clicks += 1
+                        self._conversation_load_retry_last_error = None
+                except Exception as exc:  # noqa: BLE001 - observation remains non-terminal
+                    self._conversation_load_retry_last_error = (
+                        f"{type(exc).__name__}: {exc}"
+                    )
+                delay = min(
+                    5.0,
+                    max(
+                        self.chat.config.turn.poll_interval_seconds,
+                        0.25
+                        * (2 ** max(0, self._conversation_load_retry_attempts - 1)),
+                    ),
+                )
+                self._conversation_load_retry_last_delay = delay
+                try:
+                    retry_details = json.dumps(
+                        {
+                            "attempt": self._conversation_load_retry_attempts,
+                            "clicks": self._conversation_load_retry_clicks,
+                            "delay-seconds": delay,
+                            "error": self._conversation_load_retry_last_error,
+                        },
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    )
+                    await self._emit(
+                        TransportObservationKind.TIMING,
+                        {
+                            "timing-event": (
+                                "conversation-load-retry-clicked"
+                                if retried
+                                else "conversation-load-observation-deferred"
+                            ),
+                            "diagnostic-signature": hashlib.sha256(
+                                retry_details.encode("utf-8")
+                            ).hexdigest()[:16],
+                            "diagnostic-details": retry_details,
+                        },
+                    )
+                except Exception:  # noqa: BLE001 - diagnostics are advisory
+                    logger.debug(
+                        "gpt-auto conversation-load retry telemetry failed",
+                        extra={"turn-id": self.request.turn_id},
+                        exc_info=True,
+                    )
+                await asyncio.sleep(delay)
+                previous = current
+                continue
             # Evaluate completion before provider failure.  ChatGPT can leave
             # a delivery-timeout/error panel in the DOM after a retry has
             # already produced a fresh, structurally complete answer.  That
             # stale marker must not pre-empt durable completion evidence.
             provider_interruption = "provider-interruption" in current.dom_signals
             failed = self.chat.config.workflow.policy("response-failed").evaluate(facts)
-            if failed.satisfied and not completion_candidate:
+            fresh_failure_signals = failed.matched.intersection(
+                {
+                    "request-error-alert",
+                    "network-error-alert",
+                    "stream-cache-expired",
+                }
+            )
+            if failed.satisfied and (
+                not completion_evidence_present or fresh_failure_signals
+            ):
                 logger.warning(
                     "gpt-auto response failure policy matched",
                     extra={"turn-id": self.request.turn_id, "evidence": sorted(failed.matched)},
@@ -1574,6 +2472,26 @@ class GptAutoTurn:
                 )
             if now - last_heartbeat_at >= self._HEARTBEAT_INTERVAL_SECONDS:
                 last_heartbeat_at = now
+                if (
+                    response_started
+                    and current.latest_user_id == self._prompt_message_id
+                    and self._prompt_message_id
+                    and not complete.satisfied
+                ):
+                    # Once the request-owned response has started, the
+                    # observer itself is durable liveness evidence even when
+                    # ChatGPT temporarily reports no generating flag (for
+                    # example while reasoning or materialising an action
+                    # bar). Keep this distinct from real work and from the
+                    # provider recovery clock: it renews the gateway lease
+                    # but never the physical-tab idle clock.
+                    model_activity = (
+                        "provider-busy" if current.generating else "response-observing"
+                    )
+                    await self._emit(
+                        TransportObservationKind.ACTIVITY,
+                        {"model_activity": model_activity},
+                    )
                 logger.info(
                     "gpt-auto response poll heartbeat tracker_state=%s generating=%s "
                     "complete_satisfied=%s complete_evidence=%s text_len=%d "
@@ -1589,9 +2507,13 @@ class GptAutoTurn:
                 )
 
             progress_edge = (
-                current.latest_assistant_id != previous.latest_assistant_id
+                (
+                    current.latest_assistant_id != previous.latest_assistant_id
+                    and not adopted_same_slot_replacement
+                )
                 or current.latest_assistant_text != previous.latest_assistant_text
                 or bool(progress_labels)
+                or dom_activity_changed
             )
             # Only request-owned assistant identity/text/tool changes reset
             # the recovery epoch.  The broad progress edge remains useful for
@@ -1612,7 +2534,11 @@ class GptAutoTurn:
             if await _attempt_response_recovery(
                 now,
                 interruption_present=provider_interruption,
-                completion_candidate=completion_candidate,
+                # ChatGPT can mount Copy/completion-shaped controls around a
+                # partial answer while its connection-interrupted banner and
+                # Stop control remain live.  That structural partial must not
+                # suppress the interruption refresh/lease path.
+                completion_candidate=completion_candidate and not provider_interruption,
             ):
                 continue
             if (
@@ -1621,10 +2547,26 @@ class GptAutoTurn:
                 or current.dom_signals != previous.dom_signals
             ):
                 last_progress_at = now
-            current_soft = current.dom_signals & self._SOFT_LIVENESS_SIGNALS
+            failure_present = bool(
+                current.dom_signals & self._SOFT_LIVENESS_FAILURE_SIGNALS
+            )
+            current_soft = (
+                current.dom_signals & self._SOFT_LIVENESS_SIGNALS
+                if not failure_present
+                else frozenset()
+            )
             previous_soft = previous.dom_signals & self._SOFT_LIVENESS_SIGNALS
-            soft_edge = current_soft != previous_soft or current.generating != previous.generating
-            soft_present = bool(current_soft) or current.generating
+            soft_edge = (
+                not failure_present
+                and (
+                    current_soft != previous_soft
+                    or current.generating != previous.generating
+                )
+            )
+            soft_present = (
+                not failure_present
+                and (bool(current_soft) or current.generating)
+            )
             caps = EvidenceCapability.NONE
             if response_started and progress_edge:
                 caps |= EvidenceCapability.PROGRESS
@@ -1641,8 +2583,12 @@ class GptAutoTurn:
                 # ACTIVITY emissions arriving throughout the turn, not just
                 # at the start.
                 activity_labels = (
-                    progress_labels
+                    tuple((*progress_labels, "dom-activity"))
+                    if progress_labels and dom_activity_changed
+                    else progress_labels
                     if progress_labels
+                    else ("dom-activity",)
+                    if dom_activity_changed
                     else (
                         ("response-progress",)
                         if EvidenceCapability.PROGRESS in caps
@@ -1656,11 +2602,14 @@ class GptAutoTurn:
                     )
                 emitted = True
 
-            terminal_candidate = complete.satisfied and bool(current.latest_assistant_text)
+            terminal_candidate = completion_candidate
             terminal_verified_ok = False
             response_message_id = current.latest_assistant_id
             response_text = current.latest_assistant_text
-            if terminal_candidate and tracker.state.value != "candidate-terminal":
+            terminal_candidate_entering = (
+                terminal_candidate and tracker.state.value != "candidate-terminal"
+            )
+            if terminal_candidate_entering:
                 logger.info(
                     "gpt-auto response terminal-candidate evidence=%s text_len=%d "
                     "text_digest=%s generating=%s required_stability=%s dom_signals=%s",
@@ -1676,7 +2625,7 @@ class GptAutoTurn:
                     sorted(current.dom_signals),
                     extra={"turn-id": self.request.turn_id},
                 )
-            if terminal_candidate and not emitted:
+            if terminal_candidate_entering and not emitted:
                 await self._emit(
                     TransportObservationKind.ACTIVITY, {"model_activity": "response-observed"}
                 )
@@ -1692,7 +2641,7 @@ class GptAutoTurn:
                 # same regular poll cadence -- confirms the candidate before
                 # it is trusted, matching the pre-existing design.
                 try:
-                    raw_verify = await self.chat.snapshot()
+                    raw_verify = await self._snapshot_for_observation()
                 except Exception as exc:  # noqa: BLE001 - verification resumes on next poll
                     self._last_observation_error = exc
                     logger.info(
@@ -1718,9 +2667,7 @@ class GptAutoTurn:
                     continue
                 self._remember_snapshot(raw_verify)
                 if prompt_message_id:
-                    verify, verify_ref = _scope_response_snapshot(
-                        baseline, raw_verify, prompt_message_id=prompt_message_id
-                    )
+                    verify, verify_ref = await _scope_observation(raw_verify)
                 else:
                     verify = raw_verify
                     verify_ref = None
@@ -1749,7 +2696,7 @@ class GptAutoTurn:
                         extra={"turn-id": self.request.turn_id},
                     )
                 # The independent verification snapshot must corroborate the
-                # frozen assistant identity as well as the response text. A
+                # request-owned assistant identity as well as the response text. A
                 # stale/duplicate tab can otherwise present identical text
                 # under a different message id and silently overwrite the
                 # request's correlation proof.
@@ -1759,34 +2706,16 @@ class GptAutoTurn:
                     and verify_message_id
                     and verify_message_id != self._response_message_id
                 ):
-                    expected_assistant_id = self._response_message_id
-                    if await self._refresh_after_response_correlation_conflict():
-                        self._response_message_id = None
-                        tracker = ObservationTracker(policy=policy, now=loop.time())
-                        previous = current
-                        logger.info(
-                            "gpt-auto refreshed retained conversation after terminal "
-                            "verification correlation conflict; restarting verification",
-                            extra={
-                                "turn-id": self.request.turn_id,
-                                "expected-assistant-id": expected_assistant_id,
-                                "observed-assistant-id": verify_message_id,
-                            },
+                    if _replacement_proven(verify, verify_message_id):
+                        self._response_message_id = verify_message_id
+                        mark_assistant = getattr(self.chat, "mark_assistant_observed", None)
+                        if mark_assistant is not None:
+                            mark_assistant(verify_message_id)
+                        await self._publish_message_ids(strict=True)
+                    else:
+                        raise ProviderBindingIntegrityError(
+                            "provider assistant identity changed during response verification"
                         )
-                        continue
-                    raise AudiaGenticError(
-                        code="EXT-GPTAUTO-004",
-                        kind="providers",
-                        message="gpt-auto observed a conflicting response correlation",
-                        details={
-                            "turn-id": self.request.turn_id,
-                            "failure-reason": "frozen-response-correlation-conflict",
-                            "expected-assistant-id": expected_assistant_id,
-                            "observed-assistant-id": verify_message_id,
-                            "verification": True,
-                            **self._diagnostics(),
-                        },
-                    )
                 terminal_verified_ok = (
                     verified.satisfied
                     and verify_message_id is not None
@@ -1843,6 +2772,8 @@ class GptAutoTurn:
                 assert response_text is not None
                 self._response_message_id = response_message_id
                 self._terminal_evidence = {
+                    "turn-id": self.request.turn_id,
+                    "terminal-witness-id": response_message_id,
                     "policy": "response-complete",
                     "generating-at-terminal": bool(current.generating or verify.generating)
                     if "verify" in locals()
@@ -1866,10 +2797,10 @@ class GptAutoTurn:
                 mark_activity = getattr(self.chat, "mark_validated_activity", None)
                 if callable(mark_activity):
                     mark_activity()
-                return response_text
+                return self._canonical_verified_response(plain_text=response_text, verify_ref=verify_ref if "verify_ref" in locals() else None, candidate_ref=response_ref)
             if outcome is not None:
                 tracker = ObservationTracker(policy=policy, now=loop.time())
-            previous = current
+            previous = verify if verification_replacement_adopted else current
             await asyncio.sleep(self.chat.config.turn.poll_interval_seconds)
 
     def _raise_response_recovery_exhausted(self, attempts: int) -> NoReturn:
@@ -1898,6 +2829,34 @@ class GptAutoTurn:
         # even while submission/proof polling is in progress.
         if self._stop_task is None or self._stop_task.done():
             self._stop_task = asyncio.create_task(self._stop_generation_best_effort())
+
+    def _cancellation_settle_timeout_seconds(self) -> float:
+        """Bound provider stop/quiescence before returning cancellation."""
+        cdp_config = getattr(self.chat.config, "cdp", None)
+        protocol_timeout = float(getattr(cdp_config, "protocol_timeout_seconds", 30.0))
+        if protocol_timeout <= 0:
+            protocol_timeout = 30.0
+        return max(1.0, min(30.0, protocol_timeout + 1.0))
+
+    async def _cancelled_result(self) -> SessionTurnResult:
+        """Bound provider stop/quiescence before returning a cancel result."""
+        if self._stop_task is None:
+            self._stop_task = asyncio.create_task(self._stop_generation_best_effort())
+        try:
+            await asyncio.wait_for(
+                asyncio.shield(self._stop_task),
+                timeout=self._cancellation_settle_timeout_seconds(),
+            )
+        except asyncio.TimeoutError:
+            self._set_chat_state(ChatState.RECOVERING)
+            self._stop_task.cancel()
+            logger.warning(
+                "gpt-auto cancellation settlement timed out; retaining recovery fence",
+                extra={"turn-id": self.request.turn_id},
+            )
+        if not _ENGINE.is_terminal(self.state.value):
+            self._move(TurnState.CANCELLED)
+        return self._result("cancelled")
 
     async def _stop_generation_best_effort(self) -> None:
         stopped = False
@@ -1942,9 +2901,7 @@ class GptAutoTurn:
             if not stopped:
                 raise RuntimeError("provider stop control was not confirmed")
             await self.chat.wait_quiescent()
-            clear_unresolved = getattr(self.chat, "clear_unresolved_turn", None)
-            if clear_unresolved is not None:
-                clear_unresolved()
+            await self._persist_and_clear_unresolved()
         except Exception:  # noqa: BLE001 - uncertainty must block the next prompt
             if self.chat.state not in {ChatState.CLOSED, ChatState.FAILED, ChatState.RECOVERING}:
                 self._set_chat_state(ChatState.RECOVERING)
@@ -1952,6 +2909,15 @@ class GptAutoTurn:
                 "gpt-auto cancellation did not prove provider quiescence",
                 extra={"turn-id": self.request.turn_id, "stop-executed": stopped},
             )
+
+    async def _persist_and_clear_unresolved(self) -> None:
+        """Persist removal of the recovery fence before clearing memory."""
+        persist_clear = getattr(self.chat, "persist_unresolved_clear", None)
+        if persist_clear is not None:
+            await persist_clear()
+        clear_unresolved = getattr(self.chat, "clear_unresolved_turn", None)
+        if clear_unresolved is not None:
+            clear_unresolved()
 
     def _set_chat_state(self, state: ChatState) -> None:
         move = getattr(self.chat, "_move", None)
@@ -1963,6 +2929,35 @@ class GptAutoTurn:
     def _remember_snapshot(self, snapshot: ChatSnapshot) -> None:
         self._last_snapshot = snapshot
         self._last_observation_error = None
+
+    def _proven_unsent_submission_boundary(self, error: BaseException) -> bool:
+        """Recognize a browser admission failure that happened before Send.
+
+        A loading provider page can raise ``composer not found`` from the CDP
+        submit helper before it has typed or clicked anything.  That is safe to
+        retry on the same conversation, unlike a generic provider exception
+        after the browser-side submit call has begun.
+        """
+        if self.submission_confirmed or self._phase != "submission":
+            return False
+        if (
+            isinstance(error, AudiaGenticError)
+            and error.details.get("submission-ambiguous") is False
+        ):
+            return True
+        if not isinstance(error, RuntimeError):
+            return False
+        if "composer not found" not in str(error).lower():
+            return False
+        snapshot = self._last_snapshot
+        return bool(
+            snapshot is not None
+            and not snapshot.composer_present
+            and not snapshot.composer_editable
+            and not snapshot.generating
+            and not snapshot.latest_user_text
+            and not snapshot.latest_assistant_text
+        )
 
     def _diagnostics(self, *, expected_prompt: str | None = None) -> dict[str, Any]:
         """Return bounded, sparse evidence for a provider-boundary failure."""
@@ -1976,6 +2971,10 @@ class GptAutoTurn:
             "completion-materialization-attempted": self._completion_materialization_attempted,
             "completion-materialization-succeeded": self._completion_materialization_succeeded,
             "delivery-timeout-retry-attempted": self._delivery_timeout_retry_attempted,
+            "conversation-load-retry-attempts": self._conversation_load_retry_attempts,
+            "conversation-load-retry-clicks": self._conversation_load_retry_clicks,
+            "conversation-load-retry-last-error": self._conversation_load_retry_last_error,
+            "conversation-load-retry-last-delay": self._conversation_load_retry_last_delay,
             "initial-refresh-attempted": self._initial_refresh_attempted,
             "initial-refresh-succeeded": self._initial_refresh_succeeded,
             "stale-progress-focus-attempted": self._stale_progress_focus_attempted,
@@ -1995,6 +2994,57 @@ class GptAutoTurn:
                 }
             )
         return {key: value for key, value in details.items() if value is not None and value != ""}
+
+    def _failure_response_details(self) -> dict[str, Any]:
+        """Expose the latest DOM assistant text as failure evidence only.
+
+        This is deliberately not ``final_summary``: a failed turn must never
+        be promoted to successful output.  The gateway stores this projection
+        in a separate failure artifact for clients that need to diagnose where
+        the provider stopped.
+        """
+        snapshot = self._last_snapshot
+        recovery = self.chat.config.workflow.recovery
+        # The phase name is not a submission proof. _submit_once() raises
+        # side_effect_attempted before invoking the browser, and an exception
+        # can therefore arrive while the phase is still ``submission`` even
+        # though Send may already have been reached. Use the durable turn
+        # fence instead of phase position. A recovered existing turn is
+        # already proven provider work before its observer reattaches.
+        submission_proven = self.submission_confirmed or self._recovered_existing_turn
+        submission_attempted = self.side_effect_attempted or submission_proven
+        submission_ambiguous = submission_attempted and not submission_proven
+        policy = {
+            "network-error-followup-enabled": recovery.network_error_followup_enabled,
+            "network-error-followup-max-attempts": recovery.network_error_followup_max_attempts,
+            "network-error-followup-prompt-template": recovery.network_error_followup_prompt_template,
+            "provider-error-followup-enabled": recovery.provider_error_followup_enabled,
+            "provider-error-followup-max-attempts": recovery.provider_error_followup_max_attempts,
+            "provider-error-followup-prompt-template": recovery.provider_error_followup_prompt_template,
+            "conversation-load-failure-recovery-enabled": recovery.conversation_load_failure_recovery_enabled,
+            "conversation-load-failure-max-attempts": recovery.conversation_load_failure_max_attempts,
+        }
+        text = getattr(snapshot, "latest_assistant_text", None) if snapshot else None
+        if not isinstance(text, str) or not text.strip():
+            return {
+                "failure-response-available": False,
+                "submission-proven": submission_proven,
+                "submission-attempted": submission_attempted,
+                "submission-ambiguous": submission_ambiguous,
+                "recovery-policy": policy,
+            }
+        bounded = text[:262144]
+        return {
+            "failure-response-available": True,
+            "failure-response-text": bounded,
+            "failure-response-truncated": len(bounded) != len(text),
+            "failure-response-message-id": getattr(snapshot, "latest_assistant_id", None),
+            "failure-response-source": "gpt-auto-dom-latest-assistant",
+            "submission-proven": submission_proven,
+            "submission-attempted": submission_attempted,
+            "submission-ambiguous": submission_ambiguous,
+            "recovery-policy": policy,
+        }
 
     async def _refresh_after_response_correlation_conflict(self) -> bool:
         """Use the canonical bound-page refresh within the shared recovery budget."""
@@ -2030,6 +3080,8 @@ class GptAutoTurn:
             if self._response_recovery_refresh_attempts >= max_refreshes:
                 self._response_recovery_final_grace_started_at = loop.time()
             return refreshed
+        except ProviderBindingIntegrityError:
+            raise
         except Exception as exc:  # noqa: BLE001 - preserve original conflict diagnostics
             logger.info(
                 "gpt-auto retained-conversation refresh after correlation conflict failed",
@@ -2037,6 +3089,35 @@ class GptAutoTurn:
             )
             return False
 
+    def _canonical_verified_response(
+        self,
+        *,
+        plain_text: str,
+        verify_ref: ChatMessageRef | None,
+        candidate_ref: ChatMessageRef | None,
+    ) -> str:
+        markdown: str | None = None
+        if (
+            verify_ref is not None
+            and verify_ref.message_id == self._response_message_id
+            and verify_ref.text == plain_text
+            and isinstance(verify_ref.markdown, str)
+            and verify_ref.markdown.strip()
+        ):
+            markdown = verify_ref.markdown
+        elif (
+            candidate_ref is not None
+            and candidate_ref.message_id == self._response_message_id
+            and candidate_ref.text == plain_text
+            and isinstance(candidate_ref.markdown, str)
+            and candidate_ref.markdown.strip()
+        ):
+            markdown = candidate_ref.markdown
+        if markdown is not None:
+            self._final_media_type = "text/markdown; charset=utf-8"
+            return markdown
+        self._final_media_type = "text/plain; charset=utf-8"
+        return plain_text
     def _result(self, reason: str) -> SessionTurnResult:
         metadata: dict[str, Any] = {"project-url": self.chat.project_url}
         if self.chat.provider_session_id:
@@ -2075,16 +3156,25 @@ class GptAutoTurn:
         if not metadata:
             return
         try:
-            update = ProviderSessionBindingUpdate(
-                provider_session_ref=ProviderSessionRef(self.chat.provider_session_id),
-                metadata=metadata,
-            )
+            # The request checkpoint is JSON-shaped and may contain structured
+            # correlation evidence (for example the alert-occurrence baseline),
+            # while the foundation binding contract deliberately accepts only
+            # scalar metadata.  Keep those two durable projections separate:
+            # dropping structured fields from the binding update must not drop
+            # them from the request-owned checkpoint.
             sink = getattr(self.chat, "binding_sink", None)
-            if sink is None:
-                return
-            result = sink(update)
-            if asyncio.iscoroutine(result):
-                await result
+            binding_metadata = _scalar_binding_metadata(metadata)
+            if sink is not None and binding_metadata:
+                update = ProviderSessionBindingUpdate(
+                    provider_session_ref=ProviderSessionRef(self.chat.provider_session_id),
+                    metadata=binding_metadata,
+                )
+                result = sink(update)
+                if asyncio.iscoroutine(result):
+                    await result
+            persist_request = getattr(self.chat, "persist_request_metadata", None)
+            if persist_request is not None:
+                await persist_request(metadata)
         except Exception as exc:  # noqa: BLE001 - durable identity is required after proof
             if strict:
                 raise AudiaGenticError(
@@ -2201,8 +3291,92 @@ def _response_ref_for_prompt(
     return None
 
 
+def _same_response_slot_replacement(
+    snapshot: ChatSnapshot,
+    *,
+    prompt_message_id: str,
+    old_assistant_id: str,
+    new_assistant_id: str,
+) -> bool:
+    """Prove that a changed assistant UUID is renderer replacement.
+
+    ChatGPT's ``data-message-id`` identifies a rendered assistant node, not
+    necessarily a stable logical turn.  The ordered prompt-to-assistant span
+    is the stronger identity: one exact prompt, no later user, and exactly one
+    assistant in that span.  Multiple assistant nodes or a later user make the
+    observation ambiguous and must remain fail-closed.
+    """
+    if not new_assistant_id or new_assistant_id == old_assistant_id:
+        return False
+    if snapshot.latest_user_id != prompt_message_id:
+        return False
+
+    prompt_indexes = [
+        index
+        for index, ref in enumerate(snapshot.message_refs)
+        if ref.role == "user" and ref.message_id == prompt_message_id
+    ]
+    if len(prompt_indexes) != 1:
+        return False
+
+    tail = snapshot.message_refs[prompt_indexes[0] + 1 :]
+    if any(ref.role == "user" for ref in tail):
+        return False
+    assistants = [ref for ref in tail if ref.role == "assistant"]
+    if len(assistants) != 1 or assistants[0].message_id != new_assistant_id:
+        return False
+
+    # If both DOM nodes are present, this is ambiguity rather than a proven
+    # remount/replacement.
+    if any(
+        ref.role == "assistant" and ref.message_id == old_assistant_id
+        for ref in snapshot.message_refs
+    ):
+        return False
+    return snapshot.latest_assistant_id == new_assistant_id
+
+
+def _terminal_same_response_slot_replacement(
+    snapshot: ChatSnapshot,
+    *,
+    prompt_message_id: str,
+    old_assistant_id: str,
+    new_assistant_id: str,
+) -> bool:
+    """Allow a durable assistant ID to change only after a proven remount.
+
+    The provider can rematerialize the completed assistant node with a new
+    ``data-message-id``.  A durable-ID change is normally unsafe, but it is
+    recoverable when the ordered turn boundary is unambiguous and the DOM
+    independently proves that this one response is terminal.  Requiring the
+    terminal witness and non-generating state prevents synthetic activity or
+    a transient streaming remount from masking a submission/ownership bug.
+    """
+    return (
+        _same_response_slot_replacement(
+            snapshot,
+            prompt_message_id=prompt_message_id,
+            old_assistant_id=old_assistant_id,
+            new_assistant_id=new_assistant_id,
+        )
+        and not snapshot.generating
+        and bool(snapshot.latest_assistant_text)
+        and snapshot.terminal_witness_assistant_id == new_assistant_id
+        and bool(snapshot.dom_signals & _REMOUNT_TERMINAL_WITNESS_SIGNALS)
+    )
+
+
 def _scope_response_snapshot(
-    baseline: ChatSnapshot, snapshot: ChatSnapshot, *, prompt_message_id: str
+    baseline: ChatSnapshot,
+    snapshot: ChatSnapshot,
+    *,
+    prompt_message_id: str,
+    prompt_text: str | None = None,
+    allow_virtualized_prompt: bool = False,
+    virtualized_assistant_id: str | None = None,
+    bound_assistant_id: str | None = None,
+    allow_legacy_owned_error_alert: bool = False,
+    allow_empty_baseline_virtualized_assistant: bool = False,
 ) -> tuple[ChatSnapshot, ChatMessageRef | None]:
     """Project a raw snapshot onto this request's own response, not
     whatever is conversation-global-latest.
@@ -2212,28 +3386,379 @@ def _scope_response_snapshot(
     keep this request alive or complete it merely because its controls are
     now the document-global latest controls.
     """
-    response_ref = _response_ref_for_prompt(snapshot, prompt_message_id)
-    scoped_progress = tuple(
-        block
-        for block in snapshot.progress_blocks
-        if block.owner_prompt_message_id == prompt_message_id
-        and (
-            response_ref is None
-            or block.owner_assistant_message_id is None
-            or block.owner_assistant_message_id == response_ref.message_id
+    baseline_conversation_url = canonical_chat_url(baseline.url)
+    snapshot_conversation_url = canonical_chat_url(snapshot.url)
+    if (
+        baseline_conversation_url
+        and snapshot_conversation_url != baseline_conversation_url
+        and not same_chat_identity(baseline.url, snapshot.url)
+    ):
+        raise ProviderBindingIntegrityError(
+            "provider conversation changed during response observation"
         )
+    response_ref = _response_ref_for_prompt(snapshot, prompt_message_id)
+    if (
+        response_ref is not None
+        and not _fallback_prompt_anchor_is_stable(
+            baseline, snapshot, prompt_message_id, prompt_text=prompt_text
+        )
+    ):
+        # A fallback user ordinal is not a durable turn identity. Once the
+        # visible user-turn anchor advances, do not correlate a later
+        # response even when its text is identical.
+        response_ref = None
+    request_error_alert = _request_error_alert_is_owned(
+        baseline,
+        snapshot,
+        prompt_message_id,
+        allow_legacy_owned=allow_legacy_owned_error_alert,
+    )
+    matched_prompt_id = prompt_message_id
+    if (
+        response_ref is None
+        and prompt_text
+        and prompt_message_id.startswith("fallback-user-")
+    ):
+        # The project renderer can replace the synthetic fallback user id
+        # with a real UUID after submission.  The request already proved its
+        # prompt text during submission proof, so use the exact prompt digest
+        # to rebind that one visible user node and preserve the ordered
+        # prompt-to-assistant boundary.
+        prompt_digest = PromptFingerprint.from_text(prompt_text).digest
+        prompt_refs = [
+            ref for ref in snapshot.message_refs
+            if ref.role == "user"
+            and PromptFingerprint.from_text(
+                ref.correlation_text or ref.text or ""
+            ).digest
+            == prompt_digest
+        ]
+        if len(prompt_refs) == 1:
+            matched_prompt_id = prompt_refs[0].message_id
+            response_ref = _response_ref_for_prompt(snapshot, matched_prompt_id)
+            if response_ref is not None and not _fallback_prompt_anchor_is_stable(
+                baseline, snapshot, matched_prompt_id, prompt_text=prompt_text
+            ):
+                response_ref = None
+        if response_ref is None:
+            # Some renderer revisions expose the latest prompt/assistant
+            # fields but omit one or both nodes from message_refs while the
+            # response action bar is already mounted.  The exact prompt
+            # fingerprint plus a same-conversation terminal witness is still
+            # request-owned evidence; do not discard a completed answer just
+            # because the ordered ref projection is temporarily incomplete.
+            latest_prompt_text = snapshot.latest_user_correlation_text()
+            prompt_matches = (
+                latest_prompt_text is not None
+                and PromptFingerprint.from_text(latest_prompt_text).digest
+                == prompt_digest
+            )
+            same_conversation = same_chat_identity(snapshot.url, baseline.url)
+            terminal_bound = (
+                snapshot.terminal_witness_assistant_id
+                == snapshot.latest_assistant_id
+            )
+            if (
+                _fallback_prompt_anchor_is_stable(
+                    baseline, snapshot, prompt_message_id, prompt_text=prompt_text
+                )
+                and prompt_matches
+                and same_conversation
+                and terminal_bound
+                and snapshot.latest_assistant_id
+                and snapshot.latest_assistant_text
+            ):
+                response_ref = ChatMessageRef(
+                    role="assistant",
+                    message_id=snapshot.latest_assistant_id,
+                    text=snapshot.latest_assistant_text,
+                    sequence=len(snapshot.message_refs),
+                )
+    network_error_alert = _document_signal_is_owned(
+        baseline,
+        snapshot,
+        "network-error-alert",
+        prompt_message_id=prompt_message_id,
+        matched_prompt_message_id=matched_prompt_id,
+        prompt_text=prompt_text,
+        allow_virtualized_prompt=allow_virtualized_prompt,
+        request_owned_assistant_present=bool(
+            response_ref is not None
+            or bound_assistant_id is not None
+            or virtualized_assistant_id is not None
+        ),
+    )
+    stream_cache_expired = _document_signal_is_owned(
+        baseline,
+        snapshot,
+        "stream-cache-expired",
+        prompt_message_id=prompt_message_id,
+        matched_prompt_message_id=matched_prompt_id,
+        prompt_text=prompt_text,
+        allow_virtualized_prompt=allow_virtualized_prompt,
+        request_owned_assistant_present=bool(
+            response_ref is not None
+            or bound_assistant_id is not None
+            or virtualized_assistant_id is not None
+        ),
+    )
+    if response_ref is None and bound_assistant_id:
+        # A later user turn creates a hard ownership boundary. If the
+        # assistant already bound to this request has disappeared and a
+        # newer assistant exists beyond that boundary, fail closed instead
+        # of masking the mismatch as "no response".
+        prompt_index = next(
+            (
+                index
+                for index, ref in enumerate(snapshot.message_refs)
+                if ref.role == "user" and ref.message_id == matched_prompt_id
+            ),
+            None,
+        )
+        if prompt_index is not None:
+            later_user_index = next(
+                (
+                    index
+                    for index, ref in enumerate(
+                        snapshot.message_refs[prompt_index + 1 :], prompt_index + 1
+                    )
+                    if ref.role == "user"
+                ),
+                None,
+            )
+            bound_assistant_present = any(
+                ref.role == "assistant" and ref.message_id == bound_assistant_id
+                for ref in snapshot.message_refs
+            )
+            later_assistant_present = (
+                later_user_index is not None
+                and any(
+                    ref.role == "assistant"
+                    for ref in snapshot.message_refs[later_user_index + 1 :]
+                )
+            )
+            if later_assistant_present and not bound_assistant_present:
+                raise ProviderBindingIntegrityError(
+                    "provider assistant identity changed during response observation"
+                )
+        elif (
+            any(ref.role == "user" for ref in snapshot.message_refs)
+            and any(
+                ref.role == "assistant" and ref.message_id != bound_assistant_id
+                for ref in snapshot.message_refs
+            )
+        ):
+            # Both the original prompt and its bound assistant may be
+            # virtualized out of the DOM. A remaining user/assistant pair is
+            # then necessarily a later turn, not an answer to this request.
+            raise ProviderBindingIntegrityError(
+                "provider assistant identity changed during response observation"
+            )
+    if response_ref is None and allow_virtualized_prompt:
+        # ChatGPT's project renderer can unmount the submitted user block
+        # after submission while leaving the fresh assistant response and its
+        # terminal action bar mounted.  The prompt anchor was already proven
+        # by the submission-proof phase, so a newer assistant with a bound
+        # terminal witness is safe to correlate without treating a foreign
+        # conversation-global answer as this request's response.
+        current_user_ids = set(snapshot.user_message_ids)
+        baseline_assistant_ids = set(baseline.assistant_message_ids)
+        fresh_assistant = (
+            snapshot.latest_assistant_id
+            and snapshot.latest_assistant_text
+            and (
+                virtualized_assistant_id is None
+                or snapshot.latest_assistant_id == virtualized_assistant_id
+            )
+            and snapshot.latest_assistant_id not in baseline_assistant_ids
+            and snapshot.latest_assistant_id != baseline.latest_assistant_id
+        )
+        prompt_unmounted = (
+            snapshot.latest_user_id is None
+            and not current_user_ids
+            and snapshot.user_count == 0
+        )
+        same_conversation = same_chat_identity(snapshot.url, baseline.url)
+        terminal_bound = snapshot.terminal_witness_assistant_id == snapshot.latest_assistant_id
+        assistant_refs = tuple(
+            ref for ref in snapshot.message_refs if ref.role == "assistant"
+        )
+        empty_baseline_first_assistant = (
+            allow_empty_baseline_virtualized_assistant
+            and bound_assistant_id is None
+            and baseline.user_count == 0
+            and baseline.assistant_count == 0
+            and not baseline.user_message_ids
+            and not baseline.assistant_message_ids
+            and baseline.latest_user_id is None
+            and baseline.latest_assistant_id is None
+            and snapshot.assistant_count == 1
+            and len(snapshot.assistant_message_ids) == 1
+            and len(assistant_refs) == 1
+            and assistant_refs[0].message_id == snapshot.latest_assistant_id
+            and snapshot.assistant_message_ids[0] == snapshot.latest_assistant_id
+            and _is_durable_assistant_message_id(snapshot.latest_assistant_id)
+        )
+        if (
+            fresh_assistant
+            and prompt_unmounted
+            and same_conversation
+            and terminal_bound
+            and virtualized_assistant_id is None
+            and not empty_baseline_first_assistant
+        ):
+            # A prompt-unmounted assistant is request-owned only when its
+            # identity was pinned during submission proof. Without that
+            # durable anchor, a later turn can be mistaken for this request.
+            raise ProviderBindingIntegrityError(
+                "provider assistant identity is unpinned after prompt virtualization"
+            )
+        if (
+            virtualized_assistant_id
+            and snapshot.latest_assistant_id
+            and snapshot.latest_assistant_id != virtualized_assistant_id
+            and prompt_unmounted
+            and same_conversation
+        ):
+            raise ProviderBindingIntegrityError(
+                "provider assistant identity changed during response observation"
+            )
+        if (
+            fresh_assistant
+            and prompt_unmounted
+            and same_conversation
+            and terminal_bound
+            and (virtualized_assistant_id is not None or empty_baseline_first_assistant)
+        ):
+            response_ref = ChatMessageRef(
+                role="assistant",
+                message_id=snapshot.latest_assistant_id,
+                text=snapshot.latest_assistant_text,
+                sequence=len(snapshot.message_refs),
+                markdown=next(
+                    (
+                        ref.markdown
+                        for ref in assistant_refs
+                        if ref.message_id == snapshot.latest_assistant_id
+                    ),
+                    None,
+                ),
+            )
+    if response_ref is None and virtualized_assistant_id:
+        unpinned_fresh_assistant = any(
+            ref.role == "assistant"
+            and ref.message_id != virtualized_assistant_id
+            and ref.message_id not in set(baseline.assistant_message_ids)
+            for ref in snapshot.message_refs
+        )
+        if unpinned_fresh_assistant:
+            raise ProviderBindingIntegrityError(
+                "provider assistant identity changed during response observation"
+            )
+    if (
+        virtualized_assistant_id
+        and response_ref is not None
+        and response_ref.message_id != virtualized_assistant_id
+    ):
+        # Prompt-text rebinding runs before the virtualized-prompt fallback.
+        # A renderer-local fallback ordinal may be replaced when the same
+        # prompt-owned slot remains the only assistant in the span. Durable
+        # identity changes remain fail-closed.
+        if not (
+            _fallback_prompt_anchor_is_stable(
+                baseline, snapshot, matched_prompt_id, prompt_text=prompt_text
+            )
+            and _is_fallback_assistant_message_id(virtualized_assistant_id)
+            and _is_fallback_assistant_message_id(response_ref.message_id)
+            and _same_response_slot_replacement(
+                snapshot,
+                prompt_message_id=matched_prompt_id,
+                old_assistant_id=virtualized_assistant_id,
+                new_assistant_id=response_ref.message_id,
+            )
+        ):
+            raise ProviderBindingIntegrityError(
+                "provider assistant identity changed during response observation"
+            )
+    if (
+        response_ref is not None
+        and response_ref.message_id == baseline.latest_assistant_id
+        and response_ref.text != baseline.latest_assistant_text
+    ):
+        # When the renderer keeps a bounded fallback ordinal, a new logical
+        # response can reuse the previous latest assistant id.  A response
+        # already scoped to this request's prompt is sufficient correlation
+        # proof even when the fallback user ordinal is reused unchanged; do
+        # not require the prompt-text rematch branch to have run.  Synthesize
+        # a request-local id so the assistant-fresh policy does not mistake
+        # the completed answer for the old turn.
+        response_ref = replace(
+            response_ref,
+            message_id=(
+                f"{response_ref.message_id}:prompt-"
+                f"{PromptFingerprint.from_text(prompt_text or '').digest[:16]}"
+            ),
+        )
+        snapshot = replace(
+            snapshot,
+            latest_assistant_id=response_ref.message_id,
+            terminal_witness_assistant_id=response_ref.message_id,
+        )
+    def owned_progress(block: ChatProgressBlock) -> bool:
+        if block.owner_prompt_message_id != prompt_message_id:
+            return False
+        if response_ref is None:
+            # Before an assistant exists, a non-null assistant owner is
+            # uncorrelated and must fail closed.
+            return block.owner_assistant_message_id is None
+        return block.owner_assistant_message_id in {None, response_ref.message_id}
+
+    scoped_progress = tuple(block for block in snapshot.progress_blocks if owned_progress(block))
+    scoped_dom_digest = (
+        snapshot.dom_activity_digest
+        if snapshot.dom_activity_owner_prompt_id == prompt_message_id
+        else None
     )
     if response_ref is None:
+        scoped_signals = set(snapshot.dom_signals)
+        scoped_signals.difference_update(
+            {"request-error-alert", "network-error-alert", "stream-cache-expired"}
+        )
+        if request_error_alert:
+            scoped_signals.add("request-error-alert")
+        if network_error_alert:
+            scoped_signals.add("network-error-alert")
+        if stream_cache_expired:
+            scoped_signals.add("stream-cache-expired")
         return (
             replace(
                 snapshot,
                 latest_assistant_id=baseline.latest_assistant_id,
                 latest_assistant_text=baseline.latest_assistant_text,
                 progress_blocks=scoped_progress,
+                # Conversation-global counts are useful diagnostics only;
+                # they are not request-addressable recovery evidence.
+                tool_activity_counts=(),
+                dom_activity_digest=scoped_dom_digest,
+                dom_activity_owner_prompt_id=(
+                    prompt_message_id if scoped_dom_digest else None
+                ),
+                dom_signals=frozenset(scoped_signals),
             ),
             None,
         )
     dom_signals = snapshot.dom_signals
+    dom_signals = frozenset(
+        signal
+        for signal in dom_signals
+        if signal not in {"request-error-alert", "network-error-alert", "stream-cache-expired"}
+    )
+    if request_error_alert:
+        dom_signals = frozenset((*dom_signals, "request-error-alert"))
+    if network_error_alert:
+        dom_signals = frozenset((*dom_signals, "network-error-alert"))
+    if stream_cache_expired:
+        dom_signals = frozenset((*dom_signals, "stream-cache-expired"))
     if snapshot.terminal_witness_assistant_id != response_ref.message_id:
         dom_signals = frozenset(
             signal
@@ -2247,9 +3772,132 @@ def _scope_response_snapshot(
             latest_assistant_text=response_ref.text,
             dom_signals=dom_signals,
             progress_blocks=scoped_progress,
+            tool_activity_counts=(),
+            dom_activity_digest=scoped_dom_digest,
+            dom_activity_owner_prompt_id=(
+                prompt_message_id if scoped_dom_digest else None
+            ),
         ),
         response_ref,
     )
+
+
+def _document_signal_is_owned(
+    baseline: ChatSnapshot,
+    snapshot: ChatSnapshot,
+    signal: str,
+    *,
+    prompt_message_id: str,
+    matched_prompt_message_id: str,
+    prompt_text: str | None,
+    allow_virtualized_prompt: bool,
+    request_owned_assistant_present: bool,
+) -> bool:
+    """Accept a document-scoped signal only on a request-owned post-submit edge.
+
+    Plain-text provider failures such as ``Stream cache expired`` are currently
+    rendered on ``body`` without an alert role or a stable turn wrapper.  A
+    level check would therefore let stale history, a later turn, or response
+    prose containing the same phrase fail this request.  The safe fallback is
+    deliberately narrow: the signal must be absent at the request baseline
+    and the current latest user node must still identify this prompt (by the
+    durable id or the exact prompt fingerprint when the renderer replaces a
+    fallback ordinal). A freshly submitted turn may subsequently virtualize
+    every user node before its document-scoped failure mounts. That case is
+    accepted only when submission proof explicitly authorizes virtualization,
+    the exact conversation remains bound, no user boundary is mounted, and no
+    request-owned assistant response exists yet.
+    """
+    if signal not in snapshot.dom_signals or signal in baseline.dom_signals:
+        return False
+    current_user_id = snapshot.latest_user_id
+    if current_user_id in {prompt_message_id, matched_prompt_message_id}:
+        return True
+    if prompt_text:
+        current_text = snapshot.latest_user_correlation_text()
+        if (
+            current_text
+            and PromptFingerprint.from_text(prompt_text).matches_text(current_text)
+        ):
+            return True
+    if not allow_virtualized_prompt or request_owned_assistant_present:
+        return False
+    baseline_conversation_url = canonical_chat_url(baseline.url)
+    snapshot_conversation_url = canonical_chat_url(snapshot.url)
+    return bool(
+        baseline_conversation_url
+        and snapshot_conversation_url == baseline_conversation_url
+        and snapshot.latest_user_id is None
+        and not snapshot.user_message_ids
+        and not snapshot.user_prompt_refs()
+    )
+
+
+def _request_error_alert_is_owned(
+    baseline: ChatSnapshot,
+    snapshot: ChatSnapshot,
+    prompt_message_id: str,
+    *,
+    allow_legacy_owned: bool = False,
+) -> bool:
+    """Derive a request-owned error from a post-submit alert occurrence.
+
+    ``error-alert`` is document-scoped and may be left behind by an earlier
+    turn.  A raw boolean edge is insufficient when the same alert remains
+    mounted, so compare bounded occurrence identities as a multiset.  An
+    occurrence is admissible when it is structurally owned by this prompt, or
+    when the renderer cannot expose an owner but the occurrence is provably
+    new after this request's baseline.  Foreign/later-turn alerts remain
+    unowned by this request and are ignored.
+    """
+    baseline_total: Counter[str] = Counter(
+        digest for digest, _owner in baseline.error_alert_occurrences
+    )
+    current_total: Counter[str] = Counter(
+        digest for digest, _owner in snapshot.error_alert_occurrences
+    )
+    baseline_owner: Counter[tuple[str, str | None]] = Counter(
+        baseline.error_alert_occurrences
+    )
+    current_owner: Counter[tuple[str, str | None]] = Counter(
+        snapshot.error_alert_occurrences
+    )
+    for digest in current_total:
+        if current_total[digest] <= baseline_total[digest]:
+            continue
+        baseline_buckets = {
+            owner: count
+            for (bucket_digest, owner), count in baseline_owner.items()
+            if bucket_digest == digest
+        }
+        current_buckets = {
+            owner: count
+            for (bucket_digest, owner), count in current_owner.items()
+            if bucket_digest == digest
+        }
+        # If ownership of an existing semantic alert moved between buckets,
+        # the multiset cannot prove which node is new. Fail closed rather
+        # than turning redistribution plus a foreign insertion into a request
+        # error.
+        if any(
+            current_buckets.get(owner, 0) < count
+            for owner, count in baseline_buckets.items()
+        ):
+            continue
+        for owner, count in current_buckets.items():
+            extra = count - baseline_buckets.get(owner, 0)
+            if extra <= 0:
+                continue
+            if owner == prompt_message_id or (
+                owner is None and snapshot.latest_user_id == prompt_message_id
+            ):
+                return True
+    if allow_legacy_owned:
+        return any(
+            owner == prompt_message_id
+            for _digest, owner in snapshot.error_alert_occurrences
+        )
+    return False
 
 
 def _facts(
@@ -2280,6 +3928,154 @@ def _facts(
     return facts
 
 
+def _response_decision_diagnostics(
+    baseline: ChatSnapshot,
+    raw: ChatSnapshot,
+    scoped: ChatSnapshot | None,
+    *,
+    prompt_message_id: str | None,
+    response_ref: ChatMessageRef | None,
+    bound_assistant_id: str | None,
+    virtualized_assistant_id: str | None,
+    allow_empty_baseline_virtualized_assistant: bool,
+    chat_url: str | None,
+    provider_session_id: str | None,
+    page_handle: object | None,
+    facts: dict[str, bool] | None,
+    completion_satisfied: bool,
+    completion_matched: object,
+    correlation_error: str | None,
+) -> dict[str, Any]:
+    """Return content-free correlation and completion gates for one poll.
+
+    This intentionally logs cardinalities, booleans, and bounded digests
+    only. It is detailed enough to distinguish a stale/wrong CDP target from
+    an ownership or response-policy miss without retaining prompt or response
+    bodies in gateway logs.
+    """
+    raw_assistant_refs = tuple(ref for ref in raw.message_refs if ref.role == "assistant")
+    raw_user_refs = tuple(ref for ref in raw.message_refs if ref.role == "user")
+    terminal_id = raw.terminal_witness_assistant_id
+    latest_id = raw.latest_assistant_id
+    response_id = response_ref.message_id if response_ref is not None else None
+    baseline_assistant_ids = set(baseline.assistant_message_ids)
+    prompt_unmounted = (
+        raw.user_count == 0
+        and not raw.user_message_ids
+        and not raw_user_refs
+        and raw.latest_user_id is None
+    )
+    same_conversation = same_chat_identity(raw.url, baseline.url)
+    terminal_bound_to_latest = bool(terminal_id and terminal_id == latest_id)
+    allowance_predicates = {
+        "explicitly-allowed": allow_empty_baseline_virtualized_assistant,
+        "bound-assistant-absent": bound_assistant_id is None,
+        "baseline-user-count-zero": baseline.user_count == 0,
+        "baseline-assistant-count-zero": baseline.assistant_count == 0,
+        "baseline-user-ids-empty": not baseline.user_message_ids,
+        "baseline-assistant-ids-empty": not baseline.assistant_message_ids,
+        "baseline-latest-user-absent": baseline.latest_user_id is None,
+        "baseline-latest-assistant-absent": baseline.latest_assistant_id is None,
+        "raw-assistant-count-one": raw.assistant_count == 1,
+        "raw-assistant-id-count-one": len(raw.assistant_message_ids) == 1,
+        "raw-assistant-ref-count-one": len(raw_assistant_refs) == 1,
+        "assistant-id-array-matches-latest": bool(
+            len(raw.assistant_message_ids) == 1
+            and raw.assistant_message_ids[0] == latest_id
+        ),
+        "assistant-ref-matches-latest": bool(
+            len(raw_assistant_refs) == 1
+            and raw_assistant_refs[0].message_id == latest_id
+        ),
+        "latest-assistant-durable": _is_durable_assistant_message_id(latest_id),
+        "latest-assistant-text-present": bool(raw.latest_assistant_text),
+        "latest-assistant-fresh-vs-baseline": bool(
+            latest_id
+            and latest_id not in baseline_assistant_ids
+            and latest_id != baseline.latest_assistant_id
+        ),
+        "prompt-unmounted": prompt_unmounted,
+        "same-baseline-conversation": same_conversation,
+        "terminal-witness-bound-to-latest": terminal_bound_to_latest,
+        "virtualized-assistant-pin-absent": virtualized_assistant_id is None,
+        "virtualized-assistant-pin-matches-latest": bool(
+            virtualized_assistant_id and virtualized_assistant_id == latest_id
+        ),
+    }
+    gate_names = (
+        "assistant-fresh",
+        "text-present",
+        "completion-control",
+        "more-actions-menu",
+        "response-complete-status",
+        "not-generating",
+        "canvas-edit-control",
+        "canvas-open-editor-control",
+        "streaming-indicator",
+        "thinking-indicator",
+        "auth-required",
+    )
+    return {
+        "page-handle-digest": _text_digest(str(page_handle)) if page_handle is not None else None,
+        "raw-url-digest": _text_digest(canonical_chat_url(raw.url) or raw.url),
+        "baseline-url-digest": _text_digest(
+            canonical_chat_url(baseline.url) or baseline.url
+        ),
+        "bound-url-digest": _text_digest(canonical_chat_url(chat_url or "") or chat_url),
+        "raw-same-baseline-conversation": same_chat_identity(raw.url, baseline.url),
+        "raw-same-bound-conversation": bool(
+            chat_url and same_chat_identity(raw.url, chat_url)
+        ),
+        "raw-matches-provider-session": bool(
+            provider_session_id
+            and url_matches_provider_session(raw.url, provider_session_id)
+        ),
+        "empty-baseline-allowance": allow_empty_baseline_virtualized_assistant,
+        "baseline-user-count": baseline.user_count,
+        "baseline-assistant-count": baseline.assistant_count,
+        "raw-user-count": raw.user_count,
+        "raw-assistant-count": raw.assistant_count,
+        "raw-user-id-count": len(raw.user_message_ids),
+        "raw-assistant-id-count": len(raw.assistant_message_ids),
+        "raw-user-ref-count": len(raw_user_refs),
+        "raw-assistant-ref-count": len(raw_assistant_refs),
+        "prompt-ref-present": bool(
+            prompt_message_id
+            and any(ref.message_id == prompt_message_id for ref in raw_user_refs)
+        ),
+        "prompt-unmounted": prompt_unmounted,
+        "latest-assistant-durable": _is_durable_assistant_message_id(latest_id),
+        "response-ref-present": response_ref is not None,
+        "response-ref-is-latest": bool(response_id and response_id == latest_id),
+        "response-ref-is-bound": bool(
+            response_id and bound_assistant_id and response_id == bound_assistant_id
+        ),
+        "response-ref-is-virtualized-pin": bool(
+            response_id
+            and virtualized_assistant_id
+            and response_id == virtualized_assistant_id
+        ),
+        "terminal-witness-present": terminal_id is not None,
+        "terminal-witness-hash": _text_digest(terminal_id) if terminal_id else None,
+        "response-ref-hash": _text_digest(response_id) if response_id else None,
+        "latest-assistant-hash": _text_digest(latest_id) if latest_id else None,
+        "terminal-witness-is-latest": bool(terminal_id and terminal_id == latest_id),
+        "terminal-witness-is-response": bool(terminal_id and terminal_id == response_id),
+        "raw-generating": raw.generating,
+        "raw-text-length": len(raw.latest_assistant_text or ""),
+        "scoped-text-length": len(scoped.latest_assistant_text or "") if scoped else 0,
+        "allowance-predicates": allowance_predicates,
+        "completion-gates": {
+            name: bool(facts and facts.get(name)) for name in gate_names
+        },
+        "completion-satisfied": completion_satisfied,
+        "completion-matched": tuple(sorted(str(item) for item in completion_matched)),
+        "correlation-error": correlation_error,
+        "raw-dom-signals": tuple(sorted(raw.dom_signals)),
+        "scoped-dom-signals": tuple(sorted(scoped.dom_signals)) if scoped else (),
+    }
+
+
 def _message_ids(turn: GptAutoTurn) -> dict[str, str]:
     """Return only proven provider message IDs for durable turn metadata."""
     values = {
@@ -2290,6 +4086,15 @@ def _message_ids(turn: GptAutoTurn) -> dict[str, str]:
         ),
     }
     return {key: value for key, value in values.items() if value}
+
+
+def _scalar_binding_metadata(metadata: dict[str, Any]) -> dict[str, str | int | float | bool | None]:
+    """Project request metadata onto the scalar-only binding contract."""
+    return {
+        key: value
+        for key, value in metadata.items()
+        if value is None or isinstance(value, (str, int, float, bool))
+    }
 
 
 def _snapshot_diagnostics(

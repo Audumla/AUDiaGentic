@@ -2,7 +2,10 @@ from __future__ import annotations
 
 
 def test_project_title_suffix_is_not_project_identity():
-    from audiagentic.components.providers.adapters.gpt_auto.urls import parse_project_id, canonical_chat_url
+    from audiagentic.components.providers.adapters.gpt_auto.urls import (
+        canonical_chat_url,
+        parse_project_id,
+    )
     project = "g-p-0000000000000000603e9bb65863874e"
     base = f"https://chatgpt.com/g/{project}"
     assert parse_project_id(base + "-bigcherry/c/chat") == parse_project_id(base + "/project")
@@ -47,6 +50,7 @@ def valid_config() -> dict:
             "dedicated-window": True,
         },
         "cdp": {
+            "endpoint": "http://127.0.0.1:9222",
             "connect-timeout-seconds": 15,
             "protocol-timeout-seconds": 30,
             "recovery-timeout-seconds": 30,
@@ -115,11 +119,21 @@ def valid_config() -> dict:
                     "all-of": ["assistant-fresh", "text-present"],
                     "any-of-groups": [
                         ["completion-control", "more-actions-menu"],
+                        ["completion-control", "not-generating"],
                         ["canvas-edit-control", "canvas-open-editor-control", "not-generating"],
                     ],
             "none-of": [],
                 },
-                "response-failed": {"any-of": ["error-page", "error-alert"]},
+                "response-failed": {
+                    "any-of": [
+                        "error-page",
+                        "error-alert",
+                        "request-error-alert",
+                        "network-error-alert",
+                        "stream-cache-expired",
+                        "conversation-load-failed",
+                    ]
+                },
             },
         },
     }
@@ -131,6 +145,66 @@ def test_strict_config_is_typed_and_frozen():
     assert config.cdp_url == "http://127.0.0.1:9222"
     with pytest.raises(Exception):
         config.project_url = "changed"  # type: ignore[misc]
+
+
+def test_default_load_failure_signal_accepts_current_renderer_punctuation():
+    defaults_path = (
+        Path(__file__).parents[2]
+        / "src"
+        / "audiagentic"
+        / "components"
+        / "providers"
+        / "adapters"
+        / "gpt_auto"
+        / "gpt-auto-defaults.yaml"
+    )
+    defaults = yaml.safe_load(defaults_path.read_text(encoding="utf-8"))
+    variants = defaults["settings"]["workflow"]["dom-signals"]["conversation-load-failed"][
+        "text-contains-any"
+    ]
+    assert "Could not load this ChatGPT conversation" in variants
+    assert "Could not load this ChatGPT conversation." in variants
+
+
+def test_default_stream_cache_expired_is_a_provider_failure_signal():
+    defaults_path = (
+        Path(__file__).parents[2]
+        / "src"
+        / "audiagentic"
+        / "components"
+        / "providers"
+        / "adapters"
+        / "gpt_auto"
+        / "gpt-auto-defaults.yaml"
+    )
+    defaults = yaml.safe_load(defaults_path.read_text(encoding="utf-8"))
+    signals = defaults["settings"]["workflow"]["dom-signals"]
+    assert signals["stream-cache-expired"]["text-contains-any"] == [
+        "Stream cache expired"
+    ]
+    assert "stream-cache-expired" in defaults["settings"]["workflow"]["evidence-policies"][
+        "response-failed"
+    ]["any-of"]
+
+
+def test_cdp_target_location_is_taken_from_configuration():
+    data = valid_config()
+    data["cdp"]["endpoint"] = "http://192.0.2.10:9222"
+    data["browser"]["executable"] = "C:\\remote-browser-is-not-used.exe"
+
+    config = GptAutoConfig.from_dict(data)
+
+    assert config.cdp_url == "http://192.0.2.10:9222"
+    assert config.cdp.is_remote
+
+
+def test_remote_cdp_rejects_local_devtools_active_port_fallback():
+    data = valid_config()
+    data["cdp"]["endpoint"] = "http://192.0.2.10:9222"
+    data["cdp"]["devtools-active-port-file"] = "DevToolsActivePort"
+
+    with pytest.raises(AudiaGenticError, match="only valid for a local CDP endpoint"):
+        GptAutoConfig.from_dict(data)
 
 
 def test_response_complete_policy_never_regresses_to_the_stuck_stop_control_veto():
@@ -300,6 +374,14 @@ def test_live_workflow_declares_delivery_timeout_retry_signal() -> None:
         'button[aria-label="Retry"]',
         'button[data-testid*="regenerate"][data-testid*="error"]',
     ]
+    # The current renderer's Retry control has neither aria-label nor
+    # data-testid, so it is identified by its alert's own known message text
+    # instead of by button attributes -- see gpt-auto-defaults.yaml.
+    assert signals["delivery-timeout-alert"]["selectors"] == ['[role="alert"]']
+    assert signals["delivery-timeout-alert"]["textContainsAny"] == [
+        "stream recovery polling timed out",
+        "resume stream unavailable",
+    ]
 
 
 def test_recovery_and_physical_tab_defaults_are_configurable() -> None:
@@ -354,13 +436,15 @@ def _synthetic_snapshot(
     )
 
 
-def test_real_merged_config_response_complete_requires_both_witnesses_together() -> None:
-    """GP32 integration guard: exercises turn.py's real _facts() pipeline
+def test_real_merged_config_response_complete_requires_correlated_completion_facts() -> None:
+    """GP32/GP52 integration guard: exercises turn.py's real _facts() pipeline
     against the ACTUAL trimmed, merged .audiagentic/config/providers/
     gpt-auto.yaml (not the synthetic valid_config() fixture every other
     test in this file uses) -- the one file every other test's fixture
-    comment explicitly says it cannot protect. Neither witness alone may
-    satisfy response-complete; only the pair together may."""
+    comment explicitly says it cannot protect. The historical action-bar
+    pair remains valid, and the current renderer's Copy-message plus
+    not-generating variant is valid; a completion-control-only snapshot
+    while generation is active must remain rejected."""
     root = Path(__file__).resolve().parents[2]
     document = yaml.safe_load(
         (root / ".audiagentic/config/providers/gpt-auto.yaml").read_text(encoding="utf-8")
@@ -372,11 +456,35 @@ def test_real_merged_config_response_complete_requires_both_witnesses_together()
     both = _facts(baseline, baseline, _synthetic_snapshot(["completion-control", "more-actions-menu"]))
     assert policy.evaluate(both).satisfied
 
-    only_completion = _facts(baseline, baseline, _synthetic_snapshot(["completion-control"]))
-    assert not policy.evaluate(only_completion).satisfied
+    completion_after_generation = _facts(
+        baseline,
+        baseline,
+        _synthetic_snapshot(["completion-control"], generating=False),
+    )
+    assert policy.evaluate(completion_after_generation).satisfied
+
+    completion_while_generating = _facts(
+        baseline,
+        baseline,
+        _synthetic_snapshot(["completion-control"], generating=True),
+    )
+    assert not policy.evaluate(completion_while_generating).satisfied
 
     only_more_actions = _facts(baseline, baseline, _synthetic_snapshot(["more-actions-menu"]))
     assert not policy.evaluate(only_more_actions).satisfied
+
+
+def test_real_merged_config_stream_cache_expired_is_request_failure() -> None:
+    root = Path(__file__).resolve().parents[2]
+    document = yaml.safe_load(
+        (root / ".audiagentic/config/providers/gpt-auto.yaml").read_text(encoding="utf-8")
+    )
+    config = GptAutoConfig.from_project_dict(document)
+    policy = config.workflow.policy("response-failed")
+    baseline = _synthetic_snapshot([], assistant_id=None)
+    current = _synthetic_snapshot(["stream-cache-expired"], assistant_id=None)
+
+    assert policy.evaluate(_facts(baseline, baseline, current)).satisfied
 
 
 def test_real_merged_config_response_complete_recognizes_canvas_variant_alone() -> None:

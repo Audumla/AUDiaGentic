@@ -393,6 +393,7 @@ def _renew_activity(
     if activity.identity.worker_id != record.get("worker-id") or activity.identity.attempt_epoch != record.get("attempt-epoch"):
         return
     try:
+        normalized_source = activity.activity_source.strip().lower().replace("_", "-").replace(" ", "-")
         meaningful = is_meaningful_activity(
             activity.activity_source,
             activity.activity_source,
@@ -403,7 +404,13 @@ def _renew_activity(
             owner_epoch=record["dispatch-owner-epoch"],
             worker_id=activity.identity.worker_id,
             attempt_epoch=activity.identity.attempt_epoch,
-            kind="provider" if meaningful else "owner-heartbeat",
+            kind=(
+                "client-liveness"
+                if normalized_source in {"soft-liveness", "delivery-timeout-retry"}
+                else "provider"
+                if meaningful
+                else "owner-heartbeat"
+            ),
             source=activity.activity_source,
             source_instance=activity.identity.worker_id,
             source_sequence=activity.activity_seq,
@@ -582,7 +589,9 @@ def dispatch_request(
     component_profile: str,
     provider_isolation_tier: str,
     worker_timeout_seconds: float,
+    project_name: str | None = None,
     session_start: Any | None = None,
+    resume_existing: bool = False,
 ) -> dict[str, Any]:
     """Dispatch a queued/running gateway request record to completion.
 
@@ -616,7 +625,10 @@ def dispatch_request(
     The admitted prompt is the frozen semantic payload, reloaded from the
     private request snapshot when the in-memory value is unavailable.
     """
-    if not isinstance(dispatch_prompt, str) or not dispatch_prompt:
+    if (
+        not resume_existing
+        and (not isinstance(dispatch_prompt, str) or not dispatch_prompt)
+    ):
         from audiagentic.components.agents.agents_paths import gateway_admitted_prompt_path
         from audiagentic.foundation.io import read_bytes_with_retry
 
@@ -637,6 +649,10 @@ def dispatch_request(
                 message="admitted prompt snapshot is empty",
                 details={"request-id": record.get("request-id")},
             )
+    # Observation-only restart recovery never replays the admitted prompt.
+    # Its provider-session transport consumes the durable unresolved-turn
+    # checkpoint and exact provider binding instead; requiring the private
+    # prompt snapshot here would fail a safe reattach before DOM observation.
 
     if record.get("provider-transport-kind") == "provider-session":
         return _dispatch_session_request(
@@ -645,7 +661,9 @@ def dispatch_request(
             dispatch_prompt=dispatch_prompt,
             preallocated_session_id=preallocated_session_id,
             context_fingerprint=context_fingerprint,
+            project_name=project_name,
             session_start=session_start,
+            resume_existing=resume_existing,
         )
 
     try:
@@ -669,7 +687,7 @@ def dispatch_request(
         error = exc
     else:
         from audiagentic.components.agents.gateway.output import persist_final_response
-        artifact = persist_final_response(project_root, record["request-id"], str(outcome.get("output") or ""))
+        artifact = persist_final_response(project_root, record["request-id"], str(outcome.get("output") or ""), media_type=(outcome.get("final_media_type") if isinstance(outcome.get("final_media_type"), str) and outcome.get("final_media_type") else "text/plain; charset=utf-8"))
         artifact_ref = {key: artifact[key] for key in ("artifact-id", "request-id", "media-type", "bytes", "sha256")}
         provider_metadata = outcome.get("provider-metadata")
         metadata_update = (

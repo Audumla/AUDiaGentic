@@ -22,7 +22,7 @@ requests or live sessions.
 
 - Request: `req_example_69820a6f09de0ce3`
 - Agent profile: `lite-coder-opencode`
-- Model: `brutus/coder-quality-lite`
+- Model: `<local-provider>/coder-quality-lite`
 - Plan item: AS11
 - Task class: R&D artifact hygiene, redaction, public client seam, focused tests
 - Outcome: accepted after small overseer polish
@@ -59,7 +59,7 @@ is explicit and overseer validation is cheap.
 
 - Request: `req_example_8d388f6cdab27e92`
 - Agent profile: `supp-coder-opencode`
-- Model: `brutus/coder-quality-suppliment`
+- Model: `<local-provider>/coder-quality-suppliment`
 - Plan item: AS16
 - Task class: immutable queue/session diagnostics snapshots and race tests
 - Outcome: accepted after overseer test cleanup
@@ -96,7 +96,7 @@ without asking for exact invariants and expecting controller cleanup.
 
 - Request: `req_example_e041c7db3ce33fea`
 - Agent profile: `deep-coder-opencode`
-- Model: `brutus/coder-quality-mid`
+- Model: `<local-provider>/coder-quality-mid`
 - Plan item: AS16
 - Task class: public API/client/service/MCP exposure and integration tests
 - Outcome: accepted after one small type/value correction
@@ -201,7 +201,7 @@ Harness cleanup validation:
 
 - Request: `req_example_edee53b87d787915`
 - Agent profile: `deep-coder-opencode`
-- Model: `brutus/coder-quality-mid`
+- Model: `<local-provider>/coder-quality-mid`
 - Plan item: AS33
 - Task class: public diagnostics projection enabling slice
 - Outcome: accepted after controller repair
@@ -239,7 +239,7 @@ state why capability reads must happen before schema-aware runtime/status writes
 
 - Request: `req_example_7fe00d491faa7ee5`
 - Agent profile: `lite-coder-opencode`
-- Model: `brutus/coder-quality-lite`
+- Model: `<local-provider>/coder-quality-lite`
 - Plan item: AS33
 - Task class: validation/test-review
 - Outcome: useful but mostly overlapped with deep implementation
@@ -270,7 +270,7 @@ another worker's edits.
 
 - Request: `req_example_2bf426e1e727e4b2`
 - Agent profile: `supp-coder-opencode`
-- Model: `brutus/coder-quality-suppliment`
+- Model: `<local-provider>/coder-quality-suppliment`
 - Plan item: AS33
 - Task class: unit/static contract guard
 - Outcome: accepted after controller repair
@@ -300,7 +300,7 @@ long as nested/adversarial cases are spelled out.
 
 - Request: `req_example_08f5d4de992d2ea3`
 - Agent profile: `deep-coder-opencode`
-- Model: `brutus/coder-quality-mid`
+- Model: `<local-provider>/coder-quality-mid`
 - Session reused: `ses_example_715ed17f8d27928a`
 - Plan item: AS33
 - Task class: review-only validation of controller repairs
@@ -369,7 +369,7 @@ Harness cleanup validation:
 
 - Request: `req_example_c866611fddcf3f2f`
 - Agent profile: `deep-coder-opencode`
-- Model: `brutus/coder-quality-mid`
+- Model: `<local-provider>/coder-quality-mid`
 - Plan item: AS34
 - Task class: read-only session listing implementation
 - Outcome: accepted after controller cleanup
@@ -406,7 +406,7 @@ must pass." This needs to be in the plan template for any recovery-adjacent work
 
 - Request: `req_example_5dd8d8060ad76f8e`
 - Agent profile: `lite-coder-opencode`
-- Model: `brutus/coder-quality-lite`
+- Model: `<local-provider>/coder-quality-lite`
 - Plan item: AS34
 - Task class: test-only validation
 - Outcome: accepted with useful prompt/template lessons
@@ -436,7 +436,7 @@ use store builders instead of hand-crafted records when schemas are strict.
 
 - Request: `req_example_1a8359d4a20ffabf`
 - Agent profile: `supp-coder-opencode`
-- Model: `brutus/coder-quality-suppliment`
+- Model: `<local-provider>/coder-quality-suppliment`
 - Plan item: AS34
 - Task class: review/static contract
 - Outcome: accepted after controller cleanup

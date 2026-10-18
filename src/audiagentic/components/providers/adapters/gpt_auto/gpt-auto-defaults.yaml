@@ -24,6 +24,9 @@ settings:
     physical-tab-idle-timeout-seconds: 7200
     physical-tab-reaper-interval-seconds: 300
   cdp:
+    # CDP target location. For a remote browser use e.g.
+    # http://192.0.2.42:9222 and set up private transport (SSH/VPN).
+    endpoint: http://127.0.0.1:9222
     connect-timeout-seconds: 15
     protocol-timeout-seconds: 30
     recovery-timeout-seconds: 30
@@ -64,6 +67,29 @@ settings:
     stale-progress-focus-enabled: true
     stale-progress-focus-after-seconds: 30
   workflow:
+    recovery:
+      # Recovery policy is workflow data; dispatch still enforces session and
+      # request correlation before applying any of these actions.
+      network-error-followup-enabled: true
+      network-error-followup-max-attempts: 1
+      network-error-followup-prompt-template: >-
+        Complete the previous request. The previous response was interrupted by a
+        network error. Continue from the work already done and provide the complete
+        answer.
+
+        Original request:
+        {original_request}
+      provider-error-followup-enabled: true
+      provider-error-followup-max-attempts: 1
+      provider-error-followup-prompt-template: >-
+        Complete the previous request. ChatGPT reported a temporary request error.
+        Continue from the work already done and provide the complete answer.
+
+        Original request:
+        {original_request}
+      conversation-load-failure-recovery-enabled: true
+      conversation-load-failure-max-attempts: 2
+      action-pause-seconds: 0.15
     dom-signals:
       stop-control:
         scope: document
@@ -84,6 +110,40 @@ settings:
         scope: latest-assistant-turn
         selectors: ['[aria-busy="true"]', '[data-busy="true"]']
         visible: true
+      conversation-load-failed:
+        scope: document
+        selectors: ['body']
+        visible: true
+        # The current renderer omits the trailing period, while older
+        # renderers included it. Match both exact provider-owned variants so
+        # a persistent load-error page cannot fall through to heartbeat-only
+        # response observation.
+        text-contains-any:
+          - 'Could not load this ChatGPT conversation'
+          - 'Could not load this ChatGPT conversation.'
+      network-error-alert:
+        scope: document
+        selectors: ['body']
+        visible: true
+        text-contains-any: ['A network error occurred. Please check your connection and try again.']
+      stream-cache-expired:
+        scope: document
+        selectors: ['body']
+        visible: true
+        # ChatGPT can replace the response stream with this plain-text
+        # provider error without mounting role="alert" or the generic
+        # network-error message.
+        text-contains-any: ['Stream cache expired']
+      response-complete-status:
+        # The current renderer publishes completion through an aria-live
+        # status node instead of mounting the historical assistant action
+        # controls.  This is document-scoped because ChatGPT places the
+        # status node at body level; the snapshot binds the witness to the
+        # current latest assistant turn and still requires not-generating.
+        scope: document
+        selectors: ['span[role="status"]']
+        visible: true
+        text-contains-any: ['Response complete']
       completion-control:
         # GP41 (2026-08-17): [data-testid="copy-turn-action-button"] is NOT
         # unique to assistant turns -- confirmed live it is the SAME
@@ -105,7 +165,21 @@ settings:
         # instead -- role-specific by itself, testid kept only as an extra
         # qualifier, not an independently-sufficient alternative.
         scope: latest-assistant-turn
-        selectors: ['button[data-testid="copy-turn-action-button"][aria-label="Copy response"]']
+        selectors:
+          - 'button[data-testid="copy-turn-action-button"][aria-label="Copy response"]'
+          # ChatGPT's current renderer labels the same assistant action
+          # "Copy message" (confirmed live on the GPT review tab).  Keep this
+          # scoped to latest-assistant-turn; a document-global Copy message
+          # signal would also match the user's prompt action bar.
+          - 'button[aria-label="Copy message"]'
+          # Current ChatGPT project conversations use the same assistant-scoped
+          # control with the generic labels "Copy" or "Copy message".
+          - 'button[aria-label="Copy"]'
+          - 'button[aria-label="Copy message"]'
+          # The current action bar also exposes this stable terminal control
+          # after a completed response, even when the copy control is
+          # virtualized or temporarily absent.
+          - 'button[aria-label="Regenerate response"]'
         visible: false
       error-page:
         scope: document
@@ -118,11 +192,13 @@ settings:
         text-contains-any: ['error', 'failed', 'went wrong', 'try again', 'retry', 'rate limit', 'too many requests']
       provider-interruption:
         # Provider interruption is a recovery trigger, not a generic
-        # terminal error. Match the exact user-visible interruption text.
+        # terminal error. Current project chats render this text in ordinary
+        # document content rather than role="alert"; keep the alert match for
+        # older renderers and inspect body text for the current renderer.
         scope: document
-        selectors: ['[role="alert"]']
+        selectors: ['[role="alert"]', 'body']
         visible: true
-        text-equals-any: ['Connection interrupted. Waiting for the complete answer']
+        text-contains-any: ['Connection interrupted. Waiting for the complete answer']
       delivery-timeout-retry:
         # Conversation-scoped delivery timeout; never a generic error click.
         scope: document
@@ -132,6 +208,28 @@ settings:
           - 'button[data-testid*="regenerate"][data-testid*="error"]'
         visible: true
         text-contains-any: ['retry']
+      delivery-timeout-alert:
+        # The current renderer's plain-text Retry control (live-captured
+        # 2026-09-27) has neither aria-label nor data-testid, so it cannot
+        # be identified by button attributes the way delivery-timeout-retry
+        # above does. A prior attempt widened delivery-timeout-retry's own
+        # selectors to `[role="alert"] button`, but that signal's
+        # text-contains-any (["retry"]) is a substring match, so it would
+        # also fire on any unrelated role="alert" containing a
+        # differently-labelled Retry-ish button (e.g. "Retry upload") --
+        # and turn.py marks the one-shot retry attempted before the click
+        # runs, so that false-positive would permanently consume the
+        # attempt and starve a later, genuine timeout retry. Detect this
+        # specific alert by its own message text instead, which is exact
+        # and does not depend on the button's accessible name at all; the
+        # click side (gpt_auto_cdp.py's _RETRY_DELIVERY_TIMEOUT_FN) locates
+        # the exact-text "retry" button scoped to this same alert.
+        scope: document
+        selectors: ['[role="alert"]']
+        visible: true
+        text-contains-any:
+          - 'stream recovery polling timed out'
+          - 'resume stream unavailable'
       auth-required:
         scope: document
         selectors: ['[data-testid="login-button"]', '[data-testid="signup-button"]', 'input[type="email"]']
@@ -221,8 +319,8 @@ settings:
         # completion-control alone is unreliable (proven live to fire on a
         # genuinely-incomplete turn mid-stream, GP17 2026-08-16) and can
         # stay persistently true (not flap) through the whole
-        # response_stability_seconds window, so a second, independent
-        # corroborating signal is required. any-of-groups (not a single
+        # response_stability_seconds window, so a second independent
+        # corroborating fact is required. any-of-groups (not a single
         # flat all-of) so a future DOM change breaking one corroborating
         # signal degrades to the other surviving groups instead of making
         # response-complete permanently unsatisfiable -- exactly what
@@ -243,6 +341,14 @@ settings:
         # these two; add further groups only after their own live
         # validation, never speculatively.
         #
+        # The current standard renderer can omit the historical
+        # more-actions-menu while retaining Copy message after generation
+        # has ended.  completion-control + not-generating is therefore a
+        # validated alternate group: it still rejects a mid-generation
+        # completion-control-only snapshot, while allowing the current DOM
+        # variant to terminalize once the assistant text is stable and
+        # request-correlated.
+        #
         # GP34/code review 2026-08-17: unlike the standard pair, the
         # canvas pair's own two members were proven to co-fire at
         # canvas-panel-creation time (not completion) -- see
@@ -260,6 +366,8 @@ settings:
         all-of: [assistant-fresh, text-present]
         any-of-groups:
           - [completion-control, more-actions-menu]
+          - [completion-control, not-generating]
+          - [response-complete-status, not-generating]
           - [canvas-edit-control, canvas-open-editor-control, not-generating]
         # A stale delivery-error panel can remain visible after ChatGPT has
         # produced the replacement answer.  Fresh assistant correlation plus
@@ -267,4 +375,4 @@ settings:
         # error marker; auth-required remains a hard veto.
         none-of: [streaming-indicator, thinking-indicator, auth-required]
       response-failed:
-        any-of: [error-page, error-alert, auth-required]
+        any-of: [error-page, request-error-alert, network-error-alert, stream-cache-expired, conversation-load-failed, auth-required]

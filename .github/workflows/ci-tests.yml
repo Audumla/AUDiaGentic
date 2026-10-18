@@ -23,6 +23,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e ".[test]"
+          python -m playwright install --with-deps chromium
       - name: Run host suite (parallel)
         run: python -m pytest tests/unit tests/integration tests/e2e -n auto --dist loadfile -m "not docker and not requires_container and not mutates_host"
       - name: Run held-back serial tests (no_parallel)

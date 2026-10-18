@@ -11,9 +11,11 @@ from audiagentic.components.providers.adapters.gpt_auto.cdp.bridge import Bridge
 from audiagentic.components.providers.adapters.gpt_auto.chat import (
     ChatState,
     PersistentChat,
+    _ConversationLoadFailure,
     _unresolved_prompt_match,
     _unresolved_prompt_match_diagnostics,
 )
+from audiagentic.components.providers.adapters.gpt_auto.turn import _scalar_binding_metadata
 from audiagentic.components.providers.adapters.gpt_auto.config import GptAutoConfig
 from audiagentic.components.providers.adapters.gpt_auto.prompt_fingerprint import (
     PromptFingerprint,
@@ -21,6 +23,9 @@ from audiagentic.components.providers.adapters.gpt_auto.prompt_fingerprint impor
 from audiagentic.components.providers.adapters.gpt_auto.runtime import (
     GptAutoProviderRuntime,
     ProviderState,
+)
+from audiagentic.components.providers.adapters.gpt_auto.session_transport import (
+    GptAutoSessionTransport,
 )
 from audiagentic.components.providers.adapters.gpt_auto.snapshot import ChatMessageRef, ChatSnapshot
 from audiagentic.components.providers.adapters.gpt_auto.window_anchor import (
@@ -30,6 +35,58 @@ from audiagentic.components.providers.adapters.gpt_auto.window_anchor import (
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 from .test_greenfield_config_urls import valid_config
+
+
+@pytest.mark.asyncio
+async def test_unavailable_remote_cdp_never_starts_a_local_browser(monkeypatch) -> None:
+    value = valid_config()
+    value["cdp"]["endpoint"] = "http://192.0.2.10:9222"
+    value["browser"]["executable"] = r"C:\remote-browser-is-not-used.exe"
+    config = GptAutoConfig.from_dict(value)
+    runtime = GptAutoProviderRuntime(config)
+    launched = False
+
+    async def unavailable() -> bool:
+        return False
+
+    async def should_not_launch():
+        nonlocal launched
+        launched = True
+        raise AssertionError("remote CDP must not launch a local browser")
+
+    monkeypatch.setattr(runtime, "_cdp_available", unavailable)
+    monkeypatch.setattr(runtime._browser, "ensure_browser_for_cdp", should_not_launch)
+
+    with pytest.raises(RuntimeError, match="configured remote CDP endpoint is unavailable"):
+        await runtime.ensure_available()
+
+    assert not launched
+    assert runtime.state is ProviderState.FAILED
+
+
+@pytest.mark.asyncio
+async def test_cdp_readiness_probes_the_configured_endpoint(monkeypatch) -> None:
+    value = valid_config()
+    value["cdp"]["endpoint"] = "http://192.0.2.10:9444"
+    config = GptAutoConfig.from_dict(value)
+    runtime = GptAutoProviderRuntime(config)
+    calls = []
+
+    class _Writer:
+        def close(self) -> None:
+            pass
+
+        async def wait_closed(self) -> None:
+            pass
+
+    async def open_connection(host, port):
+        calls.append((host, port))
+        return object(), _Writer()
+
+    monkeypatch.setattr(runtime_module.asyncio, "open_connection", open_connection)
+
+    assert await runtime._cdp_available()
+    assert calls == [("192.0.2.10", 9444)]
 
 
 def test_unresolved_recovery_can_match_prompt_text_without_provider_message_id() -> None:
@@ -257,12 +314,165 @@ async def test_unresolved_checkpoint_persists_snapshot_counts() -> None:
         latest_assistant_text="answer",
         dom_signals=frozenset(),
         error_present=False,
+        error_alert_occurrences=(("baseline-alert", None),),
     )
 
     await chat.persist_unresolved_checkpoint(turn_id="turn-1", baseline=baseline)
 
     assert updates[-1]["unresolved-baseline-user-count"] == 3
     assert updates[-1]["unresolved-baseline-assistant-count"] == 2
+    assert updates[-1]["unresolved-baseline-error-alert-occurrences"] == [
+        {"digest": "baseline-alert", "ownerPromptMessageId": None}
+    ]
+
+
+def test_binding_metadata_projection_drops_structured_checkpoint_evidence() -> None:
+    metadata = {
+        "prompt-message-id": "prompt-1",
+        "submission-proven": True,
+        "prompt-text-digest": "f" * 64,
+        "unresolved-baseline-error-alert-occurrences": [
+            {"digest": "alert", "ownerPromptMessageId": None}
+        ],
+    }
+
+    assert _scalar_binding_metadata(metadata) == {
+        "prompt-message-id": "prompt-1",
+        "submission-proven": True,
+        "prompt-text-digest": "f" * 64,
+    }
+    assert metadata["unresolved-baseline-error-alert-occurrences"]
+
+
+@pytest.mark.asyncio
+async def test_request_metadata_sink_can_be_rebound_for_each_turn() -> None:
+    config = GptAutoConfig.from_dict(valid_config())
+    first_updates = []
+    second_updates = []
+    chat = PersistentChat(
+        ag_session_id="session-turn-sink",
+        project_name="project",
+        project_url="https://chatgpt.com/g/g-p-project/project",
+        runtime=SimpleNamespace(),
+        config=config,
+        binding_sink=lambda _update: None,
+        checkpoint_sink=first_updates.append,
+    )
+    baseline = ChatSnapshot(
+        url="https://chatgpt.com/g/g-p-project/c/provider-session",
+        composer_present=True,
+        composer_editable=True,
+        user_count=0,
+        assistant_count=0,
+        latest_user_text=None,
+        latest_assistant_id=None,
+        latest_assistant_text=None,
+        dom_signals=frozenset(),
+        error_present=False,
+    )
+
+    chat.set_request_metadata_sink(second_updates.append)
+    chat.mark_prompt_submitted("prompt-2", None, "second turn")
+    await chat.persist_unresolved_checkpoint(turn_id="turn-2", baseline=baseline)
+
+    assert first_updates[-1]["submission-proven"] is True
+    assert second_updates[-1]["submission-proven"] is True
+    assert second_updates[-1]["prompt-message-id"] == "prompt-2"
+
+
+@pytest.mark.asyncio
+async def test_fifo_turns_share_session_checkpoint_but_isolate_request_sinks() -> None:
+    config = GptAutoConfig.from_dict(valid_config())
+    session_updates = []
+    request_a_updates = []
+    request_b_updates = []
+    chat = PersistentChat(
+        ag_session_id="session-fifo-sinks",
+        project_name="project",
+        project_url="https://chatgpt.com/g/g-p-project/project",
+        runtime=SimpleNamespace(),
+        config=config,
+        binding_sink=lambda _update: None,
+        checkpoint_sink=session_updates.append,
+    )
+    baseline = ChatSnapshot(
+        url="https://chatgpt.com/g/g-p-project/c/provider-session",
+        composer_present=True,
+        composer_editable=True,
+        user_count=0,
+        assistant_count=0,
+        latest_user_text=None,
+        latest_assistant_id=None,
+        latest_assistant_text=None,
+        dom_signals=frozenset(),
+        error_present=False,
+    )
+
+    chat.set_request_metadata_sink(request_a_updates.append)
+    chat.mark_prompt_submitted("prompt-a", None, "turn A")
+    await chat.persist_unresolved_checkpoint(turn_id="turn-a", baseline=baseline)
+
+    chat.set_request_metadata_sink(request_b_updates.append)
+    chat.mark_submission_unresolved("turn B")
+    await chat.persist_unresolved_checkpoint(turn_id="turn-b", baseline=baseline)
+
+    assert len(session_updates) == 2
+    assert len(request_a_updates) == 1
+    assert len(request_b_updates) == 1
+    assert request_a_updates[0]["unresolved-turn-id"] == "turn-a"
+    assert request_b_updates[0]["unresolved-turn-id"] == "turn-b"
+    assert session_updates[-1]["unresolved-turn-id"] == "turn-b"
+
+
+def test_new_submission_fence_clears_predecessor_identity() -> None:
+    config = GptAutoConfig.from_dict(valid_config())
+    chat = PersistentChat(
+        ag_session_id="session-turn-fence",
+        project_name="project",
+        project_url="https://chatgpt.com/g/g-p-project/project",
+        runtime=SimpleNamespace(),
+        config=config,
+        binding_sink=lambda _update: None,
+    )
+
+    chat.mark_prompt_submitted("old-prompt", "old-assistant", "old turn")
+    chat.mark_assistant_observed("old-answer")
+    chat.mark_submission_unresolved("new turn")
+
+    metadata = chat.unresolved_metadata()
+    assert metadata["submission-proven"] is False
+    assert "prompt-message-id" not in metadata
+    assert "assistant-message-id" not in metadata
+    assert "assistant-before-message-id" not in metadata
+    assert metadata["prompt-text-digest"] == PromptFingerprint.from_text("new turn").digest
+
+
+@pytest.mark.asyncio
+async def test_terminal_checkpoint_clear_retains_submission_proof() -> None:
+    config = GptAutoConfig.from_dict(valid_config())
+    updates = []
+    chat = PersistentChat(
+        ag_session_id="session-terminal-proof",
+        project_name="project",
+        project_url="https://chatgpt.com/g/g-p-project/project",
+        runtime=SimpleNamespace(),
+        config=config,
+        binding_sink=lambda _update: None,
+        checkpoint_sink=updates.append,
+    )
+
+    chat.mark_prompt_submitted("prompt-1", "assistant-0", "turn")
+    chat.mark_assistant_observed("assistant-1")
+    await chat.persist_unresolved_clear()
+
+    assert updates[-1] == {
+        "unresolved-turn-pending": False,
+        "submission-proven": True,
+        "prompt-message-id": "prompt-1",
+        "assistant-message-id": "assistant-1",
+        "assistant-before-message-id": "assistant-0",
+        "prompt-text-digest": chat.unresolved_prompt_text_digest,
+    }
 
 
 def test_explicit_unresolved_marker_remains_authoritative() -> None:
@@ -283,6 +493,84 @@ def test_explicit_unresolved_marker_remains_authoritative() -> None:
 
     assert chat.unresolved_turn_pending is True
     assert chat.unresolved_metadata()["unresolved-turn-pending"] is True
+
+
+def test_rehydrated_chat_hydrates_preferred_cdp_target_id() -> None:
+    config = GptAutoConfig.from_dict(valid_config())
+    chat = PersistentChat(
+        ag_session_id="session-target-rehydrate",
+        project_name="project",
+        project_url="https://chatgpt.com/g/g-p-project/project",
+        runtime=SimpleNamespace(),
+        config=config,
+        binding_sink=lambda _update: None,
+        provider_session_id="provider-session",
+        chat_url="https://chatgpt.com/g/g-p-project/c/provider-session",
+        resume_provider_metadata={"target-id": "target-original"},
+    )
+
+    assert chat.target_id == "target-original"
+    assert chat.unresolved_metadata()["target-id"] == "target-original"
+
+
+@pytest.mark.asyncio
+async def test_rehydrated_transport_refreshes_target_binding_without_prompt() -> None:
+    updates = []
+
+    async def binding_sink(update) -> None:
+        updates.append(update)
+
+    async def open_chat() -> None:
+        return None
+
+    chat = SimpleNamespace(
+        open=open_chat,
+        project_url="https://chatgpt.com/g/g-p-project/project",
+        unresolved_metadata=lambda: {"target-id": "target-fallback"},
+        provider_session_id="provider-session",
+        chat_url="https://chatgpt.com/g/g-p-project/c/provider-session",
+        target_id="target-fallback",
+        binding_sink=binding_sink,
+        ag_session_id="session-target-refresh",
+        set_page_mutation_owner_probe=lambda _probe: None,
+    )
+
+    result = await GptAutoSessionTransport(chat).open()
+
+    assert result.provider_session_ref is not None
+    assert result.provider_session_ref.value == "provider-session"
+    assert len(updates) == 1
+    assert updates[0].metadata["target-id"] == "target-fallback"
+
+
+@pytest.mark.asyncio
+async def test_transport_maps_project_readiness_timeout_to_structured_provider_error() -> None:
+    from audiagentic.components.providers.adapters.gpt_auto.gpt_auto_cdp import (
+        ProjectReadinessError,
+    )
+
+    readiness = ProjectReadinessError("project route did not materialize")
+    readiness.details = {
+        "reason": "project-route-not-materialized",
+        "expected-project-id": "g-p-project",
+    }
+
+    async def open_chat() -> None:
+        raise readiness
+
+    chat = SimpleNamespace(
+        open=open_chat,
+        ag_session_id="session-project-readiness",
+        set_page_mutation_owner_probe=lambda _probe: None,
+    )
+
+    with pytest.raises(AudiaGenticError) as raised:
+        await GptAutoSessionTransport(chat).open()
+
+    assert raised.value.code == "EXT-GPTAUTO-004"
+    assert raised.value.details["failure-stage"] == "readiness"
+    assert raised.value.details["submission-proven"] is False
+    assert raised.value.details["reason"] == "project-route-not-materialized"
 
 
 class _EventBridge:
@@ -606,6 +894,7 @@ async def test_unresolved_recovery_reports_missing_completion_evidence() -> None
     assert error.value.details["recovery-reason"] == "completion-evidence-missing"
     assert error.value.details["recovery-details"]["required-signal"] == (
         "completion-control+more-actions-menu"
+        "-or-completion-control+not-generating"
         "-or-canvas-edit-control+canvas-open-editor-control+not-generating"
     )
 
@@ -824,6 +1113,26 @@ def test_provider_quiescent_ignores_stale_stop_control_after_completion() -> Non
         latest_assistant_text="done",
     )
 
+    assert provider_quiescent(snapshot) is True
+
+
+def test_provider_quiescent_treats_document_alert_as_advisory() -> None:
+    from audiagentic.components.providers.adapters.gpt_auto.chat import provider_quiescent
+    from audiagentic.components.providers.adapters.gpt_auto.snapshot import ChatSnapshot
+
+    snapshot = ChatSnapshot(
+        url="https://chatgpt.com/g/g-p-project/project",
+        composer_present=True,
+        composer_editable=True,
+        generating=False,
+        error_present=False,
+        dom_signals=frozenset({"error-alert"}),
+        user_count=1,
+        assistant_count=1,
+        latest_assistant_id="assistant-1",
+        latest_user_text="request",
+        latest_assistant_text="done",
+    )
     assert provider_quiescent(snapshot) is True
 
 
@@ -1380,6 +1689,36 @@ async def test_find_conversation_page_restores_window_before_selecting_retained_
 
 
 @pytest.mark.asyncio
+async def test_find_conversation_page_falls_back_to_exact_tab_in_prior_window(
+    monkeypatch,
+) -> None:
+    """A restart may leave the retained conversation outside the new anchor window."""
+    runtime = GptAutoProviderRuntime(GptAutoConfig.from_dict(valid_config()))
+    runtime.state = ProviderState.AVAILABLE
+    runtime._dedicated_window_id = 7
+
+    class _Bridge:
+        async def call(self, method, params=None):
+            assert method == "list_pages"
+            return [
+                {
+                    "pageHandle": "retained-prior-window",
+                    "targetId": "target-retained",
+                    "windowId": 99,
+                    "url": "https://chatgpt.com/g/g-p-project/c/provider-session",
+                }
+            ]
+
+    runtime._bridge = _Bridge()  # type: ignore[assignment]
+    monkeypatch.setattr(runtime, "ensure_dedicated_window_anchor", lambda: asyncio.sleep(0, result="anchor"))
+
+    page = await runtime.find_conversation_page("provider-session")
+
+    assert page is not None
+    assert page["pageHandle"] == "retained-prior-window"
+
+
+@pytest.mark.asyncio
 async def test_find_conversation_page_does_not_trust_recycled_target_id(
     monkeypatch,
 ) -> None:
@@ -1468,6 +1807,684 @@ async def test_reconcile_proves_quiescence_before_ready(monkeypatch) -> None:
     assert chat.state is ChatState.READY
     assert chat.page_handle == "retained"
     assert chat.target_id == "target-retained"
+
+
+@pytest.mark.asyncio
+async def test_reconcile_replaces_retained_conversation_load_error_without_resubmit() -> None:
+    """A broken retained renderer is replaced without replaying the prompt."""
+    config = GptAutoConfig.from_dict(valid_config())
+    chat_url = "https://chatgpt.com/g/g-p-project/c/provider-session"
+    retained = {"pageHandle": "retained-error", "targetId": "error-target", "url": chat_url}
+    replacement = {"pageHandle": "replacement", "targetId": "replacement-target", "url": chat_url}
+    owned: set[str] = set()
+    released: list[str] = []
+    navigated: list[str] = []
+    closed: list[str] = []
+
+    class _Browser:
+        async def page_by_handle(self, handle):
+            return SimpleNamespace(
+                handle=handle,
+                target_id="error-target" if handle == retained["pageHandle"] else "replacement-target",
+                url=chat_url,
+            )
+
+        async def snapshot(self, page, *, signals=None):
+            return {
+                "url": chat_url,
+                "composerPresent": page.handle != retained["pageHandle"],
+                "composerEditable": page.handle != retained["pageHandle"],
+                "userCount": 0,
+                "assistantCount": 0,
+                "domSignals": (
+                    {"conversation-load-failed": True}
+                    if page.handle == retained["pageHandle"]
+                    else {}
+                ),
+                "errorPresent": page.handle == retained["pageHandle"],
+            }
+
+    class _Bridge:
+        async def call(self, method, params=None, **kwargs):
+            if method == "navigate":
+                navigated.append(str((params or {}).get("url")))
+                return None
+            if method == "close_page":
+                closed.append(str((params or {}).get("pageHandle")))
+                return None
+            if method == "list_pages":
+                return [retained]
+            raise AssertionError(method)
+
+    async def find_page(_provider_session_id, *, preferred_target_id=None):
+        return retained
+
+    async def create_page() -> str:
+        return replacement["pageHandle"]
+
+    def claim(_chat, handle: str) -> bool:
+        if handle in owned:
+            return False
+        owned.add(handle)
+        return True
+
+    def release(_chat, handle: str) -> None:
+        released.append(handle)
+        owned.discard(handle)
+
+    runtime = SimpleNamespace(
+        gpt_browser=_Browser(),
+        bridge=_Bridge(),
+        find_conversation_page=find_page,
+        create_chat_page=create_page,
+        claim_page=claim,
+        release_page=release,
+    )
+    chat = PersistentChat(
+        ag_session_id="session-load-error-recovery",
+        project_name="project",
+        project_url="https://chatgpt.com/g/g-p-project/project",
+        runtime=runtime,
+        config=config,
+        binding_sink=lambda _update: None,
+        provider_session_id="provider-session",
+        chat_url=chat_url,
+    )
+    chat.state = ChatState.RECOVERING
+    chat.unresolved_turn_pending = True
+    chat.defer_unresolved_reconciliation()
+
+    await chat.reconcile([retained])
+
+    assert chat.page_handle == retained["pageHandle"]
+    assert retained["pageHandle"] not in released
+    assert navigated == []
+    assert closed == []
+    # Deferred recovery keeps the consumed budget until the unresolved turn
+    # reaches terminal cleanup; a delayed provider load error must not reopen
+    # another full replacement budget after restart.
+    assert chat._conversation_load_recovery_attempts == 0
+
+
+@pytest.mark.asyncio
+async def test_ensure_ready_does_not_treat_repeated_load_error_inspection_as_progress() -> None:
+    """A bound submitted load-error page remains observation-only."""
+    config = GptAutoConfig.from_dict(valid_config())
+    chat_url = "https://chatgpt.com/g/g-p-project/c/provider-session"
+    failed = ChatSnapshot(
+        url=chat_url,
+        composer_present=False,
+        composer_editable=False,
+        user_count=0,
+        assistant_count=0,
+        latest_assistant_id=None,
+        latest_user_text=None,
+        latest_assistant_text=None,
+        dom_signals=frozenset({"conversation-load-failed"}),
+        error_present=True,
+    )
+    chat = PersistentChat(
+        ag_session_id="session-load-error-admission",
+        project_name="project",
+        project_url="https://chatgpt.com/g/g-p-project/project",
+        runtime=SimpleNamespace(),
+        config=config,
+        binding_sink=lambda _update: None,
+        provider_session_id="provider-session",
+        chat_url=chat_url,
+        resume_provider_metadata={"conversation-load-recovery-attempts": 2},
+    )
+    chat.page_handle = "retained-error"
+    chat.state = ChatState.RECOVERING
+    chat.unresolved_turn_pending = True
+    chat.defer_unresolved_reconciliation()
+    replacements: list[ChatSnapshot | None] = []
+
+    async def validate_binding() -> None:
+        return None
+
+    async def retained_snapshot() -> ChatSnapshot:
+        return failed
+
+    async def exhausted_replacement(snapshot: ChatSnapshot | None) -> bool:
+        replacements.append(snapshot)
+        return False
+
+    chat._validate_page_binding = validate_binding  # type: ignore[method-assign]
+    chat._retained_page_snapshot = retained_snapshot  # type: ignore[method-assign]
+    chat._replace_load_failed_page = exhausted_replacement  # type: ignore[method-assign]
+
+    await chat.ensure_ready()
+
+    assert replacements == [failed]
+    assert chat.state is ChatState.READY
+
+
+@pytest.mark.asyncio
+async def test_ensure_ready_preserves_replacement_load_error_dom_evidence() -> None:
+    """A replacement tab that also fails stays eligible for safe unsent retry."""
+    config = GptAutoConfig.from_dict(valid_config())
+    chat_url = "https://chatgpt.com/g/g-p-project/c/provider-session"
+    failed = ChatSnapshot(
+        url=chat_url,
+        composer_present=False,
+        composer_editable=False,
+        user_count=0,
+        assistant_count=0,
+        latest_assistant_id=None,
+        latest_user_text=None,
+        latest_assistant_text=None,
+        dom_signals=frozenset({"conversation-load-failed"}),
+        error_present=True,
+    )
+    chat = PersistentChat(
+        ag_session_id="session-load-error-replacement",
+        project_name="project",
+        project_url="https://chatgpt.com/g/g-p-project/project",
+        runtime=SimpleNamespace(),
+        config=config,
+        binding_sink=lambda _update: None,
+        provider_session_id="provider-session",
+        chat_url=chat_url,
+        resume_provider_metadata={"conversation-load-recovery-attempts": 0},
+    )
+    chat.page_handle = "retained-error"
+
+    async def validate_binding() -> None:
+        return None
+
+    async def retained_snapshot() -> ChatSnapshot:
+        return failed
+
+    async def failed_replacement(_snapshot: ChatSnapshot | None) -> bool:
+        raise _ConversationLoadFailure(failed)
+
+    chat._validate_page_binding = validate_binding  # type: ignore[method-assign]
+    chat._retained_page_snapshot = retained_snapshot  # type: ignore[method-assign]
+    chat._replace_load_failed_page = failed_replacement  # type: ignore[method-assign]
+
+    with pytest.raises(AudiaGenticError) as raised:
+        await chat.ensure_ready()
+
+    assert raised.value.code == "EXT-GPTAUTO-005"
+    assert raised.value.details["dom-signals"] == ["conversation-load-failed"]
+    assert raised.value.details["submission-proven"] is False
+    assert raised.value.details["submission-ambiguous"] is False
+    assert raised.value.details["submission-attempted"] is False
+    assert chat.state is ChatState.FAILED
+
+
+@pytest.mark.asyncio
+async def test_conversation_load_recovery_budget_survives_chat_reconstruction() -> None:
+    """A failed replacement consumes durable budget across new chat objects."""
+    config = GptAutoConfig.from_dict(valid_config())
+    checkpointed: list[dict[str, object]] = []
+    failure = ChatSnapshot(
+        url="https://chatgpt.com/g/g-p-project/c/provider-session",
+        composer_present=False,
+        composer_editable=False,
+        user_count=0,
+        assistant_count=0,
+        latest_assistant_id=None,
+        latest_user_text=None,
+        latest_assistant_text=None,
+        dom_signals=frozenset({"conversation-load-failed"}),
+        error_present=True,
+    )
+    runtime = SimpleNamespace()
+
+    async def checkpoint(metadata: dict[str, object]) -> None:
+        checkpointed.append(dict(metadata))
+
+    first = PersistentChat(
+        ag_session_id="session-load-error-budget",
+        project_name="project",
+        project_url="https://chatgpt.com/g/g-p-project/project",
+        runtime=runtime,
+        config=config,
+        binding_sink=lambda _update: None,
+        checkpoint_sink=checkpoint,
+        provider_session_id="provider-session",
+        chat_url=failure.url,
+        resume_provider_metadata={"conversation-load-recovery-attempts": 1},
+    )
+
+    async def fail_to_create_page() -> str:
+        raise RuntimeError("replacement unavailable")
+
+    first._create_recovery_page = fail_to_create_page  # type: ignore[method-assign]
+    with pytest.raises(RuntimeError, match="replacement unavailable"):
+        await first._replace_load_failed_page(failure)
+    assert checkpointed[-1]["conversation-load-recovery-attempts"] == 2
+
+    second = PersistentChat(
+        ag_session_id="session-load-error-budget",
+        project_name="project",
+        project_url="https://chatgpt.com/g/g-p-project/project",
+        runtime=runtime,
+        config=config,
+        binding_sink=lambda _update: None,
+        checkpoint_sink=checkpoint,
+        provider_session_id="provider-session",
+        chat_url=failure.url,
+        resume_provider_metadata=checkpointed[-1],
+    )
+    assert second._conversation_load_recovery_attempts == 2
+    assert await second._replace_load_failed_page(failure) is False
+    healthy = replace(failure, dom_signals=frozenset(), error_present=False)
+    assert await second._replace_load_failed_page(healthy) is False
+    assert second._conversation_load_recovery_attempts == 2
+
+
+@pytest.mark.asyncio
+async def test_deferred_recovery_budget_survives_delayed_load_error() -> None:
+    """A loadable replacement must not reset budget before a later error."""
+    config = GptAutoConfig.from_dict(valid_config())
+    chat_url = "https://chatgpt.com/g/g-p-project/c/provider-session"
+    checkpointed: list[dict[str, object]] = []
+    runtime = SimpleNamespace()
+
+    async def checkpoint(metadata: dict[str, object]) -> None:
+        checkpointed.append(dict(metadata))
+
+    chat = PersistentChat(
+        ag_session_id="session-delayed-load-error",
+        project_name="project",
+        project_url="https://chatgpt.com/g/g-p-project/project",
+        runtime=runtime,
+        config=config,
+        binding_sink=lambda _update: None,
+        checkpoint_sink=checkpoint,
+        provider_session_id="provider-session",
+        chat_url=chat_url,
+    )
+    chat.unresolved_turn_pending = True
+    chat.defer_unresolved_reconciliation()
+
+    healthy = ChatSnapshot(
+        url=chat_url,
+        composer_present=True,
+        composer_editable=True,
+        user_count=1,
+        assistant_count=0,
+        latest_assistant_id=None,
+        latest_user_text="prompt",
+        latest_assistant_text=None,
+        dom_signals=frozenset({"stop-control"}),
+        error_present=False,
+        generating=True,
+    )
+    failed = replace(
+        healthy,
+        composer_present=False,
+        composer_editable=False,
+        dom_signals=frozenset({"conversation-load-failed"}),
+        error_present=True,
+    )
+    replacement_calls = 0
+
+    async def create_recovery_page() -> str:
+        nonlocal replacement_calls
+        replacement_calls += 1
+        return f"replacement-{replacement_calls}"
+
+    async def navigate(*_args, **_kwargs) -> None:
+        return None
+
+    async def snapshot(*_args, **_kwargs) -> ChatSnapshot:
+        return healthy
+
+    chat._create_recovery_page = create_recovery_page  # type: ignore[method-assign]
+    chat.runtime.bridge = SimpleNamespace(call=navigate)
+    chat.snapshot = snapshot  # type: ignore[method-assign]
+    chat._claim_page = lambda _handle: True  # type: ignore[method-assign]
+
+    assert await chat._replace_load_failed_page(failed) is True
+    assert chat._conversation_load_recovery_attempts == 0
+    assert not checkpointed or checkpointed[-1].get("conversation-load-recovery-attempts", 0) == 0
+
+
+@pytest.mark.asyncio
+async def test_loadable_but_blank_replacement_does_not_clear_recovery_budget() -> None:
+    """A URL-only replacement is not enough to reset recovery attempts."""
+    config = GptAutoConfig.from_dict(valid_config())
+    chat_url = "https://chatgpt.com/g/g-p-project/c/provider-session"
+    chat = PersistentChat(
+        ag_session_id="session-blank-replacement",
+        project_name="project",
+        project_url="https://chatgpt.com/g/g-p-project/project",
+        runtime=SimpleNamespace(),
+        config=config,
+        binding_sink=lambda _update: None,
+        provider_session_id="provider-session",
+        chat_url=chat_url,
+    )
+    failed = ChatSnapshot(
+        url=chat_url,
+        composer_present=False,
+        composer_editable=False,
+        user_count=0,
+        assistant_count=0,
+        latest_assistant_id=None,
+        latest_user_text=None,
+        latest_assistant_text=None,
+        dom_signals=frozenset({"conversation-load-failed"}),
+        error_present=True,
+    )
+    blank = replace(failed, dom_signals=frozenset(), error_present=False)
+    chat._create_recovery_page = lambda: asyncio.sleep(0, result="replacement")  # type: ignore[method-assign]
+    chat._claim_page = lambda _handle: True  # type: ignore[method-assign]
+    chat.runtime.release_page = lambda _chat, _handle: None
+    chat.runtime.bridge = SimpleNamespace(call=lambda *args, **kwargs: asyncio.sleep(0))
+    chat.snapshot = lambda **kwargs: asyncio.sleep(0, result=blank)  # type: ignore[method-assign]
+    chat.wait_quiescent = lambda **kwargs: asyncio.sleep(0, result=blank)  # type: ignore[method-assign]
+
+    assert await chat._replace_load_failed_page(failed) is True
+    assert chat._conversation_load_recovery_attempts == 1
+
+
+@pytest.mark.asyncio
+async def test_prefer_active_conversation_page_preserves_healthy_durable_target() -> None:
+    """DOM richness must not replace a healthy durable tab after restart."""
+    config = GptAutoConfig.from_dict(valid_config())
+    chat_url = "https://chatgpt.com/g/g-p-project/c/provider-session"
+    pages = [
+        {
+            "pageHandle": "managed-rich",
+            "targetId": "managed-target",
+            "windowId": 7,
+            "url": chat_url,
+        },
+        {
+            "pageHandle": "prior-durable",
+            "targetId": "durable-target",
+            "windowId": 3,
+            "url": chat_url,
+        },
+    ]
+
+    class _Browser:
+        async def page_by_handle(self, handle):
+            return SimpleNamespace(handle=handle)
+
+        async def snapshot(self, page, *, signals=None):
+            count = 4 if page.handle == "managed-rich" else 1
+            return {
+                "url": chat_url,
+                "composerPresent": True,
+                "userCount": count,
+                "assistantCount": count,
+                "domSignals": {},
+            }
+
+    class _Bridge:
+        async def call(self, method, params=None, **kwargs):
+            assert method == "list_pages"
+            return pages
+
+    runtime = SimpleNamespace(
+        gpt_browser=_Browser(),
+        bridge=_Bridge(),
+        _page_owners={"managed-rich": "other-session"},
+        claim_page=lambda _chat, _handle: True,
+        release_page=lambda _chat, _handle: None,
+    )
+    chat = PersistentChat(
+        ag_session_id="session-durable-preference",
+        project_name="project",
+        project_url="https://chatgpt.com/g/g-p-project/project",
+        runtime=runtime,
+        config=config,
+        binding_sink=lambda _update: None,
+        provider_session_id="provider-session",
+        chat_url=chat_url,
+    )
+    chat.page_handle = "prior-durable"
+    chat.target_id = "durable-target"
+
+    await chat._prefer_active_conversation_page()
+
+    assert chat.page_handle == "prior-durable"
+    assert chat.target_id == "durable-target"
+
+
+@pytest.mark.asyncio
+async def test_resume_open_attaches_to_generating_retained_tab_without_waiting_quiescence() -> None:
+    """Restart recovery must attach while the provider is still reasoning."""
+    config = GptAutoConfig.from_dict(valid_config())
+    chat_url = "https://chatgpt.com/g/g-p-project/c/provider-session"
+    retained = {"pageHandle": "retained-generating", "targetId": "generating-target", "url": chat_url}
+
+    class _Browser:
+        async def page_by_handle(self, handle):
+            return SimpleNamespace(handle=handle, target_id="generating-target", url=chat_url)
+
+        async def snapshot(self, _page, *, signals=None):
+            return {
+                "url": chat_url,
+                "composerPresent": True,
+                "composerEditable": True,
+                "userCount": 1,
+                "assistantCount": 0,
+                "latestUserId": "prompt-id",
+                "domSignals": {"stop-control": True},
+                "errorPresent": False,
+                "generating": True,
+            }
+
+    class _Bridge:
+        async def call(self, method, params=None, **kwargs):
+            assert method == "list_pages"
+            return [retained]
+
+    async def find_page(_provider_session_id, *, preferred_target_id=None):
+        return retained
+
+    runtime = SimpleNamespace(
+        gpt_browser=_Browser(),
+        bridge=_Bridge(),
+        find_conversation_page=find_page,
+        ensure_available=lambda: asyncio.sleep(0),
+        register_chat=lambda _chat: asyncio.sleep(0),
+        claim_conversation=lambda _chat, _provider_session_id: True,
+        claim_page=lambda _chat, _handle: True,
+        release_page=lambda _chat, _handle: None,
+    )
+    chat = PersistentChat(
+        ag_session_id="session-generating-recovery",
+        project_name="project",
+        project_url="https://chatgpt.com/g/g-p-project/project",
+        runtime=runtime,
+        config=config,
+        binding_sink=lambda _update: None,
+        provider_session_id="provider-session",
+        chat_url=chat_url,
+    )
+    chat.unresolved_turn_pending = True
+    chat.defer_unresolved_reconciliation()
+
+    async def must_not_wait(*, allow_recovering=False):
+        raise AssertionError("restart recovery must not wait for provider quiescence")
+
+    chat.wait_quiescent = must_not_wait  # type: ignore[method-assign]
+
+    await chat.open()
+
+    assert chat.state is ChatState.READY
+    assert chat.page_handle == retained["pageHandle"]
+
+
+@pytest.mark.asyncio
+async def test_find_conversation_page_prefers_healthy_duplicate_over_load_error(monkeypatch) -> None:
+    """A later restart must select the healthy duplicate, not the broken tab."""
+    runtime = GptAutoProviderRuntime(GptAutoConfig.from_dict(valid_config()))
+    runtime.state = ProviderState.AVAILABLE
+    runtime._dedicated_window_id = 7
+    pages = [
+        {"pageHandle": "error-page", "targetId": "error-target", "windowId": 7,
+         "url": "https://chatgpt.com/g/g-p-project/c/provider-session"},
+        {"pageHandle": "healthy-page", "targetId": "healthy-target", "windowId": 7,
+         "url": "https://chatgpt.com/g/g-p-project/c/provider-session"},
+    ]
+
+    class _Bridge:
+        async def call(self, method, params=None):
+            assert method == "list_pages"
+            return pages
+
+    class _Browser:
+        async def page_by_handle(self, handle):
+            return SimpleNamespace(handle=handle)
+
+        async def snapshot(self, page, *, signals=None):
+            return {"url": pages[0]["url"], "domSignals": {
+                "conversation-load-failed": page.handle == "error-page"
+            }}
+
+    runtime._bridge = _Bridge()  # type: ignore[assignment]
+    runtime._gpt_browser = _Browser()  # type: ignore[assignment]
+    monkeypatch.setattr(
+        runtime,
+        "ensure_dedicated_window_anchor",
+        lambda: asyncio.sleep(0, result="anchor"),
+    )
+
+    selected = await runtime.find_conversation_page("provider-session")
+
+    assert selected is not None
+    assert selected["pageHandle"] == "healthy-page"
+
+
+@pytest.mark.asyncio
+async def test_find_conversation_page_does_not_mask_prior_window_healthy_tab(monkeypatch) -> None:
+    """A failed managed tab cannot hide a healthy exact conversation elsewhere."""
+    runtime = GptAutoProviderRuntime(GptAutoConfig.from_dict(valid_config()))
+    runtime.state = ProviderState.AVAILABLE
+    runtime._dedicated_window_id = 7
+    pages = [
+        {"pageHandle": "managed-error", "targetId": "managed-target", "windowId": 7,
+         "url": "https://chatgpt.com/g/g-p-project/c/provider-session"},
+        {"pageHandle": "prior-healthy", "targetId": "prior-target", "windowId": 3,
+         "url": "https://chatgpt.com/g/g-p-project/c/provider-session"},
+    ]
+
+    class _Bridge:
+        async def call(self, method, params=None):
+            assert method == "list_pages"
+            return pages
+
+    class _Browser:
+        async def page_by_handle(self, handle):
+            return SimpleNamespace(handle=handle)
+
+        async def snapshot(self, page, *, signals=None):
+            return {"url": pages[0]["url"], "domSignals": {
+                "conversation-load-failed": page.handle == "managed-error"
+            }}
+
+    runtime._bridge = _Bridge()  # type: ignore[assignment]
+    runtime._gpt_browser = _Browser()  # type: ignore[assignment]
+    monkeypatch.setattr(
+        runtime,
+        "ensure_dedicated_window_anchor",
+        lambda: asyncio.sleep(0, result="anchor"),
+    )
+
+    selected = await runtime.find_conversation_page("provider-session")
+
+    assert selected is not None
+    assert selected["pageHandle"] == "prior-healthy"
+
+
+@pytest.mark.asyncio
+async def test_find_conversation_page_ranks_healthy_tab_over_unknown_managed_tab(monkeypatch) -> None:
+    """A failed CDP probe is unknown and cannot mask positive prior-window health."""
+    runtime = GptAutoProviderRuntime(GptAutoConfig.from_dict(valid_config()))
+    runtime.state = ProviderState.AVAILABLE
+    runtime._dedicated_window_id = 7
+    pages = [
+        {"pageHandle": "managed-unknown", "targetId": "managed-target", "windowId": 7,
+         "url": "https://chatgpt.com/g/g-p-project/c/provider-session"},
+        {"pageHandle": "prior-healthy", "targetId": "prior-target", "windowId": 3,
+         "url": "https://chatgpt.com/g/g-p-project/c/provider-session"},
+    ]
+
+    class _Bridge:
+        async def call(self, method, params=None):
+            assert method == "list_pages"
+            return pages
+
+    class _Browser:
+        async def page_by_handle(self, handle):
+            return SimpleNamespace(handle=handle)
+
+        async def snapshot(self, page, *, signals=None):
+            if page.handle == "managed-unknown":
+                raise RuntimeError("stale CDP target")
+            return {
+                "url": pages[1]["url"],
+                "composerPresent": True,
+                "domSignals": {},
+            }
+
+    runtime._bridge = _Bridge()  # type: ignore[assignment]
+    runtime._gpt_browser = _Browser()  # type: ignore[assignment]
+    monkeypatch.setattr(
+        runtime,
+        "ensure_dedicated_window_anchor",
+        lambda: asyncio.sleep(0, result="anchor"),
+    )
+
+    selected = await runtime.find_conversation_page("provider-session")
+
+    assert selected is not None
+    assert selected["pageHandle"] == "prior-healthy"
+
+
+@pytest.mark.asyncio
+async def test_find_conversation_page_prefers_healthy_durable_target_across_windows(monkeypatch) -> None:
+    """A healthy durable target remains preferred even after window recreation."""
+    runtime = GptAutoProviderRuntime(GptAutoConfig.from_dict(valid_config()))
+    runtime.state = ProviderState.AVAILABLE
+    runtime._dedicated_window_id = 7
+    pages = [
+        {"pageHandle": "managed-duplicate", "targetId": "managed-target", "windowId": 7,
+         "url": "https://chatgpt.com/g/g-p-project/c/provider-session"},
+        {"pageHandle": "prior-durable", "targetId": "durable-target", "windowId": 3,
+         "url": "https://chatgpt.com/g/g-p-project/c/provider-session"},
+    ]
+
+    class _Bridge:
+        async def call(self, method, params=None):
+            assert method == "list_pages"
+            return pages
+
+    class _Browser:
+        async def page_by_handle(self, handle):
+            return SimpleNamespace(handle=handle)
+
+        async def snapshot(self, page, *, signals=None):
+            return {
+                "url": pages[0]["url"],
+                "composerPresent": True,
+                "domSignals": {},
+            }
+
+    runtime._bridge = _Bridge()  # type: ignore[assignment]
+    runtime._gpt_browser = _Browser()  # type: ignore[assignment]
+    monkeypatch.setattr(
+        runtime,
+        "ensure_dedicated_window_anchor",
+        lambda: asyncio.sleep(0, result="anchor"),
+    )
+
+    selected = await runtime.find_conversation_page(
+        "provider-session",
+        preferred_target_id="durable-target",
+    )
+
+    assert selected is not None
+    assert selected["pageHandle"] == "prior-durable"
 
 
 @pytest.mark.asyncio
@@ -1734,3 +2751,204 @@ async def test_ensure_dedicated_window_anchor_is_not_a_dashboard_refresh_path(mo
     result = await runtime.ensure_dedicated_window_anchor()
     assert result == "anchor"
     assert order == ["bridge-list_pages"]
+
+
+@pytest.mark.asyncio
+async def test_refresh_bound_conversation_refuses_revoked_owner_before_navigation() -> None:
+    config = GptAutoConfig.from_dict(valid_config())
+    navigated: list[str] = []
+
+    class _Browser:
+        async def page_by_handle(self, handle):
+            return SimpleNamespace(
+                handle=handle,
+                target_id="target-1",
+                url="https://chatgpt.com/g/g-p-project/c/provider-session",
+            )
+
+        async def navigate(self, _page, url):
+            navigated.append(url)
+
+    runtime = SimpleNamespace(gpt_browser=_Browser(), bridge=SimpleNamespace())
+    chat = PersistentChat(
+        ag_session_id="session-owner-fence",
+        project_name="project",
+        project_url="https://chatgpt.com/g/g-p-project/project",
+        runtime=runtime,
+        config=config,
+        binding_sink=lambda _update: None,
+        provider_session_id="provider-session",
+        chat_url="https://chatgpt.com/g/g-p-project/c/provider-session",
+    )
+    chat.page_handle = "page-1"
+    chat.target_id = "target-1"
+    chat.state = ChatState.BUSY
+    chat.set_page_mutation_owner_probe(lambda: False)
+
+    assert await chat.refresh_bound_conversation(request_id="req-terminal") is False
+    assert navigated == []
+    assert chat._unresolved_recovery_reason == "refresh-owner-not-live"
+
+
+@pytest.mark.asyncio
+async def test_load_failed_replacement_refuses_revoked_owner_before_page_creation() -> None:
+    config = GptAutoConfig.from_dict(valid_config())
+    runtime = SimpleNamespace(bridge=SimpleNamespace())
+    chat = PersistentChat(
+        ag_session_id="session-replacement-owner-fence",
+        project_name="project",
+        project_url="https://chatgpt.com/g/g-p-project/project",
+        runtime=runtime,
+        config=config,
+        binding_sink=lambda _update: None,
+        provider_session_id="provider-session",
+        chat_url="https://chatgpt.com/g/g-p-project/c/provider-session",
+    )
+    chat.page_handle = "page-1"
+    chat.state = ChatState.RECOVERING
+    chat.set_page_mutation_owner_probe(lambda: False)
+    chat._conversation_load_recovery_enabled = lambda: True  # type: ignore[method-assign]
+    chat._conversation_load_recovery_allowed = lambda: True  # type: ignore[method-assign]
+    chat._load_failure_requires_retained_observation = lambda: False  # type: ignore[method-assign]
+    chat._prefer_active_conversation_page = lambda: asyncio.sleep(0)  # type: ignore[method-assign]
+
+    created: list[bool] = []
+
+    async def create_page() -> str:
+        created.append(True)
+        return "replacement-page"
+
+    chat._create_recovery_page = create_page  # type: ignore[method-assign]
+    snapshot = ChatSnapshot(
+        url="https://chatgpt.com/g/g-p-project/c/provider-session",
+        composer_present=False,
+        composer_editable=False,
+        user_count=1,
+        assistant_count=0,
+        latest_user_text="prompt",
+        latest_assistant_id=None,
+        latest_assistant_text=None,
+        dom_signals=frozenset({"conversation-load-failed"}),
+        error_present=True,
+    )
+
+    assert await chat._replace_load_failed_page(snapshot) is False
+    assert created == []
+    assert chat._unresolved_recovery_reason == "conversation-load-owner-not-live"
+
+
+@pytest.mark.asyncio
+async def test_reconcile_refuses_recovery_page_creation_without_live_owner() -> None:
+    config = GptAutoConfig.from_dict(valid_config())
+    created: list[bool] = []
+
+    async def find_conversation_page(*_args, **_kwargs):
+        return None
+
+    async def create_chat_page():
+        created.append(True)
+        return "recovery-page"
+
+    runtime = SimpleNamespace(
+        bridge=SimpleNamespace(),
+        find_conversation_page=find_conversation_page,
+        create_chat_page=create_chat_page,
+    )
+    chat = PersistentChat(
+        ag_session_id="session-reconcile-owner-fence",
+        project_name="project",
+        project_url="https://chatgpt.com/g/g-p-project/project",
+        runtime=runtime,
+        config=config,
+        binding_sink=lambda _update: None,
+        provider_session_id="provider-session",
+        chat_url="https://chatgpt.com/g/g-p-project/c/provider-session",
+    )
+    chat.state = ChatState.RECOVERING
+    chat.set_page_mutation_owner_probe(lambda: False)
+
+    await chat.reconcile([])
+
+    assert created == []
+    assert chat.page_handle is None
+    assert chat._unresolved_recovery_reason == "reconcile-owner-not-live"
+
+
+@pytest.mark.asyncio
+async def test_reconcile_does_not_recreate_tabs_after_load_recovery_budget() -> None:
+    """A provider load outage must not become an endless tab-open loop."""
+    config = GptAutoConfig.from_dict(valid_config())
+    created: list[bool] = []
+
+    async def find_conversation_page(*_args, **_kwargs):
+        return None
+
+    async def create_chat_page():
+        created.append(True)
+        return "recovery-page"
+
+    runtime = SimpleNamespace(
+        bridge=SimpleNamespace(),
+        find_conversation_page=find_conversation_page,
+        create_chat_page=create_chat_page,
+        claim_page=lambda *_args: True,
+    )
+    chat = PersistentChat(
+        ag_session_id="session-reconcile-load-backoff",
+        project_name="project",
+        project_url="https://chatgpt.com/g/g-p-project/project",
+        runtime=runtime,
+        config=config,
+        binding_sink=lambda _update: None,
+        provider_session_id="provider-session",
+        chat_url="https://chatgpt.com/g/g-p-project/c/provider-session",
+        resume_provider_metadata={"conversation-load-recovery-attempts": 2},
+    )
+    chat.state = ChatState.RECOVERING
+
+    await chat.reconcile([])
+
+    assert created == []
+    assert chat.page_handle is None
+    assert chat.state is ChatState.RECOVERING
+    assert chat._unresolved_recovery_reason == "conversation-load-recovery-backoff"
+
+
+@pytest.mark.asyncio
+async def test_reconcile_does_not_recreate_detached_unresolved_conversation() -> None:
+    """Closing an unresolved failed tab must pause, not open a duplicate."""
+    config = GptAutoConfig.from_dict(valid_config())
+    created: list[bool] = []
+
+    async def find_conversation_page(*_args, **_kwargs):
+        return None
+
+    async def create_chat_page():
+        created.append(True)
+        return "recovery-page"
+
+    runtime = SimpleNamespace(
+        bridge=SimpleNamespace(),
+        find_conversation_page=find_conversation_page,
+        create_chat_page=create_chat_page,
+        claim_page=lambda *_args: True,
+    )
+    chat = PersistentChat(
+        ag_session_id="session-detached-unresolved",
+        project_name="project",
+        project_url="https://chatgpt.com/g/g-p-project/project",
+        runtime=runtime,
+        config=config,
+        binding_sink=lambda _update: None,
+        provider_session_id="provider-session",
+        chat_url="https://chatgpt.com/g/g-p-project/c/provider-session",
+        resume_provider_metadata={"unresolved-turn-pending": True},
+    )
+    chat.state = ChatState.RECOVERING
+
+    await chat.reconcile([])
+
+    assert created == []
+    assert chat.page_handle is None
+    assert chat.state is ChatState.RECOVERING
+    assert chat._unresolved_recovery_reason == "conversation-load-observation-deferred"
