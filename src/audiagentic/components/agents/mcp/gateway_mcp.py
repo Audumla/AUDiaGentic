@@ -12,7 +12,12 @@ GatewayClient seam, just not over MCP
 
 from __future__ import annotations
 
+import os
+from pathlib import Path
 from typing import Any
+from audiagentic.components.agents.gateway.api import _resolve_workspace_project_root
+from audiagentic.components.agents.gateway.session import sessions_store
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 from audiagentic.components.agents.gateway.client import call_gateway_method
 from audiagentic.foundation.mcp.component_server import (
@@ -28,6 +33,67 @@ _RESPONSE_PREVIEW_FIELDS = frozenset({"output-preview", "output-truncated"})
 
 _MAX_PAGE = 100
 
+
+def _request_project_root(request_id: str):
+    """Route project-scoped request IDs back to their owning checkout."""
+    root = project_root_from_env()
+    if not isinstance(request_id, str) or not request_id.startswith("req_"):
+        return root
+    parts = request_id.split("_")
+    if len(parts) < 3 or len(parts[-1]) != 12 or any(
+        character not in "0123456789abcdef" for character in parts[-1].casefold()
+    ):
+        return root
+    return _resolve_workspace_project_root(root, "_".join(parts[1:-1]))
+
+
+def _session_project_root(session_id: str):
+    """Find the owning checkout for a session before dispatching resume.
+
+    Session IDs are intentionally opaque and therefore cannot encode a
+    project slug.  The MCP process may nevertheless serve sibling checkouts;
+    probing their durable session records avoids routing resume through the
+    process CWD.  Multiple matches fail closed rather than selecting a
+    session from the wrong project.
+    """
+    root = project_root_from_env().resolve()
+    configured = os.environ.get("AUDIAGENTIC_WORKSPACE_ROOTS", "")
+    if configured.strip():
+        candidates = [
+            Path(value).expanduser().resolve()
+            for value in configured.split(os.pathsep)
+            if value.strip()
+        ]
+    else:
+        parent = root.parent
+        candidates = [root]
+        if parent.is_dir():
+            candidates.extend(
+                child.resolve()
+                for child in parent.iterdir()
+                if child.is_dir() and child.resolve() != root
+            )
+
+    matches: list[Path] = []
+    for candidate in dict.fromkeys(candidates):
+        try:
+            sessions_store.read_session_record(candidate, session_id)
+        except AudiaGenticError as exc:
+            if exc.code == "RES-AGW-002":
+                continue
+            raise
+        matches.append(candidate)
+
+    if len(matches) == 1:
+        return matches[0]
+    if len(matches) > 1:
+        raise AudiaGenticError(
+            code="VAL-AGW-152",
+            kind="agents",
+            message="gateway session id is ambiguous across project checkouts",
+            details={"session-id": session_id, "project-roots": [str(path) for path in matches]},
+        )
+    return root
 
 def _page_limit(value: int) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= _MAX_PAGE:
@@ -147,7 +213,7 @@ def agent_task_list_definitions() -> list[dict[str, Any]]:
 @tool_boundary
 def agent_task_status(request_id: str, include_response: bool = False) -> dict[str, Any]:
     """Poll compact lifecycle status; use diagnostics or response for terminal detail."""
-    project_root = project_root_from_env()
+    project_root = _request_project_root(request_id)
     if include_response:
         status = dict(call_gateway_method(
             "get_execution_request", project_root, request_id, include_response=True
@@ -168,7 +234,7 @@ def agent_task_status(request_id: str, include_response: bool = False) -> dict[s
 @tool_boundary
 def agent_task_diagnostics(request_id: str, limit: int = 25) -> dict[str, Any]:
     """Return bounded, redacted failure and activity evidence for a request."""
-    project_root = project_root_from_env()
+    project_root = _request_project_root(request_id)
     _page_limit(limit)
     return _sparse(
         call_gateway_method(
@@ -187,7 +253,7 @@ def agent_task_observations(
     tail: int | None = None,
 ) -> dict[str, Any]:
     """Return a finite page of redacted request-owned observations."""
-    project_root = project_root_from_env()
+    project_root = _request_project_root(request_id)
     _page_limit(limit)
     params: dict[str, Any] = {
         "limit": limit,
@@ -221,7 +287,7 @@ def agent_task_evidence(
     since_sequence: int | None = None,
 ) -> dict[str, Any]:
     """Return compact evidence; observation/history/recovery tiers are opt-in."""
-    project_root = project_root_from_env()
+    project_root = _request_project_root(request_id)
     _page_limit(limit)
     params: dict[str, Any] = {
         "include_observations": include_observations,
@@ -250,7 +316,7 @@ def agent_task_evidence(
 @tool_boundary
 def agent_task_observation_replay(request_id: str) -> dict[str, Any]:
     """Replay request-owned observations into a compact recovery analysis."""
-    project_root = project_root_from_env()
+    project_root = _request_project_root(request_id)
     return _sparse(
         call_gateway_method(
             "replay_execution_observations",
@@ -268,7 +334,7 @@ def agent_task_recover(
     expected_revision: int | None = None,
 ) -> dict[str, Any]:
     """Request reconcile, abandon, or clear-not-submitted; recovery never resends a prompt."""
-    project_root = project_root_from_env()
+    project_root = _request_project_root(request_id)
     return _request_dto(
         call_gateway_method(
             "recover_execution_request",
@@ -284,7 +350,7 @@ def agent_task_recover(
 @tool_boundary
 def agent_task_response(request_id: str) -> dict[str, Any]:
     """Return the exact verified terminal response."""
-    project_root = project_root_from_env()
+    project_root = _request_project_root(request_id)
     payload = call_gateway_method("get_execution_response_payload", project_root, request_id)
     result: dict[str, Any] = {
         "request-id": request_id,
@@ -306,7 +372,7 @@ def agent_task_response(request_id: str) -> dict[str, Any]:
 @tool_boundary
 def agent_task_failure_response(request_id: str) -> dict[str, Any]:
     """Return provider text captured as diagnostic evidence on a failed request."""
-    project_root = project_root_from_env()
+    project_root = _request_project_root(request_id)
     text = call_gateway_method("get_execution_failure_response", project_root, request_id)
     return {
         "request-id": request_id,
@@ -321,7 +387,7 @@ def agent_task_failure_response(request_id: str) -> dict[str, Any]:
 @tool_boundary
 def agent_task_complete_from_provider(request_id: str) -> dict[str, Any]:
     """Capture the request-owned current provider response and mark it completed; never send a prompt."""
-    project_root = project_root_from_env()
+    project_root = _request_project_root(request_id)
     return _sparse(call_gateway_method("complete_execution_from_provider", project_root, request_id))
 
 
@@ -329,7 +395,7 @@ def agent_task_complete_from_provider(request_id: str) -> dict[str, Any]:
 @tool_boundary
 def agent_task_cancel(request_id: str) -> dict[str, Any]:
     """Cancel a queued request, or best-effort mark a running one cancel-requested."""
-    project_root = project_root_from_env()
+    project_root = _request_project_root(request_id)
     return _request_dto(call_gateway_method("cancel_execution_request", project_root, request_id))
 
 
@@ -432,7 +498,7 @@ def agent_task_session_resume(
     component_profile: str | None = None,
 ) -> dict[str, Any]:
     """Resume a validated provider conversation in a new session."""
-    project_root = project_root_from_env()
+    project_root = _session_project_root(source_session_id)
     kwargs: dict[str, Any] = {
         "control_id": control_id,
         "model_id": model_id,

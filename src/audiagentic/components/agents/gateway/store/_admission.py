@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import re
 import uuid
 from collections.abc import Callable
 from pathlib import Path
@@ -260,11 +261,16 @@ def admit_record(
         return candidate, True
 
 
-def generate_request_id() -> str:
-    """Return a new request ID.
+def generate_request_id(project_root: Path | str | None = None) -> str:
+    """Return a new project-scoped request ID.
 
-    UUID-based (not a sequential directory scan like agent-jobs' job IDs)
-    because requests are created concurrently by queue workers across
-    profiles — a scan-and-increment generator would race under concurrency.
+    The bounded project slug is an operator-facing routing hint. The random
+    suffix remains the uniqueness authority and is never used as a lookup key.
     """
-    return f"req_{uuid.uuid4().hex[:16]}"
+    slug = "project"
+    if project_root is not None:
+        candidate = Path(project_root).name.lower()
+        candidate = re.sub(r"[^a-z0-9]+", "-", candidate).strip("-")
+        if candidate:
+            slug = candidate[:24]
+    return f"req_{slug}_{uuid.uuid4().hex[:12]}"

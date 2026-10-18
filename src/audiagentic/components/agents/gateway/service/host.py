@@ -506,6 +506,7 @@ class GatewayServiceHost:
                 registry.update(project_root, updated)
                 diagnostics = updated.get("diagnostics")
                 provider_turn_pending = False
+                runtime_owns_turn = False
                 session_id = updated.get("session-id")
                 if isinstance(session_id, str) and session_id:
                     try:
@@ -518,9 +519,23 @@ class GatewayServiceHost:
                         )
                     except Exception:  # noqa: BLE001 - durable request state remains authoritative
                         provider_turn_pending = False
+                    if provider_turn_pending and runtime is not None:
+                        try:
+                            runtime_status = runtime.session_runtime_status(session_id)
+                            runtime_owns_turn = bool(
+                                runtime_status.get("available")
+                                and (
+                                    runtime_status.get("turn-active") is True
+                                    or runtime_status.get("current-request-id")
+                                    == updated.get("request-id")
+                                )
+                            )
+                        except Exception:  # noqa: BLE001 - capture remains an advisory fallback
+                            runtime_owns_turn = False
                 if (
                     updated.get("state") == "running"
                     and isinstance(updated.get("session-id"), str)
+                    and not runtime_owns_turn
                     and (
                         (
                             updated.get("watchdog-state") == "intervention"
