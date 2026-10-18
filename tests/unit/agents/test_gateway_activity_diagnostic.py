@@ -11,9 +11,34 @@ from audiagentic.foundation.transports.agent_session import (
 def test_meaningful_activity_vocabulary_excludes_heartbeat_and_context_flags() -> None:
     assert not is_meaningful_activity_label("worker-heartbeat")
     assert not is_meaningful_activity_label("provider-turn-pending")
+    assert not is_meaningful_activity_label("provider-busy")
+    assert not is_meaningful_activity_label("recovery-observing")
+    assert not is_meaningful_activity_label("response-observing")
     assert not is_meaningful_activity_label("transport-unknown")
-    for label in ("thinking", "searching the web", "read-resource", "tool-progress", "response-progress"):
+    assert not is_meaningful_activity_label("connection-refreshing")
+    assert not is_meaningful_activity_label("response-observed")
+    for label in (
+        "thinking",
+        "searching the web",
+        "read-resource",
+        "tool-progress",
+        "response-progress",
+        "inspected",
+        "fetching",
+        "analyzing",
+        "evaluated",
+        "dom-status",
+        "dom-progress",
+        "dom-tool-result",
+        "dom-connector",
+        "dom-citation",
+        "dom-table",
+        "dom-materialization",
+
+    ):
         assert is_meaningful_activity_label(label)
+    assert not is_meaningful_activity_label("soft-liveness")
+    assert not is_meaningful_activity_label("delivery-timeout-retry")
     assert not is_meaningful_activity("session-transport", "activity")
     assert is_meaningful_activity("session-transport", "tool-progress")
 

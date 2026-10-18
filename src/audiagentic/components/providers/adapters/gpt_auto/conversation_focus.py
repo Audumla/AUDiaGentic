@@ -17,6 +17,7 @@ from audiagentic.components.providers.services.config.provider_config import (
 
 from .config import GptAutoConfig
 from .runtime_registry import get_runtime
+from .snapshot import ChatSnapshot
 from .urls import canonical_chat_url, parse_project_id, parse_provider_session_id
 
 
@@ -144,8 +145,8 @@ async def focus_existing_conversation(
         try:
             handle = await runtime.create_chat_page()
             await runtime.bridge.call("navigate", {"pageHandle": handle, "url": chat_url})
-            await runtime.bridge.call("activate_target", {"pageHandle": handle})
-            await runtime.bridge.call("keep_page_active", {"pageHandle": handle})
+            await runtime.bridge.call("activate_target", {"pageHandle": handle, "operator": True, "operator_reason": "dashboard-focus"})
+            await runtime.bridge.call("keep_page_active", {"pageHandle": handle, "operator": True})
             return ConversationFocusResult(
                 ConversationFocusOutcome.FOCUSED,
                 "conversation-tab-opened",
@@ -153,7 +154,7 @@ async def focus_existing_conversation(
         except Exception:
             if handle:
                 try:
-                    await runtime.bridge.call("close_page", {"pageHandle": handle})
+                    await runtime.bridge.call("close_page", {"pageHandle": handle, "operator": True})
                 except Exception:
                     pass
             return ConversationFocusResult(
@@ -168,9 +169,122 @@ async def focus_existing_conversation(
     # Page.bringToFront/window.focus keeps the renderer visible but does not
     # reliably select the tab in a multi-target browser. Explicitly activate
     # the DevTools target first, then retain the renderer-level focus call.
-    await runtime.bridge.call("activate_target", {"pageHandle": handle})
-    await runtime.bridge.call("keep_page_active", {"pageHandle": handle})
+    await runtime.bridge.call("activate_target", {"pageHandle": handle, "operator": True, "operator_reason": "dashboard-focus"})
+    await runtime.bridge.call("keep_page_active", {"pageHandle": handle, "operator": True})
     return ConversationFocusResult(ConversationFocusOutcome.FOCUSED)
 
 
-__all__ = ["focus_existing_conversation", "select_focus_page"]
+async def capture_latest_response(
+    project_root: Path,
+    *,
+    provider_id: str,
+    locator: ConversationFocusLocator,
+    passive: bool = False,
+) -> dict[str, object]:
+    """Read a proven terminal response from one exact GPT conversation.
+
+    Missing retained tabs may be reopened at the durable conversation URL for
+    an explicit operator action.  ``passive`` is used by the watchdog and is
+    strictly existing-target-only: it never creates, navigates, activates,
+    refreshes, or materializes a page.
+    """
+    document = load_provider_config(project_root)
+    provider_cfg = (document.get("providers") or {}).get(provider_id)
+    if not isinstance(provider_cfg, dict) and provider_id.startswith("gpt-auto-"):
+        provider_cfg = (document.get("providers") or {}).get("gpt-auto")
+    if not isinstance(provider_cfg, dict):
+        return {"outcome": "unavailable", "reason": "provider-config-unavailable"}
+    runtime = get_runtime(project_root, GptAutoConfig.from_project_dict(provider_cfg))
+    if not await runtime.connect_existing():
+        return {"outcome": "unavailable", "reason": "cdp-unavailable"}
+    pages = await runtime.bridge.call("list_pages")
+    runtime.adopt_existing_dedicated_window(pages)
+    scoped = [p for p in pages if runtime.page_belongs_to_dedicated_window(p)]
+    selected, result = select_focus_page(scoped, locator)
+    if (
+        selected is None
+        and result is not None
+        and result.outcome is ConversationFocusOutcome.NOT_FOUND
+        and scoped != pages
+    ):
+        selected, result = select_focus_page(pages, locator)
+    if (
+        selected is None
+        and result is not None
+        and result.outcome is ConversationFocusOutcome.NOT_FOUND
+    ):
+        chat_url = canonical_chat_url(locator.chat_url or "")
+        if chat_url is not None and not passive:
+            try:
+                handle = await runtime.create_chat_page()
+                await runtime.bridge.call(
+                    "navigate", {"pageHandle": handle, "url": chat_url}
+                )
+                selected = {"pageHandle": handle, "url": chat_url, "type": "page"}
+                result = None
+            except Exception:
+                return {
+                    "outcome": "unavailable",
+                    "reason": "conversation-tab-open-failed",
+                }
+    if selected is None:
+        return {
+            "outcome": "unavailable",
+            "reason": result.reason if result else "conversation-tab-not-found",
+        }
+    handle = str(selected.get("pageHandle") or "")
+    if not handle:
+        return {"outcome": "unavailable", "reason": "target-handle-missing"}
+    # Provider capture is used by watchdog recovery as well as the dashboard
+    # button. It must remain observation-only: foregrounding here makes a
+    # quiet/stale recovery loop steal focus and cycle through GPT tabs. Only
+    # an explicit focus/open-tab action may activate a target.
+    if not passive:
+        await runtime.bridge.call("keep_page_active", {"pageHandle": handle, "operator": True})
+    page = await runtime.gpt_browser.page_by_handle(handle)
+    if not passive:
+        await runtime.gpt_browser.materialize_latest_assistant_turn(page)
+    snapshot = ChatSnapshot.from_bridge(
+        await runtime.gpt_browser.snapshot(
+            page,
+            signals=runtime.config.workflow.bridge_signals(),
+        )
+    )
+    expected_chat_url = canonical_chat_url(locator.chat_url or "")
+    if expected_chat_url and canonical_chat_url(snapshot.url) != expected_chat_url:
+        return {
+            "outcome": "unavailable",
+            "reason": "conversation-identity-mismatch",
+        }
+    failure_signals = {
+        "auth-required",
+        "conversation-load-failed",
+        "error-page",
+    }
+    if snapshot.error_present or snapshot.dom_signals.intersection(failure_signals):
+        return {"outcome": "unavailable", "reason": "provider-error-page"}
+    if (
+        snapshot.generating
+        or not snapshot.latest_assistant_text
+        or not snapshot.latest_assistant_text.strip()
+        or not snapshot.latest_assistant_id
+        or snapshot.terminal_witness_assistant_id != snapshot.latest_assistant_id
+        or not snapshot.dom_signals.intersection(
+            {"completion-control", "response-complete-status"}
+        )
+    ):
+        return {
+            "outcome": "unavailable",
+            "reason": "terminal-response-not-proven",
+        }
+    return {
+        "outcome": "captured",
+        "snapshot": snapshot,
+        "binding": {
+            "chat-url": canonical_chat_url(snapshot.url),
+            "provider-session-id": parse_provider_session_id(snapshot.url),
+            "target-id": str(getattr(page, "target_id", "") or "") or None,
+        },
+    }
+
+__all__ = ["capture_latest_response", "focus_existing_conversation", "select_focus_page"]

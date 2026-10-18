@@ -12,9 +12,8 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
-from audiagentic.components.agents.gateway.diagnostics import (
-    activity_group,
-    normalize_activity_label,
+from audiagentic.components.agents.gateway.observation_projection import (
+    project_transport_observation,
 )
 from audiagentic.components.agents.gateway.event_topics import (
     TURN_MODEL_COMPLETED_TOPIC,
@@ -37,6 +36,22 @@ logger = logging.getLogger(__name__)
 # projection is honestly labelled unknown — never "precise"/"execution".
 _TURN_EVENT_SEMANTIC_STRENGTH = "unknown"
 _TURN_EVENT_VERIFICATION_TIER = "unknown"
+
+# These observations remain useful in the durable timeline and provider
+# activity diagnostics, but are synthetic observer/recovery edges rather than
+# evidence that the provider turn itself progressed. They must not reset the
+# session-level silence clock.
+_SESSION_CLOCK_EXCLUDED_ACTIVITY_LABELS = frozenset(
+    {
+        "connection-refreshing",
+        "provider-busy",
+        "response-observing",
+        "recovery-observing",
+        "soft-liveness",
+        "delivery-timeout-retry",
+        "response-observed",
+    }
+)
 
 # Tool statuses that mean the tool finished; carried on the completed event so
 # observers can distinguish success from failure (RV679: failed was invisible).
@@ -140,18 +155,36 @@ def _publish_turn_event(
 
 def _activity_timeline_attrs(obs: TransportObservation) -> dict[str, Any]:
     """Return bounded activity detail for durable session timeline history."""
-    raw = (
-        obs.attributes.get("model_activity")
-        if isinstance(obs.attributes, Mapping)
-        else None
-    )
-    label = normalize_activity_label(raw if isinstance(raw, str) else None)
-    if not label:
-        return {}
-    attrs: dict[str, Any] = {"activity-label": label}
-    group = activity_group(label)
-    if group:
-        attrs["activity-group"] = group
+    projection = project_transport_observation(obs)
+    activity = projection.get("activity") if isinstance(projection, Mapping) else {}
+    attrs: dict[str, Any] = {}
+    if isinstance(activity, Mapping):
+        if isinstance(activity.get("label"), str):
+            attrs["activity-label"] = activity["label"]
+        if isinstance(activity.get("group"), str):
+            attrs["activity-group"] = activity["group"]
+    facts = projection.get("diagnostic-facts") if isinstance(projection, Mapping) else {}
+    if isinstance(facts, Mapping):
+        for key, value in facts.items():
+            if isinstance(value, (str, int, float, bool)):
+                attrs[key] = value
+            elif key == "completion-gates" and isinstance(value, Mapping):
+                attrs[key] = {
+                    str(gate)[:64]: bool(state)
+                    for gate, state in list(value.items())[:32]
+                    if isinstance(state, bool)
+                }
+    response = projection.get("response-identity") if isinstance(projection, Mapping) else {}
+    if isinstance(response, Mapping):
+        for key in ("terminal", "terminal-witness-hash", "response-ref-hash", "latest-assistant-hash", "stop-reason"):
+            value = response.get(key)
+            if isinstance(value, (str, int, float, bool)):
+                attrs[key] = value
+    correlation = projection.get("correlation") if isinstance(projection, Mapping) else {}
+    if isinstance(correlation, Mapping):
+        for key, value in correlation.items():
+            if isinstance(value, (str, int, float, bool)):
+                attrs[key] = value
     return attrs
 
 
@@ -221,13 +254,22 @@ def _make_on_event_callback(
     projector = _TurnEventProjector()
 
     async def _on_event(obs: TransportObservation) -> None:
-        if activity_marker is not None and obs.kind != TransportObservationKind.TIMING:
+        activity_phase = (
+            obs.attributes.get("model_activity")
+            if isinstance(obs.attributes, Mapping)
+            else None
+        )
+        if not isinstance(activity_phase, str) or not activity_phase:
+            activity_phase = obs.kind.value if hasattr(obs.kind, "value") else str(obs.kind)
+        if (
+            activity_marker is not None
+            and obs.kind != TransportObservationKind.TIMING
+            and activity_phase.strip().lower().replace("_", "-").replace(" ", "-")
+            not in _SESSION_CLOCK_EXCLUDED_ACTIVITY_LABELS
+        ):
             activity_marker()
         if activity_relay is not None and obs.kind != TransportObservationKind.TIMING:
             try:
-                activity_phase = obs.attributes.get("model_activity") if isinstance(obs.attributes, Mapping) else None
-                if not isinstance(activity_phase, str) or not activity_phase:
-                    activity_phase = obs.kind.value if hasattr(obs.kind, "value") else str(obs.kind)
                 activity_relay.observe_provider(
                     source="session-transport",
                     source_instance=f"session:{session_id}:turn:{request_id or 'unknown'}",

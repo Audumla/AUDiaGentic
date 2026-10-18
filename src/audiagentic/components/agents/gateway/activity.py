@@ -6,12 +6,32 @@ the store allocates the aggregate sequence under the request lock.
 """
 from __future__ import annotations
 
+import math
+
 import threading
 import time
 from pathlib import Path
 
 from audiagentic.components.agents.gateway import store
 from audiagentic.foundation.transports.agent_session import is_meaningful_activity
+
+
+def frozen_activity_lease_seconds(record: dict[str, object]) -> float:
+    """Return the admission-time watchdog lease for a provider-session relay."""
+
+    persisted = record.get("watchdog-policy")
+    if not isinstance(persisted, dict):
+        raise ValueError("provider-session request has no frozen watchdog policy")
+    raw_value = persisted.get("activity-lease-seconds")
+    if isinstance(raw_value, bool):
+        raise ValueError("provider-session request has an invalid frozen watchdog policy")
+    try:
+        value = float(raw_value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("provider-session request has an invalid frozen watchdog policy") from exc
+    if not math.isfinite(value) or value <= 0:
+        raise ValueError("provider-session request has a non-positive frozen watchdog lease")
+    return value
 
 
 class RequestActivityRelay:
@@ -51,6 +71,34 @@ class RequestActivityRelay:
         # Only actual provider work renews the gateway lease.  Heartbeats and
         # contextual flags remain useful ownership evidence, but cannot mask
         # a stalled provider turn.
+        normalized_phase = (phase or "").strip().lower().replace("_", "-").replace(" ", "-")
+        if normalized_phase in {"soft-liveness", "delivery-timeout-retry"}:
+            # Synthetic DOM liveness and client-side delivery recovery are
+            # public client activity, not provider progress. They must not
+            # renew the internal watchdog lease.
+            self._observe("client-liveness", source, source_instance, source_sequence, phase, force)
+            return
+        if normalized_phase in {"response-observing", "provider-busy", "recovery-observing"}:
+            # The response observer is a synthetic owner heartbeat. Keep the
+            # worker/session lease alive without advancing provider activity or
+            # making a stalled DOM look like real progress.
+            self.observe_owner(
+                source=source,
+                source_instance=source_instance,
+                source_sequence=source_sequence,
+                force=force,
+            )
+            return
+        if normalized_phase in {"preflight-inspected", "preflight-evaluated"}:
+            # Readiness inspection is useful owner progress, but it is not
+            # provider work and must not reset the provider inactivity clock.
+            self.observe_owner(
+                source=source,
+                source_instance=source_instance,
+                source_sequence=source_sequence,
+                force=force,
+            )
+            return
         if not is_meaningful_activity(source, phase):
             return
         self._observe("provider", source, source_instance, source_sequence, phase, force)
@@ -86,6 +134,7 @@ class RequestActivityRelay:
                 source_sequence is not None
                 and previous is not None
                 and previous[0] == source_instance
+                and previous[1] is not None
                 and source_sequence <= int(previous[1] or 0)
             ):
                 return
@@ -120,4 +169,4 @@ class RequestActivityRelay:
                 self._last_phase = phase
 
 
-__all__ = ["RequestActivityRelay"]
+__all__ = ["RequestActivityRelay", "frozen_activity_lease_seconds"]

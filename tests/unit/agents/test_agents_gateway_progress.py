@@ -7,12 +7,12 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
-from audiagentic.components.agents.gateway import api as gateway
-from audiagentic.components.agents.gateway import store as store
-from audiagentic.components.agents.gateway.queue import progress as progress_mod
 from audiagentic.components.agents.configuration.management import (
     create_execution_profile,
 )
+from audiagentic.components.agents.gateway import api as gateway
+from audiagentic.components.agents.gateway import store as store
+from audiagentic.components.agents.gateway.queue import progress as progress_mod
 from audiagentic.foundation.features.base import ImplementationState
 from audiagentic.foundation.features.state import set_implementation_state
 
@@ -123,6 +123,52 @@ def test_activity_lease_diagnostic_remains_visible_after_prior_provider_activity
     assert projection["interruptibility"] == "diagnostic-only"
 
 
+def test_historical_verified_watchdog_reason_does_not_prove_provider_activity() -> None:
+    record = store.build_record(execution_profile_id="gpt-auto", prompt_body="review")
+    record.update(
+        {
+            "state": "running",
+            "worker-id": "worker-1",
+            "watchdog-state": "active",
+            "watchdog-reason": "verified-activity-renewed",
+            "activity": {
+                "provider": {
+                    "capability": "supported",
+                    "last-at": None,
+                    "lease-expires-at": None,
+                }
+            },
+        }
+    )
+
+    projection = progress_mod.project_request_progress(record)
+
+    assert projection["progress-disposition"] == "processing-unverified"
+    assert projection["progress-disposition-reason"] == "owned-attempt-awaiting-provider-evidence"
+
+def test_legacy_synthetic_provider_bucket_is_not_current_progress() -> None:
+    record = store.build_record(execution_profile_id="gpt-auto", prompt_body="review")
+    record.update(
+        {
+            "state": "running",
+            "worker-id": "worker-1",
+            "activity": {
+                "provider": {
+                    "capability": "supported",
+                    "phase": "soft-liveness",
+                    "last-at": "2026-01-01T00:00:00Z",
+                    "lease-expires-at": "2999-01-01T00:00:00Z",
+                }
+            },
+        }
+    )
+
+    projection = progress_mod.project_request_progress(record)
+
+    assert projection["progress-disposition"] == "processing-unverified"
+    assert projection["progress-disposition-reason"] == "owned-attempt-awaiting-provider-evidence"
+    assert projection["last-progress-source"] != "provider"
+
 def test_cancel_requested_running_request_is_not_terminal() -> None:
     record = store.build_record(execution_profile_id="gpt-auto", prompt_body="review")
     record.update({"state": "running", "worker-id": "worker-1", "cancel-requested": True})
@@ -228,6 +274,21 @@ def test_deterministic_multi_project_soak_has_no_cross_record_state() -> None:
     assert sum(bool(item["stale-progress"]) for item in projections) == 16
 
 
+def test_client_liveness_does_not_clear_provider_stale_progress() -> None:
+    record = store.build_record(execution_profile_id="default", prompt_body="soft")
+    record["state"] = "running"
+    record["started-at"] = "2026-01-01T00:00:00Z"
+    record["activity-sequence"] = 1
+    record["last-activity-at"] = "2026-01-01T00:09:55Z"
+    record["activity"]["owner"]["source-sequence"] = 1
+
+    now = datetime.datetime(2026, 1, 1, 0, 10, 0, tzinfo=datetime.timezone.utc)
+    projection = progress_mod.project_request_progress(record, now=now)
+
+    assert projection["stale-progress"] is True
+    assert projection["last-progress-source"] == "request-transition"
+
+
 def test_source_loss_then_progress_event_recovers_without_terminalizing() -> None:
     record = store.build_record(execution_profile_id="mcp-a2a", prompt_body="recover")
     record["state"] = "running"
@@ -235,6 +296,8 @@ def test_source_loss_then_progress_event_recovers_without_terminalizing() -> Non
     now = datetime.datetime(2026, 1, 1, 0, 10, 0, tzinfo=datetime.timezone.utc)
     stale = progress_mod.project_request_progress(record, now=now)
     assert stale["stale-progress"] is True
+    record["activity-sequence"] = 1
+    record["last-activity-at"] = "2026-01-01T00:09:55Z"
     recovered = progress_mod.project_request_progress(
         record,
         latest_session_event={"kind": "assistant-message", "timestamp": "2026-01-01T00:09:55Z"},
@@ -279,6 +342,20 @@ def test_stale_progress_with_session_event_past_threshold(tmp_path: Path) -> Non
     assert projection["phase"] == "model-active"
     assert projection["stale-progress"] is True
     assert projection["stale-reason"] == "no-turn-evidence-past-threshold"
+
+
+def test_session_event_cannot_clear_stale_without_gateway_activity() -> None:
+    record = store.build_record(execution_profile_id="default", prompt_body="hello")
+    record["state"] = "running"
+    record["started-at"] = "2026-01-01T00:00:00Z"
+    now = datetime.datetime(2026, 1, 1, 0, 10, 10, tzinfo=datetime.timezone.utc)
+    projection = progress_mod.project_request_progress(
+        record,
+        latest_session_event={"kind": "timing", "timestamp": "2026-01-01T00:10:05Z"},
+        now=now,
+    )
+    assert projection["stale-progress"] is True
+    assert projection["last-progress-source"] == "request-transition"
 
 
 def test_terminal_record_phase_and_not_stale(tmp_path: Path) -> None:
@@ -430,10 +507,12 @@ def test_last_progress_source_request_transition(tmp_path: Path) -> None:
     assert projection["last-progress-source"] == "request-transition"
 
 
-def test_last_progress_source_session_event(tmp_path: Path) -> None:
+def test_last_progress_source_gateway_activity(tmp_path: Path) -> None:
     record = store.build_record(execution_profile_id="default", prompt_body="hello")
     record["state"] = "running"
     record["started-at"] = "2026-01-01T00:00:05Z"
+    record["activity-sequence"] = 1
+    record["last-activity-at"] = "2026-01-01T00:00:10Z"
 
     session_event = {
         "kind": "assistant-message",
@@ -447,7 +526,7 @@ def test_last_progress_source_session_event(tmp_path: Path) -> None:
         now=now,
     )
 
-    assert projection["last-progress-source"] == "session-event"
+    assert projection["last-progress-source"] == "gateway-activity"
 
 
 def test_running_seconds_none_when_not_started(tmp_path: Path) -> None:
@@ -502,6 +581,76 @@ def test_request_runtime_status_includes_progress(tmp_path: Path, monkeypatch) -
 
     assert "progress" in status
     assert "phase" in status["progress"]
+
+
+def test_request_runtime_status_exposes_recovery_required_not_active(tmp_path: Path, monkeypatch) -> None:
+    record = store.build_record(execution_profile_id="recovery", prompt_body="x")
+    record.update({"state": "running", "recovery-required": True, "recovery": {"reason": "gateway-restart", "outcome": "in-place", "phase": "rehydrate-retry"}})
+    store.write_record(tmp_path, record)
+    monkeypatch.setattr(
+        gateway,
+        "get_queue_manager",
+        lambda: SimpleNamespace(request_slot_status=lambda *_args: None),
+    )
+
+    status = gateway.request_runtime_status(tmp_path, record["request-id"])
+
+    assert status["state"] == "running"
+    assert status["queue-state"] == "recovery-required"
+    assert status["profile-slot"] is None
+
+
+def test_request_runtime_status_exposes_orphaned_worker_not_active(tmp_path: Path, monkeypatch) -> None:
+    record = store.build_record(execution_profile_id="worker", prompt_body="x")
+    record.update({
+        "state": "running",
+        "dispatch-owner-epoch": "old-owner",
+        "provider-transport-kind": "worker",
+    })
+    store.write_record(tmp_path, record)
+    monkeypatch.setattr(
+        gateway,
+        "get_queue_manager",
+        lambda: SimpleNamespace(request_slot_status=lambda *_args: None),
+    )
+
+    status = gateway.request_runtime_status(tmp_path, record["request-id"])
+
+    assert status["state"] == "running"
+    assert status["queue-state"] == "orphaned"
+    assert status["profile-slot"] is None
+
+
+def test_compact_status_exposes_orphaned_worker_activity(tmp_path: Path, monkeypatch) -> None:
+    record = store.build_record(execution_profile_id="worker", prompt_body="x")
+    record.update({"state": "running", "provider-transport-kind": "worker"})
+    store.write_record(tmp_path, record)
+    monkeypatch.setattr(
+        gateway,
+        "get_queue_manager",
+        lambda: SimpleNamespace(request_slot_status=lambda *_args: None),
+    )
+
+    status = gateway.get_execution_request(tmp_path, record["request-id"])
+
+    assert status["lifecycle"] == "active"
+    assert status["activity"] == "orphaned"
+
+
+def test_compact_status_exposes_provider_recovery_activity(tmp_path: Path, monkeypatch) -> None:
+    record = store.build_record(execution_profile_id="session", prompt_body="x")
+    record.update({"state": "running", "recovery-required": True, "provider-transport-kind": "provider-session"})
+    store.write_record(tmp_path, record)
+    monkeypatch.setattr(
+        gateway,
+        "get_queue_manager",
+        lambda: SimpleNamespace(request_slot_status=lambda *_args: None),
+    )
+
+    status = gateway.get_execution_request(tmp_path, record["request-id"])
+
+    assert status["lifecycle"] == "active"
+    assert status["activity"] == "recovery-required"
 
 
 def test_wait_timeout_marker_on_non_terminal(tmp_path: Path, monkeypatch) -> None:
@@ -1084,3 +1233,25 @@ def test_request_runtime_status_includes_sh15_progress_summary(tmp_path: Path, m
 
     hold.set()
     gateway.wait_execution_request(tmp_path, req_id, timeout_seconds=5)
+
+def test_phase_less_synthetic_activity_does_not_prove_progress() -> None:
+    record = store.build_record(execution_profile_id="gpt-auto", prompt_body="hello")
+    record.update({
+        "state": "running",
+        "started-at": "2026-01-01T00:00:00Z",
+        "activity-sequence": 4,
+        "last-activity-at": "2026-01-01T00:09:55Z",
+        "activity-source": "delivery-timeout-retry",
+        "activity": {
+            "provider": {
+                "source": "delivery-timeout-retry",
+                "last-at": "2026-01-01T00:09:55Z",
+                "lease-expires-at": "2999-01-01T00:00:00Z",
+            }
+        },
+    })
+    projection = progress_mod.project_request_progress(
+        record, now=datetime.datetime(2026, 1, 1, 0, 10, tzinfo=datetime.timezone.utc)
+    )
+    assert projection["stale-progress"] is True
+    assert projection["last-progress-source"] == "request-transition"

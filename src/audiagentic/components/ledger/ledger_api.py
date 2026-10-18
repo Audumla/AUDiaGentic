@@ -21,7 +21,8 @@ from audiagentic.components.ledger.paths import (
     ledger_manifest_path,
     releases_dir,
 )
-from audiagentic.components.ledger.sync import sync_current_release_ledger
+from audiagentic.components.ledger.sync import ledger_write_lock, sync_current_release_ledger
+from audiagentic.components.ledger.validation import load_persisted_events, validate_release_id
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.io import load_ndjson
 
@@ -91,22 +92,85 @@ def archive_current(project_root: Path, release_id: str) -> dict[str, Any]:
 
 def archive_for_release(project_root: Path, release_id: str) -> dict[str, Any]:
     """Atomically recover, sync, and archive the current ledger."""
-    try:
-        return archive_current(project_root, release_id)
-    except AudiaGenticError as exc:
-        if exc.code not in {"RLS-BUSINESS-020", "CON-ARCHIVE-001"}:
-            raise
-        historical_path = project_root / "docs" / "releases" / "LEDGER.ndjson"
-        historical = load_ndjson(historical_path)
-        if not any(event.get("release-id") == release_id for event in historical):
-            raise
-        return {
-            "release-id": release_id,
-            "archived-events": 0,
-            "purged-fragments": 0,
-            "historical-ledger": str(historical_path),
-            "released-event-ids": [],
+    validate_release_id(release_id)
+    historical_path = releases_dir(project_root) / "LEDGER.ndjson"
+    # The existence check, retry projection, outbox drain, sync, and archive
+    # decision share one non-reentrant critical section. This prevents an
+    # overlapping retry from absorbing events that arrived for the next
+    # release after the first retry archived its snapshot.
+    from audiagentic.components.ledger.archive import (
+        _archive_current_ledger_locked,
+        _archive_identity,
+        _merge_historical_events,
+        _purge_fragments,
+    )
+    from audiagentic.foundation.io import atomic_write_ndjson, atomic_write_text
+
+    with ledger_write_lock(project_root) as warning:
+        historical = load_persisted_events(historical_path, role="historical")
+        historical = _merge_historical_events(historical, [])
+        snapshot = {
+            event["event-id"]: event for event in historical
+            if event.get("release-id") == release_id
         }
+        if snapshot:
+            current_path = current_ledger_path(project_root)
+            current = load_persisted_events(current_path, role="current")
+            archived_current = [event for event in current if event.get("event-id") in snapshot]
+            remaining = [event for event in current if event.get("event-id") not in snapshot]
+            for event in archived_current:
+                if _archive_identity(event) != _archive_identity(snapshot[event["event-id"]]):
+                    raise AudiaGenticError(
+                        code="CON-ARCHIVE-003", kind="release",
+                        message="current ledger conflicts with an archived event identity",
+                        details={"event-id": event["event-id"]},
+                    )
+            if archived_current:
+                if remaining:
+                    atomic_write_ndjson(current_path, remaining)
+                else:
+                    atomic_write_text(current_path, "[]\n")
+                purged = _purge_fragments(project_root, set(snapshot))
+            else:
+                purged = 0
+            return {
+                "release-id": release_id,
+                "archived-events": len(snapshot),
+                "purged-fragments": purged,
+                "historical-ledger": str(historical_path),
+                "released-event-ids": sorted(snapshot),
+                "idempotent-retry": True,
+                "recovered-current": bool(archived_current),
+            }
+
+        drain_event_outbox(project_root)
+        from audiagentic.components.ledger.sync import _sync_current_release_ledger_locked
+        _sync_current_release_ledger_locked(project_root, warning)
+        return _archive_current_ledger_locked(project_root, release_id)
+
+
+
+
+def release_events(
+    historical: list[dict[str, Any]],
+    release_id: str,
+    released_event_ids: list[str] | None = None,
+) -> list[dict[str, Any]]:
+    """Select released events for the release component's standard templates."""
+    if released_event_ids:
+        selected_ids = set(released_event_ids)
+        return sorted(
+            (event for event in historical if event.get("event-id") in selected_ids
+             and event.get("release-id") == release_id and event.get("status") == "released"),
+            key=lambda event: event.get("event-id", ""),
+        )
+    return sorted(
+        (
+            event for event in historical
+            if event.get("release-id") == release_id and event.get("status") == "released"
+        ),
+        key=lambda event: event.get("event-id", ""),
+    )
 
 
 def _union_find_cluster(keys: list[frozenset[str]]) -> list[list[int]]:

@@ -187,6 +187,51 @@ class TestOrphanedBindingDetection:
         )
         assert key in rebuilt["bindings"]
 
+    def test_register_retires_stale_active_entry_for_terminal_session(
+        self, project_root: Path
+    ) -> None:
+        """A terminal session's stale index entry must not block a successor."""
+        closed = _make_session_record(
+            project_root, "ses_stale_closed", "ref-stale", state="closed"
+        )
+        successor = _make_session_record(
+            project_root, "ses_stale_successor", "ref-stale", state="active"
+        )
+        key = bindings.provider_ref_key(
+            provider_id="test-provider",
+            surface_id="test-surface",
+            ref_namespace=None,
+            identity_context_fingerprint=None,
+            provider_session_ref="ref-stale",
+        )
+        index_path = bindings.gateway_session_binding_index_path(project_root)
+        index_path.parent.mkdir(parents=True, exist_ok=True)
+        index_path.write_text(
+            json.dumps(
+                {
+                    "contract-version": "v1",
+                    "bindings": {
+                        key: [
+                            {
+                                "binding-id": closed["binding"]["binding-id"],
+                                "session-id": closed["session-id"],
+                                "ownership": "owned",
+                                "relation": "opened",
+                                "state": "active",
+                                "created-at": closed["binding"]["created-at"],
+                            }
+                        ]
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        bindings.register_open_binding(project_root, successor)
+        entries = bindings._read_index(index_path)["bindings"][key]
+        states = {entry["session-id"]: entry["state"] for entry in entries}
+        assert states[closed["session-id"]] == "closed"
+        assert states[successor["session-id"]] == "active"
     def test_closed_sessions_not_rebuilt(self, project_root: Path) -> None:
         """Sessions in closed/expired/failed states are not included in rebuild."""
         _make_session_record(project_root, "ses_closed", "ref-closed", state="closed")

@@ -10,12 +10,14 @@ with a FakeAgentSessionTransport — no AcpLaunch / AcpSessionTransport required
 
 from __future__ import annotations
 
+import asyncio
 import functools
 import multiprocessing
 import subprocess
 import sys
 import threading
 import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -71,7 +73,19 @@ class FakeAgentSessionTransport:
         self.provider_session_ref = "prov-ses-1"
         self.ag_session_id = "ag-s-fake"
         self.reconcile_calls = 0
+        self.defer_unresolved_calls = 0
         self._turn_failure_disposition = SessionFailureDisposition.TERMINATE
+        self.durable_owner_probe: Any = None
+        self.request_owner: str | None = None
+
+    def set_durable_owner_probe(self, probe) -> None:
+        self.durable_owner_probe = probe
+
+    def set_request_owner(self, request_id: str | None) -> None:
+        self.request_owner = request_id
+
+    def defer_unresolved_reconciliation(self) -> None:
+        self.defer_unresolved_calls += 1
 
     async def open(self) -> SessionOpenResult:
         self.opened = True
@@ -204,6 +218,39 @@ class _OpenFailureTransport(FakeAgentSessionTransport):
         self.opened = True
         self.alive = True
         raise RuntimeError("provider open failed")
+
+
+class _RequestScopedMetadataTransport(FakeAgentSessionTransport):
+    """Transport double that exposes the real runtime FIFO sink boundary."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.metadata_sink: Any = None
+        self.first_started = threading.Event()
+        self.release_first = threading.Event()
+        self.metadata_by_prompt: list[tuple[str, Any]] = []
+
+    def set_request_metadata_sink(self, sink: Any) -> None:
+        self.metadata_sink = sink
+
+    async def prompt(self, prompt, sink=None, **kwargs) -> SessionTurnResult:
+        prompt_text = prompt.body if hasattr(prompt, "body") else str(prompt)
+        request_sink = self.metadata_sink
+        if len(self.metadata_by_prompt) == 0:
+            self.first_started.set()
+            while not self.release_first.is_set():
+                await asyncio.sleep(0.01)
+        metadata = {
+            "submission-proven": True,
+            "prompt-message-id": f"prompt-{prompt_text}",
+            "assistant-message-id": f"assistant-{prompt_text}",
+        }
+        if request_sink is not None:
+            result = request_sink(metadata)
+            if hasattr(result, "__await__"):
+                await result
+        self.metadata_by_prompt.append((prompt_text, request_sink))
+        return await super().prompt(prompt, sink=sink, **kwargs)
 
 
 def _build_fake_surface() -> Any:
@@ -525,6 +572,44 @@ def test_transport_open_failure_is_closed_before_error_escapes(tmp_path):
         runtime.shutdown()
 
 
+def test_admitted_session_is_failed_when_provider_open_fails(tmp_path):
+    """A pre-admitted new session cannot remain active after transport timeout."""
+    transport = _OpenFailureTransport()
+
+    def prepare_fn(project_root, *, provider_id, surface_hint, model_id=None, **kwargs):
+        transport.ag_session_id = kwargs["ag_session_id"]
+        return _build_fake_prepared(transport)
+
+    runtime = SessionRuntime(
+        clock=_Clock(),
+        reap_interval_seconds=60,
+        provider_prepare_fn=prepare_fn,
+    )
+    session = session_store.build_session_record(
+        created_by_request_id="req_open_timeout",
+        provider_transport_kind="provider-session",
+        execution_profile_id="profile-1",
+        provider_id="opencode",
+        model_id="m1",
+    )
+    session_store.write_session_record(tmp_path, session)
+    try:
+        with pytest.raises(RuntimeError, match="provider open failed"):
+            runtime.open_session(
+                tmp_path,
+                execution_profile_id="profile-1",
+                provider_id="opencode",
+                model_id="m1",
+                surface_hint=None,
+                session_id=session["session-id"],
+            )
+        failed = session_store.read_session_record(tmp_path, session["session-id"])
+        assert failed["state"] == "failed"
+        assert failed["close-reason"] == "failed"
+        assert failed["timing"]["closed-at"]
+    finally:
+        runtime.shutdown()
+
 def test_open_prompt_close_lifecycle(rig):
     runtime, clock, transports, tmp_path = rig
     record = _open(runtime, tmp_path)
@@ -548,6 +633,91 @@ def test_open_prompt_close_lifecycle(rig):
     assert closed["close-reason"] == "client-request"
     assert transports[0].closed
     assert runtime.live_session_ids() == []
+
+
+def test_fifo_continuation_keeps_request_metadata_sinks_scoped(tmp_path):
+    """A queued continuation must not inherit the opener request's sink."""
+    clock = _Clock()
+    transport = _RequestScopedMetadataTransport()
+
+    def prepare(project_root, *, provider_id, surface_hint, model_id=None, **kwargs):
+        transport.ag_session_id = kwargs["ag_session_id"]
+        return _build_fake_prepared(transport)
+
+    runtime = SessionRuntime(
+        clock=clock,
+        reap_interval_seconds=60,
+        provider_prepare_fn=prepare,
+    )
+    record = runtime.open_session(
+        tmp_path,
+        execution_profile_id="profile-1",
+        provider_id="opencode",
+        model_id="m1",
+    )
+    request_a: list[dict[str, Any]] = []
+    request_b: list[dict[str, Any]] = []
+
+    async def sink_a(metadata: dict[str, Any]) -> None:
+        request_a.append(dict(metadata))
+
+    async def sink_b(metadata: dict[str, Any]) -> None:
+        request_b.append(dict(metadata))
+
+    results: list[SessionTurnResult] = []
+
+    def run_a() -> None:
+        results.append(
+            runtime.prompt_in_session(
+                tmp_path,
+                record["session-id"],
+                "request-a",
+                request_id="req-a",
+                request_provider_metadata_sink=sink_a,
+            )
+        )
+
+    def run_b() -> None:
+        results.append(
+            runtime.prompt_in_session(
+                tmp_path,
+                record["session-id"],
+                "request-b",
+                request_id="req-b",
+                request_provider_metadata_sink=sink_b,
+            )
+        )
+
+    first = threading.Thread(target=run_a)
+    second = threading.Thread(target=run_b)
+    try:
+        first.start()
+        assert transport.first_started.wait(timeout=2)
+        second.start()
+        time.sleep(0.05)
+        transport.release_first.set()
+        first.join(timeout=2)
+        second.join(timeout=2)
+
+        assert not first.is_alive()
+        assert not second.is_alive()
+        assert [entry[0] for entry in transport.metadata_by_prompt] == [
+            "request-a",
+            "request-b",
+        ]
+        assert request_a[0]["prompt-message-id"] == "prompt-request-a"
+        assert request_b[0]["prompt-message-id"] == "prompt-request-b"
+        assert len(request_a) == 1
+        assert len(request_b) == 1
+        assert all(entry not in request_a for entry in request_b)
+        assert all(entry not in request_b for entry in request_a)
+        assert len(results) == 2
+    finally:
+        transport.release_first.set()
+        first.join(timeout=2)
+        second.join(timeout=2)
+        runtime.close_session(tmp_path, record["session-id"])
+        runtime.shutdown()
 
 
 def test_recoverable_turn_failure_retains_live_session(tmp_path):
@@ -659,6 +829,91 @@ def test_concurrent_prompts_queue_fifo(rig):
     second.join(timeout=2)
     assert transports[0].turns == ["first", "second"]
     assert len(results) == 2
+
+
+def test_queued_prompt_timeout_starts_after_fifo_admission(rig):
+    """A caller deadline must not expire while an earlier turn is active."""
+    runtime, clock, transports, tmp_path = rig
+    record = _open(runtime, tmp_path)
+    session_id = record["session-id"]
+    gate = threading.Event()
+    transports[0].block_event = gate
+    results: list[Any] = []
+    errors: list[BaseException] = []
+
+    def first_turn() -> None:
+        try:
+            results.append(runtime.prompt_in_session(tmp_path, session_id, "first"))
+        except BaseException as exc:  # pragma: no cover - assertion below reports it
+            errors.append(exc)
+
+    def queued_turn() -> None:
+        try:
+            results.append(
+                runtime.prompt_in_session(
+                    tmp_path,
+                    session_id,
+                    "second",
+                    timeout_seconds=0.05,
+                )
+            )
+        except BaseException as exc:  # pragma: no cover - assertion below reports it
+            errors.append(exc)
+
+    first = threading.Thread(target=first_turn)
+    second = threading.Thread(target=queued_turn)
+    first.start()
+    time.sleep(0.1)
+    second.start()
+    time.sleep(0.2)  # exceed the queued turn's deadline while first owns the lock
+    assert second.is_alive()
+    gate.set()
+    first.join(timeout=2)
+    second.join(timeout=2)
+
+    assert not errors
+    assert not first.is_alive() and not second.is_alive()
+    assert transports[0].turns == ["first", "second"]
+    runtime.close_session(tmp_path, session_id)
+
+
+def test_cancelled_fifo_waiter_releases_pending_before_predecessor_finishes(rig):
+    runtime, clock, transports, tmp_path = rig
+    session_id = _open(runtime, tmp_path)["session-id"]
+    gate = threading.Event()
+    transports[0].block_event = gate
+    errors = []
+
+    def submit(body, request_id=None):
+        try:
+            runtime.prompt_in_session(tmp_path, session_id, body, request_id=request_id)
+        except BaseException as exc:
+            errors.append(exc)
+
+    first = threading.Thread(target=submit, args=("first",))
+    second = threading.Thread(target=submit, args=("cancel me", "req_fifo_cancel"))
+    first.start()
+    try:
+        time.sleep(0.1)
+        second.start()
+        deadline = time.monotonic() + 2
+        while runtime._handles[session_id].pending == 0 and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert runtime._handles[session_id].pending == 1
+        runtime.request_cancel("req_fifo_cancel")
+        second.join(timeout=2)
+        assert not second.is_alive()
+        assert first.is_alive()
+        assert runtime._handles[session_id].pending == 0
+        assert len(errors) == 1 and errors[0].code == "CON-AGW-099"
+        assert "cancel me" not in transports[0].turns
+    finally:
+        gate.set()
+        first.join(timeout=2)
+        if second.ident is not None:
+            second.join(timeout=2)
+        runtime.close_session(tmp_path, session_id)
+    assert transports[0].turns == ["first"]
 
 
 def test_session_snapshot_all_reports_active_turn(rig):
@@ -894,7 +1149,7 @@ def test_api_list_and_close_sessions(rig, monkeypatch):
 
     closed = api.close_execution_session(tmp_path, record["session-id"])
     assert closed["state"] == "closed"
-    assert api.list_execution_sessions(tmp_path)[0]["live"] is False
+    assert api.list_execution_sessions(tmp_path, state="all")[0]["live"] is False
     # Idempotent on an already-terminal session
     again = api.close_execution_session(tmp_path, record["session-id"])
     assert again["state"] == "closed"
@@ -935,6 +1190,10 @@ def test_api_lists_active_sessions_before_newer_closed_sessions(tmp_path, monkey
         listed = api.list_execution_sessions(tmp_path)
 
         assert [row["session-id"] for row in listed] == [
+            "ses-active-a", "ses-active-z",
+        ]
+        listed_all = api.list_execution_sessions(tmp_path, state="all")
+        assert [row["session-id"] for row in listed_all] == [
             "ses-active-a", "ses-active-z", "ses-closed-a", "ses-closed-z",
         ]
     finally:
@@ -1311,6 +1570,108 @@ def test_rehydrate_active_generation_reuses_provider_binding(tmp_path):
         runtime.shutdown()
 
 
+def test_rehydrate_checkpoint_preserves_pending_prompt_digest(tmp_path):
+    """A pre-ID unresolved turn keeps its normalized prompt fingerprint
+    across the gateway session checkpoint sink."""
+    transports: list[FakeAgentSessionTransport] = []
+    checkpoint_sinks: list[Any] = []
+
+    def fake_prepare(project_root, *, provider_id, surface_hint, model_id=None, **kwargs):
+        checkpoint_sinks.append(kwargs["checkpoint_sink"])
+        transport = FakeAgentSessionTransport()
+        transport.ag_session_id = kwargs["ag_session_id"]
+        transport.provider_session_ref = kwargs.get("resume_provider_ref") or "prov-durable"
+        transports.append(transport)
+        return _build_fake_prepared(transport)
+
+    runtime = SessionRuntime(provider_prepare_fn=fake_prepare)
+    try:
+        record = session_store.build_session_record(
+            session_id="ses_digest",
+            execution_profile_id="profile-1",
+            provider_id="opencode",
+            model_id="m1",
+            provider_session_ref="prov-durable",
+            surface_id="opencode-acp",
+        )
+        session_store.write_session_record(tmp_path, record)
+        session_store.update_provider_metadata(
+            tmp_path, "ses_digest", {"prompt-text-digest": "old-digest"}
+        )
+        runtime.rehydrate_session(
+            tmp_path,
+            "ses_digest",
+            execution_profile_id="profile-1",
+            provider_id="opencode",
+            model_id="m1",
+            surface_hint=None,
+        )
+
+        async def apply_checkpoint() -> None:
+            await checkpoint_sinks[0](
+                {
+                    "unresolved-turn-pending": True,
+                    "submission-proven": False,
+                    "prompt-text-digest": "new-digest",
+                }
+            )
+
+        runtime._call(apply_checkpoint(), timeout=5)
+        stored = session_store.read_session_record(tmp_path, "ses_digest")
+        assert stored["provider"]["metadata"]["prompt-text-digest"] == "new-digest"
+    finally:
+        runtime.shutdown()
+
+
+def test_rehydrated_generation_preserves_durable_max_lifetime(tmp_path):
+    """A gateway restart cannot reset the session's absolute lifetime."""
+    clock = _Clock()
+    transports: list[FakeAgentSessionTransport] = []
+
+    def fake_prepare(project_root, *, provider_id, surface_hint, model_id=None, **kwargs):
+        transport = FakeAgentSessionTransport()
+        transport.ag_session_id = kwargs["ag_session_id"]
+        transport.provider_session_ref = kwargs.get("resume_provider_ref") or "prov-durable"
+        transports.append(transport)
+        return _build_fake_prepared(transport)
+
+    runtime = SessionRuntime(clock=clock, provider_prepare_fn=fake_prepare)
+    try:
+        record = runtime.open_session(
+            tmp_path,
+            execution_profile_id="profile-1",
+            provider_id="opencode",
+            model_id="m1",
+            surface_hint=None,
+            max_lifetime_seconds=60,
+        )
+        session_id = record["session-id"]
+        old_created_at = (
+            datetime.now(timezone.utc) - timedelta(seconds=30)
+        ).isoformat().replace("+00:00", "Z")
+        stored = session_store.read_session_record(tmp_path, session_id)
+        stored["timing"]["created-at"] = old_created_at
+        session_store.write_session_record(tmp_path, stored)
+
+        async def drop_handle() -> None:
+            runtime._handles.pop(session_id, None)
+
+        runtime._call(drop_handle(), timeout=5)
+        runtime.rehydrate_session(
+            tmp_path,
+            session_id,
+            execution_profile_id="profile-1",
+            provider_id="opencode",
+            model_id="m1",
+            surface_hint=None,
+        )
+        clock.now += 31
+        with pytest.raises(AudiaGenticError, match="CON-AGW-004"):
+            runtime.prompt_in_session(tmp_path, session_id, "too late")
+    finally:
+        runtime.shutdown()
+
+
 def test_rehydrate_rejects_provider_identity_swap_and_closes_transport(tmp_path):
     """A resume that proves a different provider ref cannot leak a handle."""
     transports: list[FakeAgentSessionTransport] = []
@@ -1543,6 +1904,14 @@ def test_intra_turn_events_wired_to_eventbus(rig, monkeypatch):
     )
     assert result.stop_reason == "end_turn"
 
+    from audiagentic.components.agents.gateway.observability import read_observation_page
+    journal = read_observation_page(tmp_path, "req_1", limit=20)
+    assert journal["items"]
+    assert journal["items"][-1]["session_id"] == session_id
+    assert journal["items"][-1]["facts"]["response-identity"]["terminal"] is True
+    activity_facts = [item["facts"]["activity"] for item in journal["items"] if item["facts"]["activity"].get("label")]
+    assert any(item.get("label") == "generating" and item.get("group") for item in activity_facts)
+
     # Verify the normalized turn events were published, deduped, and terminal-aware
     turn_topics = [(t, p) for t, p in events_captured if t.startswith("agents.turn.")]
     assert [t for t, _ in turn_topics] == [
@@ -1567,6 +1936,59 @@ def test_intra_turn_events_wired_to_eventbus(rig, monkeypatch):
     assert tool_completed["status"] == "failed"
     assert tool_completed["tool-call-id"] == "tc1"
 
+    runtime.close_session(tmp_path, session_id)
+
+
+def test_response_decision_timing_observation_reaches_console_trace(rig):
+    """Exercise the real SessionRuntime observation callback timing branch."""
+    from io import StringIO
+
+    from audiagentic.components.agents.gateway.session.console_trace import (
+        GatewayConsoleTrace,
+    )
+    from audiagentic.foundation.transports.agent_session import (
+        TransportObservation,
+        TransportObservationKind,
+    )
+
+    runtime, clock, transports, tmp_path = rig
+    stream = StringIO()
+    runtime._console_trace = GatewayConsoleTrace(stream=stream, clock=lambda: 10.0)
+
+    async def _emit_response_decision(obs_sink, session_id):
+        observation = TransportObservation(
+            ag_session_id=session_id,
+            turn_id="req_decision",
+            sequence=1,
+            kind=TransportObservationKind.TIMING,
+            observed_at="2025-01-01T00:00:00Z",
+            correlation_quality=CorrelationQuality.REQUEST_SCOPED,
+            attributes={
+                "timing-event": "response-decision",
+                "diagnostic-signature": "0123456789abcdef",
+                "diagnostic-details": '{"completion-satisfied":false}',
+            },
+        )
+        result = obs_sink(observation)
+        if result is not None:
+            await result
+
+    record = _open(runtime, tmp_path)
+    transports[0].on_event_emitter = _emit_response_decision
+    session_id = record["session-id"]
+
+    result = runtime.prompt_in_session(
+        tmp_path,
+        session_id,
+        "hello",
+        request_id="req_decision",
+    )
+
+    assert result.stop_reason == "end_turn"
+    rendered = stream.getvalue()
+    assert "DECISION" in rendered
+    assert "request=req_decision" in rendered
+    assert "signature=0123456789abcdef" in rendered
     runtime.close_session(tmp_path, session_id)
 
 
@@ -1922,7 +2344,7 @@ def test_stale_persisted_session_lists_not_live_no_runtime_started(tmp_path, mon
         stale_id = record["session-id"]
         session_store.write_session_record(tmp_path, record)
 
-        listed = api.list_execution_sessions(tmp_path)
+        listed = api.list_execution_sessions(tmp_path, state="all")
         row = [s for s in listed if s["session-id"] == stale_id][0]
         assert row["live"] is False
         # A stale persisted active session should carry a diagnostic flag.
@@ -1937,6 +2359,417 @@ def test_stale_persisted_session_lists_not_live_no_runtime_started(tmp_path, mon
     finally:
         if saved_runtime is not None:
             sessions_module._SESSION_RUNTIME = saved_runtime  # type: ignore[attr-defined]
+
+
+def test_stale_non_live_session_is_expired_by_durable_idle_policy(tmp_path):
+    from audiagentic.components.agents.gateway import api as api
+
+    record = session_store.build_session_record(
+        execution_profile_id="profile-1", idle_timeout_seconds=60
+    )
+    session_id = record["session-id"]
+    old = (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat().replace(
+        "+00:00", "Z"
+    )
+    record["timing"]["last-activity-at"] = old
+    session_store.write_session_record(tmp_path, record)
+
+    listed = api.list_execution_sessions(tmp_path, state="all", _live_ids=set())
+    row = next(item for item in listed if item["session-id"] == session_id)
+
+    assert row["state"] == "expired"
+    assert row["close-reason"] == "idle-timeout"
+    assert "runtime-state" not in row
+    assert session_store.read_session_record(tmp_path, session_id)["state"] == "expired"
+
+
+def test_legacy_gpt_session_without_persisted_policy_uses_admission_default(tmp_path):
+    from audiagentic.components.agents.gateway import api as api
+
+    record = session_store.build_session_record(
+        execution_profile_id="gpt-auto", provider_id="gpt-auto"
+    )
+    session_id = record["session-id"]
+    old = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat().replace(
+        "+00:00", "Z"
+    )
+    record["timing"]["last-activity-at"] = old
+    session_store.write_session_record(tmp_path, record)
+
+    row = next(
+        item
+        for item in api.list_execution_sessions(tmp_path, state="all", _live_ids=set())
+        if item["session-id"] == session_id
+    )
+
+    assert row["state"] == "expired"
+    assert row["close-reason"] == "idle-timeout"
+
+
+def test_durable_idle_sweep_reconciles_nonterminal_request(tmp_path):
+    from audiagentic.components.agents.gateway import api as api
+    from audiagentic.components.agents.gateway import store
+
+    session = session_store.build_session_record(
+        execution_profile_id="gpt-auto",
+        provider_id="gpt-auto",
+        provider_session_ref="provider-session",
+        surface_id="surface-1",
+        provider_metadata={"provider-session-id": "provider-session"},
+        idle_timeout_seconds=60,
+    )
+    session_id = session["session-id"]
+    old = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat().replace(
+        "+00:00", "Z"
+    )
+    session["timing"]["last-activity-at"] = old
+    session_store.write_session_record(tmp_path, session)
+    request = store.build_record(
+        request_id="req_protect_session",
+        execution_profile_id="gpt-auto",
+        prompt_body="x",
+        session_id=session_id,
+        session_keep_alive=True,
+        resolved_provider_id="gpt-auto",
+    )
+    request["provider-metadata"] = {"provider-session-id": "provider-session"}
+    store.write_record(tmp_path, request)
+
+    row = next(
+        item
+        for item in api.list_execution_sessions(tmp_path, state="all", _live_ids=set())
+        if item["session-id"] == session_id
+    )
+
+    reconciled = store.read_record(tmp_path, request["request-id"])
+    assert reconciled["state"] == "interrupted"
+    assert reconciled["error"]["code"] == "CON-AGW-084"
+    assert reconciled["diagnostics"]["reason-code"] == "provider-session-expired"
+    assert row["state"] == "expired"
+    assert "runtime-state" not in row
+    assert session_store.read_session_record(tmp_path, session_id)["state"] == "expired"
+
+
+def test_durable_idle_sweep_preserves_request_with_provider_activity_lease(tmp_path):
+    from audiagentic.components.agents.gateway import api as api
+    from audiagentic.components.agents.gateway import store
+
+    session = session_store.build_session_record(
+        execution_profile_id="gpt-auto",
+        provider_id="gpt-auto",
+        provider_session_ref="provider-session",
+        surface_id="surface-1",
+        provider_metadata={"provider-session-id": "provider-session"},
+        idle_timeout_seconds=60,
+    )
+    session_id = session["session-id"]
+    session["timing"]["last-activity-at"] = (
+        datetime.now(timezone.utc) - timedelta(hours=1)
+    ).isoformat().replace("+00:00", "Z")
+    session_store.write_session_record(tmp_path, session)
+    request = store.build_record(
+        request_id="req_live_provider_lease",
+        execution_profile_id="gpt-auto",
+        prompt_body="x",
+        session_id=session_id,
+        session_keep_alive=True,
+        resolved_provider_id="gpt-auto",
+    )
+    request["provider-metadata"] = {"provider-session-id": "provider-session"}
+    request["activity"]["provider"]["lease-expires-at"] = (
+        datetime.now(timezone.utc) + timedelta(minutes=5)
+    ).isoformat().replace("+00:00", "Z")
+    store.write_record(tmp_path, request)
+
+    row = next(
+        item
+        for item in api.list_execution_sessions(tmp_path, state="all", _live_ids=set())
+        if item["session-id"] == session_id
+    )
+
+    assert row["state"] == "active"
+    assert row["runtime-state"] == "stale-non-live"
+    assert store.read_record(tmp_path, request["request-id"])["state"] == "queued"
+
+
+def test_durable_idle_sweep_requires_exact_provider_session_identity(tmp_path):
+    from audiagentic.components.agents.gateway import api as api
+    from audiagentic.components.agents.gateway import store
+
+    session = session_store.build_session_record(
+        execution_profile_id="gpt-auto",
+        provider_id="gpt-auto",
+        provider_session_ref="provider-session",
+        surface_id="surface-1",
+        provider_metadata={"provider-session-id": "provider-session"},
+        idle_timeout_seconds=60,
+    )
+    session["timing"]["last-activity-at"] = (
+        datetime.now(timezone.utc) - timedelta(hours=1)
+    ).isoformat().replace("+00:00", "Z")
+    session_store.write_session_record(tmp_path, session)
+    request = store.build_record(
+        request_id="req_mismatched_provider_session",
+        execution_profile_id="gpt-auto",
+        prompt_body="x",
+        session_id=session["session-id"],
+        session_keep_alive=True,
+        resolved_provider_id="gpt-auto",
+    )
+    request["provider-metadata"] = {"provider-session-id": "other-session"}
+    store.write_record(tmp_path, request)
+
+    row = next(
+        item
+        for item in api.list_execution_sessions(tmp_path, state="all", _live_ids=set())
+        if item["session-id"] == session["session-id"]
+    )
+
+    assert row["state"] == "active"
+    assert store.read_record(tmp_path, request["request-id"])["state"] == "queued"
+
+
+def test_durable_idle_sweep_rejects_binding_metadata_divergence(tmp_path):
+    from audiagentic.components.agents.gateway import api as api
+    from audiagentic.components.agents.gateway import store
+
+    session = session_store.build_session_record(
+        execution_profile_id="gpt-auto",
+        provider_id="gpt-auto",
+        provider_session_ref="provider-session",
+        surface_id="surface-1",
+        provider_metadata={"provider-session-id": "provider-session"},
+        idle_timeout_seconds=60,
+    )
+    session["binding"]["provider-session-ref"] = "different-provider-session"
+    session["timing"]["last-activity-at"] = (
+        datetime.now(timezone.utc) - timedelta(hours=1)
+    ).isoformat().replace("+00:00", "Z")
+    session_store.write_session_record(tmp_path, session)
+    request = store.build_record(
+        request_id="req_binding_metadata_divergence",
+        execution_profile_id="gpt-auto",
+        prompt_body="x",
+        session_id=session["session-id"],
+        session_keep_alive=True,
+        resolved_provider_id="gpt-auto",
+    )
+    request["provider-metadata"] = {"provider-session-id": "provider-session"}
+    store.write_record(tmp_path, request)
+
+    row = next(
+        item
+        for item in api.list_execution_sessions(tmp_path, state="all", _live_ids=set())
+        if item["session-id"] == session["session-id"]
+    )
+
+    assert row["state"] == "active"
+    assert store.read_record(tmp_path, request["request-id"])["state"] == "queued"
+
+
+def test_durable_idle_sweep_rejects_unrelayed_request_binding(tmp_path):
+    from audiagentic.components.agents.gateway import api as api
+    from audiagentic.components.agents.gateway import store
+
+    session = session_store.build_session_record(
+        execution_profile_id="gpt-auto",
+        provider_id="gpt-auto",
+        provider_session_ref="provider-session",
+        surface_id="surface-1",
+        provider_metadata={"provider-session-id": "provider-session"},
+        idle_timeout_seconds=60,
+    )
+    session["timing"]["last-activity-at"] = (
+        datetime.now(timezone.utc) - timedelta(hours=1)
+    ).isoformat().replace("+00:00", "Z")
+    session_store.write_session_record(tmp_path, session)
+    request = store.build_record(
+        request_id="req_unrelayed_binding",
+        execution_profile_id="gpt-auto",
+        prompt_body="x",
+        session_id=session["session-id"],
+        session_keep_alive=True,
+        resolved_provider_id="gpt-auto",
+    )
+    store.write_record(tmp_path, request)
+
+    row = next(
+        item
+        for item in api.list_execution_sessions(tmp_path, state="all", _live_ids=set())
+        if item["session-id"] == session["session-id"]
+    )
+
+    assert row["state"] == "active"
+    assert store.read_record(tmp_path, request["request-id"])["state"] == "queued"
+
+
+def test_durable_idle_sweep_ignores_legacy_owner_activity_lease(tmp_path):
+    from audiagentic.components.agents.gateway import api as api
+    from audiagentic.components.agents.gateway import store
+
+    session = session_store.build_session_record(
+        execution_profile_id="gpt-auto",
+        provider_id="gpt-auto",
+        provider_session_ref="provider-session",
+        surface_id="surface-1",
+        provider_metadata={"provider-session-id": "provider-session"},
+        idle_timeout_seconds=60,
+    )
+    session["timing"]["last-activity-at"] = (
+        datetime.now(timezone.utc) - timedelta(hours=1)
+    ).isoformat().replace("+00:00", "Z")
+    session_store.write_session_record(tmp_path, session)
+    request = store.build_record(
+        request_id="req_owner_lease_only",
+        execution_profile_id="gpt-auto",
+        prompt_body="x",
+        session_id=session["session-id"],
+        session_keep_alive=True,
+        resolved_provider_id="gpt-auto",
+    )
+    request["provider-metadata"] = {"provider-session-id": "provider-session"}
+    request["activity-lease-expires-at"] = (
+        datetime.now(timezone.utc) + timedelta(hours=1)
+    ).isoformat().replace("+00:00", "Z")
+    store.write_record(tmp_path, request)
+
+    row = next(
+        item
+        for item in api.list_execution_sessions(tmp_path, state="all", _live_ids=set())
+        if item["session-id"] == session["session-id"]
+    )
+
+    assert row["state"] == "expired"
+    assert store.read_record(tmp_path, request["request-id"])["state"] == "interrupted"
+
+
+def test_durable_idle_sweep_preflights_all_requests_before_mutation(tmp_path):
+    from audiagentic.components.agents.gateway import api as api
+    from audiagentic.components.agents.gateway import store
+
+    session = session_store.build_session_record(
+        execution_profile_id="gpt-auto",
+        provider_id="gpt-auto",
+        provider_session_ref="provider-session",
+        surface_id="surface-1",
+        provider_metadata={"provider-session-id": "provider-session"},
+        idle_timeout_seconds=60,
+    )
+    session["timing"]["last-activity-at"] = (
+        datetime.now(timezone.utc) - timedelta(hours=1)
+    ).isoformat().replace("+00:00", "Z")
+    session_store.write_session_record(tmp_path, session)
+    requests = []
+    for request_id in ("req_preflight_one", "req_preflight_two"):
+        request = store.build_record(
+            request_id=request_id,
+            execution_profile_id="gpt-auto",
+            prompt_body="x",
+            session_id=session["session-id"],
+            session_keep_alive=True,
+            resolved_provider_id="gpt-auto",
+        )
+        request["provider-metadata"] = {"provider-session-id": "provider-session"}
+        requests.append(request)
+        store.write_record(tmp_path, request)
+    requests[0]["activity"]["provider"]["lease-expires-at"] = (
+        datetime.now(timezone.utc) + timedelta(minutes=5)
+    ).isoformat().replace("+00:00", "Z")
+    store.write_record(tmp_path, requests[0])
+
+    row = next(
+        item
+        for item in api.list_execution_sessions(tmp_path, state="all", _live_ids=set())
+        if item["session-id"] == session["session-id"]
+    )
+
+    assert row["state"] == "active"
+    assert all(store.read_record(tmp_path, item["request-id"])["state"] == "queued" for item in requests)
+
+
+def test_durable_idle_sweep_rechecks_revision_before_first_mutation(tmp_path, monkeypatch):
+    from audiagentic.components.agents.gateway import api as api
+    from audiagentic.components.agents.gateway import store
+
+    session = session_store.build_session_record(
+        execution_profile_id="gpt-auto",
+        provider_id="gpt-auto",
+        provider_session_ref="provider-session",
+        surface_id="surface-1",
+        provider_metadata={"provider-session-id": "provider-session"},
+        idle_timeout_seconds=60,
+    )
+    session["timing"]["last-activity-at"] = (
+        datetime.now(timezone.utc) - timedelta(hours=1)
+    ).isoformat().replace("+00:00", "Z")
+    session_store.write_session_record(tmp_path, session)
+    request = store.build_record(
+        request_id="req_revision_changed_during_preflight",
+        execution_profile_id="gpt-auto",
+        prompt_body="x",
+        session_id=session["session-id"],
+        session_keep_alive=True,
+        resolved_provider_id="gpt-auto",
+    )
+    request["provider-metadata"] = {"provider-session-id": "provider-session"}
+    store.write_record(tmp_path, request)
+
+    real_read = store.read_record
+    reads = 0
+
+    def read_with_revision_change(root, request_id, *args, **kwargs):
+        nonlocal reads
+        value = real_read(root, request_id, *args, **kwargs)
+        if request_id == request["request-id"]:
+            reads += 1
+            # list_records performs the first read; the request collection
+            # performs the second.  Simulate an activity update before the
+            # immediate pre-mutation re-read.
+            if reads == 2:
+                changed = dict(value)
+                changed["revision"] = int(value["revision"]) + 1
+                return changed
+        return value
+
+    monkeypatch.setattr(store, "read_record", read_with_revision_change)
+
+    row = next(
+        item
+        for item in api.list_execution_sessions(tmp_path, state="all", _live_ids=set())
+        if item["session-id"] == session["session-id"]
+    )
+
+    assert row["state"] == "active"
+    assert real_read(tmp_path, request["request-id"])["state"] == "queued"
+
+
+def test_durable_idle_sweep_rechecks_policy_inside_retention_fence(tmp_path, monkeypatch):
+    session = session_store.build_session_record(
+        execution_profile_id="gpt-auto", provider_id="gpt-auto", idle_timeout_seconds=60
+    )
+    session_id = session["session-id"]
+    old = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat().replace("+00:00", "Z")
+    session["timing"]["last-activity-at"] = old
+    session_store.write_session_record(tmp_path, session)
+    real_read = session_store.read_session_record
+    reads = 0
+
+    def refreshed_after_initial_read(root, current_id):
+        nonlocal reads
+        value = real_read(root, current_id)
+        if current_id == session_id:
+            reads += 1
+            if reads >= 2:
+                value = dict(value)
+                timing = dict(value["timing"])
+                timing["last-activity-at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+                value["timing"] = timing
+        return value
+
+    monkeypatch.setattr(session_store, "read_session_record", refreshed_after_initial_read)
+    result = session_store.expire_session_if_policy_exceeded(tmp_path, session_id)
+
+    assert result["state"] == "active"
 
 
 def test_live_session_lists_without_stale_flag(rig, monkeypatch):
@@ -1959,6 +2792,19 @@ def test_live_session_lists_without_stale_flag(rig, monkeypatch):
     assert row.get("runtime-state") != "stale-non-live"
 
 
+def test_reconcile_terminal_live_session_closes_provider_handle(rig):
+    """A terminal durable session cannot retain a live provider worker."""
+    runtime, _clock, transports, project_root = rig
+    record = _open(runtime, project_root)
+    session_id = record["session-id"]
+
+    session_store.transition_session_record(project_root, session_id, "closed")
+
+    assert runtime.reconcile_terminal_live_sessions() == [session_id]
+    assert runtime.live_session_ids() == []
+    assert transports[-1].closed is True
+
+
 def test_closing_session_not_in_runtime_is_stale(tmp_path, monkeypatch):
     """A persisted closing session with no live runtime is also flagged stale."""
     from audiagentic.components.agents.gateway import api as api
@@ -1979,7 +2825,7 @@ def test_closing_session_not_in_runtime_is_stale(tmp_path, monkeypatch):
             "closing",
         )
 
-        listed = api.list_execution_sessions(tmp_path)
+        listed = api.list_execution_sessions(tmp_path, state="all")
         row = [s for s in listed if s["session-id"] == closing_id][0]
         assert row["live"] is False
         assert row.get("runtime-state") == "stale-non-live"
@@ -2542,3 +3388,69 @@ def test_as19_request_id_binding_no_spurious_reject(rig):
     assert dec.coarse_state == "active"
 
     runtime.close_session(tmp_path, session_id)
+
+
+def test_session_runtime_durable_owner_probe_is_project_and_terminal_scoped(rig, tmp_path):
+    runtime, _clock, transports, project_root = rig
+    other_root = tmp_path / "other-project"
+    first = _open(runtime, project_root)
+    second = _open(runtime, other_root)
+    first_transport, second_transport = transports[-2], transports[-1]
+
+    assert first_transport.durable_owner_probe(None) is True
+    assert second_transport.durable_owner_probe(None) is True
+
+    runtime.close_session(project_root, first["session-id"])
+    assert first_transport.durable_owner_probe(None) is False
+    assert second_transport.durable_owner_probe(None) is True
+
+    runtime.close_session(other_root, second["session-id"])
+
+
+def test_shutdown_cancels_busy_owner_before_transport_teardown(rig):
+    runtime, _clock, transports, project_root = rig
+    record = _open(runtime, project_root)
+    transports[0].block_event = threading.Event()
+    outcome: list[BaseException] = []
+
+    def run_turn() -> None:
+        try:
+            runtime.prompt_in_session(
+                project_root,
+                record["session-id"],
+                "blocked shutdown",
+                request_id="req-shutdown-owner",
+            )
+        except BaseException as exc:
+            outcome.append(exc)
+
+    worker = threading.Thread(target=run_turn)
+    worker.start()
+    assert _wait_for(
+        lambda: runtime.session_runtime_status(record["session-id"]).get("current-request-id")
+        == "req-shutdown-owner"
+    )
+
+    runtime.shutdown()
+    worker.join(timeout=2)
+    assert not worker.is_alive()
+    assert transports[0].closed is True
+    assert transports[0].request_owner is None
+    stored = session_store.read_session_record(project_root, record["session-id"])
+    assert stored["state"] == "closed"
+    assert stored["close-reason"] == "shutdown"
+
+
+def test_handoff_shutdown_revokes_page_owner_without_closing_session(rig):
+    runtime, _clock, transports, project_root = rig
+    record = _open(runtime, project_root)
+    transport = transports[0]
+    transport.set_request_owner("req-old-generation")
+
+    runtime.shutdown(handoff=True)
+
+    assert transport.request_owner is None
+    assert transport.closed is False
+    stored = session_store.read_session_record(project_root, record["session-id"])
+    assert stored["state"] == "active"
+    assert stored.get("close-reason") is None

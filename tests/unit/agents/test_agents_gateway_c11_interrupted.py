@@ -151,10 +151,10 @@ def _record(project_root: Path, prompt: str = "hello") -> dict:
     return record
 
 
-class TestRecoveryInterruptedExactlyOnce:
-    """C11: recovery publishes agents.execution.interrupted exactly once per request."""
+class TestRecoveryOwnershipTakeover:
+    """Gateway generation loss preserves non-terminal request ownership safely."""
 
-    def test_recovery_interrupted_publishes_event(self, tmp_path: Path) -> None:
+    def test_recovery_interrupts_unreattachable_worker(self, tmp_path: Path) -> None:
         service_root = tmp_path / "service"
         project_root = tmp_path / "project"
         record = _record(project_root)
@@ -173,23 +173,15 @@ class TestRecoveryInterruptedExactlyOnce:
             expected_revision=claimed["revision"],
         )
 
-        events_received: list[str] = []
-
-        def handler(topic: str, payload: dict, metadata: dict) -> None:
-            events_received.append(topic)
-
-        handle = get_bus().subscribe(EXECUTION_INTERRUPTED_TOPIC, handler)
-        try:
-            from audiagentic.components.agents.gateway.queue import recovery as recovery
-
-            report = recovery.recover_gateway_requests(
-                service_root, live_owner_epoch="new-epoch"
-            )
-        finally:
-            get_bus().unsubscribe(handle)
-
+        from audiagentic.components.agents.gateway.queue import recovery as recovery
+        report = recovery.recover_gateway_requests(service_root, live_owner_epoch="new-epoch")
         assert report.interrupted == 1
-        assert events_received == [EXECUTION_INTERRUPTED_TOPIC]
+        assert report.deferred == ()
+        recovered = store.read_record(project_root, record["request-id"])
+        assert recovered["state"] == "interrupted"
+        assert recovered["error"]["code"] == "CON-AGW-084"
+        assert recovered["recovery"]["outcome"] == "manual-review-required"
+        assert not store.active_work_path(service_root, record["request-id"]).exists()
 
     def test_duplicate_recovery_does_not_republish(self, tmp_path: Path) -> None:
         """Second recovery pass on already-interrupted request publishes nothing."""
@@ -211,33 +203,14 @@ class TestRecoveryInterruptedExactlyOnce:
             expected_revision=claimed["revision"],
         )
 
-        events_received: list[str] = []
-
-        def handler(topic: str, payload: dict, metadata: dict) -> None:
-            events_received.append(topic)
-
-        handle = get_bus().subscribe(EXECUTION_INTERRUPTED_TOPIC, handler)
-        try:
-            from audiagentic.components.agents.gateway.queue import recovery as recovery
-
-            # First pass: transitions to interrupted, publishes event
-            report1 = recovery.recover_gateway_requests(
-                service_root, live_owner_epoch="new-epoch"
-            )
-            assert report1.interrupted == 1
-            first_count = len(events_received)
-
-            # Second pass: already terminal, cleared without republish
-            report2 = recovery.recover_gateway_requests(
-                service_root, live_owner_epoch="new-epoch"
-            )
-        finally:
-            get_bus().unsubscribe(handle)
-
-        assert first_count == 1
-        assert len(events_received) == 1  # no second event
-        # Second pass has nothing to examine (active-work already cleared)
-        assert report2.examined == 0
+        from audiagentic.components.agents.gateway.queue import recovery as recovery
+        report1 = recovery.recover_gateway_requests(service_root, live_owner_epoch="new-epoch")
+        report2 = recovery.recover_gateway_requests(service_root, live_owner_epoch="new-epoch")
+        assert report1.interrupted == 1
+        assert report2.deferred == ()
+        assert report2.interrupted == 0
+        assert report2.skipped_live == 0
+        assert not report2.running
 
     def test_recovery_queued_interrupted_publishes_event(self, tmp_path: Path) -> None:
         """Queued stale record also publishes interrupted event on recovery."""
@@ -252,23 +225,12 @@ class TestRecoveryInterruptedExactlyOnce:
             service_root=service_root,
         )
 
-        events_received: list[str] = []
-
-        def handler(topic: str, payload: dict, metadata: dict) -> None:
-            events_received.append(topic)
-
-        handle = get_bus().subscribe(EXECUTION_INTERRUPTED_TOPIC, handler)
-        try:
-            from audiagentic.components.agents.gateway.queue import recovery as recovery
-
-            report = recovery.recover_gateway_requests(
-                service_root, live_owner_epoch="new-epoch"
-            )
-        finally:
-            get_bus().unsubscribe(handle)
-
-        assert report.replay_required == 1
-        assert events_received == [EXECUTION_INTERRUPTED_TOPIC]
+        from audiagentic.components.agents.gateway.queue import recovery as recovery
+        report = recovery.recover_gateway_requests(service_root, live_owner_epoch="new-epoch")
+        assert len(report.queued) == 1
+        recovered = store.read_record(project_root, record["request-id"])
+        assert recovered["state"] == "queued"
+        assert recovered["dispatch-owner-epoch"] == "new-epoch"
 
     def test_recovery_queued_event_has_replay_required_true(self, tmp_path: Path) -> None:
         """End-to-end: queued recovery → replay-required outcome → event replay_required=True."""
@@ -283,28 +245,12 @@ class TestRecoveryInterruptedExactlyOnce:
             service_root=service_root,
         )
 
-        events_payload: list[dict] = []
+        from audiagentic.components.agents.gateway.queue import recovery as recovery
+        report = recovery.recover_gateway_requests(service_root, live_owner_epoch="new-epoch")
+        assert report.queued == ((project_root, record["request-id"]),)
 
-        def handler(topic: str, payload: dict, metadata: dict) -> None:
-            events_payload.append(payload)
-
-        handle = get_bus().subscribe(EXECUTION_INTERRUPTED_TOPIC, handler)
-        try:
-            from audiagentic.components.agents.gateway.queue import recovery as recovery
-
-            recovery.recover_gateway_requests(
-                service_root, live_owner_epoch="new-epoch"
-            )
-        finally:
-            get_bus().unsubscribe(handle)
-
-        assert len(events_payload) == 1
-        ev = events_payload[0]
-        # C6: queued recovery → replay-required → replay_required=True
-        assert ev["replay_required"] is True
-
-    def test_recovery_running_event_has_replay_required_false(self, tmp_path: Path) -> None:
-        """End-to-end: running recovery → resubmit-required outcome → event replay_required=False."""
+    def test_recovery_running_worker_is_interrupted(self, tmp_path: Path) -> None:
+        """End-to-end: unreattachable running recovery → interrupted outcome."""
         service_root = tmp_path / "service"
         project_root = tmp_path / "project"
         record = _record(project_root)
@@ -323,25 +269,9 @@ class TestRecoveryInterruptedExactlyOnce:
             expected_revision=claimed["revision"],
         )
 
-        events_payload: list[dict] = []
-
-        def handler(topic: str, payload: dict, metadata: dict) -> None:
-            events_payload.append(payload)
-
-        handle = get_bus().subscribe(EXECUTION_INTERRUPTED_TOPIC, handler)
-        try:
-            from audiagentic.components.agents.gateway.queue import recovery as recovery
-
-            recovery.recover_gateway_requests(
-                service_root, live_owner_epoch="new-epoch"
-            )
-        finally:
-            get_bus().unsubscribe(handle)
-
-        assert len(events_payload) == 1
-        ev = events_payload[0]
-        # C6: running recovery → resubmit-required → replay_required=False
-        assert ev["replay_required"] is False
+        from audiagentic.components.agents.gateway.queue import recovery as recovery
+        report = recovery.recover_gateway_requests(service_root, live_owner_epoch="new-epoch")
+        assert report.interrupted == 1
 
 
 # ---------------------------------------------------------------------------

@@ -9,6 +9,7 @@ import subprocess
 import sys
 import threading
 import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -16,6 +17,8 @@ import pytest
 from audiagentic.components.agents.agents_paths import gateway_timeline_path
 from audiagentic.components.agents.gateway import store as store
 from audiagentic.components.agents.gateway.queue import queue as queue_mod
+from audiagentic.components.agents.gateway.queue.recovery_control import RecoveryDeferred
+from audiagentic.components.agents.gateway.session import sessions_store
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.event import get_bus, reset_bus
 from audiagentic.foundation.io import load_ndjson
@@ -64,6 +67,1094 @@ def _immediate_runner(project_root: Path, record: dict) -> dict:
 
 def _failing_runner(project_root: Path, record: dict) -> dict:
     raise AudiaGenticError(code="EXT-FAKE-001", kind="providers", message="boom")
+
+
+def test_recovery_deferred_stays_running_and_retries_same_request(tmp_path: Path):
+    """An ambiguous recovery error never becomes a failed request."""
+    manager = queue_mod.GatewayQueueManager()
+    project = tmp_path / "project"
+    project.mkdir()
+    record = store.build_record(execution_profile_id="recovery", prompt_body="x")
+    store.write_record(project, record)
+    raised = threading.Event()
+    calls: list[str] = []
+
+    def runner(project_root: Path, current: dict) -> dict:
+        calls.append(current["request-id"])
+        if len(calls) == 1:
+            raised.set()
+            raise RecoveryDeferred(
+                AudiaGenticError(
+                    code="EXT-AGW-118",
+                    kind="agents",
+                    message="provider reattach unavailable",
+                )
+            )
+        return store.transition_record(
+            project_root,
+            current["request-id"],
+            "completed",
+            updates={"output": "recovered", "finished-at": now_iso_z()},
+        )
+
+    result = manager.enqueue(
+        project,
+        record,
+        {
+            "virtual-capacity": 1,
+            "provider-session-recovery-initial-delay-seconds": 0.5,
+            "provider-session-recovery-max-delay-seconds": 0.5,
+        },
+        runner,
+    )
+    assert result["request-id"] == record["request-id"]
+    assert raised.wait(timeout=2)
+
+    deadline = time.monotonic() + 2
+    while time.monotonic() < deadline:
+        current = store.read_record(project, record["request-id"])
+        if (current.get("recovery") or {}).get("phase") == "rehydrate-retry":
+            break
+        time.sleep(0.01)
+    assert current["state"] == "running"
+    assert current["recovery-required"] is True
+    assert current["recovery"]["attempt"] == 1
+    assert current["recovery"]["side-effect-state"] == "may-have-started"
+    # The retry may already have fired by the time the durable phase is observed;
+    # the later same-request call and terminal result prove it was scheduled.
+
+    terminal = manager.wait(project, record["request-id"], timeout_seconds=3)
+    assert terminal["state"] == "completed"
+    assert terminal["output"] == "recovered"
+    assert calls == [record["request-id"], record["request-id"]]
+    assert manager.recovery_pending_count(project) == 0
+    events = load_ndjson(gateway_timeline_path(project, record["request-id"]))
+    assert any(event.get("event") == "recovery.retry-scheduled" for event in events)
+    assert not any(
+        event.get("event") == "queue.finished" and event.get("state") == "failed"
+        for event in events
+    )
+
+
+def test_recovery_retry_scheduler_exception_reschedules(tmp_path: Path):
+    """A transient exception before retry admission must not strand the
+    durable request without another recovery timer."""
+    manager = queue_mod.GatewayQueueManager()
+    project = tmp_path / "project"
+    project.mkdir()
+    record = store.build_record(execution_profile_id="recovery-scheduler", prompt_body="x")
+    store.write_record(project, record)
+    first_attempt = threading.Event()
+    calls: list[str] = []
+
+    def runner(project_root: Path, current: dict) -> dict:
+        calls.append(current["request-id"])
+        if len(calls) == 1:
+            first_attempt.set()
+            raise RecoveryDeferred(
+                AudiaGenticError(
+                    code="EXT-AGW-118",
+                    kind="agents",
+                    message="provider reattach unavailable",
+                )
+            )
+        return store.transition_record(
+            project_root,
+            current["request-id"],
+            "completed",
+            updates={"output": "recovered", "finished-at": now_iso_z()},
+        )
+
+    manager.enqueue(
+        project,
+        record,
+        {
+            "virtual-capacity": 1,
+            "provider-session-recovery-initial-delay-seconds": 0.05,
+            "provider-session-recovery-max-delay-seconds": 0.05,
+        },
+        runner,
+    )
+    assert first_attempt.wait(timeout=2)
+    original_reserve = manager._try_reserve_source
+    reserve_calls = 0
+
+    def flaky_reserve(entry, pq):
+        nonlocal reserve_calls
+        reserve_calls += 1
+        if reserve_calls == 1:
+            raise RuntimeError("transient scheduler failure")
+        return original_reserve(entry, pq)
+
+    manager._try_reserve_source = flaky_reserve
+    terminal = manager.wait(project, record["request-id"], timeout_seconds=3)
+    assert terminal["state"] == "completed"
+    assert calls == [record["request-id"], record["request-id"]]
+    assert reserve_calls >= 2
+    assert manager.recovery_pending_count(project) == 0
+
+def test_session_recovery_deferred_before_turn_start_retries_queued_request(tmp_path: Path):
+    """A pre-lock recovery deferral must not strand a live successor session."""
+    manager = queue_mod.GatewayQueueManager()
+    calls = 0
+
+    def runner(project_root: Path, current: dict, *, session_start) -> dict:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise RecoveryDeferred(
+                AudiaGenticError(
+                    code="EXT-AGW-118",
+                    kind="providers",
+                    message="provider reattach unavailable before turn start",
+                ),
+                phase="rehydrate-retry",
+                side_effect_state="may-have-started",
+            )
+        started = session_start()
+        return store.transition_owned_terminal(
+            project_root,
+            current["request-id"],
+            "completed",
+            owner_epoch=started["dispatch-owner-epoch"],
+            worker_id=started["worker-id"],
+            attempt_epoch=started["attempt-epoch"],
+            updates={"output": "recovered", "finished-at": now_iso_z()},
+        )
+
+    record = store.build_record(
+        execution_profile_id="session-recovery-before-start",
+        prompt_body="x",
+        session_id="successor-session",
+        provider_transport_kind="provider-session",
+    )
+    store.write_record(tmp_path, record)
+    manager.enqueue(
+        tmp_path,
+        record,
+        {
+            "virtual-capacity": 1,
+            "provider-session-recovery-initial-delay-seconds": 0.01,
+            "provider-session-recovery-max-delay-seconds": 0.01,
+        },
+        runner,
+    )
+
+    terminal = manager.wait(tmp_path, record["request-id"], timeout_seconds=3)
+    assert terminal["state"] == "completed"
+    assert terminal["output"] == "recovered"
+    assert calls == 2
+    events = load_ndjson(gateway_timeline_path(tmp_path, record["request-id"]))
+    assert any(event.get("event") == "recovery.retry-scheduled" and event.get("state") == "queued" for event in events)
+    assert any(event.get("event") == "session-attempt.started" and event.get("state") == "running" for event in events)
+
+
+def test_recovery_deferred_is_bounded_and_interrupts_without_resubmit(tmp_path: Path):
+    """Observation-only recovery cannot leave a lost provider turn running forever."""
+    manager = queue_mod.GatewayQueueManager()
+    project = tmp_path / "project"
+    project.mkdir()
+    record = store.build_record(execution_profile_id="recovery-bounded", prompt_body="x")
+    record["provider-metadata"] = {
+        "submission-proven": True,
+        "chat-url": "https://chatgpt.com/g/g-p-project/c/conversation",
+        "unresolved-turn-pending": True,
+    }
+    store.write_record(project, record)
+    calls = 0
+
+    def runner(_project_root: Path, _current: dict, **_kwargs) -> dict:
+        nonlocal calls
+        calls += 1
+        raise RecoveryDeferred(
+            AudiaGenticError(
+                code="EXT-AGW-118",
+                kind="agents",
+                message="provider reattach unavailable",
+            )
+        )
+
+    manager.enqueue(
+        project,
+        record,
+        {
+            "virtual-capacity": 1,
+            "provider-session-recovery-initial-delay-seconds": 0.01,
+            "provider-session-recovery-max-delay-seconds": 0.01,
+            "provider-session-recovery-max-attempts": 2,
+        },
+        runner,
+    )
+
+    terminal = manager.wait(project, record["request-id"], timeout_seconds=3)
+    assert terminal["state"] == "interrupted"
+    assert calls == 2
+    assert terminal["error"]["code"] == "CON-AGW-084"
+    assert terminal["provider-metadata"]["submission-proven"] is True
+    assert terminal["provider-metadata"]["chat-url"].endswith("/conversation")
+    assert terminal["recovery"]["outcome"] == "bounded-recovery-exhausted"
+
+
+def test_durable_provider_identity_uses_authoritative_session_binding(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """A lagging request projection still inherits the durable provider identity."""
+    monkeypatch.setattr(
+        sessions_store,
+        "read_session_binding",
+        lambda _project_root, _session_id: {"provider-session-ref": "conversation-ref"},
+    )
+
+    assert queue_mod._has_durable_provider_identity(
+        tmp_path, {"session-id": "ses_authoritative", "provider-metadata": {}}
+    ) is True
+
+
+def test_durable_provider_recovery_is_not_interrupted_by_retry_bound(tmp_path: Path):
+    """A live provider conversation keeps retrying CDP reattachment."""
+    manager = queue_mod.GatewayQueueManager()
+    project = tmp_path / "project"
+    project.mkdir()
+    record = store.build_record(
+        execution_profile_id="recovery-provider-session",
+        prompt_body="x",
+        gateway_profile_id="recovery-provider-session",
+        gateway_profile_generation="gen_test123",
+        gateway_profile_config_digest="sha256:abcd1234",
+        resolved_provider_id="gpt-auto",
+        resolved_instance_ids=["gpt-auto"],
+    )
+    record.update(
+        {
+            "state": "running",
+            "provider-transport-kind": "provider-session",
+            "provider-metadata": {
+                "submission-proven": True,
+                "chat-url": "https://chatgpt.com/g/g-p-project/c/conversation",
+                "unresolved-turn-pending": True,
+            },
+            "recovery-required": True,
+            "worker-id": "recovery-worker",
+            "attempt-epoch": 1,
+            "dispatch-owner-epoch": "owner-epoch",
+        }
+    )
+    store.write_record(project, record)
+    calls = 0
+
+    def runner(_project_root: Path, _current: dict, **_kwargs) -> dict:
+        nonlocal calls
+        calls += 1
+        raise RecoveryDeferred(
+            AudiaGenticError(
+                code="EXT-AGW-118",
+                kind="agents",
+                message="provider reattach unavailable",
+            )
+        )
+
+    manager.enqueue_recovered_running(
+        project,
+        record,
+        {
+            "virtual-capacity": 1,
+            "provider-session-recovery-initial-delay-seconds": 0.01,
+            "provider-session-recovery-max-delay-seconds": 0.01,
+            "provider-session-recovery-max-attempts": 2,
+        },
+        runner,
+        dispatch_owner_epoch="owner-epoch",
+        dispatch_service_root=tmp_path,
+    )
+
+    deadline = time.monotonic() + 1.5
+    while time.monotonic() < deadline and calls < 2:
+        time.sleep(0.01)
+    current = store.read_record(project, record["request-id"])
+    assert calls >= 2
+    assert current["state"] == "running"
+    assert current["recovery-required"] is True
+    assert current["error"] is None
+
+    manager.cancel(project, "recovery-provider-session", record["request-id"])
+    snapshot = manager.wait(project, record["request-id"], timeout_seconds=0.2)
+    # Cancellation is durable intent, not proof that the ambiguous provider turn stopped.
+    assert snapshot["state"] == "running"
+    assert snapshot["cancel-requested"] is True
+
+
+def test_followup_bound_overrides_durable_provider_exception(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """Follow-up recovery remains bounded even while the provider lease is live."""
+    monkeypatch.setattr(
+        queue_mod.GatewayQueueManager,
+        "_recovery_retry_delay",
+        staticmethod(lambda _entry, _attempt: 0.01),
+    )
+    manager = queue_mod.GatewayQueueManager()
+    project = tmp_path / "project"
+    project.mkdir()
+    session = sessions_store.build_session_record(
+        session_id="ses_followup_durable_bound",
+        execution_profile_id="followup-durable-bound",
+        provider_transport_kind="provider-session",
+        provider_id="gpt-auto",
+        provider_session_ref="provider-conversation",
+        surface_id="gpt-auto-cdp",
+        provider_metadata={"unresolved-turn-pending": True},
+        idle_timeout_seconds=0,
+        max_lifetime_seconds=0,
+    )
+    sessions_store.write_session_record(project, session)
+    record = store.build_record(
+        execution_profile_id="followup-durable-bound",
+        prompt_body="x",
+        gateway_profile_id="followup-durable-bound",
+        gateway_profile_generation="gen_test123",
+        gateway_profile_config_digest="sha256:abcd1234",
+        resolved_provider_id="gpt-auto",
+        resolved_instance_ids=["gpt-auto"],
+        provider_transport_kind="provider-session",
+        session_id="ses_followup_durable_bound",
+    )
+    record.update(
+        {
+            "state": "running",
+            "provider-metadata": {
+                "submission-proven": True,
+                "chat-url": "https://chatgpt.com/g/g-p-project/c/conversation",
+                "unresolved-turn-pending": True,
+            },
+            "recovery-required": True,
+            "recovery": {"reason": "gateway-restart", "outcome": "in-place", "attempt": 100, "followup-attempt": 0},
+            "worker-id": "recovery-worker",
+            "attempt-epoch": 1,
+            "dispatch-owner-epoch": "owner-epoch",
+            "gateway-profile-runtime": {"params": {"provider-session-followup-recovery-max-attempts": 2}},
+        }
+    )
+    store.write_record(project, record)
+    monkeypatch.setattr(queue_mod, "_durable_provider_session_is_active", lambda *_args: True)
+
+    calls = 0
+
+    def runner(_project_root: Path, _current: dict, **_kwargs) -> dict:
+        nonlocal calls
+        calls += 1
+        raise RecoveryDeferred(
+            AudiaGenticError(
+                code="EXT-GPTAUTO-003",
+                kind="providers",
+                message="follow-up still being observed",
+            ),
+            phase="followup-reconcile",
+            side_effect_state="may-have-started",
+            continuation={"kind": "provider-followup", "resume-existing": True},
+        )
+
+    manager.enqueue_recovered_running(
+        project,
+        record,
+        {
+            "virtual-capacity": 1,
+            "provider-session-recovery-initial-delay-seconds": 0.01,
+            "provider-session-recovery-max-delay-seconds": 0.01,
+            "provider-session-recovery-max-attempts": 100,
+            "provider-session-followup-recovery-max-attempts": 2,
+        },
+        runner,
+        dispatch_owner_epoch="owner-epoch",
+        dispatch_service_root=tmp_path,
+    )
+
+    terminal = manager.wait(project, record["request-id"], timeout_seconds=3)
+    assert terminal["state"] == "interrupted", {"calls": calls, "record": terminal}
+    assert calls == 2
+    assert terminal["error"]["details"]["recovery-max-attempts"] == 2
+    assert terminal["error"]["details"]["session-fence-state"] == "manual-reconcile-required"
+    session_after = sessions_store.read_session_record(project, "ses_followup_durable_bound")
+    session_metadata = sessions_store.session_provider_metadata(session_after)
+    assert session_metadata["unresolved-turn-pending"] is True
+    assert session_metadata["recovery-state"] == "manual-reconcile-required"
+
+def test_terminal_durable_session_does_not_keep_request_running_forever(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """A failed durable session stops restart recovery without resubmission."""
+    manager = queue_mod.GatewayQueueManager()
+    project = tmp_path / "project"
+    project.mkdir()
+    record = store.build_record(
+        execution_profile_id="recovery-terminal-session",
+        prompt_body="x",
+        gateway_profile_id="recovery-terminal-session",
+        gateway_profile_generation="gen_test123",
+        gateway_profile_config_digest="sha256:abcd1234",
+        resolved_provider_id="gpt-auto",
+        resolved_instance_ids=["gpt-auto"],
+        provider_transport_kind="provider-session",
+    )
+    record.update(
+        {
+            "state": "running",
+            "session-id": "ses_failed",
+            "provider-metadata": {
+                "submission-proven": True,
+                "chat-url": "https://chatgpt.com/g/g-p-project/c/conversation",
+                "unresolved-turn-pending": True,
+            },
+            "recovery-required": True,
+            "recovery": {"attempt": 100, "reason": "owner-loss", "outcome": "in-place"},
+            "worker-id": "recovery-worker",
+            "attempt-epoch": 1,
+            "dispatch-owner-epoch": "owner-epoch",
+        }
+    )
+    store.write_record(project, record)
+    monkeypatch.setattr(
+        sessions_store,
+        "read_session_record",
+        lambda _project_root, _session_id: {"state": "failed", "close-reason": "failed"},
+    )
+    calls = 0
+
+    def runner(_project_root: Path, _current: dict, **_kwargs) -> dict:
+        nonlocal calls
+        calls += 1
+        raise RecoveryDeferred(
+            AudiaGenticError(
+                code="EXT-AGW-118",
+                kind="agents",
+                message="provider reattach unavailable",
+            )
+        )
+
+    manager.enqueue_recovered_running(
+        project,
+        record,
+        {
+            "virtual-capacity": 1,
+            "provider-session-recovery-initial-delay-seconds": 0.01,
+            "provider-session-recovery-max-delay-seconds": 0.01,
+            "provider-session-recovery-max-attempts": 2,
+        },
+        runner,
+        dispatch_owner_epoch="owner-epoch",
+        dispatch_service_root=tmp_path,
+    )
+
+    terminal = manager.wait(project, record["request-id"], timeout_seconds=3)
+    assert terminal["state"] == "interrupted", {"calls": calls, "record": terminal}
+    assert calls == 1
+    assert terminal["error"]["code"] == "CON-AGW-084"
+    assert terminal["recovery"]["outcome"] == "bounded-recovery-exhausted"
+
+
+def test_failed_local_session_without_activity_lease_is_bounded(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """A stale binding cannot keep recovery running without provider activity."""
+    manager = queue_mod.GatewayQueueManager()
+    project = tmp_path / "project"
+    project.mkdir()
+    session_id = "ses_restart_failed_local"
+    record = store.build_record(
+        execution_profile_id="recovery-restart-session",
+        prompt_body="x",
+        gateway_profile_id="recovery-restart-session",
+        gateway_profile_generation="gen_test123",
+        gateway_profile_config_digest="sha256:abcd1234",
+        resolved_provider_id="gpt-auto",
+        resolved_instance_ids=["gpt-auto"],
+        provider_transport_kind="provider-session",
+        session_id=session_id,
+    )
+    record.update(
+        {
+            "state": "running",
+            "provider-metadata": {
+                "submission-proven": True,
+                "chat-url": "https://chatgpt.com/g/g-p-project/c/conversation",
+                "unresolved-turn-pending": True,
+            },
+            "recovery-required": True,
+            "recovery": {"attempt": 100, "reason": "gateway-restart", "outcome": "in-place"},
+            "worker-id": "recovery-worker",
+            "attempt-epoch": 1,
+            "dispatch-owner-epoch": "owner-epoch",
+        }
+    )
+    store.write_record(project, record)
+    monkeypatch.setattr(
+        sessions_store,
+        "read_session_record",
+        lambda _project_root, _session_id: {
+            "state": "failed",
+            "close-reason": "failed",
+        },
+    )
+    monkeypatch.setattr(
+        sessions_store,
+        "read_session_binding",
+        lambda _project_root, _session_id: {"provider-session-ref": "conversation-ref"},
+    )
+    assert queue_mod._durable_provider_session_is_active(project, record) is False
+    calls = 0
+
+    def runner(_project_root: Path, _current: dict, **_kwargs) -> dict:
+        nonlocal calls
+        calls += 1
+        raise RecoveryDeferred(
+            AudiaGenticError(
+                code="EXT-AGW-118",
+                kind="providers",
+                message="provider reattach unavailable",
+            )
+        )
+
+    manager.enqueue_recovered_running(
+        project,
+        record,
+        {
+            "virtual-capacity": 1,
+            "provider-session-recovery-initial-delay-seconds": 0.01,
+            "provider-session-recovery-max-delay-seconds": 0.01,
+            "provider-session-recovery-max-attempts": 1,
+        },
+        runner,
+        dispatch_owner_epoch="owner-epoch",
+        dispatch_service_root=tmp_path,
+    )
+
+    terminal = manager.wait(project, record["request-id"], timeout_seconds=3)
+    assert terminal["state"] == "interrupted", {"calls": calls, "record": terminal}
+    assert terminal["error"]["code"] == "CON-AGW-084"
+    assert terminal["recovery"]["outcome"] == "bounded-recovery-exhausted"
+    assert calls == 1
+
+def test_recovery_uses_authoritative_session_checkpoint(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """A stale request projection cannot suppress a durable pending-turn fence."""
+    project = tmp_path / "project"
+    project.mkdir()
+    record = store.build_record(
+        execution_profile_id="authoritative-session-checkpoint",
+        prompt_body="x",
+        provider_transport_kind="provider-session",
+        session_id="ses_authoritative_checkpoint",
+    )
+    record.update(
+        {
+            "state": "running",
+            "provider-metadata": {
+                "chat-url": "https://chatgpt.com/g/g-p-project/c/conversation",
+                "unresolved-turn-pending": False,
+            },
+            "recovery": {"reason": "gateway-restart"},
+            "activity": {
+                "provider": {"lease-expires-at": "2999-01-01T00:00:00Z"}
+            },
+        }
+    )
+    monkeypatch.setattr(
+        sessions_store,
+        "expire_session_if_policy_exceeded",
+        lambda _project_root, _session_id: {
+            "state": "failed",
+            "provider": {"metadata": {"unresolved-turn-pending": True}},
+        },
+    )
+    monkeypatch.setattr(
+        sessions_store,
+        "read_session_binding",
+        lambda _project_root, _session_id: {"provider-session-ref": "conversation-ref"},
+    )
+
+    assert queue_mod._durable_provider_session_is_active(project, record) is True
+
+def test_active_local_session_with_expired_activity_lease_is_bounded(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """An active durable session cannot outlive its request activity lease."""
+    project = tmp_path / "project"
+    project.mkdir()
+    session_id = "ses_active_expired_lease"
+    record = store.build_record(
+        execution_profile_id="active-expired-lease",
+        prompt_body="x",
+        gateway_profile_id="active-expired-lease",
+        gateway_profile_generation="gen_test123",
+        gateway_profile_config_digest="sha256:abcd1234",
+        resolved_provider_id="gpt-auto",
+        resolved_instance_ids=["gpt-auto"],
+        provider_transport_kind="provider-session",
+        session_id=session_id,
+    )
+    record.update(
+        {
+            "state": "running",
+            "provider-metadata": {
+                "submission-proven": True,
+                "chat-url": "https://chatgpt.com/g/g-p-project/c/conversation",
+                "unresolved-turn-pending": True,
+            },
+            "recovery": {"attempt": 100, "reason": "owner-loss", "outcome": "in-place"},
+            "activity": {
+                "provider": {"lease-expires-at": "2020-01-01T00:00:00Z"}
+            },
+        }
+    )
+    monkeypatch.setattr(
+        sessions_store,
+        "expire_session_if_policy_exceeded",
+        lambda _project_root, _session_id: {"state": "active"},
+    )
+    monkeypatch.setattr(
+        sessions_store,
+        "read_session_binding",
+        lambda _project_root, _session_id: {"provider-session-ref": "conversation-ref"},
+    )
+    assert queue_mod._durable_provider_session_is_active(project, record) is False
+
+def test_durable_recovery_expires_session_at_absolute_max_lifetime(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """Recovery exemption stops once the durable session lifetime elapses."""
+    monkeypatch.setattr(
+        queue_mod.GatewayQueueManager,
+        "_recovery_retry_delay",
+        staticmethod(lambda _entry, _attempt: 0.01),
+    )
+    monkeypatch.setattr(
+        queue_mod.GatewayQueueManager,
+        "_recovery_retry_max_attempts",
+        staticmethod(lambda _entry: 2),
+    )
+    manager = queue_mod.GatewayQueueManager()
+    project = tmp_path / "project"
+    project.mkdir()
+    session_id = "ses_expired_recovery"
+    created_at = (datetime.now(timezone.utc) - timedelta(seconds=120)).isoformat().replace(
+        "+00:00", "Z"
+    )
+    session = sessions_store.build_session_record(
+        session_id=session_id,
+        execution_profile_id="recovery-expiring-session",
+        provider_transport_kind="provider-session",
+        provider_id="gpt-auto",
+        provider_session_ref="provider-conversation",
+        surface_id="gpt-auto-cdp",
+        max_lifetime_seconds=60,
+        created_at=created_at,
+    )
+    sessions_store.write_session_record(project, session)
+    record = store.build_record(
+        execution_profile_id="recovery-expiring-session",
+        prompt_body="x",
+        gateway_profile_id="recovery-expiring-session",
+        gateway_profile_generation="gen_test123",
+        gateway_profile_config_digest="sha256:abcd1234",
+        resolved_provider_id="gpt-auto",
+        resolved_instance_ids=["gpt-auto"],
+        provider_transport_kind="provider-session",
+        session_id=session_id,
+    )
+    record.update(
+        {
+            "state": "running",
+            "provider-metadata": {
+                "submission-proven": True,
+                "provider-session-id": "provider-conversation",
+                "chat-url": "https://chatgpt.com/g/g-p-project/c/conversation",
+                "unresolved-turn-pending": True,
+            },
+            "recovery-required": True,
+            "worker-id": "recovery-worker",
+            "attempt-epoch": 1,
+            "dispatch-owner-epoch": "owner-epoch",
+        }
+    )
+    store.write_record(project, record)
+    calls = 0
+
+    def runner(_project_root: Path, _current: dict, **_kwargs) -> dict:
+        nonlocal calls
+        calls += 1
+        raise RecoveryDeferred(
+            AudiaGenticError(
+                code="EXT-AGW-118",
+                kind="agents",
+                message="provider reattach unavailable",
+            )
+        )
+
+    manager.enqueue_recovered_running(
+        project,
+        record,
+        {
+            "virtual-capacity": 1,
+            "provider-session-recovery-initial-delay-seconds": 0.01,
+            "provider-session-recovery-max-delay-seconds": 0.01,
+            "provider-session-recovery-max-attempts": 2,
+        },
+        runner,
+        dispatch_owner_epoch="owner-epoch",
+        dispatch_service_root=tmp_path,
+    )
+
+    terminal = manager.wait(project, record["request-id"], timeout_seconds=3)
+    assert terminal["state"] == "interrupted"
+    assert calls == 2
+    assert sessions_store.read_session_record(project, session_id)["state"] == "expired"
+
+
+def test_presubmit_reconciliation_waits_past_generic_recovery_bound(tmp_path: Path):
+    """A proven-unsent successor remains queued until its predecessor clears."""
+    manager = queue_mod.GatewayQueueManager()
+    project = tmp_path / "project"
+    project.mkdir()
+    record = store.build_record(execution_profile_id="presubmit-reconcile", prompt_body="x")
+    store.write_record(project, record)
+    calls = 0
+
+    def runner(_project_root: Path, _current: dict, **_kwargs) -> dict:
+        nonlocal calls
+        calls += 1
+        if calls <= 3:
+            raise RecoveryDeferred(
+                AudiaGenticError(
+                    code="EXT-GPTAUTO-004",
+                    kind="providers",
+                    message="previous turn remains unresolved",
+                    details={"previous-turn-unresolved": True},
+                ),
+                phase="presubmit-reconcile",
+                side_effect_state="not-started",
+            )
+        return store.transition_record(
+            _project_root,
+            _current["request-id"],
+            "completed",
+            updates={"output": "reconciled", "finished-at": now_iso_z()},
+        )
+
+    manager.enqueue(
+        project,
+        record,
+        {
+            "virtual-capacity": 1,
+            "provider-session-recovery-initial-delay-seconds": 0.01,
+            "provider-session-recovery-max-delay-seconds": 0.01,
+            "provider-session-recovery-max-attempts": 2,
+        },
+        runner,
+    )
+
+    terminal = manager.wait(project, record["request-id"], timeout_seconds=3)
+    assert terminal["state"] == "completed"
+    assert calls == 4
+
+
+def test_followup_reconciliation_waits_past_generic_recovery_bound(tmp_path: Path):
+    """A submitted recovery prompt remains observable until outer policy ends it."""
+    manager = queue_mod.GatewayQueueManager()
+    project = tmp_path / "project"
+    project.mkdir()
+    record = store.build_record(execution_profile_id="followup-reconcile", prompt_body="x")
+    store.write_record(project, record)
+    calls = 0
+
+    seen_continuations: list[dict] = []
+
+    def runner(_project_root: Path, _current: dict, **_kwargs) -> dict:
+        nonlocal calls
+        calls += 1
+        recovery = _current.get("recovery")
+        if isinstance(recovery, dict) and isinstance(recovery.get("continuation"), dict):
+            seen_continuations.append(dict(recovery["continuation"]))
+        if calls <= 3:
+            raise RecoveryDeferred(
+                AudiaGenticError(
+                    code="EXT-GPTAUTO-003",
+                    kind="providers",
+                    message="follow-up still being observed",
+                ),
+                phase="followup-reconcile",
+                side_effect_state="may-have-started",
+                continuation={
+                    "kind": "provider-followup",
+                    "resume-existing": True,
+                    "network-followup-attempts": 1,
+                    "followup-prompt-digest": "a" * 64,
+                },
+            )
+        return store.transition_record(
+            _project_root,
+            _current["request-id"],
+            "completed",
+            updates={"output": "reconciled", "finished-at": now_iso_z()},
+        )
+
+    manager.enqueue(
+        project,
+        record,
+        {
+            "virtual-capacity": 1,
+            "provider-session-recovery-initial-delay-seconds": 0.01,
+            "provider-session-recovery-max-delay-seconds": 0.01,
+            "provider-session-recovery-max-attempts": 2,
+        },
+        runner,
+    )
+
+    terminal = manager.wait(project, record["request-id"], timeout_seconds=3)
+    assert terminal["state"] == "completed"
+    assert calls == 4
+    assert seen_continuations
+    assert all(item["resume-existing"] is True for item in seen_continuations)
+    assert all("followup-prompt-digest" in item for item in seen_continuations)
+
+
+def test_followup_reconciliation_has_independent_bound(tmp_path: Path):
+    manager = queue_mod.GatewayQueueManager()
+    project = tmp_path / "project"
+    project.mkdir()
+    record = store.build_record(execution_profile_id="followup-bound", prompt_body="x")
+    store.write_record(project, record)
+
+    def runner(_project_root: Path, _current: dict) -> dict:
+        raise RecoveryDeferred(
+            AudiaGenticError(
+                code="EXT-GPTAUTO-003",
+                kind="providers",
+                message="follow-up still being observed",
+            ),
+            phase="followup-reconcile",
+            side_effect_state="may-have-started",
+            continuation={"kind": "provider-followup", "resume-existing": True},
+        )
+
+    manager.enqueue(
+        project,
+        record,
+        {
+            "virtual-capacity": 1,
+            "provider-session-recovery-initial-delay-seconds": 0.01,
+            "provider-session-recovery-max-delay-seconds": 0.01,
+            "provider-session-recovery-max-attempts": 100,
+            "provider-session-followup-recovery-max-attempts": 2,
+        },
+        runner,
+    )
+
+    terminal = manager.wait(project, record["request-id"], timeout_seconds=3)
+    assert terminal["state"] == "interrupted"
+    assert terminal["error"]["code"] == "CON-AGW-084"
+    assert terminal["recovery"]["outcome"] == "bounded-recovery-exhausted"
+
+
+def test_conversation_load_reconciliation_waits_past_generic_recovery_bound(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """A submitted conversation-load failure stays observation-only."""
+    manager = queue_mod.GatewayQueueManager()
+    project = tmp_path / "project"
+    project.mkdir()
+    record = store.build_record(
+        execution_profile_id="conversation-load-reconcile",
+        prompt_body="x",
+    )
+    store.write_record(project, record)
+    monkeypatch.setattr(queue_mod, "_has_durable_provider_identity", lambda *_args: True)
+    monkeypatch.setattr(queue_mod, "_durable_provider_session_is_active", lambda *_args: True)
+    calls = 0
+
+    def runner(_project_root: Path, _current: dict, **_kwargs) -> dict:
+        nonlocal calls
+        calls += 1
+        if calls <= 3:
+            if calls == 1:
+                current = store.read_record(_project_root, _current["request-id"])
+                current.update(
+                    {
+                        "session-id": "ses-conversation-load",
+                        "provider-transport-kind": "provider-session",
+                        "provider-metadata": {
+                            "provider-session-id": "conversation-ref",
+                            "chat-url": "https://chatgpt.com/g/g-p-project/c/conversation",
+                            "submission-proven": True,
+                        },
+                    }
+                )
+                current["revision"] += 1
+                store.write_record(_project_root, current)
+            raise RecoveryDeferred(
+                AudiaGenticError(
+                    code="EXT-GPTAUTO-003",
+                    kind="providers",
+                    message="conversation still loading",
+                ),
+                phase="conversation-load-reconcile",
+                side_effect_state="may-have-started",
+            )
+        return store.transition_record(
+            _project_root,
+            _current["request-id"],
+            "completed",
+            updates={"output": "reconciled", "finished-at": now_iso_z()},
+        )
+
+    manager.enqueue(
+        project,
+        record,
+        {
+            "virtual-capacity": 1,
+            "provider-session-recovery-initial-delay-seconds": 0.01,
+            "provider-session-recovery-max-delay-seconds": 0.01,
+            "provider-session-recovery-max-attempts": 2,
+        },
+        runner,
+    )
+
+    terminal = manager.wait(project, record["request-id"], timeout_seconds=3)
+    assert terminal["state"] == "completed"
+    assert calls == 4
+
+
+def test_cancelled_recovery_backoff_is_not_stranded(tmp_path: Path):
+    """Cancellation during deferred recovery terminalizes without a retry."""
+    manager = queue_mod.GatewayQueueManager()
+    project = tmp_path / "project"
+    project.mkdir()
+    record = store.build_record(execution_profile_id="recovery-cancel", prompt_body="x")
+    store.write_record(project, record)
+    deferred = threading.Event()
+    calls = 0
+
+    def runner(project_root: Path, current: dict) -> dict:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            deferred.set()
+            raise RecoveryDeferred(
+                AudiaGenticError(
+                    code="EXT-AGW-118",
+                    kind="agents",
+                    message="provider reattach unavailable",
+                )
+            )
+        pytest.fail("cancelled recovery must not re-enter the provider runner")
+
+    manager.enqueue(
+        project,
+        record,
+        {
+            "virtual-capacity": 1,
+            "provider-session-recovery-initial-delay-seconds": 0.02,
+            "provider-session-recovery-max-delay-seconds": 0.02,
+        },
+        runner,
+    )
+    assert deferred.wait(timeout=2)
+    deadline = time.monotonic() + 2
+    while time.monotonic() < deadline:
+        current = store.read_record(project, record["request-id"])
+        if (current.get("recovery") or {}).get("phase") == "rehydrate-retry":
+            break
+        time.sleep(0.01)
+    manager.cancel(project, "recovery-cancel", record["request-id"])
+    terminal = manager.wait(project, record["request-id"], timeout_seconds=3)
+    assert terminal["state"] == "cancelled"
+    assert calls == 1
+
+
+def test_cancelled_recovered_request_does_not_wait_forever_for_source(tmp_path: Path):
+    """Restart recovery must observe cancellation while reserving a source."""
+    manager = queue_mod.GatewayQueueManager()
+    project = tmp_path / "project"
+    project.mkdir()
+    record = store.build_record(
+        execution_profile_id="recovery-reservation-cancel",
+        prompt_body="x",
+        gateway_profile_id="recovery-reservation-cancel",
+        gateway_profile_generation="gen_test123",
+        gateway_profile_config_digest="sha256:abcd1234",
+        resolved_provider_id="local",
+        resolved_instance_ids=["m"],
+    )
+    record.update(
+        {
+            "state": "running",
+            "cancel-requested": True,
+            "recovery-required": True,
+            "worker-id": "recovery-worker",
+            "attempt-epoch": 1,
+            "dispatch-owner-epoch": "owner-epoch",
+        }
+    )
+    store.write_record(project, record)
+
+    def runner(_project_root: Path, _current: dict) -> dict:
+        pytest.fail("provider runner must not be entered after cancellation")
+
+    manager.enqueue_recovered_running(
+        project,
+        record,
+        {"virtual-capacity": 1},
+        runner,
+        dispatch_owner_epoch="owner-epoch",
+        dispatch_service_root=tmp_path,
+    )
+    terminal = manager.wait(project, record["request-id"], timeout_seconds=3)
+    assert terminal["state"] == "cancelled"
+    assert terminal["error"]["code"] == "CON-AGW-CANCELLED"
+
+
+def test_queue_shutdown_cancels_delayed_recovery_retry(tmp_path: Path):
+    """A retired queue cannot reattach after its delayed retry is cancelled."""
+    manager = queue_mod.GatewayQueueManager()
+    project = tmp_path / "project"
+    project.mkdir()
+    record = store.build_record(execution_profile_id="recovery-shutdown", prompt_body="x")
+    store.write_record(project, record)
+    deferred = threading.Event()
+    calls = 0
+
+    def runner(_project_root: Path, _current: dict) -> dict:
+        nonlocal calls
+        calls += 1
+        deferred.set()
+        raise RecoveryDeferred(
+            AudiaGenticError(
+                code="EXT-AGW-118",
+                kind="agents",
+                message="provider reattach unavailable",
+            )
+        )
+
+    manager.enqueue(
+        project,
+        record,
+        {
+            "virtual-capacity": 1,
+            "provider-session-recovery-initial-delay-seconds": 10,
+            "provider-session-recovery-max-delay-seconds": 10,
+        },
+        runner,
+    )
+    assert deferred.wait(timeout=2)
+    deadline = time.monotonic() + 2
+    while time.monotonic() < deadline:
+        if manager.recovery_pending_count(project) == 1:
+            break
+        time.sleep(0.01)
+    manager.shutdown()
+    time.sleep(0.05)
+    assert manager.recovery_pending_count(project) == 0
+    assert calls == 1
+    assert store.read_record(project, record["request-id"])["state"] == "running"
 
 
 def test_project_queue_depths_excludes_other_projects(tmp_path: Path):
@@ -297,6 +1388,7 @@ def test_session_workers_share_one_profile_compute_slot(tmp_path: Path):
             execution_profile_id="session-profile",
             prompt_body=str(index),
             session_id=f"session-{index}",
+            provider_transport_kind="provider-session",
         )
         for index in range(2)
     ]
@@ -319,9 +1411,21 @@ def test_session_workers_share_one_profile_compute_slot(tmp_path: Path):
     assert max_active == 1
 
 
-def test_cancelled_session_waiter_is_not_misclassified_as_failed(tmp_path: Path):
+def test_cancelled_session_waiter_is_not_misclassified_as_failed(tmp_path: Path, monkeypatch):
     """A cancel racing the turn-lock boundary keeps the durable state cancelled."""
     manager = queue_mod.GatewayQueueManager()
+    from types import SimpleNamespace
+
+    from audiagentic.components.agents.gateway.session import sessions
+    signalled = []
+
+    def signal(request_id):
+        assert store.read_record(tmp_path, request_id)['state'] == 'cancelled'
+        signalled.append(request_id)
+
+    monkeypatch.setattr(sessions, 'peek_session_runtime', lambda: SimpleNamespace(
+        request_cancel=signal, forget_request_cancel=lambda _: None,
+    ))
     entered = threading.Event()
     allow_start = threading.Event()
 
@@ -337,6 +1441,7 @@ def test_cancelled_session_waiter_is_not_misclassified_as_failed(tmp_path: Path)
         execution_profile_id="session-profile",
         prompt_body="cancel me",
         session_id="same-session",
+        provider_transport_kind="provider-session",
     )
     store.write_record(tmp_path, record)
     manager.enqueue(tmp_path, record, {"virtual-capacity": 1}, runner)
@@ -347,6 +1452,7 @@ def test_cancelled_session_waiter_is_not_misclassified_as_failed(tmp_path: Path)
     # the worker may still be between its preparation and lock callback.
     assert cancelled["state"] == "cancelled"
     assert cancelled["cancel-requested"] is True
+    assert signalled == [record['request-id']]
 
     allow_start.set()
     result = manager.wait(tmp_path, record["request-id"], timeout_seconds=5)
@@ -397,6 +1503,7 @@ def test_legacy_session_capacity_is_ignored_while_project_capacity_applies(tmp_p
             execution_profile_id="session-scoped",
             prompt_body=str(index),
             session_id="same-session",
+            provider_transport_kind="provider-session",
         )
         for index in range(2)
     ]
@@ -1610,3 +2717,149 @@ def test_project_queue_depths_redacted(tmp_path: Path):
     # Keys are lane public ids — no project paths
     assert "overview-profile" in depths
 
+
+
+def test_bounded_interruption_includes_root_recovery_error(tmp_path: Path):
+    """When bounded recovery exhausts into CON-AGW-084, the interruption
+    exposes the bounded root recovery error (code/type/kind/redacted details)
+    and the durable recovery trail retains the same summary."""
+    manager = queue_mod.GatewayQueueManager()
+    project = tmp_path / "project"
+    project.mkdir()
+    record = store.build_record(execution_profile_id="recovery-root-diag", prompt_body="x")
+    store.write_record(project, record)
+
+    def runner(_project_root: Path, _current: dict, **_kwargs) -> dict:
+        raise RecoveryDeferred(
+            AudiaGenticError(
+                code="EXT-AGW-118",
+                kind="agents",
+                message="provider reattach unavailable",
+                details={"session-id": "ses-1", "dom-signals": ["network-error-alert"]},
+            ),
+            phase="rehydrate-retry",
+            side_effect_state="may-have-started",
+        )
+
+    manager.enqueue(
+        project,
+        record,
+        {
+            "virtual-capacity": 1,
+            "provider-session-recovery-initial-delay-seconds": 0.01,
+            "provider-session-recovery-max-delay-seconds": 0.01,
+            "provider-session-recovery-max-attempts": 2,
+        },
+        runner,
+    )
+
+    terminal = manager.wait(project, record["request-id"], timeout_seconds=3)
+    assert terminal["state"] == "interrupted"
+    assert terminal["error"]["code"] == "CON-AGW-084"
+
+    root = terminal["error"]["details"]["root-recovery-error"]
+    assert root["code"] == "EXT-AGW-118"
+    assert root["type"] == "AudiaGenticError"
+    assert root["kind"] == "agents"
+    assert root["details"]["session-id"] == "ses-1"
+    assert root["details"]["dom-signals"] == ["network-error-alert"]
+
+    # The bounded root summary is also retained on the durable recovery trail.
+    assert terminal["recovery"]["last-error-code"] == "EXT-AGW-118"
+    assert terminal["recovery"]["last-error-kind"] == "agents"
+    assert terminal["recovery"]["last-error-details"]["session-id"] == "ses-1"
+
+
+def test_recovered_provider_session_stays_watchdog_visible_during_retry_backoff(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from audiagentic.components.agents.gateway.queue.watchdog_registry import watchdog_registry
+
+    manager = queue_mod.GatewayQueueManager()
+    project = tmp_path / "project"
+    project.mkdir()
+    record = store.build_record(
+        execution_profile_id="recovery-backoff-visible",
+        prompt_body="x",
+        gateway_profile_id="recovery-backoff-visible",
+        gateway_profile_generation="gen_test123",
+        gateway_profile_config_digest="sha256:abcd1234",
+        resolved_provider_id="gpt-auto",
+        resolved_instance_ids=["gpt-auto"],
+        provider_transport_kind="provider-session",
+    )
+    record.update(
+        {
+            "state": "running",
+            "recovery": {"reason": "owner-loss", "outcome": "in-place", "next-retry-at": "2999-01-01T00:00:00Z"},
+            "worker-id": "recovery-worker",
+            "attempt-epoch": 1,
+            "dispatch-owner-epoch": "owner-epoch",
+        }
+    )
+    store.write_record(project, record)
+    monkeypatch.setattr(manager, "_schedule_recovery_retry", lambda *args, **kwargs: None)
+
+    manager.enqueue_recovered_running(
+        project,
+        record,
+        {},
+        lambda *_args, **_kwargs: {},
+        dispatch_owner_epoch="owner-epoch",
+        dispatch_service_root=tmp_path,
+    )
+
+    try:
+        assert any(
+            root == project.resolve() and item.get("request-id") == record["request-id"]
+            for root, item in watchdog_registry().snapshot()
+        )
+    finally:
+        watchdog_registry().unregister(project, record["request-id"])
+
+def test_recovered_provider_session_stays_watchdog_visible_during_retry_backoff(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from audiagentic.components.agents.gateway.queue.watchdog_registry import watchdog_registry
+
+    manager = queue_mod.GatewayQueueManager()
+    project = tmp_path / "project"
+    project.mkdir()
+    record = store.build_record(
+        execution_profile_id="recovery-backoff-visible",
+        prompt_body="x",
+        gateway_profile_id="recovery-backoff-visible",
+        gateway_profile_generation="gen_test123",
+        gateway_profile_config_digest="sha256:abcd1234",
+        resolved_provider_id="gpt-auto",
+        resolved_instance_ids=["gpt-auto"],
+        provider_transport_kind="provider-session",
+    )
+    record.update(
+        {
+            "state": "running",
+            "recovery": {"reason": "owner-loss", "outcome": "in-place", "next-retry-at": "2999-01-01T00:00:00Z"},
+            "worker-id": "recovery-worker",
+            "attempt-epoch": 1,
+            "dispatch-owner-epoch": "owner-epoch",
+        }
+    )
+    store.write_record(project, record)
+    monkeypatch.setattr(manager, "_schedule_recovery_retry", lambda *args, **kwargs: None)
+
+    manager.enqueue_recovered_running(
+        project,
+        record,
+        {},
+        lambda *_args, **_kwargs: {},
+        dispatch_owner_epoch="owner-epoch",
+        dispatch_service_root=tmp_path,
+    )
+
+    try:
+        assert any(
+            root == project.resolve() and item.get("request-id") == record["request-id"]
+            for root, item in watchdog_registry().snapshot()
+        )
+    finally:
+        watchdog_registry().unregister(project, record["request-id"])

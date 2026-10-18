@@ -2,18 +2,26 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from pathlib import Path
 
 import pytest
 
-from audiagentic.components.agents.agents_paths import gateway_final_response_path
+from audiagentic.components.agents.agents_paths import (
+    gateway_failure_response_path,
+    gateway_final_response_path,
+    gateway_request_path,
+)
 from audiagentic.components.agents.gateway.output import (
     OutputPolicy,
     create_relay,
+    persist_failure_response,
     persist_final_response,
+    read_failure_response,
     read_final_response,
     read_request_output,
 )
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.transports.agent_output import (
     AgentOutputEvent,
     AgentOutputKind,
@@ -110,3 +118,52 @@ def test_final_response_artifact_hashes_exact_utf8_bytes(tmp_path: Path) -> None
     assert artifact["bytes"] == len(raw)
     assert artifact["sha256"] == hashlib.sha256(raw).hexdigest()
     assert read_final_response(tmp_path, "request", artifact) == text
+
+
+def test_failure_response_artifact_is_separate_and_readable(tmp_path: Path) -> None:
+    text = "partial provider response\nβeta"
+    artifact = persist_failure_response(tmp_path, "request", text)
+
+    assert gateway_failure_response_path(tmp_path, "request").read_bytes() == text.encode("utf-8")
+    assert artifact["artifact-id"] == "failure-response"
+    assert artifact["output-preview"] == text
+    assert artifact["output-truncated"] is False
+    assert read_failure_response(tmp_path, "request", artifact) == text
+    assert not gateway_final_response_path(tmp_path, "request").exists()
+
+
+def test_late_terminal_writer_does_not_overwrite_winner_artifact(tmp_path: Path) -> None:
+    request_id = "request"
+    request_path = gateway_request_path(tmp_path, request_id)
+    request_path.parent.mkdir(parents=True, exist_ok=True)
+    request_path.write_text(json.dumps({"state": "running"}), encoding="utf-8")
+    winner = "winner response"
+    persist_final_response(tmp_path, request_id, winner)
+    request_path.write_text(json.dumps({"state": "completed"}), encoding="utf-8")
+
+    late = persist_final_response(tmp_path, request_id, "late worker response")
+
+    assert gateway_final_response_path(tmp_path, request_id).read_text(encoding="utf-8") == winner
+    assert late["sha256"] == hashlib.sha256("late worker response".encode()).hexdigest()
+
+
+def test_final_response_artifact_preserves_markdown_media_type(tmp_path: Path) -> None:
+    text = "# Heading\n\nA **rich** answer."
+    artifact = persist_final_response(
+        tmp_path,
+        "request",
+        text,
+        media_type="text/markdown; charset=utf-8",
+    )
+
+    assert artifact["media-type"] == "text/markdown; charset=utf-8"
+    assert read_final_response(tmp_path, "request", artifact) == text
+
+
+
+def test_final_response_artifact_rejects_unsupported_media_type(tmp_path: Path) -> None:
+    with pytest.raises(AudiaGenticError) as exc_info:
+        persist_final_response(tmp_path, "request", "answer", media_type="text/html; charset=utf-8")
+
+    assert exc_info.value.code == "VAL-AGW-149"
+    assert not gateway_final_response_path(tmp_path, "request").exists()

@@ -5,8 +5,8 @@ from pathlib import Path
 import pytest
 
 from audiagentic.components.project import project_api
-from audiagentic.components.session import session_api
 from audiagentic.components.providers.contracts.session_status import ProviderSessionInfo
+from audiagentic.components.session import session_api
 from audiagentic.foundation.components import context as context_mod
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 

@@ -166,22 +166,24 @@ def _build_messages(packet_ctx: dict[str, Any], prompt_body: str | None) -> list
 
 def _fetch_api_key(provider_cfg: dict[str, Any]) -> str | None:
     """Resolve API key from provider config or environment."""
-    return (
+    from audiagentic.foundation.config.local_runtime import local_provider_api_key
+    configured = (
         provider_cfg.get("api-key")
         or provider_cfg.get("apiKey")
         or provider_cfg.get("api_key")
-        or provider_cfg.get("OPENAI_API_KEY")
     )
+    return local_provider_api_key(configured or provider_cfg.get("OPENAI_API_KEY"))
 
 
 def _resolve_base_url(provider_cfg: dict[str, Any]) -> str:
     """Resolve API base URL from provider config."""
-    return (
+    from audiagentic.foundation.config.local_runtime import local_provider_base_url
+    configured = (
         provider_cfg.get("api-base-url")
         or provider_cfg.get("apiBaseUrl")
         or provider_cfg.get("api_base_url")
-        or "https://api.openai.com"
     )
+    return local_provider_base_url(configured)
 
 
 def run(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> dict[str, Any]:

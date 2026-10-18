@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 import os
 import time
+from contextlib import nullcontext
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -41,6 +42,7 @@ from ._admission import (
 from ._records import (
     _read_record_locked,
     _redact_error,
+    bounded_recovery_error,
     write_record,
 )
 from ._shared import (
@@ -151,6 +153,13 @@ def transition_record(
                     record.get("diagnostics"),
                     classify_error(updates.get("error")),
                 )
+            # An explicit diagnostics update carries the gateway-owned
+            # disposition and must win over error-derived classification.
+            if "diagnostics" in updates:
+                updated["diagnostics"] = updates["diagnostics"]
+        if new_state in _shared.TERMINAL_STATES:
+            updated["recovery-required"] = False
+
         write_record(project_root, updated)
         record_gateway_timeline(
             project_root,
@@ -549,6 +558,231 @@ def release_stale_claim(project_root: Path, request_id: str, *, stale_epoch: str
         return updated
 
 
+def takeover_nonterminal_owner(
+    project_root: Path,
+    request_id: str,
+    *,
+    expected_owner_epoch: str | None,
+    new_owner_epoch: str,
+    new_worker_id: str | None = None,
+    handoff_id: str | None = None,
+) -> dict[str, Any]:
+    """Atomically transfer a queued/running request to a new gateway owner.
+
+    A gateway generation is execution ownership, not request identity.  A
+    restart therefore changes only the owner fence and recovery metadata; it
+    never changes the request state or creates a replay request.  The old
+    generation is fenced by the owner-epoch check on every later mutation.
+    """
+    if not new_owner_epoch:
+        raise AudiaGenticError("VAL-AGW-087", "agents", "new gateway owner epoch is required", {})
+    with _request_lock(project_root, request_id):
+        record = _read_record_locked(project_root, request_id)
+        if record["state"] not in {"queued", "running"}:
+            return record
+        current_owner = record.get("dispatch-owner-epoch")
+        if expected_owner_epoch is not None and current_owner != expected_owner_epoch:
+            raise AudiaGenticError(
+                "CON-AGW-083", "agents", "gateway request dispatch ownership changed", {}
+            )
+        if current_owner == new_owner_epoch:
+            return record
+        previous = record.get("recovery")
+        previous = previous if isinstance(previous, dict) else {}
+        recovery = {
+            **previous,
+            "reason": "gateway-restart" if handoff_id else (previous.get("reason") or "owner-loss"),
+            "outcome": "in-place",
+            "from-owner-epoch": current_owner,
+            "handoff-id": handoff_id or previous.get("handoff-id"),
+            "attempt": int(previous.get("attempt", 0)),
+        }
+        updated = dict(record)
+        updated.update({
+            "dispatch-owner-epoch": new_owner_epoch,
+            "dispatch-claimed-at": record.get("dispatch-claimed-at"),
+            "updated-at": now_iso_z(),
+            "recovery": recovery,
+            "recovery-required": record["state"] == "running",
+            "revision": record["revision"] + 1,
+        })
+        if new_worker_id is not None:
+            updated["worker-id"] = new_worker_id
+        write_record(project_root, updated)
+        record_gateway_timeline(
+            project_root,
+            request_id,
+            "recovery.owner-taken-over",
+            state=updated["state"],
+            attributes={
+                "from-owner-epoch": current_owner,
+                "owner-epoch": new_owner_epoch,
+                "handoff-id": handoff_id,
+                "recovery-required": updated["recovery-required"],
+            },
+        )
+        return updated
+
+
+def defer_owned_recovery(
+    project_root: Path,
+    request_id: str,
+    *,
+    owner_epoch: str,
+    worker_id: str,
+    attempt_epoch: int,
+    error: BaseException | dict[str, Any] | None,
+    phase: str,
+    side_effect_state: str,
+    retry_delay_seconds: float,
+    continuation: Mapping[str, Any] | None = None,
+    _allow_queued: bool = False,
+) -> dict[str, Any]:
+    """Persist a fenced, non-terminal recovery retry.
+
+    This mutation changes recovery metadata only.  It intentionally leaves
+    the request running, its attempt identity, active-work index, and any
+    unresolved provider checkpoint intact so a replacement gateway can adopt
+    the same request and conversation.
+    """
+    _require_owned_identity(owner_epoch, worker_id, attempt_epoch)
+    if not phase or retry_delay_seconds < 0:
+        raise AudiaGenticError(
+            "VAL-AGW-087", "agents", "recovery retry metadata is invalid", {}
+        )
+    with _request_lock(project_root, request_id):
+        record = _read_record_locked(project_root, request_id)
+        _check_expected_identity(
+            record,
+            expected_revision=None,
+            expected_dispatch_owner_epoch=owner_epoch,
+            expected_worker_id=worker_id,
+            expected_attempt_epoch=attempt_epoch,
+        )
+        if record["state"] != "running" and not (_allow_queued and record["state"] == "queued"):
+            raise AudiaGenticError(
+                "CON-AGW-088", "agents", "gateway request is not running", {}
+            )
+        timestamp = now_iso_z()
+        previous = record.get("recovery")
+        previous = previous if isinstance(previous, dict) else {}
+        attempt = int(previous.get("attempt") or 0) + 1
+        followup_attempt = int(previous.get("followup-attempt") or 0)
+        if phase == "followup-reconcile":
+            followup_attempt += 1
+        retry_at = add_seconds(timestamp, retry_delay_seconds)
+        error_message = getattr(error, "message", None)
+        if not isinstance(error_message, str) and isinstance(error, Mapping):
+            error_message = error.get("message")
+        if not isinstance(error_message, str):
+            error_message = str(error) if error is not None else "recovery retry deferred"
+        # Bounded root-error summary (code/type/kind/details): the message
+        # alone cannot explain why observation-only recovery keeps deferring
+        # or eventually exhausts into CON-AGW-084. The projection is flat,
+        # truncated, redacted, and never carries prompt text.
+        bounded_error = bounded_recovery_error(error)
+        recovery = {
+            "reason": previous.get("reason") or "gateway-restart",
+            "outcome": "in-place",
+            "from-owner-epoch": previous.get("from-owner-epoch"),
+            "handoff-id": previous.get("handoff-id"),
+            "attempt": attempt,
+            "followup-attempt": followup_attempt,
+            "last-error": error_message[:256],
+            "last-error-code": bounded_error.get("code") if bounded_error else None,
+            "last-error-type": bounded_error.get("type") if bounded_error else None,
+            "last-error-kind": bounded_error.get("kind") if bounded_error else None,
+            "last-error-details": bounded_error.get("details") if bounded_error else None,
+            "phase": phase,
+            "side-effect-state": side_effect_state,
+            "next-retry-at": retry_at,
+            "retry-delay-seconds": retry_delay_seconds,
+        }
+        # A provider follow-up can already have been submitted when the
+        # observer loses its handle.  Preserve its bounded continuation
+        # intent across the delayed retry and a gateway restart.  The
+        # continuation contains only counters/flags/digests; prompt text is
+        # kept in the request-owned private runtime area by the queue.
+        prior_continuation = previous.get("continuation")
+        if isinstance(continuation, Mapping):
+            recovery["continuation"] = dict(continuation)
+        elif isinstance(prior_continuation, Mapping):
+            recovery["continuation"] = dict(prior_continuation)
+        updated = dict(record)
+        if (
+            not isinstance(record.get("diagnostics"), dict)
+            and side_effect_state != "not-started"
+        ):
+            updated["diagnostics"] = stale_progress_diagnostic(
+                phase="reconciliation",
+                side_effect_state=side_effect_state,
+                reason_code=phase,
+            )
+        queued_recovery = record["state"] == "queued"
+        updated.update({
+            "recovery": recovery,
+            "recovery-required": not queued_recovery,
+            "watchdog-state": "not-started" if queued_recovery else "active",
+            "watchdog-reason": (
+                "queued-recovery-retry" if queued_recovery else "recovery-retry-scheduled"
+            ),
+            "updated-at": timestamp,
+            "revision": record["revision"] + 1,
+        })
+        write_record(project_root, updated)
+        record_gateway_timeline(
+            project_root,
+            request_id,
+            "recovery.retry-scheduled",
+            state=updated["state"],
+            attributes={
+                "phase": phase,
+                "attempt": attempt,
+                "followup-attempt": followup_attempt,
+                "next-retry-at": retry_at,
+                "retry-delay-seconds": retry_delay_seconds,
+                "side-effect-state": side_effect_state,
+            },
+        )
+        return updated
+
+
+def defer_owned_queued_recovery(
+    project_root: Path,
+    request_id: str,
+    *,
+    owner_epoch: str,
+    worker_id: str,
+    attempt_epoch: int,
+    error: BaseException | dict[str, Any] | None,
+    phase: str,
+    side_effect_state: str,
+    retry_delay_seconds: float,
+    continuation: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Persist a recovery retry before a session turn owns the FIFO lock.
+
+    Provider-session recovery can attach a successor or rehydrate a browser
+    surface before the turn-start CAS.  If that observation path defers, the
+    request is still safely queued; it must retain its claim and be retried,
+    rather than being passed to the running-only recovery transition and left
+    stranded with a live session.
+    """
+    return defer_owned_recovery(
+        project_root,
+        request_id,
+        owner_epoch=owner_epoch,
+        worker_id=worker_id,
+        attempt_epoch=attempt_epoch,
+        error=error,
+        phase=phase,
+        side_effect_state=side_effect_state,
+        retry_delay_seconds=retry_delay_seconds,
+        continuation=continuation,
+        _allow_queued=True,
+    )
+
+
 def transition_recovered_terminal(
     project_root: Path,
     request_id: str,
@@ -556,8 +790,10 @@ def transition_recovered_terminal(
     *,
     error: BaseException | dict[str, Any] | None,
     stale_epoch: str | None = None,
+    expected_revision: int | None = None,
     replay_required: bool | None = None,
     replay_reason: str | None = None,
+    _request_lock_held: bool = False,
 ) -> dict[str, Any]:
     """Terminalize a recovered request.
 
@@ -569,8 +805,16 @@ def transition_recovered_terminal(
     """
     if new_state not in _shared.TERMINAL_STATES:
         raise AudiaGenticError("VAL-AGW-084", "agents", "recovered transition must be terminal", {})
-    with _request_lock(project_root, request_id):
+    lock = nullcontext() if _request_lock_held else _request_lock(project_root, request_id)
+    with lock:
         record = _read_record_locked(project_root, request_id)
+        if expected_revision is not None and record.get("revision") != expected_revision:
+            raise AudiaGenticError(
+                code="CON-AGW-143",
+                kind="agents",
+                message="gateway request revision changed during recovery",
+                details={"request-id": request_id},
+            )
         if stale_epoch is not None:
             rec_epoch = record.get("dispatch-owner-epoch")
             if rec_epoch != stale_epoch:
@@ -694,6 +938,16 @@ def claim_dispatch(
         raise AudiaGenticError("VAL-AGW-083", "agents", "dispatch owner epoch is required", {})
     with _request_lock(project_root, request_id):
         record = _read_record_locked(project_root, request_id)
+        if (
+            record["state"] == "running"
+            and record.get("recovery-required") is True
+            and record.get("dispatch-owner-epoch") == owner_epoch
+        ):
+            # Recovery workers inherit an already-running request. Returning a
+            # private marker lets the queue skip the queued-to-running CAS;
+            # the durable request remains running throughout takeover.
+            record_active_work(service_root, project_root, request_id, owner_epoch=owner_epoch)
+            return {**record, "_recovered-dispatch": True}
         if record["revision"] != expected_revision:
             raise AudiaGenticError(
                 "CON-AGW-071",
@@ -1026,13 +1280,20 @@ def renew_owned_activity(
         raise AudiaGenticError("VAL-AGW-088", "agents", "activity source is required", {})
     if isinstance(activity_lease_seconds, bool) or activity_lease_seconds <= 0:
         raise AudiaGenticError("VAL-AGW-088", "agents", "activity lease seconds must be positive", {})
+    normalized_source = activity_source.strip().lower().replace("_", "-").replace(" ", "-")
     return record_owned_activity(
         project_root,
         request_id,
         owner_epoch=owner_epoch,
         worker_id=worker_id,
         attempt_epoch=attempt_epoch,
-        kind=("provider" if is_meaningful_activity(activity_source, activity_source) else "owner-heartbeat"),
+        kind=(
+            "client-liveness"
+            if normalized_source in {"soft-liveness", "delivery-timeout-retry"}
+            else "provider"
+            if is_meaningful_activity(activity_source, activity_source)
+            else "owner-heartbeat"
+        ),
         source=activity_source,
         source_instance=worker_id,
         source_sequence=activity_seq,
@@ -1064,7 +1325,7 @@ def record_owned_activity(
     source namespace and can restart on a new worker/session attempt.
     """
     _require_owned_identity(owner_epoch, worker_id, attempt_epoch)
-    if kind not in {"provider", "owner-heartbeat"}:
+    if kind not in {"provider", "owner-heartbeat", "client-liveness"}:
         raise AudiaGenticError("VAL-AGW-088", "agents", "unknown activity kind", {"kind": kind})
     if not isinstance(source, str) or not source:
         raise AudiaGenticError("VAL-AGW-088", "agents", "activity source is required", {})
@@ -1119,6 +1380,37 @@ def record_owned_activity(
                 "activity.owner-heartbeat",
                 state="running",
                 attributes={"activity-source": source, "activity-kind": kind},
+            )
+            return updated
+        if kind == "client-liveness":
+            # Advance the public activity count without touching the provider
+            # bucket or its watchdog lease. Synthetic activity must not mask a
+            # stalled provider turn.
+            activity["owner"] = bucket
+            activity.update({"sequence": aggregate, "last-at": received_at, "last-source": source})
+            updated = dict(record)
+            updated.update(
+                {
+                    "last-activity-at": received_at,
+                    "activity-sequence": aggregate,
+                    "activity-source": source,
+                    "activity": activity,
+                    "updated-at": received_at,
+                    "revision": record["revision"] + 1,
+                }
+            )
+            write_record(project_root, updated)
+            record_gateway_timeline(
+                project_root,
+                request_id,
+                "activity.client-liveness",
+                state="running",
+                attributes={
+                    "activity-sequence": aggregate,
+                    "activity-source": source,
+                    "activity-kind": kind,
+                    "activity-label": normalize_activity_label(phase) or phase,
+                },
             )
             return updated
         normalized_label: str | None = None
@@ -1187,7 +1479,7 @@ def record_owned_activity(
                         "activity-label": normalized_label,
                         "activity-group": activity_group(normalized_label),
                     }
-                    if kind == "provider" and normalized_label
+                    if kind in {"provider", "client-liveness"} and normalized_label
                     else {}
                 ),
             },
@@ -1231,7 +1523,14 @@ def mark_watchdog_intervention_if_expired(
         # watcher that has lost its DOM observation path gets one diagnostic
         # reconciliation opportunity rather than remaining at sequence zero
         # forever. This is non-terminal and never proves provider failure.
-        first_activity = provider.get("first-at") or provider.get("last-at")
+        provider_phase = provider.get("phase")
+        provider_activity_is_real = (
+            (provider_phase is None and not provider.get("source"))
+            or is_meaningful_activity(provider.get("source"), provider_phase)
+        )
+        first_activity = (
+            provider.get("first-at") or provider.get("last-at")
+        ) if provider_activity_is_real else None
         policy = record.get("watchdog-policy")
         initial_grace = 30.0
         if isinstance(policy, dict):
@@ -1251,11 +1550,38 @@ def mark_watchdog_intervention_if_expired(
                 initial_observation_expired = datetime.now(timezone.utc) >= started_at + timedelta(seconds=initial_grace)
             except (TypeError, ValueError):
                 initial_observation_expired = False
-        expiry = None if initial_observation_expired else (
-            provider.get("lease-expires-at")
-            if provider.get("capability") == "supported" and provider.get("last-at")
-            else record.get("activity-lease-expires-at")
-        )
+        if (
+            record.get("provider-transport-kind") == "provider-session"
+            and not first_activity
+            and not initial_observation_expired
+        ):
+            # There is no provider lease before the initial observation grace
+            # elapses. Do not treat that intentional gap as an expired lease.
+            return record
+        if initial_observation_expired:
+            expiry = None
+        elif record.get("provider-transport-kind") == "provider-session":
+            # Provider-session watchdog decisions must use provider-owned
+            # activity only; aggregate liveness may be synthetic.
+            expiry = (
+                provider.get("lease-expires-at")
+                if (
+                    provider_activity_is_real
+                    and provider.get("capability") == "supported"
+                    and provider.get("last-at")
+                )
+                else None
+            )
+        else:
+            expiry = (
+                provider.get("lease-expires-at")
+                if (
+                    provider_activity_is_real
+                    and provider.get("capability") == "supported"
+                    and provider.get("last-at")
+                )
+                else record.get("activity-lease-expires-at")
+            )
         reason_code = (
             "initial-activity-observation-expired"
             if initial_observation_expired
@@ -1273,15 +1599,22 @@ def mark_watchdog_intervention_if_expired(
         )
         if provider.get("capability") == "unsupported" and not initial_observation_expired:
             return record
-        if not initial_observation_expired and (not isinstance(expiry, str) or not expiry):
-            return record
         if initial_observation_expired:
+            expired = True
+        elif not isinstance(expiry, str) or not expiry.strip():
+            # Missing/corrupt persisted leases must not keep work alive.
             expired = True
         else:
             try:
-                expired = datetime.fromisoformat(expiry.replace("Z", "+00:00")) <= datetime.now(timezone.utc)
-            except ValueError:
-                expired = False
+                parsed_expiry = datetime.fromisoformat(
+                    expiry.replace("Z", "+00:00")
+                )
+                if parsed_expiry.tzinfo is None:
+                    parsed_expiry = parsed_expiry.replace(tzinfo=timezone.utc)
+                expired = parsed_expiry <= datetime.now(timezone.utc)
+            except (TypeError, ValueError, OverflowError, AttributeError):
+                # A malformed lease is diagnostic evidence, not liveness.
+                expired = True
         if not expired or record.get("watchdog-state") == "intervention":
             return record
         timestamp = now_iso_z()
@@ -1338,6 +1671,7 @@ def update_owned_running_session(
     provider_metadata: dict[str, Any] | None = None,
     warnings: list[dict[str, Any]] | None = None,
     recovery_chat_url: str | None = None,
+    result_updates: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Attach the live session id to the current owned session attempt.
 
@@ -1371,7 +1705,12 @@ def update_owned_running_session(
                 "gateway request is not an active session attempt",
                 {"request-id": request_id, "state": record["state"]},
             )
-        if record.get("session-id") == session_id and provider_metadata is None and warnings is None:
+        if (
+            record.get("session-id") == session_id
+            and provider_metadata is None
+            and warnings is None
+            and not result_updates
+        ):
             return record
         updated = dict(record)
         updated["session-id"] = session_id
@@ -1384,6 +1723,13 @@ def update_owned_running_session(
             updated["metadata"] = metadata
         if provider_metadata is not None:
             updated["provider-metadata"] = dict(provider_metadata)
+        if result_updates:
+            for key, value in result_updates.items():
+                if key not in _shared._MUTABLE_RESULT_FIELDS:
+                    raise AudiaGenticError(
+                        "VAL-AGW-088", "agents", "invalid running result update", {"field": key}
+                    )
+                updated[key] = value
         updated["updated-at"] = now_iso_z()
         updated["revision"] = record["revision"] + 1
         write_record(project_root, updated)
@@ -1406,9 +1752,10 @@ def transition_owned_terminal(
     worker_id: str,
     attempt_epoch: int,
     updates: dict[str, Any] | None = None,
+    expected_revision: int | None = None,
     service_root: Path | None = None,
 ) -> dict[str, Any]:
-    """Write a terminal result only with the complete dispatch fence."""
+    """Write a terminal result only with dispatch and optional revision fences."""
     if new_state not in _shared.TERMINAL_STATES:
         raise AudiaGenticError("VAL-AGW-084", "agents", "owned transition must be terminal", {})
     _require_owned_identity(owner_epoch, worker_id, attempt_epoch)
@@ -1424,11 +1771,13 @@ def transition_owned_terminal(
     # falsely suggests the request is still being worked on.
     terminal_updates["watchdog-state"] = "not-started"
     terminal_updates["watchdog-reason"] = None
+    terminal_updates["recovery-required"] = False
     updated = transition_record(
         project_root,
         request_id,
         new_state,
         updates=terminal_updates,
+        expected_revision=expected_revision,
         expected_dispatch_owner_epoch=owner_epoch,
         expected_worker_id=worker_id,
         expected_attempt_epoch=attempt_epoch,
@@ -1449,6 +1798,80 @@ def transition_owned_terminal(
                 "work-index terminal cleanup failed (non-fatal)", extra={"request-id": request_id}
             )
     clear_active_work(service_root_for_cleanup, request_id)
+    return updated
+
+
+def transition_operator_terminal(
+    project_root: Path,
+    request_id: str,
+    *,
+    expected_revision: int,
+    updates: dict[str, Any],
+) -> dict[str, Any]:
+    """Terminalize a request from an operator after a compare-and-swap.
+
+    Clearing the dispatch fence is intentional: a provider worker may still be
+    unwinding after the operator captured the already-rendered answer, and its
+    later terminal write must be rejected rather than overwrite this result.
+    """
+    with _request_lock(project_root, request_id):
+        record = _read_record_locked(project_root, request_id)
+        _check_expected_identity(
+            record,
+            expected_revision=expected_revision,
+            expected_dispatch_owner_epoch=None,
+            expected_worker_id=None,
+            expected_attempt_epoch=None,
+        )
+        if record["state"] == "completed":
+            return record
+        if record["state"] not in {
+            "queued",
+            "running",
+            "interrupted",
+            "failed",
+            "cancelled",
+            "timed-out",
+            "expired",
+            "abandoned",
+        }:
+            raise AudiaGenticError(code="CON-AGW-151", kind="agents", message="request is not operator-completable", details={})
+        updated = dict(record)
+        # Older v8 records may carry the transitional preview fields even
+        # though the canonical artifact schema no longer persists them.
+        # Rebuild the preview from response-artifact on read instead of
+        # allowing an operator terminalization to preserve stale fields.
+        updated.pop("output-preview", None)
+        updated.pop("output-truncated", None)
+        updated.update({"state": "completed", "updated-at": now_iso_z(), "finished-at": now_iso_z()})
+        updated["revision"] = record["revision"] + 1
+        updated.update({"worker-id": None, "dispatch-owner-epoch": None, "dispatch-claimed-at": None})
+        updated["watchdog-state"] = "not-started"
+        updated["watchdog-reason"] = None
+        updated["recovery-required"] = False
+        final_response_text = updates.pop("__final-response-text", None)
+        if final_response_text is not None:
+            from audiagentic.components.agents.gateway.output import persist_final_response
+
+            artifact = persist_final_response(
+                project_root,
+                request_id,
+                str(final_response_text),
+                lock_held=True,
+                allow_terminal=True,
+            )
+            updates["response-artifact"] = {
+                key: artifact[key]
+                for key in ("artifact-id", "request-id", "media-type", "bytes", "sha256")
+            }
+        for key, value in updates.items():
+            updated[key.replace("_", "-")] = value
+        write_record(project_root, updated)
+        record_gateway_timeline(
+            project_root, request_id, "state.changed", state="completed",
+            attributes={"from": record["state"], "to": "completed", "source": "operator-provider-capture"},
+        )
+    _finalize_worker_session_if_terminal(project_root, updated)
     return updated
 
 

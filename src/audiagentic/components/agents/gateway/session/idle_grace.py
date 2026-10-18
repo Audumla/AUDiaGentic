@@ -1,6 +1,7 @@
 """Admission policy: chat identity is independent of live-handle retention."""
+from collections.abc import Mapping
 from math import isfinite
-from typing import Any, Mapping
+from typing import Any
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 

@@ -1,0 +1,24 @@
+{
+  "event": {
+    "change-class": "code-fix",
+    "event-id": "chg_20260927_135033_the-gateway-now-recognizes-mea_9686",
+    "files": [
+      "src/audiagentic/components/providers/adapters/gpt_auto/gpt_auto_cdp.py",
+      "tests/gpt_auto/test_snapshot_fallback_dom.py"
+    ],
+    "plan-item-ids": [
+      "AS134"
+    ],
+    "status": "unreleased",
+    "technical-summary": "Observe request-scoped CSS class transitions in the CDP activity MutationObserver while filtering animation-only shimmer, caret, pulse, and transition class edges; add regression coverage for meaningful class activity.",
+    "timestamp-utc": "2026-09-27T13:50:33.272279Z",
+    "user-summary-candidate": "The gateway now recognizes meaningful renderer class-state changes as DOM activity while ignoring animation shimmer noise."
+  },
+  "event-id": "chg_20260927_135033_the-gateway-now-recognizes-mea_9686",
+  "plan-item-ids": [
+    "AS134"
+  ],
+  "project-root": "H:\\development\\projects\\AUDia\\AUDiaGentic",
+  "source": null,
+  "timestamp-utc": "2026-09-27T13:50:33.272279Z"
+}

@@ -28,27 +28,23 @@ mcp-servers:
   - name: ag-ledger
     module: audiagentic.components.ledger.ledger_mcp
     direct-tools: [record_change_event, get_current_summary, sync_ledger, get_audit_report]
-    description: Ledger content tools — record events, summarise, sync, and audit
+    description: Record, inspect, sync, and audit release-ledger events
     propagate: providers
     instructions: >
       The ledger is the authoritative release record. Record an event after substantive
       implementation work; sync pending fragments before a release or audit.
     tool-descriptions:
-      record_change_event: >
-        Record a change event fragment. Required: change-class, files,
-        technical-summary, user-summary-candidate, status ('unreleased').
-        Optional: plan-item-ids (array of plan item IDs for automatic linkage).
-        change-class: feature, code-fix, refactor, docs, tests, config, release, audit, workflow.
+      record_change_event: Record one event or a batch; require class, files, technical/user summaries, and status=unreleased. Optional plan-item-ids.
       get_current_summary: Return the current release summary markdown.
       sync_ledger: Merge all pending fragments into the current release ledger.
-      get_audit_report: Regenerate and return paths to the audit summary and check-in docs.
+      get_audit_report: Regenerate audit and check-in docs; return their paths.
   - name: ag-ledger-mgmt
     module: audiagentic.components.ledger.ledger_manage_mcp
     direct-tools: [get_ledger_status]
     description: Ledger component health — installation state and fragment count
     propagate: audiagentic
     tool-descriptions:
-       get_ledger_status: Return ledger installation state, fragment count, and last sync time.
+       get_ledger_status: Return installation state, fragment count, and last sync time.
 
 contributions:
   - id: agent-ledger/process

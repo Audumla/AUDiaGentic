@@ -3,7 +3,7 @@
 - Request: `req_b2fc1d84281045c2` (first attempt `req_c225d5d59b464d40` failed on
   harness infrastructure, see the 2026-07-19 batch incident doc)
 - Agent profile: `deep-coder-opencode`
-- Model: `brutus/coder-quality-mid`
+- Model: `<local-provider>/coder-quality-mid`
 - Plan item: SH07, repair C1 (Critical)
 - Task class: single-file concurrency correctness fix with immutable dispatch entries
 - Turn time: ~7.5 minutes

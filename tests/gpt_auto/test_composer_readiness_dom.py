@@ -2,10 +2,11 @@
 import pytest
 from playwright.async_api import async_playwright
 
-from audiagentic.components.providers.adapters.gpt_auto.gpt_auto_cdp import (
-    ComposerSubmissionTimeout, GptAutoCdpBrowserController,
-)
 from audiagentic.components.providers.adapters.gpt_auto.cdp.cdp_browser import CdpPageRef
+from audiagentic.components.providers.adapters.gpt_auto.gpt_auto_cdp import (
+    ComposerSubmissionTimeout,
+    GptAutoCdpBrowserController,
+)
 
 
 @pytest.mark.asyncio
@@ -51,6 +52,29 @@ async def test_real_dom_readiness_and_exact_prompt(monkeypatch, mismatch, paragr
             async def evaluate(ref, function, argument=None):
                 return await page.evaluate(function, argument)
             monkeypatch.setattr(controller, "evaluate", evaluate)
+
+            async def insert_text(ref, text):
+                return await page.evaluate(
+                    """text => {
+                        const editor = document.querySelector('#prompt-textarea');
+                        editor.focus();
+                        const selection = window.getSelection();
+                        selection.removeAllRanges();
+                        const range = document.createRange();
+                        range.selectNodeContents(editor);
+                        selection.addRange(range);
+                        if (!document.execCommand('insertText', false, text)) {
+                            throw new Error('test input insertion failed');
+                        }
+                        editor.dispatchEvent(new InputEvent('input', {
+                            bubbles: true, inputType: 'insertText', data: text
+                        }));
+                        return true;
+                    }""",
+                    text,
+                )
+
+            monkeypatch.setattr(controller, "insert_text", insert_text)
             prompt = 'Review the repository.\n\nPreserve case and punctuation.\n' + ('Real content, not a repeated-character task. ' * 100)
             if mismatch:
                 with pytest.raises(ComposerSubmissionTimeout) as raised:
@@ -61,5 +85,74 @@ async def test_real_dom_readiness_and_exact_prompt(monkeypatch, mismatch, paragr
                 assert result['sendButtonClicked'] is True
             assert await page.evaluate('window.clicks') == (0 if mismatch else 1)
             assert await page.evaluate('window.insertions') == 1
+        finally:
+            await browser.close()
+
+
+@pytest.mark.asyncio
+async def test_real_dom_readiness_accepts_chatgpt_rich_url_rendering(monkeypatch):
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            await page.set_content('''<div id="prompt-textarea" contenteditable="true"></div>
+                <button data-testid="send-button" disabled>Send</button>
+                <script>window.clicks=0; document.querySelector('button').onclick=()=>window.clicks++;</script>''')
+            controller = GptAutoCdpBrowserController(object())
+
+            async def evaluate(ref, function, argument=None):
+                return await page.evaluate(function, argument)
+
+            monkeypatch.setattr(controller, "evaluate", evaluate)
+
+            async def insert_text(ref, text):
+                await page.evaluate('''text => {
+                    const editor = document.querySelector('#prompt-textarea');
+                    editor.innerHTML = '<p>Code: ` <span text-link-href="https://github.com/Audumla/AUDiaGentic.git">https://github.com/Audumla/AUDiaGentic.git</span>`</p>';
+                    document.querySelector('button').disabled = false;
+                }''', text)
+
+            monkeypatch.setattr(controller, "insert_text", insert_text)
+            result = await controller.submit(
+                CdpPageRef('test', 'test'),
+                'Code: `https://github.com/Audumla/AUDiaGentic.git`',
+                timeout=1,
+            )
+            assert result['sendButtonClicked'] is True
+            assert await page.evaluate('window.clicks') == 1
+        finally:
+            await browser.close()
+
+
+@pytest.mark.asyncio
+async def test_real_dom_readiness_rejects_changed_paragraph_boundary(monkeypatch):
+    """The send guard must not turn a semantic line break into a space."""
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            await page.set_content('''<div id="prompt-textarea" contenteditable="true"></div>
+                <button data-testid="send-button" disabled>Send</button>''')
+            controller = GptAutoCdpBrowserController(object())
+
+            async def evaluate(ref, function, argument=None):
+                return await page.evaluate(function, argument)
+
+            monkeypatch.setattr(controller, "evaluate", evaluate)
+
+            async def insert_text(ref, text):
+                await page.evaluate('''() => {
+                    const editor = document.querySelector('#prompt-textarea');
+                    editor.innerHTML = '<p>line one</p><p>line two</p>';
+                    document.querySelector('button').disabled = false;
+                }''')
+
+            monkeypatch.setattr(controller, "insert_text", insert_text)
+            with pytest.raises(ComposerSubmissionTimeout) as raised:
+                await controller.submit(
+                    CdpPageRef('test', 'test'), 'line one line two', timeout=0.8
+                )
+            assert raised.value.send_attempted is False
+            assert await page.evaluate('document.querySelector("button").disabled') is False
         finally:
             await browser.close()

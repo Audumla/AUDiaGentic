@@ -126,6 +126,21 @@ def test_bridge_snapshot_preserves_bounded_tool_activity_counts() -> None:
     assert snapshot.tool_activity_counts == (("called-tool", 3), ("talked-to-app", 2))
 
 
+def test_bridge_snapshot_preserves_bounded_dom_activity_digest() -> None:
+    snapshot = ChatSnapshot.from_bridge(
+        {
+            "url": "https://chatgpt.com/g/g-p-test/c/c1",
+            "composerPresent": True,
+            "composerEditable": True,
+            "domActivityDigest": "0123456789abcdef-too-long",
+            "domActivityOwnerPromptMessageId": "prompt-1",
+        }
+    )
+
+    assert snapshot.dom_activity_digest == "0123456789abcdef"
+    assert snapshot.dom_activity_owner_prompt_id == "prompt-1"
+
+
 def test_bridge_snapshot_preserves_web_and_resource_activity_counts() -> None:
     snapshot = ChatSnapshot.from_bridge(
         {
@@ -174,6 +189,36 @@ def test_bridge_snapshot_preserves_safe_request_scoped_progress_blocks() -> None
         ChatProgressBlock("prompt-1", None, "fetching", "abcdef0123456789"),
     )
     assert not hasattr(snapshot.progress_blocks[0], "text")
+
+
+def test_bridge_snapshot_accepts_structural_progress_kinds_only() -> None:
+    snapshot = ChatSnapshot.from_bridge(
+        {
+            "url": "https://chatgpt.com/g/g-p-test/c/c1",
+            "progressBlocks": [
+                {
+                    "ownerPromptMessageId": "prompt-1",
+                    "kind": "dom-table",
+                    "digest": "0123456789abcdef",
+                },
+                {
+                    "ownerPromptMessageId": "prompt-1",
+                    "kind": "dom-materialization",
+                    "digest": "fedcba9876543210",
+                },
+                {
+                    "ownerPromptMessageId": "prompt-1",
+                    "kind": "not-approved",
+                    "digest": "1111111111111111",
+                },
+            ],
+        }
+    )
+
+    assert snapshot.progress_blocks == (
+        ChatProgressBlock("prompt-1", None, "dom-table", "0123456789abcdef"),
+        ChatProgressBlock("prompt-1", None, "dom-materialization", "fedcba9876543210"),
+    )
 
 
 def test_bridge_snapshot_preserves_ordered_assistant_message_sequence() -> None:

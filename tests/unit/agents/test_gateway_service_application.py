@@ -41,6 +41,15 @@ class Application:
     def close_execution_session(self, project_root, session_id):
         return {"operation": "close", "session-id": session_id}
 
+    def purge_execution_session(self, project_root, session_id):
+        return {"operation": "purge", "session-id": session_id}
+
+    def purge_execution_sessions(self, project_root, **kwargs):
+        return {"operation": "purge-all", **kwargs}
+
+    def focus_execution_session(self, project_root, session_id):
+        return {"operation": "focus-session", "session-id": session_id, "root": str(project_root)}
+
     def control_execution_session(self, project_root, session_id, **kwargs):
         return {"operation": "control", "session-id": session_id, **kwargs}
 
@@ -78,6 +87,20 @@ def test_dashboard_action_token_survives_service_application_restart(tmp_path: P
     assert second.dashboard_action_token == token
 
 
+def test_dashboard_session_focus_resolves_session_owner(tmp_path: Path, monkeypatch) -> None:
+    service = _service(tmp_path)
+    project = tmp_path / "project"
+    monkeypatch.setattr(service, "_dashboard_session_projects", lambda session_id: [project])
+
+    result = service.focus_dashboard_session("ses_focus")
+
+    assert result == {
+        "operation": "focus-session",
+        "session-id": "ses_focus",
+        "root": str(project),
+    }
+
+
 def test_closed_operation_router_calls_public_application(tmp_path: Path) -> None:
     service = _service(tmp_path)
     authorization = _authorization(service)
@@ -101,6 +124,18 @@ def test_closed_operation_router_calls_public_application(tmp_path: Path) -> Non
         {"request_id": "req_1", "timeout_seconds": 3},
         **authorization,
     )["timeout"] == 3
+    assert service.invoke(
+        "purge_execution_session",
+        str(tmp_path),
+        {"session_id": "ses_1"},
+        **authorization,
+    ) == {"operation": "purge", "session-id": "ses_1"}
+    assert service.invoke(
+        "purge_execution_sessions",
+        str(tmp_path),
+        {"dry_run": True, "session_ids": ["ses_1"]},
+        **authorization,
+    ) == {"operation": "purge-all", "dry_run": True, "session_ids": ["ses_1"]}
 
     submitted = service.invoke(
         "submit_execution_request",

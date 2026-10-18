@@ -20,18 +20,21 @@ def install_release_please(
     python_version: str = "3.13",
     initial_version: str = DEFAULT_VERSION,
 ) -> dict:
+    """Install the standard release-please workflow for the selected release type."""
     return release_api.install(project_root_from_env(), release_type, branch, python_version, initial_version)
 
 
 @mcp.tool()
 @tool_boundary
 def update_release_please_workflow(branch: str = "main", python_version: str = "3.13") -> dict:
+    """Update the managed release-please workflow."""
     return release_api.update_workflow(project_root_from_env(), branch, python_version)
 
 
 @mcp.tool()
 @tool_boundary
 def finalize_release(release_id: str = "rel_0001") -> dict:
+    """Archive the ledger and render release notes for release_id."""
     return release_api.finalize(project_root_from_env(), release_id)
 
 
@@ -44,24 +47,28 @@ def dispatch_release_workflow(
     ref: str = "main",
     interactive: bool = True,
 ) -> dict:
+    """Dispatch the configured release workflow and return its result."""
     return release_api.dispatch_release_workflow(owner, repo, release_id, ref, interactive)
 
 
 @mcp.tool()
 @tool_boundary
 def github_auth(interactive: bool = True) -> dict:
+    """Start GitHub authentication; interactive controls device prompts."""
     return release_api.github_auth(interactive)
 
 
 @mcp.tool()
 @tool_boundary
 def github_auth_poll(device_code: str) -> dict:
+    """Poll a pending GitHub device-auth request."""
     return release_api.github_auth_poll(device_code)
 
 
 @mcp.tool()
 @tool_boundary
 def clear_github_auth() -> dict:
+    """Remove stored GitHub authentication state."""
     return release_api.clear_github_auth()
 
 
@@ -74,6 +81,7 @@ def build_release_artifacts(
     github_release: bool = False,
     interactive: bool = True,
 ) -> dict:
+    """Build release artifacts and optionally tag, publish, or create a release."""
     return release_api.build_release_artifacts(
         project_root_from_env(),
         release_id=release_id,

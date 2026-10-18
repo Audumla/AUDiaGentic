@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 
-from audiagentic.components.agents.gateway.mapping import normalize_chat_title
+from .urls import normalize_chat_title
 
 
 class PageObservationState(StrEnum):
@@ -53,6 +53,7 @@ class ChatMessageRef:
     message_id: str | None
     text: str | None
     sequence: int
+    markdown: str | None = None
     # Provider-private correlation representation.  ChatGPT can render
     # structural Markdown (for example a thematic break) as an element that
     # contributes no innerText.  Keep that reconstruction separate from the
@@ -71,6 +72,13 @@ _PROGRESS_KINDS = frozenset({
     "talked-to-app",
     "searching-web",
     "read-resource",
+    "dom-status",
+    "dom-progress",
+    "dom-tool-result",
+    "dom-connector",
+    "dom-citation",
+    "dom-table",
+    "dom-materialization",
 })
 
 
@@ -122,6 +130,16 @@ class ChatSnapshot:
     # is still working even when the assistant text is unchanged.
     tool_activity_counts: tuple[tuple[str, int], ...] = ()
     progress_blocks: tuple[ChatProgressBlock, ...] = ()
+    # Bounded digest of the current request-owned agent-turn DOM.  This is
+    # deliberately separate from visible assistant text/tool counts: current
+    # ChatGPT renders meaningful work by mutating status rows, cards, ARIA
+    # state, and structural nodes without changing any of those projections.
+    dom_activity_digest: str | None = None
+    dom_activity_owner_prompt_id: str | None = None
+    # Bounded occurrence identities for document-scoped error alerts.  The
+    # raw ``error-alert`` signal remains diagnostic; turn.py derives the
+    # request-owned failure signal from baseline/current occurrence deltas.
+    error_alert_occurrences: tuple[tuple[str, str | None], ...] = ()
 
     @classmethod
     def from_bridge(cls, value: dict[str, Any]) -> ChatSnapshot:
@@ -172,6 +190,7 @@ class ChatSnapshot:
                     role=str(item.get("role") or ""),
                     message_id=_text(item.get("messageId")),
                     text=_text(item.get("text")),
+                    markdown=_text(item.get("markdown")),
                     sequence=int(item.get("sequence") or 0),
                     correlation_text=_text(item.get("correlationText")),
                     structural_hr_count=(
@@ -198,6 +217,13 @@ class ChatSnapshot:
                 )
             ),
             progress_blocks=_progress_blocks(value.get("progressBlocks")),
+            dom_activity_digest=_bounded_token(value.get("domActivityDigest"), 16),
+            dom_activity_owner_prompt_id=_bounded_token(
+                value.get("domActivityOwnerPromptMessageId")
+            ),
+            error_alert_occurrences=_error_alert_occurrences(
+                value.get("errorAlertOccurrences")
+            ),
         )
 
     def latest_user_ref(self) -> ChatMessageRef | None:
@@ -257,14 +283,16 @@ class ChatSnapshot:
             markers.add("text-changed")
         auth_required = "auth-required" in signals
         error_visible = self.error_present or bool(
-            signals.intersection({"error-page", "error-alert"})
+            signals.intersection({"error-page", "request-error-alert"})
         )
         busy = self.generating or bool(
             signals.intersection(
                 {"stop-control", "streaming-indicator", "thinking-indicator", "busy-indicator"}
             )
         )
-        completion_visible = "completion-control" in signals
+        completion_visible = bool(
+            signals.intersection({"completion-control", "response-complete-status"})
+        )
         complete = (
             assistant_fresh
             and bool(self.latest_assistant_text)
@@ -339,6 +367,27 @@ def _progress_blocks(value: Any) -> tuple[ChatProgressBlock, ...]:
             )
         )
     return tuple(result)
+
+
+def _error_alert_occurrences(value: Any) -> tuple[tuple[str, str | None], ...]:
+    """Parse bounded alert identities fail-closed."""
+    if not isinstance(value, (list, tuple)) or len(value) > 32:
+        return ()
+    parsed: list[tuple[str, str | None]] = []
+    for item in value:
+        if not isinstance(item, dict):
+            return ()
+        digest = _bounded_token(item.get("digest"), 32)
+        if not digest:
+            return ()
+        owner_raw = item.get("ownerPromptMessageId")
+        if owner_raw is not None and not isinstance(owner_raw, str):
+            return ()
+        owner = _bounded_token(owner_raw)
+        if owner_raw is not None and not owner:
+            return ()
+        parsed.append((digest, owner))
+    return tuple(parsed)
 
 
 def _text(value: Any) -> str | None:

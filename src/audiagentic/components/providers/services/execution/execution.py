@@ -245,6 +245,16 @@ def load_conversation_focus_capability(provider_id: str) -> Callable[..., Any] |
     return None
 
 
+def load_conversation_capture_capability(provider_id: str) -> Callable[..., Any] | None:
+    """Load the optional read-only latest-response capability."""
+    hook = _adapter_hook(provider_id, "conversation_focus", "capture_latest_response")
+    if hook is not None:
+        return hook
+    if provider_id.startswith("gpt-auto-"):
+        return _adapter_hook("gpt-auto", "conversation_focus", "capture_latest_response")
+    return None
+
+
 _EXECUTION_MODE_BY_DECLARATION: dict[str, str] = {
     "cli": "descriptor",
     "stub": "stub",

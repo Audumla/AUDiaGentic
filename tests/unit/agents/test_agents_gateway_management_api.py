@@ -163,10 +163,10 @@ def test_gateway_restart_stops_then_reacquires_service(tmp_path: Path, monkeypat
             self.label = label
             self.closed = False
 
-        def service_stop(self, project_root: Path, *, force: bool = False) -> dict:
+        def dashboard_restart(self, project_root: Path) -> dict:
+            assert self.label == "old"
             assert project_root == tmp_path
-            assert force is True
-            return {"stopping": True, "forced": True}
+            return {"restarting": True}
 
         def service_status(self, project_root: Path) -> dict:
             assert project_root == tmp_path
@@ -180,14 +180,70 @@ def test_gateway_restart_stops_then_reacquires_service(tmp_path: Path, monkeypat
         "audiagentic.components.agents.gateway.service.bootstrap.start_or_attach_gateway",
         lambda: next(clients),
     )
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.service.bootstrap.attach_existing_gateway",
+        lambda: next(clients),
+    )
 
     result = gateway_restart(tmp_path, force=True)
 
     assert result == {
-        "stopping": {"stopping": True, "forced": True},
+        "restarting": {"restarting": True},
         "restarted": True,
         "status": {"state": "running", "owner-epoch": "new"},
     }
+
+
+def test_gateway_restart_waits_for_draining_owner_to_retire(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Client:
+        def __init__(self, label: str) -> None:
+            self.label = label
+
+        def dashboard_restart(self, project_root: Path) -> dict:
+            return {"restarting": True}
+
+        def service_status(self, project_root: Path) -> dict:
+            return {"state": "running", "owner-epoch": "new"}
+
+        def close(self) -> None:
+            pass
+
+    calls = 0
+
+    def start():
+        nonlocal calls
+        calls += 1
+        return _Client("old")
+
+    attach_calls = 0
+
+    def attach():
+        nonlocal attach_calls
+        attach_calls += 1
+        if attach_calls < 3:
+            from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+            raise AudiaGenticError(
+                "CON-MSVC-028", "agents", "service process remains live while draining"
+            )
+        return _Client("new")
+
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.service.bootstrap.start_or_attach_gateway",
+        start,
+    )
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.service.bootstrap.attach_existing_gateway",
+        attach,
+    )
+    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_RESTART_WAIT_SECONDS", "2")
+    monkeypatch.setattr("audiagentic.components.agents.gateway.management_api.time.sleep", lambda _: None)
+
+    result = gateway_restart(tmp_path)
+
+    assert calls == 1
+    assert attach_calls == 3
+    assert result["restarted"] is True
 
 
 def test_gateway_health_combines_service_and_runtime_facts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

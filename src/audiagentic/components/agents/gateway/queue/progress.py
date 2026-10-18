@@ -9,6 +9,8 @@ import datetime
 from enum import Enum
 from typing import Any
 
+from audiagentic.foundation.transports.agent_session import is_meaningful_activity
+
 STALE_PROGRESS_THRESHOLD_SECONDS = 300
 
 
@@ -62,7 +64,12 @@ def _disposition(record: dict[str, Any]) -> tuple[ProgressDisposition, Interrupt
         )
     activity = record.get("activity") if isinstance(record.get("activity"), dict) else {}
     provider_activity = activity.get("provider") if isinstance(activity.get("provider"), dict) else {}
-    provider_seen = bool(provider_activity.get("last-at"))
+    provider_phase = provider_activity.get("phase")
+    provider_activity_is_real = (
+        (provider_phase is None and not provider_activity.get("source"))
+        or is_meaningful_activity(provider_activity.get("source"), provider_phase)
+    )
+    provider_seen = bool(provider_activity.get("last-at")) and provider_activity_is_real
     provider_capability = provider_activity.get("capability", "unknown")
     if (
         record.get("watchdog-state") == "intervention"
@@ -83,7 +90,10 @@ def _disposition(record: dict[str, Any]) -> tuple[ProgressDisposition, Interrupt
             Interruptibility.NOT_SAFE,
             "provider-turn-unresolved-live-attempt",
         )
-    if provider_seen or record.get("watchdog-reason") == "verified-activity-renewed":
+    # Historical watchdog disposition is not current provider evidence.
+    # Synthetic owner/client liveness may have produced the old reason while
+    # the provider activity sequence remained unchanged.
+    if provider_seen:
         return (
             ProgressDisposition.PROCESSING_VERIFIED,
             Interruptibility.NOT_SAFE,
@@ -192,6 +202,13 @@ def project_request_progress(
     """
     now = now or _now_utc()
     state = record.get("state")
+    activity = record.get("activity") if isinstance(record.get("activity"), dict) else {}
+    provider_activity = activity.get("provider") if isinstance(activity.get("provider"), dict) else {}
+    provider_phase = provider_activity.get("phase")
+    provider_activity_is_real = (
+        (provider_phase is None and not provider_activity.get("source"))
+        or is_meaningful_activity(provider_activity.get("source"), provider_phase)
+    )
 
     # --- derive phase ---
     if isinstance(state, str) and state in _TERMINAL_STATE_TO_PHASE:
@@ -249,7 +266,9 @@ def project_request_progress(
     if candidate_ts:
         latest_transition_ts = max(candidate_ts)
 
-    # Latest session event timestamp (only kind + timestamp, redacted).
+    # Latest session event timestamp (only kind + timestamp, redacted).  This
+    # is display/phase evidence only; session timelines also contain timing
+    # and non-meaningful observations and must never clear stale progress.
     session_event_ts = None
     safe_session_event = None
     if latest_session_event is not None and isinstance(latest_session_event, dict):
@@ -260,22 +279,53 @@ def project_request_progress(
             safe_session_event = {"kind": kind, "timestamp": latest_session_event.get("timestamp")}
 
     # --- last-progress-at / source ---
+    # The durable gateway relay is the freshness authority for provider
+    # progress. The public activity sequence may include synthetic client
+    # liveness, so stale-progress diagnosis must use the provider bucket.
+    gateway_activity_ts = None
+    activity_sequence = record.get("activity-sequence", 0)
+    provider_activity_ts = (
+        _parse_ts(provider_activity.get("last-at"))
+        if provider_activity_is_real
+        else None
+    )
+    owner_activity = activity.get("owner") if isinstance(activity.get("owner"), dict) else {}
+    owner_sequence = owner_activity.get("source-sequence", 0)
+    if provider_activity_ts:
+        gateway_activity_ts = provider_activity_ts
+    elif (
+        isinstance(activity_sequence, int)
+        and not isinstance(activity_sequence, bool)
+        and activity_sequence > 0
+        and owner_sequence == 0
+        and (
+            not (activity.get("last-source") or record.get("activity-source"))
+            or is_meaningful_activity(
+                activity.get("last-source") or record.get("activity-source"), None
+            )
+        )
+    ):
+        # Pre-client-liveness records used the aggregate timestamp for
+        # provider progress. Preserve that legacy interpretation only when the
+        # owner bucket cannot prove a synthetic client activity edge.
+        gateway_activity_ts = _parse_ts(record.get("last-activity-at"))
+
     last_progress_at = None
     last_progress_source = None
 
-    if latest_transition_ts and session_event_ts:
-        if latest_transition_ts >= session_event_ts:
+    if latest_transition_ts and gateway_activity_ts:
+        if latest_transition_ts >= gateway_activity_ts:
             last_progress_at = latest_transition_ts.isoformat()
             last_progress_source = "request-transition"
         else:
-            last_progress_at = session_event_ts.isoformat()
-            last_progress_source = "session-event"
+            last_progress_at = gateway_activity_ts.isoformat()
+            last_progress_source = "gateway-activity"
     elif latest_transition_ts:
         last_progress_at = latest_transition_ts.isoformat()
         last_progress_source = "request-transition"
-    elif session_event_ts:
-        last_progress_at = session_event_ts.isoformat()
-        last_progress_source = "session-event"
+    elif gateway_activity_ts:
+        last_progress_at = gateway_activity_ts.isoformat()
+        last_progress_source = "gateway-activity"
 
     # --- running-seconds ---
     running_seconds = None

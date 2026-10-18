@@ -12,7 +12,12 @@ GatewayClient seam, just not over MCP
 
 from __future__ import annotations
 
+import os
+from pathlib import Path
 from typing import Any
+from audiagentic.components.agents.gateway.api import _resolve_workspace_project_root
+from audiagentic.components.agents.gateway.session import sessions_store
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 from audiagentic.components.agents.gateway.client import call_gateway_method
 from audiagentic.foundation.mcp.component_server import (
@@ -22,18 +27,135 @@ from audiagentic.foundation.mcp.component_server import (
     tool_boundary,
 )
 
-mcp = mcp_server(__name__)
+mcp = mcp_server(__name__, structured_output_only=True)
 
 _RESPONSE_PREVIEW_FIELDS = frozenset({"output-preview", "output-truncated"})
 
+_MAX_PAGE = 100
 
-def _status_without_response_preview(status: dict[str, Any]) -> dict[str, Any]:
+
+def _request_project_root(request_id: str):
+    """Route project-scoped request IDs back to their owning checkout."""
+    root = project_root_from_env()
+    if not isinstance(request_id, str) or not request_id.startswith("req_"):
+        return root
+    parts = request_id.split("_")
+    if len(parts) < 3 or len(parts[-1]) != 12 or any(
+        character not in "0123456789abcdef" for character in parts[-1].casefold()
+    ):
+        return root
+    return _resolve_workspace_project_root(root, "_".join(parts[1:-1]))
+
+
+def _session_project_root(session_id: str):
+    """Find the owning checkout for a session before dispatching resume.
+
+    Session IDs are intentionally opaque and therefore cannot encode a
+    project slug.  The MCP process may nevertheless serve sibling checkouts;
+    probing their durable session records avoids routing resume through the
+    process CWD.  Multiple matches fail closed rather than selecting a
+    session from the wrong project.
+    """
+    root = project_root_from_env().resolve()
+    configured = os.environ.get("AUDIAGENTIC_WORKSPACE_ROOTS", "")
+    if configured.strip():
+        candidates = [
+            Path(value).expanduser().resolve()
+            for value in configured.split(os.pathsep)
+            if value.strip()
+        ]
+    else:
+        parent = root.parent
+        candidates = [root]
+        if parent.is_dir():
+            candidates.extend(
+                child.resolve()
+                for child in parent.iterdir()
+                if child.is_dir() and child.resolve() != root
+            )
+
+    matches: list[Path] = []
+    for candidate in dict.fromkeys(candidates):
+        try:
+            sessions_store.read_session_record(candidate, session_id)
+        except AudiaGenticError as exc:
+            if exc.code == "RES-AGW-002":
+                continue
+            raise
+        matches.append(candidate)
+
+    if len(matches) == 1:
+        return matches[0]
+    if len(matches) > 1:
+        raise AudiaGenticError(
+            code="VAL-AGW-152",
+            kind="agents",
+            message="gateway session id is ambiguous across project checkouts",
+            details={"session-id": session_id, "project-roots": [str(path) for path in matches]},
+        )
+    return root
+
+def _page_limit(value: int) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= _MAX_PAGE:
+        raise ValueError(f"limit must be an integer between 1 and {_MAX_PAGE}")
+    return value
+
+def _public_scalar(value: Any) -> Any:
+    if isinstance(value, str):
+        return value[:256] if value else None
+    if isinstance(value, (bool, int, float)):
+        return value
+    return None
+
+
+def _request_dto(value: Any) -> dict[str, Any]:
+    """Project lifecycle mutations without copying arbitrary record fields."""
+    source = value if isinstance(value, dict) else {}
+    result: dict[str, Any] = {}
+    request_id = source.get("request-id") or source.get("request_id")
+    session_id = source.get("session-id") or source.get("session_id")
+    for key in ("state", "revision", "action", "disposition", "outcome", "error-code", "reason"):
+        raw = _public_scalar(source.get(key))
+        if raw is not None:
+            result[key] = raw
+    warnings = source.get("warnings")
+    if isinstance(warnings, list):
+        result["warnings"] = [item[:256] for item in warnings if isinstance(item, str)][:16]
+    if isinstance(request_id, str) and request_id:
+        result["request-id"] = request_id
+    if isinstance(session_id, str) and session_id:
+        result["session-id"] = session_id
+    return result
+
+
+def _session_dto(value: Any) -> dict[str, Any]:
+    source = value if isinstance(value, dict) else {}
+    result: dict[str, Any] = {}
+    session_id = source.get("session-id") or source.get("session_id")
+    if isinstance(session_id, str) and session_id:
+        result["session-id"] = session_id
+    for key in ("state", "live", "runtime-state", "created-at", "updated-at", "provider-id", "model-id"):
+        raw = _public_scalar(source.get(key))
+        if raw is not None:
+            result[key] = raw
+    return result
+
+
+def _status_without_response_preview(status: dict[str, Any], *, include_response: bool = False) -> dict[str, Any]:
     """Keep MCP status compact and null-free; never spend tokens on a preview."""
-    return {
-        key: value
-        for key, value in status.items()
-        if key not in _RESPONSE_PREVIEW_FIELDS and value is not None
-    }
+    allowed = {"task_id", "request_id", "request-id", "session_id", "session-id", "lifecycle", "state", "activity_seq", "activity-seq", "activity_at", "activity-at", "activity", "activity_type", "outcome", "error_code", "error-code", "contract-version", "revision"}
+    result = {key: _public_scalar(status.get(key)) for key in allowed if key not in _RESPONSE_PREVIEW_FIELDS and _public_scalar(status.get(key)) is not None}
+    session_id = status.get("session_id") or status.get("session-id")
+    if isinstance(session_id, str) and session_id:
+        result["session_id"] = session_id
+    if include_response and isinstance(status.get("response"), dict):
+        response = status["response"]
+        result["response"] = {
+            key: _public_scalar(response.get(key))
+            for key in ("text", "bytes", "format", "media_type")
+            if _public_scalar(response.get(key)) is not None
+        }
+    return result
 
 
 def _sparse(value: Any) -> Any:
@@ -78,20 +200,7 @@ def _agent_card(definition: dict[str, Any]) -> dict[str, Any]:
 @mcp.tool()
 @tool_boundary
 def agent_task_list_definitions() -> list[dict[str, Any]]:
-    """List available agents — the valid `agent_id` values for
-    `agent_task_submit` — as a slim, client-facing summary per agent
-    (agent_id, name, description, skills). Modeled on the A2A AgentCard
-    shape: what an agent IS to a caller, not how it's implemented —
-    execution profile, role, and other harness wiring are deliberately
-    left out.
-
-    The configuration MCP server (ag-agents-config) separately exposes the
-    full administrative record (via `agent_list_definitions`) for managing
-    definitions/execution-profiles/roles; a tool name must have exactly one
-    owning MCP surface, so this copy is named agent_task_list_definitions.
-    It exists so a caller using ONLY the gateway server can discover valid
-    agent_id values without also needing the configuration server
-    attached."""
+    """List valid agent_id values with concise names, descriptions, and skills."""
     from audiagentic.components.agents.configuration.global_catalog import (
         list_global_agent_definitions,
     )
@@ -102,38 +211,117 @@ def agent_task_list_definitions() -> list[dict[str, Any]]:
 
 @mcp.tool()
 @tool_boundary
-def agent_task_status(request_id: str) -> dict[str, Any]:
-    """Return the compact task status used for normal MCP polling.
-
-    V4 is the only public projection: lifecycle, activity, bounded latest
-    activity type, progress sequence/timestamp, and terminal outcome only. Response content,
-    diagnostics, attempts, watchdog policy, and provider internals belong to
-    their separate operations and never cross the normal status boundary.
-    """
-    project_root = project_root_from_env()
-    status = call_gateway_method(
-        "get_execution_request",
-        project_root,
-        request_id,
-    )
+def agent_task_status(request_id: str, include_response: bool = False) -> dict[str, Any]:
+    """Poll compact lifecycle status; use diagnostics or response for terminal detail."""
+    project_root = _request_project_root(request_id)
+    if include_response:
+        status = dict(call_gateway_method(
+            "get_execution_request", project_root, request_id, include_response=True
+        ))
+    else:
+        # Preserve the pre-v4 call shape for clients and gateway doubles that
+        # do not accept the optional response keyword.
+        status = dict(call_gateway_method("get_execution_request", project_root, request_id))
+    # The compact default is an explicit versioned MCP contract. Callers that
+    # need the prior terminal payload use the opt-in flag or response tool.
+    status.setdefault("contract-version", "task-status.v4-compact")
     # V4 is a fixed-shape contract: its inactive axes are explicitly null and
     # must not be removed by the generic sparse projection.
-    return _status_without_response_preview(status)
+    return _status_without_response_preview(status, include_response=include_response)
 
 
 @mcp.tool()
 @tool_boundary
 def agent_task_diagnostics(request_id: str, limit: int = 25) -> dict[str, Any]:
-    """Return bounded semantic failure/activity evidence for one request.
-
-    Unlike ``agent_task_status`` this is an operator diagnostic surface.  It
-    is still bounded and redacted: no prompt, full response, DOM, CDP handle,
-    cookie, or traceback crosses the MCP boundary.
-    """
-    project_root = project_root_from_env()
+    """Return bounded, redacted failure and activity evidence for a request."""
+    project_root = _request_project_root(request_id)
+    _page_limit(limit)
     return _sparse(
         call_gateway_method(
             "get_execution_diagnostics", project_root, request_id=request_id, limit=limit
+        )
+    )
+
+
+@mcp.tool()
+@tool_boundary
+def agent_task_observations(
+    request_id: str,
+    limit: int = 25,
+    cursor: str | None = None,
+    since_sequence: int | None = None,
+    tail: int | None = None,
+) -> dict[str, Any]:
+    """Return a finite page of redacted request-owned observations."""
+    project_root = _request_project_root(request_id)
+    _page_limit(limit)
+    params: dict[str, Any] = {
+        "limit": limit,
+        "cursor": cursor,
+        "since_sequence": since_sequence,
+    }
+    if tail is not None:
+        params["tail"] = tail
+    return _sparse(
+        call_gateway_method(
+            "get_execution_observations",
+            project_root,
+            request_id,
+            **params,
+        )
+    )
+
+
+@mcp.tool()
+@tool_boundary
+def agent_task_evidence(
+    request_id: str,
+    include_observations: bool = False,
+    include_history: bool = False,
+    include_recovery: bool = False,
+    limit: int = 25,
+    cursor: str | None = None,
+    observation_cursor: str | None = None,
+    recovery_cursor: str | None = None,
+    history_cursor: str | None = None,
+    since_sequence: int | None = None,
+) -> dict[str, Any]:
+    """Return compact evidence; observation/history/recovery tiers are opt-in."""
+    project_root = _request_project_root(request_id)
+    _page_limit(limit)
+    params: dict[str, Any] = {
+        "include_observations": include_observations,
+        "include_history": include_history,
+        "include_recovery": include_recovery,
+        "limit": limit,
+        "cursor": cursor,
+        "since_sequence": since_sequence,
+    }
+    if observation_cursor is not None:
+        params["observation_cursor"] = observation_cursor
+    if recovery_cursor is not None:
+        params["recovery_cursor"] = recovery_cursor
+    if history_cursor is not None:
+        params["history_cursor"] = history_cursor
+    raw = call_gateway_method(
+            "get_execution_evidence",
+            project_root,
+            request_id,
+            **params,
+        )
+    from audiagentic.components.agents.gateway.evidence_projection import project_public_gateway_evidence
+    return _sparse(project_public_gateway_evidence(raw))
+
+@mcp.tool()
+@tool_boundary
+def agent_task_observation_replay(request_id: str) -> dict[str, Any]:
+    """Replay request-owned observations into a compact recovery analysis."""
+    project_root = _request_project_root(request_id)
+    return _sparse(
+        call_gateway_method(
+            "replay_execution_observations",
+            project_root,
+            request_id,
         )
     )
 
@@ -145,14 +333,9 @@ def agent_task_recover(
     action: str,
     expected_revision: int | None = None,
 ) -> dict[str, Any]:
-    """Request a safe diagnostic recovery action.
-
-    Supported actions are ``reconcile``, ``abandon`` and
-    ``clear-not-submitted``. Recovery never resends a provider prompt; callers
-    continue polling status/diagnostics for the resulting lifecycle evidence.
-    """
-    project_root = project_root_from_env()
-    return _sparse(
+    """Request reconcile, abandon, or clear-not-submitted; recovery never resends a prompt."""
+    project_root = _request_project_root(request_id)
+    return _request_dto(
         call_gateway_method(
             "recover_execution_request",
             project_root,
@@ -166,104 +349,120 @@ def agent_task_recover(
 @mcp.tool()
 @tool_boundary
 def agent_task_response(request_id: str) -> dict[str, Any]:
-    """Return the exact terminal response through the server-side boundary.
-
-    The gateway resolves and verifies the request-owned artifact internally.
-    No filesystem path, URI, preview, or alternate artifact locator crosses
-    MCP; this operation is the sole full-response surface.
-    """
-    project_root = project_root_from_env()
-    text = call_gateway_method("get_execution_response", project_root, request_id)
-    raw_bytes = len(text.encode("utf-8"))
+    """Return the exact verified terminal response."""
+    project_root = _request_project_root(request_id)
+    payload = call_gateway_method("get_execution_response_payload", project_root, request_id)
     result: dict[str, Any] = {
         "request-id": request_id,
         "delivery": "inline",
+        "text": payload["text"],
+        "bytes": payload["bytes"],
+        "format": payload["format"],
+        "media-type": payload["media_type"],
+    }
+    state = payload.get("state")
+    if isinstance(state, str) and state: result["state"] = state
+    error_code = payload.get("error_code")
+    if isinstance(error_code, str) and error_code: result["error-code"] = error_code
+    error_reason = payload.get("error_reason")
+    if isinstance(error_reason, str) and error_reason: result["error-reason"] = error_reason
+    return result
+
+@mcp.tool()
+@tool_boundary
+def agent_task_failure_response(request_id: str) -> dict[str, Any]:
+    """Return provider text captured as diagnostic evidence on a failed request."""
+    project_root = _request_project_root(request_id)
+    text = call_gateway_method("get_execution_failure_response", project_root, request_id)
+    return {
+        "request-id": request_id,
+        "delivery": "inline",
+        "classification": "failure-diagnostic",
         "text": text,
-        "bytes": raw_bytes,
+        "bytes": len(text.encode("utf-8")),
     }
 
-    # A full response may belong to a failed terminal attempt (for example,
-    # an ACP provider cancelling after a failed tool call).  Keep the response
-    # operation self-describing with only the bounded terminal outcome and
-    # failure code; the detailed evidence remains on agent_task_diagnostics.
-    try:
-        diagnostics = call_gateway_method(
-            "get_execution_diagnostics", project_root, request_id, limit=1
-        )
-    except Exception:
-        diagnostics = None
-    if isinstance(diagnostics, dict):
-        state = diagnostics.get("state")
-        if isinstance(state, str) and state:
-            result["state"] = state
-        rollup = diagnostics.get("diagnostics")
-        if isinstance(rollup, dict):
-            failure_code = rollup.get("failure-code")
-            reason_code = rollup.get("reason-code")
-            if isinstance(failure_code, str) and failure_code:
-                result["error-code"] = failure_code
-            if isinstance(reason_code, str) and reason_code:
-                result["error-reason"] = reason_code
-    return result
+
+@mcp.tool()
+@tool_boundary
+def agent_task_complete_from_provider(request_id: str) -> dict[str, Any]:
+    """Capture the request-owned current provider response and mark it completed; never send a prompt."""
+    project_root = _request_project_root(request_id)
+    return _sparse(call_gateway_method("complete_execution_from_provider", project_root, request_id))
 
 
 @mcp.tool()
 @tool_boundary
 def agent_task_cancel(request_id: str) -> dict[str, Any]:
     """Cancel a queued request, or best-effort mark a running one cancel-requested."""
-    project_root = project_root_from_env()
-    return _sparse(call_gateway_method("cancel_execution_request", project_root, request_id))
+    project_root = _request_project_root(request_id)
+    return _request_dto(call_gateway_method("cancel_execution_request", project_root, request_id))
 
 
 @mcp.tool()
 @tool_boundary
 def agent_task_list_requests(
     state: str | None = None,
-    limit: int | None = None,
+    limit: int = 25,
 ) -> list[dict[str, Any]]:
-    """List persisted gateway requests, most recently created first.
-
-    Optionally filter by state (queued/running/completed/failed/cancelled/
-    rejected). Reads from disk, so this works even for requests from an
-    earlier process — unlike queue depths, which are in-memory only.
-    """
+    """List persisted requests, newest first; optionally filter by lifecycle state."""
     project_root = project_root_from_env()
+    _page_limit(limit)
     requests = call_gateway_method(
         "list_execution_requests", project_root, state=state, limit=limit
     )
-    projected = [
-        _status_without_response_preview(item) if isinstance(item, dict) else item
-        for item in requests
-    ]
-    return projected
+    return [_status_without_response_preview(dict(item)) for item in requests]
 
 
 @mcp.tool()
 @tool_boundary
 def agent_task_gateway_overview() -> dict[str, Any]:
-    """Operator-facing summary: persisted request counts by state, the 5 most
-    recent failures (with redacted error), and in-process per-profile queue depths."""
+    """Return request counts, recent redacted failures, and provider activity."""
     project_root = project_root_from_env()
     return _sparse(call_gateway_method("gateway_overview", project_root))
 
 
 @mcp.tool()
 @tool_boundary
-def agent_task_session_list(state: str | None = None) -> list[dict[str, Any]]:
-    """List persisted gateway sessions in stable lifecycle/ID order. Each entry carries a
-    'live' flag: true when the session's agent process is held by this gateway
-    process (only live sessions can accept new turns)."""
+def agent_task_session_list(state: str | None = "active") -> list[dict[str, Any]]:
+    """List sessions, defaulting to active; pass a lifecycle state or ``all``."""
     project_root = project_root_from_env()
-    return _sparse(call_gateway_method("list_execution_sessions", project_root, state=state))
+    gateway_state = None if state == "all" else state
+    return [_session_dto(item) for item in call_gateway_method("list_execution_sessions", project_root, state=gateway_state)]
 
 
 @mcp.tool()
 @tool_boundary
 def agent_task_session_close(session_id: str) -> dict[str, Any]:
-    """Close a live agent session (terminates its agent process). Idempotent —
-    an already-closed or orphaned session returns its final record."""
+    """Close a session and its agent process; repeated close is idempotent."""
     project_root = project_root_from_env()
-    return _sparse(call_gateway_method("close_execution_session", project_root, session_id))
+    return _session_dto(call_gateway_method("close_execution_session", project_root, session_id))
+
+
+@mcp.tool()
+@tool_boundary
+def agent_task_session_purge(session_id: str) -> dict[str, Any]:
+    """Permanently purge one terminal gateway session and its request data."""
+    project_root = project_root_from_env()
+    return _sparse(call_gateway_method("purge_execution_session", project_root, session_id))
+
+
+@mcp.tool()
+@tool_boundary
+def agent_task_gateway_purge(
+    dry_run: bool = True,
+    session_ids: list[str] | None = None,
+) -> dict[str, Any]:
+    """Inspect or purge terminal gateway sessions; dry-run defaults to true."""
+    project_root = project_root_from_env()
+    return _sparse(
+        call_gateway_method(
+            "purge_execution_sessions",
+            project_root,
+            dry_run=dry_run,
+            session_ids=session_ids,
+        )
+    )
 
 
 @mcp.tool()
@@ -275,13 +474,9 @@ def agent_task_session_control(
     turn_id: str | None = None,
     payload: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Issue a closed generic session control and return its acknowledgement.
-
-    The acknowledgement never claims the turn/session reached a lifecycle
-    state; callers continue to observe that through request status.
-    """
+    """Send a session control acknowledgement; poll request status for lifecycle truth."""
     project_root = project_root_from_env()
-    return _sparse(
+    return _request_dto(
         call_gateway_method(
             "control_execution_session",
             project_root,
@@ -302,15 +497,15 @@ def agent_task_session_resume(
     model_id: str | None = None,
     component_profile: str | None = None,
 ) -> dict[str, Any]:
-    """Resume a validated durable provider conversation in a new session."""
-    project_root = project_root_from_env()
+    """Resume a validated provider conversation in a new session."""
+    project_root = _session_project_root(source_session_id)
     kwargs: dict[str, Any] = {
         "control_id": control_id,
         "model_id": model_id,
     }
     if component_profile is not None:
         kwargs["component_profile"] = component_profile
-    return _sparse(
+    return _session_dto(
         call_gateway_method("resume_execution_session", project_root, source_session_id, **kwargs)
     )
 
@@ -330,46 +525,7 @@ def agent_task_submit(
     execution_context_fingerprint: str | None = None,
     provider_chat_url: str | None = None,
 ) -> dict[str, Any]:
-    """Submit async work as `agent_id` (AS62's Agent Definition — an Execution
-    Profile plus a Role bundled under one stable ID). Resolves the agent's
-    execution profile and dispatches.
-
-    Response fields:
-      request-id:       unique identifier for this request
-      state:            current state ("queued")
-      session-id:       session identifier — auto-generated when session_keep_alive
-                        or provider policy requires it; GPT always retains one
-      metadata:         sanitized metadata supplied on submit; omitted when empty
-      provider-metadata: adapter-owned session metadata; omitted when unavailable
-
-    Immediately — poll with `agent_task_status` using the returned request-id.
-    Raises RES-AGD-001 if `agent_id` is not a configured
-    agent definition.
-
-    `provider_chat_url` may seed a GPT-auto session from a full
-    project-scoped ChatGPT conversation URL (`/g/<project>/c/<id>`).
-
-    `title` supplies a dashboard request label (1–120 single-line characters),
-    overriding the provider label without modifying the prompt or remote chat.
-
-    GPT requests without a session reuse this client's default per project/agent.
-    Use new_session=true for a separate chat; it does not replace an established
-    default. Explicit session_id or provider_chat_url also leaves that default
-    unchanged. The first admitted session establishes the default. Recovery
-    fallback warnings are returned on submission or subsequent task status.
-
-    For GPT, session_keep_alive=false does NOT disable default-session reuse
-    or close the chat immediately. It releases the live handle after the
-    execution profile's idle timeout (30 minutes if unset/disabled), only
-    when no turn is active or queued. Results and chat references are retained;
-    a later request can auto-resume the idle-closed conversation.
-    source is optional provenance text, not a client/session identifier.
-    workspace_name identifies the caller workspace and is only used as the GPT
-    project-name fallback when project.yaml has no configured project-name. It
-    is not a session reuse key.
-
-    This is the sole submission surface over MCP (RV891). Direct
-    provider/model execution bypassing agent selection is not exposed over MCP."""
+    """Submit async work for agent_id. Return request-id, then poll status; fetch terminal text with agent_task_response. Set new_session for isolation."""
     project_root = project_root_from_env()
     submit_kwargs: dict[str, Any] = {
         "agent_id": agent_id,
@@ -390,14 +546,10 @@ def agent_task_submit(
     if provider_chat_url is not None:
         submit_kwargs["provider_chat_url"] = provider_chat_url
     status = call_gateway_method("submit_execution_request", project_root, **submit_kwargs)
-    return _sparse({
-        "request-id": status.get("request-id"),
-        "state": status.get("state"),
-        "session-id": status.get("session-id"),
-        "metadata": status.get("metadata") or {},
-        "provider-metadata": status.get("provider-metadata") or {},
-        "warnings": status.get("warnings") or [],
-    })
+    result = _request_dto(status)
+    if isinstance(status, dict) and isinstance(status.get("warnings"), list) and status["warnings"]:
+        result["warnings"] = status["warnings"][:16]
+    return result
 
 
 def main() -> None:

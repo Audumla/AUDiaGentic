@@ -67,6 +67,25 @@ def test_gateway_restart_interruption_is_explicitly_classified() -> None:
     assert result["recovery"]["disposition"] == "reconcile-required"
 
 
+def test_bounded_restart_interruption_uses_provider_root_classification() -> None:
+    result = classify_error(
+        {
+            "code": "CON-AGW-084",
+            "details": {
+                "root-recovery-error": {
+                    "code": "EXT-AGW-118",
+                    "type": "AudiaGenticError",
+                    "kind": "agents",
+                }
+            },
+        }
+    )
+    assert result["failure-code"] == "CON-AGW-084"
+    assert result["reason-code"] == "EXT-AGW-118"
+    assert result["classification"] == "provider-error"
+    assert result["recovery"]["disposition"] == "reconcile-required"
+
+
 def test_diagnostics_side_effect_state_never_regresses() -> None:
     previous = classify_error(
         {
@@ -241,6 +260,154 @@ def test_initial_zero_activity_gets_non_terminal_reconciliation_diagnostic(tmp_p
     assert diagnosed["diagnostic-evidence"][-1]["kind"] == "initial-activity-timeout"
 
 
+def test_initial_zero_activity_before_grace_does_not_create_diagnostic(tmp_path) -> None:
+    record = store.build_record(
+        execution_profile_id="gpt-auto",
+        prompt_body="inspect",
+        watchdog_policy={
+            "policy-id": "test",
+            "policy-digest": "test",
+            "activity-lease-seconds": 300.0,
+            "absolute-safety-ceiling-seconds": 0.0,
+            "diagnostic-grace-seconds": 30.0,
+            "initial-activity-grace-seconds": 300.0,
+            "available": True,
+        },
+    )
+    record["provider-transport-kind"] = "provider-session"
+    store.write_record(tmp_path, record)
+    claimed = store.claim_dispatch(tmp_path, record["request-id"], owner_epoch="service", expected_revision=0)
+    running = store.start_owned_attempt(
+        tmp_path,
+        record["request-id"],
+        owner_epoch="service",
+        worker_id="worker",
+        expected_revision=claimed["revision"],
+    )
+
+    diagnosed = diagnose_activity_lease(tmp_path, running)
+
+    assert diagnosed["state"] == "running"
+    assert diagnosed["activity-sequence"] == 0
+    assert diagnosed["watchdog-state"] != "intervention"
+    assert diagnosed.get("diagnostic-evidence", []) == []
+
+def test_deferred_ambiguous_recovery_creates_reconcile_diagnostics(tmp_path) -> None:
+    record = store.build_record(execution_profile_id="gpt-auto", prompt_body="inspect")
+    store.write_record(tmp_path, record)
+    claimed = store.claim_dispatch(tmp_path, record["request-id"], owner_epoch="service", expected_revision=0)
+    running = store.start_owned_attempt(
+        tmp_path,
+        record["request-id"],
+        owner_epoch="service",
+        worker_id="worker",
+        expected_revision=claimed["revision"],
+    )
+
+    deferred = store.defer_owned_recovery(
+        tmp_path,
+        record["request-id"],
+        owner_epoch="service",
+        worker_id="worker",
+        attempt_epoch=running["attempt-epoch"],
+        error=None,
+        phase="conversation-load-reconcile",
+        side_effect_state="may-have-started",
+        retry_delay_seconds=1.0,
+    )
+
+    assert deferred["diagnostics"]["side-effect-state"] == "may-have-started"
+    assert deferred["diagnostics"]["recovery"]["allowed-actions"] == [
+        "reconcile",
+        "abandon",
+    ]
+
+
+def test_reconcile_synthesizes_diagnostics_from_durable_recovery_evidence(
+    tmp_path, monkeypatch
+) -> None:
+    from audiagentic.components.agents.gateway import api as gateway_api
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+    record = {
+        "request-id": "req_reconcile_evidence",
+        "state": "running",
+        "revision": 4,
+        "recovery": {
+            "phase": "conversation-load-reconcile",
+            "side-effect-state": "may-have-started",
+        },
+        "diagnostic-evidence": [
+            {
+                "request-id": "req_reconcile_evidence",
+                "certainty": "strong",
+                "side-effect-state": "may-have-started",
+            }
+        ],
+    }
+    monkeypatch.setattr(store, "read_record", lambda *_: record)
+    monkeypatch.setattr(
+        store,
+        "update_diagnostics",
+        lambda _root, _request_id, diagnostics, **_kwargs: {
+            **record,
+            "revision": 5,
+            "diagnostics": diagnostics,
+        },
+    )
+
+    def unresolved(*_args, **_kwargs):
+        raise AudiaGenticError(
+            code="CON-AGW-154",
+            kind="agents",
+            message="provider response could not be captured",
+            details={},
+        )
+
+    monkeypatch.setattr(gateway_api, "complete_execution_from_provider", unresolved)
+    result = recover_execution_request(
+        tmp_path, record["request-id"], action="reconcile"
+    )
+
+    assert result["disposition"] == "accepted"
+    assert result["reconciliation"] == {
+        "outcome": "unresolved",
+        "reason": "CON-AGW-154",
+    }
+    assert result["diagnostics"]["side-effect-state"] == "may-have-started"
+
+
+def test_clear_not_submitted_rejects_synthesized_recovery_evidence(
+    tmp_path, monkeypatch
+) -> None:
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+    record = {
+        "request-id": "req_clear_evidence",
+        "state": "running",
+        "revision": 1,
+        "recovery": {
+            "phase": "presubmit-reconcile",
+            "side-effect-state": "may-have-started",
+        },
+        "diagnostic-evidence": [
+            {
+                "request-id": "req_clear_evidence",
+                "certainty": "strong",
+                "side-effect-state": "may-have-started",
+            }
+        ],
+    }
+    monkeypatch.setattr(store, "read_record", lambda *_: record)
+
+    try:
+        recover_execution_request(tmp_path, record["request-id"], action="clear-not-submitted")
+    except AudiaGenticError as exc:
+        assert exc.code == "CON-AGW-145"
+    else:  # pragma: no cover
+        raise AssertionError("clear-not-submitted accepted synthesized evidence")
+
+
 def test_cancellation_provenance_is_durable(tmp_path) -> None:
     record = store.build_record(execution_profile_id="default", prompt_body="cancel")
     store.write_record(tmp_path, record)
@@ -322,6 +489,44 @@ def test_mark_cancel_requested_preserves_unresolved_side_effect_diagnostics(tmp_
     assert cancelled["diagnostics"]["classification"] == "ambiguous-side-effect"
     assert cancelled["diagnostics"]["resolution-state"] == "unresolved"
 
+
+def test_abandon_terminalizes_running_request_with_failed_session(tmp_path, monkeypatch) -> None:
+    from audiagentic.components.agents.gateway.session import sessions_store
+
+    record = store.build_record(
+        execution_profile_id="orphaned-abandon",
+        prompt_body="abandon",
+        provider_transport_kind="provider-session",
+        session_id="ses-orphaned",
+    )
+    record.update(
+        {
+            "state": "running",
+            "diagnostics": classify_error(
+                {
+                    "code": "EXT-GPTAUTO-003",
+                    "details": {"submission-ambiguous": True},
+                }
+            ),
+            "dispatch-owner-epoch": "owner-1",
+            "worker-id": "worker-1",
+            "attempt-epoch": 1,
+        }
+    )
+    store.write_record(tmp_path, record)
+    monkeypatch.setattr(
+        sessions_store,
+        "read_session_record",
+        lambda _root, _session_id: {"state": "failed"},
+    )
+
+    result = recover_execution_request(tmp_path, record["request-id"], action="abandon")
+
+    assert result["state"] == "cancelled"
+    assert result["diagnostics"]["resolution-state"] == "abandon-requested"
+    terminal = store.read_record(tmp_path, record["request-id"])
+    assert terminal["state"] == "cancelled"
+    assert terminal["error"]["code"] == "CON-AGW-CANCELLED"
 
 def test_abandon_recovery_is_single_cas_operation(tmp_path) -> None:
     record = store.build_record(execution_profile_id="default", prompt_body="abandon")

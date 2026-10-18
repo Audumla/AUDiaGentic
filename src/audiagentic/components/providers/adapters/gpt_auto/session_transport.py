@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
+import inspect
+import re
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.foundation.time import now_iso_z
 from audiagentic.foundation.transports.agent_session import (
     ControlDisposition,
     CorrelationQuality,
@@ -16,11 +21,18 @@ from audiagentic.foundation.transports.agent_session import (
     SessionOpenResult,
     SessionPrompt,
     SessionTurnResult,
+    TransportObservation,
+    TransportObservationKind,
 )
-from audiagentic.foundation.transports.session_binding import ProviderSessionRef
+from audiagentic.foundation.transports.session_binding import (
+    ProviderSessionBindingUpdate,
+    ProviderSessionRef,
+)
 
 from .chat import ChatState, PersistentChat
+from .cdp.client import CdpError
 from .config import GptAutoConfig
+from .gpt_auto_cdp import ProjectReadinessError
 from .runtime_registry import get_runtime
 from .turn import GptAutoTurn
 from .urls import (
@@ -31,30 +43,113 @@ from .urls import (
 )
 
 
+def _bounded_cause_message(error: BaseException) -> str:
+    """Keep provider admission causes useful without leaking private context."""
+    message = re.sub(r"\s+", " ", str(error)).strip()
+    message = re.sub(r"(?i)https?://\S+", "[redacted-url]", message)
+    message = re.sub(r"(?i)(?:[A-Z]:\\|/)[^\s]+", "[redacted-path]", message)
+    return message[:240]
+
+
 class GptAutoSessionTransport:
     def __init__(self, chat: PersistentChat) -> None:
         self.chat = chat
         self._active_turn: GptAutoTurn | None = None
         self._closed = False
         self._turn_failure_disposition = SessionFailureDisposition.TERMINATE
+        self._pending_cancel_turn_id: str | None = None
+        self._durable_owner_probe: Callable[[str | None], bool] | None = None
+        self._request_owner_id: str | None = None
+        self._open_in_progress = False
+        self.chat.set_page_mutation_owner_probe(self._has_live_durable_owner)
 
     @property
     def ag_session_id(self) -> str:
         return self.chat.ag_session_id
 
+    def set_request_metadata_sink(self, sink: Any | None) -> None:
+        """Route checkpoint metadata to the request owning the active turn."""
+        self.chat.set_request_metadata_sink(sink)
+
+    def set_durable_owner_probe(
+        self, probe: Callable[[str | None], bool] | None
+    ) -> None:
+        """Install the gateway-owned durable session/request liveness fence."""
+        self._durable_owner_probe = probe
+
+    def set_request_owner(self, request_id: str | None) -> None:
+        """Bind page mutation authority to the currently executing durable request."""
+        self._request_owner_id = request_id
+
+    def _has_live_durable_owner(self) -> bool:
+        if self._closed:
+            return False
+        probe = self._durable_owner_probe
+        if probe is None:
+            # Standalone adapter tests/embedders have no gateway durable store.
+            # Gateway-composed transports install this probe before open().
+            return True
+        owner_id = self._request_owner_id
+        if owner_id is None and not self._open_in_progress:
+            return False
+        try:
+            return bool(probe(owner_id))
+        except Exception:
+            return False
+
     async def open(self) -> SessionOpenResult:
-        await self.chat.open()
+        self._open_in_progress = True
+        try:
+            await self.chat.open()
+        except ProjectReadinessError as exc:
+            details = dict(getattr(exc, "details", {}) or {})
+            details.update(
+                {
+                    "failure-stage": "readiness",
+                    "failure-reason": "project-readiness-failed",
+                    "submission-state": "not_started",
+                    "submission-proven": False,
+                    "submission-attempted": False,
+                    "submission-ambiguous": False,
+                    "retryable-same-session": False,
+                    "cause-type": type(exc).__name__,
+                    "cause-message": str(exc),
+                    "session-id": self.chat.ag_session_id,
+                }
+            )
+            raise AudiaGenticError(
+                code="EXT-GPTAUTO-004",
+                kind="providers",
+                message="gpt-auto project readiness did not complete",
+                details=details,
+            ) from exc
+        finally:
+            self._open_in_progress = False
         metadata: dict[str, Any] = {"project-url": self.chat.project_url}
         metadata.update(self.chat.unresolved_metadata())
         ref = None
         if self.chat.provider_session_id:
             ref = ProviderSessionRef(self.chat.provider_session_id)
-            metadata.update(
-                {
-                    "provider-session-id": self.chat.provider_session_id,
-                    "chat-url": self.chat.chat_url,
-                }
+            binding_metadata = {
+                "provider-session-id": self.chat.provider_session_id,
+                "chat-url": self.chat.chat_url,
+            }
+            if self.chat.target_id:
+                binding_metadata["target-id"] = self.chat.target_id
+            metadata.update(binding_metadata)
+            # Rehydration may have rebound to an exact-URL fallback target.
+            # Refresh the immutable provider binding's scalar metadata without
+            # changing its provider-session reference, so the next restart
+            # prefers the newly proven physical target. This is observation
+            # only; no prompt is sent from this path.
+            result = self.chat.binding_sink(
+                ProviderSessionBindingUpdate(
+                    provider_session_ref=ref,
+                    metadata=binding_metadata,
+                )
             )
+            if inspect.isawaitable(result):
+                await result
         return SessionOpenResult(
             ag_session_id=self.chat.ag_session_id,
             provider_session_ref=ref,
@@ -64,6 +159,12 @@ class GptAutoSessionTransport:
     async def prompt(self, request: SessionPrompt, sink: ObservationSink) -> SessionTurnResult:
         if self._closed:
             raise RuntimeError("gpt-auto chat is not ready")
+        # Readiness and project admission can spend a long time in CDP/browser
+        # work before GptAutoTurn has a DOM snapshot to compare.  Emit a
+        # request-scoped provider observation before entering that path so the
+        # durable gateway activity lease does not remain at sequence zero while
+        # the provider adapter is actively inspecting the browser.
+        await self._emit_activity(sink, request, "preflight-inspected")
         # Admission can fail before a GptAutoTurn exists (for example an
         # unresolved prior send).  Route that failure through the same
         # provider recovery disposition as failures raised by turn.run();
@@ -72,14 +173,87 @@ class GptAutoSessionTransport:
         # RES-AGW-003.
         try:
             await self.chat.ensure_ready()
+            # A successful readiness pass is a second meaningful provider
+            # observation even when the first post-submit DOM snapshot has not
+            # materialized a new user/assistant node yet.
+            await self._emit_activity(sink, request, "preflight-evaluated")
         except Exception as exc:
-            retained = await self.chat.retain_after_turn_failure(exc)
+            metadata_fn = getattr(self.chat, "unresolved_metadata", None)
+            metadata = metadata_fn() if callable(metadata_fn) else {}
+            unresolved = bool(metadata.get("unresolved-turn-pending"))
+            # Preserve the typed load-error evidence emitted by
+            # PersistentChat.  The gateway's dispatch policy uses the
+            # explicit unsent/ambiguous fields to decide whether a fresh
+            # session replay is safe; wrapping this as generic EXT-004 would
+            # erase that distinction and make the guarded recovery path
+            # unreachable from normal prompt admission.
+            if isinstance(exc, AudiaGenticError) and exc.code == "EXT-GPTAUTO-005":
+                details = dict(exc.details or {})
+                details.setdefault("failure-stage", "readiness")
+                details.setdefault("submission-state", "not_started")
+                details.setdefault("submission-proven", False)
+                details.setdefault("submission-ambiguous", False)
+                details.setdefault("retryable-same-session", False)
+                details.setdefault("previous-turn-unresolved", unresolved)
+                details.setdefault("request-id", request.turn_id)
+                details.setdefault("session-id", getattr(self.chat, "ag_session_id", None))
+                failure = AudiaGenticError(
+                    code=exc.code,
+                    kind=exc.kind,
+                    message=exc.message,
+                    details=details,
+                )
+            else:
+                failure = AudiaGenticError(
+                    code="EXT-GPTAUTO-004",
+                    kind="providers",
+                    message="gpt-auto turn admission failed before provider submission",
+                    details={
+                        "failure-stage": "readiness",
+                        "submission-state": "not_started",
+                        "submission-proven": False,
+                        "submission-ambiguous": False,
+                        "retryable-same-session": False,
+                        "previous-turn-unresolved": unresolved,
+                        "cause-type": type(exc).__name__,
+                        "cause-message": _bounded_cause_message(exc),
+                        "request-id": request.turn_id,
+                        "session-id": getattr(self.chat, "ag_session_id", None),
+                    },
+                )
+            retained = await self.chat.retain_after_turn_failure(failure)
+            details = dict(failure.details or {})
+            # A recovery helper may return True after it has performed best-
+            # effort cleanup, but that does not mean the provider session is
+            # still usable.  In particular, an unresolved turn on a session
+            # that has already entered FAILED/CLOSED must not keep the
+            # gateway request in an endless recovery retry loop.
+            post_retain_metadata_fn = getattr(self.chat, "unresolved_metadata", None)
+            post_retain_metadata = (
+                post_retain_metadata_fn() if callable(post_retain_metadata_fn) else {}
+            )
+            post_retain_unresolved = bool(
+                post_retain_metadata.get("unresolved-turn-pending")
+            )
+            session_state = getattr(self.chat, "state", None)
+            session_usable = session_state not in {ChatState.FAILED, ChatState.CLOSED}
+            details["retryable-same-session"] = bool(
+                retained
+                and not post_retain_unresolved
+                and session_usable
+            )
+            failure = AudiaGenticError(
+                code=failure.code,
+                kind=failure.kind,
+                message=failure.message,
+                details=details,
+            )
             self._turn_failure_disposition = (
                 SessionFailureDisposition.RETAIN
-                if retained
+                if retained and session_usable
                 else SessionFailureDisposition.TERMINATE
             )
-            raise
+            raise failure from exc
         self._turn_failure_disposition = SessionFailureDisposition.TERMINATE
         turn = GptAutoTurn(self.chat, request, sink)
         self._active_turn = turn
@@ -96,15 +270,147 @@ class GptAutoSessionTransport:
         finally:
             self._active_turn = None
 
+    async def _emit_activity(
+        self,
+        sink: ObservationSink,
+        request: SessionPrompt,
+        phase: str,
+    ) -> None:
+        """Relay bounded provider lifecycle activity without provider payloads."""
+        mark_activity = getattr(self.chat, "mark_validated_activity", None)
+        if callable(mark_activity) and phase not in {
+            "connection-refreshing",
+            "provider-busy",
+            "response-observing",
+            "recovery-observing",
+            "preflight-inspected",
+            "preflight-evaluated",
+            "soft-liveness",
+            "delivery-timeout-retry",
+        }:
+            mark_activity()
+        observation = TransportObservation(
+            ag_session_id=self.chat.ag_session_id,
+            turn_id=request.turn_id,
+            sequence=None,
+            kind=TransportObservationKind.ACTIVITY,
+            observed_at=now_iso_z(),
+            correlation_quality=CorrelationQuality.REQUEST_SCOPED,
+            attributes={"model_activity": phase},
+        )
+        result = sink(observation)
+        if inspect.isawaitable(result):
+            await result
+
+    async def resume_existing(
+        self, request: SessionPrompt, sink: ObservationSink
+    ) -> SessionTurnResult:
+        """Observe the request-owned turn after a gateway generation handoff.
+
+        This path is intentionally separate from ``prompt``: the durable
+        unresolved checkpoint proves that a provider side effect may already
+        exist, so recovery must never call the composer or submit a prompt.
+        """
+        if self._closed:
+            raise RuntimeError("gpt-auto chat is not ready")
+        # Recovery can spend the same long interval rehydrating/revalidating
+        # the CDP page. Keep the request-owned activity lease honest on this
+        # path as well; the resumed turn will emit its sequenced observations
+        # once its provider snapshot loop is active.
+        # This is only a recovery-attempt marker.  It is deliberately not
+        # provider progress: an unchanged DOM inspected by a reconstructed
+        # observer must not renew the request lease or reset recovery bounds.
+        await self._emit_activity(sink, request, "recovery-observing")
+        metadata = self.chat.unresolved_metadata()
+        if not metadata.get("unresolved-turn-pending"):
+            raise AudiaGenticError(
+                "CON-AGW-124",
+                "agents",
+                "gpt-auto cannot prove a stale provider-session turn was unsent",
+                {"failure-reason": "unresolved-checkpoint-unavailable"},
+            )
+        if metadata.get("unresolved-turn-id") != request.turn_id:
+            raise RuntimeError(
+                "gpt-auto unresolved turn does not belong to the recovered request"
+            )
+        turn = GptAutoTurn(self.chat, request, sink)
+        self._active_turn = turn
+        if self._pending_cancel_turn_id == request.turn_id:
+            self._pending_cancel_turn_id = None
+            turn.cancel()
+        try:
+            return await turn.resume_existing()
+        except Exception as exc:
+            retained = await self.chat.retain_after_turn_failure(exc)
+            details = getattr(exc, "details", {})
+            load_failure_terminal = (
+                getattr(exc, "code", None) == "EXT-GPTAUTO-005"
+                and isinstance(details, dict)
+                and details.get("failure-reason") == "conversation-load-failed"
+            )
+            definitively_failed = (
+                (
+                    retained
+                    and getattr(exc, "code", None) == "EXT-GPTAUTO-003"
+                    and isinstance(details, dict)
+                    and details.get("failure-reason") == "provider-failure-policy-matched"
+                    and not self.chat.unresolved_metadata().get("unresolved-turn-pending")
+                )
+                or load_failure_terminal
+            )
+            # A reconstructed observer can fail before it gets a typed
+            # provider result (for example while ChatGPT still shows the
+            # connection-interrupted banner).  If the durable unresolved
+            # checkpoint and provider binding are still present, this is
+            # recoverable observation loss, not proof that the session died.
+            # Keep the session alive so the queue can reattach and observe the
+            # same turn again; only a correlated provider rejection that also
+            # cleared the checkpoint is terminal.
+            unresolved = self.chat.unresolved_metadata()
+            durable_observation_recovery = bool(
+                isinstance(exc, CdpError)
+                and not definitively_failed
+                and unresolved.get("unresolved-turn-pending")
+                and self.chat.provider_session_id
+                and self.chat.state not in {ChatState.FAILED, ChatState.CLOSED}
+            )
+            self._turn_failure_disposition = (
+                SessionFailureDisposition.TERMINAL_FAILED
+                if definitively_failed
+                else SessionFailureDisposition.RETAIN
+                if retained or durable_observation_recovery
+                else SessionFailureDisposition.TERMINATE
+            )
+            raise
+        finally:
+            self._active_turn = None
+
+    def defer_unresolved_reconciliation(
+        self, *, defer_page_creation: bool = False
+    ) -> None:
+        """Keep the durable checkpoint for ``resume_existing`` to consume."""
+        self.chat.defer_unresolved_reconciliation(
+            defer_page_creation=defer_page_creation
+        )
+
     async def control(self, request: SessionControlRequest) -> SessionControlResult:
         if request.action is SessionControlAction.CANCEL_TURN:
             if self._active_turn is None:
+                metadata = self.chat.unresolved_metadata()
+                if (
+                    metadata.get("unresolved-turn-pending")
+                    and metadata.get("unresolved-turn-id") == request.turn_id
+                ):
+                    self._pending_cancel_turn_id = request.turn_id
+                    return SessionControlResult(
+                        ControlDisposition.ACCEPTED, CorrelationQuality.REQUEST_SCOPED
+                    )
                 return SessionControlResult(
-                    ControlDisposition.ALREADY_TERMINAL, CorrelationQuality.REQUEST_SCOPED
+                    ControlDisposition.UNCERTAIN, CorrelationQuality.UNCERTAIN
                 )
             if request.turn_id != self._active_turn.request.turn_id:
                 return SessionControlResult(
-                    ControlDisposition.ALREADY_TERMINAL, CorrelationQuality.REQUEST_SCOPED
+                    ControlDisposition.UNCERTAIN, CorrelationQuality.UNCERTAIN
                 )
             self._active_turn.cancel()
             return SessionControlResult(
@@ -120,6 +426,7 @@ class GptAutoSessionTransport:
         if self._closed:
             return
         self._closed = True
+        self._request_owner_id = None
         # Always release the PersistentChat/runtime ownership claim, even when
         # waiting for an in-flight turn raises a provider error.  Previously a
         # non-timeout wait failure skipped ``chat.close()`` and left the
@@ -192,6 +499,12 @@ def build_session_transport(
         raise ValueError("gpt-auto session transport requires an admitted project name")
     parsed = GptAutoConfig.from_project_dict(config)
     runtime = get_runtime(project_root, parsed)
+    # The admitted project name identifies the repository for provenance. A
+    # pinned GPT profile may target a different ChatGPT Project (for example
+    # the gpt-t2 test project), so use its explicit provider display name for
+    # CDP row selection while retaining the admitted name at the gateway
+    # boundary.
+    provider_project_name = parsed.project_name or project_name.strip()
     metadata = resume_metadata_hint or {}
     project_url_value = metadata.get("project-url") or parsed.project_url
     project_url = str(project_url_value) if project_url_value else None
@@ -242,7 +555,7 @@ def build_session_transport(
             chat_url = None
     chat = PersistentChat(
         ag_session_id=ag_session_id,
-        project_name=project_name.strip(),
+        project_name=provider_project_name,
         project_url=project_url,
         runtime=runtime,
         config=parsed,

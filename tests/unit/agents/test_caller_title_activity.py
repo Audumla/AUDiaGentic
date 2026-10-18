@@ -43,3 +43,115 @@ def test_acp_content_renews_activity_without_leaking_body(tmp_path, kind, phase)
         relay.observe_provider(source_sequence=2, source_instance="turn", phase="heartbeat")
         relay.observe_provider(source_sequence=3, source_instance="turn", phase="transport-error")
         assert record.call_count == 1
+
+
+@pytest.mark.parametrize(
+    "phase",
+    [
+        "inspected",
+        "fetching",
+        "analyzing",
+        "evaluated",
+        "dom-status",
+        "dom-progress",
+        "dom-tool-result",
+        "dom-connector",
+        "dom-citation",
+        "dom-table",
+        "dom-materialization",
+    ],
+)
+def test_gpt_auto_dom_progress_renews_request_activity(tmp_path, phase):
+    relay = RequestActivityRelay(tmp_path, "req_test", owner_epoch="owner", worker_id="worker", attempt_epoch=1)
+    with patch("audiagentic.components.agents.gateway.activity.store.record_owned_activity") as record:
+        relay.observe_provider(source_sequence=1, source_instance="turn", phase=phase)
+
+    assert record.call_count == 1
+    assert record.call_args.kwargs["phase"] == phase
+
+
+def test_unsequenced_lifecycle_activity_does_not_mask_first_dom_sequence(tmp_path):
+    relay = RequestActivityRelay(tmp_path, "req_test", owner_epoch="owner", worker_id="worker", attempt_epoch=1)
+    with patch("audiagentic.components.agents.gateway.activity.store.record_owned_activity") as record:
+        relay.observe_provider(source_sequence=None, source_instance="turn", phase="inspected")
+        relay.observe_provider(source_sequence=0, source_instance="turn", phase="response-progress")
+
+    assert record.call_count == 2
+    assert record.call_args.kwargs["source_sequence"] == 0
+
+
+def test_provider_busy_renews_owner_only(tmp_path):
+    relay = RequestActivityRelay(tmp_path, "req_test", owner_epoch="owner", worker_id="worker", attempt_epoch=1)
+    with patch("audiagentic.components.agents.gateway.activity.store.record_owned_activity") as record:
+        relay.observe_provider(source_sequence=1, source_instance="turn", phase="provider-busy")
+        relay.observe_provider(source_sequence=2, source_instance="turn", phase="provider-busy")
+
+    record.assert_called_once()
+    assert record.call_args.kwargs['kind'] == 'owner-heartbeat'
+    assert record.call_args.kwargs['phase'] is None
+
+
+def test_synthetic_recovery_and_terminal_observation_do_not_renew_provider_activity(tmp_path):
+    relay = RequestActivityRelay(tmp_path, "req_test", owner_epoch="owner", worker_id="worker", attempt_epoch=1)
+    with patch("audiagentic.components.agents.gateway.activity.store.record_owned_activity") as record:
+        relay.observe_provider(source_sequence=1, source_instance="turn", phase="connection-refreshing")
+        relay.observe_provider(source_sequence=2, source_instance="turn", phase="response-observed")
+    record.assert_not_called()
+
+
+def test_response_observing_renews_owner_lease_without_provider_activity(tmp_path):
+    relay = RequestActivityRelay(
+        tmp_path, "req_test", owner_epoch="owner", worker_id="worker", attempt_epoch=1
+    )
+    with patch("audiagentic.components.agents.gateway.activity.store.record_owned_activity") as record:
+        relay.observe_provider(
+            source_sequence=1,
+            source_instance="turn",
+            phase="response-observing",
+        )
+
+    record.assert_called_once()
+    assert record.call_args.kwargs["kind"] == "owner-heartbeat"
+    assert record.call_args.kwargs["phase"] is None
+
+
+def test_soft_liveness_uses_client_activity_kind(tmp_path):
+    relay = RequestActivityRelay(tmp_path, "req_test", owner_epoch="owner", worker_id="worker", attempt_epoch=1)
+    with patch("audiagentic.components.agents.gateway.activity.store.record_owned_activity") as record:
+        relay.observe_provider(source_sequence=1, source_instance="turn", phase="soft-liveness")
+
+    record.assert_called_once()
+    assert record.call_args.kwargs["kind"] == "client-liveness"
+    assert record.call_args.kwargs["phase"] == "soft-liveness"
+
+
+def test_preflight_activity_renews_owner_without_provider_activity(tmp_path):
+    relay = RequestActivityRelay(
+        tmp_path, "req_test", owner_epoch="owner", worker_id="worker", attempt_epoch=1
+    )
+    with patch("audiagentic.components.agents.gateway.activity.store.record_owned_activity") as record:
+        relay.observe_provider(source_sequence=1, source_instance="turn", phase="preflight-inspected")
+        relay.observe_provider(source_sequence=2, source_instance="turn", phase="preflight-evaluated")
+
+    assert record.call_count == 1
+    assert {call.kwargs["kind"] for call in record.call_args_list} == {"owner-heartbeat"}
+    assert all(call.kwargs["phase"] is None for call in record.call_args_list)
+
+
+def test_provider_session_lease_uses_admission_snapshot() -> None:
+    from audiagentic.components.agents.gateway.activity import frozen_activity_lease_seconds
+
+    assert frozen_activity_lease_seconds({"watchdog-policy": {"activity-lease-seconds": 123}}) == 123
+
+
+def test_provider_session_lease_fails_closed_without_snapshot() -> None:
+    from audiagentic.components.agents.gateway.activity import frozen_activity_lease_seconds
+
+    with pytest.raises(ValueError, match="frozen watchdog policy"):
+        frozen_activity_lease_seconds({})
+@pytest.mark.parametrize("value", [True, float("nan"), float("inf"), -float("inf")])
+def test_provider_session_lease_rejects_non_finite_or_boolean_snapshot(value) -> None:
+    from audiagentic.components.agents.gateway.activity import frozen_activity_lease_seconds
+
+    with pytest.raises(ValueError, match="frozen watchdog policy|non-positive"):
+        frozen_activity_lease_seconds({"watchdog-policy": {"activity-lease-seconds": value}})

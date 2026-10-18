@@ -158,12 +158,9 @@ class StandaloneGatewayClient:
         kwargs.setdefault("logical_client_id", self._logical_client_id)
         return cast(dict[str, Any], self._call("submit_execution_request", project_root, kwargs))
 
-    def get_execution_request(self, project_root: Path, request_id: str) -> dict[str, Any]:
-        params: dict[str, Any] = {"request_id": request_id}
-        return cast(
-            dict[str, Any],
-            self._call("get_execution_request", project_root, params),
-        )
+    def get_execution_request(self, project_root: Path, request_id: str, *, include_response: bool = False) -> dict[str, Any]:
+        params: dict[str, Any] = {"request_id": request_id, "include_response": include_response}
+        return cast(dict[str, Any], self._call("get_execution_request", project_root, params))
 
     def get_execution_diagnostics(self, project_root: Path, request_id: str, *, limit: int = 25) -> dict[str, Any]:
         return cast(
@@ -171,16 +168,34 @@ class StandaloneGatewayClient:
             self._call("get_execution_diagnostics", project_root, {"request_id": request_id, "limit": limit}),
         )
 
+    def get_execution_observations(self, project_root: Path, request_id: str, **kwargs: Any) -> dict[str, Any]:
+        return cast(dict[str, Any], self._call("get_execution_observations", project_root, {"request_id": request_id, **kwargs}))
+
+    def get_execution_evidence(self, project_root: Path, request_id: str, **kwargs: Any) -> dict[str, Any]:
+        return cast(dict[str, Any], self._call("get_execution_evidence", project_root, {"request_id": request_id, **kwargs}))
+
+    def replay_execution_observations(self, project_root: Path, request_id: str) -> dict[str, Any]:
+        return cast(dict[str, Any], self._call("replay_execution_observations", project_root, {"request_id": request_id}))
+
     def recover_execution_request(self, project_root: Path, request_id: str, **kwargs: Any) -> dict[str, Any]:
         return cast(
             dict[str, Any],
             self._call("recover_execution_request", project_root, {"request_id": request_id, **kwargs}),
         )
 
+    def get_execution_response_payload(self, project_root: Path, request_id: str) -> dict[str, Any]:
+        return cast(dict[str, Any], self._call("get_execution_response_payload", project_root, {"request_id": request_id}))
+
     def get_execution_response(self, project_root: Path, request_id: str) -> str:
         return cast(
             str,
             self._call("get_execution_response", project_root, {"request_id": request_id}),
+        )
+
+    def get_execution_failure_response(self, project_root: Path, request_id: str) -> str:
+        return cast(
+            str,
+            self._call("get_execution_failure_response", project_root, {"request_id": request_id}),
         )
 
     def focus_execution_chat(self, project_root: Path, request_id: str) -> dict[str, Any]:
@@ -189,6 +204,9 @@ class StandaloneGatewayClient:
             dict[str, Any],
             self._call("focus_execution_chat", project_root, {"request_id": request_id}),
         )
+
+    def complete_execution_from_provider(self, project_root: Path, request_id: str) -> dict[str, Any]:
+        return cast(dict[str, Any], self._call("complete_execution_from_provider", project_root, {"request_id": request_id}))
 
     def wait_execution_request(
         self,
@@ -252,6 +270,28 @@ class StandaloneGatewayClient:
         return cast(
             dict[str, Any],
             self._call("close_execution_session", project_root, {"session_id": session_id}),
+        )
+
+    def purge_execution_session(self, project_root: Path, session_id: str) -> dict[str, Any]:
+        return cast(
+            dict[str, Any],
+            self._call("purge_execution_session", project_root, {"session_id": session_id}),
+        )
+
+    def purge_execution_sessions(
+        self,
+        project_root: Path,
+        *,
+        dry_run: bool = True,
+        session_ids: list[str] | None = None,
+    ) -> dict[str, Any]:
+        return cast(
+            dict[str, Any],
+            self._call(
+                "purge_execution_sessions",
+                project_root,
+                {"dry_run": dry_run, "session_ids": session_ids},
+            ),
         )
 
     def control_execution_session(
@@ -325,6 +365,10 @@ class StandaloneGatewayClient:
 
     def service_stop(self, project_root: Path, *, force: bool = False) -> dict[str, Any]:
         return cast(dict[str, Any], self._call("service_stop", project_root, {"force": force}))
+
+    def dashboard_restart(self, project_root: Path) -> dict[str, Any]:
+        """Request the managed handoff restart through the authenticated service API."""
+        return cast(dict[str, Any], self._call("service_restart", project_root, {}))
 
     # Gateway operator operations have a deliberately separate client
     # surface; they are not part of the activity GatewayClient protocol.
