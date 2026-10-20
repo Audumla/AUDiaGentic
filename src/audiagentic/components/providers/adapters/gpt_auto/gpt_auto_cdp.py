@@ -443,6 +443,33 @@ _SNAPSHOT_FN = r"""
       }
     }
   }
+  // The live project renderer can mount a second DOM copy of the same user
+  // message after the assistant answer (same durable provider UUID). Treat
+  // those copies as one logical message, otherwise the duplicate looks like
+  // a later user turn and makes a valid terminal assistant response
+  // uncorrelatable. Keep the first DOM position for ordering, but prefer a
+  // painted duplicate when the original copy is virtualized/hidden. Synthetic
+  // ordinal IDs are deliberately not deduplicated: without a durable provider
+  // identity, equal role/text is not enough to prove two nodes are one turn.
+  const uniqueMessageEntries = [];
+  const durableMessageEntryIndexes = new Map();
+  for (const entry of messageEntries) {
+    const messageId = entry.messageId;
+    const durableId = typeof messageId === "string" && messageId &&
+      !messageId.startsWith("fallback-");
+    const key = durableId ? `${entry.role}:${messageId}` : null;
+    const priorIndex = key ? durableMessageEntryIndexes.get(key) : undefined;
+    if (priorIndex === undefined) {
+      if (key) durableMessageEntryIndexes.set(key, uniqueMessageEntries.length);
+      uniqueMessageEntries.push(entry);
+      continue;
+    }
+    const prior = uniqueMessageEntries[priorIndex];
+    if (!shown(prior.el) && shown(entry.el)) {
+      uniqueMessageEntries[priorIndex] = entry;
+    }
+  }
+  messageEntries.splice(0, messageEntries.length, ...uniqueMessageEntries);
   let fallbackActivityOwnerPromptMessageId = null;
   const userMessageEntries = messageEntries.filter(m => m.role === "user");
   const assistantMessageEntries = messageEntries.filter(m => m.role === "assistant");

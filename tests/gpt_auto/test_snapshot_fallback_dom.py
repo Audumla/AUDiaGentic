@@ -978,6 +978,69 @@ async def test_current_renderer_units_restore_prompt_and_repeated_assistant_iden
 
 
 @pytest.mark.asyncio
+async def test_fallback_deduplicates_same_durable_user_message_after_answer() -> None:
+    """A duplicated DOM copy of one provider message is not a later turn.
+
+    The live renderer can append another visible user node with the same
+    durable UUID after its answer. Collapse that copy while retaining truly
+    distinct later user messages as separate turns.
+    """
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            await page.set_content(
+                """
+                <div class="block-BQZwFn">
+                  <h4 class="sr-only">You said:</h4>
+                  <div data-chatgpt-search-message-ids="user-1">prompt</div>
+                </div>
+                <div class="block-BQZwFn">
+                  <h4 class="sr-only">ChatGPT said:</h4>
+                  <div data-chatgpt-search-message-ids="assistant-1">answer</div>
+                </div>
+                <div class="block-BQZwFn">
+                  <h4 class="sr-only">You said:</h4>
+                  <div data-chatgpt-search-message-ids="user-1">prompt</div>
+                </div>
+                """
+            )
+
+            snapshot = await page.evaluate(_SNAPSHOT_FN, [])
+
+            assert snapshot["userCount"] == 1
+            assert snapshot["assistantCount"] == 1
+            assert snapshot["latestUserId"] == "user-1"
+            assert [
+                (ref["role"], ref["messageId"]) for ref in snapshot["messageRefs"]
+            ] == [("user", "user-1"), ("assistant", "assistant-1")]
+
+            await page.set_content(
+                """
+                <div class="block-BQZwFn">
+                  <h4 class="sr-only">You said:</h4>
+                  <div data-chatgpt-search-message-ids="user-1">first prompt</div>
+                </div>
+                <div class="block-BQZwFn">
+                  <h4 class="sr-only">ChatGPT said:</h4>
+                  <div data-chatgpt-search-message-ids="assistant-1">answer</div>
+                </div>
+                <div class="block-BQZwFn">
+                  <h4 class="sr-only">You said:</h4>
+                  <div data-chatgpt-search-message-ids="user-2">second prompt</div>
+                </div>
+                """
+            )
+
+            distinct_turns = await page.evaluate(_SNAPSHOT_FN, [])
+
+            assert distinct_turns["userCount"] == 2
+            assert distinct_turns["latestUserId"] == "user-2"
+        finally:
+            await browser.close()
+
+
+@pytest.mark.asyncio
 async def test_fallback_unlabelled_wrapper_does_not_adopt_a_nested_blocks_label() -> None:
     """An unlabelled outer `.block-BQZwFn` wrapping a labelled nested block
     must not adopt the nested block's h4 label -- that would turn one
