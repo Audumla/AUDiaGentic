@@ -16,6 +16,7 @@ import functools
 import hashlib
 import logging
 import os
+import threading
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -37,6 +38,8 @@ logger = logging.getLogger(__name__)
 DEFAULT_BLOCKING_TIMEOUT_SECONDS = 300.0
 
 _QUEUE_MANAGER = queue_mod.GatewayQueueManager()
+_STATUS_RECOVERY_LOCK = threading.Lock()
+_STATUS_RECOVERY_IN_FLIGHT: set[tuple[str, str]] = set()
 
 
 def get_queue_manager() -> queue_mod.GatewayQueueManager:
@@ -1105,10 +1108,7 @@ def _auto_reconcile_terminal_status(
     except Exception:  # noqa: BLE001 - status remains a read operation
         return
     metadata = record.get("provider-metadata")
-    if not isinstance(metadata, dict) or (
-        metadata.get("submission-proven") is not True
-        and metadata.get("unresolved-turn-pending") is not True
-    ):
+    if not isinstance(metadata, dict) or metadata.get("submission-proven") is not True:
         return
 
     try:
@@ -1119,33 +1119,53 @@ def _auto_reconcile_terminal_status(
 
         latest = last_ndjson(gateway_recovery_action_path(project_root, request_id))
         now = datetime.now(timezone.utc)
-        if isinstance(latest, dict):
-            event = latest.get("event")
-            if event == "action-intent":
+        if isinstance(latest, dict) and latest.get("event") == "action-result":
+            if latest.get("outcome") == "reconciliation-completed":
                 return
-            if event == "action-result":
-                if latest.get("outcome") == "reconciliation-completed":
+            created_at = latest.get("created-at")
+            if not isinstance(created_at, str):
+                return
+            try:
+                created = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+                if created.tzinfo is None:
                     return
-                created_at = latest.get("created-at")
-                if isinstance(created_at, str):
-                    try:
-                        age = (
-                            now
-                            - datetime.fromisoformat(created_at.replace("Z", "+00:00"))
-                        ).total_seconds()
-                    except ValueError:
-                        age = 0.0
-                    if age < _AUTO_STATUS_RECOVERY_COOLDOWN_SECONDS:
-                        return
+                age = (now - created.astimezone(timezone.utc)).total_seconds()
+            except (TypeError, ValueError):
+                return
+            if age < _AUTO_STATUS_RECOVERY_COOLDOWN_SECONDS:
+                return
 
-        recover_execution_request(
-            project_root,
-            request_id,
-            action="reconcile",
-            expected_revision=(
-                record.get("revision") if isinstance(record.get("revision"), int) else None
-            ),
+        expected_revision = (
+            record.get("revision") if isinstance(record.get("revision"), int) else None
         )
+        key = (str(project_root.resolve()), request_id)
+        with _STATUS_RECOVERY_LOCK:
+            if key in _STATUS_RECOVERY_IN_FLIGHT:
+                return
+            _STATUS_RECOVERY_IN_FLIGHT.add(key)
+
+        def reconcile() -> None:
+            try:
+                recover_execution_request(
+                    project_root,
+                    request_id,
+                    action="reconcile",
+                    expected_revision=expected_revision,
+                )
+            except Exception as exc:  # noqa: BLE001 - recovery is advisory to status
+                logger.info(
+                    "automatic terminal request reconciliation deferred",
+                    extra={"request-id": request_id, "error": str(exc)},
+                )
+            finally:
+                with _STATUS_RECOVERY_LOCK:
+                    _STATUS_RECOVERY_IN_FLIGHT.discard(key)
+
+        threading.Thread(
+            target=reconcile,
+            daemon=True,
+            name=f"gateway-status-recovery-{request_id}",
+        ).start()
     except Exception as exc:  # noqa: BLE001 - status must not become a side-effect error
         logger.info(
             "automatic terminal request reconciliation deferred",
@@ -1357,10 +1377,11 @@ def recover_execution_request(
 
     from audiagentic.components.agents.gateway.replay import (
         prepare_recovery_action,
+        recovery_capture_lock,
         record_recovery_result,
     )
-    action_attempt_id = f"recovery_{request_id}_{record.get('revision', 0)}_{action}"
-    prepare_recovery_action(
+    action_attempt_id = f"recovery_{request_id}_{uuid.uuid4().hex[:16]}_{action}"
+    prepared = prepare_recovery_action(
         project_root,
         request_id,
         action_attempt_id=action_attempt_id,
@@ -1372,6 +1393,18 @@ def recover_execution_request(
         causal_input_ids=[request_id, str(record.get("session-id") or "")],
         binding={"session-id": record.get("session-id"), "turn-id": record.get("turn-id")},
     )
+    if prepared.get("disposition") != "intent-persisted":
+        return {
+            "request-id": request_id,
+            "action": action,
+            "disposition": prepared.get("disposition"),
+            "state": record.get("state"),
+            "revision": record.get("revision"),
+            "reconciliation": {
+                "outcome": "not-executed",
+                "reason": prepared.get("outcome"),
+            },
+        }
 
     updated_diagnostics = dict(diagnostics)
     recovery = dict(updated_diagnostics.get("recovery") or {})
@@ -1458,7 +1491,8 @@ def recover_execution_request(
     )
     if action == "reconcile":
         try:
-            completed = complete_execution_from_provider(project_root, request_id)
+            with recovery_capture_lock(project_root, request_id):
+                completed = complete_execution_from_provider(project_root, request_id)
         except AudiaGenticError as exc:
             if exc.code not in {
                 "CON-AGW-152",
@@ -1469,6 +1503,7 @@ def recover_execution_request(
                 "CON-AGW-157",
                 "RES-AGW-112",
                 "VAL-AGW-112",
+                "TO-PROC-002",
             }:
                 raise
             record_recovery_result(

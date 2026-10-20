@@ -1754,6 +1754,9 @@ class GptAutoTurn:
                     allow_empty_baseline_virtualized_assistant=(
                         allow_empty_baseline_virtualized_assistant
                     ),
+                    allow_proven_submission_virtualized_assistant=(
+                        self.submission_confirmed or self._recovered_existing_turn
+                    ),
                 )
             except ProviderBindingIntegrityError as exc:
                 await self._log_response_decision_diagnostics(
@@ -3436,6 +3439,7 @@ def _scope_response_snapshot(
     bound_assistant_id: str | None = None,
     allow_legacy_owned_error_alert: bool = False,
     allow_empty_baseline_virtualized_assistant: bool = False,
+    allow_proven_submission_virtualized_assistant: bool = False,
 ) -> tuple[ChatSnapshot, ChatMessageRef | None]:
     """Project a raw snapshot onto this request's own response, not
     whatever is conversation-global-latest.
@@ -3676,6 +3680,23 @@ def _scope_response_snapshot(
             and snapshot.assistant_message_ids[0] == snapshot.latest_assistant_id
             and _is_durable_assistant_message_id(snapshot.latest_assistant_id)
         )
+        baseline_assistant_ids = set(baseline.assistant_message_ids)
+        fresh_assistant_ids = set(snapshot.assistant_message_ids) - baseline_assistant_ids
+        if not fresh_assistant_ids:
+            fresh_assistant_ids = {
+                ref.message_id
+                for ref in assistant_refs
+                if ref.message_id not in baseline_assistant_ids
+            }
+        proven_submission_terminal_assistant = (
+            allow_proven_submission_virtualized_assistant
+            and fresh_assistant
+            and len(fresh_assistant_ids) == 1
+            and _is_durable_assistant_message_id(snapshot.latest_assistant_id)
+            and bool(
+                _REMOUNT_TERMINAL_WITNESS_SIGNALS <= snapshot.dom_signals
+            )
+        )
         if (
             fresh_assistant
             and prompt_unmounted
@@ -3683,6 +3704,7 @@ def _scope_response_snapshot(
             and terminal_bound
             and virtualized_assistant_id is None
             and not empty_baseline_first_assistant
+            and not proven_submission_terminal_assistant
         ):
             # A prompt-unmounted assistant is request-owned only when its
             # identity was pinned during submission proof. Without that
@@ -3705,7 +3727,11 @@ def _scope_response_snapshot(
             and prompt_unmounted
             and same_conversation
             and terminal_bound
-            and (virtualized_assistant_id is not None or empty_baseline_first_assistant)
+            and (
+                virtualized_assistant_id is not None
+                or empty_baseline_first_assistant
+                or proven_submission_terminal_assistant
+            )
         ):
             response_ref = ChatMessageRef(
                 role="assistant",
