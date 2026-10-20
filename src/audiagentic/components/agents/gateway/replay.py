@@ -4,6 +4,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+from datetime import datetime, timedelta, timezone
 from collections import defaultdict
 from collections.abc import Iterable, Mapping
 from pathlib import Path
@@ -21,14 +22,46 @@ from audiagentic.foundation.transports.agent_session import is_meaningful_activi
 
 SCHEMA_VERSION = "gateway-recovery.v1"
 _PAGE_SIZE = 100
+RECOVERY_CLAIM_LEASE_SECONDS = 120.0
+RECOVERY_UNRESOLVED_COOLDOWN_SECONDS = 60.0
+_RECOVERY_CLOCK_SKEW_SECONDS = 5.0
 
 
 def _text(value: Any, limit: int = 256) -> str | None:
     return value[:limit] if isinstance(value, str) and value else None
 
 
+def _parse_recovery_time(value: Any) -> datetime | None:
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    if parsed.tzinfo is None:
+        return None
+    return parsed.astimezone(timezone.utc)
+
+
 def _lock(project_root: Path, request_id: str) -> StartupLock:
     return StartupLock(gateway_request_path(project_root, request_id).with_name("mutation.lock"))
+
+
+def recovery_capture_lock(
+    project_root: Path, request_id: str, *, timeout: float = 0.25
+) -> StartupLock:
+    """Return the cross-process mutex for one provider response capture.
+
+    The durable claim decides *which* recovery attempt may proceed; this
+    mutex prevents a stale worker and a takeover worker from entering the
+    provider runtime concurrently while the first attempt is still unwinding.
+    """
+    return StartupLock(
+        gateway_request_path(project_root, request_id).with_name(
+            "recovery-capture.lock"
+        ),
+        timeout=timeout,
+    )
 
 
 def _read(project_root: Path, request_id: str) -> list[dict[str, Any]]:
@@ -86,10 +119,11 @@ def prepare_recovery_action(
     if action_kind not in {"provider-native-retry", "provider-native-continue", "linked-child-turn", "reconcile"}:
         raise ValueError("unknown recovery action kind")
     with _lock(project_root, request_id):
+        entries = list(iter_ndjson(gateway_recovery_action_path(project_root, request_id)))
         existing: dict[str, Any] | None = None
         result_seen = False
         consumed_budget = 0
-        for entry in iter_ndjson(gateway_recovery_action_path(project_root, request_id)):
+        for entry in entries:
             if entry.get("action-attempt-id") == action_attempt_id:
                 existing = entry
             if entry.get("event") == "action-result" and entry.get("action-attempt-id") == action_attempt_id:
@@ -102,6 +136,40 @@ def prepare_recovery_action(
                     return {**existing, "disposition": "already-recorded", "outcome": "action-already-recorded"}
                 return {**existing, "disposition": "reconciliation-required", "outcome": "action-result-missing"}
             return existing
+        if action_kind == "reconcile":
+            now = datetime.now(timezone.utc)
+            for entry in reversed(entries):
+                if entry.get("event") != "action-intent" or entry.get("action-kind") != action_kind:
+                    continue
+                prior_id = str(entry.get("action-attempt-id") or "")
+                prior_result = next(
+                    (
+                        candidate
+                        for candidate in reversed(entries)
+                        if candidate.get("event") == "action-result"
+                        and candidate.get("action-attempt-id") == prior_id
+                    ),
+                    None,
+                )
+                if prior_result is not None:
+                    outcome = prior_result.get("outcome")
+                    created = _parse_recovery_time(prior_result.get("created-at"))
+                    if outcome == "reconciliation-completed":
+                        return {**entry, **prior_result, "disposition": "already-recorded"}
+                    if created is None or created > now + timedelta(seconds=_RECOVERY_CLOCK_SKEW_SECONDS):
+                        return {**entry, **prior_result, "disposition": "reconciliation-required", "outcome": "recovery-timestamp-invalid"}
+                    if (now - created).total_seconds() < RECOVERY_UNRESOLVED_COOLDOWN_SECONDS:
+                        return {**entry, **prior_result, "disposition": "reconciliation-required", "outcome": "recovery-cooldown-active"}
+                    break
+                created = _parse_recovery_time(entry.get("created-at"))
+                lease_expires = _parse_recovery_time(entry.get("lease-expires-at"))
+                if created is None or created > now + timedelta(seconds=_RECOVERY_CLOCK_SKEW_SECONDS):
+                    return {**entry, "disposition": "reconciliation-required", "outcome": "recovery-claim-timestamp-invalid"}
+                if lease_expires is None:
+                    lease_expires = created + timedelta(seconds=RECOVERY_CLAIM_LEASE_SECONDS)
+                if lease_expires > now:
+                    return {**entry, "disposition": "reconciliation-required", "outcome": "recovery-claim-active"}
+                break
         remaining_budget = max(0, int(retry_budget) - consumed_budget)
         if action_kind in {"provider-native-retry", "provider-native-continue"} and submission_proven is not False:
             disposition, outcome = "reconciliation-required", "rejected-ambiguous-submission"
@@ -132,6 +200,12 @@ def prepare_recovery_action(
             "binding": safe_binding,
             "created-at": now_iso_z(),
         }
+        if action_kind == "reconcile" and disposition == "intent-persisted":
+            created = _parse_recovery_time(event["created-at"])
+            if created is not None:
+                event["lease-expires-at"] = (
+                    created + timedelta(seconds=RECOVERY_CLAIM_LEASE_SECONDS)
+                ).isoformat().replace("+00:00", "Z")
         result = _append(project_root, request_id, event)
     try:
         from .observability import append_observation
