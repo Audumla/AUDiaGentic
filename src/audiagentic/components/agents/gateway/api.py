@@ -1661,10 +1661,16 @@ def complete_execution_from_provider(
         # witness prove that it is the same response.  Ambiguous/later-turn
         # captures remain fail-closed.
         from audiagentic.components.providers.adapters.gpt_auto.turn import (
+            _terminal_same_turn_response_replacement,
             _terminal_same_response_slot_replacement,
         )
 
         if not _terminal_same_response_slot_replacement(
+            snapshot,
+            prompt_message_id=str(prompt_id or ""),
+            old_assistant_id=str(expected_assistant),
+            new_assistant_id=str(latest_assistant_id or ""),
+        ) and not _terminal_same_turn_response_replacement(
             snapshot,
             prompt_message_id=str(prompt_id or ""),
             old_assistant_id=str(expected_assistant),

@@ -116,9 +116,15 @@ def test_complete_from_provider_accepts_terminal_durable_assistant_remount(
             ChatMessageRef(role="user", message_id="prompt-1", text="request", sequence=0),
             ChatMessageRef(
                 role="assistant",
+                message_id="assistant-before-remount",
+                text="partial answer",
+                sequence=1,
+            ),
+            ChatMessageRef(
+                role="assistant",
                 message_id="assistant-after-remount",
                 text="captured answer after remount",
-                sequence=1,
+                sequence=2,
             ),
         ),
     )
