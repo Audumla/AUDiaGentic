@@ -63,6 +63,7 @@ _RECOVERY_RETRY_INITIAL_SECONDS = 0.5
 _RECOVERY_RETRY_MAX_SECONDS = 15.0
 _RECOVERY_RETRY_MAX_ATTEMPTS = 6
 _FOLLOWUP_RECOVERY_DEFAULT_MAX_ATTEMPTS = max(_RECOVERY_RETRY_MAX_ATTEMPTS * 4, 24)
+_PRESUBMIT_RECOVERY_DEFAULT_MAX_ATTEMPTS = max(_RECOVERY_RETRY_MAX_ATTEMPTS * 4, 24)
 
 # SH07 crash-matrix test-only hook: widens the claim-to-start control-plane
 # window so a real OS process kill can be observed landing inside it (the
@@ -1123,6 +1124,22 @@ class GatewayQueueManager:
             return max(_RECOVERY_RETRY_MAX_ATTEMPTS * 4, 24)
         return value if value > 0 else max(_RECOVERY_RETRY_MAX_ATTEMPTS * 4, 24)
 
+    @staticmethod
+    def _recovery_presubmit_max_attempts(entry: QueuedDispatch) -> int:
+        """Bound safe-unsent waits for an unresolved predecessor turn."""
+        params = dict(entry.snapshot.execution_params)
+        value = params.get(
+            "provider-session-presubmit-recovery-max-attempts",
+            _PRESUBMIT_RECOVERY_DEFAULT_MAX_ATTEMPTS,
+        )
+        if isinstance(value, bool):
+            return _PRESUBMIT_RECOVERY_DEFAULT_MAX_ATTEMPTS
+        try:
+            value = int(value)
+        except (TypeError, ValueError):
+            return _PRESUBMIT_RECOVERY_DEFAULT_MAX_ATTEMPTS
+        return value if value > 0 else _PRESUBMIT_RECOVERY_DEFAULT_MAX_ATTEMPTS
+
 
     def _schedule_recovery_retry(
         self,
@@ -1664,14 +1681,11 @@ class GatewayQueueManager:
                 previous_recovery = previous_recovery if isinstance(previous_recovery, dict) else {}
                 recovery_attempt = int(previous_recovery.get("attempt", 0)) + 1
                 max_recovery_attempts = self._recovery_retry_max_attempts(entry)
-                # A presubmit reconciliation is different from uncertain
-                # provider-side recovery: the current request has proven that
-                # Send was never reached, so retrying it cannot duplicate a
-                # prompt.  Keep it queued behind the unresolved predecessor
-                # until the session becomes admissible (or an explicit outer
-                # timeout/cancellation ends it).  Applying the generic finite
-                # recovery bound here incorrectly converted safe queued work
-                # into CON-AGW-084 after five observations.
+                # A presubmit reconciliation is safe to retry because the
+                # current request has proven that Send was never reached, but
+                # it still needs its own finite bound. Without one, a session
+                # with no silence/outer timeout can emit heartbeats forever
+                # while an unresolved predecessor remains fenced.
                 wait_for_previous_turn = (
                     deferred.phase == "presubmit-reconcile"
                     and deferred.side_effect_state == "not-started"
@@ -1686,7 +1700,13 @@ class GatewayQueueManager:
                     and followup_attempt >= followup_max_attempts
                 )
                 effective_recovery_max_attempts = (
-                    followup_max_attempts if followup_reconciliation else max_recovery_attempts
+                    followup_max_attempts
+                    if followup_reconciliation
+                    else (
+                        self._recovery_presubmit_max_attempts(entry)
+                        if wait_for_previous_turn
+                        else max_recovery_attempts
+                    )
                 )
                 conversation_load_reconciliation = (
                     deferred.phase == "conversation-load-reconcile"
@@ -1718,7 +1738,6 @@ class GatewayQueueManager:
                     (
                         (
                             recovery_attempt >= max_recovery_attempts
-                            and not wait_for_previous_turn
                             and not followup_reconciliation
                         )
                         or followup_recovery_exhausted
@@ -2273,4 +2292,3 @@ class GatewayQueueManager:
             else:
                 depth["active_running"] += 1
         return result
-

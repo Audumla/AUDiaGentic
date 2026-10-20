@@ -810,8 +810,8 @@ def test_durable_recovery_expires_session_at_absolute_max_lifetime(
     assert sessions_store.read_session_record(project, session_id)["state"] == "expired"
 
 
-def test_presubmit_reconciliation_waits_past_generic_recovery_bound(tmp_path: Path):
-    """A proven-unsent successor remains queued until its predecessor clears."""
+def test_presubmit_reconciliation_uses_its_own_recovery_bound(tmp_path: Path):
+    """A proven-unsent successor cannot wait forever behind a stale fence."""
     manager = queue_mod.GatewayQueueManager()
     project = tmp_path / "project"
     project.mkdir()
@@ -822,22 +822,15 @@ def test_presubmit_reconciliation_waits_past_generic_recovery_bound(tmp_path: Pa
     def runner(_project_root: Path, _current: dict, **_kwargs) -> dict:
         nonlocal calls
         calls += 1
-        if calls <= 3:
-            raise RecoveryDeferred(
-                AudiaGenticError(
-                    code="EXT-GPTAUTO-004",
-                    kind="providers",
-                    message="previous turn remains unresolved",
-                    details={"previous-turn-unresolved": True},
-                ),
-                phase="presubmit-reconcile",
-                side_effect_state="not-started",
-            )
-        return store.transition_record(
-            _project_root,
-            _current["request-id"],
-            "completed",
-            updates={"output": "reconciled", "finished-at": now_iso_z()},
+        raise RecoveryDeferred(
+            AudiaGenticError(
+                code="EXT-GPTAUTO-004",
+                kind="providers",
+                message="previous turn remains unresolved",
+                details={"previous-turn-unresolved": True},
+            ),
+            phase="presubmit-reconcile",
+            side_effect_state="not-started",
         )
 
     manager.enqueue(
@@ -848,13 +841,15 @@ def test_presubmit_reconciliation_waits_past_generic_recovery_bound(tmp_path: Pa
             "provider-session-recovery-initial-delay-seconds": 0.01,
             "provider-session-recovery-max-delay-seconds": 0.01,
             "provider-session-recovery-max-attempts": 2,
+            "provider-session-presubmit-recovery-max-attempts": 2,
         },
         runner,
     )
 
     terminal = manager.wait(project, record["request-id"], timeout_seconds=3)
-    assert terminal["state"] == "completed"
-    assert calls == 4
+    assert terminal["state"] == "interrupted"
+    assert terminal["recovery"]["outcome"] == "bounded-recovery-exhausted"
+    assert calls <= 3
 
 
 def test_followup_reconciliation_waits_past_generic_recovery_bound(tmp_path: Path):
