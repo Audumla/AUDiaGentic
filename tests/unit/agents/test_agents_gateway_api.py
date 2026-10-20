@@ -270,6 +270,7 @@ def test_status_poll_reconciles_adoptable_terminal_failure_once(tmp_path: Path, 
         "provider-metadata": {"submission-proven": True},
     }
     calls: list[dict[str, object]] = []
+    completed = threading.Event()
     monkeypatch.setattr(gateway.store, "read_public_status", lambda *_: dict(public_record))
     monkeypatch.setattr(
         gateway.store,
@@ -279,9 +280,11 @@ def test_status_poll_reconciles_adoptable_terminal_failure_once(tmp_path: Path, 
     monkeypatch.setattr(
         gateway,
         "recover_execution_request",
-        lambda *args, **kwargs: calls.append({"args": args, **kwargs}) or {
-            "reconciliation": {"outcome": "unresolved"}
-        },
+        lambda *args, **kwargs: (
+            calls.append({"args": args, **kwargs}),
+            completed.set(),
+            {"reconciliation": {"outcome": "unresolved"}},
+        )[-1],
     )
     monkeypatch.setattr(
         gateway,
@@ -293,6 +296,7 @@ def test_status_poll_reconciles_adoptable_terminal_failure_once(tmp_path: Path, 
         "lifecycle": "terminal",
         "outcome": "failed",
     }
+    assert completed.wait(1.0)
     assert len(calls) == 1
     assert calls[0]["action"] == "reconcile"
     assert calls[0]["expected_revision"] == 7

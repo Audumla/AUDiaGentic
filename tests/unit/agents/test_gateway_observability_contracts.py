@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import gzip
 import json
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from audiagentic.components.agents.gateway import observability, replay
@@ -216,6 +217,86 @@ def test_recovery_intent_fences_ambiguous_submission_and_replay(tmp_path):
     result = replay.replay_request(tmp_path, "req_recovery", observations=[])
     assert result["safe-to-resubmit"] is False
     assert result["duplicate-prompt-fence"] == "ambiguous-action-attempt"
+
+
+def test_reconcile_claim_lease_and_unresolved_cooldown_are_durable(tmp_path):
+    first = replay.prepare_recovery_action(
+        tmp_path,
+        "req_reconcile_claim",
+        action_attempt_id="attempt_1",
+        action="reconcile",
+        action_kind="reconcile",
+        attempt_epoch=1,
+        retry_budget=0,
+        submission_proven=True,
+    )
+    assert first["disposition"] == "intent-persisted"
+    active = replay.prepare_recovery_action(
+        tmp_path,
+        "req_reconcile_claim",
+        action_attempt_id="attempt_2",
+        action="reconcile",
+        action_kind="reconcile",
+        attempt_epoch=1,
+        retry_budget=0,
+        submission_proven=True,
+    )
+    assert active["disposition"] == "reconciliation-required"
+    assert active["outcome"] == "recovery-claim-active"
+
+    replay.record_recovery_result(
+        tmp_path,
+        "req_reconcile_claim",
+        action_attempt_id="attempt_1",
+        outcome="reconciliation-unresolved",
+    )
+    cooldown = replay.prepare_recovery_action(
+        tmp_path,
+        "req_reconcile_claim",
+        action_attempt_id="attempt_3",
+        action="reconcile",
+        action_kind="reconcile",
+        attempt_epoch=1,
+        retry_budget=0,
+        submission_proven=True,
+    )
+    assert cooldown["disposition"] == "reconciliation-required"
+    assert cooldown["outcome"] == "recovery-cooldown-active"
+
+
+def test_expired_reconcile_claim_can_be_taken_over_without_replay(tmp_path):
+    replay.prepare_recovery_action(
+        tmp_path,
+        "req_reconcile_takeover",
+        action_attempt_id="attempt_1",
+        action="reconcile",
+        action_kind="reconcile",
+        attempt_epoch=1,
+        retry_budget=0,
+        submission_proven=True,
+    )
+    journal = replay.gateway_recovery_action_path(tmp_path, "req_reconcile_takeover")
+    entry = json.loads(journal.read_text(encoding="utf-8").splitlines()[0])
+    expired = (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat().replace(
+        "+00:00", "Z"
+    )
+    entry["created-at"] = expired
+    entry["lease-expires-at"] = expired
+    journal.write_text(json.dumps(entry) + "\n", encoding="utf-8")
+
+    takeover = replay.prepare_recovery_action(
+        tmp_path,
+        "req_reconcile_takeover",
+        action_attempt_id="attempt_2",
+        action="reconcile",
+        action_kind="reconcile",
+        attempt_epoch=1,
+        retry_budget=0,
+        submission_proven=True,
+    )
+
+    assert takeover["disposition"] == "intent-persisted"
+    assert takeover["action-attempt-id"] == "attempt_2"
 
 
 def test_native_continuation_fence_persists_intent_before_provider_action(tmp_path):
