@@ -253,6 +253,7 @@ class _Chat:
         )
         self.checkpoint_updates = []
         self._page_mutation_owner_probe = None
+        self._submission_proven = False
     async def snapshot(self):
         return next(self._snapshots)
 
@@ -264,13 +265,20 @@ class _Chat:
 
     def mark_submission_unresolved(self, prompt_text=None):
         self.unresolved_turn_pending = True
+        self._submission_proven = False
         self.prompt_text = prompt_text
+
+    async def mark_submission_dispatching(self, *, turn_id):
+        self.checkpoint_updates.append(
+            {"turn-id": turn_id, "recovery-state": "side-effect-may-have-started", "submission-state": "dispatching"}
+        )
 
     def set_page_mutation_owner_probe(self, probe):
         self._page_mutation_owner_probe = probe
 
     def mark_prompt_submitted(self, prompt_id, assistant_before_id, prompt_text=None):
         self.unresolved_turn_pending = True
+        self._submission_proven = True
         self.unresolved_prompt_message_id = prompt_id
         self.unresolved_assistant_before_id = assistant_before_id
         self.prompt_text = prompt_text
@@ -279,17 +287,21 @@ class _Chat:
         self.unresolved_turn_pending = False
 
     async def persist_unresolved_checkpoint(self, *, turn_id, baseline):
+        prepared = not self._submission_proven
         self.checkpoint_updates.append(
             {
                 "turn-id": turn_id,
-                "recovery-state": "side-effect-may-have-started",
+                "recovery-state": "submission-prepared" if prepared else "submission-proven",
+                "submission-state": "prepared" if prepared else "proven",
                 "unresolved-turn-pending": True,
                 "baseline-user-id": baseline.latest_user_id,
             }
         )
 
     async def persist_unresolved_clear(self):
-        self.checkpoint_updates.append({"unresolved-turn-pending": False})
+        self.checkpoint_updates.append(
+            {"unresolved-turn-pending": False, "submission-state": "cleared"}
+        )
 
 
 @pytest.mark.asyncio
@@ -462,8 +474,13 @@ async def test_turn_proves_submission_once_and_completes_from_atomic_snapshots()
     assert chat.state is ChatState.READY
     assert result.metadata["prompt-message-id"] == "prompt-1"
     assert result.metadata["assistant-message-id"] == "assistant-1"
-    assert chat.checkpoint_updates[0]["recovery-state"] == "side-effect-may-have-started"
-    assert chat.checkpoint_updates[-1] == {"unresolved-turn-pending": False}
+    assert chat.checkpoint_updates[0]["recovery-state"] == "submission-prepared"
+    assert chat.checkpoint_updates[0]["submission-state"] == "prepared"
+    assert chat.checkpoint_updates[1]["submission-state"] == "dispatching"
+    assert chat.checkpoint_updates[-1] == {
+        "unresolved-turn-pending": False,
+        "submission-state": "cleared",
+    }
     timing = [
         observation
         for observation in observations
@@ -4505,7 +4522,10 @@ async def test_staged_timeout_only_clears_proven_unsent_turn(send_attempted):
     assert chat.unresolved_turn_pending is send_attempted
     assert chat.state is (ChatState.FAILED if send_attempted else ChatState.READY)
     if not send_attempted:
-        assert chat.checkpoint_updates[-1] == {"unresolved-turn-pending": False}
+        assert chat.checkpoint_updates[-1] == {
+            "unresolved-turn-pending": False,
+            "submission-state": "cleared",
+        }
 
 
 @pytest.mark.asyncio
@@ -4542,7 +4562,10 @@ async def test_loading_page_composer_failure_is_proven_unsent_and_clears_fence()
     assert details["retryable-same-session"] is True
     assert chat.state is ChatState.READY
     assert chat.unresolved_turn_pending is False
-    assert chat.checkpoint_updates[-1] == {"unresolved-turn-pending": False}
+    assert chat.checkpoint_updates[-1] == {
+        "unresolved-turn-pending": False,
+        "submission-state": "cleared",
+    }
 
 
 @pytest.mark.asyncio

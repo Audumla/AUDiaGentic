@@ -186,6 +186,7 @@ class PersistentChat:
             key: metadata[key]
             for key in (
                 "recovery-state",
+                "submission-state",
                 "unresolved-turn-id",
                 "unresolved-baseline-user-id",
                 "unresolved-baseline-assistant-id",
@@ -206,11 +207,15 @@ class PersistentChat:
         turn_id: str,
         baseline: ChatSnapshot | None,
     ) -> None:
-        """Write the side-effect checkpoint before browser Send is invoked."""
+        """Persist a prepared checkpoint before any browser submission action."""
         self._reconciliation_delivery_retry_attempted = False
         load_recovery_attempts = self._conversation_load_recovery_attempts
+        submission_state = "proven" if self._submission_proven else "prepared"
         self._checkpoint_metadata = {
-            "recovery-state": "side-effect-may-have-started",
+            "recovery-state": (
+                "submission-proven" if self._submission_proven else "submission-prepared"
+            ),
+            "submission-state": submission_state,
             "unresolved-turn-id": turn_id,
         }
         if load_recovery_attempts:
@@ -236,6 +241,17 @@ class PersistentChat:
             ):
                 if value is not None and value != "":
                     self._checkpoint_metadata[key] = value
+        await self._persist_checkpoint({**self.unresolved_metadata(), **self._checkpoint_metadata})
+
+    async def mark_submission_dispatching(self, *, turn_id: str) -> None:
+        """Durably cross the no-replay boundary immediately before browser Send."""
+        self._checkpoint_metadata.update(
+            {
+                "recovery-state": "side-effect-may-have-started",
+                "submission-state": "dispatching",
+                "unresolved-turn-id": turn_id,
+            }
+        )
         await self._persist_checkpoint({**self.unresolved_metadata(), **self._checkpoint_metadata})
 
     async def _persist_checkpoint(self, metadata: dict[str, object]) -> None:
@@ -283,7 +299,10 @@ class PersistentChat:
         # Emit the intended durable state explicitly.  Callers may persist
         # before mutating the in-memory marker so a failed write cannot expose
         # READY and then resurrect an unresolved lock after restart.
-        metadata: dict[str, object] = {"unresolved-turn-pending": False}
+        metadata: dict[str, object] = {
+            "unresolved-turn-pending": False,
+            "submission-state": "cleared",
+        }
         # Explicit terminal cleanup only when this session actually carried a
         # recovery budget.  The retry budget is intentionally not part of the
         # generic pending=false removal set because idle session recovery can
@@ -1897,6 +1916,7 @@ class PersistentChat:
         self.unresolved_prompt_text_digest = None
         self._unresolved_recovery_reason = None
         self._unresolved_recovery_details = {}
+        self._checkpoint_metadata = {}
         self._reconciliation_refresh_attempted = False
         if prompt_text:
             self.unresolved_prompt_text_digest = PromptFingerprint.from_text(prompt_text).digest
@@ -1909,6 +1929,9 @@ class PersistentChat:
     ) -> None:
         self.unresolved_turn_pending = True
         self._submission_proven = True
+        self._checkpoint_metadata.update(
+            {"recovery-state": "submission-proven", "submission-state": "proven"}
+        )
         self._unresolved_recovery_reason = None
         self._unresolved_recovery_details = {}
         self._reconciliation_refresh_attempted = False

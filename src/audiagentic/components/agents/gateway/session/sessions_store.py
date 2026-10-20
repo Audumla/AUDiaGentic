@@ -1345,6 +1345,7 @@ def record_session_turn(
                 current_metadata["unresolved-turn-pending"] = False
                 for key in (
                     "recovery-state",
+                    "submission-state",
                     "unresolved-turn-id",
                     "unresolved-baseline-user-id",
                     "unresolved-baseline-assistant-id",
@@ -1392,6 +1393,7 @@ def record_session_turn(
                 current_metadata["unresolved-turn-pending"] = False
                 for key in (
                     "recovery-state",
+                    "submission-state",
                     "unresolved-turn-id",
                     "unresolved-baseline-user-id",
                     "unresolved-baseline-assistant-id",

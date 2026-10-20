@@ -1144,6 +1144,9 @@ class GptAutoTurn:
         if self.cancel_event.is_set():
             self._move(TurnState.CANCELLED)
             return
+        mark_dispatching = getattr(self.chat, "mark_submission_dispatching", None)
+        if callable(mark_dispatching):
+            await mark_dispatching(turn_id=self.request.turn_id)
         self.side_effect_attempted = True
         try:
             if self.cancel_event.is_set():
