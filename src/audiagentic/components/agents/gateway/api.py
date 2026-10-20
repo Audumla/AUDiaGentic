@@ -1376,9 +1376,12 @@ def recover_execution_request(
         )
 
     from audiagentic.components.agents.gateway.replay import (
+        RecoveryClaimLostError,
+        assert_recovery_claim_owner,
         prepare_recovery_action,
         recovery_capture_lock,
         record_recovery_result,
+        renew_recovery_claim,
     )
     action_attempt_id = f"recovery_{request_id}_{uuid.uuid4().hex[:16]}_{action}"
     prepared = prepare_recovery_action(
@@ -1483,16 +1486,63 @@ def recover_execution_request(
         updated_diagnostics["resolution-state"] = "cleared-not-submitted"
 
     updated_diagnostics["recovery"] = recovery
-    updated = store.update_diagnostics(
-        project_root,
-        request_id,
-        updated_diagnostics,
-        expected_revision=record.get("revision"),
-    )
     if action == "reconcile":
         try:
             with recovery_capture_lock(project_root, request_id):
-                completed = complete_execution_from_provider(project_root, request_id)
+                claim_generation = int(prepared.get("claim-generation") or 0)
+                assert_recovery_claim_owner(
+                    project_root,
+                    request_id,
+                    action_attempt_id=action_attempt_id,
+                    claim_generation=claim_generation,
+                )
+                updated = store.update_diagnostics(
+                    project_root,
+                    request_id,
+                    updated_diagnostics,
+                    expected_revision=record.get("revision"),
+                )
+                heartbeat_stop = threading.Event()
+                heartbeat_lost = threading.Event()
+
+                def renew_claim() -> None:
+                    while not heartbeat_stop.wait(30.0):
+                        if not renew_recovery_claim(
+                            project_root,
+                            request_id,
+                            action_attempt_id=action_attempt_id,
+                            claim_generation=claim_generation,
+                        ):
+                            heartbeat_lost.set()
+                            return
+
+                heartbeat = threading.Thread(
+                    target=renew_claim,
+                    daemon=True,
+                    name=f"gateway-recovery-lease-{request_id}",
+                )
+                heartbeat.start()
+                try:
+                    completed = complete_execution_from_provider(
+                        project_root,
+                        request_id,
+                        recovery_attempt_id=action_attempt_id,
+                        recovery_claim_generation=claim_generation,
+                    )
+                finally:
+                    heartbeat_stop.set()
+                    heartbeat.join(timeout=1.0)
+                if heartbeat_lost.is_set():
+                    raise RecoveryClaimLostError("recovery claim renewal failed")
+        except RecoveryClaimLostError:
+            return {
+                "request-id": request_id,
+                "action": action,
+                "disposition": "stale-claim",
+                "state": record.get("state"),
+                "revision": record.get("revision"),
+                "reconciliation": {"outcome": "ownership-lost"},
+            }
         except AudiaGenticError as exc:
             if exc.code not in {
                 "CON-AGW-152",
@@ -1510,6 +1560,7 @@ def recover_execution_request(
                 project_root,
                 request_id,
                 action_attempt_id=action_attempt_id,
+                claim_generation=int(prepared.get("claim-generation") or 0),
                 outcome="reconciliation-unresolved",
                 terminal=False,
                 causal_input_ids=[request_id],
@@ -1527,6 +1578,7 @@ def recover_execution_request(
             project_root,
             request_id,
             action_attempt_id=action_attempt_id,
+            claim_generation=int(prepared.get("claim-generation") or 0),
             outcome="reconciliation-completed",
             terminal=True,
             causal_input_ids=[request_id],
@@ -1541,6 +1593,12 @@ def recover_execution_request(
             "reconciliation": {"outcome": "completed"},
         }
 
+    updated = store.update_diagnostics(
+        project_root,
+        request_id,
+        updated_diagnostics,
+        expected_revision=record.get("revision"),
+    )
     record_recovery_result(
         project_root,
         request_id,
@@ -1653,7 +1711,12 @@ def focus_execution_session(project_root: Path, session_id: str) -> dict[str, An
 
 
 def complete_execution_from_provider(
-    project_root: Path, request_id: str, *, passive: bool = False
+    project_root: Path,
+    request_id: str,
+    *,
+    passive: bool = False,
+    recovery_attempt_id: str | None = None,
+    recovery_claim_generation: int | None = None,
 ) -> dict[str, Any]:
     """Capture and commit the request-owned current GPT response.
 
@@ -1886,6 +1949,14 @@ def complete_execution_from_provider(
                 for key, value in recovered_binding.items()
                 if value is not None
             },
+        )
+    if recovery_attempt_id is not None:
+        from audiagentic.components.agents.gateway.replay import assert_recovery_claim_owner
+        assert_recovery_claim_owner(
+            project_root,
+            request_id,
+            action_attempt_id=recovery_attempt_id,
+            claim_generation=int(recovery_claim_generation or 0),
         )
     updated = store.transition_operator_terminal(
         project_root, request_id, expected_revision=int(record.get("revision", 0)),

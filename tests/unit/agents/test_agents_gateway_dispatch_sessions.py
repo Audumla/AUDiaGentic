@@ -27,6 +27,7 @@ from audiagentic.components.agents.gateway.session import dispatch as session_di
 from audiagentic.components.agents.gateway.session import sessions as sessions_module
 from audiagentic.components.agents.gateway.session import sessions_store
 from audiagentic.components.agents.gateway.session.sessions import SessionRuntime
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 PROFILE = {
     "profile_id": "profile-1",
@@ -1221,6 +1222,34 @@ def test_preterminal_reconciliation_does_not_capture_ambiguous_without_submissio
     )
     assert result is None
 
+
+def test_preterminal_reconciliation_retries_transient_terminal_capture(monkeypatch, tmp_path):
+    calls = []
+
+    def capture(root, request_id, *, passive=False):
+        calls.append((root, request_id, passive))
+        if len(calls) < 2:
+            raise AudiaGenticError(
+                code="CON-AGW-155",
+                kind="agents",
+                message="terminal response is still settling",
+                details={},
+            )
+        return {"request-id": request_id, "state": "completed"}
+
+    from audiagentic.components.agents.gateway import api
+
+    monkeypatch.setattr(api, "complete_execution_from_provider", capture)
+    monkeypatch.setattr(session_dispatch.time, "sleep", lambda _: None)
+    result = session_dispatch._reconcile_before_failed_terminal(
+        tmp_path,
+        {"provider-metadata": {"submission-proven": True}},
+        provider_id="gpt-auto",
+        request_id="req_reconcile_retry",
+    )
+    assert result["state"] == "completed"
+    assert len(calls) == 2
+
 def test_failed_session_with_durable_binding_auto_resumes(resumable_rig):
     """A failed local generation can continue when its provider binding is safe."""
     from audiagentic.components.agents.gateway.session import sessions_store as session_store
@@ -1451,5 +1480,3 @@ def test_completed_session_checkpoint_repairs_missing_predecessor_record(tmp_pat
 
     assert cleared is not None
     assert cleared["provider-metadata"]["unresolved-turn-pending"] is False
-
-

@@ -27,6 +27,10 @@ RECOVERY_UNRESOLVED_COOLDOWN_SECONDS = 60.0
 _RECOVERY_CLOCK_SKEW_SECONDS = 5.0
 
 
+class RecoveryClaimLostError(RuntimeError):
+    """Raised when a recovery worker no longer owns its durable claim."""
+
+
 def _text(value: Any, limit: int = 256) -> str | None:
     return value[:limit] if isinstance(value, str) and value else None
 
@@ -41,6 +45,69 @@ def _parse_recovery_time(value: Any) -> datetime | None:
     if parsed.tzinfo is None:
         return None
     return parsed.astimezone(timezone.utc)
+
+
+def recovery_claim_state(
+    entries: Iterable[Mapping[str, Any]], *, now: datetime | None = None
+) -> dict[str, Any] | None:
+    """Project the authoritative reconciliation claim from journal order."""
+    current: dict[str, Any] | None = None
+    generation = 0
+    for entry in entries:
+        if entry.get("event") == "action-intent" and entry.get("action-kind") == "reconcile" and entry.get("disposition") == "intent-persisted":
+            raw_generation = entry.get("claim-generation")
+            generation = raw_generation if isinstance(raw_generation, int) and not isinstance(raw_generation, bool) else generation + 1
+            current = {
+                "action-attempt-id": entry.get("action-attempt-id"),
+                "claim-generation": generation,
+                "lease-expires-at": entry.get("lease-expires-at"),
+                "intent": dict(entry),
+                "result": None,
+            }
+        elif current is not None and entry.get("event") == "claim-renewal" and entry.get("action-attempt-id") == current["action-attempt-id"] and entry.get("claim-generation") == current["claim-generation"]:
+            current["lease-expires-at"] = entry.get("lease-expires-at")
+        elif current is not None and entry.get("event") == "action-result" and entry.get("action-attempt-id") == current["action-attempt-id"] and entry.get("claim-generation") == current["claim-generation"]:
+            current["result"] = dict(entry)
+    if current is None:
+        return None
+    current["created-at"] = current["intent"].get("created-at")
+    current["valid"] = _parse_recovery_time(current.get("created-at")) is not None and _parse_recovery_time(current.get("lease-expires-at")) is not None
+    if now is not None and current["valid"]:
+        expires = _parse_recovery_time(current["lease-expires-at"])
+        current["active"] = bool(expires and expires > now)
+    return current
+
+
+def assert_recovery_claim_owner(
+    project_root: Path,
+    request_id: str,
+    *,
+    action_attempt_id: str,
+    claim_generation: int,
+) -> dict[str, Any]:
+    """Fail closed unless this attempt owns the current, unexpired claim."""
+    with _lock(project_root, request_id):
+        claim = recovery_claim_state(_read(project_root, request_id), now=datetime.now(timezone.utc))
+        if not claim or not claim.get("valid") or not claim.get("active") or claim.get("action-attempt-id") != action_attempt_id or claim.get("claim-generation") != claim_generation or claim.get("result") is not None:
+            raise RecoveryClaimLostError("recovery claim is no longer owned")
+        return claim
+
+
+def renew_recovery_claim(
+    project_root: Path,
+    request_id: str,
+    *,
+    action_attempt_id: str,
+    claim_generation: int,
+) -> bool:
+    """Extend an owned claim without changing its generation."""
+    with _lock(project_root, request_id):
+        claim = recovery_claim_state(_read(project_root, request_id), now=datetime.now(timezone.utc))
+        if not claim or not claim.get("valid") or not claim.get("active") or claim.get("action-attempt-id") != action_attempt_id or claim.get("claim-generation") != claim_generation or claim.get("result") is not None:
+            return False
+        expires = (datetime.now(timezone.utc) + timedelta(seconds=RECOVERY_CLAIM_LEASE_SECONDS)).isoformat().replace("+00:00", "Z")
+        _append(project_root, request_id, {"schema-version": SCHEMA_VERSION, "event": "claim-renewal", "action-attempt-id": action_attempt_id, "claim-generation": claim_generation, "lease-expires-at": expires, "created-at": now_iso_z()})
+        return True
 
 
 def _lock(project_root: Path, request_id: str) -> StartupLock:
@@ -93,7 +160,7 @@ def _append(project_root: Path, request_id: str, event: dict[str, Any]) -> dict[
         path,
         index,
         max_bytes=journal_max_bytes("recovery"),
-        preserve=lambda row: row.get("event") in {"action-result", "recovery-terminal", "reconciliation-result"},
+        preserve=lambda row: row.get("event") in {"action-intent", "claim-renewal", "action-result", "recovery-terminal", "reconciliation-result"},
     )
     return event
 
@@ -136,40 +203,28 @@ def prepare_recovery_action(
                     return {**existing, "disposition": "already-recorded", "outcome": "action-already-recorded"}
                 return {**existing, "disposition": "reconciliation-required", "outcome": "action-result-missing"}
             return existing
+        claim_generation = None
         if action_kind == "reconcile":
             now = datetime.now(timezone.utc)
-            for entry in reversed(entries):
-                if entry.get("event") != "action-intent" or entry.get("action-kind") != action_kind:
-                    continue
-                prior_id = str(entry.get("action-attempt-id") or "")
-                prior_result = next(
-                    (
-                        candidate
-                        for candidate in reversed(entries)
-                        if candidate.get("event") == "action-result"
-                        and candidate.get("action-attempt-id") == prior_id
-                    ),
-                    None,
-                )
+            claim = recovery_claim_state(entries, now=now)
+            if claim:
+                prior_result = claim.get("result")
                 if prior_result is not None:
                     outcome = prior_result.get("outcome")
                     created = _parse_recovery_time(prior_result.get("created-at"))
                     if outcome == "reconciliation-completed":
-                        return {**entry, **prior_result, "disposition": "already-recorded"}
+                        return {**claim["intent"], **prior_result, "disposition": "already-recorded"}
                     if created is None or created > now + timedelta(seconds=_RECOVERY_CLOCK_SKEW_SECONDS):
-                        return {**entry, **prior_result, "disposition": "reconciliation-required", "outcome": "recovery-timestamp-invalid"}
+                        return {**claim["intent"], **prior_result, "disposition": "reconciliation-required", "outcome": "recovery-timestamp-invalid"}
                     if (now - created).total_seconds() < RECOVERY_UNRESOLVED_COOLDOWN_SECONDS:
-                        return {**entry, **prior_result, "disposition": "reconciliation-required", "outcome": "recovery-cooldown-active"}
-                    break
-                created = _parse_recovery_time(entry.get("created-at"))
-                lease_expires = _parse_recovery_time(entry.get("lease-expires-at"))
-                if created is None or created > now + timedelta(seconds=_RECOVERY_CLOCK_SKEW_SECONDS):
-                    return {**entry, "disposition": "reconciliation-required", "outcome": "recovery-claim-timestamp-invalid"}
-                if lease_expires is None:
-                    lease_expires = created + timedelta(seconds=RECOVERY_CLAIM_LEASE_SECONDS)
-                if lease_expires > now:
-                    return {**entry, "disposition": "reconciliation-required", "outcome": "recovery-claim-active"}
-                break
+                        return {**claim["intent"], **prior_result, "disposition": "reconciliation-required", "outcome": "recovery-cooldown-active"}
+                elif not claim.get("valid"):
+                    return {**claim["intent"], "disposition": "reconciliation-required", "outcome": "recovery-claim-timestamp-invalid"}
+                elif claim.get("active"):
+                    return {**claim["intent"], "disposition": "reconciliation-required", "outcome": "recovery-claim-active"}
+                claim_generation = int(claim.get("claim-generation") or 0) + 1
+            else:
+                claim_generation = 1
         remaining_budget = max(0, int(retry_budget) - consumed_budget)
         if action_kind in {"provider-native-retry", "provider-native-continue"} and submission_proven is not False:
             disposition, outcome = "reconciliation-required", "rejected-ambiguous-submission"
@@ -201,6 +256,8 @@ def prepare_recovery_action(
             "created-at": now_iso_z(),
         }
         if action_kind == "reconcile" and disposition == "intent-persisted":
+            event["claim-generation"] = claim_generation or 1
+            event["claim-owner-id"] = event["action-attempt-id"]
             created = _parse_recovery_time(event["created-at"])
             if created is not None:
                 event["lease-expires-at"] = (
@@ -229,18 +286,23 @@ def record_recovery_result(
     action_attempt_id: str,
     outcome: str,
     terminal: bool = False,
+    claim_generation: int | None = None,
     causal_input_ids: Iterable[str] = (),
 ) -> dict[str, Any]:
     """Append reconciliation/result evidence; never mutate the intent event."""
     with _lock(project_root, request_id):
-        intent_seen = False
-        for entry in iter_ndjson(gateway_recovery_action_path(project_root, request_id)):
-            if entry.get("event") == "action-result" and entry.get("action-attempt-id") == action_attempt_id:
-                return entry
-            if entry.get("action-attempt-id") == action_attempt_id:
-                intent_seen = True
-        if not intent_seen:
+        entries = list(iter_ndjson(gateway_recovery_action_path(project_root, request_id)))
+        intent = next((entry for entry in entries if entry.get("event") == "action-intent" and entry.get("action-attempt-id") == action_attempt_id), None)
+        if intent is None:
             raise ValueError("recovery action intent is missing")
+        resolved_generation = claim_generation if isinstance(claim_generation, int) else intent.get("claim-generation")
+        existing_result = next((entry for entry in entries if entry.get("event") == "action-result" and entry.get("action-attempt-id") == action_attempt_id), None)
+        if existing_result is not None:
+            return existing_result
+        if intent.get("action-kind") == "reconcile":
+            claim = recovery_claim_state(entries, now=datetime.now(timezone.utc))
+            if not claim or claim.get("action-attempt-id") != action_attempt_id or claim.get("claim-generation") != resolved_generation or not claim.get("valid") or not claim.get("active") or claim.get("result") is not None:
+                return {"disposition": "stale-claim", "outcome": "recovery-claim-lost", "action-attempt-id": action_attempt_id, "claim-generation": resolved_generation}
         result = _append(
             project_root,
             request_id,
@@ -248,6 +310,7 @@ def record_recovery_result(
                 "schema-version": SCHEMA_VERSION,
                 "event": "action-result",
                 "action-attempt-id": _text(action_attempt_id, 128),
+                "claim-generation": resolved_generation,
                 "outcome": _text(outcome, 128) or "unknown",
                 "terminal": bool(terminal),
                 "causal-input-ids": [_text(value, 128) for value in causal_input_ids if _text(value, 128)],

@@ -297,6 +297,46 @@ def test_expired_reconcile_claim_can_be_taken_over_without_replay(tmp_path):
 
     assert takeover["disposition"] == "intent-persisted"
     assert takeover["action-attempt-id"] == "attempt_2"
+    assert takeover["claim-generation"] == 2
+
+
+def test_stale_reconcile_result_is_rejected_after_claim_takeover(tmp_path):
+    first = replay.prepare_recovery_action(
+        tmp_path, "req_stale_result", action_attempt_id="attempt_1", action="reconcile",
+        action_kind="reconcile", attempt_epoch=1, retry_budget=0, submission_proven=True,
+    )
+    journal = replay.gateway_recovery_action_path(tmp_path, "req_stale_result")
+    entry = json.loads(journal.read_text(encoding="utf-8").splitlines()[0])
+    expired = (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat().replace("+00:00", "Z")
+    entry["created-at"] = expired
+    entry["lease-expires-at"] = expired
+    journal.write_text(json.dumps(entry) + "\n", encoding="utf-8")
+    second = replay.prepare_recovery_action(
+        tmp_path, "req_stale_result", action_attempt_id="attempt_2", action="reconcile",
+        action_kind="reconcile", attempt_epoch=1, retry_budget=0, submission_proven=True,
+    )
+    assert second["claim-generation"] == first["claim-generation"] + 1
+    stale = replay.record_recovery_result(
+        tmp_path, "req_stale_result", action_attempt_id="attempt_1",
+        claim_generation=first["claim-generation"], outcome="reconciliation-completed", terminal=True,
+    )
+    assert stale["disposition"] == "stale-claim"
+    assert len([row for row in replay._read(tmp_path, "req_stale_result") if row.get("event") == "action-result"]) == 0
+
+
+def test_recovery_claim_can_be_renewed_without_changing_generation(tmp_path):
+    first = replay.prepare_recovery_action(
+        tmp_path, "req_renew", action_attempt_id="attempt_1", action="reconcile",
+        action_kind="reconcile", attempt_epoch=1, retry_budget=0, submission_proven=True,
+    )
+    assert replay.renew_recovery_claim(
+        tmp_path, "req_renew", action_attempt_id="attempt_1", claim_generation=first["claim-generation"]
+    ) is True
+    active = replay.prepare_recovery_action(
+        tmp_path, "req_renew", action_attempt_id="attempt_2", action="reconcile",
+        action_kind="reconcile", attempt_epoch=1, retry_budget=0, submission_proven=True,
+    )
+    assert active["outcome"] == "recovery-claim-active"
 
 
 def test_native_continuation_fence_persists_intent_before_provider_action(tmp_path):

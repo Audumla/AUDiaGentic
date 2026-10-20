@@ -2422,6 +2422,51 @@ def test_scope_adopts_terminal_response_after_proven_submission_virtualization()
     assert scoped.latest_assistant_text == "Complete review response"
 
 
+def test_scope_adopts_terminal_response_with_multiple_mounted_assistant_bubbles():
+    """Tool/assistant remounts may leave more than one durable bubble.
+
+    The latest bubble is still safe only when the prompt was proven, the user
+    bubble is virtualized, and the latest bubble owns the complete terminal
+    witness.  Generation remains a hard fence.
+    """
+    first_id = "76f09062-4cd7-4179-84f2-4da57cf8ac62"
+    latest_id = "3cff157d-2b9a-4140-a7bd-3d4c1440f349"
+    conversation_url = "https://chatgpt.com/g/g-p-project/c/conversation-1"
+    baseline = replace(snap(url=conversation_url), user_count=0, assistant_count=0)
+    raw = replace(
+        snap(
+            assistants=2,
+            assistant="Complete review response",
+            assistant_id=latest_id,
+            complete=True,
+            url=conversation_url,
+        ),
+        user_count=0,
+        latest_user_id=None,
+        user_message_ids=(),
+        assistant_count=2,
+        assistant_message_ids=(first_id, latest_id),
+        assistant_message_texts=("Tool result", "Complete review response"),
+        message_refs=(
+            ChatMessageRef("assistant", first_id, "Tool result", 0),
+            ChatMessageRef("assistant", latest_id, "Complete review response", 1),
+        ),
+        terminal_witness_assistant_id=latest_id,
+    )
+
+    scoped, response_ref = _scope_response_snapshot(
+        baseline,
+        raw,
+        prompt_message_id="prompt-a",
+        allow_virtualized_prompt=True,
+        allow_proven_submission_virtualized_assistant=True,
+    )
+
+    assert response_ref is not None
+    assert response_ref.message_id == latest_id
+    assert scoped.latest_assistant_text == "Complete review response"
+
+
 def test_scope_pins_first_terminal_assistant_after_empty_baseline_prompt_virtualization():
     assistant_id = "76f09062-4cd7-4179-84f2-4da57cf8ac62"
     baseline = snap()
