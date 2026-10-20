@@ -1369,9 +1369,13 @@ class SessionRuntime:
             admitted_surface_id = (
                 admitted_profile.resolved_surface_id if admitted_profile is not None else None
             )
+            if requested_surface_id is None:
+                requested_surface_id = admitted_surface_id
             if (
-                isinstance(admitted_surface_id, str)
-                and admitted_surface_id != requested_surface_id
+                not isinstance(admitted_surface_id, str)
+                or not admitted_surface_id.strip()
+                or not isinstance(requested_surface_id, str)
+                or admitted_surface_id != requested_surface_id
             ):
                 raise AudiaGenticError(
                     code="CON-AGW-125",
@@ -1541,14 +1545,48 @@ class SessionRuntime:
                     message="rehydrated provider attempted to replace its session binding",
                     details={"session-id": session_id},
                 )
-            session_store.install_initial_provider_binding(
-                project_root,
-                session_id,
-                provider_id=provider_id,
-                surface_id=surface_id,
-                provider_session_ref=provider_ref,
-                metadata=dict(getattr(update, "metadata", {}) or {}),
-            )
+            update_metadata = dict(getattr(update, "metadata", {}) or {})
+            if prepared_current_turn:
+                session_store.install_prepared_recovery_binding(
+                    project_root,
+                    session_id,
+                    request_id,
+                    provider_id=provider_id,
+                    surface_id=surface_id,
+                    provider_session_ref=provider_ref,
+                    expected_surface_id=requested_surface_id,
+                    claim_id=claim["claim-id"],
+                    dispatch_owner_epoch=dispatch_owner_epoch,
+                    worker_id=worker_id,
+                    attempt_epoch=attempt_epoch,
+                    binding_metadata=update_metadata,
+                    binding_identity={
+                        "identity_context_fingerprint": binding.get(
+                            "identity-context-fingerprint"
+                        ),
+                        "execution_context_fingerprint": binding.get(
+                            "execution-context-fingerprint"
+                        ),
+                        "context_id": binding.get("context-id"),
+                        "agent_definition_id": binding.get("agent-definition-id"),
+                        "agent_definition_digest": binding.get("agent-definition-digest"),
+                        "role_ids": binding.get("role-ids"),
+                        "role_set_digest": binding.get("role-set-digest"),
+                        "execution_profile_digest": binding.get("execution-profile-digest"),
+                        "effective_capability_digest": binding.get(
+                            "effective-capability-digest"
+                        ),
+                    },
+                )
+            else:
+                session_store.install_initial_provider_binding(
+                    project_root,
+                    session_id,
+                    provider_id=provider_id,
+                    surface_id=surface_id,
+                    provider_session_ref=provider_ref,
+                    metadata=update_metadata,
+                )
 
         prepared_submission_advanced = False
 
@@ -1558,6 +1596,7 @@ class SessionRuntime:
             remove = () if pending else (
                 "recovery-state",
                 "submission-state",
+                "submission-recovery-generation",
                 "unresolved-turn-id",
                 "unresolved-baseline-user-id",
                 "unresolved-baseline-assistant-id",
@@ -1590,22 +1629,37 @@ class SessionRuntime:
                     )
                     prepared_submission_advanced = True
                 else:
-                    session_store.assert_prepared_submission_recovery_claim(
+                    session_store.update_owned_submission_checkpoint(
                         project_root,
                         session_id,
                         request_id,
-                        claim_id=claim["claim-id"],
+                        metadata,
+                        claim_id=(
+                            claim["claim-id"]
+                            if metadata.get("submission-state") == "prepared"
+                            else None
+                        ),
                         dispatch_owner_epoch=dispatch_owner_epoch,
                         worker_id=worker_id,
                         attempt_epoch=attempt_epoch,
+                        remove_keys=remove,
                     )
+            else:
+                if prepared_current_turn:
+                    session_store.update_owned_submission_checkpoint(
+                        project_root,
+                        session_id,
+                        request_id,
+                        metadata,
+                        dispatch_owner_epoch=dispatch_owner_epoch,
+                        worker_id=worker_id,
+                        attempt_epoch=attempt_epoch,
+                        remove_keys=remove,
+                    )
+                else:
                     session_store.update_provider_metadata(
                         project_root, session_id, metadata, remove_keys=remove
                     )
-            else:
-                session_store.update_provider_metadata(
-                    project_root, session_id, metadata, remove_keys=remove
-                )
 
         prepare_kwargs: dict[str, Any] = {
             "provider_id": provider_id,
@@ -1630,6 +1684,24 @@ class SessionRuntime:
                     kind="agents",
                     message="resolved session surface is unsupported; cannot rehydrate session",
                     details={"session-id": session_id, "provider-id": provider_id},
+                )
+            prepared_surface_id = getattr(
+                getattr(getattr(prepared, "surface", None), "ref", None),
+                "surface_id",
+                None,
+            )
+            if prepared_current_turn and (
+                not isinstance(requested_surface_id, str)
+                or not requested_surface_id.strip()
+                or prepared_surface_id != requested_surface_id
+                or prepared_surface_id != surface_id
+            ):
+                await _close_failed_transport(prepared.transport)
+                raise AudiaGenticError(
+                    code="CON-AGW-120",
+                    kind="agents",
+                    message="rehydrated provider surface differs from the admission-frozen surface",
+                    details={"session-id": session_id},
                 )
             transport = prepared.transport
             if resume_existing:
@@ -1787,26 +1859,55 @@ class SessionRuntime:
             )
         session_id = session_id or session_store.generate_session_id()
         allocated_session_id = session_id
+        resolved_surface_id = getattr(surface_hint, "surface_id", None)
 
         async def binding_sink(update: Any) -> None:
             metadata = dict(update.metadata)
-            session_store.install_initial_provider_binding(
-                project_root,
-                allocated_session_id,
-                provider_id=provider_id,
-                surface_id=surface_hint.surface_id,
-                provider_session_ref=update.provider_session_ref.value,
-                metadata=metadata,
-                identity_context_fingerprint=identity_context_fingerprint,
-                execution_context_fingerprint=execution_context_fingerprint,
-                context_id=context_id,
-                agent_definition_id=agent_definition_id,
-                agent_definition_digest=agent_definition_digest,
-                role_ids=role_ids,
-                role_set_digest=role_set_digest,
-                execution_profile_digest=execution_profile_digest,
-                effective_capability_digest=effective_capability_digest,
-            )
+            if not isinstance(resolved_surface_id, str) or not resolved_surface_id.strip():
+                raise AudiaGenticError(
+                    code="CON-AGW-120",
+                    kind="agents",
+                    message="provider binding arrived without a resolved surface identity",
+                    details={"session-id": allocated_session_id},
+                )
+            if prepared_recovery_claim:
+                admitted_provider = session_store.session_provider_id(
+                    session_store.read_session_record(project_root, allocated_session_id)
+                )
+                if admitted_provider and provider_id != admitted_provider:
+                    raise AudiaGenticError(
+                        code="CON-AGW-120",
+                        kind="agents",
+                        message="prepared provider binding conflicts with admission-frozen identity",
+                        details={"session-id": allocated_session_id},
+                    )
+                session_store.assert_prepared_submission_recovery_claim(
+                    project_root,
+                    allocated_session_id,
+                    prepared_recovery_claim["request-id"],
+                    claim_id=prepared_recovery_claim["claim-id"],
+                    dispatch_owner_epoch=prepared_recovery_claim["dispatch-owner-epoch"],
+                    worker_id=prepared_recovery_claim["worker-id"],
+                    attempt_epoch=prepared_recovery_claim["attempt-epoch"],
+                )
+            else:
+                session_store.install_initial_provider_binding(
+                    project_root,
+                    allocated_session_id,
+                    provider_id=provider_id,
+                    surface_id=resolved_surface_id,
+                    provider_session_ref=update.provider_session_ref.value,
+                    metadata=metadata,
+                    identity_context_fingerprint=identity_context_fingerprint,
+                    execution_context_fingerprint=execution_context_fingerprint,
+                    context_id=context_id,
+                    agent_definition_id=agent_definition_id,
+                    agent_definition_digest=agent_definition_digest,
+                    role_ids=role_ids,
+                    role_set_digest=role_set_digest,
+                    execution_profile_digest=execution_profile_digest,
+                    effective_capability_digest=effective_capability_digest,
+                )
             # Provider identity is discovered during the first turn, after
             # the request has entered ``running``. Persist the immutable
             # binding metadata to the canonical session record; the active
@@ -1820,6 +1921,7 @@ class SessionRuntime:
             remove = () if pending else (
                 "recovery-state",
                 "submission-state",
+                "submission-recovery-generation",
                 "unresolved-turn-id",
                 "unresolved-baseline-user-id",
                 "unresolved-baseline-assistant-id",
@@ -1855,22 +1957,40 @@ class SessionRuntime:
                     )
                     prepared_submission_advanced = True
                 else:
-                    session_store.assert_prepared_submission_recovery_claim(
+                    session_store.update_owned_submission_checkpoint(
                         project_root,
                         allocated_session_id,
                         prepared_recovery_claim["request-id"],
-                        **claim_args,
-                    )
-                    session_store.update_provider_metadata(
-                        project_root, allocated_session_id, metadata, remove_keys=remove
+                        metadata,
+                        claim_id=(
+                            prepared_recovery_claim["claim-id"]
+                            if metadata.get("submission-state") == "prepared"
+                            else None
+                        ),
+                        dispatch_owner_epoch=claim_args["dispatch_owner_epoch"],
+                        worker_id=claim_args["worker_id"],
+                        attempt_epoch=claim_args["attempt_epoch"],
+                        remove_keys=remove,
                     )
             else:
-                session_store.update_provider_metadata(
-                    project_root,
-                    allocated_session_id,
-                    metadata,
-                    remove_keys=remove,
-                )
+                if prepared_recovery_claim:
+                    session_store.update_owned_submission_checkpoint(
+                        project_root,
+                        allocated_session_id,
+                        prepared_recovery_claim["request-id"],
+                        metadata,
+                        dispatch_owner_epoch=prepared_recovery_claim["dispatch-owner-epoch"],
+                        worker_id=prepared_recovery_claim["worker-id"],
+                        attempt_epoch=prepared_recovery_claim["attempt-epoch"],
+                        remove_keys=remove,
+                    )
+                else:
+                    session_store.update_provider_metadata(
+                        project_root,
+                        allocated_session_id,
+                        metadata,
+                        remove_keys=remove,
+                    )
 
         # AS28 slice 4a: resolve provider-neutral transport via the public
         # prepare seam. No AcpLaunch / AcpSessionTransport construction here.
@@ -1921,6 +2041,50 @@ class SessionRuntime:
                     and getattr(prepared.surface.validation, "state", "unknown"),
                 },
             )
+        prepared_surface_id = getattr(
+            getattr(getattr(prepared, "surface", None), "ref", None),
+            "surface_id",
+            None,
+        )
+        if not isinstance(prepared_surface_id, str) or not prepared_surface_id.strip():
+            await _close_failed_transport(prepared.transport)
+            raise AudiaGenticError(
+                code="CON-AGW-120",
+                kind="agents",
+                message="provider preparation returned no resolved surface identity",
+                details={"session-id": session_id, "provider-id": provider_id},
+            )
+        if resolved_surface_id and resolved_surface_id != prepared_surface_id:
+            await _close_failed_transport(prepared.transport)
+            raise AudiaGenticError(
+                code="CON-AGW-120",
+                kind="agents",
+                message="provider preparation changed the requested surface identity",
+                details={"session-id": session_id},
+            )
+        resolved_surface_id = prepared_surface_id
+        if prepared_recovery_claim:
+            from audiagentic.components.agents.gateway import profiles as profiles_mod
+            from audiagentic.components.agents.gateway import store as gateway_store
+
+            admitted_request = gateway_store.read_record(
+                project_root, prepared_recovery_claim["request-id"]
+            )
+            admitted_profile = profiles_mod.snapshot_from_record(admitted_request)
+            if (
+                admitted_profile is None
+                or admitted_profile.resolved_surface_id != resolved_surface_id
+            ):
+                await _close_failed_transport(prepared.transport)
+                raise AudiaGenticError(
+                    code="CON-AGW-125",
+                    kind="agents",
+                    message="prepared recovery provider surface differs from admission-frozen identity",
+                    details={
+                        "request-id": prepared_recovery_claim["request-id"],
+                        "session-id": session_id,
+                    },
+                )
         transport = prepared.transport
         set_owner_probe = getattr(transport, "set_durable_owner_probe", None)
         if callable(set_owner_probe):
@@ -2099,8 +2263,9 @@ class SessionRuntime:
                     "correlation-id": correlation_id,
                 },
             )
-            session_store.write_session_record(project_root, record)
-            binding_store.register_open_binding(project_root, record)
+            if not prepared_recovery_claim:
+                session_store.write_session_record(project_root, record)
+                binding_store.register_open_binding(project_root, record)
             logger.info(
                 "gateway open phase bookkeeping complete elapsed-ms=%.1f session-id=%s",
                 (time.monotonic() - bookkeeping_started) * 1000,
@@ -2187,6 +2352,27 @@ class SessionRuntime:
         handle.child_pid = child_pid
         handle.child_creation_identity = child_creation_identity
         handle.adopted_child = getattr(transport, "_adopted_child", None)
+        if prepared_recovery_claim:
+            def _install_prepared_handle(_committed_record: dict[str, Any]) -> None:
+                self._handles[session_id] = handle
+
+            try:
+                record = session_store.commit_prepared_recovery_open(
+                    project_root,
+                    session_id,
+                    prepared_recovery_claim["request-id"],
+                    opened_record,
+                    claim_id=prepared_recovery_claim["claim-id"],
+                    dispatch_owner_epoch=prepared_recovery_claim["dispatch-owner-epoch"],
+                    worker_id=prepared_recovery_claim["worker-id"],
+                    attempt_epoch=prepared_recovery_claim["attempt-epoch"],
+                    expected_surface_id=resolved_surface_id,
+                    on_commit=_install_prepared_handle,
+                )
+            except BaseException:
+                self._observer_ingress.invalidate_all_for_session(session_id)
+                await _close_failed_transport(transport)
+                raise
         self._trace_session_opened(
             handle,
             provider_id=provider_id,
@@ -2258,7 +2444,8 @@ class SessionRuntime:
                 extra={"session-id": session_id},
                 exc_info=True,
             )
-        self._handles[session_id] = handle
+        if not prepared_recovery_claim:
+            self._handles[session_id] = handle
         _publish_session_event(
             SESSION_OPENED_TOPIC,
             {
