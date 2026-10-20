@@ -104,11 +104,15 @@ def _apply_terminal_finalization(
             {str(key): value for key, value in binding.items() if value is not None},
         )
     if finalization.get("clear-unresolved-turn"):
-        session_store.update_provider_metadata(
+        session_store._clear_terminal_submission_checkpoint_locked(
             project_root,
             session_id,
-            {"unresolved-turn-pending": False, "recovery-state": "terminal-captured"},
+            request_id,
+            recovery_state="terminal-captured",
             remove_keys=(
+                "submission-state", "submission-recovery-generation",
+                "unresolved-baseline-user-id", "unresolved-baseline-assistant-id",
+                "unresolved-baseline-user-count", "unresolved-baseline-assistant-count",
                 "unresolved-turn-id", "prompt-message-id", "assistant-message-id",
                 "assistant-before-message-id", "assistant-before-id", "prompt-text-digest",
                 "submission-proven", "terminal-evidence",

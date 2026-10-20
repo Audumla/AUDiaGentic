@@ -273,16 +273,28 @@ def _clear_terminal_predecessor_fence(
         dom_signals = set(details.get("dom-signals") or ())
         if not details.get("failure-response-available") or "completion-control" not in dom_signals:
             return None
-    cleared = dict(metadata)
-    cleared["unresolved-turn-pending"] = False
-    cleared["recovery-state"] = "stale-predecessor-fence-cleared"
-    cleared["stale-predecessor-request-id"] = predecessor_id
-    for key in _UNRESOLVED_CHECKPOINT_KEYS:
-        cleared.pop(key, None)
+    session_store.clear_terminal_submission_checkpoint(
+        project_root,
+        session_id,
+        predecessor_id,
+        recovery_state="stale-predecessor-fence-cleared",
+        remove_keys=(
+            "submission-state",
+            "submission-recovery-generation",
+            "unresolved-baseline-user-id",
+            "unresolved-baseline-assistant-id",
+            "unresolved-baseline-user-count",
+            "unresolved-baseline-assistant-count",
+            *_UNRESOLVED_CHECKPOINT_KEYS,
+        ),
+    )
     session_store.update_provider_metadata(
-        project_root, session_id,
-        {"unresolved-turn-pending": False, "recovery-state": "stale-predecessor-fence-cleared", "stale-predecessor-request-id": predecessor_id},
-        remove_keys=_UNRESOLVED_CHECKPOINT_KEYS,
+        project_root,
+        session_id,
+        {"stale-predecessor-request-id": predecessor_id},
+    )
+    cleared = session_store.session_provider_metadata(
+        session_store.read_session_record(project_root, session_id)
     )
     updated = store.update_owned_running_session(
         project_root, record["request-id"],
@@ -1054,6 +1066,10 @@ def _dispatch_session_request(
                 request_provider_metadata_sink=_relay_provider_metadata,
                 resume_provider_ref=resume_provider_ref,
                 resume_provider_metadata=resume_provider_metadata,
+                request_id=request_id,
+                dispatch_owner_epoch=record["dispatch-owner-epoch"],
+                worker_id=record["worker-id"],
+                attempt_epoch=record["attempt-epoch"],
                 # Request value wins over profile params; 0 disables the bound
                 # (RV513) — use explicit None checks so 0 survives resolution.
                 idle_timeout_seconds=(
@@ -2364,11 +2380,15 @@ def _transition_owned_attempt(
             session_id = str(record["session-id"])
             session_record = sessions_store.read_session_record(project_root, session_id)
             if session_record.get("session-id") == session_id:
-                sessions_store.update_provider_metadata(
+                sessions_store.clear_terminal_submission_checkpoint(
                     project_root,
                     session_id,
-                    {"unresolved-turn-pending": False, "recovery-state": "terminal-completed"},
+                    record["request-id"],
+                    recovery_state="terminal-completed",
                     remove_keys=(
+                        "submission-state", "submission-recovery-generation",
+                        "unresolved-baseline-user-id", "unresolved-baseline-assistant-id",
+                        "unresolved-baseline-user-count", "unresolved-baseline-assistant-count",
                         "unresolved-turn-id", "prompt-message-id", "assistant-message-id",
                         "assistant-before-message-id", "assistant-before-id",
                         "prompt-text-digest", "submission-proven", "terminal-evidence",

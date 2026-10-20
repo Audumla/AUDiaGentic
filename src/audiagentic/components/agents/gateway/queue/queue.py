@@ -1759,48 +1759,6 @@ class GatewayQueueManager:
                             "retry-delay-seconds": 0,
                         }
                     )
-                    if prompt_unavailable_recovery and current.get("session-id"):
-                        # The provider turn was not safely recoverable after
-                        # the bounded observation window. Release only this
-                        # stale session fence so later queued work cannot be
-                        # held behind an owner that no longer exists; the
-                        # interrupted request remains explicitly ambiguous
-                        # and is never replayed automatically.
-                        try:
-                            from audiagentic.components.agents.gateway.session import sessions_store
-
-                            sessions_store.update_provider_metadata(
-                                project_root,
-                                str(current["session-id"]),
-                                {
-                                    "unresolved-turn-pending": False,
-                                    "recovery-state": "bounded-recovery-exhausted",
-                                    "stale-predecessor-request-id": request_id,
-                                },
-                                remove_keys=(
-                                    "unresolved-turn-id",
-                                    "prompt-message-id",
-                                    "assistant-message-id",
-                                    "assistant-before-message-id",
-                                    "assistant-before-id",
-                                    "prompt-text-digest",
-                                    "submission-proven",
-                                    "terminal-evidence",
-                                ),
-                            )
-                            store.record_gateway_timeline(
-                                project_root,
-                                request_id,
-                                "provider.unresolved-fence-cleared",
-                                state="running",
-                                attributes={"reason": "bounded-promptless-recovery-exhausted"},
-                            )
-                        except Exception:  # noqa: BLE001 - terminal request state remains authoritative
-                            logger.warning(
-                                "could not clear exhausted provider fence",
-                                extra={"request-id": request_id, "session-id": current.get("session-id")},
-                                exc_info=True,
-                            )
                     session_fence_state = None
                     if followup_reconciliation and current.get("session-id"):
                         # The provider outcome is still ambiguous after the
@@ -1815,6 +1773,10 @@ class GatewayQueueManager:
                                 project_root,
                                 str(current["session-id"]),
                                 {"recovery-state": session_fence_state},
+                                request_id=request_id,
+                                dispatch_owner_epoch=record["dispatch-owner-epoch"],
+                                worker_id=record["worker-id"],
+                                attempt_epoch=record["attempt-epoch"],
                             )
                         except Exception:  # noqa: BLE001 - terminal request state remains authoritative
                             logger.warning(
@@ -1864,6 +1826,48 @@ class GatewayQueueManager:
                         service_root=service_root,
                     )
                     session_id = current.get("session-id")
+                    if prompt_unavailable_recovery and isinstance(session_id, str) and session_id:
+                        # Only release the session fence after the interrupted
+                        # lifecycle is durable; an ambiguous provider turn is
+                        # never replayed automatically.
+                        try:
+                            from audiagentic.components.agents.gateway.session import sessions_store
+
+                            sessions_store.clear_terminal_submission_checkpoint(
+                                project_root,
+                                session_id,
+                                request_id,
+                                recovery_state="bounded-recovery-exhausted",
+                                remove_keys=(
+                                    "submission-state",
+                                    "submission-recovery-generation",
+                                    "unresolved-baseline-user-id",
+                                    "unresolved-baseline-assistant-id",
+                                    "unresolved-baseline-user-count",
+                                    "unresolved-baseline-assistant-count",
+                                    "unresolved-turn-id",
+                                    "prompt-message-id",
+                                    "assistant-message-id",
+                                    "assistant-before-message-id",
+                                    "assistant-before-id",
+                                    "prompt-text-digest",
+                                    "submission-proven",
+                                    "terminal-evidence",
+                                ),
+                            )
+                            store.record_gateway_timeline(
+                                project_root,
+                                request_id,
+                                "provider.unresolved-fence-cleared",
+                                state="interrupted",
+                                attributes={"reason": "bounded-promptless-recovery-exhausted"},
+                            )
+                        except Exception:  # noqa: BLE001 - request interruption remains authoritative
+                            logger.warning(
+                                "could not clear exhausted provider fence",
+                                extra={"request-id": request_id, "session-id": session_id},
+                                exc_info=True,
+                            )
                     if isinstance(session_id, str) and session_id:
                         try:
                             from audiagentic.components.agents.gateway.session import sessions_store
