@@ -1796,12 +1796,17 @@ async def capture_latest_response(
     provider_id: str,
     locator: ConversationFocusLocator,
     passive: bool = False,
+    timeout_seconds: float = 20.0,
 ) -> dict[str, Any]:
     from audiagentic.components.providers.services.execution.public_execution import (
         capture_latest_response as _capture,
     )
     return await _capture(
-        project_root, provider_id=provider_id, locator=locator, passive=passive
+        project_root,
+        provider_id=provider_id,
+        locator=locator,
+        passive=passive,
+        timeout_seconds=timeout_seconds,
     )
 
 

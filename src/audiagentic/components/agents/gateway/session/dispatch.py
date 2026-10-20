@@ -657,13 +657,21 @@ def _reconcile_before_failed_terminal(
     # This never sends a prompt, never resets the request's activity clock, and
     # never treats synthetic activity as completion evidence.
     retry_delays = (0.0, 0.25, 0.75)
+    deadline = time.monotonic() + 12.0
     for attempt, delay in enumerate(retry_delays, start=1):
+        if time.monotonic() >= deadline:
+            return None
         if delay:
             time.sleep(delay)
         try:
             # Local import avoids the API/dispatch module cycle at import time.
             from audiagentic.components.agents.gateway.api import complete_execution_from_provider
-            result = complete_execution_from_provider(project_root, request_id, passive=True)
+            result = complete_execution_from_provider(
+                project_root,
+                request_id,
+                passive=True,
+                capture_timeout_seconds=3.0,
+            )
             store.record_gateway_timeline(
                 project_root,
                 request_id,
@@ -2368,5 +2376,4 @@ def _transition_owned_attempt(
     except Exception:  # noqa: BLE001 - journal is advisory
         logger.debug("terminal diagnostic journal append failed", extra={"request-id": record["request-id"]}, exc_info=True)
     return updated
-
 

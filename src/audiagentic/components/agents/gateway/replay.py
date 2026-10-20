@@ -71,10 +71,20 @@ def recovery_claim_state(
     if current is None:
         return None
     current["created-at"] = current["intent"].get("created-at")
-    current["valid"] = _parse_recovery_time(current.get("created-at")) is not None and _parse_recovery_time(current.get("lease-expires-at")) is not None
-    if now is not None and current["valid"]:
-        expires = _parse_recovery_time(current["lease-expires-at"])
-        current["active"] = bool(expires and expires > now)
+    reference = now or datetime.now(timezone.utc)
+    created = _parse_recovery_time(current.get("created-at"))
+    expires = _parse_recovery_time(current.get("lease-expires-at"))
+    current["valid"] = bool(
+        created
+        and expires
+        and created <= reference + timedelta(seconds=_RECOVERY_CLOCK_SKEW_SECONDS)
+        and expires >= created
+        and expires <= created + timedelta(
+            seconds=RECOVERY_CLAIM_LEASE_SECONDS + _RECOVERY_CLOCK_SKEW_SECONDS
+        )
+    )
+    current["invalid-reason"] = None if current["valid"] else "invalid-claim-timestamps"
+    current["active"] = bool(current["valid"] and expires and expires > reference)
     return current
 
 

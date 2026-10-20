@@ -1196,7 +1196,7 @@ def test_closed_by_non_shutdown_reason_still_raises_res_agw_003(rig):
 def test_preterminal_reconciliation_uses_passive_capture_for_proven_gpt_turn(monkeypatch, tmp_path):
     calls = []
 
-    def capture(root, request_id, *, passive=False):
+    def capture(root, request_id, *, passive=False, **kwargs):
         calls.append((root, request_id, passive))
         return {"request-id": request_id, "state": "completed"}
 
@@ -1226,7 +1226,7 @@ def test_preterminal_reconciliation_does_not_capture_ambiguous_without_submissio
 def test_preterminal_reconciliation_retries_transient_terminal_capture(monkeypatch, tmp_path):
     calls = []
 
-    def capture(root, request_id, *, passive=False):
+    def capture(root, request_id, *, passive=False, **kwargs):
         calls.append((root, request_id, passive))
         if len(calls) < 2:
             raise AudiaGenticError(
