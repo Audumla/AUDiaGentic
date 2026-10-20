@@ -66,6 +66,15 @@ def test_transport_timing_completion_diagnostics_reach_journal_and_public_eviden
             "diagnostic-details": json.dumps({
                 "completion-gates": {"completion-satisfied": True, "terminal-witness-present": True},
                 "completion-matched": ["assistant-bound", "stable-output"],
+                "terminal-node-unmounted": True,
+                "terminal-node-rematerialization-attempted": True,
+                "turn-anchor-ref-count": 1,
+                "turn-anchor-ref-sequence": 4,
+                "refs-after-anchor-user-count": 0,
+                "refs-after-anchor-assistant-count": 2,
+                "latest-user-matches-turn-anchor": True,
+                "latest-assistant-matches-terminal-witness": True,
+                "assistant-id-changed-from-bound": True,
             }),
         },
     )
@@ -74,6 +83,11 @@ def test_transport_timing_completion_diagnostics_reach_journal_and_public_eviden
     diagnostic = item["facts"]["diagnostic-facts"]
     assert diagnostic["completion-gates"]["completion-satisfied"] is True
     assert diagnostic["completion-matched"] == ["assistant-bound", "stable-output"]
+    assert diagnostic["terminal-node-unmounted"] is True
+    assert diagnostic["terminal-node-rematerialization-attempted"] is True
+    assert diagnostic["turn-anchor-ref-count"] == 1
+    assert diagnostic["refs-after-anchor-assistant-count"] == 2
+    assert diagnostic["assistant-id-changed-from-bound"] is True
     public = project_public_gateway_evidence({"observations": {"items": [item]}})
     assert public["observations"]["items"][0]["facts"]["diagnostic-facts"]["completion-matched"] == [
         "assistant-bound", "stable-output"

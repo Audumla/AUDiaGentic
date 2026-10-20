@@ -1775,6 +1775,21 @@ def complete_execution_from_provider(
                 raise AudiaGenticError(code="CON-AGW-157", kind="agents", message="request prompt submission is not proven", details={"request-id": request_id})
             raise
         session_metadata = session_store.session_provider_metadata(session_record)
+        session_turn_id = session_metadata.get("unresolved-turn-id")
+        if isinstance(session_turn_id, str) and session_turn_id != request_id:
+            # Session checkpoint identity is authoritative even when the
+            # request record contains a stale or conflicting claim for itself.
+            # Do not let merged request evidence override the current owner of
+            # the provider conversation.
+            raise AudiaGenticError(
+                code="CON-AGW-156",
+                kind="agents",
+                message="provider session turn belongs to a different request",
+                details={
+                    "request-id": request_id,
+                    "failure-reason": "foreign-session-turn",
+                },
+            )
         locator_metadata = {**session_metadata, **metadata}
         effective_metadata = resolve_effective_turn_evidence(record, session_metadata)
         provider_id = provider_id or session_store.session_provider_id(session_record)

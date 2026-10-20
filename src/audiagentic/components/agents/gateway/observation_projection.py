@@ -44,6 +44,13 @@ _DIAGNOSTIC_GATE_KEYS = frozenset({
     "terminal-witness-is-latest", "terminal-witness-is-response", "prompt-ref-present",
     "response-ref-present", "response-ref-is-latest", "response-ref-is-bound",
     "raw-same-bound-conversation", "raw-matches-provider-session", "prompt-unmounted",
+    "terminal-node-unmounted", "terminal-node-rematerialization-attempted",
+    "latest-user-matches-turn-anchor", "latest-assistant-matches-terminal-witness",
+    "assistant-id-changed-from-bound",
+})
+_DIAGNOSTIC_COUNT_KEYS = frozenset({
+    "turn-anchor-ref-count", "turn-anchor-ref-sequence", "refs-after-anchor-user-count",
+    "refs-after-anchor-assistant-count",
 })
 _CORRELATION_KEYS = frozenset({
     "page-handle-digest", "raw-url-digest", "baseline-url-digest", "bound-url-digest",
@@ -100,6 +107,10 @@ def project_transport_observation(observation: Any) -> dict[str, Any]:
         value = facts.get(key)
         if isinstance(value, bool):
             diagnostic[key] = value
+    for key in _DIAGNOSTIC_COUNT_KEYS:
+        value = facts.get(key)
+        if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+            diagnostic[key] = value
     completion_gates = facts.get("completion-gates")
     if isinstance(completion_gates, Mapping):
         diagnostic["completion-gates"] = {
@@ -130,7 +141,18 @@ def project_transport_observation(observation: Any) -> dict[str, Any]:
         if (value := _bounded_text(attributes.get(key) or facts.get(key))):
             error_occurrence[key.replace("_", "-")] = value
     decision: dict[str, Any] = {}
-    for key in ("completion-satisfied", "not-generating", "composer-editable", "raw-same-bound-conversation", "raw-matches-provider-session"):
+    for key in (
+        "completion-satisfied",
+        "not-generating",
+        "composer-editable",
+        "raw-same-bound-conversation",
+        "raw-matches-provider-session",
+        "terminal-node-unmounted",
+        "terminal-node-rematerialization-attempted",
+        "latest-user-matches-turn-anchor",
+        "latest-assistant-matches-terminal-witness",
+        "assistant-id-changed-from-bound",
+    ):
         if key in diagnostic:
             decision[key] = diagnostic[key]
     for key in ("timing-event", "diagnostic-signature"):
