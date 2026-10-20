@@ -1,6 +1,8 @@
 """Client-scoped default selection must not overwrite explicit chat choices."""
 from unittest.mock import patch
 
+import pytest
+
 from audiagentic.components.agents.gateway.session import client_defaults as defaults
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
@@ -151,6 +153,25 @@ def test_terminal_default_session_is_not_reused_and_retains_chat(tmp_path):
             assert chosen.session_id is None
             assert chosen.provider_chat_url == url
             assert chosen.warnings[0]["code"] == "RES-AGW-003"
+
+
+@pytest.mark.parametrize("state", ["failed", "closed", "expired", "unknown"])
+def test_only_terminal_default_states_are_replaced(tmp_path, state):
+    url = "https://chatgpt.com/g/g-p-example/c/conversation"
+    with selection(tmp_path, provider_chat_url=url) as chosen:
+        chosen.commit({"session-id": "ses_state"})
+    session = {
+        "session-id": "ses_state",
+        "state": state,
+        "provider-metadata": {"chat-url": url},
+    }
+    with patch(
+        "audiagentic.components.agents.gateway.session.sessions_store.read_session_record",
+        return_value=session,
+    ):
+        with selection(tmp_path) as chosen:
+            assert chosen.session_id is None
+            assert chosen.provider_chat_url == url
 
 
 def test_first_explicit_new_session_establishes_default(tmp_path):
