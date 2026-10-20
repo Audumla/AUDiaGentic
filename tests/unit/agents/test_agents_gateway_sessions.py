@@ -1909,6 +1909,18 @@ def test_successor_claim_fences_stale_prepared_binding_checkpoint_and_open_commi
             worker_id="worker-b",
             attempt_epoch=2,
         )
+    with pytest.raises(AudiaGenticError, match="cannot be removed before dispatch"):
+        session_store.update_owned_submission_checkpoint(
+            tmp_path,
+            session_id,
+            request_id,
+            {},
+            claim_id=claim_b["claim-id"],
+            dispatch_owner_epoch="owner-b",
+            worker_id="worker-b",
+            attempt_epoch=2,
+            remove_keys=("submission-state", "unresolved-turn-id"),
+        )
 
     with pytest.raises(AudiaGenticError, match="lost its request owner fence"):
         session_store.update_prepared_submission_checkpoint(
