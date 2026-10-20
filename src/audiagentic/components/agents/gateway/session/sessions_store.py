@@ -596,7 +596,79 @@ def update_owned_submission_checkpoint(
         with _ordered_session_mutation_lock(project_root, session_id):
             record = read_session_record(project_root, session_id)
             metadata = session_provider_metadata(record)
-            if metadata.get("submission-state") == "prepared":
+            current_stage = metadata.get("submission-state")
+            fresh_prepared_checkpoint = (
+                current_stage is None
+                and metadata.get("unresolved-turn-pending") is not True
+                and not _RECOVERY_IDENTITY_KEYS.intersection(metadata)
+                and not {
+                    "submission-proven",
+                    "submission-recovery-claim",
+                    "submission-recovery-generation",
+                    "terminal-evidence",
+                }.intersection(metadata)
+                and metadata_update.get("submission-state") == "prepared"
+                and metadata_update.get("unresolved-turn-pending") is True
+                and metadata_update.get("unresolved-turn-id") == request_id
+                and metadata_update.get("submission-proven") is False
+                and claim_id is None
+            )
+            fresh_prepared_dispatch = (
+                current_stage == "prepared"
+                and claim_id is None
+                and metadata.get("submission-recovery-claim") is None
+                and metadata.get("submission-recovery-generation") is None
+            )
+            if fresh_prepared_checkpoint:
+                # The first turn on a newly admitted session has no prior
+                # checkpoint (and therefore no recovery claim). The durable
+                # request owner is the authority for this one-way initialization.
+                _assert_request_dispatch_owner(
+                    project_root,
+                    request_id,
+                    session_id,
+                    dispatch_owner_epoch=dispatch_owner_epoch,
+                    worker_id=worker_id,
+                    attempt_epoch=attempt_epoch,
+                )
+                if _RECOVERY_CHECKPOINT_KEYS.intersection(remove_keys):
+                    raise AudiaGenticError(
+                        code="CON-AGW-125",
+                        kind="agents",
+                        message="initial prepared checkpoint cannot remove recovery evidence",
+                        details={"request-id": request_id, "session-id": session_id},
+                    )
+            elif fresh_prepared_dispatch:
+                # The normal first-turn dispatch advances its just-written
+                # prepared checkpoint without a recovery claim. Claims are
+                # mandatory for a recovered prepared checkpoint; their durable
+                # generation distinguishes that case from fresh dispatch.
+                _assert_request_dispatch_owner(
+                    project_root,
+                    request_id,
+                    session_id,
+                    dispatch_owner_epoch=dispatch_owner_epoch,
+                    worker_id=worker_id,
+                    attempt_epoch=attempt_epoch,
+                )
+                if (
+                    metadata.get("submission-recovery-claim") is not None
+                    or metadata.get("submission-recovery-generation") is not None
+                    or metadata.get("unresolved-turn-pending") is not True
+                    or metadata.get("unresolved-turn-id") != request_id
+                    or metadata.get("submission-proven") is not False
+                    or metadata_update.get("submission-state") != "dispatching"
+                    or metadata_update.get("unresolved-turn-pending") is not True
+                    or metadata_update.get("unresolved-turn-id") != request_id
+                    or metadata_update.get("submission-proven") is True
+                ):
+                    raise AudiaGenticError(
+                        code="CON-AGW-125",
+                        kind="agents",
+                        message="fresh prepared checkpoint cannot advance without its request owner",
+                        details={"request-id": request_id, "session-id": session_id},
+                    )
+            elif current_stage == "prepared":
                 if not isinstance(claim_id, str) or not claim_id:
                     raise AudiaGenticError(
                         code="CON-AGW-125",
@@ -622,7 +694,6 @@ def update_owned_submission_checkpoint(
                     worker_id=worker_id,
                     attempt_epoch=attempt_epoch,
                 )
-                current_stage = metadata.get("submission-state")
                 if not (
                     metadata.get("unresolved-turn-pending") is True
                     and metadata.get("unresolved-turn-id") == request_id
@@ -639,7 +710,7 @@ def update_owned_submission_checkpoint(
                 metadata_update["submission-state"] != "dispatching"
                 or metadata.get("submission-state")
                 not in {None, "dispatching"}
-            ):
+            ) and not fresh_prepared_checkpoint and not fresh_prepared_dispatch:
                 raise AudiaGenticError(
                     code="CON-AGW-125",
                     kind="agents",
