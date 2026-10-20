@@ -574,6 +574,16 @@ def update_owned_submission_checkpoint(
                     message="prepared checkpoint cannot be completed before dispatch",
                     details={"request-id": request_id, "session-id": session_id},
                 )
+            if metadata_update.get("unresolved-turn-pending") is False and not (
+                metadata.get("submission-proven") is True
+                or metadata_update.get("submission-proven") is True
+            ):
+                raise AudiaGenticError(
+                    code="CON-AGW-125",
+                    kind="agents",
+                    message="recovery checkpoint cannot clear an unproven turn",
+                    details={"request-id": request_id, "session-id": session_id},
+                )
             if (
                 metadata.get("submission-proven") is True
                 and metadata_update.get("submission-proven") is False
@@ -594,6 +604,43 @@ def update_owned_submission_checkpoint(
                         code="CON-AGW-125",
                         kind="agents",
                         message="owned checkpoint update cannot replace frozen turn identity",
+                        details={"request-id": request_id, "session-id": session_id},
+                    )
+            protected_removals = _RECOVERY_CHECKPOINT_KEYS.intersection(remove_keys)
+            if metadata.get("submission-state") == "prepared" and protected_removals:
+                raise AudiaGenticError(
+                    code="CON-AGW-125",
+                    kind="agents",
+                    message="prepared recovery evidence cannot be removed before dispatch",
+                    details={"request-id": request_id, "session-id": session_id},
+                )
+            if protected_removals:
+                terminal_removals = {
+                    "recovery-state",
+                    "submission-state",
+                    "submission-recovery-generation",
+                    "unresolved-turn-id",
+                    "unresolved-baseline-user-id",
+                    "unresolved-baseline-assistant-id",
+                    "unresolved-baseline-user-count",
+                    "unresolved-baseline-assistant-count",
+                    "prompt-text-digest",
+                }
+                terminal_cleanup = (
+                    metadata.get("submission-state") == "dispatching"
+                    and metadata_update.get("unresolved-turn-pending") is False
+                    and (
+                        metadata.get("submission-proven") is True
+                        or metadata_update.get("submission-proven") is True
+                    )
+                )
+                if not terminal_cleanup or not protected_removals.issubset(
+                    terminal_removals
+                ):
+                    raise AudiaGenticError(
+                        code="CON-AGW-125",
+                        kind="agents",
+                        message="recovery evidence removal requires proven terminal cleanup",
                         details={"request-id": request_id, "session-id": session_id},
                     )
             metadata.update(metadata_update)
