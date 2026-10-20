@@ -1705,11 +1705,20 @@ def update_owned_running_session(
                 "gateway request is not an active session attempt",
                 {"request-id": request_id, "state": record["state"]},
             )
+        current_metadata = record.get("provider-metadata")
+        current_metadata = current_metadata if isinstance(current_metadata, dict) else {}
+        metadata_unchanged = provider_metadata is None or dict(provider_metadata) == current_metadata
+        current_warnings = record.get("warnings")
+        current_warnings = current_warnings if isinstance(current_warnings, list) else []
+        warnings_unchanged = warnings is None or list(warnings)[-3:] == current_warnings
+        updates_unchanged = not result_updates or all(
+            record.get(key) == value for key, value in result_updates.items()
+        )
         if (
             record.get("session-id") == session_id
-            and provider_metadata is None
-            and warnings is None
-            and not result_updates
+            and metadata_unchanged
+            and warnings_unchanged
+            and updates_unchanged
         ):
             return record
         updated = dict(record)

@@ -3691,8 +3691,19 @@ def _scope_response_snapshot(
         proven_submission_terminal_assistant = (
             allow_proven_submission_virtualized_assistant
             and fresh_assistant
-            and len(fresh_assistant_ids) == 1
             and _is_durable_assistant_message_id(snapshot.latest_assistant_id)
+            and not snapshot.generating
+            # A project renderer can leave multiple assistant/tool bubbles in
+            # the mounted response slot after it evicts the user bubble.  The
+            # terminal witness is still unique: it must belong to the latest
+            # durable assistant, and every mounted assistant must be durable.
+            # Do not use this when the provider still reports generation or a
+            # pinned identity has changed; those remain unresolved/recoverable
+            # rather than being silently completed.
+            and all(
+                _is_durable_assistant_message_id(ref.message_id)
+                for ref in assistant_refs
+            )
             and bool(
                 _REMOUNT_TERMINAL_WITNESS_SIGNALS <= snapshot.dom_signals
             )

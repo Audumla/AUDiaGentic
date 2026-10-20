@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 import hashlib
+import time
 from pathlib import Path
 from typing import Any
 
@@ -650,19 +651,42 @@ def _reconcile_before_failed_terminal(
         or metadata.get("unresolved-turn-pending") is True
     ):
         return None
-    try:
-        # Local import avoids the API/dispatch module cycle at import time.
-        from audiagentic.components.agents.gateway.api import complete_execution_from_provider
-        return complete_execution_from_provider(project_root, request_id, passive=True)
-    except AudiaGenticError as exc:
-        store.record_gateway_timeline(
-            project_root,
-            request_id,
-            "provider.reconciliation-before-failure",
-            state="running",
-            attributes={"outcome": "unresolved", "error-code": exc.code},
-        )
-        return None
+    # A provider-boundary failure can be raised on the same renderer tick that
+    # ChatGPT mounts the terminal response.  Give the existing observation-only
+    # capture path a short, bounded settling window before committing failure.
+    # This never sends a prompt, never resets the request's activity clock, and
+    # never treats synthetic activity as completion evidence.
+    retry_delays = (0.0, 0.25, 0.75)
+    for attempt, delay in enumerate(retry_delays, start=1):
+        if delay:
+            time.sleep(delay)
+        try:
+            # Local import avoids the API/dispatch module cycle at import time.
+            from audiagentic.components.agents.gateway.api import complete_execution_from_provider
+            result = complete_execution_from_provider(project_root, request_id, passive=True)
+            store.record_gateway_timeline(
+                project_root,
+                request_id,
+                "provider.reconciliation-before-failure",
+                state="running",
+                attributes={"outcome": "captured", "attempt": attempt},
+            )
+            return result
+        except AudiaGenticError as exc:
+            store.record_gateway_timeline(
+                project_root,
+                request_id,
+                "provider.reconciliation-before-failure",
+                state="running",
+                attributes={
+                    "outcome": "unresolved",
+                    "attempt": attempt,
+                    "error-code": exc.code,
+                },
+            )
+            if attempt == len(retry_delays):
+                return None
+    return None
 
 def _build_surface_hint(profile: dict[str, Any]) -> Any:
     """Build the surface hint from the resolved execution profile.
@@ -2344,6 +2368,5 @@ def _transition_owned_attempt(
     except Exception:  # noqa: BLE001 - journal is advisory
         logger.debug("terminal diagnostic journal append failed", extra={"request-id": record["request-id"]}, exc_info=True)
     return updated
-
 
 
