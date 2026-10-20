@@ -656,6 +656,7 @@ class SessionRuntime:
         locator: ConversationFocusLocator,
         timeout_seconds: float = 20.0,
         passive: bool = False,
+        deadline_monotonic: float | None = None,
     ) -> dict[str, Any]:
         """Read the current response from the request-owned provider tab."""
         return self._call(
@@ -665,6 +666,7 @@ class SessionRuntime:
                 locator=locator,
                 passive=passive,
                 timeout_seconds=timeout_seconds,
+                deadline_monotonic=deadline_monotonic,
             ),
             timeout=timeout_seconds,
         )
