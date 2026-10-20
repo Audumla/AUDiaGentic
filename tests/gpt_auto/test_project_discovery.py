@@ -111,6 +111,9 @@ def test_session_transport_uses_admitted_project_name(monkeypatch, tmp_path: Pat
         def __init__(self, **kwargs):
             captured.update(kwargs)
 
+        def set_page_mutation_owner_probe(self, _probe):
+            return None
+
     monkeypatch.setattr(session_transport, "PersistentChat", FakeChat)
     monkeypatch.setattr(session_transport, "get_runtime", lambda *_args: object())
 
@@ -133,6 +136,9 @@ def test_session_transport_uses_provider_project_name_for_pinned_profile(
     class FakeChat:
         def __init__(self, **kwargs):
             captured.update(kwargs)
+
+        def set_page_mutation_owner_probe(self, _probe):
+            return None
 
     monkeypatch.setattr(session_transport, "PersistentChat", FakeChat)
     monkeypatch.setattr(session_transport, "get_runtime", lambda *_args: object())

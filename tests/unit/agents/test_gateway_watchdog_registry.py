@@ -334,6 +334,87 @@ def test_host_watchdog_passively_probes_unresolved_turn_without_diagnostics(
     assert captured == [{"passive": True}]
 
 
+def test_host_watchdog_skips_capture_when_session_has_foreign_unresolved_turn(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """A waiting request must not complete from its predecessor's provider DOM."""
+    from audiagentic.components.agents.gateway.service.host import GatewayServiceHost
+
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    request_id = "req-waiting"
+    predecessor_id = "req-predecessor"
+    diagnosed = {
+        "request-id": request_id,
+        "state": "running",
+        "session-id": "ses-shared",
+        "revision": 7,
+        "watchdog-state": "active",
+        "diagnostics": None,
+    }
+
+    class Registry:
+        def snapshot(self):
+            return ((project_root.resolve(), dict(diagnosed)),)
+
+        def update(self, _root, _record):
+            return None
+
+        def unregister(self, *_args):
+            raise AssertionError("a waiting request must remain registered")
+
+    captures: list[str] = []
+    timeline: list[tuple[str, dict]] = []
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.queue.watchdog_registry.watchdog_registry",
+        lambda: Registry(),
+    )
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.queue.dispatch.diagnose_activity_lease",
+        lambda _root, _record: dict(diagnosed),
+    )
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.session.sessions.peek_session_runtime",
+        lambda: None,
+    )
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.session.sessions_store.read_session_record",
+        lambda *_args: {"session-id": "ses-shared", "provider": {"metadata": {}}},
+    )
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.session.sessions_store.session_provider_metadata",
+        lambda _session: {
+            "unresolved-turn-pending": True,
+            "unresolved-turn-id": predecessor_id,
+        },
+    )
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.api.complete_execution_from_provider",
+        lambda *_args, **_kwargs: captures.append(request_id),
+    )
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.store.record_gateway_timeline",
+        lambda _root, _request_id, event, **kwargs: timeline.append((event, kwargs)),
+    )
+
+    result = GatewayServiceHost.run_watchdog_pass(object.__new__(GatewayServiceHost))
+
+    assert captures == []
+    assert result == (diagnosed,)
+    assert timeline == [
+        (
+            "provider.capture-skipped",
+            {
+                "state": "running",
+                "attributes": {
+                    "reason": "foreign-unresolved-turn",
+                    "provider-turn-id": predecessor_id,
+                },
+            },
+        )
+    ]
+
+
 def test_host_watchdog_stops_reopen_after_uncorrelated_provider_terminal(
     tmp_path: Path, monkeypatch
 ) -> None:

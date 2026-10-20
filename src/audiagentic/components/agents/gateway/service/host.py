@@ -506,32 +506,66 @@ class GatewayServiceHost:
                 registry.update(project_root, updated)
                 diagnostics = updated.get("diagnostics")
                 provider_turn_pending = False
+                provider_turn_id: str | None = None
                 runtime_owns_turn = False
                 session_id = updated.get("session-id")
                 if isinstance(session_id, str) and session_id:
                     try:
                         session_record = sessions_store.read_session_record(project_root, session_id)
+                        session_metadata = sessions_store.session_provider_metadata(
+                            session_record
+                        )
+                        candidate_turn_id = session_metadata.get("unresolved-turn-id")
+                        provider_turn_id = (
+                            candidate_turn_id
+                            if isinstance(candidate_turn_id, str)
+                            else None
+                        )
                         provider_turn_pending = (
-                            sessions_store.session_provider_metadata(session_record).get(
-                                "unresolved-turn-pending"
-                            )
-                            is True
+                            session_metadata.get("unresolved-turn-pending") is True
+                            and provider_turn_id in (None, updated.get("request-id"))
                         )
                     except Exception:  # noqa: BLE001 - durable request state remains authoritative
                         provider_turn_pending = False
-                    if provider_turn_pending and runtime is not None:
-                        try:
-                            runtime_status = runtime.session_runtime_status(session_id)
-                            runtime_owns_turn = bool(
-                                runtime_status.get("available")
-                                and (
-                                    runtime_status.get("turn-active") is True
-                                    or runtime_status.get("current-request-id")
-                                    == updated.get("request-id")
-                                )
+                if (
+                    provider_turn_id is not None
+                    and provider_turn_id != updated.get("request-id")
+                    and updated.get("state") == "running"
+                ):
+                    # The provider session can still hold a predecessor's
+                    # unresolved-turn marker while this request waits in the
+                    # same conversation. Do not use that predecessor's latest
+                    # DOM response to terminalize the waiting request.
+                    try:
+                        store.record_gateway_timeline(
+                            project_root,
+                            updated["request-id"],
+                            "provider.capture-skipped",
+                            state="running",
+                            attributes={
+                                "reason": "foreign-unresolved-turn",
+                                "provider-turn-id": provider_turn_id,
+                            },
+                        )
+                    except Exception:  # noqa: BLE001 - the skip remains fail-closed
+                        logger.debug(
+                            "could not record foreign-turn capture skip",
+                            extra={"request-id": updated.get("request-id")},
+                            exc_info=True,
+                        )
+                if provider_turn_pending and runtime is not None:
+                    try:
+                        runtime_status = runtime.session_runtime_status(session_id)
+                        runtime_owns_turn = bool(
+                            runtime_status.get("available")
+                            and (
+                                runtime_status.get("turn-active") is True
+                                or runtime_status.get("current-request-id")
+                                == updated.get("request-id")
                             )
-                        except Exception:  # noqa: BLE001 - capture remains an advisory fallback
-                            runtime_owns_turn = False
+                        )
+                    except Exception:  # noqa: BLE001 - capture remains an advisory fallback
+                        runtime_owns_turn = False
                 if (
                     updated.get("state") == "running"
                     and isinstance(updated.get("session-id"), str)
