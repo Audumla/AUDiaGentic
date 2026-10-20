@@ -1797,6 +1797,7 @@ async def capture_latest_response(
     locator: ConversationFocusLocator,
     passive: bool = False,
     timeout_seconds: float = 20.0,
+    deadline_monotonic: float | None = None,
 ) -> dict[str, Any]:
     from audiagentic.components.providers.services.execution.public_execution import (
         capture_latest_response as _capture,
@@ -1807,6 +1808,7 @@ async def capture_latest_response(
         locator=locator,
         passive=passive,
         timeout_seconds=timeout_seconds,
+        deadline_monotonic=deadline_monotonic,
     )
 
 

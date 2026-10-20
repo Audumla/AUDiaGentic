@@ -85,6 +85,7 @@ async def capture_latest_response(
     locator: ConversationFocusLocator,
     passive: bool = False,
     timeout_seconds: float = 20.0,
+    deadline_monotonic: float | None = None,
 ) -> dict[str, Any]:
     """Read-only provider capability for operator response recovery."""
     from .execution import load_conversation_capture_capability
@@ -95,7 +96,12 @@ async def capture_latest_response(
     value = hook(project_root, provider_id=provider_id, locator=locator, passive=passive)
     if inspect.isawaitable(value):
         try:
-            value = await asyncio.wait_for(value, timeout=max(0.1, float(timeout_seconds)))
+            timeout = max(0.1, float(timeout_seconds))
+            if deadline_monotonic is not None:
+                timeout = min(timeout, deadline_monotonic - asyncio.get_running_loop().time())
+                if timeout <= 0:
+                    return {"outcome": "unavailable", "reason": "provider-capture-timeout"}
+            value = await asyncio.wait_for(value, timeout=timeout)
         except asyncio.TimeoutError:
             return {"outcome": "unavailable", "reason": "provider-capture-timeout"}
     return value if isinstance(value, dict) else {"outcome": "unavailable", "reason": "invalid-provider-capability-result"}
