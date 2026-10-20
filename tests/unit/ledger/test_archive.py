@@ -35,6 +35,35 @@ def test_archive_rejects_conflicting_historical_identity(tmp_path: Path) -> None
         _archive_current_ledger_locked(tmp_path, "rel_conflict")
 
 
+def test_archive_skips_identical_events_already_released(tmp_path: Path) -> None:
+    releases = tmp_path / "docs" / "releases"
+    releases.mkdir(parents=True)
+    prior = {**_event("same content"), "status": "released", "release-id": "v0.2.1"}
+    current_duplicate = {**_event("same content"), "status": "unreleased"}
+    current_new = {**_event("new content"), "event-id": "chg_new"}
+    (releases / "LEDGER.ndjson").write_text(json.dumps(prior) + "\n", encoding="utf-8")
+    (releases / "CURRENT_RELEASE_LEDGER.ndjson").write_text(
+        "\n".join(json.dumps(event) for event in (current_duplicate, current_new)) + "\n",
+        encoding="utf-8",
+    )
+
+    result = _archive_current_ledger_locked(tmp_path, "v0.3.0")
+
+    archived = [
+        json.loads(line)
+        for line in (releases / "LEDGER.ndjson").read_text(encoding="utf-8").splitlines()
+    ]
+    prior_releases = {
+        event["release-id"] for event in archived if event["event-id"] == "chg_same"
+    }
+    new_releases = {
+        event["release-id"] for event in archived if event["event-id"] == "chg_new"
+    }
+    assert result["archived-events"] == 1
+    assert prior_releases == {"v0.2.1"}
+    assert new_releases == {"v0.3.0"}
+
+
 def test_archive_is_idempotent_for_same_release(tmp_path: Path) -> None:
     releases = tmp_path / "docs" / "releases"
     releases.mkdir(parents=True)
@@ -51,6 +80,40 @@ def test_archive_is_idempotent_for_same_release(tmp_path: Path) -> None:
 
     assert first["archived-events"] == second["archived-events"] == 1
     assert len((releases / "LEDGER.ndjson").read_text(encoding="utf-8").splitlines()) == 1
+
+
+def test_archive_preserves_legacy_event_ids_with_safe_punctuation(tmp_path: Path) -> None:
+    releases = tmp_path / "docs" / "releases"
+    releases.mkdir(parents=True)
+    legacy_ids = (
+        "chg_20260620_071526_each-ai-provider's-capabilitie_3588",
+        "chg_20260620_081436_provider-surface-files-(claude_2732",
+        "chg_20260621_012028_lifecycle-unit,-release-integr_2351",
+    )
+    historical_events = [
+        {
+            **_event(f"historical event {index}"),
+            "event-id": event_id,
+            "status": "released",
+            "release-id": "rel_previous",
+        }
+        for index, event_id in enumerate(legacy_ids)
+    ]
+    (releases / "LEDGER.ndjson").write_text(
+        "".join(json.dumps(event) + "\n" for event in historical_events), encoding="utf-8"
+    )
+    current = {**_event("new event"), "event-id": "chg_new"}
+    (releases / "CURRENT_RELEASE_LEDGER.ndjson").write_text(
+        json.dumps(current) + "\n", encoding="utf-8"
+    )
+
+    _archive_current_ledger_locked(tmp_path, "rel_next")
+
+    archived = [
+        json.loads(line)
+        for line in (releases / "LEDGER.ndjson").read_text(encoding="utf-8").splitlines()
+    ]
+    assert set(legacy_ids) <= {event["event-id"] for event in archived}
 
 
 def test_release_retry_does_not_claim_next_release_events(tmp_path: Path) -> None:

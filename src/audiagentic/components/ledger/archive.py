@@ -120,11 +120,53 @@ def _archive_current_ledger_locked(project_root: Path, release_id: str) -> dict[
             details={"release-id": release_id},
         )
 
+    historical_path = historical_ledger_path(project_root)
+    historical = load_persisted_events(historical_path, role="historical")
+    historical_by_id = {event["event-id"]: event for event in historical}
+    already_archived: set[str] = set()
+    pending_events: list[dict[str, Any]] = []
+    for event in events:
+        prior = historical_by_id.get(event["event-id"])
+        if prior is None:
+            pending_events.append(event)
+            continue
+        if _archive_identity(prior) != _archive_identity(event):
+            raise AudiaGenticError(
+                code="CON-ARCHIVE-003",
+                kind="release",
+                message="current ledger has conflicting content for an archived event identity",
+                details={"event-id": event["event-id"]},
+            )
+        already_archived.add(event["event-id"])
+
+    events = pending_events
+    if not events:
+        if already_archived and all(
+            historical_by_id[event_id].get("release-id") == release_id
+            for event_id in already_archived
+        ):
+            atomic_write_text(current_path, "[]\n")
+            purged = _purge_fragments(project_root, already_archived)
+            return {
+                "release-id": release_id,
+                "archived-events": len(already_archived),
+                "purged-fragments": purged,
+                "historical-ledger": str(historical_path),
+                "released-event-ids": sorted(already_archived),
+                "idempotent-retry": True,
+                "recovered-current": True,
+            }
+        raise AudiaGenticError(
+            code="CON-ARCHIVE-001",
+            kind="release",
+            message="current ledger contains no new events to archive",
+            details={"release-id": release_id},
+        )
+
     # Mark all current events as released before archiving
     released_events = [{**e, "status": "released", "release-id": release_id} for e in events]
     released_ids = {e["event-id"] for e in released_events}
 
-    historical = load_persisted_events(historical_path, role="historical")
     merged = _merge_historical_events(historical, released_events)
 
     atomic_write_ndjson(historical_path, merged)
@@ -132,7 +174,7 @@ def _archive_current_ledger_locked(project_root: Path, release_id: str) -> dict[
     # NDJSON loader and avoids needless format churn in release commits.
     atomic_write_text(current_path, "[]\n")
     atomic_write_text(releases_dir(project_root) / "CURRENT_RELEASE.md", "# Current Release\n\n## Changes\n\n")
-    purged = _purge_fragments(project_root, released_ids)
+    purged = _purge_fragments(project_root, released_ids | already_archived)
 
     return {
         "release-id": release_id,
