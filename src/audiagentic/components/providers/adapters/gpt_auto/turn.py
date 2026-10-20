@@ -1793,6 +1793,7 @@ class GptAutoTurn:
                 observed_url is None
                 or not bound_url
                 or parse_project_id(raw.url) != parse_project_id(self.chat.chat_url or "")
+                or observed_url != bound_url
             ):
                 return False
             return (
@@ -1807,16 +1808,30 @@ class GptAutoTurn:
                         old_assistant_id=old_id,
                         new_assistant_id=new_id,
                     )
+                    or _terminal_same_turn_response_replacement(
+                        raw,
+                        prompt_message_id=prompt_message_id,
+                        old_assistant_id=old_id,
+                        new_assistant_id=new_id,
+                    )
                 )
                 and (
                     _is_fallback_assistant_message_id(new_id)
                     or _is_durable_assistant_message_id(new_id)
                 )
-                and _same_response_slot_replacement(
-                    raw,
-                    prompt_message_id=prompt_message_id,
-                    old_assistant_id=old_id,
-                    new_assistant_id=new_id,
+                and (
+                    _same_response_slot_replacement(
+                        raw,
+                        prompt_message_id=prompt_message_id,
+                        old_assistant_id=old_id,
+                        new_assistant_id=new_id,
+                    )
+                    or _terminal_same_turn_response_replacement(
+                        raw,
+                        prompt_message_id=prompt_message_id,
+                        old_assistant_id=old_id,
+                        new_assistant_id=new_id,
+                    )
                 )
             )
 
@@ -3366,6 +3381,50 @@ def _terminal_same_response_slot_replacement(
     )
 
 
+def _terminal_same_turn_response_replacement(
+    snapshot: ChatSnapshot,
+    *,
+    prompt_message_id: str,
+    old_assistant_id: str,
+    new_assistant_id: str,
+) -> bool:
+    """Prove a terminal assistant remount within one prompt turn.
+
+    Some ChatGPT renderer revisions briefly retain the old assistant node
+    while mounting the terminal replacement.  The ordinary slot predicate
+    deliberately rejects that overlap because it is ambiguous in a normal
+    snapshot.  This narrower terminal-only predicate is safe when the
+    prompt is still the latest user turn, exactly two assistant nodes occupy
+    that turn (the bound node and its replacement), and the replacement is
+    the independent terminal witness.
+    """
+    if not new_assistant_id or new_assistant_id == old_assistant_id:
+        return False
+    if snapshot.latest_user_id != prompt_message_id:
+        return False
+    prompt_indexes = [
+        index
+        for index, ref in enumerate(snapshot.message_refs)
+        if ref.role == "user" and ref.message_id == prompt_message_id
+    ]
+    if len(prompt_indexes) != 1:
+        return False
+    tail = snapshot.message_refs[prompt_indexes[0] + 1 :]
+    if any(ref.role == "user" for ref in tail):
+        return False
+    assistants = [ref for ref in tail if ref.role == "assistant"]
+    return (
+        len(assistants) == 2
+        and assistants[0].message_id == old_assistant_id
+        and assistants[1].message_id == new_assistant_id
+        and snapshot.latest_assistant_id == new_assistant_id
+        and snapshot.terminal_witness_assistant_id == new_assistant_id
+        and not snapshot.generating
+        and bool(snapshot.latest_assistant_text)
+        and bool(snapshot.dom_signals & _REMOUNT_TERMINAL_WITNESS_SIGNALS)
+    )
+
+
 def _scope_response_snapshot(
     baseline: ChatSnapshot,
     snapshot: ChatSnapshot,
@@ -3537,7 +3596,25 @@ def _scope_response_snapshot(
                     for ref in snapshot.message_refs[later_user_index + 1 :]
                 )
             )
-            if later_assistant_present and not bound_assistant_present:
+            latest_assistant_ref = next(
+                (
+                    ref
+                    for ref in reversed(snapshot.message_refs)
+                    if ref.role == "assistant"
+                ),
+                None,
+            )
+            if (
+                latest_assistant_ref is not None
+                and _terminal_same_turn_response_replacement(
+                    snapshot,
+                    prompt_message_id=matched_prompt_id,
+                    old_assistant_id=bound_assistant_id,
+                    new_assistant_id=latest_assistant_ref.message_id,
+                )
+            ):
+                response_ref = latest_assistant_ref
+            elif later_assistant_present and not bound_assistant_present:
                 raise ProviderBindingIntegrityError(
                     "provider assistant identity changed during response observation"
                 )
