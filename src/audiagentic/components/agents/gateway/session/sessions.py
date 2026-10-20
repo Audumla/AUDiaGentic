@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import asyncio
 import atexit
+import hashlib
 import inspect
 import logging
 import threading
@@ -893,6 +894,7 @@ class SessionRuntime:
         mcp_entries=(),
         project_name: str | None = None,
         resume_existing: bool = False,
+        request_id: str | None = None,
     ) -> dict[str, Any]:
         """Reattach an active durable generation after a runtime restart.
 
@@ -936,6 +938,7 @@ class SessionRuntime:
                 mcp_entries=tuple(mcp_entries),
                 project_name=project_name,
                 resume_existing=resume_existing,
+                request_id=request_id,
             ),
             timeout=None,
         )
@@ -1267,6 +1270,7 @@ class SessionRuntime:
         mcp_entries,
         project_name: str | None,
         resume_existing: bool,
+        request_id: str | None,
     ) -> dict[str, Any]:
         # The loop serializes this check with every other session operation;
         # concurrent continuations cannot open two browser/provider handles.
@@ -1310,8 +1314,78 @@ class SessionRuntime:
         provider_ref = (binding or {}).get("provider-session-ref")
         bound_provider = (binding or {}).get("provider-id") or session_store.session_provider_id(record)
         surface_id = (binding or {}).get("surface-id")
-        if not isinstance(provider_ref, str) or not provider_ref.strip():
+        metadata = session_store.session_provider_metadata(record)
+        prepared_current_turn = (
+            not resume_existing
+            and isinstance(request_id, str)
+            and bool(request_id)
+            and metadata.get("unresolved-turn-pending") is True
+            and metadata.get("unresolved-turn-id") == request_id
+            and metadata.get("submission-state") == "prepared"
+            and metadata.get("submission-proven") is False
+        )
+        if prepared_current_turn:
+            # The provider checkpoint says this request was prepared but the
+            # browser Send action had not been dispatched. Clear only that
+            # exact request's fence before reopening the project/chat so the
+            # frozen prompt can be sent once by normal dispatch.
+            session_store.update_provider_metadata(
+                project_root,
+                session_id,
+                {
+                    "unresolved-turn-pending": False,
+                    "recovery-state": "restart-proven-unsent",
+                },
+                remove_keys=(
+                    "submission-state",
+                    "submission-proven",
+                    "unresolved-turn-id",
+                    "unresolved-baseline-user-id",
+                    "unresolved-baseline-assistant-id",
+                    "unresolved-baseline-user-count",
+                    "unresolved-baseline-assistant-count",
+                    "unresolved-baseline-error-alert-occurrences",
+                    "prompt-message-id",
+                    "assistant-message-id",
+                    "assistant-before-message-id",
+                    "assistant-before-id",
+                    "prompt-text-digest",
+                    "terminal-evidence",
+                ),
+            )
+            record = session_store.read_session_record(project_root, session_id)
             metadata = session_store.session_provider_metadata(record)
+        if not isinstance(provider_ref, str) or not provider_ref.strip():
+            if prepared_current_turn:
+                # This session never acquired a conversation identity before
+                # the gateway stopped. Reopen its configured provider surface
+                # under the same gateway session id, then let normal dispatch
+                # send the immutable admitted prompt. The prepared checkpoint
+                # is the only state that authorizes this path.
+                capacity_source_id = metadata.get("gateway-capacity-source-id")
+                return await self._open_session(
+                    project_root,
+                    execution_profile_id=execution_profile_id,
+                    provider_id=provider_id,
+                    model_id=session_store.session_model_id(record) or model_id,
+                    model_selector=None,
+                    session_id=session_id,
+                    surface_hint=surface_hint,
+                    idle_timeout_seconds=idle_timeout_seconds,
+                    max_lifetime_seconds=max_lifetime_seconds,
+                    turn_timeout_seconds=turn_timeout_seconds,
+                    turn_silence_timeout_seconds=turn_silence_timeout_seconds,
+                    correlation_id=correlation_id,
+                    request_runtime_root=request_runtime_root,
+                    mcp_entries=mcp_entries,
+                    project_name=project_name,
+                    resume_provider_metadata=metadata,
+                    capacity_source_id=(
+                        capacity_source_id
+                        if isinstance(capacity_source_id, str)
+                        else None
+                    ),
+                )
             if resume_existing:
                 # There is no stable provider conversation identity to open.
                 # Never create a replacement tab or replay the prompt; retain
@@ -1402,6 +1476,7 @@ class SessionRuntime:
             pending = bool(metadata.get("unresolved-turn-pending"))
             remove = () if pending else (
                 "recovery-state",
+                "submission-state",
                 "unresolved-turn-id",
                 "unresolved-baseline-user-id",
                 "unresolved-baseline-assistant-id",
@@ -1614,6 +1689,7 @@ class SessionRuntime:
             pending = bool(metadata.get("unresolved-turn-pending"))
             remove = () if pending else (
                 "recovery-state",
+                "submission-state",
                 "unresolved-turn-id",
                 "unresolved-baseline-user-id",
                 "unresolved-baseline-assistant-id",

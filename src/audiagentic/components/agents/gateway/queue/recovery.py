@@ -424,6 +424,15 @@ def recovery_runner(record: dict[str, Any], *, project_root: Path | None = None)
         isinstance(session_metadata, dict)
         and session_metadata.get("unresolved-turn-id") == record.get("request-id")
     )
+    checkpoint_proves_current_turn_prepared = (
+        provider_session
+        and session_checkpoint_available
+        and checkpoint_has_current_turn
+        and isinstance(session_metadata, dict)
+        and session_metadata.get("unresolved-turn-pending") is True
+        and session_metadata.get("submission-proven") is False
+        and session_metadata.get("submission-state") == "prepared"
+    )
     checkpoint_has_uncorrelated_pending_turn = (
         isinstance(session_metadata, dict)
         and session_metadata.get("unresolved-turn-pending") is True
@@ -486,18 +495,22 @@ def recovery_runner(record: dict[str, Any], *, project_root: Path | None = None)
         worker_timeout_seconds=float(record.get("timeout-seconds") or 300.0),
         project_name=project_name,
         # A submitted/ambiguous provider-session turn is observation-only.
-        # The one exception is a durable presubmit reconciliation whose
+        # One exception is a durable presubmit reconciliation whose
         # side-effect fence proves Send was not reached and whose authoritative
         # session checkpoint explicitly clears pending work or names a different
-        # predecessor. Missing/empty/unreadable checkpoint evidence stays
-        # observation-only; it must never authorize prompt replay.
+        # predecessor. Another is this request's explicit prepared checkpoint,
+        # which proves the browser Send action was never dispatched. Missing,
+        # empty, legacy, or ambiguous checkpoint evidence stays observation-only.
         # Worker-backed work is deferred above.
         resume_existing=(
             bool(record.get("recovery-required"))
             and provider_session
             and (
                 not session_checkpoint_available
-                or not safe_presubmit_recovery
+                or not (
+                    safe_presubmit_recovery
+                    or checkpoint_proves_current_turn_prepared
+                )
             )
         ),
     )

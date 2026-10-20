@@ -1270,6 +1270,7 @@ def _dispatch_session_request(
                             mcp_entries=providers_api.collect_management_mcp_launch_entries(project_root),
                             project_name=project_name,
                             resume_existing=resume_existing,
+                            request_id=request_id,
                         )
                     except AudiaGenticError as exc:
                         if exc.code == "EXT-AGW-118":

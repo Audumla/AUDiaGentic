@@ -1623,6 +1623,68 @@ def test_rehydrate_checkpoint_preserves_pending_prompt_digest(tmp_path):
         runtime.shutdown()
 
 
+def test_rehydrate_reopens_unbound_session_only_for_correlated_prepared_turn(tmp_path):
+    """A proven pre-Send crash can reopen the project under the same session."""
+    transports: list[FakeAgentSessionTransport] = []
+
+    def fake_prepare(project_root, *, provider_id, surface_hint, model_id=None, **kwargs):
+        transport = FakeAgentSessionTransport()
+        transport.ag_session_id = kwargs["ag_session_id"]
+        transports.append(transport)
+        return _build_fake_prepared(transport)
+
+    request_id = "req-prepared-restart"
+    session_id = "ses-unbound-prepared"
+    record = session_store.build_session_record(
+        session_id=session_id,
+        provider_transport_kind="provider-session",
+        execution_profile_id="gpt-auto",
+        provider_id="gpt-auto",
+        model_id="chatgpt",
+        provider_metadata={
+            "project-url": "https://chatgpt.com/g/g-p-project/project",
+            "unresolved-turn-pending": True,
+            "unresolved-turn-id": request_id,
+            "submission-proven": False,
+            "submission-state": "prepared",
+            "recovery-state": "submission-prepared",
+        },
+    )
+    session_store.write_session_record(tmp_path, record)
+
+    runtime = SessionRuntime(provider_prepare_fn=fake_prepare)
+    try:
+        restored = runtime.rehydrate_session(
+            tmp_path,
+            session_id,
+            execution_profile_id="gpt-auto",
+            provider_id="gpt-auto",
+            model_id="chatgpt",
+            surface_hint=None,
+            request_id=request_id,
+        )
+
+        assert restored["session-id"] == session_id
+        assert len(transports) == 1
+        assert transports[0].opened is True
+        checkpoint = session_store.session_provider_metadata(
+            session_store.read_session_record(tmp_path, session_id)
+        )
+        assert checkpoint.get("unresolved-turn-pending", False) is False
+        assert "submission-state" not in checkpoint
+        assert "unresolved-turn-id" not in checkpoint
+        assert session_store.read_session_binding(tmp_path, session_id)[
+            "provider-session-ref"
+        ] == "prov-ses-1"
+
+        runtime.prompt_in_session(
+            tmp_path, session_id, "immutable admitted prompt", request_id=request_id
+        )
+        assert transports[0].turns == ["immutable admitted prompt"]
+    finally:
+        runtime.shutdown()
+
+
 def test_rehydrated_generation_preserves_durable_max_lifetime(tmp_path):
     """A gateway restart cannot reset the session's absolute lifetime."""
     clock = _Clock()
