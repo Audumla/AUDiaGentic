@@ -525,6 +525,10 @@ class SessionRuntime:
         request_provider_metadata_sink: Any = None,
         resume_provider_ref: str | None = None,
         resume_provider_metadata: dict[str, Any] | None = None,
+        request_id: str | None = None,
+        dispatch_owner_epoch: str | None = None,
+        worker_id: str | None = None,
+        attempt_epoch: int | None = None,
     ) -> dict[str, Any]:
         """Open a live session; returns the persisted session record.
 
@@ -591,6 +595,10 @@ class SessionRuntime:
                 request_provider_metadata_sink=request_provider_metadata_sink,
                 resume_provider_ref=resume_provider_ref,
                 resume_provider_metadata=resume_provider_metadata,
+                request_id=request_id,
+                dispatch_owner_epoch=dispatch_owner_epoch,
+                worker_id=worker_id,
+                attempt_epoch=attempt_epoch,
             ),
             # Opening a provider session is provider work. Do not convert a
             # slow but alive handshake into a terminal request solely because
@@ -1614,6 +1622,17 @@ class SessionRuntime:
                 )
             if not pending or not metadata.get("prompt-text-digest"):
                 remove += ("prompt-text-digest",)
+            if not pending:
+                # The provider callback can observe a terminal DOM before the
+                # gateway has durably terminalized this request. Preserve the
+                # session fence here; terminal cleanup runs after the request
+                # transition and validates that durable state.
+                metadata = dict(metadata)
+                metadata.pop("unresolved-turn-pending", None)
+                metadata.pop("submission-state", None)
+                metadata.pop("submission-recovery-generation", None)
+                metadata.pop("submission-recovery-claim", None)
+                remove = ()
             if prepared_current_turn and not prepared_submission_advanced:
                 if metadata.get("submission-state") == "dispatching":
                     session_store.advance_prepared_submission_to_dispatching(
@@ -1658,7 +1677,14 @@ class SessionRuntime:
                     )
                 else:
                     session_store.update_provider_metadata(
-                        project_root, session_id, metadata, remove_keys=remove
+                        project_root,
+                        session_id,
+                        metadata,
+                        remove_keys=remove,
+                        request_id=request_id,
+                        dispatch_owner_epoch=dispatch_owner_epoch,
+                        worker_id=worker_id,
+                        attempt_epoch=attempt_epoch,
                     )
 
         prepare_kwargs: dict[str, Any] = {
@@ -1839,6 +1865,10 @@ class SessionRuntime:
         request_provider_metadata_sink: Any = None,
         resume_provider_ref: str | None = None,
         resume_provider_metadata: dict[str, Any] | None = None,
+        request_id: str | None = None,
+        dispatch_owner_epoch: str | None = None,
+        worker_id: str | None = None,
+        attempt_epoch: int | None = None,
         preserve_admitted_session_on_open_failure: bool = False,
         prepared_recovery_claim: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
@@ -1939,6 +1969,15 @@ class SessionRuntime:
                 )
             if not pending or not metadata.get("prompt-text-digest"):
                 remove += ("prompt-text-digest",)
+            if not pending:
+                # Do not erase the recovery fence until the request's
+                # terminal lifecycle has been persisted by the gateway.
+                metadata = dict(metadata)
+                metadata.pop("unresolved-turn-pending", None)
+                metadata.pop("submission-state", None)
+                metadata.pop("submission-recovery-generation", None)
+                metadata.pop("submission-recovery-claim", None)
+                remove = ()
             if prepared_recovery_claim and not prepared_submission_advanced:
                 claim_args = {
                     "claim_id": prepared_recovery_claim["claim-id"],
@@ -1990,6 +2029,10 @@ class SessionRuntime:
                         allocated_session_id,
                         metadata,
                         remove_keys=remove,
+                        request_id=request_id,
+                        dispatch_owner_epoch=dispatch_owner_epoch,
+                        worker_id=worker_id,
+                        attempt_epoch=attempt_epoch,
                     )
 
         # AS28 slice 4a: resolve provider-neutral transport via the public

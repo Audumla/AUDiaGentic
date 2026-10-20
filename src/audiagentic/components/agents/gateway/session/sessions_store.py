@@ -120,30 +120,53 @@ def update_provider_metadata(
     metadata: dict[str, Any],
     *,
     remove_keys: tuple[str, ...] = (),
+    request_id: str | None = None,
+    dispatch_owner_epoch: str | None = None,
+    worker_id: str | None = None,
+    attempt_epoch: int | None = None,
+    claim_id: str | None = None,
 ) -> dict[str, Any]:
     """Atomically update provider metadata without changing session identity.
 
-    Turn recovery checkpoints use this narrow write path so a provider-side
-    effect is durable before a browser Send.  ``remove_keys`` lets terminal
-    proof clear only checkpoint fields while retaining provider URL/ref data.
+    Recovery fields are delegated to the request-owner-fenced checkpoint
+    writer. Terminal cleanup uses ``clear_terminal_submission_checkpoint``;
+    ordinary provider binding metadata remains independent of turn state.
     """
-    with _ordered_session_mutation_lock(project_root, session_id):
-        record = read_session_record(project_root, session_id)
-        provider = record.setdefault("provider", {})
-        current = dict(provider.get("metadata") or {})
-        if (
-            isinstance(current.get("submission-recovery-claim"), dict)
-            or current.get("submission-recovery-generation") is not None
-        ) and (
-            _RECOVERY_CHECKPOINT_KEYS.intersection(metadata)
-            or _RECOVERY_CHECKPOINT_KEYS.intersection(remove_keys)
+    checkpoint_touched = bool(
+        _RECOVERY_CHECKPOINT_KEYS.intersection(metadata)
+        or _RECOVERY_CHECKPOINT_KEYS.intersection(remove_keys)
+    )
+    if checkpoint_touched:
+        if not (
+            isinstance(request_id, str)
+            and request_id
+            and isinstance(dispatch_owner_epoch, str)
+            and dispatch_owner_epoch
+            and isinstance(worker_id, str)
+            and worker_id
+            and isinstance(attempt_epoch, int)
         ):
             raise AudiaGenticError(
                 code="CON-AGW-125",
                 kind="agents",
-                message="prepared recovery checkpoint requires its request-owner fence",
+                message="provider recovery checkpoint requires its request-owner fence",
                 details={"session-id": session_id},
             )
+        return update_owned_submission_checkpoint(
+            project_root,
+            session_id,
+            request_id,
+            metadata,
+            claim_id=claim_id,
+            dispatch_owner_epoch=dispatch_owner_epoch,
+            worker_id=worker_id,
+            attempt_epoch=attempt_epoch,
+            remove_keys=remove_keys,
+        )
+    with _ordered_session_mutation_lock(project_root, session_id):
+        record = read_session_record(project_root, session_id)
+        provider = record.setdefault("provider", {})
+        current = dict(provider.get("metadata") or {})
         current.update(metadata)
         for key in remove_keys:
             current.pop(key, None)
@@ -154,6 +177,78 @@ def update_provider_metadata(
         record.setdefault("timing", {})["updated-at"] = now_iso_z()
         write_session_record(project_root, record)
         return record
+
+
+def clear_terminal_submission_checkpoint(
+    project_root: Path,
+    session_id: str,
+    request_id: str,
+    *,
+    recovery_state: str,
+    remove_keys: tuple[str, ...],
+) -> bool:
+    """Clear a request's session fence only after its durable terminal state.
+
+    The request lock proves the terminal lifecycle while the session mutation
+    lock prevents this cleanup from erasing a successor turn's fence.
+    """
+    with _request_lock(project_root, request_id):
+        return _clear_terminal_submission_checkpoint_locked(
+            project_root,
+            session_id,
+            request_id,
+            recovery_state=recovery_state,
+            remove_keys=remove_keys,
+        )
+
+
+def _clear_terminal_submission_checkpoint_locked(
+    project_root: Path,
+    session_id: str,
+    request_id: str,
+    *,
+    recovery_state: str,
+    remove_keys: tuple[str, ...],
+) -> bool:
+    """Locked implementation for callers already holding the request lock."""
+    from audiagentic.components.agents.gateway import store as gateway_store
+
+    request = gateway_store.read_record(project_root, request_id)
+    if (
+        request.get("state") not in gateway_store.TERMINAL_STATES
+        or request.get("session-id") != session_id
+    ):
+        raise AudiaGenticError(
+            code="CON-AGW-125",
+            kind="agents",
+            message="provider checkpoint cleanup requires a terminal request bound to the session",
+            details={"request-id": request_id, "session-id": session_id},
+        )
+    allowed_removals = _RECOVERY_CHECKPOINT_KEYS - {
+        "unresolved-turn-pending",
+        "submission-recovery-claim",
+    }
+    if not set(remove_keys).issubset(allowed_removals):
+        raise AudiaGenticError(
+            code="CON-AGW-125",
+            kind="agents",
+            message="terminal provider checkpoint cleanup contains unsupported fields",
+            details={"request-id": request_id, "session-id": session_id},
+        )
+    with _ordered_session_mutation_lock(project_root, session_id):
+        record = read_session_record(project_root, session_id)
+        metadata = session_provider_metadata(record)
+        current_turn_id = metadata.get("unresolved-turn-id")
+        if current_turn_id != request_id:
+            return False
+        metadata["unresolved-turn-pending"] = False
+        metadata["recovery-state"] = recovery_state
+        for key in remove_keys:
+            metadata.pop(key, None)
+        record.setdefault("provider", {})["metadata"] = metadata
+        record.setdefault("timing", {})["updated-at"] = now_iso_z()
+        write_session_record(project_root, record)
+    return True
 
 
 def _assert_request_dispatch_owner(
@@ -527,10 +622,11 @@ def update_owned_submission_checkpoint(
                     worker_id=worker_id,
                     attempt_epoch=attempt_epoch,
                 )
+                current_stage = metadata.get("submission-state")
                 if not (
                     metadata.get("unresolved-turn-pending") is True
                     and metadata.get("unresolved-turn-id") == request_id
-                    and metadata.get("submission-state") == "dispatching"
+                    and current_stage in {None, "dispatching"}
                     and claim_id is None
                 ):
                     raise AudiaGenticError(
@@ -539,7 +635,11 @@ def update_owned_submission_checkpoint(
                         message="owned checkpoint update does not match the current dispatch stage",
                         details={"request-id": request_id, "session-id": session_id},
                     )
-            if "submission-state" in metadata_update:
+            if "submission-state" in metadata_update and (
+                metadata_update["submission-state"] != "dispatching"
+                or metadata.get("submission-state")
+                not in {None, "dispatching"}
+            ):
                 raise AudiaGenticError(
                     code="CON-AGW-125",
                     kind="agents",
@@ -574,14 +674,11 @@ def update_owned_submission_checkpoint(
                     message="prepared checkpoint cannot be completed before dispatch",
                     details={"request-id": request_id, "session-id": session_id},
                 )
-            if metadata_update.get("unresolved-turn-pending") is False and not (
-                metadata.get("submission-proven") is True
-                or metadata_update.get("submission-proven") is True
-            ):
+            if metadata_update.get("unresolved-turn-pending") is False:
                 raise AudiaGenticError(
                     code="CON-AGW-125",
                     kind="agents",
-                    message="recovery checkpoint cannot clear an unproven turn",
+                    message="running request cannot clear its recovery checkpoint",
                     details={"request-id": request_id, "session-id": session_id},
                 )
             if (
@@ -615,34 +712,12 @@ def update_owned_submission_checkpoint(
                     details={"request-id": request_id, "session-id": session_id},
                 )
             if protected_removals:
-                terminal_removals = {
-                    "recovery-state",
-                    "submission-state",
-                    "submission-recovery-generation",
-                    "unresolved-turn-id",
-                    "unresolved-baseline-user-id",
-                    "unresolved-baseline-assistant-id",
-                    "unresolved-baseline-user-count",
-                    "unresolved-baseline-assistant-count",
-                    "prompt-text-digest",
-                }
-                terminal_cleanup = (
-                    metadata.get("submission-state") == "dispatching"
-                    and metadata_update.get("unresolved-turn-pending") is False
-                    and (
-                        metadata.get("submission-proven") is True
-                        or metadata_update.get("submission-proven") is True
-                    )
+                raise AudiaGenticError(
+                    code="CON-AGW-125",
+                    kind="agents",
+                    message="recovery evidence removal requires a terminal request",
+                    details={"request-id": request_id, "session-id": session_id},
                 )
-                if not terminal_cleanup or not protected_removals.issubset(
-                    terminal_removals
-                ):
-                    raise AudiaGenticError(
-                        code="CON-AGW-125",
-                        kind="agents",
-                        message="recovery evidence removal requires proven terminal cleanup",
-                        details={"request-id": request_id, "session-id": session_id},
-                    )
             metadata.update(metadata_update)
             for key in remove_keys:
                 metadata.pop(key, None)

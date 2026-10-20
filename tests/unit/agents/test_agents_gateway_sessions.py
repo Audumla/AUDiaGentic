@@ -1578,9 +1578,8 @@ def test_rehydrate_active_generation_reuses_provider_binding(tmp_path):
         runtime.shutdown()
 
 
-def test_rehydrate_checkpoint_preserves_pending_prompt_digest(tmp_path):
-    """A pre-ID unresolved turn keeps its normalized prompt fingerprint
-    across the gateway session checkpoint sink."""
+def test_rehydrate_checkpoint_sink_rejects_unowned_pending_prompt_digest(tmp_path):
+    """Legacy pending checkpoints cannot be rewritten without request ownership."""
     transports: list[FakeAgentSessionTransport] = []
     checkpoint_sinks: list[Any] = []
 
@@ -1601,11 +1600,9 @@ def test_rehydrate_checkpoint_preserves_pending_prompt_digest(tmp_path):
             model_id="m1",
             provider_session_ref="prov-durable",
             surface_id="opencode-acp",
+            provider_metadata={"prompt-text-digest": "old-digest"},
         )
         session_store.write_session_record(tmp_path, record)
-        session_store.update_provider_metadata(
-            tmp_path, "ses_digest", {"prompt-text-digest": "old-digest"}
-        )
         runtime.rehydrate_session(
             tmp_path,
             "ses_digest",
@@ -1624,9 +1621,10 @@ def test_rehydrate_checkpoint_preserves_pending_prompt_digest(tmp_path):
                 }
             )
 
-        runtime._call(apply_checkpoint(), timeout=5)
+        with pytest.raises(AudiaGenticError, match="requires its request-owner fence"):
+            runtime._call(apply_checkpoint(), timeout=5)
         stored = session_store.read_session_record(tmp_path, "ses_digest")
-        assert stored["provider"]["metadata"]["prompt-text-digest"] == "new-digest"
+        assert stored["provider"]["metadata"]["prompt-text-digest"] == "old-digest"
     finally:
         runtime.shutdown()
 
@@ -1788,6 +1786,125 @@ def test_rehydrate_reopens_unbound_session_only_for_correlated_prepared_turn(tmp
         assert transports[1].turns == ["immutable admitted prompt"]
     finally:
         runtime.shutdown()
+
+
+def test_submission_checkpoint_cleanup_requires_terminal_request_and_owner_fence(tmp_path):
+    from audiagentic.components.agents.gateway import store as gateway_store
+
+    session_id = "ses_terminal_guard"
+    request_id = "req_terminal_guard"
+    session = session_store.build_session_record(
+        session_id=session_id,
+        execution_profile_id="profile-1",
+        provider_id="opencode",
+        model_id="m1",
+        provider_session_ref="provider-session",
+        surface_id="opencode-acp",
+        provider_metadata={
+            "unresolved-turn-pending": True,
+            "unresolved-turn-id": request_id,
+            "submission-state": "dispatching",
+            "submission-proven": True,
+            "submission-recovery-generation": 4,
+            "prompt-text-digest": "prompt-hash",
+        },
+    )
+    session_store.write_session_record(tmp_path, session)
+    request = gateway_store.build_record(
+        request_id=request_id,
+        execution_profile_id="profile-1",
+        prompt_body="prompt",
+        session_id=session_id,
+        resolved_provider_id="opencode",
+    )
+    request.update(
+        {
+            "state": "running",
+            "worker-id": "worker-a",
+            "attempt-epoch": 1,
+            "dispatch-owner-epoch": "owner-a",
+        }
+    )
+    gateway_store.write_record(tmp_path, request)
+
+    with pytest.raises(AudiaGenticError, match="requires its request-owner fence"):
+        session_store.update_provider_metadata(
+            tmp_path,
+            session_id,
+            {},
+            remove_keys=("submission-recovery-generation",),
+        )
+    with pytest.raises(AudiaGenticError, match="requires a terminal request"):
+        session_store.update_provider_metadata(
+            tmp_path,
+            session_id,
+            {},
+            request_id=request_id,
+            dispatch_owner_epoch="owner-a",
+            worker_id="worker-a",
+            attempt_epoch=1,
+            remove_keys=("submission-state", "unresolved-turn-id"),
+        )
+    with pytest.raises(AudiaGenticError, match="cannot clear its recovery checkpoint"):
+        session_store.update_owned_submission_checkpoint(
+            tmp_path,
+            session_id,
+            request_id,
+            {"unresolved-turn-pending": False},
+            dispatch_owner_epoch="owner-a",
+            worker_id="worker-a",
+            attempt_epoch=1,
+        )
+    with pytest.raises(AudiaGenticError, match="requires a terminal request"):
+        session_store.clear_terminal_submission_checkpoint(
+            tmp_path,
+            session_id,
+            request_id,
+            recovery_state="terminal-completed",
+            remove_keys=("submission-state", "unresolved-turn-id"),
+        )
+
+    request["state"] = "completed"
+    gateway_store.write_record(tmp_path, request)
+    assert session_store.clear_terminal_submission_checkpoint(
+        tmp_path,
+        session_id,
+        request_id,
+        recovery_state="terminal-completed",
+        remove_keys=(
+            "submission-state",
+            "submission-recovery-generation",
+            "unresolved-turn-id",
+            "prompt-text-digest",
+            "submission-proven",
+        ),
+    )
+    metadata = session_store.session_provider_metadata(
+        session_store.read_session_record(tmp_path, session_id)
+    )
+    assert metadata["unresolved-turn-pending"] is False
+    assert metadata["recovery-state"] == "terminal-completed"
+    assert not {
+        "submission-state",
+        "submission-recovery-generation",
+        "unresolved-turn-id",
+        "prompt-text-digest",
+        "submission-proven",
+    }.intersection(metadata)
+    with pytest.raises(AudiaGenticError, match="requires its request-owner fence"):
+        session_store.update_provider_metadata(
+            tmp_path, session_id, {"submission-proven": False}
+        )
+    with pytest.raises(AudiaGenticError, match="lost its request owner fence"):
+        session_store.update_provider_metadata(
+            tmp_path,
+            session_id,
+            {"submission-proven": False},
+            request_id=request_id,
+            dispatch_owner_epoch="owner-a",
+            worker_id="worker-a",
+            attempt_epoch=1,
+        )
 
 
 def test_successor_claim_fences_stale_prepared_binding_checkpoint_and_open_commit(
