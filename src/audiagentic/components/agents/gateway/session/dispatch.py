@@ -1271,6 +1271,9 @@ def _dispatch_session_request(
                             project_name=project_name,
                             resume_existing=resume_existing,
                             request_id=request_id,
+                            dispatch_owner_epoch=record.get("dispatch-owner-epoch"),
+                            worker_id=record.get("worker-id"),
+                            attempt_epoch=record.get("attempt-epoch"),
                         )
                     except AudiaGenticError as exc:
                         if exc.code == "EXT-AGW-118":

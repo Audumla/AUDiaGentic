@@ -895,6 +895,9 @@ class SessionRuntime:
         project_name: str | None = None,
         resume_existing: bool = False,
         request_id: str | None = None,
+        dispatch_owner_epoch: str | None = None,
+        worker_id: str | None = None,
+        attempt_epoch: int | None = None,
     ) -> dict[str, Any]:
         """Reattach an active durable generation after a runtime restart.
 
@@ -939,6 +942,9 @@ class SessionRuntime:
                 project_name=project_name,
                 resume_existing=resume_existing,
                 request_id=request_id,
+                dispatch_owner_epoch=dispatch_owner_epoch,
+                worker_id=worker_id,
+                attempt_epoch=attempt_epoch,
             ),
             timeout=None,
         )
@@ -1271,6 +1277,9 @@ class SessionRuntime:
         project_name: str | None,
         resume_existing: bool,
         request_id: str | None,
+        dispatch_owner_epoch: str | None,
+        worker_id: str | None,
+        attempt_epoch: int | None,
     ) -> dict[str, Any]:
         # The loop serializes this check with every other session operation;
         # concurrent continuations cannot open two browser/provider handles.
@@ -1324,37 +1333,68 @@ class SessionRuntime:
             and metadata.get("submission-state") == "prepared"
             and metadata.get("submission-proven") is False
         )
+        if bound_provider and bound_provider != provider_id:
+            raise AudiaGenticError(
+                code="CON-AGW-120",
+                kind="agents",
+                message="durable provider binding does not match the requested provider",
+                details={"session-id": session_id, "provider-id": provider_id},
+            )
+        admitted_provider = session_store.session_provider_id(record)
+        if admitted_provider and admitted_provider != provider_id:
+            raise AudiaGenticError(
+                code="CON-AGW-120",
+                kind="agents",
+                message="requested provider does not match the admitted session provider",
+                details={"session-id": session_id, "provider-id": provider_id},
+            )
+        requested_surface_id = getattr(surface_hint, "surface_id", None)
+        if (
+            isinstance(surface_id, str)
+            and isinstance(requested_surface_id, str)
+            and surface_id != requested_surface_id
+        ):
+            raise AudiaGenticError(
+                code="CON-AGW-120",
+                kind="agents",
+                message="requested surface does not match the durable session surface",
+                details={"session-id": session_id, "surface-id": surface_id},
+            )
         if prepared_current_turn:
-            # The provider checkpoint says this request was prepared but the
-            # browser Send action had not been dispatched. Clear only that
-            # exact request's fence before reopening the project/chat so the
-            # frozen prompt can be sent once by normal dispatch.
-            session_store.update_provider_metadata(
+            from audiagentic.components.agents.gateway import profiles as profiles_mod
+            from audiagentic.components.agents.gateway import store as gateway_store
+
+            admitted_request = gateway_store.read_record(project_root, request_id)
+            admitted_profile = profiles_mod.snapshot_from_record(admitted_request)
+            admitted_surface_id = (
+                admitted_profile.resolved_surface_id if admitted_profile is not None else None
+            )
+            if (
+                isinstance(admitted_surface_id, str)
+                and admitted_surface_id != requested_surface_id
+            ):
+                raise AudiaGenticError(
+                    code="CON-AGW-125",
+                    kind="agents",
+                    message="prepared recovery surface differs from the admission-frozen surface",
+                    details={"request-id": request_id, "session-id": session_id},
+                )
+            if not all((dispatch_owner_epoch, worker_id)) or attempt_epoch is None:
+                raise AudiaGenticError(
+                    code="CON-AGW-125",
+                    kind="agents",
+                    message="prepared turn recovery requires a durable dispatch owner fence",
+                    details={"request-id": request_id, "session-id": session_id},
+                )
+            claim = session_store.claim_prepared_submission_recovery(
                 project_root,
                 session_id,
-                {
-                    "unresolved-turn-pending": False,
-                    "recovery-state": "restart-proven-unsent",
-                },
-                remove_keys=(
-                    "submission-state",
-                    "submission-proven",
-                    "unresolved-turn-id",
-                    "unresolved-baseline-user-id",
-                    "unresolved-baseline-assistant-id",
-                    "unresolved-baseline-user-count",
-                    "unresolved-baseline-assistant-count",
-                    "unresolved-baseline-error-alert-occurrences",
-                    "prompt-message-id",
-                    "assistant-message-id",
-                    "assistant-before-message-id",
-                    "assistant-before-id",
-                    "prompt-text-digest",
-                    "terminal-evidence",
-                ),
+                request_id,
+                dispatch_owner_epoch=dispatch_owner_epoch,
+                worker_id=worker_id,
+                attempt_epoch=attempt_epoch,
             )
-            record = session_store.read_session_record(project_root, session_id)
-            metadata = session_store.session_provider_metadata(record)
+            metadata["submission-recovery-claim"] = claim
         if not isinstance(provider_ref, str) or not provider_ref.strip():
             if prepared_current_turn:
                 # This session never acquired a conversation identity before
@@ -1363,29 +1403,74 @@ class SessionRuntime:
                 # send the immutable admitted prompt. The prepared checkpoint
                 # is the only state that authorizes this path.
                 capacity_source_id = metadata.get("gateway-capacity-source-id")
-                return await self._open_session(
-                    project_root,
-                    execution_profile_id=execution_profile_id,
-                    provider_id=provider_id,
-                    model_id=session_store.session_model_id(record) or model_id,
-                    model_selector=None,
-                    session_id=session_id,
-                    surface_hint=surface_hint,
-                    idle_timeout_seconds=idle_timeout_seconds,
-                    max_lifetime_seconds=max_lifetime_seconds,
-                    turn_timeout_seconds=turn_timeout_seconds,
-                    turn_silence_timeout_seconds=turn_silence_timeout_seconds,
-                    correlation_id=correlation_id,
-                    request_runtime_root=request_runtime_root,
-                    mcp_entries=mcp_entries,
-                    project_name=project_name,
-                    resume_provider_metadata=metadata,
-                    capacity_source_id=(
-                        capacity_source_id
-                        if isinstance(capacity_source_id, str)
-                        else None
-                    ),
-                )
+                binding_record = record.get("binding") or {}
+                try:
+                    return await self._open_session(
+                        project_root,
+                        execution_profile_id=execution_profile_id,
+                        provider_id=provider_id,
+                        model_id=session_store.session_model_id(record) or model_id,
+                        model_selector=None,
+                        session_id=session_id,
+                        surface_hint=surface_hint,
+                        idle_timeout_seconds=idle_timeout_seconds,
+                        max_lifetime_seconds=max_lifetime_seconds,
+                        turn_timeout_seconds=turn_timeout_seconds,
+                        turn_silence_timeout_seconds=turn_silence_timeout_seconds,
+                        correlation_id=correlation_id,
+                        request_runtime_root=request_runtime_root,
+                        mcp_entries=mcp_entries,
+                        project_name=project_name,
+                        resume_provider_metadata=metadata,
+                        capacity_source_id=(
+                            capacity_source_id
+                            if isinstance(capacity_source_id, str)
+                            else None
+                        ),
+                        identity_context_fingerprint=binding_record.get("identity-context-fingerprint"),
+                        execution_context_fingerprint=binding_record.get("execution-context-fingerprint"),
+                        context_id=binding_record.get("context-id"),
+                        agent_definition_id=binding_record.get("agent-definition-id"),
+                        agent_definition_digest=binding_record.get("agent-definition-digest"),
+                        role_ids=binding_record.get("role-ids"),
+                        role_set_digest=binding_record.get("role-set-digest"),
+                        execution_profile_digest=binding_record.get("execution-profile-digest"),
+                        effective_capability_digest=binding_record.get("effective-capability-digest"),
+                        preserve_admitted_session_on_open_failure=True,
+                        prepared_recovery_claim={
+                            "claim-id": claim["claim-id"],
+                            "request-id": request_id,
+                            "dispatch-owner-epoch": dispatch_owner_epoch,
+                            "worker-id": worker_id,
+                            "attempt-epoch": attempt_epoch,
+                        },
+                    )
+                except asyncio.CancelledError:
+                    session_store.release_prepared_submission_recovery_claim(
+                        project_root, session_id, claim_id=claim["claim-id"]
+                    )
+                    raise
+                except AudiaGenticError:
+                    session_store.release_prepared_submission_recovery_claim(
+                        project_root, session_id, claim_id=claim["claim-id"]
+                    )
+                    raise
+                except Exception as exc:  # noqa: BLE001 - preserve provider cause
+                    session_store.release_prepared_submission_recovery_claim(
+                        project_root, session_id, claim_id=claim["claim-id"]
+                    )
+                    raise AudiaGenticError(
+                        code="EXT-AGW-118",
+                        kind="agents",
+                        message="provider rejected prepared session recovery",
+                        details={
+                            "session-id": session_id,
+                            "provider-id": provider_id,
+                            "error-type": type(exc).__name__,
+                            "error-message": str(exc).strip(),
+                            "submission-state": "not_started",
+                        },
+                    ) from exc
             if resume_existing:
                 # There is no stable provider conversation identity to open.
                 # Never create a replacement tab or replay the prompt; retain
@@ -1439,13 +1524,6 @@ class SessionRuntime:
                 message="active session has no durable provider binding to rehydrate",
                 details={"session-id": session_id, "suggestion": "resume the session explicitly"},
             )
-        if bound_provider and bound_provider != provider_id:
-            raise AudiaGenticError(
-                code="CON-AGW-120",
-                kind="agents",
-                message="durable provider binding does not match the requested provider",
-                details={"session-id": session_id, "provider-id": provider_id},
-            )
         if not isinstance(surface_id, str) or not surface_id.strip():
             raise AudiaGenticError(
                 code="RES-AGW-003",
@@ -1472,7 +1550,10 @@ class SessionRuntime:
                 metadata=dict(getattr(update, "metadata", {}) or {}),
             )
 
+        prepared_submission_advanced = False
+
         async def checkpoint_sink(metadata: dict[str, Any]) -> None:
+            nonlocal prepared_submission_advanced
             pending = bool(metadata.get("unresolved-turn-pending"))
             remove = () if pending else (
                 "recovery-state",
@@ -1494,9 +1575,37 @@ class SessionRuntime:
                 )
             if not pending or not metadata.get("prompt-text-digest"):
                 remove += ("prompt-text-digest",)
-            session_store.update_provider_metadata(
-                project_root, session_id, metadata, remove_keys=remove
-            )
+            if prepared_current_turn and not prepared_submission_advanced:
+                if metadata.get("submission-state") == "dispatching":
+                    session_store.advance_prepared_submission_to_dispatching(
+                        project_root,
+                        session_id,
+                        request_id,
+                        metadata,
+                        claim_id=claim["claim-id"],
+                        dispatch_owner_epoch=dispatch_owner_epoch,
+                        worker_id=worker_id,
+                        attempt_epoch=attempt_epoch,
+                        remove_keys=remove,
+                    )
+                    prepared_submission_advanced = True
+                else:
+                    session_store.assert_prepared_submission_recovery_claim(
+                        project_root,
+                        session_id,
+                        request_id,
+                        claim_id=claim["claim-id"],
+                        dispatch_owner_epoch=dispatch_owner_epoch,
+                        worker_id=worker_id,
+                        attempt_epoch=attempt_epoch,
+                    )
+                    session_store.update_provider_metadata(
+                        project_root, session_id, metadata, remove_keys=remove
+                    )
+            else:
+                session_store.update_provider_metadata(
+                    project_root, session_id, metadata, remove_keys=remove
+                )
 
         prepare_kwargs: dict[str, Any] = {
             "provider_id": provider_id,
@@ -1531,14 +1640,26 @@ class SessionRuntime:
         except asyncio.CancelledError:
             if transport is not None:
                 await _close_failed_transport(transport)
+            if prepared_current_turn:
+                session_store.release_prepared_submission_recovery_claim(
+                    project_root, session_id, claim_id=claim["claim-id"]
+                )
             raise
         except AudiaGenticError:
             if transport is not None:
                 await _close_failed_transport(transport)
+            if prepared_current_turn:
+                session_store.release_prepared_submission_recovery_claim(
+                    project_root, session_id, claim_id=claim["claim-id"]
+                )
             raise
         except Exception as exc:  # noqa: BLE001 - preserve provider cause
             if transport is not None:
                 await _close_failed_transport(transport)
+            if prepared_current_turn:
+                session_store.release_prepared_submission_recovery_claim(
+                    project_root, session_id, claim_id=claim["claim-id"]
+                )
             raise AudiaGenticError(
                 code="EXT-AGW-118",
                 kind="agents",
@@ -1562,6 +1683,10 @@ class SessionRuntime:
                 )
         except BaseException as exc:
             await _close_failed_transport(transport)
+            if prepared_current_turn:
+                session_store.release_prepared_submission_recovery_claim(
+                    project_root, session_id, claim_id=claim["claim-id"]
+                )
             raise
 
         handle = _SessionHandle(
@@ -1642,6 +1767,8 @@ class SessionRuntime:
         request_provider_metadata_sink: Any = None,
         resume_provider_ref: str | None = None,
         resume_provider_metadata: dict[str, Any] | None = None,
+        preserve_admitted_session_on_open_failure: bool = False,
+        prepared_recovery_claim: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         started = time.monotonic()
         logger.info(
@@ -1685,7 +1812,10 @@ class SessionRuntime:
             # binding metadata to the canonical session record; the active
             # request receives its own metadata through the per-turn sink.
 
+        prepared_submission_advanced = False
+
         async def checkpoint_sink(metadata: dict[str, Any]) -> None:
+            nonlocal prepared_submission_advanced
             pending = bool(metadata.get("unresolved-turn-pending"))
             remove = () if pending else (
                 "recovery-state",
@@ -1707,12 +1837,40 @@ class SessionRuntime:
                 )
             if not pending or not metadata.get("prompt-text-digest"):
                 remove += ("prompt-text-digest",)
-            session_store.update_provider_metadata(
-                project_root,
-                allocated_session_id,
-                metadata,
-                remove_keys=remove,
-            )
+            if prepared_recovery_claim and not prepared_submission_advanced:
+                claim_args = {
+                    "claim_id": prepared_recovery_claim["claim-id"],
+                    "dispatch_owner_epoch": prepared_recovery_claim["dispatch-owner-epoch"],
+                    "worker_id": prepared_recovery_claim["worker-id"],
+                    "attempt_epoch": prepared_recovery_claim["attempt-epoch"],
+                }
+                if metadata.get("submission-state") == "dispatching":
+                    session_store.advance_prepared_submission_to_dispatching(
+                        project_root,
+                        allocated_session_id,
+                        prepared_recovery_claim["request-id"],
+                        metadata,
+                        **claim_args,
+                        remove_keys=remove,
+                    )
+                    prepared_submission_advanced = True
+                else:
+                    session_store.assert_prepared_submission_recovery_claim(
+                        project_root,
+                        allocated_session_id,
+                        prepared_recovery_claim["request-id"],
+                        **claim_args,
+                    )
+                    session_store.update_provider_metadata(
+                        project_root, allocated_session_id, metadata, remove_keys=remove
+                    )
+            else:
+                session_store.update_provider_metadata(
+                    project_root,
+                    allocated_session_id,
+                    metadata,
+                    remove_keys=remove,
+                )
 
         # AS28 slice 4a: resolve provider-neutral transport via the public
         # prepare seam. No AcpLaunch / AcpSessionTransport construction here.
@@ -1819,7 +1977,11 @@ class SessionRuntime:
             # remain active and block later work or mislead recovery logic.
             try:
                 admitted = session_store.read_session_record(project_root, session_id)
-                if admitted.get("state") == "active" and not admitted.get("binding"):
+                if (
+                    not preserve_admitted_session_on_open_failure
+                    and admitted.get("state") == "active"
+                    and not admitted.get("binding")
+                ):
                     session_store.transition_session_record(
                         project_root,
                         session_id,
@@ -1899,7 +2061,7 @@ class SessionRuntime:
                 message="worker-backed gateway session cannot open a provider transport",
                 details={"session-id": session_id},
             )
-        record = session_store.build_session_record(
+        opened_record = session_store.build_session_record(
             session_id=session_id,
             created_by_request_id=admitted_record.get("created-by-request-id"),
             provider_transport_kind="provider-session",
@@ -1915,7 +2077,18 @@ class SessionRuntime:
             execution_context_fingerprint=execution_context_fingerprint,
             created_at=(admitted_record.get("timing") or {}).get("created-at"),
         )
-        session_id = str(record["session-id"])
+        session_id = str(opened_record["session-id"])
+        record = dict(admitted_record)
+        record["binding"] = opened_record.get("binding")
+        record["provider-transport-kind"] = "provider-session"
+        provider_group = dict(record.get("provider") or {})
+        provider_group.update(opened_record.get("provider") or {})
+        provider_metadata = dict((record.get("provider") or {}).get("metadata") or {})
+        provider_metadata.update((opened_record.get("provider") or {}).get("metadata") or {})
+        if provider_metadata:
+            provider_group["metadata"] = provider_metadata
+        record["provider"] = provider_group
+        record.setdefault("timing", {})["updated-at"] = now_iso_z()
         try:
             bookkeeping_started = time.monotonic()
             logger.info(

@@ -566,7 +566,7 @@ def test_reconcile_executes_capture_and_reports_completion(monkeypatch, tmp_path
     monkeypatch.setattr(
         api,
         "complete_execution_from_provider",
-        lambda *_: {
+        lambda *_, **__: {
             "state": "completed",
             "revision": 6,
             "response-artifact": {"artifact-id": "final-response"},
@@ -678,3 +678,42 @@ def test_operator_provider_capture_can_promote_failed_request(tmp_path: Path):
     assert failed["state"] == "failed"
     assert completed["state"] == "completed"
     assert api.get_execution_response(tmp_path, record["request-id"]) == "captured answer"
+
+
+def test_operator_provider_capture_persists_replayable_session_finalization(tmp_path: Path):
+    """The capture path's cross-record cleanup marker is schema-valid and replayable."""
+    from audiagentic.components.agents.gateway.session import sessions_store
+
+    record = store.build_record(execution_profile_id="gpt-auto", prompt_body="request")
+    store.write_record(tmp_path, record)
+    session = sessions_store.build_session_record(
+        session_id="ses-capture-finalization",
+        created_by_request_id=record["request-id"],
+        execution_profile_id="gpt-auto",
+        provider_id="gpt-auto",
+        provider_metadata={"unresolved-turn-pending": True, "unresolved-turn-id": record["request-id"]},
+    )
+    sessions_store.write_session_record(tmp_path, session)
+    running = store.transition_record(
+        tmp_path,
+        record["request-id"],
+        "running",
+        updates={"session-id": session["session-id"], "started-at": "2026-09-27T00:00:00Z"},
+    )
+
+    completed = store.transition_operator_terminal(
+        tmp_path,
+        record["request-id"],
+        expected_revision=running["revision"],
+        updates={"__final-response-text": "captured answer"},
+        session_id=session["session-id"],
+        clear_unresolved_turn=True,
+    )
+
+    assert completed["state"] == "completed"
+    assert "terminal-finalization" not in completed
+    metadata = sessions_store.session_provider_metadata(
+        sessions_store.read_session_record(tmp_path, session["session-id"])
+    )
+    assert metadata["unresolved-turn-pending"] is False
+    assert metadata["recovery-state"] == "terminal-captured"

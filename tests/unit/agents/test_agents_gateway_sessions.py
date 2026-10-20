@@ -39,6 +39,7 @@ from audiagentic.foundation.system.adopted_process import (
     adopt_child,
 )
 from audiagentic.foundation.system.managed_process import ProcessEvidence
+from audiagentic.foundation.time import now_iso_z
 from audiagentic.foundation.transports.agent_session import (
     CorrelationQuality,
     ProviderSessionRef,
@@ -1626,10 +1627,17 @@ def test_rehydrate_checkpoint_preserves_pending_prompt_digest(tmp_path):
 def test_rehydrate_reopens_unbound_session_only_for_correlated_prepared_turn(tmp_path):
     """A proven pre-Send crash can reopen the project under the same session."""
     transports: list[FakeAgentSessionTransport] = []
+    checkpoint_sinks: list[Any] = []
 
     def fake_prepare(project_root, *, provider_id, surface_hint, model_id=None, **kwargs):
+        checkpoint_sinks.append(kwargs["checkpoint_sink"])
         transport = FakeAgentSessionTransport()
         transport.ag_session_id = kwargs["ag_session_id"]
+        if not transports:
+            async def fail_first_open():
+                raise RuntimeError("transient provider open failure")
+
+            transport.open = fail_first_open
         transports.append(transport)
         return _build_fake_prepared(transport)
 
@@ -1641,8 +1649,12 @@ def test_rehydrate_reopens_unbound_session_only_for_correlated_prepared_turn(tmp
         execution_profile_id="gpt-auto",
         provider_id="gpt-auto",
         model_id="chatgpt",
+        created_by_request_id=request_id,
+        idle_timeout_seconds=3600,
+        max_lifetime_seconds=7200,
         provider_metadata={
             "project-url": "https://chatgpt.com/g/g-p-project/project",
+            "project-id": "g-p-project",
             "unresolved-turn-pending": True,
             "unresolved-turn-id": request_id,
             "submission-proven": False,
@@ -1651,9 +1663,50 @@ def test_rehydrate_reopens_unbound_session_only_for_correlated_prepared_turn(tmp
         },
     )
     session_store.write_session_record(tmp_path, record)
+    from audiagentic.components.agents.gateway import store as gateway_store
+
+    request = gateway_store.build_record(
+        request_id=request_id,
+        execution_profile_id="gpt-auto",
+        prompt_body="immutable admitted prompt",
+        session_id=session_id,
+        resolved_provider_id="gpt-auto",
+    )
+    request.update(
+        {
+            "state": "running",
+            "started-at": now_iso_z(),
+            "worker-id": "worker-prepared",
+            "attempt-epoch": 1,
+            "dispatch-owner-epoch": "owner-prepared",
+            "provider-metadata": {"project-id": "g-p-project"},
+        }
+    )
+    gateway_store.write_record(tmp_path, request)
 
     runtime = SessionRuntime(provider_prepare_fn=fake_prepare)
     try:
+        with pytest.raises(AudiaGenticError, match="provider rejected prepared session recovery") as caught:
+            runtime.rehydrate_session(
+                tmp_path,
+                session_id,
+                execution_profile_id="gpt-auto",
+                provider_id="gpt-auto",
+                model_id="chatgpt",
+                surface_hint=None,
+                request_id=request_id,
+                dispatch_owner_epoch="owner-prepared",
+                worker_id="worker-prepared",
+                attempt_epoch=1,
+            )
+        assert caught.value.details["submission-state"] == "not_started"
+        checkpoint = session_store.session_provider_metadata(
+            session_store.read_session_record(tmp_path, session_id)
+        )
+        assert checkpoint["unresolved-turn-pending"] is True
+        assert checkpoint["submission-state"] == "prepared"
+        assert "submission-recovery-claim" not in checkpoint
+
         restored = runtime.rehydrate_session(
             tmp_path,
             session_id,
@@ -1662,25 +1715,59 @@ def test_rehydrate_reopens_unbound_session_only_for_correlated_prepared_turn(tmp
             model_id="chatgpt",
             surface_hint=None,
             request_id=request_id,
+            dispatch_owner_epoch="owner-prepared",
+            worker_id="worker-prepared",
+            attempt_epoch=1,
         )
 
         assert restored["session-id"] == session_id
-        assert len(transports) == 1
-        assert transports[0].opened is True
+        assert restored["created-by-request-id"] == request_id
+        assert restored["policy"]["idle-timeout-seconds"] == 3600
+        assert restored["policy"]["max-lifetime-seconds"] == 7200
+        assert len(transports) == 2
+        assert transports[0].closed is True
+        assert transports[1].opened is True
         checkpoint = session_store.session_provider_metadata(
             session_store.read_session_record(tmp_path, session_id)
         )
-        assert checkpoint.get("unresolved-turn-pending", False) is False
-        assert "submission-state" not in checkpoint
-        assert "unresolved-turn-id" not in checkpoint
+        assert checkpoint["unresolved-turn-pending"] is True
+        assert checkpoint["submission-state"] == "prepared"
+        assert checkpoint["unresolved-turn-id"] == request_id
+        assert "submission-recovery-claim" in checkpoint
+        with pytest.raises(AudiaGenticError, match="already claimed"):
+            session_store.claim_prepared_submission_recovery(
+                tmp_path,
+                session_id,
+                request_id,
+                dispatch_owner_epoch="owner-prepared",
+                worker_id="worker-prepared",
+                attempt_epoch=1,
+            )
         assert session_store.read_session_binding(tmp_path, session_id)[
             "provider-session-ref"
         ] == "prov-ses-1"
 
+        asyncio.run(
+            checkpoint_sinks[1](
+                {
+                    "unresolved-turn-pending": True,
+                    "submission-state": "dispatching",
+                    "submission-proven": False,
+                    "unresolved-turn-id": request_id,
+                    "recovery-state": "side-effect-may-have-started",
+                }
+            )
+        )
+        checkpoint = session_store.session_provider_metadata(
+            session_store.read_session_record(tmp_path, session_id)
+        )
+        assert checkpoint["submission-state"] == "dispatching"
+        assert "submission-recovery-claim" not in checkpoint
+
         runtime.prompt_in_session(
             tmp_path, session_id, "immutable admitted prompt", request_id=request_id
         )
-        assert transports[0].turns == ["immutable admitted prompt"]
+        assert transports[1].turns == ["immutable admitted prompt"]
     finally:
         runtime.shutdown()
 
