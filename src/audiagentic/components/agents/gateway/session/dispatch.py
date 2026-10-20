@@ -666,11 +666,12 @@ def _reconcile_before_failed_terminal(
         try:
             # Local import avoids the API/dispatch module cycle at import time.
             from audiagentic.components.agents.gateway.api import complete_execution_from_provider
+            remaining = max(0.1, deadline - time.monotonic())
             result = complete_execution_from_provider(
                 project_root,
                 request_id,
                 passive=True,
-                capture_timeout_seconds=3.0,
+                capture_timeout_seconds=min(3.0, remaining / 2.0),
             )
             store.record_gateway_timeline(
                 project_root,
@@ -2376,4 +2377,3 @@ def _transition_owned_attempt(
     except Exception:  # noqa: BLE001 - journal is advisory
         logger.debug("terminal diagnostic journal append failed", extra={"request-id": record["request-id"]}, exc_info=True)
     return updated
-

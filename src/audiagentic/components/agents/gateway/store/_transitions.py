@@ -1826,6 +1826,9 @@ def transition_operator_terminal(
     updates: dict[str, Any],
     recovery_attempt_id: str | None = None,
     recovery_claim_generation: int | None = None,
+    session_id: str | None = None,
+    recovered_binding: dict[str, Any] | None = None,
+    clear_unresolved_turn: bool = False,
 ) -> dict[str, Any]:
     """Terminalize a request from an operator after a compare-and-swap.
 
@@ -1911,6 +1914,26 @@ def transition_operator_terminal(
             project_root, request_id, "state.changed", state="completed",
             attributes={"from": record["state"], "to": "completed", "source": "operator-provider-capture"},
         )
+        if session_id and (recovered_binding or clear_unresolved_turn):
+            from audiagentic.components.agents.gateway.session import sessions_store as session_store
+
+            if recovered_binding:
+                session_store.update_provider_metadata(
+                    project_root,
+                    session_id,
+                    {str(key): value for key, value in recovered_binding.items() if value is not None},
+                )
+            if clear_unresolved_turn:
+                session_store.update_provider_metadata(
+                    project_root,
+                    session_id,
+                    {"unresolved-turn-pending": False, "recovery-state": "terminal-captured"},
+                    remove_keys=(
+                        "unresolved-turn-id", "prompt-message-id", "assistant-message-id",
+                        "assistant-before-message-id", "assistant-before-id", "prompt-text-digest",
+                        "submission-proven", "terminal-evidence",
+                    ),
+                )
     _finalize_worker_session_if_terminal(project_root, updated)
     return updated
 
