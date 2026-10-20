@@ -16,6 +16,7 @@ import os
 from pathlib import Path
 from typing import Any
 from audiagentic.components.agents.gateway.api import _resolve_workspace_project_root
+from audiagentic.components.agents.gateway import store as gateway_store
 from audiagentic.components.agents.gateway.session import sessions_store
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
@@ -44,6 +45,44 @@ def _request_project_root(request_id: str):
         character not in "0123456789abcdef" for character in parts[-1].casefold()
     ):
         return root
+    # The project slug is not necessarily unique across configured worktrees
+    # (for example, a main checkout and a detached Codex worktree can share
+    # project-id/project-name). Prefer the durable request record, which is
+    # authoritative and already carries the exact project root, before using
+    # the human-readable slug resolver.
+    configured = os.environ.get("AUDIAGENTIC_WORKSPACE_ROOTS", "")
+    if configured.strip():
+        candidates = [
+            Path(value).expanduser().resolve()
+            for value in configured.split(os.pathsep)
+            if value.strip()
+        ]
+    else:
+        candidates = [root]
+        if root.parent.is_dir():
+            candidates.extend(
+                child.resolve()
+                for child in root.parent.iterdir()
+                if child.is_dir() and child.resolve() != root
+            )
+    matches: list[Path] = []
+    for candidate in dict.fromkeys(candidates):
+        try:
+            gateway_store.read_record(candidate, request_id)
+        except AudiaGenticError as exc:
+            if exc.code == "RES-AGW-001":
+                continue
+            raise
+        matches.append(candidate)
+    if len(matches) == 1:
+        return matches[0]
+    if len(matches) > 1:
+        raise AudiaGenticError(
+            code="VAL-AGW-152",
+            kind="agents",
+            message="gateway request id is ambiguous across project checkouts",
+            details={"request-id": request_id, "project-roots": [str(path) for path in matches]},
+        )
     return _resolve_workspace_project_root(root, "_".join(parts[1:-1]))
 
 
@@ -558,4 +597,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
