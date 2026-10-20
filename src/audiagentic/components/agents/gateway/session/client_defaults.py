@@ -269,6 +269,24 @@ def select(
                 recovered_url = chat_url(sessions_store.session_provider_metadata(session))
                 if recovered_url:
                     binding["chat-url"] = recovered_url
+                # A persisted default can outlive its gateway session.  Never
+                # hand a terminal session to admission: doing so makes the
+                # next prompt fail during turn admission before the provider
+                # is reached, even though the retained GPT conversation may
+                # still be recoverable.  Keep the provider URL so API
+                # admission can create a replacement gateway session and
+                # silently reopen the same conversation when safe.
+                session_state = session.get("state")
+                if session_state is not None and session_state != "active":
+                    selection.session_id = None
+                    selection.provider_chat_url = recovered_url or binding.get("chat-url")
+                    selection.warnings.append(
+                        warning(
+                            "RES-AGW-003",
+                            "Default gateway session is terminal; creating a replacement while retaining its chat when possible.",
+                            selected_session_id,
+                        )
+                    )
             except AudiaGenticError as exc:
                 selection.session_id = None
                 selection.provider_chat_url = binding.get("chat-url")

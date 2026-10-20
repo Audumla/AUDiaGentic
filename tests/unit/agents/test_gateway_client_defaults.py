@@ -133,6 +133,26 @@ def test_missing_session_retains_chat_recovery_reference(tmp_path):
             assert url not in str(chosen.warnings)
 
 
+def test_terminal_default_session_is_not_reused_and_retains_chat(tmp_path):
+    url = "https://chatgpt.com/g/g-p-example/c/conversation"
+    with selection(tmp_path, provider_chat_url=url) as chosen:
+        chosen.commit({"session-id": "ses_terminal"})
+
+    terminal = {
+        "session-id": "ses_terminal",
+        "state": "failed",
+        "provider-metadata": {"chat-url": url},
+    }
+    with patch(
+        "audiagentic.components.agents.gateway.session.sessions_store.read_session_record",
+        return_value=terminal,
+    ):
+        with selection(tmp_path) as chosen:
+            assert chosen.session_id is None
+            assert chosen.provider_chat_url == url
+            assert chosen.warnings[0]["code"] == "RES-AGW-003"
+
+
 def test_first_explicit_new_session_establishes_default(tmp_path):
     with selection(tmp_path, new_session=True) as chosen:
         chosen.commit({"session-id": "ses_first"})
