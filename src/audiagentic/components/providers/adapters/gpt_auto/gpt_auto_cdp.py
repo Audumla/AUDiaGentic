@@ -319,6 +319,47 @@ _SNAPSHOT_FN = r"""
     const value = owner?.getAttribute('data-content-search-turn-key');
     return value ? String(value) : null;
   };
+  const fallbackBlockMessageId = block => {
+    const carriers = block.hasAttribute('data-chatgpt-search-message-ids')
+      ? [block, ...block.querySelectorAll('[data-chatgpt-search-message-ids]')]
+      : Array.from(block.querySelectorAll('[data-chatgpt-search-message-ids]'));
+    const owned = carriers.filter(carrier => carrier.closest('.block-BQZwFn') === block);
+    const ids = new Set();
+    for (const carrier of owned) {
+      const raw = (carrier.getAttribute('data-chatgpt-search-message-ids') || '').trim();
+      if (!raw) continue;
+      // The current renderer repeats the same UUID in one attribute. A
+      // repeated identical token is one proven identity; genuinely different
+      // tokens are ambiguous and must not be guessed.
+      const tokens = [...new Set(raw.split(/\s+/))];
+      if (tokens.length !== 1) return null;
+      ids.add(tokens[0]);
+    }
+    return ids.size === 1 ? [...ids][0] : null;
+  };
+  // Normalize duplicate renderer copies before deriving latest-turn,
+  // unanswered-prompt, activity-owner, or completion state below. Doing this
+  // later fixes messageRefs/counts but leaves those earlier decisions based
+  // on the duplicated raw order. Preserve logical position and use a painted
+  // copy when the first copy is hidden/virtualized. Do not infer identity
+  // from text or synthetic ordinal IDs.
+  const uniqueFallbackBlocks = [];
+  const durableFallbackBlockIndexes = new Map();
+  for (const block of fallbackBlocks) {
+    const role = fallbackBlockRole(block);
+    const messageId = role ? fallbackBlockMessageId(block) : null;
+    const key = messageId ? `${role}:${messageId}` : null;
+    const priorIndex = key ? durableFallbackBlockIndexes.get(key) : undefined;
+    if (priorIndex === undefined) {
+      if (key) durableFallbackBlockIndexes.set(key, uniqueFallbackBlocks.length);
+      uniqueFallbackBlocks.push(block);
+      continue;
+    }
+    if (!shown(uniqueFallbackBlocks[priorIndex]) && shown(block)) {
+      uniqueFallbackBlocks[priorIndex] = block;
+    }
+  }
+  fallbackBlocks = uniqueFallbackBlocks;
   // The virtualized renderer can expose both completed blocks with zero
   // geometry and newest-first DOM order. In that black-and-white case the
   // provider's shared content-turn key is stronger than either layout or DOM
@@ -394,39 +435,6 @@ _SNAPSHOT_FN = r"""
     // renderer does not expose message UUIDs.
     let userIndex = 0;
     let assistantIndex = 0;
-    // The real ChatGPT message UUID rides in `data-chatgpt-search-message-ids`
-    // on a descendant of the labelled block, not on the block itself and not
-    // on `[data-user-message-bubble="true"]` (that attribute is no longer
-    // rendered by the current renderer). Read it from whichever element in
-    // the block actually carries it before falling back to a synthetic id.
-    // Collect every candidate carrier (self plus all descendants), keep only
-    // the ones actually owned by this block (nearest `.block-BQZwFn`
-    // ancestor is this block, not a nested/foreign one -- a querySelector
-    // that stopped at the first match could silently shadow a later owned
-    // carrier with an earlier foreign one, or pick an arbitrary one of two
-    // disagreeing owned carriers), and fail closed to null (never guess)
-    // unless every owned carrier resolves to exactly one single-id value.
-    const realMessageId = block => {
-      const carriers = block.hasAttribute('data-chatgpt-search-message-ids')
-        ? [block, ...block.querySelectorAll('[data-chatgpt-search-message-ids]')]
-        : Array.from(block.querySelectorAll('[data-chatgpt-search-message-ids]'));
-      const owned = carriers.filter(carrier => carrier.closest('.block-BQZwFn') === block);
-      const ids = new Set();
-      for (const carrier of owned) {
-        const raw = (carrier.getAttribute('data-chatgpt-search-message-ids') || '').trim();
-        if (!raw) continue;
-        // The current renderer repeats the same UUID in one attribute.  A
-        // repeated identical token is still one proven identity; only
-        // genuinely different tokens are ambiguous.
-        const tokens = [...new Set(raw.split(/\s+/))];
-        // A carrier's own value is ambiguous (more than one space-separated
-        // id, no proven canonical token) -- fail the whole block closed
-        // rather than silently pick a token from it.
-        if (tokens.length !== 1) return null;
-        ids.add(tokens[0]);
-      }
-      return ids.size === 1 ? [...ids][0] : null;
-    };
     for (const block of fallbackBlocks) {
       const role = fallbackBlockRole(block);
       if (role === 'user') {
@@ -436,10 +444,10 @@ _SNAPSHOT_FN = r"""
         // identity across polls, independent of which blocks happen to
         // expose a real id on a given poll.
         const synthetic = `fallback-user-${userIndex++}`;
-        messageEntries.push({role: 'user', el: content, messageId: realMessageId(block) || synthetic});
+        messageEntries.push({role: 'user', el: content, messageId: fallbackBlockMessageId(block) || synthetic});
       } else if (role === 'assistant') {
         const synthetic = `fallback-assistant-${assistantIndex++}`;
-        messageEntries.push({role: 'assistant', el: block, messageId: realMessageId(block) || synthetic});
+        messageEntries.push({role: 'assistant', el: block, messageId: fallbackBlockMessageId(block) || synthetic});
       }
     }
   }
