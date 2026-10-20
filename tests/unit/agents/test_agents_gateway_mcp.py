@@ -113,6 +113,22 @@ def test_agent_task_status_delegates():
     mock_call.assert_called_once_with("get_execution_request", _ROOT, "req_x")
 
 
+def test_request_status_prefers_durable_record_when_project_slug_is_ambiguous():
+    request_id = "req_example_84c8ae891c30"
+    with (
+        _patch_root(),
+        patch.dict("os.environ", {"AUDIAGENTIC_WORKSPACE_ROOTS": str(_ROOT)}),
+        patch("audiagentic.components.agents.mcp.gateway_mcp.gateway_store.read_record") as read,
+        patch("audiagentic.components.agents.mcp.gateway_mcp.call_gateway_method") as mock_call,
+    ):
+        read.return_value = {"request-id": request_id}
+        mock_call.return_value = {"request_id": request_id, "lifecycle": "pending", "activity_seq": 0}
+        result = agents_gateway_mcp.agent_task_status(request_id)
+    assert result["request_id"] == request_id
+    read.assert_called_once_with(_ROOT, request_id)
+    mock_call.assert_called_once_with("get_execution_request", _ROOT, request_id)
+
+
 def test_status_and_submit_dtos_drop_raw_metadata_and_status_has_session_id():
     with (
         _patch_root(),
