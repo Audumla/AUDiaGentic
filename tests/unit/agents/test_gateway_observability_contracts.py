@@ -339,6 +339,31 @@ def test_recovery_claim_can_be_renewed_without_changing_generation(tmp_path):
     assert active["outcome"] == "recovery-claim-active"
 
 
+def test_future_dated_recovery_claim_is_invalid_and_can_be_replaced(tmp_path):
+    replay.prepare_recovery_action(
+        tmp_path, "req_future_claim", action_attempt_id="attempt_1", action="reconcile",
+        action_kind="reconcile", attempt_epoch=1, retry_budget=0, submission_proven=True,
+    )
+    journal = replay.gateway_recovery_action_path(tmp_path, "req_future_claim")
+    entry = json.loads(journal.read_text(encoding="utf-8").splitlines()[0])
+    future = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat().replace(
+        "+00:00", "Z"
+    )
+    entry["created-at"] = future
+    entry["lease-expires-at"] = (
+        datetime.now(timezone.utc) + timedelta(hours=1, minutes=2)
+    ).isoformat().replace("+00:00", "Z")
+    journal.write_text(json.dumps(entry) + "\n", encoding="utf-8")
+
+    replacement = replay.prepare_recovery_action(
+        tmp_path, "req_future_claim", action_attempt_id="attempt_2", action="reconcile",
+        action_kind="reconcile", attempt_epoch=1, retry_budget=0, submission_proven=True,
+    )
+
+    assert replacement["disposition"] == "intent-persisted"
+    assert replacement["claim-generation"] == 2
+
+
 def test_native_continuation_fence_persists_intent_before_provider_action(tmp_path):
     from audiagentic.components.agents.gateway.session.dispatch import (
         _prepare_native_recovery_fence,
