@@ -14,8 +14,10 @@ from __future__ import annotations
 
 import functools
 import hashlib
+import logging
 import os
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
@@ -27,6 +29,8 @@ from audiagentic.components.agents.gateway.queue import dispatch as dispatch
 from audiagentic.components.agents.gateway.queue import queue as queue_mod
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.time import now_iso_z
+
+logger = logging.getLogger(__name__)
 
 # A blocking wait with no requested timeout still needs a bound so it cannot
 # hang forever; callers that want longer pass an explicit timeout_seconds.
@@ -1048,6 +1052,9 @@ def get_execution_request(
 ) -> dict[str, Any]:
     """Return compact V4 status, optionally with verified terminal response."""
     record = store.read_public_status(project_root, request_id)
+    _auto_reconcile_terminal_status(project_root, request_id, record)
+    if record.get("state") in {"failed", "cancelled"}:
+        record = store.read_public_status(project_root, request_id)
     status = _attach_agent_status(record, project_root)
     if not include_response or status.get("lifecycle") != "terminal":
         return status
@@ -1066,6 +1073,84 @@ def get_execution_request(
             "media_type": response["media_type"],
         },
     }
+
+
+_AUTO_STATUS_RECOVERY_COOLDOWN_SECONDS = 60.0
+
+
+def _auto_reconcile_terminal_status(
+    project_root: Path,
+    request_id: str,
+    public_record: dict[str, Any],
+) -> None:
+    """Mirror the dashboard reconcile action once from a status read.
+
+    This is deliberately limited to terminal failures with proven provider
+    side effects and an adoptable diagnostic disposition.  It never sends a
+    prompt.  The recovery journal provides a durable in-flight/completed
+    fence and a short retry cooldown so normal dashboard polling cannot
+    hammer the provider.
+    """
+    if public_record.get("state") not in {"failed", "cancelled"}:
+        return
+    diagnostics = public_record.get("diagnostics")
+    if not isinstance(diagnostics, dict):
+        return
+    recovery = diagnostics.get("recovery")
+    disposition = recovery.get("disposition") if isinstance(recovery, dict) else None
+    if disposition not in {"operator-adopt-available", "reconcile-required"}:
+        return
+    try:
+        record = store.read_record(project_root, request_id, include_output=False)
+    except Exception:  # noqa: BLE001 - status remains a read operation
+        return
+    metadata = record.get("provider-metadata")
+    if not isinstance(metadata, dict) or (
+        metadata.get("submission-proven") is not True
+        and metadata.get("unresolved-turn-pending") is not True
+    ):
+        return
+
+    try:
+        from audiagentic.components.agents.gateway.replay import (
+            gateway_recovery_action_path,
+        )
+        from audiagentic.foundation.io import last_ndjson
+
+        latest = last_ndjson(gateway_recovery_action_path(project_root, request_id))
+        now = datetime.now(timezone.utc)
+        if isinstance(latest, dict):
+            event = latest.get("event")
+            if event == "action-intent":
+                return
+            if event == "action-result":
+                if latest.get("outcome") == "reconciliation-completed":
+                    return
+                created_at = latest.get("created-at")
+                if isinstance(created_at, str):
+                    try:
+                        age = (
+                            now
+                            - datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+                        ).total_seconds()
+                    except ValueError:
+                        age = 0.0
+                    if age < _AUTO_STATUS_RECOVERY_COOLDOWN_SECONDS:
+                        return
+
+        recover_execution_request(
+            project_root,
+            request_id,
+            action="reconcile",
+            expected_revision=(
+                record.get("revision") if isinstance(record.get("revision"), int) else None
+            ),
+        )
+    except Exception as exc:  # noqa: BLE001 - status must not become a side-effect error
+        logger.info(
+            "automatic terminal request reconciliation deferred",
+            extra={"request-id": request_id, "error": str(exc)},
+        )
 
 def get_execution_diagnostics(
     project_root: Path, request_id: str, *, limit: int = 25
