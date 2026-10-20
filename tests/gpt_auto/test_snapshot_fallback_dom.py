@@ -1041,6 +1041,92 @@ async def test_fallback_deduplicates_same_durable_user_message_after_answer() ->
 
 
 @pytest.mark.asyncio
+async def test_fallback_dedup_precedes_unanswered_prompt_and_terminal_witness() -> None:
+    """Duplicate durable nodes must not poison completion state derived earlier.
+
+    Also cover duplicate assistant nodes and a hidden-first/visible-second
+    user copy: the visible element is selected, but the logical turn remains
+    in its first conversation position and keeps its terminal action bar.
+    """
+    signals = [
+        dict(name='completion-control', scope='latest-assistant-turn', selectors=['button[aria-label="Copy"]'], visible=True),
+        dict(name='more-actions-menu', scope='latest-assistant-turn', selectors=['button[aria-label="More actions"]'], visible=True),
+    ]
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            await page.set_content(
+                """
+                <div data-turn-key="turn-1">
+                  <div class="block-BQZwFn" style="display:none">
+                    <h4 class="sr-only">You said:</h4>
+                    <div data-chatgpt-search-message-ids="user-1">hidden copy</div>
+                  </div>
+                  <div class="block-BQZwFn">
+                    <h4 class="sr-only">ChatGPT said:</h4>
+                    <div data-chatgpt-search-message-ids="assistant-1">answer</div>
+                  </div>
+                  <div class="block-BQZwFn">
+                    <h4 class="sr-only">You said:</h4>
+                    <div data-chatgpt-search-message-ids="user-1">visible copy</div>
+                  </div>
+                  <div class="block-BQZwFn">
+                    <h4 class="sr-only">ChatGPT said:</h4>
+                    <div data-chatgpt-search-message-ids="assistant-1">answer copy</div>
+                  </div>
+                  <div class="turn-action-controls">
+                    <button aria-label="Copy">Copy</button>
+                    <button aria-label="More actions">More</button>
+                  </div>
+                </div>
+                """
+            )
+
+            snapshot = await page.evaluate(_SNAPSHOT_FN, signals)
+
+            assert snapshot["userCount"] == 1
+            assert snapshot["assistantCount"] == 1
+            assert snapshot["latestUserId"] == "user-1"
+            assert snapshot["latestAssistantId"] == "assistant-1"
+            assert snapshot["latestUserText"].endswith("visible copy")
+            assert "hidden copy" not in snapshot["latestUserText"]
+            assert snapshot["terminalWitnessAssistantId"] == "assistant-1"
+            assert snapshot["domSignals"]["completion-control"] is True
+            assert snapshot["domSignals"]["more-actions-menu"] is True
+        finally:
+            await browser.close()
+
+
+@pytest.mark.asyncio
+async def test_fallback_does_not_deduplicate_synthetic_message_ids() -> None:
+    """Without durable provider IDs, identical text is not message identity."""
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            await page.set_content(
+                """
+                <div class="block-BQZwFn">
+                  <h4 class="sr-only">ChatGPT said:</h4><div>same answer</div>
+                </div>
+                <div class="block-BQZwFn">
+                  <h4 class="sr-only">ChatGPT said:</h4><div>same answer</div>
+                </div>
+                """
+            )
+
+            snapshot = await page.evaluate(_SNAPSHOT_FN, [])
+
+            assert snapshot["assistantCount"] == 2
+            assert [
+                ref["messageId"] for ref in snapshot["messageRefs"]
+            ] == ["fallback-assistant-0", "fallback-assistant-1"]
+        finally:
+            await browser.close()
+
+
+@pytest.mark.asyncio
 async def test_fallback_unlabelled_wrapper_does_not_adopt_a_nested_blocks_label() -> None:
     """An unlabelled outer `.block-BQZwFn` wrapping a labelled nested block
     must not adopt the nested block's h4 label -- that would turn one
