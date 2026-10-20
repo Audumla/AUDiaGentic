@@ -26,6 +26,11 @@ from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
 client_validation_error = make_error_factory("VAL", "AGSV", "gateway-service")
 client_network_error = make_error_factory("NET", "AGSV", "gateway-service")
 _DEFAULT_TRANSPORT_TIMEOUT = object()
+# Provider response capture is deliberately bounded in the gateway API, but
+# it may require two CDP snapshots and a remote-browser reconnect.  Do not let
+# the ordinary 30-second control-plane timeout misreport a live recovery as
+# NET-AGSV-002 while the standalone service is still processing it.
+_RECOVERY_TRANSPORT_TIMEOUT_SECONDS = 90.0
 
 
 class StandaloneGatewayClient:
@@ -180,7 +185,12 @@ class StandaloneGatewayClient:
     def recover_execution_request(self, project_root: Path, request_id: str, **kwargs: Any) -> dict[str, Any]:
         return cast(
             dict[str, Any],
-            self._call("recover_execution_request", project_root, {"request_id": request_id, **kwargs}),
+            self._call(
+                "recover_execution_request",
+                project_root,
+                {"request_id": request_id, **kwargs},
+                transport_timeout=_RECOVERY_TRANSPORT_TIMEOUT_SECONDS,
+            ),
         )
 
     def get_execution_response_payload(self, project_root: Path, request_id: str) -> dict[str, Any]:
