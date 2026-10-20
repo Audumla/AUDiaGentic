@@ -63,9 +63,11 @@ def recovery_claim_state(
                 "lease-expires-at": entry.get("lease-expires-at"),
                 "intent": dict(entry),
                 "result": None,
+                "lease-created-at": entry.get("created-at"),
             }
         elif current is not None and entry.get("event") == "claim-renewal" and entry.get("action-attempt-id") == current["action-attempt-id"] and entry.get("claim-generation") == current["claim-generation"]:
             current["lease-expires-at"] = entry.get("lease-expires-at")
+            current["lease-created-at"] = entry.get("created-at")
         elif current is not None and entry.get("event") == "action-result" and entry.get("action-attempt-id") == current["action-attempt-id"] and entry.get("claim-generation") == current["claim-generation"]:
             current["result"] = dict(entry)
     if current is None:
@@ -73,13 +75,16 @@ def recovery_claim_state(
     current["created-at"] = current["intent"].get("created-at")
     reference = now or datetime.now(timezone.utc)
     created = _parse_recovery_time(current.get("created-at"))
+    lease_created = _parse_recovery_time(current.get("lease-created-at"))
     expires = _parse_recovery_time(current.get("lease-expires-at"))
     current["valid"] = bool(
         created
+        and lease_created
         and expires
         and created <= reference + timedelta(seconds=_RECOVERY_CLOCK_SKEW_SECONDS)
-        and expires >= created
-        and expires <= created + timedelta(
+        and lease_created <= reference + timedelta(seconds=_RECOVERY_CLOCK_SKEW_SECONDS)
+        and expires >= lease_created
+        and expires <= lease_created + timedelta(
             seconds=RECOVERY_CLAIM_LEASE_SECONDS + _RECOVERY_CLOCK_SKEW_SECONDS
         )
     )

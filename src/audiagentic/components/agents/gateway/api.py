@@ -1958,55 +1958,10 @@ def complete_execution_from_provider(
         updates={"__final-response-text": text, "error": None, "completion": {"source": "operator-provider-capture", "provider-message-id": latest_assistant_id}},
         recovery_attempt_id=recovery_attempt_id,
         recovery_claim_generation=recovery_claim_generation,
+        session_id=str(session_id) if session_id else None,
+        recovered_binding=recovered_binding if isinstance(recovered_binding, dict) else None,
+        clear_unresolved_turn=bool(session_id and isinstance(session_record, dict) and session_record.get("session-id") == str(session_id)),
     )
-    if isinstance(recovered_binding, dict):
-        from audiagentic.components.agents.gateway.session import sessions_store as session_store
-        if recovery_attempt_id is None:
-            session_store.update_provider_metadata(
-                project_root,
-                str(session_id),
-                {str(key): value for key, value in recovered_binding.items() if value is not None},
-            )
-        else:
-            try:
-                assert_recovery_claim_owner(
-                    project_root,
-                    request_id,
-                    action_attempt_id=recovery_attempt_id,
-                    claim_generation=int(recovery_claim_generation or 0),
-                )
-            except RecoveryClaimLostError:
-                recovered_binding = None
-            if recovered_binding is not None:
-                session_store.update_provider_metadata(
-                    project_root,
-                    str(session_id),
-                    {str(key): value for key, value in recovered_binding.items() if value is not None},
-                )
-    # Operator capture is a verified terminal witness, just like the normal
-    # turn observer.  Clear the request-owned unresolved-turn fence as part
-    # of the same terminalization; otherwise a later prompt on this durable
-    # conversation remains queued behind a predecessor that is already
-    # completed.
-    if session_id and isinstance(session_record, dict) and session_record.get("session-id") == str(session_id):
-        session_store.update_provider_metadata(
-            project_root,
-            str(session_id),
-            {
-                "unresolved-turn-pending": False,
-                "recovery-state": "terminal-captured",
-            },
-            remove_keys=(
-                "unresolved-turn-id",
-                "prompt-message-id",
-                "assistant-message-id",
-                "assistant-before-message-id",
-                "assistant-before-id",
-                "prompt-text-digest",
-                "submission-proven",
-                "terminal-evidence",
-            ),
-        )
     return {"request-id": request_id, "state": updated.get("state"), "response-artifact": updated.get("response-artifact"), "capture-source": "provider-current-response"}
 
 
