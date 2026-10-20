@@ -547,6 +547,62 @@ async def test_response_observer_materializes_virtualized_turn_once_before_compl
 
 
 @pytest.mark.asyncio
+async def test_response_observer_rematerializes_pinned_body_before_virtualized_completion():
+    """A quiescent terminal witness remounts text before it can complete."""
+    chat = _Chat()
+    chat.config.turn.poll_interval_seconds = 0.001
+    chat.config.turn.response_stability_seconds = 0.001
+    chat.config.turn.response_generating_override_stability_seconds = 0.001
+    baseline = snap(users=1, user="Review AU01", user_id="prompt-1")
+    body = "Exact response captured before ChatGPT virtualized the message body"
+    generating = snap(
+        users=1,
+        assistants=1,
+        user="Review AU01",
+        user_id="prompt-1",
+        assistant=body,
+        assistant_id="assistant-1",
+        generating=True,
+        complete=True,
+        completion_signals=("completion-control", "more-actions-menu"),
+    )
+    virtualized = replace(
+        generating,
+        assistant_count=0,
+        latest_assistant_id=None,
+        latest_assistant_text=None,
+        assistant_message_ids=(),
+        assistant_message_texts=(),
+        message_refs=(generating.message_refs[0],),
+        generating=False,
+    )
+    quiescent_body = replace(generating, generating=False)
+    chat._snapshots = iter([generating, virtualized, quiescent_body, quiescent_body])
+    materialized: list[bool] = []
+
+    async def materialize_latest_assistant_turn() -> bool:
+        materialized.append(True)
+        return True
+
+    chat.materialize_latest_assistant_turn = materialize_latest_assistant_turn
+    chat.state = ChatState.BUSY
+    turn = GptAutoTurn(
+        chat, SessionPrompt(turn_id="turn-virtualized-terminal", body="Review AU01"), lambda _: None
+    )
+    turn.state = TurnState.AWAITING_RESPONSE
+    turn._prompt_message_id = "prompt-1"
+    turn._submission_proof_url = baseline.url
+
+    result = await turn._await_response(baseline, generating)
+
+    assert result == body
+    assert materialized == [True]
+    assert turn._terminal_body_materialization_attempted
+    assert turn._terminal_evidence["terminal-witness-id"] == "assistant-1"
+    assert turn._terminal_evidence["text-digest"]
+
+
+@pytest.mark.asyncio
 async def test_initial_blank_page_settings_do_not_authorize_a_refresh():
     """AS123: legacy initial-response probes have no recovery authority."""
     chat = _Chat()

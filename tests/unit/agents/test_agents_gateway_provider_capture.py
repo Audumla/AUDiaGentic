@@ -350,7 +350,7 @@ def test_complete_execution_from_provider_rejects_foreign_unresolved_turn(
         api.complete_execution_from_provider(tmp_path, "req_foreign_unresolved")
 
     assert getattr(caught.value, "code", None) == "CON-AGW-156"
-    assert caught.value.details["failure-reason"] == "prompt-digest-mismatch"
+    assert caught.value.details["failure-reason"] == "foreign-session-turn"
 
 
 def test_complete_execution_from_provider_rejects_stale_turn_metadata_on_queued_request(
@@ -402,6 +402,66 @@ def test_complete_execution_from_provider_rejects_stale_turn_metadata_on_queued_
 
     assert getattr(caught.value, "code", None) == "CON-AGW-156"
     assert caught.value.details["failure-reason"] == "foreign-unresolved-turn"
+    assert capture_calls == 0
+
+
+def test_complete_execution_from_provider_rejects_foreign_session_turn_over_request_claim(
+    monkeypatch, tmp_path: Path
+):
+    """A current-looking request record cannot override a foreign session fence."""
+    request_id = "req_current_turn"
+    record = {
+        "request-id": request_id,
+        "state": "running",
+        "revision": 3,
+        "session-id": "ses_capture",
+        "resolved-provider-id": "gpt-auto",
+        "provider-metadata": {
+            "project-url": "https://chatgpt.com/g/g-p-project/project",
+            "chat-url": "https://chatgpt.com/g/g-p-project/c/conversation",
+            "provider-session-id": "conversation",
+            "submission-proven": True,
+            "unresolved-turn-pending": True,
+            "unresolved-turn-id": request_id,
+            "prompt-message-id": "current-prompt",
+            "assistant-before-message-id": "prior-assistant",
+            "prompt-text-digest": "current-prompt-digest",
+        },
+    }
+    capture_calls = 0
+
+    def capture(*_args, **_kwargs):
+        nonlocal capture_calls
+        capture_calls += 1
+        return {"outcome": "captured", "snapshot": object()}
+
+    monkeypatch.setattr(api.store, "read_record", lambda *_: record)
+    monkeypatch.setattr(
+        sessions_store,
+        "read_session_record",
+        lambda *_: {"provider": {"metadata": {}}},
+    )
+    monkeypatch.setattr(
+        sessions_store,
+        "session_provider_metadata",
+        lambda _: {
+            "submission-proven": True,
+            "unresolved-turn-pending": True,
+            "unresolved-turn-id": "req_predecessor_turn",
+        },
+    )
+    monkeypatch.setattr(sessions_store, "session_provider_id", lambda _: "gpt-auto")
+    monkeypatch.setattr(
+        session_runtime_module,
+        "get_session_runtime",
+        lambda: SimpleNamespace(capture_latest_response=capture),
+    )
+
+    with pytest.raises(Exception) as caught:
+        api.complete_execution_from_provider(tmp_path, request_id, passive=True)
+
+    assert getattr(caught.value, "code", None) == "CON-AGW-156"
+    assert caught.value.details["failure-reason"] == "foreign-session-turn"
     assert capture_calls == 0
 
 

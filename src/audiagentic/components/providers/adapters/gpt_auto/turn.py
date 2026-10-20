@@ -359,6 +359,7 @@ class GptAutoTurn:
         # own tab position.
         self._completion_materialization_attempted = False
         self._completion_materialization_succeeded = False
+        self._terminal_body_materialization_attempted = False
         self._delivery_timeout_retry_attempted = False
         self._delivery_timeout_retry_probe_failed = False
         self._conversation_load_retry_attempts = 0
@@ -2111,14 +2112,74 @@ class GptAutoTurn:
             # this recovery path because stale stop controls are deliberately
             # advisory elsewhere. When generating is still reported, require
             # one unchanged correlated response observation before attempting.
+            pinned_terminal_body_unmounted = bool(
+                response_ref is None
+                and request_activity_response_id
+                and request_activity_response_id == self._response_message_id
+                and request_activity_response_text
+                and current.terminal_witness_assistant_id
+                == request_activity_response_id
+                and not current.generating
+                and not current.error_present
+                and not current.dom_signals.intersection(
+                    {
+                        "auth-required",
+                        "provider-interruption",
+                        "conversation-load-failed",
+                        "request-error-alert",
+                        "network-error-alert",
+                        "stream-cache-expired",
+                    }
+                )
+                and current.dom_signals.intersection(
+                    {"completion-control", "response-complete-status"}
+                )
+                and same_chat_identity(current.url, baseline.url)
+                and same_chat_identity(current.url, self.chat.chat_url or baseline.url)
+                and (
+                    not self.chat.provider_session_id
+                    or url_matches_provider_session(
+                        current.url, self.chat.provider_session_id
+                    )
+                )
+                and (
+                    current.latest_assistant_id is None
+                    or current.latest_assistant_id == request_activity_response_id
+                )
+                and (
+                    current.latest_user_id is None
+                    or current.latest_user_id == prompt_message_id
+                )
+                and (
+                    current.user_count == 0
+                    or current.latest_user_id == prompt_message_id
+                )
+                and all(
+                    user_id == prompt_message_id for user_id in current.user_message_ids
+                )
+                and not any(
+                    ref.role == "assistant"
+                    and ref.message_id != request_activity_response_id
+                    for ref in current.message_refs
+                )
+            )
+            should_materialize_terminal_body = (
+                pinned_terminal_body_unmounted
+                and not self._terminal_body_materialization_attempted
+            )
             if (
-                not self._completion_materialization_attempted
-                and response_ref is not None
-                and current.latest_assistant_text
-                and (not current.generating or response_content_stable)
-                and not (current.dom_signals & self._TERMINAL_WITNESS_SIGNALS)
+                (
+                    not self._completion_materialization_attempted
+                    and response_ref is not None
+                    and current.latest_assistant_text
+                    and (not current.generating or response_content_stable)
+                    and not (current.dom_signals & self._TERMINAL_WITNESS_SIGNALS)
+                )
+                or should_materialize_terminal_body
             ):
                 self._completion_materialization_attempted = True
+                if should_materialize_terminal_body:
+                    self._terminal_body_materialization_attempted = True
                 materialize = getattr(self.chat, "materialize_latest_assistant_turn", None)
                 if callable(materialize):
                     try:
@@ -2231,6 +2292,9 @@ class GptAutoTurn:
                     completion_satisfied=complete.satisfied,
                     completion_matched=complete.matched,
                     correlation_error=None,
+                    terminal_body_materialization_attempted=(
+                        self._terminal_body_materialization_attempted
+                    ),
                 )
             )
             id_only_replacement = (
@@ -4128,6 +4192,7 @@ def _response_decision_diagnostics(
     completion_satisfied: bool,
     completion_matched: object,
     correlation_error: str | None,
+    terminal_body_materialization_attempted: bool = False,
 ) -> dict[str, Any]:
     """Return content-free correlation and completion gates for one poll.
 
@@ -4138,6 +4203,21 @@ def _response_decision_diagnostics(
     """
     raw_assistant_refs = tuple(ref for ref in raw.message_refs if ref.role == "assistant")
     raw_user_refs = tuple(ref for ref in raw.message_refs if ref.role == "user")
+    prompt_refs = tuple(
+        ref for ref in raw_user_refs if prompt_message_id and ref.message_id == prompt_message_id
+    )
+    prompt_ref = prompt_refs[-1] if prompt_refs else None
+    refs_after_prompt = tuple(
+        ref
+        for ref in raw.message_refs
+        if prompt_ref is not None and ref.sequence > prompt_ref.sequence
+    )
+    user_refs_after_prompt = tuple(
+        ref for ref in refs_after_prompt if ref.role == "user"
+    )
+    assistant_refs_after_prompt = tuple(
+        ref for ref in refs_after_prompt if ref.role == "assistant"
+    )
     terminal_id = raw.terminal_witness_assistant_id
     latest_id = raw.latest_assistant_id
     response_id = response_ref.message_id if response_ref is not None else None
@@ -4226,6 +4306,19 @@ def _response_decision_diagnostics(
             prompt_message_id
             and any(ref.message_id == prompt_message_id for ref in raw_user_refs)
         ),
+        "turn-anchor-ref-count": len(prompt_refs),
+        "turn-anchor-ref-sequence": prompt_ref.sequence if prompt_ref is not None else None,
+        "refs-after-anchor-user-count": len(user_refs_after_prompt),
+        "refs-after-anchor-assistant-count": len(assistant_refs_after_prompt),
+        "latest-user-matches-turn-anchor": bool(
+            prompt_message_id and raw.latest_user_id == prompt_message_id
+        ),
+        "latest-assistant-matches-terminal-witness": bool(
+            latest_id and terminal_id and latest_id == terminal_id
+        ),
+        "assistant-id-changed-from-bound": bool(
+            bound_assistant_id and latest_id and bound_assistant_id != latest_id
+        ),
         "prompt-unmounted": prompt_unmounted,
         "latest-assistant-durable": _is_durable_assistant_message_id(latest_id),
         "response-ref-present": response_ref is not None,
@@ -4238,6 +4331,13 @@ def _response_decision_diagnostics(
             and virtualized_assistant_id
             and response_id == virtualized_assistant_id
         ),
+        "terminal-node-unmounted": bool(
+            response_id is None
+            and bound_assistant_id
+            and terminal_id == bound_assistant_id
+            and not raw.generating
+        ),
+        "terminal-node-rematerialization-attempted": terminal_body_materialization_attempted,
         "terminal-witness-present": terminal_id is not None,
         "terminal-witness-hash": _text_digest(terminal_id) if terminal_id else None,
         "response-ref-hash": _text_digest(response_id) if response_id else None,
