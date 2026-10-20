@@ -255,6 +255,73 @@ def test_public_status_is_slim_v4_projection(tmp_path: Path, monkeypatch):
     }
 
 
+def test_status_poll_reconciles_adoptable_terminal_failure_once(tmp_path: Path, monkeypatch):
+    request_id = "req_auto_reconcile"
+    public_record = {
+        "request-id": request_id,
+        "state": "failed",
+        "revision": 7,
+        "diagnostics": {
+            "recovery": {"disposition": "operator-adopt-available"},
+        },
+    }
+    durable_record = {
+        **public_record,
+        "provider-metadata": {"submission-proven": True},
+    }
+    calls: list[dict[str, object]] = []
+    monkeypatch.setattr(gateway.store, "read_public_status", lambda *_: dict(public_record))
+    monkeypatch.setattr(
+        gateway.store,
+        "read_record",
+        lambda *_args, **_kwargs: dict(durable_record),
+    )
+    monkeypatch.setattr(
+        gateway,
+        "recover_execution_request",
+        lambda *args, **kwargs: calls.append({"args": args, **kwargs}) or {
+            "reconciliation": {"outcome": "unresolved"}
+        },
+    )
+    monkeypatch.setattr(
+        gateway,
+        "_attach_agent_status",
+        lambda record, _root: {"lifecycle": "terminal", "outcome": "failed"},
+    )
+
+    assert gateway.get_execution_request(tmp_path, request_id) == {
+        "lifecycle": "terminal",
+        "outcome": "failed",
+    }
+    assert len(calls) == 1
+    assert calls[0]["action"] == "reconcile"
+    assert calls[0]["expected_revision"] == 7
+
+
+def test_status_poll_does_not_reconcile_non_adoptable_failure(tmp_path: Path, monkeypatch):
+    request_id = "req_no_auto_reconcile"
+    public_record = {
+        "request-id": request_id,
+        "state": "failed",
+        "revision": 7,
+        "diagnostics": {
+            "recovery": {"disposition": "retry-safe"},
+        },
+    }
+    calls: list[object] = []
+    monkeypatch.setattr(gateway.store, "read_public_status", lambda *_: dict(public_record))
+    monkeypatch.setattr(gateway, "recover_execution_request", lambda *_args, **_kwargs: calls.append(True))
+    monkeypatch.setattr(
+        gateway,
+        "_attach_agent_status",
+        lambda record, _root: {"lifecycle": "terminal", "outcome": "failed"},
+    )
+
+    gateway.get_execution_request(tmp_path, request_id)
+
+    assert calls == []
+
+
 def test_public_status_has_no_legacy_response_version_argument(tmp_path: Path):
     record = store.build_record(execution_profile_id="default", prompt_body="hi")
     store.write_record(tmp_path, record)
