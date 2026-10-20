@@ -29,6 +29,7 @@ from audiagentic.components.providers.adapters.gpt_auto.turn import (
     _facts,
     _progress_activity_labels,
     _same_response_slot_replacement,
+    _terminal_same_turn_response_replacement,
     _terminal_same_response_slot_replacement,
     _scope_response_snapshot,
 )
@@ -1461,6 +1462,46 @@ def test_durable_assistant_remount_is_adopted_only_with_terminal_dom_witness() -
 
     assert not _terminal_same_response_slot_replacement(
         replace(terminal, generating=True, dom_signals=frozenset({"stop-control"})),
+        prompt_message_id="prompt-1",
+        old_assistant_id="assistant-old",
+        new_assistant_id="assistant-new",
+    )
+
+
+def test_terminal_same_turn_remount_allows_old_node_to_overlap_replacement() -> None:
+    snapshot = replace(
+        snap(
+            users=1,
+            assistants=2,
+            user="Review AU01",
+            user_id="prompt-1",
+            assistant="final response",
+            assistant_id="assistant-new",
+            complete=True,
+        ),
+        message_refs=(
+            ChatMessageRef(role="user", message_id="prompt-1", text="Review AU01", sequence=0),
+            ChatMessageRef(role="assistant", message_id="assistant-old", text="partial", sequence=1),
+            ChatMessageRef(role="assistant", message_id="assistant-new", text="final response", sequence=2),
+        ),
+    )
+
+    assert _terminal_same_turn_response_replacement(
+        snapshot,
+        prompt_message_id="prompt-1",
+        old_assistant_id="assistant-old",
+        new_assistant_id="assistant-new",
+    )
+
+    later_user = replace(
+        snapshot,
+        user_count=2,
+        message_refs=snapshot.message_refs
+        + (ChatMessageRef(role="user", message_id="prompt-2", text="later", sequence=3),),
+        latest_user_id="prompt-2",
+    )
+    assert not _terminal_same_turn_response_replacement(
+        later_user,
         prompt_message_id="prompt-1",
         old_assistant_id="assistant-old",
         new_assistant_id="assistant-new",
