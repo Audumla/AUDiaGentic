@@ -1974,18 +1974,18 @@ def test_fresh_owned_submission_checkpoint_is_durable_before_send_and_terminal_c
     assert persisted["unresolved-turn-pending"] is True
     assert persisted["unresolved-turn-id"] == request_id
 
-    # The normal first-turn owner advances prepared -> dispatching before the
-    # browser Send side effect; a restart can read, but not replay, that stage.
+    # The uninterrupted first-turn owner advances before the browser Send.
+    dispatching_checkpoint = {
+        "unresolved-turn-pending": True,
+        "unresolved-turn-id": request_id,
+        "submission-state": "dispatching",
+        "submission-proven": False,
+        "recovery-state": "side-effect-may-have-started",
+    }
     session_store.update_provider_metadata(
         tmp_path,
         session_id,
-        {
-            "unresolved-turn-pending": True,
-            "unresolved-turn-id": request_id,
-            "submission-state": "dispatching",
-            "submission-proven": False,
-            "recovery-state": "side-effect-may-have-started",
-        },
+        dispatching_checkpoint,
         request_id=request_id,
         **owner,
     )
@@ -2000,9 +2000,7 @@ def test_fresh_owned_submission_checkpoint_is_durable_before_send_and_terminal_c
             tmp_path,
             session_id,
             request_id,
-            dispatch_owner_epoch=owner["dispatch_owner_epoch"],
-            worker_id=owner["worker_id"],
-            attempt_epoch=owner["attempt_epoch"],
+            **owner,
         )
 
     request["state"] = "completed"
@@ -2027,6 +2025,113 @@ def test_fresh_owned_submission_checkpoint_is_durable_before_send_and_terminal_c
     assert terminal_metadata["recovery-state"] == "terminal-completed"
     assert "submission-state" not in terminal_metadata
     assert "unresolved-turn-id" not in terminal_metadata
+
+
+def test_restarted_prepared_checkpoint_requires_recovery_claim(tmp_path):
+    from audiagentic.components.agents.gateway import store as gateway_store
+
+    request_id = "req-restarted-prepared-checkpoint"
+    session_id = "ses-restarted-prepared-checkpoint"
+    project_id = "g-p-audiagentic-exact"
+    initial_owner = {
+        "dispatch_owner_epoch": "owner-before-restart",
+        "worker_id": "worker-before-restart",
+        "attempt_epoch": 1,
+    }
+    session = session_store.build_session_record(
+        session_id=session_id,
+        created_by_request_id=request_id,
+        provider_transport_kind="provider-session",
+        execution_profile_id="gpt-auto",
+        provider_id="gpt-auto",
+        model_id="chatgpt",
+        provider_metadata={"project-id": project_id},
+    )
+    session_store.write_session_record(tmp_path, session)
+    request = gateway_store.build_record(
+        request_id=request_id,
+        execution_profile_id="gpt-auto",
+        prompt_body="immutable prepared prompt",
+        session_id=session_id,
+        resolved_provider_id="gpt-auto",
+    )
+    request.update(
+        {
+            "state": "running",
+            "worker-id": initial_owner["worker_id"],
+            "attempt-epoch": initial_owner["attempt_epoch"],
+            "dispatch-owner-epoch": initial_owner["dispatch_owner_epoch"],
+            "provider-metadata": {"project-id": project_id},
+        }
+    )
+    gateway_store.write_record(tmp_path, request)
+    session_store.update_provider_metadata(
+        tmp_path,
+        session_id,
+        {
+            "unresolved-turn-pending": True,
+            "unresolved-turn-id": request_id,
+            "submission-state": "prepared",
+            "submission-proven": False,
+            "recovery-state": "submission-prepared",
+            "prompt-text-digest": "restart-prompt-digest",
+        },
+        request_id=request_id,
+        **initial_owner,
+    )
+
+    recovery_owner = {
+        "dispatch_owner_epoch": "owner-after-restart",
+        "worker_id": "worker-after-restart",
+        "attempt_epoch": initial_owner["attempt_epoch"],
+    }
+    gateway_store.takeover_nonterminal_owner(
+        tmp_path,
+        request_id,
+        expected_owner_epoch=initial_owner["dispatch_owner_epoch"],
+        new_owner_epoch=recovery_owner["dispatch_owner_epoch"],
+        new_worker_id=recovery_owner["worker_id"],
+    )
+    dispatching_checkpoint = {
+        "unresolved-turn-pending": True,
+        "unresolved-turn-id": request_id,
+        "submission-state": "dispatching",
+        "submission-proven": False,
+        "recovery-state": "side-effect-may-have-started",
+    }
+    with pytest.raises(AudiaGenticError, match="cannot advance without its request owner"):
+        session_store.update_owned_submission_checkpoint(
+            tmp_path,
+            session_id,
+            request_id,
+            dispatching_checkpoint,
+            **recovery_owner,
+        )
+    unchanged = session_store.session_provider_metadata(
+        session_store.read_session_record(tmp_path, session_id)
+    )
+    assert unchanged["submission-state"] == "prepared"
+    assert unchanged["unresolved-turn-id"] == request_id
+
+    claim = session_store.claim_prepared_submission_recovery(
+        tmp_path,
+        session_id,
+        request_id,
+        **recovery_owner,
+    )
+    session_store.advance_prepared_submission_to_dispatching(
+        tmp_path,
+        session_id,
+        request_id,
+        dispatching_checkpoint,
+        claim_id=claim["claim-id"],
+        **recovery_owner,
+    )
+    recovered = session_store.session_provider_metadata(
+        session_store.read_session_record(tmp_path, session_id)
+    )
+    assert recovered["submission-state"] == "dispatching"
+    assert recovered["unresolved-turn-pending"] is True
 
 
 def test_successor_claim_fences_stale_prepared_binding_checkpoint_and_open_commit(
