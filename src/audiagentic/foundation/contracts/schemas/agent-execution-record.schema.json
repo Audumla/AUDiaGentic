@@ -217,6 +217,16 @@
       "type": ["string", "null"],
       "enum": ["cancelled", "worker-process-exited", "provider-terminal-error", "verified-stall", "absolute-safety-ceiling", null]
     },
+    "terminal-finalization": {
+      "type": "object",
+      "properties": {
+        "session-id": {"type": "string", "minLength": 1},
+        "recovered-binding": {"type": "object", "additionalProperties": true},
+        "clear-unresolved-turn": {"type": "boolean"}
+      },
+      "required": ["session-id", "recovered-binding", "clear-unresolved-turn"],
+      "additionalProperties": false
+    },
     "diagnostics": {
       "type": ["object", "null"],
       "properties": {

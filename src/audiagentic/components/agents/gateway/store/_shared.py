@@ -57,6 +57,7 @@ _MUTABLE_RESULT_FIELDS = {
     "replay-reason",
     "replayed-by-request-id",
     "terminal-classification",
+    "terminal-finalization",
     "diagnostics",
     "diagnostic-evidence",
     "recovery-required",
