@@ -1778,6 +1778,21 @@ def complete_execution_from_provider(
         locator_metadata = {**session_metadata, **metadata}
         effective_metadata = resolve_effective_turn_evidence(record, session_metadata)
         provider_id = provider_id or session_store.session_provider_id(session_record)
+    effective_turn_id = effective_metadata.get("unresolved-turn-id")
+    if isinstance(effective_turn_id, str) and effective_turn_id != request_id:
+        # A request can be queued behind an unresolved predecessor in the same
+        # provider conversation. Its record may still carry that predecessor's
+        # submission metadata. Capturing the latest visible response in that
+        # case would falsely complete the queued request with an older turn.
+        raise AudiaGenticError(
+            code="CON-AGW-156",
+            kind="agents",
+            message="provider turn evidence belongs to a different request",
+            details={
+                "request-id": request_id,
+                "failure-reason": "foreign-unresolved-turn",
+            },
+        )
     if effective_metadata.get("submission-proven") is not True and effective_metadata.get("unresolved-turn-pending") is not True:
         raise AudiaGenticError(code="CON-AGW-157", kind="agents", message="request prompt submission is not proven", details={"request-id": request_id})
     if not provider_id or not session_id:

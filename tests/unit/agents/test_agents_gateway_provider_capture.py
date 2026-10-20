@@ -353,6 +353,58 @@ def test_complete_execution_from_provider_rejects_foreign_unresolved_turn(
     assert caught.value.details["failure-reason"] == "prompt-digest-mismatch"
 
 
+def test_complete_execution_from_provider_rejects_stale_turn_metadata_on_queued_request(
+    monkeypatch, tmp_path: Path
+):
+    """A queued request must not capture the previous request's completed turn."""
+    request_id = "req_queued_behind_predecessor"
+    record = {
+        "request-id": request_id,
+        "state": "running",
+        "revision": 3,
+        "session-id": "ses_capture",
+        "resolved-provider-id": "gpt-auto",
+        "provider-metadata": {
+            "project-url": "https://chatgpt.com/g/g-p-project/project",
+            "chat-url": "https://chatgpt.com/g/g-p-project/c/conversation",
+            "provider-session-id": "conversation",
+            "submission-proven": True,
+            "unresolved-turn-pending": True,
+            "unresolved-turn-id": "req_previous_turn",
+            "prompt-message-id": "previous-prompt",
+            "assistant-message-id": "previous-assistant",
+            "prompt-text-digest": "previous-prompt-digest",
+        },
+    }
+    capture_calls = 0
+
+    def capture(*_args, **_kwargs):
+        nonlocal capture_calls
+        capture_calls += 1
+        return {"outcome": "captured", "snapshot": object()}
+
+    monkeypatch.setattr(api.store, "read_record", lambda *_: record)
+    monkeypatch.setattr(
+        sessions_store,
+        "read_session_record",
+        lambda *_: {"provider": {"metadata": {}}},
+    )
+    monkeypatch.setattr(sessions_store, "session_provider_metadata", lambda _: {})
+    monkeypatch.setattr(sessions_store, "session_provider_id", lambda _: "gpt-auto")
+    monkeypatch.setattr(
+        session_runtime_module,
+        "get_session_runtime",
+        lambda: SimpleNamespace(capture_latest_response=capture),
+    )
+
+    with pytest.raises(Exception) as caught:
+        api.complete_execution_from_provider(tmp_path, request_id, passive=True)
+
+    assert getattr(caught.value, "code", None) == "CON-AGW-156"
+    assert caught.value.details["failure-reason"] == "foreign-unresolved-turn"
+    assert capture_calls == 0
+
+
 def test_complete_execution_from_provider_uses_prompt_text_for_synthetic_ids(monkeypatch, tmp_path: Path):
     prompt = "synthetic prompt"
     request_id = "req_synthetic"

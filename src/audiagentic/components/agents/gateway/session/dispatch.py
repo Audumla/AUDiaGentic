@@ -704,6 +704,12 @@ def _reconcile_before_failed_terminal(
                     "outcome": "unresolved",
                     "attempt": attempt,
                     "error-code": exc.code,
+                    "failure-reason": (
+                        exc.details.get("failure-reason")
+                        if isinstance(exc.details, dict)
+                        and isinstance(exc.details.get("failure-reason"), str)
+                        else None
+                    ),
                 },
             )
             if attempt == len(retry_delays):
