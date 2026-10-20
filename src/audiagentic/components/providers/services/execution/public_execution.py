@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 import logging
 from collections.abc import Mapping
@@ -83,6 +84,7 @@ async def capture_latest_response(
     provider_id: str,
     locator: ConversationFocusLocator,
     passive: bool = False,
+    timeout_seconds: float = 20.0,
 ) -> dict[str, Any]:
     """Read-only provider capability for operator response recovery."""
     from .execution import load_conversation_capture_capability
@@ -92,7 +94,10 @@ async def capture_latest_response(
         return {"outcome": "unsupported", "reason": "provider-capability-unavailable"}
     value = hook(project_root, provider_id=provider_id, locator=locator, passive=passive)
     if inspect.isawaitable(value):
-        value = await value
+        try:
+            value = await asyncio.wait_for(value, timeout=max(0.1, float(timeout_seconds)))
+        except asyncio.TimeoutError:
+            return {"outcome": "unavailable", "reason": "provider-capture-timeout"}
     return value if isinstance(value, dict) else {"outcome": "unavailable", "reason": "invalid-provider-capability-result"}
 
 #: Preparation failed with an exception that was not a classified

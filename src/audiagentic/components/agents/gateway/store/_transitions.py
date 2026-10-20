@@ -1711,6 +1711,12 @@ def update_owned_running_session(
         current_warnings = record.get("warnings")
         current_warnings = current_warnings if isinstance(current_warnings, list) else []
         warnings_unchanged = warnings is None or list(warnings)[-3:] == current_warnings
+        current_request_metadata = record.get("metadata")
+        current_request_metadata = current_request_metadata if isinstance(current_request_metadata, dict) else {}
+        recovery_url_unchanged = (
+            recovery_chat_url is None
+            or current_request_metadata.get("provider-chat-url") == recovery_chat_url
+        )
         updates_unchanged = not result_updates or all(
             record.get(key) == value for key, value in result_updates.items()
         )
@@ -1718,13 +1724,15 @@ def update_owned_running_session(
             record.get("session-id") == session_id
             and metadata_unchanged
             and warnings_unchanged
+            and recovery_url_unchanged
             and updates_unchanged
         ):
             return record
         updated = dict(record)
         updated["session-id"] = session_id
-        if warnings is not None:
-            updated["warnings"] = list(warnings)[-3:]
+        if warnings is not None or recovery_chat_url:
+            if warnings is not None:
+                updated["warnings"] = list(warnings)[-3:]
             metadata = dict(updated.get("metadata") or {})
             metadata.pop("provider-chat-url", None)
             if recovery_chat_url:
@@ -1816,6 +1824,8 @@ def transition_operator_terminal(
     *,
     expected_revision: int,
     updates: dict[str, Any],
+    recovery_attempt_id: str | None = None,
+    recovery_claim_generation: int | None = None,
 ) -> dict[str, Any]:
     """Terminalize a request from an operator after a compare-and-swap.
 
@@ -1824,6 +1834,26 @@ def transition_operator_terminal(
     later terminal write must be rejected rather than overwrite this result.
     """
     with _request_lock(project_root, request_id):
+        if recovery_attempt_id is not None:
+            from audiagentic.components.agents.gateway.replay import (
+                RecoveryClaimLostError,
+                recovery_claim_state,
+            )
+            from audiagentic.components.agents.agents_paths import gateway_recovery_action_path
+            from audiagentic.foundation.io import iter_ndjson
+
+            claim = recovery_claim_state(
+                iter_ndjson(gateway_recovery_action_path(project_root, request_id))
+            )
+            if not (
+                claim
+                and claim.get("valid")
+                and claim.get("active") is True
+                and claim.get("result") is None
+                and claim.get("action-attempt-id") == recovery_attempt_id
+                and claim.get("claim-generation") == recovery_claim_generation
+            ):
+                raise RecoveryClaimLostError("recovery claim lost before terminal commit")
         record = _read_record_locked(project_root, request_id)
         _check_expected_identity(
             record,
@@ -1858,6 +1888,7 @@ def transition_operator_terminal(
         updated["watchdog-state"] = "not-started"
         updated["watchdog-reason"] = None
         updated["recovery-required"] = False
+        updates = dict(updates)
         final_response_text = updates.pop("__final-response-text", None)
         if final_response_text is not None:
             from audiagentic.components.agents.gateway.output import persist_final_response

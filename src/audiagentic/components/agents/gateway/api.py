@@ -1507,12 +1507,16 @@ def recover_execution_request(
 
                 def renew_claim() -> None:
                     while not heartbeat_stop.wait(30.0):
-                        if not renew_recovery_claim(
-                            project_root,
-                            request_id,
-                            action_attempt_id=action_attempt_id,
-                            claim_generation=claim_generation,
-                        ):
+                        try:
+                            renewed = renew_recovery_claim(
+                                project_root,
+                                request_id,
+                                action_attempt_id=action_attempt_id,
+                                claim_generation=claim_generation,
+                            )
+                        except Exception:  # noqa: BLE001 - loss must fence capture
+                            renewed = False
+                        if not renewed:
                             heartbeat_lost.set()
                             return
 
@@ -1717,6 +1721,7 @@ def complete_execution_from_provider(
     passive: bool = False,
     recovery_attempt_id: str | None = None,
     recovery_claim_generation: int | None = None,
+    capture_timeout_seconds: float = 20.0,
 ) -> dict[str, Any]:
     """Capture and commit the request-owned current GPT response.
 
@@ -1767,13 +1772,21 @@ def complete_execution_from_provider(
     )
     from audiagentic.components.agents.gateway.session.sessions import get_session_runtime
     captured = get_session_runtime().capture_latest_response(
-        project_root, provider_id=str(provider_id), locator=locator, passive=passive
+        project_root,
+        provider_id=str(provider_id),
+        locator=locator,
+        passive=passive,
+        timeout_seconds=capture_timeout_seconds,
     )
     if captured.get("outcome") != "captured":
         raise AudiaGenticError(code="CON-AGW-154", kind="agents", message="provider response could not be captured", details={"request-id": request_id, "reason": captured.get("reason")})
     snapshot = captured.get("snapshot")
     confirmed = get_session_runtime().capture_latest_response(
-        project_root, provider_id=str(provider_id), locator=locator, passive=passive
+        project_root,
+        provider_id=str(provider_id),
+        locator=locator,
+        passive=passive,
+        timeout_seconds=capture_timeout_seconds,
     )
     if confirmed.get("outcome") != "captured":
         raise AudiaGenticError(code="CON-AGW-155", kind="agents", message="provider terminal response could not be revalidated", details={"request-id": request_id})
@@ -1938,30 +1951,38 @@ def complete_execution_from_provider(
         if not isinstance(latest_user, str) or latest_user.strip() != prompt.strip() or (latest_user_ref is not None and (latest_user_ref.correlation_text or latest_user_ref.text or "").strip() != prompt.strip()):
             raise AudiaGenticError(code="CON-AGW-156", kind="agents", message="provider prompt text does not match request", details={"request-id": request_id})
     recovered_binding = confirmed.get("binding")
-    if isinstance(recovered_binding, dict):
-        from audiagentic.components.agents.gateway.session import sessions_store as session_store
-
-        session_store.update_provider_metadata(
-            project_root,
-            str(session_id),
-            {
-                str(key): value
-                for key, value in recovered_binding.items()
-                if value is not None
-            },
-        )
     if recovery_attempt_id is not None:
         from audiagentic.components.agents.gateway.replay import assert_recovery_claim_owner
-        assert_recovery_claim_owner(
-            project_root,
-            request_id,
-            action_attempt_id=recovery_attempt_id,
-            claim_generation=int(recovery_claim_generation or 0),
-        )
     updated = store.transition_operator_terminal(
         project_root, request_id, expected_revision=int(record.get("revision", 0)),
         updates={"__final-response-text": text, "error": None, "completion": {"source": "operator-provider-capture", "provider-message-id": latest_assistant_id}},
+        recovery_attempt_id=recovery_attempt_id,
+        recovery_claim_generation=recovery_claim_generation,
     )
+    if isinstance(recovered_binding, dict):
+        from audiagentic.components.agents.gateway.session import sessions_store as session_store
+        if recovery_attempt_id is None:
+            session_store.update_provider_metadata(
+                project_root,
+                str(session_id),
+                {str(key): value for key, value in recovered_binding.items() if value is not None},
+            )
+        else:
+            try:
+                assert_recovery_claim_owner(
+                    project_root,
+                    request_id,
+                    action_attempt_id=recovery_attempt_id,
+                    claim_generation=int(recovery_claim_generation or 0),
+                )
+            except RecoveryClaimLostError:
+                recovered_binding = None
+            if recovered_binding is not None:
+                session_store.update_provider_metadata(
+                    project_root,
+                    str(session_id),
+                    {str(key): value for key, value in recovered_binding.items() if value is not None},
+                )
     # Operator capture is a verified terminal witness, just like the normal
     # turn observer.  Clear the request-owned unresolved-turn fence as part
     # of the same terminalization; otherwise a later prompt on this durable

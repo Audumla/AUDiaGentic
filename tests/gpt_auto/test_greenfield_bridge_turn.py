@@ -362,7 +362,7 @@ async def test_await_response_never_returns_a_later_foreign_turns_answer():
             [own_prompt_ref, own_answer_ref],
             assistant_text="Looks sound",
             assistant_id="assistant-own",
-            generating=True,
+            generating=False,
         )
         # A foreign turn has now landed in the same conversation and become
         # conversation-global-latest -- the raw snapshot's own
@@ -2383,7 +2383,7 @@ def test_scope_adopts_terminal_response_after_proven_submission_virtualization()
             assistants=2,
             assistant="Complete review response",
             assistant_id=new_assistant_id,
-            generating=True,
+            generating=False,
             complete=True,
             completion_signals=(
                 "completion-control",
@@ -2422,13 +2422,8 @@ def test_scope_adopts_terminal_response_after_proven_submission_virtualization()
     assert scoped.latest_assistant_text == "Complete review response"
 
 
-def test_scope_adopts_terminal_response_with_multiple_mounted_assistant_bubbles():
-    """Tool/assistant remounts may leave more than one durable bubble.
-
-    The latest bubble is still safe only when the prompt was proven, the user
-    bubble is virtualized, and the latest bubble owns the complete terminal
-    witness.  Generation remains a hard fence.
-    """
+def test_scope_rejects_multiple_mounted_assistant_bubbles_without_turn_anchor():
+    """A fully virtualized later turn must remain fail-closed."""
     first_id = "00000000-0000-4000-8000-7f66df619813"
     latest_id = "00000000-0000-4000-8000-393d1aa5d8af"
     conversation_url = "https://chatgpt.com/g/g-p-project/c/conversation-1"
@@ -2454,17 +2449,17 @@ def test_scope_adopts_terminal_response_with_multiple_mounted_assistant_bubbles(
         terminal_witness_assistant_id=latest_id,
     )
 
-    scoped, response_ref = _scope_response_snapshot(
-        baseline,
-        raw,
-        prompt_message_id="prompt-a",
-        allow_virtualized_prompt=True,
-        allow_proven_submission_virtualized_assistant=True,
-    )
-
-    assert response_ref is not None
-    assert response_ref.message_id == latest_id
-    assert scoped.latest_assistant_text == "Complete review response"
+    with pytest.raises(
+        ProviderBindingIntegrityError,
+        match="unpinned after prompt virtualization",
+    ):
+        _scope_response_snapshot(
+            baseline,
+            raw,
+            prompt_message_id="prompt-a",
+            allow_virtualized_prompt=True,
+            allow_proven_submission_virtualized_assistant=True,
+        )
 
 
 def test_scope_pins_first_terminal_assistant_after_empty_baseline_prompt_virtualization():
