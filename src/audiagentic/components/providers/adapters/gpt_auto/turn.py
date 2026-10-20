@@ -1759,6 +1759,24 @@ class GptAutoTurn:
                     ),
                 )
             except ProviderBindingIntegrityError as exc:
+                terminal_remount = _terminal_single_response_remount(
+                    baseline,
+                    raw,
+                    prompt_message_id=prompt_message_id or "",
+                    prompt_text=self.request.body,
+                )
+                if terminal_remount is not None:
+                    # ChatGPT can replace the completed assistant node while
+                    # preserving the exact latest prompt and terminal DOM
+                    # witness.  Treat that as a safe response-slot remount,
+                    # not as an ownership failure.  This path is terminal-
+                    # only and never permits a streaming or ambiguous turn.
+                    self._response_message_id = terminal_remount.message_id
+                    mark_assistant = getattr(self.chat, "mark_assistant_observed", None)
+                    if mark_assistant is not None:
+                        mark_assistant(terminal_remount.message_id)
+                    await self._publish_message_ids(strict=True)
+                    return raw, terminal_remount
                 await self._log_response_decision_diagnostics(
                     _response_decision_diagnostics(
                         baseline,
@@ -3426,6 +3444,64 @@ def _terminal_same_turn_response_replacement(
         and bool(snapshot.latest_assistant_text)
         and bool(snapshot.dom_signals & _REMOUNT_TERMINAL_WITNESS_SIGNALS)
     )
+
+
+def _terminal_single_response_remount(
+    baseline: ChatSnapshot,
+    snapshot: ChatSnapshot,
+    *,
+    prompt_message_id: str,
+    prompt_text: str | None,
+) -> ChatMessageRef | None:
+    """Recover a completed response after a terminal assistant remount.
+
+    The renderer may expose only the newly materialized assistant node after
+    replacing the node that was pinned during submission.  This is safe only
+    when the same conversation contains one uniquely matching latest prompt,
+    one assistant in that prompt span, and an independent terminal witness.
+    """
+    if snapshot.generating or not snapshot.latest_assistant_text:
+        return None
+    if snapshot.latest_assistant_id != snapshot.terminal_witness_assistant_id:
+        return None
+    if not _is_durable_assistant_message_id(baseline.latest_assistant_id):
+        return None
+    if not _is_durable_assistant_message_id(snapshot.latest_assistant_id):
+        return None
+    if not snapshot.dom_signals & _REMOUNT_TERMINAL_WITNESS_SIGNALS:
+        return None
+    if not same_chat_identity(snapshot.url, baseline.url):
+        return None
+
+    prompt_refs = [
+        ref
+        for ref in snapshot.message_refs
+        if ref.role == "user" and ref.message_id == prompt_message_id
+    ]
+    if not prompt_refs and prompt_text:
+        prompt_digest = PromptFingerprint.from_text(prompt_text).digest
+        prompt_refs = [
+            ref
+            for ref in snapshot.message_refs
+            if ref.role == "user"
+            and PromptFingerprint.from_text(ref.correlation_text or ref.text or "").digest
+            == prompt_digest
+        ]
+    if len(prompt_refs) != 1 or snapshot.latest_user_id != prompt_refs[0].message_id:
+        return None
+    prompt_index = next(
+        index
+        for index, ref in enumerate(snapshot.message_refs)
+        if ref is prompt_refs[0]
+    )
+    tail = snapshot.message_refs[prompt_index + 1 :]
+    assistants = [ref for ref in tail if ref.role == "assistant"]
+    if any(ref.role == "user" for ref in tail) or len(assistants) != 1:
+        return None
+    assistant = assistants[0]
+    if assistant.message_id != snapshot.latest_assistant_id:
+        return None
+    return assistant
 
 
 def _scope_response_snapshot(

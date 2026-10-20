@@ -155,6 +155,24 @@ def test_submit_forwards_calling_component_profile(monkeypatch, tmp_path) -> Non
     assert captured["params"]["logical_client_id"] == client._logical_client_id
 
 
+def test_recovery_uses_extended_transport_timeout(monkeypatch, tmp_path) -> None:
+    client = StandaloneGatewayClient("http://127.0.0.1:9000", "token")
+    captured: dict = {}
+    monkeypatch.setattr(
+        client,
+        "_call",
+        lambda operation, root, params, **kwargs: captured.update(
+            operation=operation, root=root, params=params, kwargs=kwargs
+        ) or {"state": "failed"},
+    )
+
+    assert client.recover_execution_request(tmp_path, "req-1", action="reconcile") == {
+        "state": "failed"
+    }
+    assert captured["operation"] == "recover_execution_request"
+    assert captured["kwargs"]["transport_timeout"] == 90.0
+
+
 def test_standalone_logical_client_identity_can_be_explicit(monkeypatch, tmp_path) -> None:
     client = StandaloneGatewayClient(
         "http://127.0.0.1:9000", "token", logical_client_id="ide-chat-a"

@@ -29,6 +29,7 @@ from audiagentic.components.providers.adapters.gpt_auto.turn import (
     _facts,
     _progress_activity_labels,
     _same_response_slot_replacement,
+    _terminal_single_response_remount,
     _terminal_same_turn_response_replacement,
     _terminal_same_response_slot_replacement,
     _scope_response_snapshot,
@@ -3001,6 +3002,49 @@ def test_response_scope_rejects_nonterminal_virtualized_assistant_remount():
             allow_virtualized_prompt=True,
             virtualized_assistant_id="assistant-a",
         )
+
+
+def test_terminal_single_response_remount_accepts_completed_new_assistant_identity():
+    baseline = snap(
+        users=1,
+        assistants=1,
+        user="Request A",
+        user_id="prompt-a",
+        assistant="Streaming answer",
+        assistant_id="00000000-0000-4000-8000-bd7662a5eeb4",
+    )
+    raw = replace(
+        snap(
+            users=1,
+            assistants=1,
+            user="Request A",
+            user_id="prompt-a",
+            assistant="Completed answer",
+            assistant_id="00000000-0000-4000-8000-b454f82c5857",
+            complete=True,
+        ),
+        message_refs=(
+            ChatMessageRef("user", "prompt-a", "Request A", 0),
+            ChatMessageRef(
+                "assistant",
+                "00000000-0000-4000-8000-b454f82c5857",
+                "Completed answer",
+                1,
+            ),
+        ),
+        latest_user_id="prompt-a",
+        terminal_witness_assistant_id="00000000-0000-4000-8000-b454f82c5857",
+    )
+
+    response_ref = _terminal_single_response_remount(
+        baseline,
+        raw,
+        prompt_message_id="prompt-a",
+        prompt_text="Request A",
+    )
+
+    assert response_ref is not None
+    assert response_ref.message_id == "00000000-0000-4000-8000-b454f82c5857"
 
 
 def test_response_scope_rebinds_real_prompt_id_and_reused_fallback_assistant_slot():
