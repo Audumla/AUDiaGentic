@@ -1790,7 +1790,9 @@ def test_rehydrate_reopens_unbound_session_only_for_correlated_prepared_turn(tmp
         runtime.shutdown()
 
 
-def test_successor_claim_fences_stale_prepared_binding_checkpoint_and_open_commit(tmp_path):
+def test_successor_claim_fences_stale_prepared_binding_checkpoint_and_open_commit(
+    tmp_path, monkeypatch
+):
     from audiagentic.components.agents.gateway import store as gateway_store
 
     request_id = "req-prepared-owner-takeover"
@@ -1838,6 +1840,23 @@ def test_successor_claim_fences_stale_prepared_binding_checkpoint_and_open_commi
         worker_id="worker-a",
         attempt_epoch=1,
     )
+    assert session_store.release_prepared_submission_recovery_claim(
+        tmp_path, session_id, claim_id=claim_a["claim-id"]
+    )
+    released_metadata = session_store.session_provider_metadata(
+        session_store.read_session_record(tmp_path, session_id)
+    )
+    assert released_metadata["submission-recovery-generation"] == claim_a["generation"]
+    assert "submission-recovery-claim" not in released_metadata
+    claim_a = session_store.claim_prepared_submission_recovery(
+        tmp_path,
+        session_id,
+        request_id,
+        dispatch_owner_epoch="owner-a",
+        worker_id="worker-a",
+        attempt_epoch=1,
+    )
+    assert claim_a["generation"] == released_metadata["submission-recovery-generation"] + 1
     expired_session = session_store.read_session_record(tmp_path, session_id)
     expired_metadata = session_store.session_provider_metadata(expired_session)
     expired_metadata["submission-recovery-claim"]["lease-expires-at"] = (
@@ -1879,6 +1898,17 @@ def test_successor_claim_fences_stale_prepared_binding_checkpoint_and_open_commi
             session_id,
             {"submission-recovery-claim": {"claim-id": "unfenced"}},
         )
+    with pytest.raises(AudiaGenticError, match="cannot claim a submitted prompt"):
+        session_store.update_owned_submission_checkpoint(
+            tmp_path,
+            session_id,
+            request_id,
+            {"submission-proven": True},
+            claim_id=claim_b["claim-id"],
+            dispatch_owner_epoch="owner-b",
+            worker_id="worker-b",
+            attempt_epoch=2,
+        )
 
     with pytest.raises(AudiaGenticError, match="lost its request owner fence"):
         session_store.update_prepared_submission_checkpoint(
@@ -1914,6 +1944,12 @@ def test_successor_claim_fences_stale_prepared_binding_checkpoint_and_open_commi
         model_id="chatgpt",
         provider_session_ref="provider-session-a",
         surface_id="gpt-auto-cdp",
+        provider_metadata={
+            "provider-open-marker": "ok",
+            "submission-state": "dispatching",
+            "submission-proven": True,
+            "unresolved-turn-id": "another-request",
+        },
     )
     with pytest.raises(AudiaGenticError, match="lost its request owner fence"):
         session_store.commit_prepared_recovery_open(
@@ -1933,6 +1969,86 @@ def test_successor_claim_fences_stale_prepared_binding_checkpoint_and_open_commi
     metadata = session_store.session_provider_metadata(persisted)
     assert metadata["submission-state"] == "prepared"
     assert metadata["submission-recovery-claim"]["claim-id"] == claim_b["claim-id"]
+
+    register_open_binding = binding_store.register_open_binding
+    registration_attempts = 0
+
+    def fail_index_registration(*args, **kwargs):
+        raise RuntimeError("simulated binding index failure")
+
+    monkeypatch.setattr(binding_store, "register_open_binding", fail_index_registration)
+    with pytest.raises(RuntimeError, match="simulated binding index failure"):
+        session_store.commit_prepared_recovery_open(
+            tmp_path,
+            session_id,
+            request_id,
+            opened_record,
+            claim_id=claim_b["claim-id"],
+            dispatch_owner_epoch="owner-b",
+            worker_id="worker-b",
+            attempt_epoch=2,
+            expected_surface_id="gpt-auto-cdp",
+        )
+    rolled_back = session_store.read_session_record(tmp_path, session_id)
+    assert rolled_back.get("binding") is None
+
+    def crash_before_index_publication(*args, **kwargs):
+        nonlocal registration_attempts
+        registration_attempts += 1
+        if registration_attempts == 1:
+            raise SystemExit("simulated crash before binding index publication")
+        return register_open_binding(*args, **kwargs)
+
+    monkeypatch.setattr(
+        binding_store, "register_open_binding", crash_before_index_publication
+    )
+    callback_records = []
+    with pytest.raises(SystemExit, match="simulated crash"):
+        session_store.commit_prepared_recovery_open(
+            tmp_path,
+            session_id,
+            request_id,
+            opened_record,
+            claim_id=claim_b["claim-id"],
+            dispatch_owner_epoch="owner-b",
+            worker_id="worker-b",
+            attempt_epoch=2,
+            expected_surface_id="gpt-auto-cdp",
+            on_commit=callback_records.append,
+        )
+
+    persisted = session_store.read_session_record(tmp_path, session_id)
+    assert persisted["binding"]["provider-session-ref"] == "provider-session-a"
+    index = binding_store._read_index(gateway_session_binding_index_path(tmp_path))
+    assert not index["bindings"]
+    assert callback_records == []
+
+    session_store.commit_prepared_recovery_open(
+        tmp_path,
+        session_id,
+        request_id,
+        opened_record,
+        claim_id=claim_b["claim-id"],
+        dispatch_owner_epoch="owner-b",
+        worker_id="worker-b",
+        attempt_epoch=2,
+        expected_surface_id="gpt-auto-cdp",
+        on_commit=callback_records.append,
+    )
+    index = binding_store._read_index(gateway_session_binding_index_path(tmp_path))
+    assert any(
+        entry["session-id"] == session_id
+        for entries in index["bindings"].values()
+        for entry in entries
+    )
+    assert len(callback_records) == 1
+    recovered_metadata = session_store.session_provider_metadata(
+        session_store.read_session_record(tmp_path, session_id)
+    )
+    assert recovered_metadata["submission-state"] == "prepared"
+    assert recovered_metadata["submission-proven"] is False
+    assert recovered_metadata["unresolved-turn-id"] == request_id
+    assert recovered_metadata["provider-open-marker"] == "ok"
 
 
 def test_rehydrated_generation_preserves_durable_max_lifetime(tmp_path):
