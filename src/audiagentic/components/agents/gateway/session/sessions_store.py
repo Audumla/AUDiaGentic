@@ -259,7 +259,7 @@ def _assert_request_dispatch_owner(
     dispatch_owner_epoch: str,
     worker_id: str,
     attempt_epoch: int,
-) -> None:
+) -> dict[str, Any]:
     from audiagentic.components.agents.gateway import store as gateway_store
 
     request = gateway_store.read_record(project_root, request_id)
@@ -306,6 +306,7 @@ def _assert_request_dispatch_owner(
                 message="prepared recovery request and session do not prove the same GPT project",
                 details={"request-id": request_id, "session-id": session_id},
             )
+    return request
 
 
 def claim_prepared_submission_recovery(
@@ -623,7 +624,7 @@ def update_owned_submission_checkpoint(
                 # The first turn on a newly admitted session has no prior
                 # checkpoint (and therefore no recovery claim). The durable
                 # request owner is the authority for this one-way initialization.
-                _assert_request_dispatch_owner(
+                request = _assert_request_dispatch_owner(
                     project_root,
                     request_id,
                     session_id,
@@ -631,6 +632,13 @@ def update_owned_submission_checkpoint(
                     worker_id=worker_id,
                     attempt_epoch=attempt_epoch,
                 )
+                if request.get("recovery-required") is True:
+                    raise AudiaGenticError(
+                        code="CON-AGW-125",
+                        kind="agents",
+                        message="recovered request requires a prepared submission claim",
+                        details={"request-id": request_id, "session-id": session_id},
+                    )
                 if _RECOVERY_CHECKPOINT_KEYS.intersection(remove_keys):
                     raise AudiaGenticError(
                         code="CON-AGW-125",
@@ -640,10 +648,10 @@ def update_owned_submission_checkpoint(
                     )
             elif fresh_prepared_dispatch:
                 # The normal first-turn dispatch advances its just-written
-                # prepared checkpoint without a recovery claim. Claims are
-                # mandatory for a recovered prepared checkpoint; their durable
-                # generation distinguishes that case from fresh dispatch.
-                _assert_request_dispatch_owner(
+                # prepared checkpoint without a recovery claim. A takeover
+                # marks the durable request recovery-required, so restarted
+                # owners must instead acquire the prepared recovery claim.
+                request = _assert_request_dispatch_owner(
                     project_root,
                     request_id,
                     session_id,
@@ -652,7 +660,8 @@ def update_owned_submission_checkpoint(
                     attempt_epoch=attempt_epoch,
                 )
                 if (
-                    metadata.get("submission-recovery-claim") is not None
+                    request.get("recovery-required") is True
+                    or metadata.get("submission-recovery-claim") is not None
                     or metadata.get("submission-recovery-generation") is not None
                     or metadata.get("unresolved-turn-pending") is not True
                     or metadata.get("unresolved-turn-id") != request_id
