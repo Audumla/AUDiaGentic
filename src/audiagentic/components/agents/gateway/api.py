@@ -83,6 +83,24 @@ def _resolve_workspace_project_root(
     if not isinstance(workspace_name, str) or not workspace_name.strip():
         return project_root
 
+    requested_path = Path(workspace_name.strip()).expanduser()
+    if requested_path.is_absolute():
+        explicit_root = requested_path.resolve()
+        # Labels are intentionally fail-closed when duplicate worktrees share
+        # the same project-id/name.  An explicit project root is the
+        # unambiguous selector for that case; require managed project
+        # metadata before accepting it.
+        if not explicit_root.is_dir() or not (
+            explicit_root / ".audiagentic" / "config" / "project.yaml"
+        ).is_file():
+            raise AudiaGenticError(
+                code="RES-AGW-152",
+                kind="agents",
+                message="workspace_name could not be resolved to a local project root",
+                details={"workspace-name": workspace_name.strip()},
+            )
+        return explicit_root
+
     requested = _workspace_label(workspace_name)
     current = Path(project_root).resolve()
     candidates: list[Path] = [current]

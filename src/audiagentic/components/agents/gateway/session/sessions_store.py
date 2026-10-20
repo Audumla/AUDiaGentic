@@ -48,6 +48,11 @@ _SCHEMA_STEM = "agent-execution-session"
 _WORKFLOW = load_workflow(Path(__file__).parent.parent.parent / "workflows.yaml", "gateway-session")
 SESSION_TERMINAL_STATES: set[str] = set(states_in_set(_WORKFLOW, "terminal"))
 
+
+def session_state_is_reusable(state: object) -> bool:
+    """Return whether a durable session may admit another provider turn."""
+    return isinstance(state, str) and is_known_state(_WORKFLOW, state) and state == "active"
+
 _REDACTED_ERROR_KEYS = {"code", "message", "kind"}
 
 # Lifecycle fields a workflow transition may update. Everything else on the

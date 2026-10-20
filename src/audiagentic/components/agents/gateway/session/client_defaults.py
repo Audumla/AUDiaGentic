@@ -12,7 +12,7 @@ import re
 import threading
 import weakref
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -35,6 +35,10 @@ def preparation_guard(record: dict[str, Any]) -> Any:
 
 
 _SCOPE_SCHEMA_GENERATION = 2
+def _conversation_lock_path(service_root: Path, project_root: Path, chat_url: str) -> Path:
+    identity = f"{project_root.resolve()}\n{chat_url}"
+    digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()
+    return service_root / "conversation-locks" / f"{digest}.lock"
 
 
 def scope_key(
@@ -238,60 +242,83 @@ def select(
             logical_client_id=client_id,
             provider_surface=provider_id,
         )
-        if automatic and binding.get("session-id"):
-            from audiagentic.components.agents.gateway.session import sessions_store
+        from audiagentic.components.agents.gateway.session import sessions_store
 
-            selected_session_id = str(binding["session-id"])
-            if _claimed_by_other_client(
-                Path(service_root),
-                path,
-                selected_session_id,
-                client_id,
-                provider_id,
-            ):
-                # Do not adopt the other client's conversation or its chat
-                # URL.  Leaving this selection unbound makes admission create
-                # and commit a fresh default for this client.
-                selection.session_id = None
-                selection.provider_chat_url = None
-                selection.binding = {}
-                selection.warnings.append(
-                    warning(
-                        "CON-AGW-123",
-                        "Client default session ownership conflict; creating a separate session.",
-                    )
-                )
-                yield selection
-                return
-            selection.session_id = selected_session_id
-            try:
-                session = sessions_store.read_session_record(project_root, selection.session_id)
-                recovered_url = chat_url(sessions_store.session_provider_metadata(session))
-                if recovered_url:
-                    binding["chat-url"] = recovered_url
-                # A persisted default can outlive its gateway session.  Never
-                # hand a terminal session to admission: doing so makes the
-                # next prompt fail during turn admission before the provider
-                # is reached, even though the retained GPT conversation may
-                # still be recoverable.  Keep the provider URL so API
-                # admission can create a replacement gateway session and
-                # silently reopen the same conversation when safe.
-                session_state = session.get("state")
-                if session_state is not None and session_state != "active":
-                    selection.session_id = None
-                    selection.provider_chat_url = recovered_url or binding.get("chat-url")
-                    selection.warnings.append(
-                        warning(
-                            "RES-AGW-003",
-                            "Default gateway session is terminal; creating a replacement while retaining its chat when possible.",
-                            selected_session_id,
+        # Hold the conversation lock through API owner resolution, session
+        # creation, request admission, and default commit. ExitStack ensures
+        # every acquisition is released if any preparation step raises.
+        with ExitStack() as locks:
+            conversation_url = provider_chat_url
+            if conversation_url:
+                locks.enter_context(
+                    StartupLock(
+                        _conversation_lock_path(
+                            Path(service_root), project_root, conversation_url
                         )
                     )
-            except AudiaGenticError as exc:
-                selection.session_id = None
-                selection.provider_chat_url = binding.get("chat-url")
-                selection.warnings.append(warning(exc.code, "Default gateway session unavailable; restoring its chat when possible, otherwise creating a replacement.", str(binding["session-id"])))
-        yield selection
+                )
+            if automatic and binding.get("session-id"):
+                selected_session_id = str(binding["session-id"])
+                if _claimed_by_other_client(
+                    Path(service_root), path, selected_session_id, client_id, provider_id
+                ):
+                    selection.session_id = None
+                    selection.provider_chat_url = None
+                    selection.binding = {}
+                    selection.warnings.append(
+                        warning(
+                            "CON-AGW-123",
+                            "Client default session ownership conflict; creating a separate session.",
+                        )
+                    )
+                else:
+                    selection.session_id = selected_session_id
+                    try:
+                        session = sessions_store.read_session_record(
+                            project_root, selection.session_id
+                        )
+                        recovered_url = chat_url(
+                            sessions_store.session_provider_metadata(session)
+                        )
+                        if recovered_url:
+                            binding["chat-url"] = recovered_url
+                            conversation_url = recovered_url
+                            # The binding is authoritative after reading the
+                            # durable session, so lock that identity before
+                            # yielding to admission.
+                            locks.enter_context(
+                                StartupLock(
+                                    _conversation_lock_path(
+                                        Path(service_root), project_root, conversation_url
+                                    )
+                                )
+                            )
+                        session_state = session.get("state")
+                        if session_state is not None and not sessions_store.session_state_is_reusable(
+                            session_state
+                        ):
+                            selection.session_id = None
+                            selection.provider_chat_url = (
+                                recovered_url or binding.get("chat-url")
+                            )
+                            selection.warnings.append(
+                                warning(
+                                    "RES-AGW-003",
+                                    "Default gateway session is not reusable; creating a replacement while retaining its chat when possible.",
+                                    selected_session_id,
+                                )
+                            )
+                    except AudiaGenticError as exc:
+                        selection.session_id = None
+                        selection.provider_chat_url = binding.get("chat-url")
+                        selection.warnings.append(
+                            warning(
+                                exc.code,
+                                "Default gateway session unavailable; restoring its chat when possible, otherwise creating a replacement.",
+                                str(binding["session-id"]),
+                            )
+                        )
+            yield selection
 
 
 def remember(project_root: Path, record: dict[str, Any]) -> None:

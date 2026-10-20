@@ -76,6 +76,19 @@ def test_workspace_name_resolution_fails_closed_when_missing(tmp_path: Path) -> 
 
     assert exc_info.value.code == "RES-AGW-152"
 
+
+def test_absolute_workspace_root_disambiguates_duplicate_worktrees(tmp_path: Path) -> None:
+    target = tmp_path / "AUDiaGentic"
+    (target / ".audiagentic" / "config").mkdir(parents=True)
+    (target / ".audiagentic" / "config" / "project.yaml").write_text(
+        "project-id: audiagentic" + chr(10) + "project-name: AUDiaGentic" + chr(10),
+        encoding="utf-8",
+    )
+
+    assert gateway._resolve_workspace_project_root(
+        tmp_path / "other", str(target)
+    ) == target.resolve()
+
 def test_submit_returns_immediately_for_long_running_request(tmp_path: Path, monkeypatch):
     _make_profile(tmp_path, "default", "local-openai")
     hold = threading.Event()
