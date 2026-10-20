@@ -254,7 +254,9 @@ class _RequestScopedMetadataTransport(FakeAgentSessionTransport):
         return await super().prompt(prompt, sink=sink, **kwargs)
 
 
-def _build_fake_surface() -> Any:
+def _build_fake_surface(
+    provider_id: str = "opencode", surface_id: str = "opencode-acp"
+) -> Any:
     """Build a minimal ResolvedSessionSurface for test PreparedSessionTransport."""
     from audiagentic.foundation.transports.session_surface import (
         ContentStreamCapabilities,
@@ -266,8 +268,8 @@ def _build_fake_surface() -> Any:
 
     return ResolvedSessionSurface(
         ref=SessionSurfaceRef(
-            provider_id="opencode",
-            surface_id="opencode-acp",
+            provider_id=provider_id,
+            surface_id=surface_id,
             resolved_version="0.1.0",
         ),
         identity=SessionIdentityCapabilities(),
@@ -277,14 +279,19 @@ def _build_fake_surface() -> Any:
     )
 
 
-def _build_fake_prepared(transport: FakeAgentSessionTransport) -> PreparedSessionTransport:
+def _build_fake_prepared(
+    transport: FakeAgentSessionTransport,
+    *,
+    provider_id: str = "opencode",
+    surface_id: str = "opencode-acp",
+) -> PreparedSessionTransport:
     """Build a fake PreparedSessionTransport with the given transport."""
     return PreparedSessionTransport(
         transport=transport,
-        surface=_build_fake_surface(),
+        surface=_build_fake_surface(provider_id, surface_id),
         effective_provider_ref=SessionSurfaceRef(
-            provider_id="opencode",
-            surface_id="opencode-acp",
+            provider_id=provider_id,
+            surface_id=surface_id,
             resolved_version="0.1.0",
         ),
     )
@@ -1639,7 +1646,9 @@ def test_rehydrate_reopens_unbound_session_only_for_correlated_prepared_turn(tmp
 
             transport.open = fail_first_open
         transports.append(transport)
-        return _build_fake_prepared(transport)
+        return _build_fake_prepared(
+            transport, provider_id="gpt-auto", surface_id="gpt-auto-cdp"
+        )
 
     request_id = "req-prepared-restart"
     session_id = "ses-unbound-prepared"
@@ -1680,6 +1689,15 @@ def test_rehydrate_reopens_unbound_session_only_for_correlated_prepared_turn(tmp
             "attempt-epoch": 1,
             "dispatch-owner-epoch": "owner-prepared",
             "provider-metadata": {"project-id": "g-p-project"},
+            "gateway-profile-id": "gpt-auto",
+            "gateway-profile-generation": "1",
+            "gateway-profile-config-digest": "sha256:test",
+            "resolved-instance-ids": ["source-gpt-auto"],
+            "gateway-profile-runtime": {
+                "provider-id": "gpt-auto",
+                "params": {},
+                "surface-id": "gpt-auto-cdp",
+            },
         }
     )
     gateway_store.write_record(tmp_path, request)
@@ -1770,6 +1788,151 @@ def test_rehydrate_reopens_unbound_session_only_for_correlated_prepared_turn(tmp
         assert transports[1].turns == ["immutable admitted prompt"]
     finally:
         runtime.shutdown()
+
+
+def test_successor_claim_fences_stale_prepared_binding_checkpoint_and_open_commit(tmp_path):
+    from audiagentic.components.agents.gateway import store as gateway_store
+
+    request_id = "req-prepared-owner-takeover"
+    session_id = "ses-prepared-owner-takeover"
+    session = session_store.build_session_record(
+        session_id=session_id,
+        provider_transport_kind="provider-session",
+        execution_profile_id="gpt-auto",
+        provider_id="gpt-auto",
+        model_id="chatgpt",
+        provider_metadata={
+            "project-url": "https://chatgpt.com/g/g-p-project/project",
+            "project-id": "g-p-project",
+            "unresolved-turn-pending": True,
+            "unresolved-turn-id": request_id,
+            "submission-proven": False,
+            "submission-state": "prepared",
+        },
+    )
+    session_store.write_session_record(tmp_path, session)
+    request = gateway_store.build_record(
+        request_id=request_id,
+        execution_profile_id="gpt-auto",
+        prompt_body="frozen prompt",
+        session_id=session_id,
+        resolved_provider_id="gpt-auto",
+    )
+    request.update(
+        {
+            "state": "running",
+            "started-at": now_iso_z(),
+            "worker-id": "worker-a",
+            "attempt-epoch": 1,
+            "dispatch-owner-epoch": "owner-a",
+            "provider-metadata": {"project-id": "g-p-project"},
+        }
+    )
+    gateway_store.write_record(tmp_path, request)
+
+    claim_a = session_store.claim_prepared_submission_recovery(
+        tmp_path,
+        session_id,
+        request_id,
+        dispatch_owner_epoch="owner-a",
+        worker_id="worker-a",
+        attempt_epoch=1,
+    )
+    expired_session = session_store.read_session_record(tmp_path, session_id)
+    expired_metadata = session_store.session_provider_metadata(expired_session)
+    expired_metadata["submission-recovery-claim"]["lease-expires-at"] = (
+        datetime.now(timezone.utc) - timedelta(seconds=1)
+    ).isoformat().replace("+00:00", "Z")
+    expired_session.setdefault("provider", {})["metadata"] = expired_metadata
+    session_store.write_session_record(tmp_path, expired_session)
+    claim_a_expired_retry = session_store.claim_prepared_submission_recovery(
+        tmp_path,
+        session_id,
+        request_id,
+        dispatch_owner_epoch="owner-a",
+        worker_id="worker-a",
+        attempt_epoch=1,
+    )
+    assert claim_a_expired_retry["generation"] == claim_a["generation"] + 1
+    claim_a = claim_a_expired_retry
+    request.update(
+        {
+            "worker-id": "worker-b",
+            "attempt-epoch": 2,
+            "dispatch-owner-epoch": "owner-b",
+        }
+    )
+    gateway_store.write_record(tmp_path, request)
+    claim_b = session_store.claim_prepared_submission_recovery(
+        tmp_path,
+        session_id,
+        request_id,
+        dispatch_owner_epoch="owner-b",
+        worker_id="worker-b",
+        attempt_epoch=2,
+    )
+    assert claim_b["generation"] == claim_a["generation"] + 1
+
+    with pytest.raises(AudiaGenticError, match="requires its request-owner fence"):
+        session_store.update_provider_metadata(
+            tmp_path,
+            session_id,
+            {"submission-recovery-claim": {"claim-id": "unfenced"}},
+        )
+
+    with pytest.raises(AudiaGenticError, match="lost its request owner fence"):
+        session_store.update_prepared_submission_checkpoint(
+            tmp_path,
+            session_id,
+            request_id,
+            {"recovery-state": "stale-worker-write"},
+            claim_id=claim_a["claim-id"],
+            dispatch_owner_epoch="owner-a",
+            worker_id="worker-a",
+            attempt_epoch=1,
+        )
+    with pytest.raises(AudiaGenticError, match="lost its request owner fence"):
+        session_store.install_prepared_recovery_binding(
+            tmp_path,
+            session_id,
+            request_id,
+            provider_id="gpt-auto",
+            surface_id="gpt-auto-cdp",
+            provider_session_ref="stale-provider-session",
+            expected_surface_id="gpt-auto-cdp",
+            claim_id=claim_a["claim-id"],
+            dispatch_owner_epoch="owner-a",
+            worker_id="worker-a",
+            attempt_epoch=1,
+        )
+
+    opened_record = session_store.build_session_record(
+        session_id=session_id,
+        provider_transport_kind="provider-session",
+        execution_profile_id="gpt-auto",
+        provider_id="gpt-auto",
+        model_id="chatgpt",
+        provider_session_ref="provider-session-a",
+        surface_id="gpt-auto-cdp",
+    )
+    with pytest.raises(AudiaGenticError, match="lost its request owner fence"):
+        session_store.commit_prepared_recovery_open(
+            tmp_path,
+            session_id,
+            request_id,
+            opened_record,
+            claim_id=claim_a["claim-id"],
+            dispatch_owner_epoch="owner-a",
+            worker_id="worker-a",
+            attempt_epoch=1,
+            expected_surface_id="gpt-auto-cdp",
+        )
+
+    persisted = session_store.read_session_record(tmp_path, session_id)
+    assert persisted.get("binding") is None
+    metadata = session_store.session_provider_metadata(persisted)
+    assert metadata["submission-state"] == "prepared"
+    assert metadata["submission-recovery-claim"]["claim-id"] == claim_b["claim-id"]
 
 
 def test_rehydrated_generation_preserves_durable_max_lifetime(tmp_path):

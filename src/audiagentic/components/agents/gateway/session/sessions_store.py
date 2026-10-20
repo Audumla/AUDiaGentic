@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from collections.abc import Callable
 from contextlib import ExitStack, contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -94,10 +95,42 @@ def update_provider_metadata(
     effect is durable before a browser Send.  ``remove_keys`` lets terminal
     proof clear only checkpoint fields while retaining provider URL/ref data.
     """
-    with _session_lock(project_root, session_id):
+    with _ordered_session_mutation_lock(project_root, session_id):
         record = read_session_record(project_root, session_id)
         provider = record.setdefault("provider", {})
         current = dict(provider.get("metadata") or {})
+        protected_checkpoint_keys = {
+            "unresolved-turn-pending",
+            "unresolved-turn-id",
+            "submission-state",
+            "submission-proven",
+            "submission-recovery-claim",
+            "submission-recovery-generation",
+            "recovery-state",
+            "prompt-text-digest",
+            "prompt-message-id",
+            "assistant-message-id",
+            "assistant-before-message-id",
+            "assistant-before-id",
+            "terminal-evidence",
+            "unresolved-baseline-user-id",
+            "unresolved-baseline-assistant-id",
+            "unresolved-baseline-user-count",
+            "unresolved-baseline-assistant-count",
+        }
+        if (
+            isinstance(current.get("submission-recovery-claim"), dict)
+            or current.get("submission-recovery-generation") is not None
+        ) and (
+            protected_checkpoint_keys.intersection(metadata)
+            or protected_checkpoint_keys.intersection(remove_keys)
+        ):
+            raise AudiaGenticError(
+                code="CON-AGW-125",
+                kind="agents",
+                message="prepared recovery checkpoint requires its request-owner fence",
+                details={"session-id": session_id},
+            )
         current.update(metadata)
         for key in remove_keys:
             current.pop(key, None)
@@ -181,8 +214,9 @@ def claim_prepared_submission_recovery(
 
     The prepared checkpoint remains intact while a replacement provider
     surface is being opened. A crash therefore leaves recoverable proof; the
-    short lease prevents a second live owner from opening/submitting in
-    parallel, while request-owner fencing lets a successor take over at once.
+    request-owner fencing lets a successor take over immediately. An expired
+    same-owner claim can also be reclaimed after a crashed worker, with a new
+    generation fencing any late writes from the old claimant.
     """
     from audiagentic.components.agents.gateway.store._shared import _request_lock
 
@@ -220,12 +254,21 @@ def claim_prepared_submission_recovery(
                 )
                 current_owner = (dispatch_owner_epoch, worker_id, attempt_epoch)
                 if previous_owner == current_owner:
-                    raise AudiaGenticError(
-                        code="CON-AGW-125",
-                        kind="agents",
-                        message="prepared submission recovery is already claimed",
-                        details={"request-id": request_id, "session-id": session_id},
-                    )
+                    expires = previous.get("lease-expires-at")
+                    try:
+                        expired = (
+                            datetime.fromisoformat(str(expires).replace("Z", "+00:00"))
+                            <= datetime.now(timezone.utc)
+                        )
+                    except (TypeError, ValueError):
+                        expired = False
+                    if not expired:
+                        raise AudiaGenticError(
+                            code="CON-AGW-125",
+                            kind="agents",
+                            message="prepared submission recovery is already claimed",
+                            details={"request-id": request_id, "session-id": session_id},
+                        )
                 generation = previous.get("generation", 0)
             else:
                 generation = 0
@@ -246,6 +289,7 @@ def claim_prepared_submission_recovery(
             }
             provider = record.setdefault("provider", {})
             metadata["submission-recovery-claim"] = claim
+            metadata["submission-recovery-generation"] = generation
             provider["metadata"] = metadata
             record.setdefault("timing", {})["updated-at"] = now_iso_z()
             write_session_record(project_root, record)
@@ -333,6 +377,15 @@ def advance_prepared_submission_to_dispatching(
     """CAS prepared -> dispatching and consume its recovery claim atomically."""
     from audiagentic.components.agents.gateway.store._shared import _request_lock
 
+    if {"submission-recovery-claim", "submission-recovery-generation"}.intersection(
+        metadata_update
+    ):
+        raise AudiaGenticError(
+            code="CON-AGW-125",
+            kind="agents",
+            message="provider checkpoint cannot replace recovery claim identity",
+            details={"request-id": request_id, "session-id": session_id},
+        )
     with _request_lock(project_root, request_id):
         with _ordered_session_mutation_lock(project_root, session_id):
             record, metadata = _assert_prepared_submission_claim_locked(
@@ -360,6 +413,292 @@ def advance_prepared_submission_to_dispatching(
             return record
 
 
+def update_prepared_submission_checkpoint(
+    project_root: Path,
+    session_id: str,
+    request_id: str,
+    metadata_update: dict[str, Any],
+    *,
+    claim_id: str,
+    dispatch_owner_epoch: str,
+    worker_id: str,
+    attempt_epoch: int,
+    remove_keys: tuple[str, ...] = (),
+) -> dict[str, Any]:
+    """Mutate a prepared checkpoint only while its request owner still holds the claim."""
+    from audiagentic.components.agents.gateway.store._shared import _request_lock
+
+    if {"submission-recovery-claim", "submission-recovery-generation"}.intersection(
+        metadata_update
+    ):
+        raise AudiaGenticError(
+            code="CON-AGW-125",
+            kind="agents",
+            message="provider checkpoint cannot replace recovery claim identity",
+            details={"request-id": request_id, "session-id": session_id},
+        )
+    with _request_lock(project_root, request_id):
+        with _ordered_session_mutation_lock(project_root, session_id):
+            record, metadata = _assert_prepared_submission_claim_locked(
+                project_root,
+                session_id,
+                request_id,
+                claim_id=claim_id,
+                dispatch_owner_epoch=dispatch_owner_epoch,
+                worker_id=worker_id,
+                attempt_epoch=attempt_epoch,
+            )
+            metadata.update(metadata_update)
+            for key in remove_keys:
+                metadata.pop(key, None)
+            record.setdefault("provider", {})["metadata"] = metadata
+            record.setdefault("timing", {})["updated-at"] = now_iso_z()
+            write_session_record(project_root, record)
+            return record
+
+
+def update_owned_submission_checkpoint(
+    project_root: Path,
+    session_id: str,
+    request_id: str,
+    metadata_update: dict[str, Any],
+    *,
+    dispatch_owner_epoch: str,
+    worker_id: str,
+    attempt_epoch: int,
+    claim_id: str | None = None,
+    remove_keys: tuple[str, ...] = (),
+) -> dict[str, Any]:
+    """Update recovery checkpoint only under its request owner and current stage."""
+    if {"submission-recovery-claim", "submission-recovery-generation"}.intersection(
+        metadata_update
+    ):
+        raise AudiaGenticError(
+            code="CON-AGW-125",
+            kind="agents",
+            message="provider checkpoint cannot replace recovery claim identity",
+            details={"request-id": request_id, "session-id": session_id},
+        )
+    with _request_lock(project_root, request_id):
+        with _ordered_session_mutation_lock(project_root, session_id):
+            record = read_session_record(project_root, session_id)
+            metadata = session_provider_metadata(record)
+            if metadata.get("submission-state") == "prepared":
+                if not isinstance(claim_id, str) or not claim_id:
+                    raise AudiaGenticError(
+                        code="CON-AGW-125",
+                        kind="agents",
+                        message="prepared checkpoint update requires its recovery claim",
+                        details={"request-id": request_id, "session-id": session_id},
+                    )
+                record, metadata = _assert_prepared_submission_claim_locked(
+                    project_root,
+                    session_id,
+                    request_id,
+                    claim_id=claim_id,
+                    dispatch_owner_epoch=dispatch_owner_epoch,
+                    worker_id=worker_id,
+                    attempt_epoch=attempt_epoch,
+                )
+            else:
+                _assert_request_dispatch_owner(
+                    project_root,
+                    request_id,
+                    session_id,
+                    dispatch_owner_epoch=dispatch_owner_epoch,
+                    worker_id=worker_id,
+                    attempt_epoch=attempt_epoch,
+                )
+                if not (
+                    metadata.get("unresolved-turn-pending") is True
+                    and metadata.get("unresolved-turn-id") == request_id
+                    and metadata.get("submission-state") == "dispatching"
+                    and claim_id is None
+                ):
+                    raise AudiaGenticError(
+                        code="CON-AGW-125",
+                        kind="agents",
+                        message="owned checkpoint update does not match the current dispatch stage",
+                        details={"request-id": request_id, "session-id": session_id},
+                    )
+            metadata.update(metadata_update)
+            for key in remove_keys:
+                metadata.pop(key, None)
+            record.setdefault("provider", {})["metadata"] = metadata
+            record.setdefault("timing", {})["updated-at"] = now_iso_z()
+            write_session_record(project_root, record)
+            return record
+
+
+def install_prepared_recovery_binding(
+    project_root: Path,
+    session_id: str,
+    request_id: str,
+    *,
+    provider_id: str,
+    surface_id: str,
+    provider_session_ref: str,
+    claim_id: str,
+    dispatch_owner_epoch: str,
+    worker_id: str,
+    attempt_epoch: int,
+    expected_surface_id: str,
+    binding_metadata: dict[str, Any] | None = None,
+    binding_identity: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Install a newly opened provider identity under the prepared recovery claim."""
+    from audiagentic.components.agents.gateway.store._shared import _request_lock
+
+    with _request_lock(project_root, request_id):
+        with _ordered_session_mutation_lock(project_root, session_id):
+            record, metadata = _assert_prepared_submission_claim_locked(
+                project_root,
+                session_id,
+                request_id,
+                claim_id=claim_id,
+                dispatch_owner_epoch=dispatch_owner_epoch,
+                worker_id=worker_id,
+                attempt_epoch=attempt_epoch,
+            )
+            admitted_provider = session_provider_id(record)
+            if admitted_provider and admitted_provider != provider_id:
+                raise AudiaGenticError(
+                    code="CON-AGW-120",
+                    kind="agents",
+                    message="prepared provider binding conflicts with admitted provider",
+                    details={"session-id": session_id},
+                )
+            if not isinstance(expected_surface_id, str) or not expected_surface_id.strip() or surface_id != expected_surface_id:
+                raise AudiaGenticError(
+                    code="CON-AGW-120",
+                    kind="agents",
+                    message="prepared provider binding does not match the admission-frozen surface",
+                    details={"session-id": session_id},
+                )
+            current = record.get("binding")
+            if isinstance(current, dict):
+                if not (
+                    current.get("provider-id") == provider_id
+                    and current.get("surface-id") == surface_id
+                    and current.get("provider-session-ref") == provider_session_ref
+                ):
+                    raise AudiaGenticError(
+                        code="CON-AGW-120",
+                        kind="agents",
+                        message="prepared provider binding conflicts with existing session identity",
+                        details={"session-id": session_id},
+                    )
+            else:
+                record["binding"] = bindings.build_binding(
+                    provider_id=provider_id,
+                    provider_session_ref=provider_session_ref,
+                    surface_id=surface_id,
+                    **(binding_identity or {}),
+                )
+            if binding_metadata:
+                metadata.update(binding_metadata)
+            record.setdefault("provider", {})["metadata"] = metadata
+            record.setdefault("timing", {})["updated-at"] = now_iso_z()
+            _validate(record, code="VAL-AGW-120")
+            bindings.register_open_binding(project_root, record)
+            write_session_record(project_root, record)
+            return record
+
+
+def commit_prepared_recovery_open(
+    project_root: Path,
+    session_id: str,
+    request_id: str,
+    opened_record: dict[str, Any],
+    *,
+    claim_id: str,
+    dispatch_owner_epoch: str,
+    worker_id: str,
+    attempt_epoch: int,
+    expected_surface_id: str,
+    on_commit: Callable[[dict[str, Any]], None] | None = None,
+) -> dict[str, Any]:
+    """Commit provider-open facts without replacing admitted session state or stale ownership."""
+    from audiagentic.components.agents.gateway.store._shared import _request_lock
+
+    with _request_lock(project_root, request_id):
+        with _ordered_session_mutation_lock(project_root, session_id):
+            record, metadata = _assert_prepared_submission_claim_locked(
+                project_root,
+                session_id,
+                request_id,
+                claim_id=claim_id,
+                dispatch_owner_epoch=dispatch_owner_epoch,
+                worker_id=worker_id,
+                attempt_epoch=attempt_epoch,
+            )
+            opened_binding = opened_record.get("binding")
+            current_binding = record.get("binding")
+            if not isinstance(opened_binding, dict):
+                raise AudiaGenticError(
+                    code="CON-AGW-120",
+                    kind="agents",
+                    message="provider open did not return a durable session binding",
+                    details={"session-id": session_id},
+                )
+            if (
+                not isinstance(expected_surface_id, str)
+                or not expected_surface_id.strip()
+                or opened_binding.get("surface-id") != expected_surface_id
+            ):
+                raise AudiaGenticError(
+                    code="CON-AGW-120",
+                    kind="agents",
+                    message="provider-open surface differs from the admission-frozen surface",
+                    details={"session-id": session_id},
+                )
+            if isinstance(current_binding, dict) and not (
+                current_binding.get("provider-id") == opened_binding.get("provider-id")
+                and current_binding.get("surface-id") == opened_binding.get("surface-id")
+                and current_binding.get("provider-session-ref")
+                == opened_binding.get("provider-session-ref")
+            ):
+                raise AudiaGenticError(
+                    code="CON-AGW-120",
+                    kind="agents",
+                    message="provider-open result conflicts with the committed session binding",
+                    details={"session-id": session_id},
+                )
+            if session_provider_id(record) not in (None, opened_binding.get("provider-id")):
+                raise AudiaGenticError(
+                    code="CON-AGW-120",
+                    kind="agents",
+                    message="provider-open result conflicts with the admitted session provider",
+                    details={"session-id": session_id},
+                )
+            if (
+                opened_record.get("execution-profile-id")
+                != record.get("execution-profile-id")
+            ):
+                raise AudiaGenticError(
+                    code="CON-AGW-120",
+                    kind="agents",
+                    message="provider-open profile differs from the admitted session profile",
+                    details={"session-id": session_id},
+                )
+            record["binding"] = current_binding or opened_binding
+            record["provider-transport-kind"] = "provider-session"
+            provider = dict(record.get("provider") or {})
+            opened_provider = dict(opened_record.get("provider") or {})
+            opened_metadata = dict(opened_provider.pop("metadata", {}) or {})
+            provider.update(opened_provider)
+            metadata.update(opened_metadata)
+            provider["metadata"] = metadata
+            record["provider"] = provider
+            record.setdefault("timing", {})["updated-at"] = now_iso_z()
+            _validate(record, code="VAL-AGW-120")
+            bindings.register_open_binding(project_root, record)
+            write_session_record(project_root, record)
+            if on_commit is not None:
+                on_commit(record)
+            return record
+
+
 def release_prepared_submission_recovery_claim(
     project_root: Path, session_id: str, *, claim_id: str
 ) -> bool:
@@ -374,6 +713,7 @@ def release_prepared_submission_recovery_claim(
         if not isinstance(claim, dict) or claim.get("claim-id") != claim_id:
             return False
         metadata.pop("submission-recovery-claim", None)
+        metadata.pop("submission-recovery-generation", None)
         record.setdefault("provider", {})["metadata"] = metadata
         record.setdefault("timing", {})["updated-at"] = now_iso_z()
         write_session_record(project_root, record)
