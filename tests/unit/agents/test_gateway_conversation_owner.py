@@ -21,6 +21,14 @@ def test_prefers_live_successor(tmp_path):
     with patch("audiagentic.components.agents.gateway.session.sessions_store.list_session_records", return_value=[owner("ses_old", "closed"), owner()]):
         assert resolve_conversation_owner(tmp_path, URL, None) == "ses_existing"
 
+
+def test_terminal_only_owner_allows_successor_session(tmp_path):
+    with patch(
+        "audiagentic.components.agents.gateway.session.sessions_store.list_session_records",
+        return_value=[owner("ses_failed", "failed")],
+    ):
+        assert resolve_conversation_owner(tmp_path, URL, None) is None
+
 def test_conflicting_explicit_session_rejected(tmp_path):
     with patch("audiagentic.components.agents.gateway.session.sessions_store.list_session_records", return_value=[owner()]):
         with pytest.raises(AudiaGenticError):
