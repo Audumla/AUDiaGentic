@@ -672,6 +672,7 @@ def _reconcile_before_failed_terminal(
                 request_id,
                 passive=True,
                 capture_timeout_seconds=min(3.0, remaining / 2.0),
+                capture_deadline=deadline,
             )
             store.record_gateway_timeline(
                 project_root,

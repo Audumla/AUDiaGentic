@@ -1722,6 +1722,7 @@ def complete_execution_from_provider(
     recovery_attempt_id: str | None = None,
     recovery_claim_generation: int | None = None,
     capture_timeout_seconds: float = 20.0,
+    capture_deadline: float | None = None,
 ) -> dict[str, Any]:
     """Capture and commit the request-owned current GPT response.
 
@@ -1777,6 +1778,7 @@ def complete_execution_from_provider(
         locator=locator,
         passive=passive,
         timeout_seconds=capture_timeout_seconds,
+        deadline_monotonic=capture_deadline,
     )
     if captured.get("outcome") != "captured":
         raise AudiaGenticError(code="CON-AGW-154", kind="agents", message="provider response could not be captured", details={"request-id": request_id, "reason": captured.get("reason")})
@@ -1787,6 +1789,7 @@ def complete_execution_from_provider(
         locator=locator,
         passive=passive,
         timeout_seconds=capture_timeout_seconds,
+        deadline_monotonic=capture_deadline,
     )
     if confirmed.get("outcome") != "captured":
         raise AudiaGenticError(code="CON-AGW-155", kind="agents", message="provider terminal response could not be revalidated", details={"request-id": request_id})
@@ -1967,6 +1970,7 @@ def complete_execution_from_provider(
 
 def request_runtime_status(project_root: Path, request_id: str) -> dict[str, Any]:
     """Return redacted runtime facts for one request without starting runtimes."""
+    store.repair_pending_terminal_finalization(project_root, request_id)
     record = store.read_public_status(project_root, request_id)
     state = record["state"]
     slot = get_queue_manager().request_slot_status(record["execution-profile-id"], request_id)

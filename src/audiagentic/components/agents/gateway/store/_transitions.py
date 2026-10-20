@@ -74,6 +74,80 @@ def _test_stall_terminal_to_cleanup() -> None:
         time.sleep(ms / 1000.0)
 
 
+def _apply_terminal_finalization(
+    project_root: Path,
+    request_id: str,
+    finalization: Mapping[str, Any],
+) -> bool:
+    """Apply idempotent session cleanup after a terminal capture.
+
+    The request record carries the finalization marker, so a process crash
+    between the request write and this cross-record update can be replayed by
+    the next status read.  A newer unresolved turn owns the session and makes
+    this cleanup obsolete; in that case it is safely skipped.
+    """
+    session_id = finalization.get("session-id")
+    if not isinstance(session_id, str) or not session_id:
+        return True
+    from audiagentic.components.agents.gateway.session import sessions_store as session_store
+
+    session_record = session_store.read_session_record(project_root, session_id)
+    metadata = session_store.session_provider_metadata(session_record)
+    unresolved_turn_id = metadata.get("unresolved-turn-id")
+    if unresolved_turn_id not in {None, request_id}:
+        return True
+    binding = finalization.get("recovered-binding")
+    if isinstance(binding, dict) and binding:
+        session_store.update_provider_metadata(
+            project_root,
+            session_id,
+            {str(key): value for key, value in binding.items() if value is not None},
+        )
+    if finalization.get("clear-unresolved-turn"):
+        session_store.update_provider_metadata(
+            project_root,
+            session_id,
+            {"unresolved-turn-pending": False, "recovery-state": "terminal-captured"},
+            remove_keys=(
+                "unresolved-turn-id", "prompt-message-id", "assistant-message-id",
+                "assistant-before-message-id", "assistant-before-id", "prompt-text-digest",
+                "submission-proven", "terminal-evidence",
+            ),
+        )
+    return True
+
+
+def repair_pending_terminal_finalization(project_root: Path, request_id: str) -> bool:
+    """Replay a terminal session cleanup marker, if one was left by a crash."""
+    with _request_lock(project_root, request_id):
+        record = _read_record_locked(project_root, request_id)
+        finalization = record.get("terminal-finalization")
+        if record.get("state") != "completed" or not isinstance(finalization, dict):
+            return False
+        try:
+            _apply_terminal_finalization(project_root, request_id, finalization)
+        except Exception:  # noqa: BLE001 - leave marker for the next status read
+            logger.warning(
+                "terminal session finalization replay deferred",
+                extra={"request-id": request_id},
+                exc_info=True,
+            )
+            return False
+        updated = dict(record)
+        updated.pop("terminal-finalization", None)
+        updated["updated-at"] = now_iso_z()
+        updated["revision"] = record["revision"] + 1
+        write_record(project_root, updated)
+        record_gateway_timeline(
+            project_root,
+            request_id,
+            "session.finalization-replayed",
+            state="completed",
+            attributes={"source": "status-replay"},
+        )
+        return True
+
+
 def ensure_transition(current_state: str, new_state: str) -> None:
     if not _shared.is_known_state_fn(current_state):
         raise AudiaGenticError(
@@ -1891,6 +1965,14 @@ def transition_operator_terminal(
         updated["watchdog-state"] = "not-started"
         updated["watchdog-reason"] = None
         updated["recovery-required"] = False
+        finalization = None
+        if session_id and (recovered_binding or clear_unresolved_turn):
+            finalization = {
+                "session-id": session_id,
+                "recovered-binding": dict(recovered_binding or {}),
+                "clear-unresolved-turn": bool(clear_unresolved_turn),
+            }
+            updated["terminal-finalization"] = finalization
         updates = dict(updates)
         final_response_text = updates.pop("__final-response-text", None)
         if final_response_text is not None:
@@ -1914,26 +1996,21 @@ def transition_operator_terminal(
             project_root, request_id, "state.changed", state="completed",
             attributes={"from": record["state"], "to": "completed", "source": "operator-provider-capture"},
         )
-        if session_id and (recovered_binding or clear_unresolved_turn):
-            from audiagentic.components.agents.gateway.session import sessions_store as session_store
-
-            if recovered_binding:
-                session_store.update_provider_metadata(
-                    project_root,
-                    session_id,
-                    {str(key): value for key, value in recovered_binding.items() if value is not None},
+        if finalization is not None:
+            try:
+                _apply_terminal_finalization(project_root, request_id, finalization)
+            except Exception:  # noqa: BLE001 - marker remains replayable
+                logger.warning(
+                    "terminal session finalization deferred",
+                    extra={"request-id": request_id},
+                    exc_info=True,
                 )
-            if clear_unresolved_turn:
-                session_store.update_provider_metadata(
-                    project_root,
-                    session_id,
-                    {"unresolved-turn-pending": False, "recovery-state": "terminal-captured"},
-                    remove_keys=(
-                        "unresolved-turn-id", "prompt-message-id", "assistant-message-id",
-                        "assistant-before-message-id", "assistant-before-id", "prompt-text-digest",
-                        "submission-proven", "terminal-evidence",
-                    ),
-                )
+            else:
+                updated = _read_record_locked(project_root, request_id)
+                updated.pop("terminal-finalization", None)
+                updated["updated-at"] = now_iso_z()
+                updated["revision"] = record["revision"] + 2
+                write_record(project_root, updated)
     _finalize_worker_session_if_terminal(project_root, updated)
     return updated
 

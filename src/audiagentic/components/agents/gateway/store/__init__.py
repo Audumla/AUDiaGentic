@@ -70,6 +70,7 @@ from audiagentic.components.agents.gateway.store._transitions import (
     takeover_nonterminal_owner,
     transition_owned_terminal,
     transition_operator_terminal,
+    repair_pending_terminal_finalization,
     transition_record,
     transition_recovered_terminal,
     update_diagnostics,
@@ -122,6 +123,7 @@ __all__ = [
     "start_owned_attempt",
     "transition_owned_terminal",
     "transition_operator_terminal",
+    "repair_pending_terminal_finalization",
     "transition_record",
     "transition_recovered_terminal",
     "takeover_nonterminal_owner",
@@ -130,4 +132,3 @@ __all__ = [
     "update_diagnostics",
     "update_owned_running_session",
 ]
-
