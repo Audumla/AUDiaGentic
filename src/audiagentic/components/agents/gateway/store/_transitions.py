@@ -96,26 +96,44 @@ def _apply_terminal_finalization(
     unresolved_turn_id = metadata.get("unresolved-turn-id")
     if unresolved_turn_id not in {None, request_id}:
         return True
+    expected_checkpoint = finalization.get("pre-clear-checkpoint")
+    if not isinstance(expected_checkpoint, dict):
+        expected_checkpoint = None
+    if "expected-session-binding" in finalization and session_record.get("binding") != finalization["expected-session-binding"]:
+        return False
+    if unresolved_turn_id is None and metadata.get("unresolved-turn-pending") is False:
+        # A crash can occur after session clear but before memory handoff.
+        # Surviving residue must still agree; never overwrite a newer attempt.
+        if expected_checkpoint is not None and any(
+            key in metadata and metadata[key] != expected_checkpoint.get(key)
+            for key in session_store._RECOVERY_CHECKPOINT_KEYS
+            - {"unresolved-turn-pending", "recovery-state"}
+        ):
+            return False
+        return True
     binding = finalization.get("recovered-binding")
-    if isinstance(binding, dict) and binding:
+    if isinstance(binding, dict) and binding and not finalization.get("clear-unresolved-turn"):
         session_store.update_provider_metadata(
             project_root,
             session_id,
             {str(key): value for key, value in binding.items() if value is not None},
         )
     if finalization.get("clear-unresolved-turn"):
-        session_store._clear_terminal_submission_checkpoint_locked(
+        return session_store._clear_terminal_submission_checkpoint_locked(
             project_root,
             session_id,
             request_id,
             recovery_state="terminal-captured",
-            remove_keys=(
-                "submission-state", "submission-recovery-generation",
-                "unresolved-baseline-user-id", "unresolved-baseline-assistant-id",
-                "unresolved-baseline-user-count", "unresolved-baseline-assistant-count",
-                "unresolved-turn-id", "prompt-message-id", "assistant-message-id",
-                "assistant-before-message-id", "assistant-before-id", "prompt-text-digest",
-                "submission-proven", "terminal-evidence",
+            expected_metadata=expected_checkpoint,
+            expected_binding=finalization.get("expected-session-binding"),
+            check_binding="expected-session-binding" in finalization,
+            binding_metadata_update=(
+                {str(key): value for key, value in binding.items() if value is not None}
+                if isinstance(binding, dict) else None
+            ),
+            remove_keys=tuple(
+                key for key in session_store.TERMINAL_SUBMISSION_CHECKPOINT_REMOVE_KEYS
+                if key != "recovery-state"
             ),
         )
     return True
@@ -129,7 +147,8 @@ def repair_pending_terminal_finalization(project_root: Path, request_id: str) ->
         if record.get("state") != "completed" or not isinstance(finalization, dict):
             return False
         try:
-            _apply_terminal_finalization(project_root, request_id, finalization)
+            if not _apply_terminal_finalization(project_root, request_id, finalization):
+                return False
         except Exception:  # noqa: BLE001 - leave marker for the next status read
             logger.warning(
                 "terminal session finalization replay deferred",
@@ -137,19 +156,23 @@ def repair_pending_terminal_finalization(project_root: Path, request_id: str) ->
                 exc_info=True,
             )
             return False
-        updated = dict(record)
-        updated.pop("terminal-finalization", None)
-        updated["updated-at"] = now_iso_z()
-        updated["revision"] = record["revision"] + 1
-        write_record(project_root, updated)
-        record_gateway_timeline(
-            project_root,
-            request_id,
-            "session.finalization-replayed",
-            state="completed",
-            attributes={"source": "status-replay"},
-        )
-        return True
+        # A captured private checkpoint remains replayable until the matching
+        # live observer/memory handoff acknowledges it outside these locks.
+        if "pre-clear-checkpoint" not in finalization:
+            updated = dict(record)
+            updated.pop("terminal-finalization", None)
+            updated["updated-at"] = now_iso_z()
+            updated["revision"] = record["revision"] + 1
+            write_record(project_root, updated)
+            record_gateway_timeline(
+                project_root, request_id, "session.finalization-replayed", state="completed",
+                attributes={"source": "status-replay"},
+            )
+            return True
+    # Never call into the live event loop while holding a file mutation lock:
+    # its observer may itself be waiting to publish a fenced checkpoint.
+    from ..session.capture_handoff import reconcile_idle_captured_handoff
+    return reconcile_idle_captured_handoff(project_root, request_id)
 
 
 def ensure_transition(current_state: str, new_state: str) -> None:
@@ -1905,6 +1928,8 @@ def transition_operator_terminal(
     recovery_attempt_id: str | None = None,
     recovery_claim_generation: int | None = None,
     session_id: str | None = None,
+    expected_session_provider: dict[str, Any] | None = None,
+    expected_session_binding: dict[str, Any] | None = None,
     recovered_binding: dict[str, Any] | None = None,
     clear_unresolved_turn: bool = False,
 ) -> dict[str, Any]:
@@ -1914,7 +1939,10 @@ def transition_operator_terminal(
     unwinding after the operator captured the already-rendered answer, and its
     later terminal write must be rejected rather than overwrite this result.
     """
-    with _request_lock(project_root, request_id):
+    def assert_current_capture_claim() -> None:
+        # Call only while _request_lock is held. replay's claim preparation,
+        # renewal and result writers use this same request mutation.lock, so
+        # journal identity cannot change between this check and write_record.
         if recovery_attempt_id is not None:
             from audiagentic.components.agents.gateway.replay import (
                 RecoveryClaimLostError,
@@ -1935,6 +1963,8 @@ def transition_operator_terminal(
                 and claim.get("claim-generation") == recovery_claim_generation
             ):
                 raise RecoveryClaimLostError("recovery claim lost before terminal commit")
+    with _request_lock(project_root, request_id):
+        assert_current_capture_claim()
         record = _read_record_locked(project_root, request_id)
         _check_expected_identity(
             record,
@@ -1969,6 +1999,12 @@ def transition_operator_terminal(
         updated["watchdog-state"] = "not-started"
         updated["watchdog-reason"] = None
         updated["recovery-required"] = False
+        diagnostics = updated.get("diagnostics")
+        if isinstance(diagnostics, dict):
+            updated["diagnostics"] = {
+                **diagnostics, "resolution-state": "resolved",
+                "recovery": {"disposition": "none", "allowed-actions": []},
+            }
         finalization = None
         if session_id and (recovered_binding or clear_unresolved_turn):
             finalization = {
@@ -1976,6 +2012,22 @@ def transition_operator_terminal(
                 "recovered-binding": dict(recovered_binding or {}),
                 "clear-unresolved-turn": bool(clear_unresolved_turn),
             }
+            checkpoint = (expected_session_provider or {}).get("metadata")
+            if (
+                isinstance(checkpoint, dict)
+                and checkpoint.get("unresolved-turn-id") == request_id
+                and checkpoint.get("unresolved-turn-pending") is True
+            ):
+                from audiagentic.components.agents.gateway.session.sessions_store import _RECOVERY_CHECKPOINT_KEYS
+                finalization["pre-clear-checkpoint"] = {
+                    key: value for key, value in checkpoint.items()
+                    if key in _RECOVERY_CHECKPOINT_KEYS
+                }
+                finalization["expected-session-binding"] = expected_session_binding
+                finalization["capture-owner"] = {
+                    key: record.get(key)
+                    for key in ("dispatch-owner-epoch", "worker-id", "attempt-epoch")
+                }
             updated["terminal-finalization"] = finalization
         updates = dict(updates)
         final_response_text = updates.pop("__final-response-text", None)
@@ -1995,14 +2047,38 @@ def transition_operator_terminal(
             }
         for key, value in updates.items():
             updated[key.replace("_", "-")] = value
-        write_record(project_root, updated)
+        if session_id and expected_session_provider is not None:
+            from audiagentic.components.agents.gateway.session import sessions_store
+
+            # A successor turn can change only the session checkpoint while
+            # this request's revision stays unchanged. Recheck that checkpoint
+            # under the session lock and hold it through the terminal write.
+            with sessions_store._ordered_session_mutation_lock(project_root, session_id):
+                current_session = sessions_store.read_session_record(project_root, session_id)
+                if (
+                    current_session.get("provider") != expected_session_provider
+                    or current_session.get("binding") != expected_session_binding
+                ):
+                    raise AudiaGenticError(
+                        code="CON-AGW-156", kind="agents",
+                        message="provider session changed during response capture",
+                        details={"request-id": request_id},
+                    )
+                # Session/retention lock acquisition and artifact persistence
+                # can outlive the lease checked at entry. Revision/CAS alone
+                # cannot prove this recovery attempt is still authorized.
+                assert_current_capture_claim()
+                write_record(project_root, updated)
+        else:
+            assert_current_capture_claim()
+            write_record(project_root, updated)
         record_gateway_timeline(
             project_root, request_id, "state.changed", state="completed",
             attributes={"from": record["state"], "to": "completed", "source": "operator-provider-capture"},
         )
         if finalization is not None:
             try:
-                _apply_terminal_finalization(project_root, request_id, finalization)
+                applied = _apply_terminal_finalization(project_root, request_id, finalization)
             except Exception:  # noqa: BLE001 - marker remains replayable
                 logger.warning(
                     "terminal session finalization deferred",
@@ -2010,12 +2086,20 @@ def transition_operator_terminal(
                     exc_info=True,
                 )
             else:
-                updated = _read_record_locked(project_root, request_id)
-                updated.pop("terminal-finalization", None)
-                updated["updated-at"] = now_iso_z()
-                updated["revision"] = record["revision"] + 2
-                write_record(project_root, updated)
+                if applied and "pre-clear-checkpoint" not in finalization:
+                    updated = _read_record_locked(project_root, request_id)
+                    updated.pop("terminal-finalization", None)
+                    updated["updated-at"] = now_iso_z()
+                    updated["revision"] = record["revision"] + 2
+                    write_record(project_root, updated)
     _finalize_worker_session_if_terminal(project_root, updated)
+    if finalization is not None and "pre-clear-checkpoint" in finalization:
+        from ..session.capture_handoff import reconcile_idle_captured_handoff
+        try:
+            if reconcile_idle_captured_handoff(project_root, request_id):
+                updated = _read_record_locked(project_root, request_id)
+        except Exception:  # noqa: BLE001 - durable marker remains for the owner/status replay
+            logger.warning("captured memory handoff deferred", exc_info=True)
     return updated
 
 

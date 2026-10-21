@@ -468,6 +468,7 @@ async def test_terminal_checkpoint_clear_retains_submission_proof() -> None:
     assert updates[-1] == {
         "unresolved-turn-pending": False,
         "submission-proven": True,
+        "submission-state": "cleared",
         "prompt-message-id": "prompt-1",
         "assistant-message-id": "assistant-1",
         "assistant-before-message-id": "assistant-0",

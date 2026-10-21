@@ -2,8 +2,12 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
 
 from audiagentic.components.agents.agents_paths import gateway_request_dir, gateway_timeline_path
+from audiagentic.components.agents.gateway import retention
 from audiagentic.components.agents.gateway.operations.retention_policy import (
     DEFAULT_CONSOLE_TRACE_MAX_BYTES,
     DEFAULT_OBSERVATION_MAX_BYTES,
@@ -17,6 +21,79 @@ from audiagentic.components.agents.gateway.retention import (
     enforce_request_retention,
 )
 from audiagentic.components.agents.gateway.session.console_trace import GatewayConsoleTrace
+
+
+def test_pending_terminal_handoff_is_not_retention_eligible(tmp_path, monkeypatch):
+    request_id = "req_pending_handoff"
+    directory = gateway_request_dir(tmp_path, request_id)
+    directory.mkdir(parents=True)
+    record = {"request-id": request_id, "state": "completed", "terminal-finalization": {"pre-clear-checkpoint": {"unresolved-turn-id": request_id}}}
+    path = directory / "record.json"
+    path.write_text(json.dumps(record), encoding="utf-8")
+    monkeypatch.setattr(retention, "request_retention_pin", lambda *_: SimpleNamespace(pinned=False))
+    assert retention._eligible_record(tmp_path, directory) is None
+    record.pop("terminal-finalization")
+    path.write_text(json.dumps(record), encoding="utf-8")
+    assert retention._eligible_record(tmp_path, directory) is not None
+
+
+@pytest.mark.parametrize("has_runtime_file", [True, False])
+def test_positive_runtime_pin_skips_global_session_census(tmp_path, monkeypatch, has_runtime_file):
+    directory = gateway_request_dir(tmp_path, "req_runtime_pin")
+    (directory / "runtime").mkdir(parents=True)
+    (directory / "record.json").write_text(json.dumps({
+        "request-id": "req_runtime_pin", "state": "completed",
+    }), encoding="utf-8")
+    if has_runtime_file:
+        (directory / "runtime" / "admitted-prompt.txt").write_text("saved prompt", encoding="utf-8")
+    calls = []
+
+    def full_census(*_args):
+        calls.append(True)
+        return SimpleNamespace(pinned=False)
+
+    monkeypatch.setattr(retention, "request_retention_pin", full_census)
+    result = retention._eligible_record(tmp_path, directory)
+    assert (result is None) is has_runtime_file
+    assert len(calls) == int(not has_runtime_file)
+
+
+def test_positive_lineage_snapshot_only_skips_known_kept_requests(tmp_path, monkeypatch):
+    directory = gateway_request_dir(tmp_path, "req_lineage_pin")
+    directory.mkdir(parents=True)
+    (directory / "record.json").write_text(json.dumps({
+        "request-id": "req_lineage_pin", "state": "completed",
+    }), encoding="utf-8")
+    calls = []
+    monkeypatch.setattr(retention, "request_retention_pin", lambda *_: (calls.append(True) or SimpleNamespace(pinned=True)))
+    assert retention._eligible_record(tmp_path, directory, positive_lineage=frozenset({"req_lineage_pin"})) is None
+    assert not calls
+    assert retention._eligible_record(tmp_path, directory, positive_lineage=frozenset({"some_other_request"})) is None
+    assert calls == [True]  # Missing snapshot entries still need fresh pin authority.
+
+
+def test_positive_lineage_snapshot_contains_only_durable_string_references(tmp_path, monkeypatch):
+    from audiagentic.components.agents.gateway.session import retention as session_retention
+    monkeypatch.setattr(session_retention, "list_session_records", lambda *_: [
+        {"activity": {"request-ids": ["req_one", "req_one", "", None, 1]}},
+        {"activity": {"request-ids": ["req_two"]}}, {"activity": None},
+    ])
+    assert session_retention.positive_session_lineage_snapshot(tmp_path) == frozenset({"req_one", "req_two"})
+
+
+def test_failed_lineage_census_skips_maintenance(tmp_path, monkeypatch):
+    from audiagentic.components.agents.gateway.session import retention as session_retention
+    gateway_request_dir(tmp_path, "req_protected").mkdir(parents=True)
+
+    def failed(*_args):
+        raise OSError("unreadable session census")
+
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError("failed census must not proceed with maintenance")
+
+    monkeypatch.setattr(session_retention, "positive_session_lineage_snapshot", failed)
+    monkeypatch.setattr(retention, "_eligible_record", forbidden)
+    assert retention.enforce_request_retention(tmp_path)["compacted"] == 0
 
 
 def test_retention_policy_defaults_and_machine_overrides(tmp_path: Path, monkeypatch) -> None:
@@ -111,6 +188,77 @@ def test_rolling_retention_compacts_old_resolved_histories_without_deleting_dire
     assert result["compacted"] >= 2
     assert all(gateway_request_dir(tmp_path, request_id).exists() for request_id in request_ids)
     assert all(gateway_request_dir(tmp_path, request_id).joinpath("record.json").exists() for request_id in request_ids)
+
+
+def test_terminal_timeline_schedules_retention_instead_of_running_inline(tmp_path: Path, monkeypatch) -> None:
+    from audiagentic.components.agents.gateway.store import _shared
+
+    scheduled: list[tuple[Path, str | None]] = []
+    monkeypatch.setattr(
+        retention,
+        "schedule_request_retention",
+        lambda root, *, trigger_request_id=None: scheduled.append((root, trigger_request_id)),
+    )
+    monkeypatch.setattr(
+        retention,
+        "enforce_request_retention",
+        lambda *_args, **_kwargs: pytest.fail("retention must not execute inline"),
+    )
+
+    _shared.record_gateway_timeline(
+        tmp_path,
+        "req_terminal_retention_async",
+        "state.changed",
+        state="completed",
+    )
+
+    assert scheduled == [(tmp_path, "req_terminal_retention_async")]
+
+
+def test_background_retention_sweep_records_duration_and_result(tmp_path: Path, monkeypatch) -> None:
+    observed: list[dict] = []
+    threads: list[SimpleNamespace] = []
+
+    class FakeThread:
+        def __init__(self, *, target, **_kwargs):
+            self.target = target
+
+        def start(self):
+            threads.append(SimpleNamespace(target=self.target))
+
+    from audiagentic.components.agents.gateway import observability
+
+    monkeypatch.setattr(retention.threading, "Thread", FakeThread)
+    monkeypatch.setattr(
+        retention,
+        "enforce_request_retention",
+        lambda _root: {
+            "limit": 100,
+            "eligible": 120,
+            "retained": 100,
+            "compacted": 20,
+            "protected": 0,
+        },
+    )
+    monkeypatch.setattr(
+        observability,
+        "append_observation",
+        lambda _root, _request_id, **kwargs: observed.append(kwargs),
+    )
+
+    assert retention.schedule_request_retention(
+        tmp_path, trigger_request_id="req_retention_trace"
+    )
+    assert len(threads) == 1
+    threads[0].target()
+
+    assert len(observed) == 1
+    event = observed[0]
+    assert event["source"] == "request-retention"
+    assert event["action"]["outcome"] == "completed"
+    assert event["diagnostic_facts"]["retention"]["sweep-result"]["compacted"] == 20
+    assert event["diagnostic_facts"]["retention"]["sweep-duration-ms"] >= 0
+    assert retention._RETENTION_WORKER_RUNNING is False
 
 
 def test_console_trace_rotates_one_bounded_backup(tmp_path: Path, monkeypatch) -> None:

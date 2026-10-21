@@ -258,6 +258,7 @@ _RECOVERABLE_SIDE_EFFECTS = {
 def resolve_effective_turn_evidence(
     record: dict[str, Any],
     session_metadata: dict[str, Any] | None,
+    *, include_checkpoint_identity: bool = False,
 ) -> dict[str, Any]:
     """Use session turn evidence only when it explicitly owns this request."""
     effective = dict(record.get("provider-metadata") or {})
@@ -266,9 +267,13 @@ def resolve_effective_turn_evidence(
         or session_metadata.get("unresolved-turn-id") != record.get("request-id")
     ):
         return effective
-    for key in _TURN_EVIDENCE_KEYS:
+    keys = _TURN_EVIDENCE_KEYS
+    if include_checkpoint_identity:
+        from ..session.sessions_store import _RECOVERY_CHECKPOINT_KEYS
+        keys = tuple(_RECOVERY_CHECKPOINT_KEYS)
+    for key in keys:
         effective.pop(key, None)
-    for key in _TURN_EVIDENCE_KEYS:
+    for key in keys:
         if key in session_metadata:
             effective[key] = session_metadata[key]
     return effective

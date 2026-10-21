@@ -17,12 +17,13 @@ from typing import Any
 
 from audiagentic.components.agents.agents_paths import (
     gateway_idempotency_index_path,
+    gateway_root,
 )
 from audiagentic.components.agents.gateway.queue.work_index import (
     write_work_index_entry,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.foundation.io import atomic_write_json
+from audiagentic.foundation.io import atomic_write_json, read_json_with_retry
 from audiagentic.foundation.time import now_iso_z
 
 from . import _records, _shared
@@ -160,6 +161,7 @@ def admit_record(
     idempotency_key: str,
     service_root: Path | None = None,
     before_write: Callable[[], None] | None = None,
+    on_admitted: Callable[[dict[str, Any]], None] | None = None,
 ) -> tuple[dict[str, Any], bool]:
     """Atomically reserve an idempotency key and persist its request record.
 
@@ -239,6 +241,21 @@ def admit_record(
 
         if before_write is not None:
             before_write()
+        if candidate.get("provider-transport-kind") == "provider-session":
+            sequence_path = gateway_root(project_root) / "enqueue-sequence.json"
+            try:
+                previous = read_json_with_retry(sequence_path)
+                if type(previous) is not int or previous < 0:
+                    raise ValueError("invalid gateway enqueue sequence")
+            except FileNotFoundError:
+                previous = max(
+                    (r["enqueue-ordinal"] for r in _records.list_records(project_root)
+                     if type(r.get("enqueue-ordinal")) is int), default=0,
+                )
+            candidate["enqueue-ordinal"] = previous + 1
+            # Persist the counter first. Crash gaps are harmless; reused order
+            # identities are not. The existing admission lock serializes this.
+            atomic_write_json(sequence_path, previous + 1)
         _records.write_record(project_root, candidate)
         atomic_write_json(index_path, {
             "key-digest": key_digest,
@@ -258,6 +275,10 @@ def admit_record(
                     "work-index write failed at admission (non-fatal)",
                     extra={"request-id": candidate["request-id"]},
                 )
+        if on_admitted is not None:
+            # Memory-only registration, before another admission can publish
+            # its successor. Do not dispatch or do provider I/O in this hook.
+            on_admitted(candidate)
         return candidate, True
 
 

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import re
 import threading
@@ -20,6 +21,8 @@ from typing import Any
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.io import atomic_write_json
 from audiagentic.foundation.system.process import StartupLock
+
+logger = logging.getLogger(__name__)
 
 _guards_lock = threading.Lock()
 _guards: Any = weakref.WeakValueDictionary()
@@ -424,7 +427,10 @@ def replace_failed_default(project_root: Path, record: dict[str, Any], error: Ex
         return updated
 
 
-def replace_failed_session(project_root: Path, record: dict[str, Any], error: Exception) -> dict[str, Any] | None:
+def replace_failed_session(
+    project_root: Path, record: dict[str, Any], error: Exception, *,
+    warning_message: str = "Provider conversation could not be loaded; resubmitting in a fresh session.",
+) -> dict[str, Any] | None:
     """Reserve a fresh provider session for an explicit session-bound request."""
     from audiagentic.components.agents.gateway import store
     from audiagentic.components.agents.gateway.session import sessions_store
@@ -445,7 +451,7 @@ def replace_failed_session(project_root: Path, record: dict[str, Any], error: Ex
             target,
             warning(
                 getattr(error, "code", "EXT-GPTAUTO-003"),
-                "Provider conversation could not be loaded; resubmitting in a fresh session.",
+                warning_message,
                 record.get("session-id"),
             ),
             None,
