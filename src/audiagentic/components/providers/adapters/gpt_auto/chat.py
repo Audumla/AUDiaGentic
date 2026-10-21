@@ -207,6 +207,10 @@ class PersistentChat:
         self._conversation_load_recovery_attempts = _metadata_int(
             metadata, "conversation-load-recovery-attempts"
         )
+        self._conversation_load_recovery_revision = _metadata_int(
+            metadata, "conversation-load-recovery-revision"
+        )
+        self._load_budget_observation = None
         self._checkpoint_metadata: dict[str, object] = {
             key: metadata[key]
             for key in (
@@ -440,15 +444,9 @@ class PersistentChat:
             "unresolved-turn-pending": False,
             "submission-state": "cleared",
         }
-        # Explicit terminal cleanup only when this session actually carried a
-        # recovery budget.  The retry budget is intentionally not part of the
-        # generic pending=false removal set because idle session recovery can
-        # consume it without an unresolved turn.
-        if (
-            self._conversation_load_recovery_attempts
-            or "conversation-load-recovery-attempts" in self._checkpoint_metadata
-        ):
-            metadata["conversation-load-recovery-attempts"] = 0
+        # Budget authority is separate from submission-checkpoint cleanup.
+        if self._conversation_load_recovery_attempts and self._last_snapshot is not None:
+            await self._reset_load_recovery_budget_after_positive_snapshot(self._last_snapshot)
         if self._submission_proven:
             metadata["submission-proven"] = True
             for key, value in (
@@ -461,7 +459,6 @@ class PersistentChat:
                     metadata[key] = value
         await self._persist_checkpoint(metadata)
         self._checkpoint_metadata = {}
-        self._conversation_load_recovery_attempts = 0
 
     def _claim_page(self, page_handle: str) -> bool:
         """Claim a page when the runtime exposes ownership tracking.
@@ -1109,7 +1106,7 @@ class PersistentChat:
 
     def _replacement_snapshot_is_positive(self, snapshot: ChatSnapshot | None) -> bool:
         """Require exact, positive DOM evidence before clearing recovery budget."""
-        if snapshot is None or "conversation-load-failed" in snapshot.dom_signals:
+        if snapshot is None or snapshot.error_present or "conversation-load-failed" in snapshot.dom_signals:
             return False
         if self.provider_session_id and not url_matches_provider_session(
             snapshot.url, self.provider_session_id
@@ -1154,9 +1151,58 @@ class PersistentChat:
         """Clear replacement budget only after positive conversation proof."""
         if self.unresolved_turn_pending and self._defer_unresolved_reconciliation:
             return
-        self._conversation_load_recovery_attempts = 0
-        self._checkpoint_metadata["conversation-load-recovery-attempts"] = 0
-        await self._persist_checkpoint(self.unresolved_metadata())
+        observation = self._load_budget_observation
+        if (
+            not self._replacement_snapshot_is_positive(snapshot)
+            or observation is None or observation[0] is not snapshot
+            or observation[2] != self._binding_token(snapshot)
+            or observation[1] != (
+                self._conversation_load_recovery_attempts,
+                self._conversation_load_recovery_revision,
+            )
+            or not self._conversation_load_recovery_attempts
+        ):
+            return
+        if (
+            not await self._binding_token_is_current(observation[2])
+            or observation[2] != self._binding_token(snapshot)
+        ):
+            return
+        await self._persist_load_recovery_budget("reset", expected=observation[1])
+
+    async def _persist_load_recovery_budget(
+        self, action: str, *, expected: tuple[int, int] | None = None,
+    ) -> tuple[int, int]:
+        """Commit session authority before navigation; request copy is advisory."""
+        maximum = self.config.workflow.recovery.conversation_load_failure_max_attempts
+        if type(maximum) is not int or not 0 <= maximum <= 1_000_000:
+            raise ValueError("invalid conversation load replacement budget")
+        sink = self._turn_session_checkpoint_sink or self._session_checkpoint_sink
+        budget_sink = getattr(sink, "recovery_budget", None)
+        if sink is not None and not callable(budget_sink):
+            raise RuntimeError("durable checkpoint sink has no recovery budget capability")
+        if callable(budget_sink):
+            result = await budget_sink(action=action, expected=expected, maximum=maximum)
+        else:
+            # Standalone provider use has no durable gateway or request owner.
+            current = (self._conversation_load_recovery_attempts, self._conversation_load_recovery_revision)
+            if action == "read":
+                return current
+            if expected != current or (action == "increment" and current[0] >= maximum):
+                raise RuntimeError("conversation load budget compare-and-swap rejected")
+            result = (current[0] + 1 if action == "increment" else 0, current[1] + 1)
+        self._conversation_load_recovery_attempts, self._conversation_load_recovery_revision = result
+        if action != "read":
+            projection = dict(zip(("conversation-load-recovery-attempts", "conversation-load-recovery-revision"), result))
+            self._checkpoint_metadata.update(projection)
+            try:
+                await self.persist_request_metadata(projection)
+            except Exception:  # noqa: BLE001 - session commit is authoritative
+                logger.warning("request recovery budget projection failed; session authority retained", exc_info=True)
+            if callable(budget_sink):
+                # Projection failure must not hide owner retirement before a side effect.
+                await budget_sink(action="read", maximum=maximum)
+        return result
 
     def _conversation_load_recovery_allowed(self) -> bool:
         workflow = getattr(self.config, "workflow", None)
@@ -1415,26 +1461,22 @@ class PersistentChat:
                 dom_signals=sorted(snapshot.dom_signals),
             )
             return True
-        if not self._conversation_load_recovery_allowed():
-            return False
         if not self._page_mutation_owner_is_live():
             self._set_unresolved_recovery(
                 "conversation-load-owner-not-live",
                 attempts=retry_attempts,
             )
             return False
+        current_budget = await self._persist_load_recovery_budget("read")
+        if not self._conversation_load_recovery_allowed():
+            return False
         old_handle = self.page_handle
+        await self._persist_load_recovery_budget("increment", expected=current_budget)
+        if not self._page_mutation_owner_is_live():
+            return False
         if old_handle:
             self.page_handle = None
             self.runtime.release_page(self, old_handle)
-        self._conversation_load_recovery_attempts += 1
-        self._checkpoint_metadata[
-            "conversation-load-recovery-attempts"
-        ] = self._conversation_load_recovery_attempts
-        # Fence the increment before creating a replacement tab.  If the
-        # gateway dies during navigation, the next chat instance inherits the
-        # consumed budget instead of starting over.
-        await self._persist_checkpoint(self.unresolved_metadata())
         replacement_handle: str | None = None
         try:
             replacement_handle = await self._create_recovery_page()
@@ -1479,9 +1521,7 @@ class PersistentChat:
             if stable_replacement and not (
                 self.unresolved_turn_pending and self._defer_unresolved_reconciliation
             ):
-                self._conversation_load_recovery_attempts = 0
-                self._checkpoint_metadata["conversation-load-recovery-attempts"] = 0
-                await self._persist_checkpoint(self.unresolved_metadata())
+                await self._reset_load_recovery_budget_after_positive_snapshot(ready_snapshot)
             return True
         except Exception:
             if replacement_handle:
@@ -1544,15 +1584,21 @@ class PersistentChat:
                     raise RuntimeError("gpt-auto chat recovery timed out") from exc
         if not self.page_handle:
             raise RuntimeError("chat page is not bound")
-        page = await self._gpt_browser().page_by_handle(self.page_handle)
+        observed_binding = (
+            self._page_generation, self.page_handle, self.target_id,
+            self.provider_session_id, canonical_chat_url(self.chat_url or ""),
+        )
+        page = await self._gpt_browser().page_by_handle(str(observed_binding[1]))
         target_id = str(getattr(page, "target_id", "") or "")
         if target_id:
             self.target_id = target_id
+        budget_observed = (self._conversation_load_recovery_attempts, self._conversation_load_recovery_revision)
         snapshot = ChatSnapshot.from_bridge(
             await self._gpt_browser().snapshot(page, signals=self.config.workflow.bridge_signals())
         )
         self._last_url = snapshot.url
         self._last_snapshot = snapshot
+        self._load_budget_observation = (snapshot, budget_observed, observed_binding)
         remember = getattr(self.runtime, "remember_tab_activity", None)
         if callable(remember):
             remember(self)

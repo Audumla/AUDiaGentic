@@ -396,7 +396,20 @@ def _make_submission_checkpoint_sink(
             )
             raise
 
-    return checkpoint_sink
+    class OwnedCheckpointSink:
+        """Separate trusted budget capability from submission metadata writes."""
+
+        async def __call__(self, metadata: dict[str, Any]) -> None:
+            await checkpoint_sink(metadata)
+
+        async def recovery_budget(self, **operation: Any) -> tuple[int, int]:
+            return session_store.owned_conversation_load_budget(
+                project_root, session_id, request_id,
+                dispatch_owner_epoch=dispatch_owner_epoch, worker_id=worker_id,
+                attempt_epoch=attempt_epoch, **operation,
+            )
+
+    return OwnedCheckpointSink()
 
 
 def _default_prepare_fn(

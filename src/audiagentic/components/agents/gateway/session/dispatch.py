@@ -1689,6 +1689,19 @@ def _dispatch_session_request(
             except Exception:  # noqa: BLE001 - journal is advisory
                 logger.debug("provider binding journal append failed", extra={"request-id": request_id}, exc_info=True)
 
+        class TurnCheckpointRelay:
+            async def __call__(self, metadata: dict[str, Any]) -> None:
+                await _relay_session_checkpoint(metadata)
+
+            async def recovery_budget(self, **operation: Any) -> tuple[int, int]:
+                # No stage/claim is required for this independent capability.
+                return session_store.owned_conversation_load_budget(
+                    project_root, session_id, request_id,
+                    dispatch_owner_epoch=record["dispatch-owner-epoch"],
+                    worker_id=record["worker-id"], attempt_epoch=record["attempt-epoch"],
+                    **operation,
+                )
+
         if is_new_session:
             # keep-alive: open a new session bound to this profile
             request_runtime_root.mkdir(parents=True, exist_ok=True)
@@ -2107,7 +2120,7 @@ def _dispatch_session_request(
             dispatch_claim=dispatch_claim,
             resume_existing=resume_existing,
             request_provider_metadata_sink=_relay_provider_metadata,
-            request_session_checkpoint_sink=_relay_session_checkpoint,
+            request_session_checkpoint_sink=TurnCheckpointRelay(),
         )
         if result.stop_reason == "externally-captured":
             from ..output import read_final_response
