@@ -11,6 +11,8 @@ from __future__ import annotations
 import json
 import logging
 import os
+import threading
+import time
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
@@ -39,6 +41,10 @@ from audiagentic.foundation.io import atomic_write_bytes, iter_ndjson
 from audiagentic.foundation.system.process import StartupLock
 
 logger = logging.getLogger(__name__)
+
+_RETENTION_SCHEDULER_LOCK = threading.Lock()
+_RETENTION_PENDING: dict[str, tuple[Path, str | None]] = {}
+_RETENTION_WORKER_RUNNING = False
 
 _MAX_ENV_BYTES = 256 * 1024 * 1024
 _TERMINAL_STATES = frozenset(
@@ -218,7 +224,9 @@ def _sort_key(record: dict[str, Any], path: Path) -> tuple[datetime, str]:
     return timestamp, str(record.get("request-id") or path.name)
 
 
-def _eligible_record(project_root: Path, entry: Path) -> tuple[dict[str, Any], tuple[datetime, str]] | None:
+def _eligible_record(
+    project_root: Path, entry: Path, *, positive_lineage: frozenset[str] = frozenset(),
+) -> tuple[dict[str, Any], tuple[datetime, str]] | None:
     record_path = entry / "record.json"
     try:
         record = json.loads(record_path.read_text(encoding="utf-8"))
@@ -230,13 +238,24 @@ def _eligible_record(project_root: Path, entry: Path) -> tuple[dict[str, Any], t
         return None
     if record.get("recovery-required") is True:
         return None
+    if record.get("terminal-finalization"):
+        return None
     diagnostics = record.get("diagnostics")
     if isinstance(diagnostics, dict) and diagnostics.get("resolution-state") in {"unresolved", "reconciliation-requested"}:
         return None
     request_id = record.get("request-id")
     if not isinstance(request_id, str) or request_id != entry.name:
         return None
+    if request_id in positive_lineage:
+        return None
     try:
+        # Positive runtime protection is sufficient to keep the request.
+        # Most admitted records retain their private prompt here; scanning
+        # every session under the global pin lock first is unnecessary.
+        # A disappearing root can only conservatively defer one sweep.
+        runtime_root = entry / "runtime"
+        if runtime_root.is_dir() and next(runtime_root.iterdir(), None) is not None:
+            return None
         if request_retention_pin(project_root, request_id).pinned:
             return None
     except (OSError, ValueError, TypeError):
@@ -256,11 +275,18 @@ def enforce_request_retention(project_root: Path, *, exclude_request_id: str | N
     }
     if not root.exists():
         return result
+    from .session.retention import positive_session_lineage_snapshot
+
+    try:
+        positive_lineage = positive_session_lineage_snapshot(project_root)
+    except Exception:  # noqa: BLE001 - failed maintenance census must not change eligibility
+        logger.warning("gateway retention skipped after failed lineage census", exc_info=True)
+        return result
     eligible: list[tuple[tuple[datetime, str], str]] = []
     for entry in root.iterdir():
         if not entry.is_dir() or entry.name in {"idempotency", "sessions", "archive"}:
             continue
-        candidate = _eligible_record(project_root, entry)
+        candidate = _eligible_record(project_root, entry, positive_lineage=positive_lineage)
         if candidate is None:
             result["protected"] += 1
             continue
@@ -275,6 +301,97 @@ def enforce_request_retention(project_root: Path, *, exclude_request_id: str | N
     for _, request_id in eligible[:-result["limit"]] if result["limit"] else eligible:
         result["compacted"] += compact_request_journals(project_root, request_id)
     return result
+
+
+def schedule_request_retention(
+    project_root: Path, *, trigger_request_id: str | None = None
+) -> bool:
+    """Queue a coalesced retention sweep without delaying request terminalization.
+
+    Terminal transitions are on the provider response path. A large legacy
+    backlog can make compaction take minutes, so it must never run inline while
+    the request mutation lock is held. One daemon worker drains one pending
+    sweep per project; additional terminal transitions coalesce into a follow-
+    up pass.
+    """
+    global _RETENTION_WORKER_RUNNING
+
+    root = project_root.resolve()
+    key = str(root)
+    with _RETENTION_SCHEDULER_LOCK:
+        _RETENTION_PENDING[key] = (root, trigger_request_id)
+        if _RETENTION_WORKER_RUNNING:
+            return True
+        _RETENTION_WORKER_RUNNING = True
+    try:
+        threading.Thread(
+            target=_drain_request_retention,
+            name="gateway-request-retention",
+            daemon=True,
+        ).start()
+    except Exception:  # noqa: BLE001 - compaction cannot block terminal state
+        with _RETENTION_SCHEDULER_LOCK:
+            _RETENTION_WORKER_RUNNING = False
+        logger.exception("could not start gateway request-retention worker")
+        return False
+    return True
+
+
+def _drain_request_retention() -> None:
+    global _RETENTION_WORKER_RUNNING
+
+    while True:
+        with _RETENTION_SCHEDULER_LOCK:
+            if not _RETENTION_PENDING:
+                _RETENTION_WORKER_RUNNING = False
+                return
+            key = sorted(_RETENTION_PENDING)[0]
+            project_root, trigger_request_id = _RETENTION_PENDING.pop(key)
+
+        started = time.perf_counter()
+        summary: dict[str, int] | None = None
+        error: Exception | None = None
+        try:
+            summary = enforce_request_retention(project_root)
+        except Exception as exc:  # noqa: BLE001 - later terminal events can retry
+            error = exc
+            logger.exception(
+                "gateway request-retention sweep failed",
+                extra={"trigger-request-id": trigger_request_id},
+            )
+        duration_ms = round((time.perf_counter() - started) * 1000, 3)
+        if trigger_request_id:
+            try:
+                from audiagentic.components.agents.gateway.observability import (
+                    append_observation,
+                )
+
+                append_observation(
+                    project_root,
+                    trigger_request_id,
+                    source="request-retention",
+                    diagnostic_facts={
+                        "retention": {
+                            "sweep-duration-ms": duration_ms,
+                            "sweep-result": summary,
+                            "error-kind": type(error).__name__ if error else None,
+                        }
+                    },
+                    decision={"maintenance-is-asynchronous": True},
+                    action={
+                        "event": "request-retention-sweep",
+                        "kind": "retention-maintenance",
+                        "outcome": "failed" if error else "completed",
+                    },
+                    causal_input_ids=[trigger_request_id],
+                    force_flush=True,
+                )
+            except Exception:  # noqa: BLE001 - tracing cannot affect request state
+                logger.debug(
+                    "could not append gateway retention observation",
+                    extra={"trigger-request-id": trigger_request_id},
+                    exc_info=True,
+                )
 
 
 __all__ = [

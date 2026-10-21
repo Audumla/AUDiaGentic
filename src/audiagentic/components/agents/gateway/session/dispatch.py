@@ -12,9 +12,12 @@ module-level cycles.
 
 from __future__ import annotations
 
-import logging
 import hashlib
+import logging
+import re
 import time
+import traceback
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +29,115 @@ from audiagentic.foundation.time import now_iso_z
 from audiagentic.foundation.transports.agent_session import SessionFailureDisposition
 
 logger = logging.getLogger(__name__)
+
+
+def _record_dispatch_failure_observation(
+    project_root: Path,
+    record: dict[str, Any],
+    error: BaseException,
+    *,
+    resume_existing: bool,
+) -> None:
+    """Persist bounded cause and side-effect facts for a session dispatch error."""
+    request_id = record.get("request-id")
+    session_id = record.get("session-id")
+    if not isinstance(request_id, str) or not request_id:
+        return
+    request_metadata = record.get("provider-metadata")
+    request_metadata = request_metadata if isinstance(request_metadata, dict) else {}
+    session_metadata: dict[str, Any] = {}
+    provider_binding_present = False
+    if isinstance(session_id, str) and session_id:
+        try:
+            from audiagentic.components.agents.gateway.session import sessions_store
+
+            session_record = sessions_store.read_session_record(project_root, session_id)
+            session_metadata = sessions_store.session_provider_metadata(session_record)
+            binding = sessions_store.read_session_binding(project_root, session_id)
+            provider_binding_present = bool(
+                isinstance(binding, dict) and binding.get("provider-session-ref")
+            )
+        except Exception:  # noqa: BLE001 - diagnostics must not mask dispatch failure
+            pass
+    frames = traceback.extract_tb(error.__traceback__) if error.__traceback__ else []
+    origin = None
+    if frames:
+        last = frames[-1]
+        module = Path(last.filename).stem[:96]
+        origin = f"{module}.{last.name}"[:192]
+    message = str(error)
+    match = re.search(r"\b[A-Z]{2,}-[A-Z0-9]+-\d{3}\b", message)
+    error_code = getattr(error, "code", None)
+    if not isinstance(error_code, str):
+        error_code = match.group(0) if match else None
+    unregistered = isinstance(error, ValueError) and "not registered in any component" in message
+    facts = {
+        "failure-phase": "session-recovery" if resume_existing else "session-dispatch",
+        "exception-type": type(error).__name__,
+        "exception-origin": origin,
+        "exception-code": error_code,
+        "submission-stage": (
+            session_metadata.get("submission-stage")
+            or request_metadata.get("submission-stage")
+            or "unknown"
+        ),
+        "submission-state": (
+            session_metadata.get("submission-state")
+            or request_metadata.get("submission-state")
+            or "unknown"
+        ),
+        "send-intent-ever": (
+            session_metadata.get("send-intent-ever") is True
+            or request_metadata.get("send-intent-ever") is True
+        ),
+        "submission-proven": (
+            session_metadata.get("submission-proven") is True
+            or request_metadata.get("submission-proven") is True
+        ),
+        "turn-bound": session_metadata.get("unresolved-turn-id") == request_id,
+        "provider-binding-present": provider_binding_present,
+    }
+    error_details = getattr(error, "details", None)
+    owner_fence_facts = (
+        error_details.get("request-owner-fence")
+        if isinstance(error_details, dict)
+        else None
+    )
+    if isinstance(owner_fence_facts, dict):
+        facts["request-owner-fence"] = {
+            key: value
+            for key, value in owner_fence_facts.items()
+            if isinstance(key, str) and isinstance(value, bool)
+        }
+    try:
+        from audiagentic.components.agents.gateway.observability import append_observation
+
+        append_observation(
+            project_root,
+            request_id,
+            session_id=session_id if isinstance(session_id, str) else None,
+            turn_id=request_id,
+            attempt_epoch=max(1, int(record.get("attempt-epoch") or 1)),
+            source="session-dispatch",
+            diagnostic_facts=facts,
+            error_occurrence={
+                "failure-code": error_code or "INT-AGW-098",
+                "classification": (
+                    "unregistered-error-code" if unregistered else "dispatch-exception"
+                ),
+            },
+            action={"event": "dispatch-failed", "outcome": "failed"},
+            causal_input_ids=[request_id, session_id]
+            if isinstance(session_id, str)
+            else [request_id],
+            force_flush=True,
+        )
+    except Exception:  # noqa: BLE001 - trace failure must not mask dispatch failure
+        logger.warning(
+            "could not persist session dispatch failure observation",
+            extra={"request-id": request_id, "session-id": session_id},
+            exc_info=True,
+        )
 
 
 def _prepare_native_recovery_fence(
@@ -207,6 +319,233 @@ _UNRESOLVED_CHECKPOINT_KEYS = (
 )
 
 
+def _synchronize_cleared_predecessor(
+    project_root: Path, session_id: str, predecessor: dict[str, Any],
+    expected_metadata: dict[str, Any], cleared_metadata: dict[str, Any],
+) -> bool:
+    """Release idle provider memory only after a verified terminal artifact."""
+    if predecessor.get("state") != "completed" or predecessor.get("session-id") != session_id:
+        return False
+    try:
+        from ..output import read_final_response
+        from .sessions import peek_session_runtime
+
+        artifact = predecessor.get("response-artifact")
+        if not isinstance(artifact, dict):
+            return False
+        read_final_response(project_root, predecessor["request-id"], artifact)
+        memory_checkpoint = expected_metadata
+        if expected_metadata.get("unresolved-turn-id") != predecessor["request-id"]:
+            # Manual capture has already cleared the durable turn id. The
+            # residue was CAS-cleared by our caller, but it is not the live
+            # pre-clear checkpoint. Recover that exact identity from the
+            # captured request; the provider still compares every frozen key.
+            captured_checkpoint = predecessor.get("provider-metadata")
+            if not (
+                expected_metadata.get("unresolved-turn-pending") is False
+                and not expected_metadata.get("unresolved-turn-id")
+                and isinstance(captured_checkpoint, dict)
+                and captured_checkpoint.get("unresolved-turn-id") == predecessor["request-id"]
+                and captured_checkpoint.get("unresolved-turn-pending") is True
+                and isinstance(expected_metadata.get("submission-attempt-id"), str)
+                and bool(expected_metadata["submission-attempt-id"])
+                and captured_checkpoint.get("submission-attempt-id") == expected_metadata["submission-attempt-id"]
+                and all(
+                    captured_checkpoint.get(key) == expected_metadata[key]
+                    for key in (
+                        "submission-stage", "send-intent-ever", "submission-proof-source",
+                        "submission-recovery-generation", "submission-recovery-claim",
+                        "unresolved-baseline-error-alert-occurrences",
+                    )
+                    if key in expected_metadata
+                )
+            ):
+                return False
+            memory_checkpoint = captured_checkpoint
+        runtime = peek_session_runtime()
+        if runtime is None:
+            return False
+        return runtime.synchronize_cleared_predecessor_checkpoint(
+            session_id, predecessor["request-id"], expected_metadata=memory_checkpoint,
+            persisted_session_metadata=cleared_metadata,
+        )
+    except Exception:
+        logger.warning("could not synchronize cleared provider checkpoint", exc_info=True)
+        return False
+
+
+def _clear_orphaned_pending_checkpoint(
+    project_root: Path,
+    record: dict[str, Any],
+    *,
+    session_store: Any,
+    session_metadata: dict[str, Any],
+    session_binding_identity: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Clear a missing-owner pending fence only from exact terminal proof."""
+    request_id = record.get("request-id")
+    session_id = record.get("session-id")
+    attempt_id = session_metadata.get("submission-attempt-id")
+    if (
+        not isinstance(request_id, str)
+        or not isinstance(session_id, str)
+        or not session_id
+        or session_metadata.get("unresolved-turn-pending") is not True
+        or session_metadata.get("unresolved-turn-id")
+        or not isinstance(attempt_id, str)
+        or not attempt_id
+        or session_metadata.get("submission-recovery-claim") is not None
+        or session_metadata.get("submission-recovery-generation") is not None
+        or not isinstance(session_binding_identity.get("binding-id"), str)
+        or not session_binding_identity.get("binding-id")
+        or isinstance(session_binding_identity.get("generation"), bool)
+        or not isinstance(session_binding_identity.get("generation"), int)
+        or session_binding_identity["generation"] < 1
+    ):
+        return None
+
+    from audiagentic.components.agents.gateway.observability import append_observation
+
+    scan_complete = False
+    try:
+        candidates = store.list_records(project_root, include_output=False, limit=None)
+        scan_complete = True
+    except Exception:  # noqa: BLE001 - never weaken the checkpoint fence
+        candidates = []
+
+    attempt_fingerprint = hashlib.sha256(attempt_id.encode("utf-8")).hexdigest()
+    same_session_predecessors = [
+        candidate
+        for candidate in candidates
+        if candidate.get("request-id") != request_id
+        and candidate.get("session-id") == session_id
+        and isinstance(candidate.get("created-at"), str)
+        and isinstance(record.get("created-at"), str)
+        and candidate["created-at"] < record["created-at"]
+    ]
+    matches: list[dict[str, Any]] = []
+    for candidate in same_session_predecessors:
+        provider_metadata = candidate.get("provider-metadata")
+        provider_metadata = provider_metadata if isinstance(provider_metadata, dict) else {}
+        terminal_evidence = provider_metadata.get("terminal-evidence")
+        terminal_evidence = terminal_evidence if isinstance(terminal_evidence, dict) else {}
+        artifact = candidate.get("response-artifact")
+        if (
+            candidate.get("state") == "completed"
+            and terminal_evidence.get("turn-id") == candidate.get("request-id")
+            and terminal_evidence.get("policy") == "response-complete"
+            and isinstance(terminal_evidence.get("terminal-witness-id"), str)
+            and bool(terminal_evidence.get("terminal-witness-id"))
+            and terminal_evidence.get("submission-attempt-fingerprint")
+            == attempt_fingerprint
+            and isinstance(artifact, dict)
+            and artifact.get("request-id") == candidate.get("request-id")
+        ):
+            matches.append(candidate)
+
+    latest_created_at = max(
+        (candidate["created-at"] for candidate in same_session_predecessors),
+        default=None,
+    )
+    latest_predecessors = [
+        candidate
+        for candidate in same_session_predecessors
+        if candidate.get("created-at") == latest_created_at
+    ]
+    unique_latest_match = (
+        len(matches) == 1
+        and len(latest_predecessors) == 1
+        and matches[0].get("request-id") == latest_predecessors[0].get("request-id")
+    )
+    scan_facts = {
+        "candidate-scan-complete": scan_complete,
+        "same-session-predecessor-count": len(same_session_predecessors),
+        "attempt-fingerprint-match-count": len(matches),
+        "unique-latest-terminal-predecessor": unique_latest_match,
+        "attempt-fingerprint-present": True,
+        "owner-turn-id-absent": True,
+        "recovery-claim-absent": True,
+    }
+
+    def observe(outcome: str, *, predecessor_id: str | None = None) -> None:
+        try:
+            append_observation(
+                project_root,
+                request_id,
+                session_id=session_id,
+                turn_id=request_id,
+                attempt_epoch=max(1, int(record.get("attempt-epoch") or 1)),
+                source="session-checkpoint-recovery",
+                diagnostic_facts={"checkpoint-residue": scan_facts},
+                action={
+                    "event": "orphaned-terminal-checkpoint-reconciled",
+                    "outcome": outcome,
+                },
+                causal_input_ids=[request_id, session_id]
+                + ([predecessor_id] if predecessor_id else []),
+                force_flush=True,
+            )
+        except Exception:  # noqa: BLE001 - trace cannot alter admission
+            logger.warning(
+                "could not persist orphaned checkpoint reconciliation observation",
+                extra={"request-id": request_id, "session-id": session_id},
+                exc_info=True,
+            )
+
+    if not unique_latest_match:
+        observe("rejected-no-unique-latest-terminal-predecessor")
+        return None
+
+    predecessor = matches[0]
+    try:
+        cleared_checkpoint = session_store.clear_completed_checkpoint_residue(
+            project_root,
+            session_id,
+            predecessor["request-id"],
+            expected_metadata=session_metadata,
+            expected_binding_identity=session_binding_identity,
+            allow_orphaned_pending=True,
+        )
+    except AudiaGenticError:
+        cleared_checkpoint = False
+    if not cleared_checkpoint:
+        observe(
+            "rejected-checkpoint-or-binding-cas",
+            predecessor_id=predecessor.get("request-id"),
+        )
+        return None
+
+    cleared_metadata = session_store.session_provider_metadata(
+        session_store.read_session_record(project_root, session_id)
+    )
+    _synchronize_cleared_predecessor(
+        project_root, session_id, predecessor, session_metadata, cleared_metadata,
+    )
+    updated = store.update_owned_running_session(
+        project_root,
+        request_id,
+        owner_epoch=record["dispatch-owner-epoch"],
+        worker_id=record["worker-id"],
+        attempt_epoch=record["attempt-epoch"],
+        session_id=session_id,
+        provider_metadata=cleared_metadata,
+    )
+    store.record_gateway_timeline(
+        project_root,
+        request_id,
+        "provider.orphaned-terminal-checkpoint-cleared",
+        state=updated["state"],
+        attributes={
+            "predecessor-request-id": predecessor["request-id"],
+            "reason": "attempt-fingerprint-terminal-proof-artifact-and-binding-cas",
+            "same-session-predecessor-count": len(same_session_predecessors),
+        },
+    )
+    scan_facts["residue-cleared"] = True
+    observe("cleared", predecessor_id=predecessor["request-id"])
+    return updated
+
+
 def _clear_terminal_predecessor_fence(
     project_root: Path,
     record: dict[str, Any],
@@ -214,15 +553,248 @@ def _clear_terminal_predecessor_fence(
     session_store: Any,
 ) -> dict[str, Any] | None:
     """Clear only a proven stale predecessor fence before a new prompt."""
-    metadata = record.get("provider-metadata")
-    if not isinstance(metadata, dict) or metadata.get("unresolved-turn-pending") is not True:
+    session_id = record.get("session-id")
+    session_metadata: dict[str, Any] = {}
+    session_binding_identity: dict[str, Any] = {}
+    if isinstance(session_id, str) and session_id:
+        try:
+            session_record = session_store.read_session_record(project_root, session_id)
+            session_metadata = session_store.session_provider_metadata(session_record)
+            binding = session_record.get("binding")
+            if isinstance(binding, dict):
+                session_binding_identity = {
+                    "binding-id": binding.get("binding-id"),
+                    "generation": binding.get("generation"),
+                }
+        except AudiaGenticError:
+            session_metadata = {}
+    # The session record owns the current checkpoint. A request-level
+    # projection can lag terminal cleanup and must never resurrect a fence
+    # after the session checkpoint has been cleared.
+    metadata = session_metadata
+    if metadata.get("unresolved-turn-pending") is not True:
+        # A previous gateway build could durably mark the fence non-pending
+        # while leaving immutable attempt/stage fields behind. Those fields
+        # make a truly fresh successor look like an attempt to replace an
+        # active checkpoint. Clear that residue only when its exact attempt
+        # belongs to one completed request in this same session and that
+        # request's response artifact validates.
+        if (
+            metadata.get("unresolved-turn-pending") is False
+            and not metadata.get("unresolved-turn-id")
+            and isinstance(session_id, str)
+            and session_id
+        ):
+            attempt_id = metadata.get("submission-attempt-id")
+            if not isinstance(attempt_id, str) or not attempt_id:
+                return None
+            if (
+                not isinstance(session_binding_identity.get("binding-id"), str)
+                or not session_binding_identity.get("binding-id")
+                or isinstance(session_binding_identity.get("generation"), bool)
+                or not isinstance(session_binding_identity.get("generation"), int)
+                or session_binding_identity["generation"] < 1
+            ):
+                return None
+            from audiagentic.components.agents.gateway.observability import append_observation
+
+            scan_complete = False
+            try:
+                candidates = store.list_records(
+                    project_root,
+                    include_output=False,
+                    limit=None,
+                )
+                scan_complete = True
+            except Exception:  # noqa: BLE001 - stale cleanup is best-effort
+                candidates = []
+            attempt_fingerprint = hashlib.sha256(attempt_id.encode("utf-8")).hexdigest()
+            predecessors = [
+                candidate
+                for candidate in candidates
+                if candidate.get("request-id") != record.get("request-id")
+                and candidate.get("session-id") == session_id
+                and candidate.get("state") == "completed"
+                and isinstance(candidate.get("provider-metadata"), dict)
+                and (
+                    candidate["provider-metadata"].get("submission-attempt-id")
+                    == attempt_id
+                    or (
+                        isinstance(
+                            candidate["provider-metadata"].get("terminal-evidence"),
+                            dict,
+                        )
+                        and candidate["provider-metadata"]["terminal-evidence"].get(
+                            "turn-id"
+                        )
+                        == candidate.get("request-id")
+                        and candidate["provider-metadata"]["terminal-evidence"].get(
+                            "policy"
+                        )
+                        == "response-complete"
+                        and candidate["provider-metadata"]["terminal-evidence"].get(
+                            "submission-attempt-fingerprint"
+                        )
+                        == attempt_fingerprint
+                    )
+                )
+            ]
+            same_session_predecessors = [
+                candidate
+                for candidate in candidates
+                if candidate.get("request-id") != record.get("request-id")
+                and candidate.get("session-id") == session_id
+                and isinstance(candidate.get("created-at"), str)
+                and isinstance(record.get("created-at"), str)
+                and candidate["created-at"] < record["created-at"]
+            ]
+            latest_created_at = max(
+                (candidate["created-at"] for candidate in same_session_predecessors),
+                default=None,
+            )
+            latest_predecessors = [
+                candidate
+                for candidate in same_session_predecessors
+                if candidate.get("created-at") == latest_created_at
+            ]
+            if (
+                len(predecessors) != 1
+                or len(latest_predecessors) != 1
+                or predecessors[0].get("request-id")
+                != latest_predecessors[0].get("request-id")
+            ):
+                try:
+                    append_observation(
+                        project_root,
+                        record["request-id"],
+                        session_id=session_id,
+                        turn_id=record["request-id"],
+                        attempt_epoch=max(1, int(record.get("attempt-epoch") or 1)),
+                        source="session-checkpoint-recovery",
+                        diagnostic_facts={
+                            "checkpoint-residue": {
+                                "candidate-scan-complete": scan_complete,
+                                "candidate-scan-count": len(candidates),
+                                "matching-predecessor-count": len(predecessors),
+                                "same-session-predecessor-count": len(
+                                    same_session_predecessors
+                                ),
+                                "unique-latest-terminal-predecessor": False,
+                            }
+                        },
+                        action={
+                            "event": "terminal-checkpoint-residue-scan-rejected",
+                            "outcome": "no-unique-completed-predecessor",
+                        },
+                        causal_input_ids=[record["request-id"], session_id],
+                        force_flush=True,
+                    )
+                except Exception:  # noqa: BLE001 - trace must not block dispatch
+                    logger.warning(
+                        "could not persist terminal checkpoint scan rejection",
+                        extra={"request-id": record["request-id"], "session-id": session_id},
+                        exc_info=True,
+                    )
+                return None
+            predecessor = predecessors[0]
+            try:
+                residue_cleared = session_store.clear_completed_checkpoint_residue(
+                    project_root,
+                    session_id,
+                    predecessor["request-id"],
+                    expected_metadata=session_metadata,
+                    expected_binding_identity=session_binding_identity,
+                )
+            except AudiaGenticError:
+                residue_cleared = False
+            if not residue_cleared:
+                return None
+            cleared_metadata = session_store.session_provider_metadata(
+                session_store.read_session_record(project_root, session_id)
+            )
+            _synchronize_cleared_predecessor(
+                project_root, session_id, predecessor, session_metadata, cleared_metadata,
+            )
+            updated = store.update_owned_running_session(
+                project_root,
+                record["request-id"],
+                owner_epoch=record["dispatch-owner-epoch"],
+                worker_id=record["worker-id"],
+                attempt_epoch=record["attempt-epoch"],
+                session_id=session_id,
+                provider_metadata=cleared_metadata,
+            )
+            try:
+                store.record_gateway_timeline(
+                    project_root,
+                    record["request-id"],
+                    "provider.terminal-checkpoint-residue-cleared",
+                    state=updated["state"],
+                    attributes={
+                        "predecessor-request-id": predecessor["request-id"],
+                        "reason": "completed-attempt-matched-cleared-session-residue",
+                        "candidate-scan-count": len(candidates),
+                        "matching-predecessor-count": len(predecessors),
+                        "same-session-predecessor-count": len(same_session_predecessors),
+                        "unique-latest-terminal-predecessor": True,
+                    },
+                )
+                append_observation(
+                    project_root,
+                    record["request-id"],
+                    session_id=session_id,
+                    turn_id=record["request-id"],
+                    attempt_epoch=max(1, int(record.get("attempt-epoch") or 1)),
+                    source="session-checkpoint-recovery",
+                    diagnostic_facts={
+                        "checkpoint-residue": {
+                            "prior-pending-false": True,
+                            "prior-turn-id-absent": True,
+                            "attempt-identity-matched": True,
+                            "terminal-request-durable": True,
+                            "response-artifact-validated": True,
+                            "residue-cleared": True,
+                            "candidate-scan-count": len(candidates),
+                            "matching-predecessor-count": len(predecessors),
+                        }
+                    },
+                    action={
+                        "event": "terminal-checkpoint-residue-cleared",
+                        "outcome": "cleared",
+                    },
+                    causal_input_ids=[
+                        record["request-id"], session_id, predecessor["request-id"]
+                    ],
+                    force_flush=True,
+                )
+            except Exception:  # noqa: BLE001 - cleanup trace must not block dispatch
+                logger.warning(
+                    "could not persist terminal checkpoint residue observation",
+                    extra={
+                        "request-id": record["request-id"],
+                        "session-id": session_id,
+                    },
+                    exc_info=True,
+                )
+            return updated
         return None
     predecessor_id = metadata.get("unresolved-turn-id")
-    if not isinstance(predecessor_id, str) or not predecessor_id or predecessor_id == record.get("request-id"):
+    if not isinstance(predecessor_id, str) or not predecessor_id:
+        if metadata.get("unresolved-turn-pending") is True:
+            return _clear_orphaned_pending_checkpoint(
+                project_root,
+                record,
+                session_store=session_store,
+                session_metadata=metadata,
+                session_binding_identity=session_binding_identity,
+            )
         return None
-    session_id = record.get("session-id")
+    if predecessor_id == record.get("request-id"):
+        return None
     if not isinstance(session_id, str) or not session_id:
         return None
+    effective_record = dict(record)
+    effective_record["provider-metadata"] = dict(metadata)
     try:
         predecessor = store.read_record(project_root, predecessor_id)
     except AudiaGenticError:
@@ -273,13 +845,19 @@ def _clear_terminal_predecessor_fence(
         dom_signals = set(details.get("dom-signals") or ())
         if not details.get("failure-response-available") or "completion-control" not in dom_signals:
             return None
-    session_store.clear_terminal_submission_checkpoint(
+    checkpoint_cleared = session_store.clear_terminal_submission_checkpoint(
         project_root,
         session_id,
         predecessor_id,
         recovery_state="stale-predecessor-fence-cleared",
+        expected_metadata=session_metadata,
         remove_keys=(
+            "recovery-state",
             "submission-state",
+            "submission-attempt-id",
+            "submission-stage",
+            "send-intent-ever",
+            "submission-proof-source",
             "submission-recovery-generation",
             "unresolved-baseline-user-id",
             "unresolved-baseline-assistant-id",
@@ -288,6 +866,8 @@ def _clear_terminal_predecessor_fence(
             *_UNRESOLVED_CHECKPOINT_KEYS,
         ),
     )
+    if not checkpoint_cleared:
+        return None
     session_store.update_provider_metadata(
         project_root,
         session_id,
@@ -296,8 +876,11 @@ def _clear_terminal_predecessor_fence(
     cleared = session_store.session_provider_metadata(
         session_store.read_session_record(project_root, session_id)
     )
+    _synchronize_cleared_predecessor(
+        project_root, session_id, predecessor, session_metadata, cleared,
+    )
     updated = store.update_owned_running_session(
-        project_root, record["request-id"],
+        project_root, effective_record["request-id"],
         owner_epoch=record["dispatch-owner-epoch"],
         worker_id=record["worker-id"],
         attempt_epoch=record["attempt-epoch"],
@@ -564,9 +1147,16 @@ def _auto_resume_reopenable_closed_session(
                 )
             except Exception:
                 pass
-            if new_session_record.get("state") not in {"closed", "expired"}:
-                break
-            if new_session_record.get("close-reason") not in _AUTO_RESUMABLE_CLOSE_REASONS:
+            resource_closed = (
+                new_session_record.get("state") in {"closed", "expired"}
+                and new_session_record.get("close-reason") in _AUTO_RESUMABLE_CLOSE_REASONS
+            )
+            safely_failed = (
+                new_session_record.get("state") == "failed"
+                and not allow_failed
+                and _failed_session_has_safe_provider_continuation(project_root, new_session_record)
+            )
+            if not (resource_closed or safely_failed):
                 break
             resume_source_id = str(new_session_record["session-id"])
             new_session_record = runtime.resume_session(
@@ -622,6 +1212,37 @@ def _auto_resume_reopenable_closed_session(
     return new_session_id, new_session_record, updated_record
 
 
+def _terminal_session_needs_fresh_chat(session: dict[str, Any], request_id: str) -> bool:
+    """A terminal, never-bound session is not a conversation to reopen.
+
+    Only a new request may leave an explicitly cleared foreign checkpoint.
+    Retain that checkpoint on the source session rather than weakening it.
+    """
+    provider = session.get("provider") or {}
+    metadata = provider.get("metadata") or {}
+    return (
+        provider.get("provider-id") == "gpt-auto"
+        and session.get("state") in {"failed", "closed", "expired"}
+        and not session.get("binding")
+        and not any(
+            metadata.get(key)
+            for key in (
+                "chat-url", "provider-chat-url", "provider-session-id",
+                "conversation-url", "session-id", "conversation-id", "provider-session-ref",
+            )
+        )
+        and metadata.get("unresolved-turn-pending") is False
+        and isinstance(metadata.get("unresolved-turn-id"), str)
+        and bool(metadata["unresolved-turn-id"])
+        and metadata["unresolved-turn-id"] != request_id
+        and metadata.get("submission-ambiguous") is not True
+        and metadata.get("submission-proven") is False
+        and metadata.get("send-intent-ever") in (None, False)
+        and metadata.get("submission-state") is None
+        and metadata.get("submission-stage") is None
+    )
+
+
 def _failed_session_has_safe_provider_continuation(
     project_root: Path, session_record: dict[str, Any]
 ) -> bool:
@@ -641,9 +1262,19 @@ def _failed_session_has_safe_provider_continuation(
     if not isinstance(binding, dict) or not binding.get("provider-session-ref"):
         return False
     metadata = session_store.session_provider_metadata(session_record)
-    return not any(
-        metadata.get(key) is True
-        for key in ("unresolved-turn-pending", "submission-ambiguous")
+    allowed_clear_keys = {"unresolved-turn-pending", "submission-proven"}
+    if metadata.get("recovery-state") in {
+        "terminal-captured", "stale-terminal-checkpoint-residue-cleared",
+        "orphaned-terminal-fence-cleared",
+    }:
+        allowed_clear_keys.add("recovery-state")
+    if metadata.get("unresolved-baseline-error-alert-occurrences") == []:
+        allowed_clear_keys.add("unresolved-baseline-error-alert-occurrences")
+    return (
+        metadata.get("unresolved-turn-pending") is False
+        and metadata.get("submission-ambiguous") in (None, False)
+        and metadata.get("submission-proven") in (None, False)
+        and not (session_store._RECOVERY_CHECKPOINT_KEYS.intersection(metadata) - allowed_clear_keys)
     )
 
 
@@ -977,6 +1608,33 @@ def _dispatch_session_request(
                 message="worker-backed request was routed to provider-session dispatch",
                 details={"request-id": request_id, "session-id": session_id},
             )
+        if (
+            not resume_existing and dispatch_prompt.strip()
+            and _default_recovery_attempt == 0
+            and admitted_session.get("execution-profile-id") == execution_profile_id
+            and _terminal_session_needs_fresh_chat(admitted_session, request_id)
+        ):
+            replacement = client_defaults.replace_failed_session(
+                project_root, record,
+                AudiaGenticError(code="RES-AGW-003", kind="agents", message="terminal session has no provider conversation to reopen"),
+                warning_message="Previous session has no conversation binding; starting this unsent prompt in a fresh session.",
+            )
+            if replacement is None:
+                raise AudiaGenticError(
+                    code="CON-AGW-125", kind="agents",
+                    message="could not allocate a clean session for the unsent request",
+                    details={"request-id": request_id, "session-id": session_id},
+                )
+            if replacement is not None:
+                if guard_held:
+                    preparation_guard.release()
+                    guard_held = False
+                return _dispatch_session_request(
+                    project_root, replacement, dispatch_prompt=dispatch_prompt,
+                    context_fingerprint=context_fingerprint,
+                    _default_recovery_attempt=1, session_start=session_start,
+                    project_name=project_name, resume_existing=False,
+                )
         is_new_session = admitted_session.get("created-by-request-id") == request_id
         if record.get("client-default-session"):
             is_new_session = not admitted_session.get("binding") and not runtime.session_runtime_status(session_id).get("available")
@@ -986,6 +1644,27 @@ def _dispatch_session_request(
             # session binding/checkpoint when the request-level relay was
             # interrupted before publication.
             is_new_session = False
+
+        turn_checkpoint_writer = None
+
+        async def _relay_session_checkpoint(metadata: dict[str, Any]) -> None:
+            nonlocal turn_checkpoint_writer
+            if turn_checkpoint_writer is None:
+                from .sessions import _make_submission_checkpoint_sink
+
+                current_session = session_store.read_session_record(project_root, session_id)
+                current_metadata = session_store.session_provider_metadata(current_session)
+                claim = current_metadata.get("submission-recovery-claim")
+                turn_checkpoint_writer = _make_submission_checkpoint_sink(
+                    project_root, session_id, request_id=request_id,
+                    dispatch_owner_epoch=record["dispatch-owner-epoch"],
+                    worker_id=record["worker-id"], attempt_epoch=record["attempt-epoch"],
+                    prepared_recovery_claim=(
+                        claim if isinstance(claim, dict)
+                        and current_metadata.get("submission-state") == "prepared" else None
+                    ),
+                )
+            await turn_checkpoint_writer(metadata)
 
         async def _relay_provider_metadata(metadata: dict[str, Any]) -> None:
             nonlocal record
@@ -1003,7 +1682,9 @@ def _dispatch_session_request(
             )
             client_defaults.remember(project_root, record)
             try:
-                from audiagentic.components.agents.gateway.observation_projection import append_request_projection
+                from audiagentic.components.agents.gateway.observation_projection import (
+                    append_request_projection,
+                )
                 append_request_projection(project_root, request_id, record, source="provider-binding")
             except Exception:  # noqa: BLE001 - journal is advisory
                 logger.debug("provider binding journal append failed", extra={"request-id": request_id}, exc_info=True)
@@ -1251,7 +1932,7 @@ def _dispatch_session_request(
                         message="session is not active and cannot be continued",
                         details=_terminal_session_diagnostics(session_id, session_record),
                     )
-                else:
+                if session_record.get("state") == "active" and not runtime.session_runtime_status(session_id).get("available"):
                     from audiagentic.components.providers import providers_api
 
                     opening_request_ids = session_store.session_request_ids(session_record)
@@ -1426,7 +2107,23 @@ def _dispatch_session_request(
             dispatch_claim=dispatch_claim,
             resume_existing=resume_existing,
             request_provider_metadata_sink=_relay_provider_metadata,
+            request_session_checkpoint_sink=_relay_session_checkpoint,
         )
+        if result.stop_reason == "externally-captured":
+            from ..output import read_final_response
+            captured = store.read_record(project_root, request_id)
+            if (
+                captured.get("state") != "completed"
+                or (captured.get("completion") or {}).get("source") != "operator-provider-capture"
+                or not isinstance(captured.get("response-artifact"), dict)
+            ):
+                raise AudiaGenticError(
+                    code="CON-AGW-156", kind="agents",
+                    message="externally captured outcome has no durable operator result",
+                    details={"request-id": request_id},
+                )
+            read_final_response(project_root, request_id, captured["response-artifact"])
+            return captured
         if resume_existing and isinstance(recovery_intent, dict):
             from audiagentic.components.agents.gateway.replay import record_recovery_result
             record_recovery_result(
@@ -1463,6 +2160,19 @@ def _dispatch_session_request(
     except AudiaGenticError as exc:
         if guard_held:
             preparation_guard.release()
+        if isinstance(exc.details, dict) and isinstance(
+            exc.details.get("request-owner-fence"), dict
+        ):
+            # Owner-fence failures are intentionally raised while request and
+            # session mutation locks are held. Persist their safe comparison
+            # facts here, after those context managers have unwound, so the
+            # request-owned trace explains which CAS field rejected dispatch.
+            _record_dispatch_failure_observation(
+                project_root,
+                record,
+                exc,
+                resume_existing=resume_existing,
+            )
         if resume_existing:
             disposition = runtime.session_failure_disposition(session_id)
             if disposition is not SessionFailureDisposition.TERMINAL_FAILED:
@@ -1926,7 +2636,7 @@ def _dispatch_session_request(
             if replacement is not None:
                 record = replacement
                 if not runtime_invoked:
-                    return _dispatch_session_request(project_root, record, dispatch_prompt=dispatch_prompt, context_fingerprint=context_fingerprint, _default_recovery_attempt=_default_recovery_attempt + 1)
+                    return _dispatch_session_request(project_root, record, dispatch_prompt=dispatch_prompt, context_fingerprint=context_fingerprint, _default_recovery_attempt=_default_recovery_attempt + 1, session_start=session_start, project_name=project_name)
         exc = _explain_stale_session_runtime_error(project_root, session_id, exc)
         if request_runtime is not None:
             _quarantine_request_runtime(request_runtime, request_runtime_root.parent / "quarantine")
@@ -2000,6 +2710,12 @@ def _dispatch_session_request(
             "session dispatch failed with unhandled error",
             extra={"request-id": request_id},
         )
+        _record_dispatch_failure_observation(
+            project_root,
+            record,
+            exc,
+            resume_existing=resume_existing,
+        )
         if request_runtime is not None:
             _quarantine_request_runtime(request_runtime, request_runtime_root.parent / "quarantine")
         cause = repr(exc) or f"<{type(exc).__name__}>"
@@ -2046,7 +2762,7 @@ def _dispatch_session_request(
             if replacement is not None:
                 record = replacement
                 if not runtime_invoked:
-                    return _dispatch_session_request(project_root, record, dispatch_prompt=dispatch_prompt, context_fingerprint=context_fingerprint, _default_recovery_attempt=_default_recovery_attempt + 1)
+                    return _dispatch_session_request(project_root, record, dispatch_prompt=dispatch_prompt, context_fingerprint=context_fingerprint, _default_recovery_attempt=_default_recovery_attempt + 1, session_start=session_start, project_name=project_name)
         reconciled = _reconcile_before_failed_terminal(
             project_root, record, provider_id=provider_id, request_id=request_id
         )
@@ -2098,7 +2814,9 @@ def _dispatch_session_request(
             provider_metadata=provider_metadata,
         )
         try:
-            from audiagentic.components.agents.gateway.observation_projection import append_request_projection
+            from audiagentic.components.agents.gateway.observation_projection import (
+                append_request_projection,
+            )
             append_request_projection(project_root, request_id, record, source="provider-terminal")
         except Exception:  # noqa: BLE001 - journal is advisory
             logger.debug("provider terminal journal append failed", extra={"request-id": request_id}, exc_info=True)
@@ -2276,19 +2994,11 @@ def _dispatch_session_request(
         started_at=started_at,
         finished_at=now_iso_z(),
     )
-    # Post-turn: close continued session if keep_alive=false and quiescent.
-    if record.get("session-id") is not None and not record.get("session-keep-alive"):
-        _post_turn_close_continued_session_if_quiescent(
-            project_root,
-            session_id,
-            runtime,
-        )
-    if request_runtime is not None and not record.get("session-keep-alive"):
-        _cleanup_request_runtime(request_runtime)
-    return _transition_owned_attempt(
+    completed = _transition_owned_attempt(
         project_root,
         record,
         "completed",
+        session_runtime=runtime,
         updates={
             "provider-id": provider_id,
             "model-id": model_id,
@@ -2307,6 +3017,18 @@ def _dispatch_session_request(
             "finished-at": now_iso_z(),
         },
     )
+    # The response artifact and request terminal state are durable before
+    # checkpoint cleanup. Keep the live transport available until its private
+    # checkpoint acknowledges that post-terminal compare-and-clear.
+    if record.get("session-id") is not None and not record.get("session-keep-alive"):
+        _post_turn_close_continued_session_if_quiescent(
+            project_root,
+            session_id,
+            runtime,
+        )
+    if request_runtime is not None and not record.get("session-keep-alive"):
+        _cleanup_request_runtime(request_runtime)
+    return completed
 
 
 class _CancelledDuringDispatch(Exception):
@@ -2368,8 +3090,10 @@ def _transition_owned_attempt(
     new_state: str,
     *,
     updates: dict[str, Any] | None = None,
+    session_runtime: Any | None = None,
 ) -> dict[str, Any]:
     """Persist a terminal state only while this worker attempt still owns it."""
+    transition_started = time.perf_counter()
     updated = store.transition_owned_terminal(
         project_root,
         record["request-id"],
@@ -2379,32 +3103,210 @@ def _transition_owned_attempt(
         worker_id=record["worker-id"],
         attempt_epoch=record["attempt-epoch"],
     )
+    transition_call_ms = round((time.perf_counter() - transition_started) * 1000, 3)
     if new_state == "completed" and record.get("session-id"):
+        finalization_started = time.perf_counter()
+        session_id = str(record["session-id"])
+        checkpoint_cas_ms = 0.0
+        checkpoint_error_code: str | None = None
+        checkpoint_error_kind: str | None = None
         try:
             from audiagentic.components.agents.gateway.session import sessions_store
 
-            session_id = str(record["session-id"])
             session_record = sessions_store.read_session_record(project_root, session_id)
-            if session_record.get("session-id") == session_id:
-                sessions_store.clear_terminal_submission_checkpoint(
+            before_metadata = sessions_store.session_provider_metadata(session_record)
+            turn_id_matches = before_metadata.get("unresolved-turn-id") == record["request-id"]
+            terminal_evidence = before_metadata.get("terminal-evidence")
+            terminal_evidence_valid = bool(
+                isinstance(terminal_evidence, dict)
+                and terminal_evidence.get("turn-id") == record["request-id"]
+                and terminal_evidence.get("policy") == "response-complete"
+            )
+            submission_proven = before_metadata.get("submission-proven") is True
+            clear_attempted = bool(
+                session_record.get("session-id") == session_id
+                and before_metadata.get("unresolved-turn-pending") is True
+                and turn_id_matches
+                and submission_proven
+                and terminal_evidence_valid
+            )
+            checkpoint_cleared = False
+            if clear_attempted:
+                checkpoint_started = time.perf_counter()
+                try:
+                    checkpoint_cleared = sessions_store.clear_terminal_submission_checkpoint(
+                        project_root,
+                        session_id,
+                        record["request-id"],
+                        recovery_state="terminal-completed",
+                        remove_keys=sessions_store.TERMINAL_SUBMISSION_CHECKPOINT_REMOVE_KEYS,
+                        expected_metadata=before_metadata,
+                    )
+                except Exception as exc:  # noqa: BLE001 - record failed CAS for diagnosis
+                    checkpoint_error_code = (
+                        exc.code if isinstance(exc, AudiaGenticError) else None
+                    )
+                    checkpoint_error_kind = type(exc).__name__
+                    checkpoint_cleared = False
+                finally:
+                    checkpoint_cas_ms = round(
+                        (time.perf_counter() - checkpoint_started) * 1000, 3
+                    )
+            after_record = sessions_store.read_session_record(project_root, session_id)
+            after_metadata = sessions_store.session_provider_metadata(after_record)
+            provider_acknowledged = False
+            if (
+                checkpoint_cleared
+                and session_runtime is not None
+                and isinstance(terminal_evidence, dict)
+            ):
+                try:
+                    provider_acknowledged = bool(
+                        session_runtime.acknowledge_terminal_checkpoint_finalization(
+                            session_id,
+                            record["request-id"],
+                            terminal_metadata=before_metadata,
+                            persisted_session_metadata=after_metadata,
+                        )
+                    )
+                except Exception:  # noqa: BLE001 - durable clear remains authoritative
+                    logger.warning(
+                        "provider terminal checkpoint acknowledgement failed",
+                        extra={"request-id": record["request-id"], "session-id": session_id},
+                        exc_info=True,
+                    )
+            if checkpoint_error_kind is not None:
+                clear_outcome = "error"
+            elif checkpoint_cleared:
+                clear_outcome = "cleared"
+            elif (
+                after_metadata.get("unresolved-turn-pending") is False
+                and not after_metadata.get("unresolved-turn-id")
+            ):
+                clear_outcome = "already-cleared"
+            elif after_metadata.get("unresolved-turn-id") != record["request-id"]:
+                clear_outcome = "successor-retained"
+            elif not (submission_proven and terminal_evidence_valid and turn_id_matches):
+                clear_outcome = "terminal-proof-missing"
+            else:
+                clear_outcome = "compare-and-clear-rejected"
+            try:
+                from audiagentic.components.agents.gateway.observability import append_observation
+
+                append_observation(
                     project_root,
-                    session_id,
                     record["request-id"],
-                    recovery_state="terminal-completed",
-                    remove_keys=(
-                        "submission-state", "submission-recovery-generation",
-                        "unresolved-baseline-user-id", "unresolved-baseline-assistant-id",
-                        "unresolved-baseline-user-count", "unresolved-baseline-assistant-count",
-                        "unresolved-turn-id", "prompt-message-id", "assistant-message-id",
-                        "assistant-before-message-id", "assistant-before-id",
-                        "prompt-text-digest", "submission-proven", "terminal-evidence",
-                    ),
+                    session_id=session_id,
+                    turn_id=record["request-id"],
+                    attempt_epoch=max(1, int(updated.get("attempt-epoch") or 1)),
+                    source="session-finalization",
+                    diagnostic_facts={
+                        "checkpoint": {
+                            "clear-outcome": clear_outcome,
+                            "pending-after-write": (
+                                after_metadata.get("unresolved-turn-pending") is True
+                            ),
+                            "turn-id-matches-request": turn_id_matches,
+                            "submission-proof-present": submission_proven,
+                            "terminal-evidence-valid": terminal_evidence_valid,
+                            "provider-acknowledged": provider_acknowledged,
+                            "request-terminal-durable": updated.get("state") == "completed",
+                            "terminal-transition-call-ms": transition_call_ms,
+                            "checkpoint-cas-ms": checkpoint_cas_ms,
+                            "finalization-duration-ms": round(
+                                (time.perf_counter() - finalization_started) * 1000, 3
+                            ),
+                            "terminal-state-to-finalization-ms": _terminal_to_finalization_ms(updated),
+                            "checkpoint-error-code": checkpoint_error_code,
+                            "checkpoint-error-kind": checkpoint_error_kind,
+                        }
+                    },
+                    decision={
+                        "timing-event": "terminal-checkpoint-finalization",
+                        "checkpoint-cleared": checkpoint_cleared,
+                    },
+                    action={
+                        "event": "terminal-checkpoint-finalized",
+                        "kind": "checkpoint-finalization",
+                        "outcome": clear_outcome,
+                    },
+                    causal_input_ids=[record["request-id"], session_id],
+                    force_flush=True,
                 )
-        except Exception:  # noqa: BLE001 - terminal request state remains authoritative
-            logger.warning("could not clear completed provider turn fence", extra={"request-id": record["request-id"]}, exc_info=True)
+            except Exception:  # noqa: BLE001 - trace persistence must not affect terminal state
+                logger.warning(
+                    "could not persist terminal checkpoint finalization observation",
+                    extra={"request-id": record["request-id"], "session-id": session_id},
+                    exc_info=True,
+                )
+        except Exception as exc:  # noqa: BLE001 - terminal request state remains authoritative
+            logger.warning(
+                "could not clear completed provider turn fence",
+                extra={"request-id": record["request-id"]},
+                exc_info=True,
+            )
+            try:
+                from audiagentic.components.agents.gateway.observability import append_observation
+
+                append_observation(
+                    project_root,
+                    record["request-id"],
+                    session_id=session_id,
+                    turn_id=record["request-id"],
+                    attempt_epoch=max(1, int(updated.get("attempt-epoch") or 1)),
+                    source="session-finalization",
+                    diagnostic_facts={
+                        "checkpoint": {
+                            "clear-outcome": "error",
+                            "pending-after-write": None,
+                            "request-terminal-durable": updated.get("state") == "completed",
+                            "terminal-transition-call-ms": transition_call_ms,
+                            "terminal-state-to-finalization-ms": _terminal_to_finalization_ms(updated),
+                            "finalization-duration-ms": round(
+                                (time.perf_counter() - finalization_started) * 1000, 3
+                            ),
+                            "checkpoint-error-code": checkpoint_error_code,
+                            "checkpoint-error-kind": checkpoint_error_kind,
+                            "finalization-error-kind": type(exc).__name__,
+                            "finalization-error-code": (
+                                exc.code if isinstance(exc, AudiaGenticError) else None
+                            ),
+                        }
+                    },
+                    action={
+                        "event": "terminal-checkpoint-finalized",
+                        "kind": "checkpoint-finalization",
+                        "outcome": "error",
+                    },
+                    causal_input_ids=[record["request-id"], session_id],
+                    force_flush=True,
+                )
+            except Exception:  # noqa: BLE001 - finalization trace is advisory
+                logger.warning(
+                    "could not persist terminal checkpoint failure observation",
+                    extra={"request-id": record["request-id"], "session-id": session_id},
+                    exc_info=True,
+                )
     try:
-        from audiagentic.components.agents.gateway.observation_projection import append_request_projection
+        from audiagentic.components.agents.gateway.observation_projection import (
+            append_request_projection,
+        )
         append_request_projection(project_root, record["request-id"], updated, source="gateway-terminal")
     except Exception:  # noqa: BLE001 - journal is advisory
         logger.debug("terminal diagnostic journal append failed", extra={"request-id": record["request-id"]}, exc_info=True)
     return updated
+
+
+def _terminal_to_finalization_ms(record: dict[str, Any]) -> float | None:
+    """Measure delay from the durable terminal timestamp to cleanup evidence."""
+    updated_at = record.get("updated-at")
+    if not isinstance(updated_at, str) or not updated_at:
+        return None
+    try:
+        completed_at = datetime.fromisoformat(updated_at.replace("Z", "+00:00"))
+        if completed_at.tzinfo is None:
+            return None
+        elapsed = (datetime.now(timezone.utc) - completed_at.astimezone(timezone.utc)).total_seconds()
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return round(max(0.0, elapsed * 1000), 3)

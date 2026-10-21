@@ -120,10 +120,15 @@ def record_gateway_timeline(
     )
     if state in TERMINAL_STATES:
         try:
-            from ..retention import enforce_request_retention
-            enforce_request_retention(project_root, exclude_request_id=request_id)
+            from ..retention import schedule_request_retention
+
+            schedule_request_retention(project_root, trigger_request_id=request_id)
         except Exception:  # noqa: BLE001 - retention must not break lifecycle writes
-            logger.warning("gateway rolling retention pass failed", extra={"request-id": request_id}, exc_info=True)
+            logger.warning(
+                "gateway request-retention scheduling failed",
+                extra={"request-id": request_id},
+                exc_info=True,
+            )
     return result
 
 

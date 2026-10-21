@@ -70,6 +70,31 @@ def test_workspace_name_resolves_sibling_project_root(tmp_path: Path) -> None:
     assert resolved == target.resolve()
 
 
+def test_workspace_name_ignores_sibling_config_dir_that_normalizes_to_project_id(
+    tmp_path: Path,
+) -> None:
+    current = tmp_path / "AUDiaGentic"
+    current_config = current / ".audiagentic" / "config"
+    current_config.mkdir(parents=True)
+    (current_config / "project.yaml").write_text(
+        "project-id: audiagentic" + chr(10) + "project-name: AUDiaGentic" + chr(10),
+        encoding="utf-8",
+    )
+    # The resolver scans direct siblings. This operational directory's name
+    # normalizes to `audiagentic`, but it has no project manifest and is not a
+    # second checkout.
+    (tmp_path / ".audiagentic").mkdir()
+    similarly_named = tmp_path / "AUDiaGentic-test"
+    similar_config = similarly_named / ".audiagentic" / "config"
+    similar_config.mkdir(parents=True)
+    (similar_config / "project.yaml").write_text(
+        "project-id: audiagentic-test" + chr(10) + "project-name: AUDiaGentic Test" + chr(10),
+        encoding="utf-8",
+    )
+
+    assert gateway._resolve_workspace_project_root(current, "AUDiaGentic") == current.resolve()
+
+
 def test_workspace_name_resolution_fails_closed_when_missing(tmp_path: Path) -> None:
     with pytest.raises(AudiaGenticError) as exc_info:
         gateway._resolve_workspace_project_root(tmp_path / "AUDiaGentic", "missing")

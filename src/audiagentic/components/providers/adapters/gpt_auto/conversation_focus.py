@@ -7,6 +7,7 @@ from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
 from audiagentic.components.providers.contracts.conversation_focus import (
+    ConversationCaptureLocator,
     ConversationFocusLocator,
     ConversationFocusOutcome,
     ConversationFocusResult,
@@ -16,6 +17,7 @@ from audiagentic.components.providers.services.config.provider_config import (
 )
 
 from .config import GptAutoConfig
+from .prompt_fingerprint import PromptFingerprint
 from .runtime_registry import get_runtime
 from .snapshot import ChatSnapshot
 from .urls import canonical_chat_url, parse_project_id, parse_provider_session_id
@@ -92,6 +94,66 @@ def select_focus_page(
         if len(url_matches) > 1:
             return None, ConversationFocusResult(ConversationFocusOutcome.AMBIGUOUS, "duplicate-url-identity")
     return None, ConversationFocusResult(ConversationFocusOutcome.NOT_FOUND, "conversation-tab-not-found")
+
+
+def _select_capture_checkpoint_target(
+    pages: Iterable[Mapping[str, object]], locator: ConversationFocusLocator
+) -> Mapping[str, object] | None:
+    """Find only the persisted first-turn target, before any page actions."""
+    if (
+        not isinstance(locator, ConversationCaptureLocator)
+        or locator.chat_url
+        or locator.provider_session_id
+        or not locator.provider_target_id
+        or locator.send_intent_ever is not True
+        or locator.submission_stage != "send-click-acknowledged"
+        or not isinstance(locator.prompt_text_digest, str)
+        or len(locator.prompt_text_digest) != 64
+        or type(locator.baseline_user_count) is not int
+        or locator.baseline_user_count != 0
+        or type(locator.baseline_assistant_count) is not int
+        or locator.baseline_assistant_count != 0
+    ):
+        return None
+    project = parse_project_id(locator.project_url or "")
+    if not project:
+        return None
+    matches = [
+        page for page in pages
+        if page.get("targetId") == locator.provider_target_id
+        and canonical_chat_url(str(page.get("url") or ""))
+        and parse_project_id(str(page.get("url") or "")) == project
+    ]
+    return matches[0] if len(matches) == 1 else None
+
+
+def _capture_checkpoint_matches(
+    snapshot: ChatSnapshot, locator: ConversationCaptureLocator
+) -> bool:
+    """Prove the sole submitted user turn and its ordered assistant response."""
+    user = snapshot.latest_user_ref()
+    assistant = next(
+        (ref for ref in reversed(snapshot.message_refs) if ref.role == "assistant"),
+        None,
+    )
+    return bool(
+        canonical_chat_url(snapshot.url)
+        and parse_project_id(snapshot.url) == parse_project_id(locator.project_url or "")
+        and snapshot.user_count == 1
+        and len(snapshot.user_prompt_refs()) == 1
+        and snapshot.assistant_count > 0
+        and user is not None
+        and assistant is not None
+        and user.message_id == snapshot.latest_user_id
+        and user.message_id
+        and not user.message_id.startswith(("fallback-", "virtualized-prompt-for-"))
+        and assistant.message_id == snapshot.latest_assistant_id
+        and assistant.message_id
+        and not assistant.message_id.startswith("fallback-")
+        and user.sequence < assistant.sequence
+        and locator.prompt_text_digest
+        == PromptFingerprint.from_text(snapshot.latest_user_correlation_text() or "").digest
+    )
 
 
 async def focus_existing_conversation(
@@ -201,6 +263,7 @@ async def capture_latest_response(
     runtime.adopt_existing_dedicated_window(pages)
     scoped = [p for p in pages if runtime.page_belongs_to_dedicated_window(p)]
     selected, result = select_focus_page(scoped, locator)
+    checkpoint_locator = None
     if (
         selected is None
         and result is not None
@@ -208,6 +271,15 @@ async def capture_latest_response(
         and scoped != pages
     ):
         selected, result = select_focus_page(pages, locator)
+    if (
+        selected is None
+        and result is not None
+        and result.outcome is ConversationFocusOutcome.NOT_FOUND
+    ):
+        checkpoint_page = _select_capture_checkpoint_target(pages, locator)
+        if checkpoint_page is not None:
+            selected, result = checkpoint_page, None
+            checkpoint_locator = locator
     if (
         selected is None
         and result is not None
@@ -239,10 +311,10 @@ async def capture_latest_response(
     # button. It must remain observation-only: foregrounding here makes a
     # quiet/stale recovery loop steal focus and cycle through GPT tabs. Only
     # an explicit focus/open-tab action may activate a target.
-    if not passive:
+    if not passive and checkpoint_locator is None:
         await runtime.bridge.call("keep_page_active", {"pageHandle": handle, "operator": True})
     page = await runtime.gpt_browser.page_by_handle(handle)
-    if not passive:
+    if not passive and checkpoint_locator is None:
         await runtime.gpt_browser.materialize_latest_assistant_turn(page)
     snapshot = ChatSnapshot.from_bridge(
         await runtime.gpt_browser.snapshot(
@@ -250,6 +322,22 @@ async def capture_latest_response(
             signals=runtime.config.workflow.bridge_signals(),
         )
     )
+    if checkpoint_locator is not None:
+        try:
+            current_page = await runtime.gpt_browser.page_by_handle(handle)
+        except Exception:
+            return {"outcome": "unavailable", "reason": "provider-target-no-longer-available"}
+        if (
+            current_page.target_id != checkpoint_locator.provider_target_id
+            or canonical_chat_url(current_page.url) != canonical_chat_url(snapshot.url)
+        ):
+            return {"outcome": "unavailable", "reason": "provider-target-checkpoint-mismatch"}
+    if checkpoint_locator is not None and (
+        getattr(page, "target_id", None) != checkpoint_locator.provider_target_id
+        or canonical_chat_url(snapshot.url) != canonical_chat_url(str(selected.get("url") or ""))
+        or not _capture_checkpoint_matches(snapshot, checkpoint_locator)
+    ):
+        return {"outcome": "unavailable", "reason": "provider-target-checkpoint-mismatch"}
     expected_chat_url = canonical_chat_url(locator.chat_url or "")
     if expected_chat_url and canonical_chat_url(snapshot.url) != expected_chat_url:
         return {

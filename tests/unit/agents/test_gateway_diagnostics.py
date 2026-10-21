@@ -32,6 +32,47 @@ def test_ambiguous_gpt_auto_error_is_not_provider_failure() -> None:
     assert result["provider-signals"] == ["completion-control", "more-actions-menu"]
 
 
+def test_explicit_unsent_outcome_supersedes_earlier_fsm_phase_only_with_full_proof():
+    details = {
+        "turn-state": "side-effect-attempted",
+        "submission-state": "not_started",
+        "submission-attempted": False,
+        "submission-proven": False,
+        "submission-ambiguous": False,
+    }
+    result = classify_error({"code": "EXT-GPTAUTO-003", "details": details})
+    assert result["side-effect-state"] == "not-started"
+    assert result["recovery"]["disposition"] == "retry-safe"
+    for key in ("submission-state", "submission-attempted", "submission-proven", "submission-ambiguous"):
+        incomplete = dict(details)
+        del incomplete[key]
+        assert classify_error({"code": "EXT-GPTAUTO-003", "details": incomplete})["side-effect-state"] == "may-have-started"
+    for extra in (
+        {"side-effect-attempted": True}, {"submission-ambiguous": True},
+        {"submission-attempted": True}, {"send-intent-ever": True},
+        {"send-button-clicked": True}, {"enter-dispatched": True},
+    ):
+        assert classify_error({"code": "EXT-GPTAUTO-003", "details": {**details, **extra}})["side-effect-state"] == "may-have-started"
+
+
+def test_saved_gpt_error_retains_typed_unsent_recovery_proof_without_prompt_text():
+    from audiagentic.components.agents.gateway.store._records import _redact_error
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+    proof = {
+        "turn-state": "side-effect-attempted", "submission-state": "not_started",
+        "submission-attempted": False, "submission-proven": False,
+        "submission-ambiguous": False, "failure-stage": "submission",
+        "retryable-same-session": True, "send-intent-ever": False,
+    }
+    saved = _redact_error(AudiaGenticError(
+        code="EXT-GPTAUTO-003", kind="providers", message="unsent timeout",
+        details={**proof, "prompt-body": "private prompt must not be copied"},
+    ))
+    assert saved["details"] == proof
+    assert classify_error(saved)["side-effect-state"] == "not-started"
+
+
 def test_response_policy_timeout_is_reconciliation_timeout() -> None:
     result = classify_error(
         {

@@ -49,6 +49,7 @@ from audiagentic.components.agents.gateway.queue.capacity_policy import (
     resolve_pending_capacity,
 )
 from audiagentic.components.agents.gateway.queue.pending import PendingAuthority
+from audiagentic.components.agents.gateway.queue.session_order import SessionDispatchOrder
 from audiagentic.components.agents.gateway.queue.recovery_control import RecoveryDeferred
 from audiagentic.components.agents.gateway.queue.watchdog_registry import watchdog_registry
 from audiagentic.foundation.contracts.errors import AudiaGenticError
@@ -480,6 +481,7 @@ class GatewayQueueManager:
         self._recovery_timers: dict[str, threading.Timer] = {}
         self._recovery_pending: dict[str, Path] = {}
         self._shutdown_event = threading.Event()
+        self._session_dispatch_order = SessionDispatchOrder()
 
     def shutdown(self) -> None:
         """Stop delayed recovery work owned by this queue generation."""
@@ -490,6 +492,23 @@ class GatewayQueueManager:
             self._recovery_pending.clear()
         for timer in timers:
             timer.cancel()
+
+    def reserve_session_admission(self, record: dict[str, Any], *, project_root: Path) -> None:
+        """Register persisted admission before a later request can overtake it."""
+        if record.get("provider-transport-kind") == "provider-session":
+            self._session_dispatch_order.register(
+                record["request-id"], str(project_root.resolve()), record.get("session-id"),
+            )
+
+    def _release_terminal_session_order(self, entry: QueuedDispatch) -> None:
+        """A recovery timer can retire before entering the normal worker."""
+        try:
+            current = store.read_record(entry.project_root, entry.request_id, include_output=False)
+        except Exception:
+            logger.debug("session order retained until terminal state is readable", exc_info=True)
+            return
+        if current["state"] in store.TERMINAL_STATES:
+            self._session_dispatch_order.complete(entry.request_id)
 
     def _runtime_state(self, snapshot: profiles_mod.ResolvedExecutionProfile) -> _RuntimeState:
         profile_identity = ProfileGenerationIdentity(
@@ -675,6 +694,8 @@ class GatewayQueueManager:
                 )
             ) >= pq.pending_capacity
             if not queue_full:
+                if record.get("provider-transport-kind") == "provider-session":
+                    self._session_dispatch_order.register(entry.request_id, entry.project_key, entry.session_key)
                 self._pending_authority.enqueue(
                     request_id=entry.request_id,
                     project_key=entry.project_key,
@@ -829,6 +850,8 @@ class GatewayQueueManager:
             ),
         )
         pq = self._runtime_state(snapshot)
+        if record.get("provider-transport-kind") == "provider-session":
+            self._session_dispatch_order.register(entry.request_id, entry.project_key, entry.session_key)
         # Keep recovered provider sessions visible even while a bounded retry
         # is waiting; the watchdog must continue to observe cancellation and
         # stale transport state during the backoff window.
@@ -897,6 +920,7 @@ class GatewayQueueManager:
                     with pq.lock:
                         pq.running.discard(entry.request_id)
                     self._active_requests.pop(entry.request_id, None)
+                    self._release_terminal_session_order(entry)
 
         threading.Thread(
             target=_recover,
@@ -941,6 +965,8 @@ class GatewayQueueManager:
         with pq.lock:
             if self._pending_authority.get(record["request-id"]) is not None:
                 return
+            if record.get("provider-transport-kind") == "provider-session":
+                self._session_dispatch_order.register(entry.request_id, entry.project_key, entry.session_key)
             self._pending_authority.enqueue(
                 request_id=entry.request_id,
                 project_key=entry.project_key,
@@ -1228,6 +1254,8 @@ class GatewayQueueManager:
             finally:
                 if not entered_worker and bound is not None:
                     self._release_reservation(bound)
+                if not entered_worker:
+                    self._release_terminal_session_order(entry)
 
         timer = threading.Timer(max(0.0, delay_seconds), _launch)
         timer.daemon = True
@@ -1590,6 +1618,21 @@ class GatewayQueueManager:
 
             try:
                 if is_session:
+                    if not self._session_dispatch_order.is_head(request_id, required=entry.session_key is not None):
+                        store.record_gateway_timeline(
+                            project_root, request_id, "queue.session-order-waiting", state=record["state"],
+                            attributes={"session-id": entry.session_key},
+                        )
+
+                    def stopped_before_session_runner() -> bool:
+                        return self._shutdown_event.is_set() or store.read_record(
+                            project_root, request_id, include_output=False,
+                        )["state"] in store.TERMINAL_STATES
+
+                    if not self._session_dispatch_order.wait(
+                        request_id, stopped_before_session_runner, required=entry.session_key is not None,
+                    ):
+                        return
                     result = runner(project_root, record, session_start=_start_session_attempt)
                 else:
                     result = runner(project_root, record)
@@ -1769,11 +1812,10 @@ class GatewayQueueManager:
                         try:
                             from audiagentic.components.agents.gateway.session import sessions_store
 
-                            sessions_store.update_provider_metadata(
+                            sessions_store.annotate_owned_manual_reconciliation(
                                 project_root,
                                 str(current["session-id"]),
-                                {"recovery-state": session_fence_state},
-                                request_id=request_id,
+                                request_id,
                                 dispatch_owner_epoch=record["dispatch-owner-epoch"],
                                 worker_id=record["worker-id"],
                                 attempt_epoch=record["attempt-epoch"],
@@ -2028,6 +2070,8 @@ class GatewayQueueManager:
             if runtime is not None:
                 runtime.forget_request_cancel(request_id)
             _TURNCB.clear(request_id)
+            if retry_plan is None:
+                self._session_dispatch_order.complete(request_id)
             if not self._shutdown_event.is_set():
                 self._drain_all()
             if retry_plan is not None:
@@ -2065,9 +2109,13 @@ class GatewayQueueManager:
         """
         removed = self._pending_authority.remove(request_id)
         if removed is not None:
-            return store.cancel_queued_or_mark_requested(
+            updated = store.cancel_queued_or_mark_requested(
                 project_root, request_id, source="api", actor_type="client", reason="client-request"
             )
+            if updated["state"] == "cancelled":
+                self._session_dispatch_order.complete(request_id)
+            self._drain_all()
+            return updated
 
         pq = self._find_profile_for_request(execution_profile_id, request_id)
         if pq is None:
@@ -2093,6 +2141,7 @@ class GatewayQueueManager:
                 project_root, request_id, source="api", actor_type="client", reason="client-request"
             )
             if updated["state"] == "cancelled":
+                self._session_dispatch_order.complete(request_id)
                 # The worker can already be waiting on a session FIFO lock
                 # even though its durable request is still queued. Signal only
                 # that request's local event; never cancel the active provider
@@ -2158,6 +2207,22 @@ class GatewayQueueManager:
 
         while True:
             if record["state"] in store.TERMINAL_STATES:
+                # The durable terminal transition is published just before
+                # runner-side finalization (for worker transport, this closes
+                # the request-owned session). A same-process blocking caller
+                # must not return and tear down its workspace while that
+                # bookkeeping is still running. Remote-process waiters have no
+                # local active entry and continue to trust the durable record.
+                if request_id in self._active_requests:
+                    now = time.monotonic()
+                    if deadline is not None and now >= deadline:
+                        return record
+                    delay = _WAIT_INITIAL_BACKOFF_SECONDS
+                    if deadline is not None:
+                        delay = min(delay, max(0.0, deadline - now))
+                    time.sleep(delay)
+                    record = store.read_record(project_root, request_id)
+                    continue
                 recovery = record.get("recovery") if isinstance(record.get("recovery"), dict) else {}
                 if (
                     record.get("state") == "interrupted"

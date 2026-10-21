@@ -1,12 +1,130 @@
 import asyncio
+from dataclasses import replace
+from types import SimpleNamespace
+
+import pytest
 
 from audiagentic.components.providers.adapters.gpt_auto import conversation_focus
 from audiagentic.components.providers.adapters.gpt_auto.conversation_focus import select_focus_page
+from audiagentic.components.providers.adapters.gpt_auto.prompt_fingerprint import PromptFingerprint
+from audiagentic.components.providers.adapters.gpt_auto.snapshot import ChatMessageRef, ChatSnapshot
 from audiagentic.components.providers.contracts import ConversationFocusLocator
+from audiagentic.components.providers.contracts.conversation_focus import ConversationCaptureLocator
 
 
 def _locator(url=None, session=None):
     return ConversationFocusLocator(chat_url=url, provider_session_id=session)
+
+
+@pytest.mark.parametrize(
+    "case",
+    ["valid", "target-missing", "target-replaced", "wrong-project", "wrong-prompt",
+     "later-user", "duplicate-prompt", "reverse-order", "generating", "missing-witness",
+     "no-send-intent", "no-click-ack", "nonzero-baseline", "invalid-baseline",
+     "target-navigated-during-snapshot"],
+)
+def test_capture_from_exact_checkpoint_target_reproves_turn_without_page_actions(
+    monkeypatch, tmp_path, case
+):
+    project_url = "https://chatgpt.com/g/g-p-x/project"
+    chat_url = "https://chatgpt.com/g/g-p-x/c/s1"
+    locator = ConversationCaptureLocator(
+        project_url=project_url, gateway_session_id="ses-exact",
+        provider_target_id="exact-target", prompt_text_digest=PromptFingerprint.from_text("request").digest,
+        baseline_user_count=0, baseline_assistant_count=0,
+        send_intent_ever=True, submission_stage="send-click-acknowledged",
+    )
+    user = ChatMessageRef(role="user", message_id="user-1", text="request", sequence=0)
+    assistant = ChatMessageRef(role="assistant", message_id="assistant-1", text="answer", sequence=1)
+    snapshot = ChatSnapshot(
+        url=chat_url, composer_present=True, composer_editable=True,
+        user_count=1, assistant_count=1, latest_user_id="user-1", latest_user_text="request",
+        latest_assistant_id="assistant-1", latest_assistant_text="answer",
+        terminal_witness_assistant_id="assistant-1", generating=False,
+        error_present=False, dom_signals=frozenset({"completion-control"}),
+        message_refs=(user, assistant),
+    )
+    pages = [{"pageHandle": "h1", "targetId": "exact-target", "url": chat_url}]
+    current_url = chat_url
+    if case == "target-missing":
+        pages = []
+    elif case == "target-replaced":
+        pages[0]["targetId"] = "different-target"
+    elif case == "wrong-project":
+        pages[0]["url"] = "https://chatgpt.com/g/g-p-other/c/s1"
+    elif case == "wrong-prompt":
+        snapshot = replace(snapshot, message_refs=(replace(user, text="foreign"), assistant))
+    elif case in {"later-user", "duplicate-prompt"}:
+        foreign = replace(user, message_id="user-2", sequence=2,
+                          text="request" if case == "duplicate-prompt" else "foreign")
+        snapshot = replace(snapshot, user_count=2, latest_user_id="user-2",
+                           message_refs=(user, assistant, foreign))
+    elif case == "reverse-order":
+        snapshot = replace(snapshot, message_refs=(replace(assistant, sequence=0), replace(user, sequence=1)))
+    elif case == "generating":
+        snapshot = replace(snapshot, generating=True)
+    elif case == "missing-witness":
+        snapshot = replace(snapshot, terminal_witness_assistant_id=None)
+    elif case == "no-send-intent":
+        locator = replace(locator, send_intent_ever=False)
+    elif case == "no-click-ack":
+        locator = replace(locator, submission_stage="send-intent")
+    elif case == "nonzero-baseline":
+        locator = replace(locator, baseline_user_count=1)
+    elif case == "invalid-baseline":
+        locator = replace(locator, baseline_user_count=False)
+    elif case == "target-navigated-during-snapshot":
+        snapshot = replace(snapshot, url="https://chatgpt.com/g/g-p-x/c/repurposed")
+        current_url = snapshot.url
+
+    class Browser:
+        async def page_by_handle(self, handle):
+            assert handle == "h1"
+            return SimpleNamespace(target_id="exact-target", url=current_url)
+
+        async def snapshot(self, page, *, signals):
+            return snapshot
+
+        async def materialize_latest_assistant_turn(self, page):
+            raise AssertionError("unbound target recovery must be observation-only")
+
+    class Bridge:
+        async def call(self, method, params=None):
+            assert method == "list_pages", f"capture performed page action: {method}"
+            return pages
+
+    class Runtime:
+        bridge = Bridge()
+        gpt_browser = Browser()
+        config = SimpleNamespace(workflow=SimpleNamespace(bridge_signals=lambda: ()))
+
+        async def connect_existing(self):
+            return True
+
+        def adopt_existing_dedicated_window(self, pages):
+            pass
+
+        def page_belongs_to_dedicated_window(self, page):
+            # An exact retained target can be in another browser window.
+            return False
+
+        async def create_chat_page(self):
+            raise AssertionError("missing binding must never create a new page")
+
+    monkeypatch.setattr(conversation_focus, "load_provider_config", lambda _: {"providers": {"gpt-auto": {}}})
+    monkeypatch.setattr(conversation_focus, "get_runtime", lambda *_: Runtime())
+    monkeypatch.setattr(conversation_focus.ChatSnapshot, "from_bridge", lambda value: value)
+    result = asyncio.run(conversation_focus.capture_latest_response(
+        tmp_path, provider_id="gpt-auto", locator=locator,
+    ))
+    if case == "valid":
+        assert result["outcome"] == "captured"
+        assert result["binding"]["chat-url"] == chat_url
+        assert result["binding"]["target-id"] == "exact-target"
+    else:
+        assert result["outcome"] == "unavailable"
+    assert "target" not in str(locator.to_mapping())
+    assert "exact-target" not in repr(locator)
 
 
 def test_focus_selects_exact_url_and_session():

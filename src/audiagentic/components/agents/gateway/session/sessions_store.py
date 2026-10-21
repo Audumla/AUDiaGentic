@@ -14,8 +14,10 @@ hold lifecycle metadata only.
 
 from __future__ import annotations
 
-import logging
 import copy
+import hashlib
+import json
+import logging
 import uuid
 from collections.abc import Callable
 from contextlib import ExitStack, contextmanager
@@ -63,12 +65,54 @@ _MUTABLE_TRANSITION_FIELDS = {"close-reason", "closed-at", "last-activity-at", "
 
 _COMPONENT_ID = "agents"
 _RESOURCE_KIND = "agent-execution-gateway-session"
+
+
+def _terminal_checkpoint_fingerprint(
+    metadata: dict[str, Any], *, turn_id: str
+) -> str | None:
+    """Hash immutable prompt/baseline identity without exposing provider IDs."""
+    if (
+        not isinstance(turn_id, str)
+        or not turn_id
+        or not isinstance(metadata.get("submission-attempt-id"), str)
+        or not metadata.get("submission-attempt-id")
+        or not isinstance(metadata.get("prompt-text-digest"), str)
+        or not metadata.get("prompt-text-digest")
+        or isinstance(metadata.get("unresolved-baseline-user-count"), bool)
+        or not isinstance(metadata.get("unresolved-baseline-user-count"), int)
+        or isinstance(metadata.get("unresolved-baseline-assistant-count"), bool)
+        or not isinstance(metadata.get("unresolved-baseline-assistant-count"), int)
+        or not isinstance(
+            metadata.get("unresolved-baseline-error-alert-occurrences"), list
+        )
+    ):
+        return None
+    identity = {
+        "turn-id": turn_id,
+        "fields": {
+            key: {"present": key in metadata, "value": metadata.get(key)}
+            for key in _TERMINAL_CHECKPOINT_IDENTITY_KEYS
+        },
+    }
+    try:
+        encoded = json.dumps(
+            identity, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")
+    except (TypeError, ValueError):
+        return None
+    return hashlib.sha256(encoded).hexdigest()
+
+
 _RECOVERY_CHECKPOINT_KEYS = frozenset(
     {
         "unresolved-turn-pending",
         "unresolved-turn-id",
         "submission-state",
+        "submission-attempt-id",
+        "submission-stage",
+        "send-intent-ever",
         "submission-proven",
+        "submission-proof-source",
         "submission-recovery-claim",
         "submission-recovery-generation",
         "recovery-state",
@@ -82,7 +126,20 @@ _RECOVERY_CHECKPOINT_KEYS = frozenset(
         "unresolved-baseline-assistant-id",
         "unresolved-baseline-user-count",
         "unresolved-baseline-assistant-count",
+        "unresolved-baseline-error-alert-occurrences",
     }
+)
+_TERMINAL_CHECKPOINT_IDENTITY_KEYS = (
+    "submission-attempt-id",
+    "prompt-text-digest",
+    "prompt-message-id",
+    "assistant-before-message-id",
+    "assistant-before-id",
+    "unresolved-baseline-user-id",
+    "unresolved-baseline-assistant-id",
+    "unresolved-baseline-user-count",
+    "unresolved-baseline-assistant-count",
+    "unresolved-baseline-error-alert-occurrences",
 )
 _RECOVERY_IDENTITY_KEYS = frozenset(
     {
@@ -91,9 +148,189 @@ _RECOVERY_IDENTITY_KEYS = frozenset(
         "unresolved-baseline-assistant-id",
         "unresolved-baseline-user-count",
         "unresolved-baseline-assistant-count",
+        "unresolved-baseline-error-alert-occurrences",
+        "prompt-text-digest",
+        "submission-attempt-id",
+        "submission-recovery-generation",
+        "submission-recovery-claim",
+    }
+)
+TERMINAL_SUBMISSION_CHECKPOINT_REMOVE_KEYS = tuple(
+    sorted(_RECOVERY_CHECKPOINT_KEYS - {"unresolved-turn-pending", "submission-recovery-claim"})
+)
+_SUBMISSION_OBSERVATION_STAGE_ORDER = {
+    "dispatching": 0,
+    "composer-focused": 1,
+    "composer-filled": 2,
+    "composer-validated": 3,
+    "send-intent": 4,
+    "send-click-acknowledged": 5,
+}
+
+
+def _validate_submission_observation_progress(
+    metadata: dict[str, Any], metadata_update: dict[str, Any], *, request_id: str, session_id: str
+) -> None:
+    """Reject invalid or regressing content-free submit-stage checkpoints."""
+    attempt_id = metadata_update.get("submission-attempt-id")
+    if attempt_id is not None and (
+        not isinstance(attempt_id, str) or not attempt_id or len(attempt_id) > 64
+    ):
+        raise AudiaGenticError(
+            code="CON-AGW-125",
+            kind="agents",
+            message="submission observation attempt identity is invalid",
+            details={"request-id": request_id, "session-id": session_id},
+        )
+    existing_attempt_id = metadata.get("submission-attempt-id")
+    if (
+        attempt_id is not None
+        and existing_attempt_id is not None
+        and attempt_id != existing_attempt_id
+    ):
+        raise AudiaGenticError(
+            code="CON-AGW-125",
+            kind="agents",
+            message="submission observation attempt identity cannot change",
+            details={"request-id": request_id, "session-id": session_id},
+        )
+    stage = metadata_update.get("submission-stage")
+    if stage is not None and stage not in _SUBMISSION_OBSERVATION_STAGE_ORDER:
+        raise AudiaGenticError(
+            code="CON-AGW-125",
+            kind="agents",
+            message="submission observation stage is invalid",
+            details={"request-id": request_id, "session-id": session_id},
+        )
+    existing_stage = metadata.get("submission-stage")
+    if (
+        isinstance(stage, str)
+        and isinstance(existing_stage, str)
+        and stage in _SUBMISSION_OBSERVATION_STAGE_ORDER
+        and existing_stage in _SUBMISSION_OBSERVATION_STAGE_ORDER
+        and _SUBMISSION_OBSERVATION_STAGE_ORDER[stage]
+        < _SUBMISSION_OBSERVATION_STAGE_ORDER[existing_stage]
+    ):
+        raise AudiaGenticError(
+            code="CON-AGW-125",
+            kind="agents",
+            message="submission observation stage cannot move backwards",
+            details={"request-id": request_id, "session-id": session_id},
+        )
+    send_intent = metadata_update.get("send-intent-ever")
+    if send_intent is not None and not isinstance(send_intent, bool):
+        raise AudiaGenticError(
+            code="CON-AGW-125",
+            kind="agents",
+            message="submission send-intent latch must be boolean",
+            details={"request-id": request_id, "session-id": session_id},
+        )
+    if metadata.get("send-intent-ever") is True and send_intent is False:
+        raise AudiaGenticError(
+            code="CON-AGW-125",
+            kind="agents",
+            message="submission send-intent latch cannot be cleared",
+            details={"request-id": request_id, "session-id": session_id},
+        )
+    effective_send_intent = (
+        send_intent if send_intent is not None else metadata.get("send-intent-ever")
+    )
+    if (
+        isinstance(stage, str)
+        and _SUBMISSION_OBSERVATION_STAGE_ORDER[stage] >= _SUBMISSION_OBSERVATION_STAGE_ORDER["send-intent"]
+        and effective_send_intent is not True
+    ):
+        raise AudiaGenticError(
+            code="CON-AGW-125",
+            kind="agents",
+            message="send-intent observation requires the durable send-intent latch",
+            details={"request-id": request_id, "session-id": session_id},
+        )
+
+
+def _frozen_identity_mismatch_keys(
+    existing: dict[str, Any], update: dict[str, Any]
+) -> list[str]:
+    """Return names, never values, for frozen identity fields that differ."""
+    return sorted(
+        key
+        for key in _RECOVERY_IDENTITY_KEYS
+        if (key in update) != (key in existing)
+        or (key in existing and update.get(key) != existing.get(key))
+    )
+
+
+def _terminal_checkpoint_clear_is_proven(
+    existing: dict[str, Any], update: dict[str, Any], request_id: str
+) -> bool:
+    """Validate terminal evidence against the exact persisted checkpoint identity."""
+    evidence = update.get("terminal-evidence")
+    verification = evidence.get("verification-evidence") if isinstance(evidence, dict) else None
+    verification_set = (
+        set(verification) if isinstance(verification, (list, tuple, set)) else set()
+    )
+    digest = update.get("prompt-text-digest")
+    return bool(
+        existing.get("unresolved-turn-pending") is True
+        and existing.get("unresolved-turn-id") == request_id
+        and update.get("unresolved-turn-id") == request_id
+        and update.get("submission-proven") is True
+        and update.get("submission-proof-source") == "provider-user-message"
+        and isinstance(digest, str)
+        and bool(digest)
+        and isinstance(evidence, dict)
+        and evidence.get("turn-id") == request_id
+        and evidence.get("policy") == "response-complete"
+        and {"not-generating", "text-present"}.issubset(verification_set)
+        and bool(
+            verification_set.intersection(
+                {"completion-control", "response-complete-status"}
+            )
+        )
+        and not _frozen_identity_mismatch_keys(existing, update)
+    )
+
+
+_FRESH_SUBMISSION_DEFAULT_REMOVALS = frozenset(
+    {
+        "submission-proven",
+        "prompt-message-id",
+        "assistant-message-id",
+        "assistant-before-message-id",
+        "assistant-before-id",
+        "terminal-evidence",
         "prompt-text-digest",
     }
 )
+
+
+def _fresh_checkpoint_removals_are_safe(
+    metadata: dict[str, Any],
+    metadata_update: dict[str, Any],
+    remove_keys: tuple[str, ...],
+) -> bool:
+    """Allow only absent/default checkpoint cleanup on an unclaimed fresh turn."""
+    if any(not isinstance(key, str) for key in remove_keys):
+        return False
+    removals = set(remove_keys)
+    if not removals.issubset(_FRESH_SUBMISSION_DEFAULT_REMOVALS):
+        return False
+    removable_false_defaults = {
+        key
+        for key in ("unresolved-turn-pending", "submission-proven")
+        if metadata.get(key) is False
+    }
+    explicitly_false_updates = {
+        key
+        for key in ("unresolved-turn-pending", "submission-proven")
+        if metadata_update.get(key) is False
+    }
+    conflicting_updates = removals.intersection(metadata_update) - explicitly_false_updates
+    existing_evidence = (
+        _RECOVERY_CHECKPOINT_KEYS.intersection(removals).intersection(metadata)
+        - removable_false_defaults
+    )
+    return not conflicting_updates and not existing_evidence
 
 
 # ── v3 grouped-field accessors ──────────────────────────────────────
@@ -179,6 +416,79 @@ def update_provider_metadata(
         return record
 
 
+def annotate_owned_manual_reconciliation(
+    project_root: Path, session_id: str, request_id: str, *,
+    dispatch_owner_epoch: str, worker_id: str, attempt_epoch: int,
+) -> None:
+    """Record an exhausted observer outcome without changing its turn fence."""
+    with _request_lock(project_root, request_id):
+        with _ordered_session_mutation_lock(project_root, session_id):
+            _assert_request_dispatch_owner(
+                project_root, request_id, session_id,
+                dispatch_owner_epoch=dispatch_owner_epoch,
+                worker_id=worker_id, attempt_epoch=attempt_epoch,
+            )
+            record = read_session_record(project_root, session_id)
+            metadata = session_provider_metadata(record)
+            if (
+                metadata.get("unresolved-turn-pending") is not True
+                or metadata.get("unresolved-turn-id") != request_id
+            ):
+                raise AudiaGenticError(
+                    code="CON-AGW-125", kind="agents",
+                    message="manual reconciliation annotation requires the current unresolved turn",
+                    details={"request-id": request_id, "session-id": session_id},
+                )
+            metadata["recovery-state"] = "manual-reconcile-required"
+            record.setdefault("provider", {})["metadata"] = metadata
+            record.setdefault("timing", {})["updated-at"] = now_iso_z()
+            write_session_record(project_root, record)
+
+
+def clear_owned_unsent_submission_checkpoint(
+    project_root: Path, session_id: str, request_id: str, *,
+    submission_attempt_id: str, dispatch_owner_epoch: str,
+    worker_id: str, attempt_epoch: int,
+) -> None:
+    """Retire only the current owner's exact durably pre-Send attempt."""
+    with _request_lock(project_root, request_id):
+        with _ordered_session_mutation_lock(project_root, session_id):
+            request = _assert_request_dispatch_owner(
+                project_root, request_id, session_id,
+                dispatch_owner_epoch=dispatch_owner_epoch,
+                worker_id=worker_id, attempt_epoch=attempt_epoch,
+            )
+            record = read_session_record(project_root, session_id)
+            metadata = session_provider_metadata(record)
+            if (
+                request.get("recovery-required") is True
+                or metadata.get("unresolved-turn-id") != request_id
+                or metadata.get("unresolved-turn-pending") is not True
+                or metadata.get("submission-state") != "dispatching"
+                or not isinstance(submission_attempt_id, str)
+                or not submission_attempt_id
+                or metadata.get("submission-attempt-id") != submission_attempt_id
+                or metadata.get("send-intent-ever") is not False
+                or metadata.get("submission-proven") is True
+                or metadata.get("submission-stage") not in {
+                    "dispatching", "composer-focused", "composer-filled", "composer-validated",
+                }
+                or metadata.get("submission-recovery-claim") is not None
+                or metadata.get("submission-recovery-generation") is not None
+            ):
+                raise AudiaGenticError(
+                    code="CON-AGW-125", kind="agents",
+                    message="unsent checkpoint retirement requires the exact current no-Send attempt",
+                    details={"request-id": request_id, "session-id": session_id},
+                )
+            for key in _RECOVERY_CHECKPOINT_KEYS:
+                metadata.pop(key, None)
+            metadata["unresolved-turn-pending"] = False
+            record.setdefault("provider", {})["metadata"] = metadata
+            record.setdefault("timing", {})["updated-at"] = now_iso_z()
+            write_session_record(project_root, record)
+
+
 def clear_terminal_submission_checkpoint(
     project_root: Path,
     session_id: str,
@@ -186,6 +496,7 @@ def clear_terminal_submission_checkpoint(
     *,
     recovery_state: str,
     remove_keys: tuple[str, ...],
+    expected_metadata: dict[str, Any] | None = None,
 ) -> bool:
     """Clear a request's session fence only after its durable terminal state.
 
@@ -199,6 +510,7 @@ def clear_terminal_submission_checkpoint(
             request_id,
             recovery_state=recovery_state,
             remove_keys=remove_keys,
+            expected_metadata=expected_metadata,
         )
 
 
@@ -209,6 +521,10 @@ def _clear_terminal_submission_checkpoint_locked(
     *,
     recovery_state: str,
     remove_keys: tuple[str, ...],
+    expected_metadata: dict[str, Any] | None = None,
+    expected_binding: dict[str, Any] | None = None,
+    check_binding: bool = False,
+    binding_metadata_update: dict[str, Any] | None = None,
 ) -> bool:
     """Locked implementation for callers already holding the request lock."""
     from audiagentic.components.agents.gateway import store as gateway_store
@@ -235,19 +551,265 @@ def _clear_terminal_submission_checkpoint_locked(
             message="terminal provider checkpoint cleanup contains unsupported fields",
             details={"request-id": request_id, "session-id": session_id},
         )
+    if binding_metadata_update and not set(binding_metadata_update).issubset(
+        {"chat-url", "provider-session-id", "project-url", "chat-title", "target-id"}
+    ):
+        raise AudiaGenticError(
+            code="CON-AGW-125", kind="agents",
+            message="terminal checkpoint binding update contains unsupported fields",
+            details={"request-id": request_id, "session-id": session_id},
+        )
     with _ordered_session_mutation_lock(project_root, session_id):
         record = read_session_record(project_root, session_id)
+        if check_binding and record.get("binding") != expected_binding:
+            return False
         metadata = session_provider_metadata(record)
         current_turn_id = metadata.get("unresolved-turn-id")
         if current_turn_id != request_id:
             return False
+        if expected_metadata is not None:
+            # A request id can be reused across a prepared-submission recovery
+            # attempt. Compare the complete persisted checkpoint snapshot so a
+            # delayed predecessor finalizer cannot clear a successor attempt
+            # with the same logical turn id but a new generation/claim/stage.
+            if any(
+                (key in expected_metadata) != (key in metadata)
+                or (
+                    key in expected_metadata
+                    and expected_metadata.get(key) != metadata.get(key)
+                )
+                for key in _RECOVERY_CHECKPOINT_KEYS
+            ):
+                return False
         metadata["unresolved-turn-pending"] = False
         metadata["recovery-state"] = recovery_state
         for key in remove_keys:
             metadata.pop(key, None)
+        metadata.update(binding_metadata_update or {})
         record.setdefault("provider", {})["metadata"] = metadata
         record.setdefault("timing", {})["updated-at"] = now_iso_z()
         write_session_record(project_root, record)
+    return True
+
+
+def clear_completed_checkpoint_residue(
+    project_root: Path,
+    session_id: str,
+    terminal_request_id: str,
+    *,
+    expected_metadata: dict[str, Any],
+    expected_binding_identity: dict[str, Any],
+    allow_orphaned_pending: bool = False,
+) -> bool:
+    """Remove stale terminal checkpoint fields after proving their owner.
+
+    Legacy non-pending residue is accepted by default. The explicit orphaned
+    mode also accepts ``pending=True`` only when the owner turn id is absent;
+    its private attempt id must fingerprint-match terminal evidence on the
+    completed predecessor. Both modes require a readable response artifact,
+    immutable session binding identity, and a full checkpoint snapshot CAS
+    under request -> retention -> session lock order.
+    """
+    from audiagentic.components.agents.gateway import store as gateway_store
+
+    expected_attempt_id = expected_metadata.get("submission-attempt-id")
+    pending_false_residue = (
+        expected_metadata.get("unresolved-turn-pending") is False
+        and not expected_metadata.get("unresolved-turn-id")
+    )
+    orphaned_pending = (
+        allow_orphaned_pending
+        and expected_metadata.get("unresolved-turn-pending") is True
+        and not expected_metadata.get("unresolved-turn-id")
+        and expected_metadata.get("submission-recovery-claim") is None
+        and expected_metadata.get("submission-recovery-generation") is None
+    )
+    if (
+        not (pending_false_residue or orphaned_pending)
+        or not isinstance(expected_attempt_id, str)
+        or not expected_attempt_id
+    ):
+        return False
+    expected_attempt_fingerprint = hashlib.sha256(
+        expected_attempt_id.encode("utf-8")
+    ).hexdigest()
+
+    with _request_lock(project_root, terminal_request_id):
+        request = gateway_store.read_record(
+            project_root, terminal_request_id, include_output=False
+        )
+        request_metadata = request.get("provider-metadata")
+        request_metadata = request_metadata if isinstance(request_metadata, dict) else {}
+        terminal_evidence = request_metadata.get("terminal-evidence")
+        terminal_evidence = terminal_evidence if isinstance(terminal_evidence, dict) else {}
+        request_attempt_id = request_metadata.get("submission-attempt-id")
+        artifact = request.get("response-artifact")
+        evidence_proves_attempt = (
+            terminal_evidence.get("turn-id") == terminal_request_id
+            and terminal_evidence.get("policy") == "response-complete"
+            and isinstance(terminal_evidence.get("terminal-witness-id"), str)
+            and bool(terminal_evidence.get("terminal-witness-id"))
+            and terminal_evidence.get("submission-attempt-fingerprint")
+            == expected_attempt_fingerprint
+        )
+        expected_checkpoint_fingerprint = _terminal_checkpoint_fingerprint(
+            expected_metadata, turn_id=terminal_request_id
+        )
+        checkpoint_fingerprint = terminal_evidence.get(
+            "submission-checkpoint-fingerprint"
+        )
+        evidence_proves_checkpoint_identity = (
+            expected_checkpoint_fingerprint is not None
+            and checkpoint_fingerprint == expected_checkpoint_fingerprint
+        )
+        checkpoint_identity_conflicts = (
+            checkpoint_fingerprint is not None
+            and not evidence_proves_checkpoint_identity
+        )
+        if (
+            request.get("state") != "completed"
+            or request.get("session-id") != session_id
+            or (
+                request_attempt_id is not None
+                and request_attempt_id != expected_attempt_id
+            )
+            or not (
+                request_attempt_id == expected_attempt_id
+                or evidence_proves_attempt
+            )
+            or checkpoint_identity_conflicts
+            or (
+                orphaned_pending
+                and (
+                    not evidence_proves_attempt
+                    or not evidence_proves_checkpoint_identity
+                )
+            )
+            or not isinstance(artifact, dict)
+            or artifact.get("request-id") != terminal_request_id
+        ):
+            return False
+        from audiagentic.components.agents.gateway.output import read_final_response
+
+        # Request locks protect artifact writes; the retention lock protects
+        # archived-request removal. Hold both while re-reading the immutable
+        # terminal reference and validating its bytes, then acquire the
+        # session lock in the established request -> retention -> session
+        # order before the checkpoint CAS.
+        with StartupLock(gateway_retention_lock_path(project_root)):
+            try:
+                current_request = gateway_store.read_record(
+                    project_root, terminal_request_id, include_output=False
+                )
+                current_artifact = current_request.get("response-artifact")
+                if (
+                    current_request.get("state") != "completed"
+                    or current_request.get("session-id") != session_id
+                    or current_request.get("provider-metadata", {}).get(
+                        "submission-attempt-id"
+                    ) not in {None, expected_attempt_id}
+                    or current_artifact != artifact
+                ):
+                    return False
+                current_terminal_evidence = current_request.get(
+                    "provider-metadata", {}
+                ).get("terminal-evidence")
+                current_terminal_evidence = (
+                    current_terminal_evidence
+                    if isinstance(current_terminal_evidence, dict)
+                    else {}
+                )
+                current_evidence_proves_attempt = (
+                    current_terminal_evidence.get("turn-id") == terminal_request_id
+                    and current_terminal_evidence.get("policy") == "response-complete"
+                    and isinstance(
+                        current_terminal_evidence.get("terminal-witness-id"), str
+                    )
+                    and bool(current_terminal_evidence.get("terminal-witness-id"))
+                    and current_terminal_evidence.get(
+                        "submission-attempt-fingerprint"
+                    )
+                    == expected_attempt_fingerprint
+                )
+                current_checkpoint_fingerprint = _terminal_checkpoint_fingerprint(
+                    expected_metadata, turn_id=terminal_request_id
+                )
+                current_evidence_checkpoint_fingerprint = (
+                    current_terminal_evidence.get("submission-checkpoint-fingerprint")
+                )
+                current_evidence_proves_checkpoint_identity = (
+                    current_checkpoint_fingerprint is not None
+                    and current_evidence_checkpoint_fingerprint
+                    == current_checkpoint_fingerprint
+                )
+                if (
+                    request_attempt_id != expected_attempt_id
+                    and not current_evidence_proves_attempt
+                ):
+                    return False
+                if (
+                    current_evidence_checkpoint_fingerprint is not None
+                    and not current_evidence_proves_checkpoint_identity
+                ):
+                    return False
+                if orphaned_pending and (
+                    not current_evidence_proves_attempt
+                    or not current_evidence_proves_checkpoint_identity
+                ):
+                    return False
+                response = read_final_response(
+                    project_root, terminal_request_id, current_artifact
+                )
+            except (AudiaGenticError, OSError, TypeError, ValueError, AttributeError):
+                return False
+            if not isinstance(response, str) or not response.strip():
+                return False
+
+            with _session_lock(project_root, session_id):
+                record = read_session_record(project_root, session_id)
+                metadata = session_provider_metadata(record)
+                binding = record.get("binding")
+                if (
+                    record.get("state") not in {"active", "failed"}
+                    or not isinstance(binding, dict)
+                    or binding.get("binding-id")
+                    != expected_binding_identity.get("binding-id")
+                    or binding.get("generation")
+                    != expected_binding_identity.get("generation")
+                    or metadata.get("unresolved-turn-pending")
+                    is not expected_metadata.get("unresolved-turn-pending")
+                    or metadata.get("unresolved-turn-id")
+                    or metadata.get("submission-recovery-claim") is not None
+                    or (
+                        orphaned_pending
+                        and metadata.get("submission-recovery-generation") is not None
+                    )
+                    or metadata.get("submission-attempt-id") != expected_attempt_id
+                    or any(
+                        (key in expected_metadata) != (key in metadata)
+                        or (
+                            key in expected_metadata
+                            and expected_metadata.get(key) != metadata.get(key)
+                        )
+                        for key in _RECOVERY_CHECKPOINT_KEYS
+                    )
+                ):
+                    return False
+                for key in _RECOVERY_CHECKPOINT_KEYS - {
+                    "unresolved-turn-pending",
+                    "submission-recovery-claim",
+                }:
+                    metadata.pop(key, None)
+                if orphaned_pending:
+                    metadata["unresolved-turn-pending"] = False
+                metadata["recovery-state"] = (
+                    "orphaned-terminal-fence-cleared"
+                    if orphaned_pending
+                    else "stale-terminal-checkpoint-residue-cleared"
+                )
+                record.setdefault("provider", {})["metadata"] = metadata
+                record.setdefault("timing", {})["updated-at"] = now_iso_z()
+                write_session_record(project_root, record)
     return True
 
 
@@ -259,22 +821,50 @@ def _assert_request_dispatch_owner(
     dispatch_owner_epoch: str,
     worker_id: str,
     attempt_epoch: int,
+    allow_queued_pre_send: bool = False,
 ) -> dict[str, Any]:
     from audiagentic.components.agents.gateway import store as gateway_store
 
     request = gateway_store.read_record(project_root, request_id)
-    if not (
-        request.get("state") == "running"
-        and request.get("session-id") == session_id
-        and request.get("dispatch-owner-epoch") == dispatch_owner_epoch
-        and request.get("worker-id") == worker_id
-        and request.get("attempt-epoch") == attempt_epoch
+    request_state = request.get("state")
+    request_is_owned = (
+        request_state == "running"
+        or (
+            allow_queued_pre_send
+            and request_state == "queued"
+            and request.get("recovery-required") is not True
+        )
+    )
+    owner_facts = {
+        "request-state-owned": request_is_owned,
+        "session-id-matches": request.get("session-id") == session_id,
+        "dispatch-owner-epoch-matches": (
+            request.get("dispatch-owner-epoch") == dispatch_owner_epoch
+        ),
+        "worker-id-matches": request.get("worker-id") == worker_id,
+        "attempt-epoch-matches": request.get("attempt-epoch") == attempt_epoch,
+        "allow-queued-pre-send": allow_queued_pre_send,
+        "recovery-required": request.get("recovery-required") is True,
+    }
+    if not all(
+        owner_facts[key]
+        for key in (
+            "request-state-owned",
+            "session-id-matches",
+            "dispatch-owner-epoch-matches",
+            "worker-id-matches",
+            "attempt-epoch-matches",
+        )
     ):
         raise AudiaGenticError(
             code="CON-AGW-125",
             kind="agents",
             message="prepared submission recovery lost its request owner fence",
-            details={"request-id": request_id, "session-id": session_id},
+            details={
+                "request-id": request_id,
+                "session-id": session_id,
+                "request-owner-fence": owner_facts,
+            },
         )
     session = read_session_record(project_root, session_id)
     if session_provider_id(session) == "gpt-auto":
@@ -337,6 +927,7 @@ def claim_prepared_submission_recovery(
             dispatch_owner_epoch=dispatch_owner_epoch,
             worker_id=worker_id,
             attempt_epoch=attempt_epoch,
+            allow_queued_pre_send=True,
         )
         with _ordered_session_mutation_lock(project_root, session_id):
             record = read_session_record(project_root, session_id)
@@ -421,6 +1012,7 @@ def _assert_prepared_submission_claim_locked(
         dispatch_owner_epoch=dispatch_owner_epoch,
         worker_id=worker_id,
         attempt_epoch=attempt_epoch,
+        allow_queued_pre_send=True,
     )
     record = read_session_record(project_root, session_id)
     metadata = session_provider_metadata(record)
@@ -536,6 +1128,38 @@ def advance_prepared_submission_to_dispatching(
                         message="dispatching checkpoint cannot replace frozen turn identity",
                         details={"request-id": request_id, "session-id": session_id},
                     )
+            if not _fresh_checkpoint_removals_are_safe(
+                metadata, metadata_update, remove_keys
+            ):
+                raise AudiaGenticError(
+                    code="CON-AGW-125",
+                    kind="agents",
+                    message="prepared recovery removal is not limited to absent/default fields",
+                    details={
+                        "request-id": request_id,
+                        "session-id": session_id,
+                        "checkpoint-diagnostics": {
+                            "removal-count": len(remove_keys),
+                            "protected-removal-count": len(
+                                _RECOVERY_CHECKPOINT_KEYS.intersection(remove_keys)
+                            ),
+                            "removal-conflicts-with-update": bool(
+                                set(remove_keys).intersection(metadata_update)
+                                - {
+                                    key
+                                    for key in ("unresolved-turn-pending", "submission-proven")
+                                    if metadata_update.get(key) is False
+                                }
+                            ),
+                        },
+                    },
+                )
+            _validate_submission_observation_progress(
+                metadata,
+                metadata_update,
+                request_id=request_id,
+                session_id=session_id,
+            )
             metadata.update(metadata_update)
             for key in (*remove_keys, "submission-recovery-claim"):
                 metadata.pop(key, None)
@@ -598,16 +1222,37 @@ def update_owned_submission_checkpoint(
             record = read_session_record(project_root, session_id)
             metadata = session_provider_metadata(record)
             current_stage = metadata.get("submission-state")
+            cleared_annotation_keys = (
+                {"recovery-state"}
+                if metadata.get("recovery-state") in {
+                    "terminal-captured", "stale-terminal-checkpoint-residue-cleared",
+                    "orphaned-terminal-fence-cleared",
+                }
+                else set()
+            )
             fresh_prepared_checkpoint = (
                 current_stage is None
                 and metadata.get("unresolved-turn-pending") is not True
-                and not _RECOVERY_IDENTITY_KEYS.intersection(metadata)
-                and not {
-                    "submission-proven",
-                    "submission-recovery-claim",
-                    "submission-recovery-generation",
-                    "terminal-evidence",
-                }.intersection(metadata)
+                and not (
+                    _RECOVERY_IDENTITY_KEYS.intersection(metadata)
+                    - {"unresolved-baseline-error-alert-occurrences"}
+                )
+                and not (
+                    _RECOVERY_CHECKPOINT_KEYS.intersection(metadata)
+                    - {"unresolved-turn-pending", "submission-proven", "unresolved-baseline-error-alert-occurrences"}
+                    - cleared_annotation_keys
+                )
+                and (
+                    "unresolved-baseline-error-alert-occurrences" not in metadata
+                    or metadata.get("unresolved-baseline-error-alert-occurrences") == []
+                )
+                # Initial provider binding metadata may explicitly carry the
+                # default false value before the first turn is admitted. That
+                # is absence of submission proof, not prior-turn evidence.
+                and (
+                    metadata.get("submission-proven") is None
+                    or metadata.get("submission-proven") is False
+                )
                 and metadata_update.get("submission-state") == "prepared"
                 and metadata_update.get("unresolved-turn-pending") is True
                 and metadata_update.get("unresolved-turn-id") == request_id
@@ -620,6 +1265,7 @@ def update_owned_submission_checkpoint(
                 and metadata.get("submission-recovery-claim") is None
                 and metadata.get("submission-recovery-generation") is None
             )
+            dispatching_to_proven_checkpoint = False
             if fresh_prepared_checkpoint:
                 # The first turn on a newly admitted session has no prior
                 # checkpoint (and therefore no recovery claim). The durable
@@ -639,7 +1285,17 @@ def update_owned_submission_checkpoint(
                         message="recovered request requires a prepared submission claim",
                         details={"request-id": request_id, "session-id": session_id},
                     )
-                if _RECOVERY_CHECKPOINT_KEYS.intersection(remove_keys):
+                removable_initial_defaults = {
+                    key
+                    for key in ("unresolved-turn-pending", "submission-proven")
+                    if metadata.get(key) is False
+                }
+                existing_recovery_removals = (
+                    _RECOVERY_CHECKPOINT_KEYS.intersection(remove_keys)
+                    .intersection(metadata)
+                    - removable_initial_defaults
+                )
+                if existing_recovery_removals:
                     raise AudiaGenticError(
                         code="CON-AGW-125",
                         kind="agents",
@@ -665,7 +1321,10 @@ def update_owned_submission_checkpoint(
                     or metadata.get("submission-recovery-generation") is not None
                     or metadata.get("unresolved-turn-pending") is not True
                     or metadata.get("unresolved-turn-id") != request_id
-                    or metadata.get("submission-proven") is not False
+                    or not (
+                        metadata.get("submission-proven") is None
+                        or metadata.get("submission-proven") is False
+                    )
                     or metadata_update.get("submission-state") != "dispatching"
                     or metadata_update.get("unresolved-turn-pending") is not True
                     or metadata_update.get("unresolved-turn-id") != request_id
@@ -695,7 +1354,7 @@ def update_owned_submission_checkpoint(
                     attempt_epoch=attempt_epoch,
                 )
             else:
-                _assert_request_dispatch_owner(
+                dispatch_request = _assert_request_dispatch_owner(
                     project_root,
                     request_id,
                     session_id,
@@ -703,23 +1362,186 @@ def update_owned_submission_checkpoint(
                     worker_id=worker_id,
                     attempt_epoch=attempt_epoch,
                 )
+                prompt_message_id = metadata_update.get("prompt-message-id")
+                prompt_text_digest = metadata.get("prompt-text-digest")
+                baseline_user_count = metadata.get("unresolved-baseline-user-count")
+                baseline_user_id = metadata.get("unresolved-baseline-user-id")
+                baseline_assistant_count = metadata.get(
+                    "unresolved-baseline-assistant-count"
+                )
+                proof_update_keys_are_safe = set(metadata_update).issubset(
+                    _RECOVERY_CHECKPOINT_KEYS | {"target-id"}
+                )
+                frozen_identity_mismatch_keys = _frozen_identity_mismatch_keys(
+                    metadata, metadata_update
+                )
+                frozen_identity_is_unchanged = not frozen_identity_mismatch_keys
+                prompt_message_id_is_durable = (
+                    isinstance(prompt_message_id, str)
+                    and bool(prompt_message_id.strip())
+                    and not prompt_message_id.startswith(
+                        ("fallback-", "virtualized-prompt-for-")
+                    )
+                )
+                prompt_digest_matches = (
+                    isinstance(prompt_text_digest, str)
+                    and bool(prompt_text_digest)
+                    and metadata_update.get("prompt-text-digest") == prompt_text_digest
+                )
+                baseline_user_count_matches = (
+                    isinstance(baseline_user_count, int)
+                    and not isinstance(baseline_user_count, bool)
+                    and metadata_update.get("unresolved-baseline-user-count")
+                    == baseline_user_count
+                )
+                baseline_assistant_count_matches = (
+                    isinstance(baseline_assistant_count, int)
+                    and not isinstance(baseline_assistant_count, bool)
+                    and metadata_update.get("unresolved-baseline-assistant-count")
+                    == baseline_assistant_count
+                )
+                baseline_user_id_is_new = (
+                    not isinstance(baseline_user_id, str)
+                    or prompt_message_id != baseline_user_id
+                )
+                request_owner_is_current = (
+                    dispatch_request.get("recovery-required") is not True
+                )
+                dispatching_to_proven_checkpoint = (
+                    current_stage == "dispatching"
+                    and claim_id is None
+                    and metadata.get("unresolved-turn-pending") is True
+                    and metadata.get("unresolved-turn-id") == request_id
+                    and (
+                        metadata.get("submission-proven") is None
+                        or metadata.get("submission-proven") is False
+                    )
+                    and metadata.get("submission-recovery-claim") is None
+                    and metadata.get("submission-recovery-generation") is None
+                    and metadata_update.get("submission-state") == "proven"
+                    and metadata_update.get("unresolved-turn-pending") is True
+                    and metadata_update.get("unresolved-turn-id") == request_id
+                    and metadata_update.get("submission-proven") is True
+                    and metadata_update.get("submission-proof-source")
+                    == "provider-user-message"
+                    and proof_update_keys_are_safe
+                    and frozen_identity_is_unchanged
+                    and prompt_message_id_is_durable
+                    and prompt_digest_matches
+                    and baseline_user_count_matches
+                    and baseline_assistant_count_matches
+                    and baseline_user_id_is_new
+                    and request_owner_is_current
+                )
                 if not (
                     metadata.get("unresolved-turn-pending") is True
                     and metadata.get("unresolved-turn-id") == request_id
                     and current_stage in {None, "dispatching"}
                     and claim_id is None
+                    and (
+                        metadata_update.get("submission-state") != "proven"
+                        or dispatching_to_proven_checkpoint
+                    )
                 ):
+                    known_stages = {"prepared", "dispatching", "proven", "cleared"}
+                    requested_stage = metadata_update.get("submission-state")
+                    observed_proof = metadata.get("submission-proven")
+                    error_details = {
+                        "request-id": request_id,
+                        "session-id": session_id,
+                        "checkpoint-diagnostics": {
+                            "observed-stage": (
+                                current_stage
+                                if current_stage is None
+                                or (
+                                    isinstance(current_stage, str)
+                                    and current_stage in known_stages
+                                )
+                                else "other"
+                            ),
+                            "requested-stage": (
+                                requested_stage
+                                if requested_stage is None
+                                or (
+                                    isinstance(requested_stage, str)
+                                    and requested_stage in known_stages
+                                )
+                                else "other"
+                            ),
+                            "unresolved-turn-pending": (
+                                metadata.get("unresolved-turn-pending") is True
+                            ),
+                            "turn-id-matches-request": (
+                                metadata.get("unresolved-turn-id") == request_id
+                            ),
+                            "claim-id-supplied": claim_id is not None,
+                            "claim-present": metadata.get(
+                                "submission-recovery-claim"
+                            )
+                            is not None,
+                            "claim-generation-present": metadata.get(
+                                "submission-recovery-generation"
+                            )
+                            is not None,
+                            "submission-proven": (
+                                observed_proof
+                                if isinstance(observed_proof, bool)
+                                else "missing-or-invalid"
+                            ),
+                            "request-recovery-required": (
+                                dispatch_request.get("recovery-required") is True
+                            ),
+                            "proof-source-valid": (
+                                metadata_update.get("submission-proof-source")
+                                == "provider-user-message"
+                            ),
+                            "proof-update-keys-safe": proof_update_keys_are_safe,
+                            "frozen-identity-unchanged": frozen_identity_is_unchanged,
+                            "frozen-identity-mismatch-keys": frozen_identity_mismatch_keys,
+                            "provider-anchor-valid": prompt_message_id_is_durable,
+                            "fingerprint-equal": prompt_digest_matches,
+                            "baseline-user-count-matches": baseline_user_count_matches,
+                            "baseline-assistant-count-matches": baseline_assistant_count_matches,
+                            "baseline-user-id-is-new": baseline_user_id_is_new,
+                            "request-owner-is-current": request_owner_is_current,
+                        },
+                    }
+                    previous_turn_blocks_prepared = (
+                        requested_stage == "prepared"
+                        and metadata.get("unresolved-turn-pending") is True
+                        and metadata.get("unresolved-turn-id") != request_id
+                        and metadata.get("submission-recovery-claim") is None
+                        and metadata.get("submission-recovery-generation") is None
+                        and request_owner_is_current
+                    )
+                    if previous_turn_blocks_prepared:
+                        # The prepared stage is rejected before provider Send.
+                        # Keep this request in reconciliation instead of
+                        # terminal-failing it as a generic checkpoint error.
+                        error_details.update(
+                            {
+                                "failure-stage": "submission",
+                                "submission-state": "not_started",
+                                "submission-proven": False,
+                                "submission-ambiguous": False,
+                                "previous-turn-unresolved": True,
+                            }
+                        )
                     raise AudiaGenticError(
                         code="CON-AGW-125",
                         kind="agents",
                         message="owned checkpoint update does not match the current dispatch stage",
-                        details={"request-id": request_id, "session-id": session_id},
+                        details=error_details,
                     )
             if "submission-state" in metadata_update and (
                 metadata_update["submission-state"] != "dispatching"
                 or metadata.get("submission-state")
                 not in {None, "dispatching"}
-            ) and not fresh_prepared_checkpoint and not fresh_prepared_dispatch:
+            ) and not (
+                fresh_prepared_checkpoint
+                or fresh_prepared_dispatch
+                or dispatching_to_proven_checkpoint
+            ):
                 raise AudiaGenticError(
                     code="CON-AGW-125",
                     kind="agents",
@@ -784,20 +1606,46 @@ def update_owned_submission_checkpoint(
                         details={"request-id": request_id, "session-id": session_id},
                     )
             protected_removals = _RECOVERY_CHECKPOINT_KEYS.intersection(remove_keys)
-            if metadata.get("submission-state") == "prepared" and protected_removals:
+            fresh_prepared_removal_safe = (
+                (fresh_prepared_checkpoint or fresh_prepared_dispatch)
+                and _fresh_checkpoint_removals_are_safe(
+                    metadata, metadata_update, remove_keys
+                )
+            )
+            if (
+                (fresh_prepared_checkpoint or fresh_prepared_dispatch)
+                and not fresh_prepared_removal_safe
+            ):
+                raise AudiaGenticError(
+                    code="CON-AGW-125",
+                    kind="agents",
+                    message="fresh checkpoint cleanup exceeds the absent/default allowlist",
+                    details={"request-id": request_id, "session-id": session_id},
+                )
+            if (
+                metadata.get("submission-state") == "prepared"
+                and protected_removals
+                and not fresh_prepared_removal_safe
+            ):
                 raise AudiaGenticError(
                     code="CON-AGW-125",
                     kind="agents",
                     message="prepared recovery evidence cannot be removed before dispatch",
                     details={"request-id": request_id, "session-id": session_id},
                 )
-            if protected_removals:
+            if protected_removals and not fresh_prepared_removal_safe:
                 raise AudiaGenticError(
                     code="CON-AGW-125",
                     kind="agents",
                     message="recovery evidence removal requires a terminal request",
                     details={"request-id": request_id, "session-id": session_id},
                 )
+            _validate_submission_observation_progress(
+                metadata,
+                metadata_update,
+                request_id=request_id,
+                session_id=session_id,
+            )
             metadata.update(metadata_update)
             for key in remove_keys:
                 metadata.pop(key, None)
@@ -1154,27 +2002,15 @@ def expire_session_if_policy_exceeded(
         reason = "idle-timeout"
     if reason is None:
         return record
-    # Serialize the request preflight, request terminalization, and session
-    # retirement under the same project retention fence.  Per-request CAS is
-    # still required, but without this logical-operation lock another writer
-    # could change a later request between the all-request preflight and the
-    # session transition, leaving a partially reconciled session.
-    with StartupLock(gateway_retention_lock_path(project_root)):
-        current = read_session_record(project_root, session_id)
-        if current.get("state") in SESSION_TERMINAL_STATES:
-            return current
-        # The session may have been refreshed while this sweep waited for the
-        # project fence. Re-evaluate policy from the locked record.
-        reason = None
-        if session_lifetime_expired(current):
-            reason = "max-lifetime"
-        elif session_idle_expired(current):
-            reason = "idle-timeout"
-        if reason is None:
-            return current
-        expired = _reconcile_nonterminal_requests_before_expiry(project_root, current, reason=reason)
-        if expired is None:
-            return current
+    # Reconciliation acquires request locks before the project retention and
+    # session locks. This is the order used by terminal checkpoint cleanup
+    # and submission writers; taking retention first here can deadlock against
+    # a finalizer holding a request lock while waiting for retention.
+    expired = _reconcile_nonterminal_requests_before_expiry(
+        project_root, record, reason=reason
+    )
+    if expired is None:
+        return read_session_record(project_root, session_id)
     try:
         record_session_timeline(
             project_root,
@@ -1227,12 +2063,11 @@ def _reconcile_nonterminal_requests_before_expiry(
         for record in records
         if record.get("session-id") == session_id and record.get("request-id")
     )
-    nonterminal: list[dict[str, Any]] = []
+    request_snapshots: dict[str, dict[str, Any]] = {}
     for request_id in sorted(request_ids):
         try:
             record = store.read_record(project_root, request_id)
-            if record.get("state") not in store.TERMINAL_STATES:
-                nonterminal.append(record)
+            request_snapshots[request_id] = record
         except Exception:  # noqa: BLE001 - one record must not block expiry
             logger.warning(
                 "could not inspect request owned by expiring session",
@@ -1241,75 +2076,73 @@ def _reconcile_nonterminal_requests_before_expiry(
             )
             return None
 
-    if not nonterminal:
-        # No request mutation or provider ownership proof is needed for an
-        # empty stale session. Retire it under the caller's retention fence.
-        expired = transition_session_record(
-            project_root,
-            session_id,
-            "expired",
-            updates={"close-reason": reason, "closed-at": now_iso_z()},
-        )
-        bindings.retire_binding(project_root, expired, state="expired")
-        return expired
+    nonterminal = [
+        record
+        for record in request_snapshots.values()
+        if record.get("state") not in store.TERMINAL_STATES
+    ]
 
     eligible: list[dict[str, Any]] = []
-    session_provider_metadata_value = session_provider_metadata(session)
-    session_provider_session_id = session_provider_metadata_value.get("provider-session-id")
-    session_provider_id_value = session_provider_id(session)
-    binding = session.get("binding")
-    binding_provider_id = binding.get("provider-id") if isinstance(binding, dict) else None
-    binding_provider_session_ref = binding.get("provider-session-ref") if isinstance(binding, dict) else None
-    if (
-        not isinstance(session_provider_session_id, str)
-        or not session_provider_session_id.strip()
-        or not isinstance(session_provider_id_value, str)
-        or not session_provider_id_value.strip()
-        or binding_provider_id != session_provider_id_value
-        or binding_provider_session_ref != session_provider_session_id
-    ):
-        return None
-    for record in nonterminal:
-        request_metadata = record.get("provider-metadata")
-        if not isinstance(request_metadata, dict):
-            return None
-        request_provider_session_id = request_metadata.get("provider-session-id")
+    if nonterminal:
+        session_provider_metadata_value = session_provider_metadata(session)
+        session_provider_session_id = session_provider_metadata_value.get("provider-session-id")
+        session_provider_id_value = session_provider_id(session)
+        binding = session.get("binding")
+        binding_provider_id = binding.get("provider-id") if isinstance(binding, dict) else None
+        binding_provider_session_ref = binding.get("provider-session-ref") if isinstance(binding, dict) else None
         if (
-            not isinstance(request_provider_session_id, str)
-            or not request_provider_session_id.strip()
-            or request_provider_session_id != session_provider_session_id
-            or record.get("resolved-provider-id") != session_provider_id_value
+            not isinstance(session_provider_session_id, str)
+            or not session_provider_session_id.strip()
+            or not isinstance(session_provider_id_value, str)
+            or not session_provider_id_value.strip()
+            or binding_provider_id != session_provider_id_value
+            or binding_provider_session_ref != session_provider_session_id
         ):
             return None
-        activity = record.get("activity")
-        provider_activity = activity.get("provider") if isinstance(activity, dict) else None
-        # The legacy top-level lease is the gateway owner/synthetic lease.  It
-        # must never keep a provider session alive during expiry reconciliation.
-        lease = provider_activity.get("lease-expires-at") if isinstance(provider_activity, dict) else None
-        if isinstance(lease, str) and lease.strip():
-            try:
-                lease_at = datetime.fromisoformat(lease.replace("Z", "+00:00"))
-                if lease_at.tzinfo is None:
-                    lease_at = lease_at.replace(tzinfo=timezone.utc)
-                if lease_at > datetime.now(timezone.utc):
-                    return None
-            except (TypeError, ValueError):
-                # An invalid lease is not meaningful proof of liveness.
-                pass
-        eligible.append(record)
+        for record in nonterminal:
+            request_metadata = record.get("provider-metadata")
+            if not isinstance(request_metadata, dict):
+                return None
+            request_provider_session_id = request_metadata.get("provider-session-id")
+            if (
+                not isinstance(request_provider_session_id, str)
+                or not request_provider_session_id.strip()
+                or request_provider_session_id != session_provider_session_id
+                or record.get("resolved-provider-id") != session_provider_id_value
+            ):
+                return None
+            activity = record.get("activity")
+            provider_activity = activity.get("provider") if isinstance(activity, dict) else None
+            # The legacy top-level lease is the gateway owner/synthetic lease. It
+            # must never keep a provider session alive during expiry reconciliation.
+            lease = provider_activity.get("lease-expires-at") if isinstance(provider_activity, dict) else None
+            if isinstance(lease, str) and lease.strip():
+                try:
+                    lease_at = datetime.fromisoformat(lease.replace("Z", "+00:00"))
+                    if lease_at.tzinfo is None:
+                        lease_at = lease_at.replace(tzinfo=timezone.utc)
+                    if lease_at > datetime.now(timezone.utc):
+                        return None
+                except (TypeError, ValueError):
+                    # An invalid lease is not meaningful proof of liveness.
+                    pass
+            eligible.append(record)
 
+    eligible_ids = {str(record.get("request-id")) for record in eligible}
     with ExitStack() as request_locks:
         # Hold every request mutation lock through the session transition's
         # logical operation. Activity/cancellation writers use these same
         # locks, so request B cannot advance after request A is terminalized.
-        for record in eligible:
-            request_locks.enter_context(_request_lock(project_root, str(record.get("request-id"))))
+        # Stable ordering avoids competing multi-request expiry sweeps.
+        for request_id in sorted(eligible_ids):
+            request_locks.enter_context(_request_lock(project_root, request_id))
 
-        # Hold the session mutation fence before the final policy check and
-        # keep it through request terminalization and session transition.
-        # Activity refreshes use this same lock, so a refresh cannot land
-        # between the policy check and expiry.
-        with _session_lock(project_root, session_id):
+        # Global lock order: request(s) -> retention -> session. Revalidate
+        # the complete request roster under retention so a newly attached
+        # request or changed request revision aborts this expiry attempt.
+        with StartupLock(gateway_retention_lock_path(project_root)), _session_lock(
+            project_root, session_id
+        ):
             current_session = read_session_record(project_root, session_id)
             if current_session.get("state") in SESSION_TERMINAL_STATES:
                 return current_session
@@ -1320,6 +2153,38 @@ def _reconcile_nonterminal_requests_before_expiry(
                 reason = "idle-timeout"
             if reason is None:
                 return current_session
+
+            current_ids = set(session_request_ids(current_session))
+            try:
+                current_records = store.list_records(project_root, include_output=False)
+            except Exception:  # noqa: BLE001 - do not expire on incomplete roster
+                logger.warning(
+                    "could not revalidate requests for expired session",
+                    extra={"session-id": session_id},
+                    exc_info=True,
+                )
+                return None
+            current_ids.update(
+                str(item.get("request-id"))
+                for item in current_records
+                if item.get("session-id") == session_id and item.get("request-id")
+            )
+            if current_ids != request_ids:
+                return None
+
+            current_by_id = {
+                str(item.get("request-id")): item
+                for item in current_records
+                if item.get("session-id") == session_id and item.get("request-id")
+            }
+            current_nonterminal_ids = {
+                request_id
+                for request_id in current_ids
+                if request_id in current_by_id
+                and current_by_id[request_id].get("state") not in store.TERMINAL_STATES
+            }
+            if current_nonterminal_ids != eligible_ids:
+                return None
 
             for record in eligible:
                 current = store.read_record(project_root, str(record.get("request-id")))
@@ -1834,7 +2699,19 @@ def install_initial_provider_binding(
         if metadata:
             provider = record.setdefault("provider", {})
             existing = provider.setdefault("metadata", {})
-            existing.update(metadata)
+            # Provider binding updates are not request-owned checkpoint
+            # writes. In particular, GPT-auto may publish message identity
+            # before its first prepared checkpoint; allowing unresolved-turn
+            # scalars through here creates a pending fence with no owner,
+            # turn id, or submission stage and makes the prepared CAS fail.
+            # Recovery fields have their own owner-fenced mutation path below.
+            existing.update(
+                {
+                    key: value
+                    for key, value in metadata.items()
+                    if key not in _RECOVERY_CHECKPOINT_KEYS
+                }
+            )
         record.setdefault("timing", {})["updated-at"] = now_iso_z()
         _validate(record, code="VAL-AGW-120")
         # Register first so a retry repairs either side of a partial caller
@@ -2262,25 +3139,28 @@ def record_session_turn(
                 return record
             updated = dict(record)
             provider = dict(updated.get("provider") or {})
-            current_metadata = dict(provider.get("metadata") or {})
-            current_metadata.update(provider_metadata)
-            if (
-                current_metadata.get("unresolved-turn-pending") is True
-                and isinstance(current_metadata.get("terminal-evidence"), dict)
-            ):
-                current_metadata["unresolved-turn-pending"] = False
-                for key in (
-                    "recovery-state",
-                    "submission-state",
-                    "unresolved-turn-id",
-                    "unresolved-baseline-user-id",
-                    "unresolved-baseline-assistant-id",
-                    "unresolved-baseline-user-count",
-                    "unresolved-baseline-assistant-count",
-                    "unresolved-baseline-error-alert-occurrences",
-                    "terminal-evidence",
-                ):
-                    current_metadata.pop(key, None)
+            existing_metadata = dict(provider.get("metadata") or {})
+            current_metadata = dict(existing_metadata)
+            terminal_checkpoint_proven = _terminal_checkpoint_clear_is_proven(
+                existing_metadata, provider_metadata, request_id
+            )
+            checkpoint_keys = set(_RECOVERY_CHECKPOINT_KEYS)
+            current_metadata.update(
+                {
+                    key: value
+                    for key, value in provider_metadata.items()
+                    if key not in checkpoint_keys
+                }
+            )
+            if terminal_checkpoint_proven:
+                # Persist the validated terminal witness, but keep the
+                # unresolved fence until the request's terminal state and
+                # response artifact are durable. The queue owner performs the
+                # compare-and-clear afterward under the request + session
+                # locks; a crash here must remain recoverable.
+                current_metadata["terminal-evidence"] = copy.deepcopy(
+                    provider_metadata["terminal-evidence"]
+                )
             provider["metadata"] = current_metadata
             updated["provider"] = provider
             timing = dict(updated.get("timing") or {})
@@ -2304,31 +3184,27 @@ def record_session_turn(
         timestamp = now_iso_z()
         if provider_metadata is not None:
             provider = dict(updated.get("provider") or {})
-            current_metadata = dict(provider.get("metadata") or {})
-            current_metadata.update(provider_metadata)
-            # The provider result is assembled from the turn's checkpoint
-            # snapshot.  A successful turn may therefore still carry the
-            # pre-send unresolved marker even though terminal proof already
-            # cleared it through the checkpoint sink.  Terminal evidence is
-            # the authoritative proof here; do not resurrect a stale fence
-            # while recording the completed turn.
-            if (
-                current_metadata.get("unresolved-turn-pending") is True
-                and isinstance(current_metadata.get("terminal-evidence"), dict)
-            ):
-                current_metadata["unresolved-turn-pending"] = False
-                for key in (
-                    "recovery-state",
-                    "submission-state",
-                    "unresolved-turn-id",
-                    "unresolved-baseline-user-id",
-                    "unresolved-baseline-assistant-id",
-                    "unresolved-baseline-user-count",
-                    "unresolved-baseline-assistant-count",
-                    "unresolved-baseline-error-alert-occurrences",
-                    "terminal-evidence",
-                ):
-                    current_metadata.pop(key, None)
+            existing_metadata = dict(provider.get("metadata") or {})
+            current_metadata = dict(existing_metadata)
+            terminal_checkpoint_proven = _terminal_checkpoint_clear_is_proven(
+                existing_metadata, provider_metadata, request_id
+            )
+            checkpoint_keys = set(_RECOVERY_CHECKPOINT_KEYS)
+            current_metadata.update(
+                {
+                    key: value
+                    for key, value in provider_metadata.items()
+                    if key not in checkpoint_keys
+                }
+            )
+            if terminal_checkpoint_proven:
+                # Do not clear here: request completion/artifact persistence
+                # is a separate durable write owned by the queue. Retain the
+                # exact checkpoint through that crash window and let the
+                # terminal request CAS remove it afterward.
+                current_metadata["terminal-evidence"] = copy.deepcopy(
+                    provider_metadata["terminal-evidence"]
+                )
             provider["metadata"] = current_metadata
             updated["provider"] = provider
         timing = dict(updated.get("timing") or {})

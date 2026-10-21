@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+from collections.abc import Awaitable, Callable
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -28,6 +29,28 @@ def _selection_project_id(selection: object, expected_project_id: str | None) ->
     return None
 
 logger = logging.getLogger(__name__)
+
+_EXPAND_USER_PROMPT_FN = r"""({messageId}) => {
+  if (!messageId || /^(fallback-|virtualized-prompt-for-)/.test(messageId)) return false;
+  const roots = [];
+  for (const node of document.querySelectorAll('[data-message-id], [data-chatgpt-search-message-ids]')) {
+    const standard = node.getAttribute('data-message-id') === messageId
+      && node.getAttribute('data-message-author-role') === 'user';
+    const ids = [...new Set((node.getAttribute('data-chatgpt-search-message-ids') || '').trim().split(/\s+/))];
+    const block = node.closest('.block-BQZwFn');
+    const fallback = ids.length === 1 && ids[0] === messageId
+      && block && block.querySelector('[data-user-message-bubble="true"]');
+    if (!standard && !fallback) continue;
+    const root = standard ? (node.closest('article') || node) : block;
+    if (!roots.includes(root)) roots.push(root);
+  }
+  const controls = roots.flatMap(root => Array.from(root.querySelectorAll('button,[role="button"]')))
+    .filter(button => button.getAttribute('aria-expanded') === 'false'
+      && (button.innerText || button.getAttribute('aria-label') || '').trim().toLowerCase() === 'show more');
+  if (controls.length !== 1) return false;
+  controls[0].click();
+  return true;
+}"""
 
 class ProjectReadinessError(RuntimeError):
     pass
@@ -229,6 +252,53 @@ _COMPOSER_READY_FN = r"""() => {
     visible: rect.width > 0 && rect.height > 0 && style.visibility !== "hidden"
       && style.display !== "none" && style.opacity !== "0"
   };
+}"""
+_COMPOSER_VALIDATE_FN = r"""(text) => {
+  text = String(text || '');
+  const editor = document.querySelector('#prompt-textarea') || Array.from(
+    document.querySelectorAll('[contenteditable="true"]')
+  ).find(el => /^(new chat in\b|ask chatgpt$|message chatgpt$)/i.test(String(el.getAttribute('aria-label') || '').trim()));
+  if (!editor || !editor.isContentEditable) {
+    return {validated: false, ready: false, clicked: false, reason: 'composer-unavailable'};
+  }
+  const renderedText = root => {
+    const blockTags = new Set([
+      'ADDRESS', 'ARTICLE', 'ASIDE', 'BLOCKQUOTE', 'DD', 'DIV', 'DL', 'DT', 'FIELDSET', 'FIGURE', 'FOOTER', 'FORM',
+      'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'HEADER', 'LI', 'MAIN', 'NAV', 'OL', 'P', 'PRE', 'SECTION', 'TABLE', 'TR', 'UL'
+    ]);
+    const walk = node => {
+      if (node.nodeType === Node.TEXT_NODE) return node.nodeValue || '';
+      if (node.nodeType !== Node.ELEMENT_NODE) return '';
+      const element = node;
+      const link = element.getAttribute('text-link-href');
+      if (link) return link;
+      if (element.getAttribute('data-markdown-copy') === 'exclude') return '';
+      if (element.matches('button, [role=button]')) return '';
+      if (element.tagName === 'BR') return '\n';
+      let value = '';
+      for (const child of element.childNodes) value += walk(child);
+      if (element.tagName === 'DIV' && value === '\n') return '\n\n';
+      if (blockTags.has(element.tagName) && !value.endsWith('\n')) value += '\n';
+      return value;
+    };
+    return walk(root)
+      .replace(/\u00a0/g, ' ')
+      .replace(/([`])\s+(https?:\/\/)/g, '$1$2')
+      .replace(/(https?:\/\/[^\s`]+)\s+([`])/g, '$1$2')
+      .replace(/\n+$/, '');
+  };
+  const sourceText = value => String(value || '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .replace(/\n+$/, '');
+  if (renderedText(editor) !== sourceText(text)) {
+    return {validated: false, ready: false, clicked: false, reason: 'composer-text-mismatch'};
+  }
+  const button = document.querySelector('[data-testid="send-button"], button[aria-label*="Send" i]');
+  if (!button || button.disabled || button.getAttribute('aria-disabled') === 'true' || !button.getClientRects().length) {
+    return {validated: true, ready: false, clicked: false, reason: 'send-unavailable'};
+  }
+  return {validated: true, ready: true};
 }"""
 
 
@@ -890,7 +960,22 @@ _SNAPSHOT_FN = r"""
       ? fallbackActivityOwnerPromptMessageId
       : null;
   };
+  const structuralActivityOwnerFor = node => {
+    const element = node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
+    const turn = element?.closest('[data-content-search-turn-key], [data-turn-key]');
+    if (!turn) return undefined;
+    // Activity roots can wrap both the user node and its streamed response.
+    // Document order alone then attributes the root to the preceding user.
+    // Require one durable/logical user identity inside this exact turn scope;
+    // a missing or ambiguous scoped owner must not fall back to another turn.
+    const ids = new Set(progressUserEntries
+      .filter(entry => turn.contains(entry.el))
+      .map(entry => entry.messageId));
+    return ids.size === 1 ? [...ids][0] : null;
+  };
   const ownerPromptFor = node => {
+    const structuralOwner = structuralActivityOwnerFor(node);
+    if (structuralOwner !== undefined) return structuralOwner;
     const fallbackOwner = fallbackActivityOwnerFor(node);
     if (fallbackOwner) return fallbackOwner;
     while (ownerUserIndex >= 0) {
@@ -908,6 +993,8 @@ _SNAPSHOT_FN = r"""
   };
   const ownerPromptIdFor = node => {
     if (!node) return null;
+    const structuralOwner = structuralActivityOwnerFor(node);
+    if (structuralOwner !== undefined) return structuralOwner;
     const fallbackOwner = fallbackActivityOwnerFor(node);
     if (fallbackOwner) return fallbackOwner;
     for (let index = progressUserEntries.length - 1; index >= 0; index--) {
@@ -1160,7 +1247,12 @@ _SNAPSHOT_FN = r"""
     return fragments.some(fragment => lowered.includes(String(fragment).toLowerCase()));
   };
   const outsideMessageTextMatches = (spec, selectors) => {
-    const messageNodes = messageEntries.map(entry => entry.el);
+    const messageNodes = [
+      ...messageEntries.map(entry => entry.el),
+      // Unsent source code can quote provider error messages. It is caller
+      // input, not a load-error banner, including while insertion settles.
+      ...document.querySelectorAll('[contenteditable="true"], textarea, input')
+    ];
     const candidates = new Set();
     for (const selector of selectors) {
       for (const root of document.querySelectorAll(selector)) {
@@ -1244,7 +1336,12 @@ _SNAPSHOT_FN = r"""
       "SECTION", "TABLE", "TR", "UL"
     ]);
     const walk = (node) => {
-      if (node.nodeType === Node.TEXT_NODE) return node.nodeValue || "";
+      if (node.nodeType === Node.TEXT_NODE) {
+        const value = node.nodeValue || "";
+        // Whitespace-only nodes between HTML blocks are layout padding;
+        // indentation within source text belongs to prompt correlation.
+        return !value.trim() && value.includes("\n") ? "\n" : value;
+      }
       if (node.nodeType !== Node.ELEMENT_NODE) return "";
       const element = /** @type {Element} */ (node);
       if (element.getAttribute("data-markdown-copy") === "exclude") return "";
@@ -1257,7 +1354,7 @@ _SNAPSHOT_FN = r"""
     };
     return walk(root)
       .replace(/[ \t\f\v]+/g, " ")
-      .replace(/[ ]*\n[ ]*/g, "\n")
+      .replace(/[ ]*\n/g, "\n")
       .replace(/\n+/g, "\n")
       .replace(/\n+$/, "")
       .trim();
@@ -1271,6 +1368,16 @@ _SNAPSHOT_FN = r"""
     // than stripping their labels from the resulting string: a real prompt is
     // allowed to contain words such as "Show more".
     clone.querySelectorAll('button, [role="button"], [aria-label*="show more" i], [aria-label*="show less" i]').forEach(el => el.remove());
+    // The user renderer exports fenced language in data-language without
+    // painting a label. Restore that semantic source field, not arbitrary
+    // text, so the existing durable fingerprint remains unchanged.
+    clone.querySelectorAll('pre[data-markdown-copy="code-block"] > code[data-language][data-markdown-copy-content="true"]').forEach(code => {
+      const pre = code.parentElement;
+      const language = String(code.getAttribute('data-language') || '').trim();
+      if (language && pre.childElementCount === 1 && pre.firstElementChild === code) {
+        code.before(document.createTextNode(language + '\n'));
+      }
+    });
     clone.querySelectorAll('[aria-hidden="true"]').forEach(el => {
       if (String(el.innerText || el.textContent || "").trim() === "…") el.remove();
     });
@@ -1678,6 +1785,10 @@ class GptAutoCdpBrowserController(CdpBrowserController):
         )
         return bool(result)
 
+    async def expand_user_prompt(self, page: CdpPageRef, message_id: str) -> bool:
+        """Expand only the exact submitted user message without foregrounding."""
+        return bool(await self.evaluate(page, _EXPAND_USER_PROMPT_FN, {"messageId": message_id}))
+
     async def materialize_latest_assistant_turn(self, page: CdpPageRef) -> bool:
         """Bring the current assistant turn into the rendered viewport.
 
@@ -1793,16 +1904,27 @@ class GptAutoCdpBrowserController(CdpBrowserController):
     # the turn-scale submission timeout: the caller must reconcile the now
     # ambiguous send against authoritative DOM state without clicking again.
     _SEND_CLICK_ACK_TIMEOUT_SECONDS = 3.0
+    _INSERT_TEXT_ACK_TIMEOUT_SECONDS = 3.0
     # Give React's controlled composer a realistic render/input turn between
     # insertion and the synthetic Send click.  Keeping this outside the DOM
     # evaluator avoids batching both browser actions into one CDP task.
     _SUBMIT_DEFAULT_TIMEOUT_SECONDS = 15.0
 
     async def submit(
-        self, page: CdpPageRef, text: str, *, timeout: float | None = None
+        self,
+        page: CdpPageRef,
+        text: str,
+        *,
+        timeout: float | None = None,
+        stage_callback: Callable[[str], Awaitable[None]] | None = None,
     ) -> dict[str, Any]:
         if not isinstance(text, str) or not text.strip():
             raise ValueError("text must be a non-empty string")
+
+        async def notify_stage(stage: str) -> None:
+            if stage_callback is not None:
+                await stage_callback(stage)
+
         send_attempted = False
         stage = "composer-insertion"
         try:
@@ -1813,6 +1935,12 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                 stage = "composer-readiness"
                 await asyncio.sleep(self._PAGE_READY_PAUSE_SECONDS)
                 stage = "composer-insertion"
+                # A prior proven-unsent attempt may already have populated
+                # this exact composer. Avoid re-triggering expensive rich-text
+                # rendering; this read never authorizes Send on its own.
+                async with asyncio.timeout(self._SEND_CLICK_ACK_TIMEOUT_SECONDS):
+                    existing = await self.evaluate(page, _COMPOSER_VALIDATE_FN, text)
+                draft_present = isinstance(existing, dict) and existing.get("validated") is True
                 await self.evaluate(
                     page,
                     r"""(text) => {
@@ -1827,23 +1955,67 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                     }""",
                     text,
                 )
-                await self.insert_text(page, text)
+                await notify_stage("composer-focused")
+                if not draft_present:
+                    try:
+                        async with asyncio.timeout(self._INSERT_TEXT_ACK_TIMEOUT_SECONDS):
+                            await self.insert_text(page, text)
+                    except TimeoutError:
+                        # Input.insertText can apply before its CDP reply is lost.
+                        # Never insert again: only an exact semantic draft match
+                        # permits this same submission attempt to continue.
+                        async with asyncio.timeout(self._SEND_CLICK_ACK_TIMEOUT_SECONDS):
+                            inserted = await self.evaluate(page, _COMPOSER_VALIDATE_FN, text)
+                        if not (
+                            isinstance(inserted, dict)
+                            and inserted.get("validated") is True
+                        ):
+                            raise
+                await asyncio.sleep(self._TYPED_PAUSE_SECONDS)
+                await notify_stage("composer-filled")
                 # Let controlled-editor input settle before the Send control
                 # is queried or clicked. This is deliberately independent of
                 # the shorter generic browser-action pause.
-                await asyncio.sleep(self._TYPED_PAUSE_SECONDS)
                 # The send-side DOM check below re-reads and compares the
                 # composer text.  Input.insertText has already delivered the
                 # exact caller text to the focused editor, so a second read
                 # here only adds another CDP race window.
                 typed = text
+                composer_validation_recorded = False
                 while True:
                     # One synchronous DOM operation verifies both readiness
                     # conditions and clicks once. No browser-side timer survives
                     # a React navigation, and no Enter bypasses a disabled Send.
                     stage = "send-button"
-                    send_attempted = True
                     await asyncio.sleep(self._action_pause_seconds)
+                    async with asyncio.timeout(self._SEND_CLICK_ACK_TIMEOUT_SECONDS):
+                        validation = await self.evaluate(
+                            page,
+                            _COMPOSER_VALIDATE_FN,
+                            text,
+                        )
+                    if not (
+                        isinstance(validation, dict)
+                        and validation.get("validated") is True
+                        and validation.get("ready") is True
+                    ):
+                        send_attempted = False
+                        stage = "composer-readiness"
+                        await asyncio.sleep(self._SUBMIT_POLL_SECONDS)
+                        continue
+                    if not composer_validation_recorded:
+                        await notify_stage("composer-validated")
+                        composer_validation_recorded = True
+                    # This awaited callback must durably record intent before
+                    # the external browser click. If persistence fails, the
+                    # click does not happen. A later crash after this point is
+                    # ambiguous even when the provider's acknowledgement is
+                    # lost; the marker never claims provider acceptance.
+                    await notify_stage("send-intent")
+                    # A timeout while recording intent cannot mean the
+                    # browser click happened. Mark dispatch only after the
+                    # durable pre-click checkpoint has returned.
+                    send_attempted = True
                     async with asyncio.timeout(self._SEND_CLICK_ACK_TIMEOUT_SECONDS):
                         sent = await self.evaluate(
                             page,
@@ -1905,6 +2077,7 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                         # click has already happened, and the next DOM read
                         # must not race React's route/message insertion.
                         await asyncio.sleep(self._action_pause_seconds)
+                        await notify_stage("send-click-acknowledged")
                         return {"actionComplete": True, "typedText": typed,
                                 "sendButtonClicked": True, "enterDispatched": False}
                     send_attempted = False

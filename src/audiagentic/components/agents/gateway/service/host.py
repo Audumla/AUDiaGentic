@@ -209,10 +209,27 @@ class GatewayServiceHost:
             from audiagentic.components.agents.gateway.queue.recovery import recovery_runner
 
             queue_manager = gateway_api.get_queue_manager()
-            for project_root, request_id in recovery_report.queued:
-                record = gateway_api.store.read_record(project_root, request_id)
+            # Seed already-running predecessors first. Queued recovery must
+            # preserve admission order, not random request-ID/filename order.
+            # Otherwise the new session-order fence could put a successor in
+            # front of the unresolved provider turn it must wait for.
+            running = [
+                (root, gateway_api.store.read_record(root, request_id))
+                for root, request_id in recovery_report.running
+            ]
+            queued = [
+                (root, gateway_api.store.read_record(root, request_id))
+                for root, request_id in recovery_report.queued
+            ]
+            # New admissions have a durable ordinal. Timestamp fallback is
+            # compatibility only for legacy records from before this field.
+            ordering = lambda entry: (
+                entry[1].get("enqueue-ordinal") or 0,
+                entry[1].get("created-at") or "", entry[1]["request-id"],
+            )
+            for project_root, record in sorted(running, key=ordering):
                 runtime = record.get("gateway-profile-runtime") or {}
-                queue_manager.enqueue_recovered_queued(
+                queue_manager.enqueue_recovered_running(
                     project_root,
                     record,
                     dict(runtime.get("params") or {}),
@@ -220,10 +237,9 @@ class GatewayServiceHost:
                     dispatch_owner_epoch=self.owner_epoch,
                     dispatch_service_root=self.service_store.root,
                 )
-            for project_root, request_id in recovery_report.running:
-                record = gateway_api.store.read_record(project_root, request_id)
+            for project_root, record in sorted(queued, key=ordering):
                 runtime = record.get("gateway-profile-runtime") or {}
-                queue_manager.enqueue_recovered_running(
+                queue_manager.enqueue_recovered_queued(
                     project_root,
                     record,
                     dict(runtime.get("params") or {}),

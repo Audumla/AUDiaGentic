@@ -13,8 +13,12 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from audiagentic.components.agents.gateway.diagnostics import activity_group, normalize_activity_label
+from audiagentic.components.agents.gateway.diagnostics import (
+    activity_group,
+    normalize_activity_label,
+)
 from audiagentic.foundation.transports.agent_session import TransportObservationKind
+
 from .observability import append_observation
 
 _DOM_SIGNALS = frozenset(
@@ -137,9 +141,24 @@ def project_transport_observation(observation: Any) -> dict[str, Any]:
     if diagnostic.get("terminal-witness-present"):
         response_identity["terminal-witness-present"] = True
     error_occurrence: dict[str, Any] = {}
-    for key in ("error_code", "error-code", "reason", "failure-code", "classification", "correlation-error"):
+    error_keys = (
+        "error_code",
+        "error-code",
+        "failure-code",
+        "reason-code",
+        "classification",
+        "correlation-error",
+    )
+    for key in error_keys:
         if (value := _bounded_text(attributes.get(key) or facts.get(key))):
             error_occurrence[key.replace("_", "-")] = value
+    # ``reason`` is overloaded in the transport vocabulary: TURN_ACCEPTED
+    # uses it for the benign value ``provider-accepted``. Treat it as an
+    # error only on an explicit transport-error observation, never by field
+    # name alone.
+    if kind == TransportObservationKind.TRANSPORT_ERROR.value:
+        if (value := _bounded_text(attributes.get("reason") or facts.get("reason"))):
+            error_occurrence["reason"] = value
     decision: dict[str, Any] = {}
     for key in (
         "completion-satisfied",
@@ -155,10 +174,17 @@ def project_transport_observation(observation: Any) -> dict[str, Any]:
     ):
         if key in diagnostic:
             decision[key] = diagnostic[key]
-    for key in ("timing-event", "diagnostic-signature"):
+    for key in (
+        "timing-event",
+        "diagnostic-signature",
+        "submission-stage",
+        "submission-attempt-id",
+    ):
         value = _bounded_text(attributes.get(key) or facts.get(key), 128)
         if value:
             decision[key] = value
+    if isinstance(attributes.get("send-intent-ever"), bool):
+        decision["send-intent-ever"] = attributes["send-intent-ever"]
     correlation = {key: facts[key] for key in _CORRELATION_KEYS if key in facts and isinstance(facts[key], (str, bool))}
     if correlation:
         decision["correlation"] = correlation

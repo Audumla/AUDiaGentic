@@ -226,6 +226,22 @@ class ChatSnapshot:
             ),
         )
 
+    def has_ordered_message_advance(self, role: str, baseline_id: object, candidate_id: object) -> bool:
+        """Prove advancement inside one DOM window without counting mounted history."""
+        if any(
+            not isinstance(value, str) or not value
+            or value.startswith(("fallback-", "virtualized-"))
+            for value in (baseline_id, candidate_id)
+        ) or baseline_id == candidate_id:
+            return False
+        before = [ref for ref in self.message_refs if ref.message_id == baseline_id]
+        after = [ref for ref in self.message_refs if ref.message_id == candidate_id]
+        return bool(
+            len(before) == len(after) == 1
+            and before[0].role == after[0].role == role
+            and before[0].sequence < after[0].sequence
+        )
+
     def latest_user_ref(self) -> ChatMessageRef | None:
         """Return the latest user ref in the ordered DOM projection."""
         return next(

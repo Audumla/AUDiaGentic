@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import functools
+import hashlib
 import multiprocessing
 import subprocess
 import sys
@@ -19,6 +20,7 @@ import threading
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -1269,6 +1271,189 @@ def test_cross_process_session_turn_appends_do_not_lose_updates(tmp_path: Path) 
     assert sorted(final["activity"]["request-ids"]) == sorted(f"req_{index}" for index in range(count))
 
 
+def test_record_session_turn_requires_terminal_evidence_for_that_request(tmp_path: Path) -> None:
+    record = session_store.build_session_record(execution_profile_id="p")
+    record["provider"] = {
+        "provider-id": "gpt-auto",
+        "metadata": {
+            "unresolved-turn-pending": True,
+            "unresolved-turn-id": "req-current",
+            "submission-state": "proven",
+            "submission-attempt-id": "attempt-current",
+            "submission-proven": True,
+            "submission-proof-source": "provider-user-message",
+            "prompt-text-digest": "turn-digest",
+            "unresolved-baseline-user-count": 0,
+            "unresolved-baseline-assistant-count": 0,
+            "unresolved-baseline-error-alert-occurrences": [],
+        },
+    }
+    session_store.write_session_record(tmp_path, record)
+    terminal = {
+        "policy": "response-complete",
+        "verification-evidence": ["not-generating", "text-present", "completion-control"],
+    }
+
+    mismatched = session_store.record_session_turn(
+        tmp_path,
+        record["session-id"],
+        "req-current",
+        provider_metadata={
+            "unresolved-turn-id": "req-current",
+            "submission-attempt-id": "attempt-current",
+            "submission-proven": True,
+            "submission-proof-source": "provider-user-message",
+            "prompt-text-digest": "turn-digest",
+            "unresolved-baseline-user-count": 0,
+            "unresolved-baseline-assistant-count": 0,
+            "unresolved-baseline-error-alert-occurrences": [],
+            "terminal-evidence": {**terminal, "turn-id": "req-previous"},
+        },
+    )
+    assert mismatched["provider"]["metadata"]["unresolved-turn-pending"] is True
+    assert mismatched["provider"]["metadata"]["unresolved-turn-id"] == "req-current"
+
+    finalized = session_store.record_session_turn(
+        tmp_path,
+        record["session-id"],
+        "req-current",
+        provider_metadata={
+            "unresolved-turn-id": "req-current",
+            "submission-attempt-id": "attempt-current",
+            "submission-proven": True,
+            "submission-proof-source": "provider-user-message",
+            "prompt-text-digest": "turn-digest",
+            "unresolved-baseline-user-count": 0,
+            "unresolved-baseline-assistant-count": 0,
+            "unresolved-baseline-error-alert-occurrences": [],
+            "terminal-evidence": {
+                **terminal,
+                "turn-id": "req-current",
+                "checkpoint-clear-persisted": False,
+            },
+        },
+    )
+    checkpoint = session_store.session_provider_metadata(finalized)
+    assert checkpoint["unresolved-turn-pending"] is True
+    assert checkpoint["unresolved-turn-id"] == "req-current"
+    assert checkpoint["terminal-evidence"]["turn-id"] == "req-current"
+
+    # Terminal DOM proof is only staged here. The fence is removed after the
+    # request output and terminal lifecycle have been durably written.
+    from audiagentic.components.agents.gateway import store as gateway_store
+
+    request = gateway_store.build_record(
+        request_id="req-current",
+        execution_profile_id="p",
+        prompt_body="test prompt",
+        session_id=record["session-id"],
+    )
+    request["state"] = "completed"
+    gateway_store.write_record(tmp_path, request)
+    assert session_store.clear_terminal_submission_checkpoint(
+        tmp_path,
+        record["session-id"],
+        "req-current",
+        recovery_state="terminal-completed",
+        remove_keys=session_store.TERMINAL_SUBMISSION_CHECKPOINT_REMOVE_KEYS,
+        expected_metadata=checkpoint,
+    )
+    cleared = session_store.session_provider_metadata(
+        session_store.read_session_record(tmp_path, record["session-id"])
+    )
+    assert cleared["unresolved-turn-pending"] is False
+    assert "unresolved-turn-id" not in cleared
+    assert "submission-attempt-id" not in cleared
+
+
+def test_record_session_turn_retains_checkpoint_on_frozen_identity_mismatch(tmp_path: Path) -> None:
+    record = session_store.build_session_record(execution_profile_id="p")
+    record["provider"] = {
+        "provider-id": "gpt-auto",
+        "metadata": {
+            "unresolved-turn-pending": True,
+            "unresolved-turn-id": "req-identity",
+            "submission-proven": True,
+            "submission-proof-source": "provider-user-message",
+            "prompt-text-digest": "original-digest",
+        },
+    }
+    session_store.write_session_record(tmp_path, record)
+    metadata = {
+        "unresolved-turn-id": "req-identity",
+        "submission-proven": True,
+        "submission-proof-source": "provider-user-message",
+        "prompt-text-digest": "different-digest",
+        "terminal-evidence": {
+            "turn-id": "req-identity",
+            "policy": "response-complete",
+            "verification-evidence": [
+                "not-generating",
+                "text-present",
+                "completion-control",
+            ],
+        },
+    }
+
+    result = session_store.record_session_turn(
+        tmp_path, record["session-id"], "req-identity", provider_metadata=metadata
+    )
+
+    assert result["provider"]["metadata"]["unresolved-turn-pending"] is True
+    assert result["provider"]["metadata"]["unresolved-turn-id"] == "req-identity"
+
+
+def test_record_session_turn_does_not_clear_a_successor_submission_attempt(tmp_path: Path) -> None:
+    record = session_store.build_session_record(execution_profile_id="p")
+    record["provider"] = {
+        "provider-id": "gpt-auto",
+        "metadata": {
+            "unresolved-turn-pending": True,
+            "unresolved-turn-id": "req-same-logical-turn",
+            "submission-proven": True,
+            "submission-proof-source": "provider-user-message",
+            "submission-attempt-id": "attempt-successor",
+            "submission-recovery-generation": 4,
+            "prompt-text-digest": "current-digest",
+            "unresolved-baseline-user-count": 1,
+            "unresolved-baseline-assistant-count": 2,
+            "unresolved-baseline-error-alert-occurrences": [],
+        },
+    }
+    session_store.write_session_record(tmp_path, record)
+
+    result = session_store.record_session_turn(
+        tmp_path,
+        record["session-id"],
+        "req-same-logical-turn",
+        provider_metadata={
+            "unresolved-turn-id": "req-same-logical-turn",
+            "submission-proven": True,
+            "submission-proof-source": "provider-user-message",
+            "submission-attempt-id": "attempt-stale",
+            "submission-recovery-generation": 3,
+            "prompt-text-digest": "current-digest",
+            "unresolved-baseline-user-count": 1,
+            "unresolved-baseline-assistant-count": 2,
+            "unresolved-baseline-error-alert-occurrences": [],
+            "terminal-evidence": {
+                "turn-id": "req-same-logical-turn",
+                "policy": "response-complete",
+                "verification-evidence": [
+                    "not-generating",
+                    "text-present",
+                    "completion-control",
+                ],
+            },
+        },
+    )
+
+    metadata = result["provider"]["metadata"]
+    assert metadata["unresolved-turn-pending"] is True
+    assert metadata["submission-attempt-id"] == "attempt-successor"
+    assert metadata["submission-recovery-generation"] == 4
+
+
 def test_v1_session_record_without_surface_fails_closed(tmp_path):
     import json
 
@@ -1763,17 +1948,18 @@ def test_rehydrate_reopens_unbound_session_only_for_correlated_prepared_turn(tmp
             "provider-session-ref"
         ] == "prov-ses-1"
 
-        asyncio.run(
-            checkpoint_sinks[1](
-                {
-                    "unresolved-turn-pending": True,
-                    "submission-state": "dispatching",
-                    "submission-proven": False,
-                    "unresolved-turn-id": request_id,
-                    "recovery-state": "side-effect-may-have-started",
-                }
-            )
-        )
+        dispatching_checkpoint = {
+            "unresolved-turn-pending": True,
+            "submission-state": "dispatching",
+            "submission-proven": False,
+            "unresolved-turn-id": request_id,
+            "recovery-state": "side-effect-may-have-started",
+        }
+        asyncio.run(checkpoint_sinks[1](dispatching_checkpoint))
+        # Repeated provider checkpoint updates must preserve the negative proof
+        # marker; removing it is only safe for absent/default fields at the
+        # initial prepared stage, never after dispatching has been recorded.
+        asyncio.run(checkpoint_sinks[1](dispatching_checkpoint))
         checkpoint = session_store.session_provider_metadata(
             session_store.read_session_record(tmp_path, session_id)
         )
@@ -1866,6 +2052,25 @@ def test_submission_checkpoint_cleanup_requires_terminal_request_and_owner_fence
 
     request["state"] = "completed"
     gateway_store.write_record(tmp_path, request)
+    checkpoint_snapshot = session_store.session_provider_metadata(
+        session_store.read_session_record(tmp_path, session_id)
+    )
+    successor_attempt = dict(checkpoint_snapshot)
+    successor_attempt["submission-recovery-generation"] = 5
+    assert not session_store.clear_terminal_submission_checkpoint(
+        tmp_path,
+        session_id,
+        request_id,
+        recovery_state="terminal-completed",
+        remove_keys=("submission-state", "unresolved-turn-id"),
+        expected_metadata=successor_attempt,
+    )
+    unchanged = session_store.session_provider_metadata(
+        session_store.read_session_record(tmp_path, session_id)
+    )
+    assert unchanged["unresolved-turn-pending"] is True
+    assert unchanged["submission-recovery-generation"] == 4
+
     assert session_store.clear_terminal_submission_checkpoint(
         tmp_path,
         session_id,
@@ -1878,6 +2083,7 @@ def test_submission_checkpoint_cleanup_requires_terminal_request_and_owner_fence
             "prompt-text-digest",
             "submission-proven",
         ),
+        expected_metadata=checkpoint_snapshot,
     )
     metadata = session_store.session_provider_metadata(
         session_store.read_session_record(tmp_path, session_id)
@@ -1907,8 +2113,706 @@ def test_submission_checkpoint_cleanup_requires_terminal_request_and_owner_fence
         )
 
 
+@pytest.mark.parametrize("session_state", ["active", "failed"])
+def test_completed_attempt_clears_nonpending_checkpoint_residue(tmp_path, session_state):
+    from audiagentic.components.agents.gateway import store as gateway_store
+    from audiagentic.components.agents.gateway.output import persist_final_response
+
+    predecessor_id = "req-terminal-residue-predecessor"
+    session_id = "ses-terminal-residue"
+    attempt_id = "attempt-terminal-residue"
+    session = session_store.build_session_record(
+        session_id=session_id,
+        created_by_request_id=predecessor_id,
+        provider_transport_kind="provider-session",
+        execution_profile_id="gpt-auto",
+        provider_id="gpt-auto",
+        model_id="chatgpt",
+        provider_session_ref="provider-terminal-residue",
+        surface_id="gpt-auto-cdp",
+        provider_metadata={
+            "unresolved-turn-pending": False,
+            "recovery-state": "terminal-captured",
+            "submission-state": "cleared",
+            "submission-attempt-id": attempt_id,
+            "submission-stage": "send-click-acknowledged",
+            "send-intent-ever": True,
+            "target-id": "target-1",
+        },
+    )
+    session["state"] = session_state
+    session_store.write_session_record(tmp_path, session)
+    request = gateway_store.build_record(
+        request_id=predecessor_id,
+        execution_profile_id="gpt-auto",
+        prompt_body="previous request",
+        session_id=session_id,
+        resolved_provider_id="gpt-auto",
+    )
+    artifact = persist_final_response(tmp_path, predecessor_id, "previous response")
+    artifact.pop("output-preview", None)
+    artifact.pop("output-truncated", None)
+    request.update(
+        {
+            "state": "completed",
+            "response-artifact": artifact,
+            "provider-metadata": {"submission-attempt-id": attempt_id},
+        }
+    )
+    gateway_store.write_record(tmp_path, request)
+    expected = session_store.session_provider_metadata(
+        session_store.read_session_record(tmp_path, session_id)
+    )
+    binding = session_store.read_session_record(tmp_path, session_id)["binding"]
+
+    assert session_store.clear_completed_checkpoint_residue(
+        tmp_path,
+        session_id,
+        predecessor_id,
+        expected_metadata=expected,
+        expected_binding_identity={
+            "binding-id": binding["binding-id"],
+            "generation": binding["generation"],
+        },
+    )
+
+    actual = session_store.session_provider_metadata(
+        session_store.read_session_record(tmp_path, session_id)
+    )
+    assert actual["unresolved-turn-pending"] is False
+    assert actual["target-id"] == "target-1"
+    assert actual["recovery-state"] == "stale-terminal-checkpoint-residue-cleared"
+    assert not {
+        "submission-state",
+        "submission-attempt-id",
+        "submission-stage",
+        "send-intent-ever",
+        "submission-proven",
+        "submission-proof-source",
+        "submission-recovery-generation",
+        "unresolved-turn-id",
+        "prompt-text-digest",
+        "prompt-message-id",
+        "assistant-message-id",
+        "assistant-before-message-id",
+        "assistant-before-id",
+        "terminal-evidence",
+        "unresolved-baseline-user-id",
+        "unresolved-baseline-assistant-id",
+        "unresolved-baseline-user-count",
+        "unresolved-baseline-assistant-count",
+        "unresolved-baseline-error-alert-occurrences",
+    }.intersection(actual)
+
+
+def test_orphaned_pending_checkpoint_requires_exact_terminal_attempt_proof(tmp_path):
+    from audiagentic.components.agents.gateway import store as gateway_store
+    from audiagentic.components.agents.gateway.output import persist_final_response
+    from audiagentic.components.providers.adapters.gpt_auto.turn import (
+        _terminal_checkpoint_fingerprint as provider_checkpoint_fingerprint,
+    )
+
+    predecessor_id = "req-orphan-pending-predecessor"
+    session_id = "ses-orphan-pending"
+    attempt_id = "attempt-orphan-pending"
+    session = session_store.build_session_record(
+        session_id=session_id,
+        created_by_request_id=predecessor_id,
+        provider_transport_kind="provider-session",
+        execution_profile_id="gpt-auto",
+        provider_id="gpt-auto",
+        model_id="chatgpt",
+        provider_session_ref="provider-orphan-pending",
+        surface_id="gpt-auto-cdp",
+        provider_metadata={
+            "unresolved-turn-pending": True,
+            "submission-attempt-id": attempt_id,
+            "submission-stage": "send-click-acknowledged",
+            "send-intent-ever": True,
+            "submission-proven": True,
+            "prompt-text-digest": "prompt-digest-orphan-pending",
+            "unresolved-baseline-user-count": 0,
+            "unresolved-baseline-assistant-count": 0,
+            "unresolved-baseline-error-alert-occurrences": [],
+        },
+    )
+    session_store.write_session_record(tmp_path, session)
+    request = gateway_store.build_record(
+        request_id=predecessor_id,
+        execution_profile_id="gpt-auto",
+        prompt_body="previous request",
+        session_id=session_id,
+        resolved_provider_id="gpt-auto",
+    )
+    artifact = persist_final_response(tmp_path, predecessor_id, "previous response")
+    artifact.pop("output-preview", None)
+    artifact.pop("output-truncated", None)
+    request.update(
+        {
+            "state": "completed",
+            "response-artifact": artifact,
+            "provider-metadata": {
+                "terminal-evidence": {
+                    "turn-id": predecessor_id,
+                    "policy": "response-complete",
+                    "terminal-witness-id": "assistant-terminal",
+                    "submission-attempt-fingerprint": hashlib.sha256(
+                        attempt_id.encode("utf-8")
+                    ).hexdigest(),
+                    "submission-checkpoint-fingerprint": provider_checkpoint_fingerprint(
+                        SimpleNamespace(
+                            terminal_checkpoint_metadata=lambda turn_id: (
+                                {
+                                    **session_store.session_provider_metadata(session),
+                                    "unresolved-turn-id": turn_id,
+                                }
+                                if turn_id == predecessor_id
+                                else {}
+                            )
+                        ),
+                        predecessor_id,
+                    ),
+                }
+            },
+        }
+    )
+    gateway_store.write_record(tmp_path, request)
+    expected_record = session_store.read_session_record(tmp_path, session_id)
+    expected_metadata = session_store.session_provider_metadata(expected_record)
+    binding = expected_record["binding"]
+    binding_identity = {
+        "binding-id": binding["binding-id"],
+        "generation": binding["generation"],
+    }
+
+    different_attempt_record = dict(expected_record)
+    different_attempt_record["provider"] = dict(expected_record["provider"])
+    different_attempt_record["provider"]["metadata"] = {
+        **expected_metadata,
+        "submission-attempt-id": "attempt-successor-b",
+        "prompt-text-digest": "prompt-digest-successor-b",
+    }
+    session_store.write_session_record(tmp_path, different_attempt_record)
+    different_attempt_metadata = session_store.session_provider_metadata(
+        session_store.read_session_record(tmp_path, session_id)
+    )
+    assert not session_store.clear_completed_checkpoint_residue(
+        tmp_path,
+        session_id,
+        predecessor_id,
+        expected_metadata=different_attempt_metadata,
+        expected_binding_identity=binding_identity,
+        allow_orphaned_pending=True,
+    )
+    assert session_store.session_provider_metadata(
+        session_store.read_session_record(tmp_path, session_id)
+    ) == different_attempt_metadata
+    session_store.write_session_record(tmp_path, expected_record)
+
+    assert not session_store.clear_completed_checkpoint_residue(
+        tmp_path,
+        session_id,
+        predecessor_id,
+        expected_metadata=expected_metadata,
+        expected_binding_identity=binding_identity,
+    )
+    terminal_evidence = request["provider-metadata"]["terminal-evidence"]
+    checkpoint_fingerprint = terminal_evidence[
+        "submission-checkpoint-fingerprint"
+    ]
+    terminal_evidence["submission-checkpoint-fingerprint"] = "mismatched-identity"
+    gateway_store.write_record(tmp_path, request)
+    assert not session_store.clear_completed_checkpoint_residue(
+        tmp_path,
+        session_id,
+        predecessor_id,
+        expected_metadata=expected_metadata,
+        expected_binding_identity=binding_identity,
+        allow_orphaned_pending=True,
+    )
+    assert session_store.session_provider_metadata(
+        session_store.read_session_record(tmp_path, session_id)
+    ) == expected_metadata
+    terminal_evidence["submission-checkpoint-fingerprint"] = checkpoint_fingerprint
+    gateway_store.write_record(tmp_path, request)
+
+    assert session_store.clear_completed_checkpoint_residue(
+        tmp_path,
+        session_id,
+        predecessor_id,
+        expected_metadata=expected_metadata,
+        expected_binding_identity=binding_identity,
+        allow_orphaned_pending=True,
+    )
+
+    actual_record = session_store.read_session_record(tmp_path, session_id)
+    actual = session_store.session_provider_metadata(actual_record)
+    assert actual["unresolved-turn-pending"] is False
+    assert actual["recovery-state"] == "orphaned-terminal-fence-cleared"
+    assert actual_record["binding"] == binding
+    assert "submission-attempt-id" not in actual
+
+
+def test_initial_provider_binding_cannot_create_or_overwrite_turn_checkpoint(tmp_path):
+    fresh_id = "ses-binding-metadata-fresh"
+    fresh = session_store.build_session_record(
+        session_id=fresh_id,
+        created_by_request_id="req-binding-metadata-fresh",
+        provider_transport_kind="provider-session",
+        execution_profile_id="gpt-auto",
+        provider_id="gpt-auto",
+        model_id="chatgpt",
+    )
+    session_store.write_session_record(tmp_path, fresh)
+    binding_update = {
+        "chat-url": "https://chatgpt.com/g/project/c/chat",
+        **{
+            key: f"foreign-{key}"
+            for key in session_store._RECOVERY_CHECKPOINT_KEYS
+        },
+    }
+    session_store.install_initial_provider_binding(
+        tmp_path,
+        fresh_id,
+        provider_id="gpt-auto",
+        surface_id="gpt-auto-cdp",
+        provider_session_ref="provider-chat-fresh",
+        metadata=binding_update,
+    )
+    fresh_metadata = session_store.session_provider_metadata(
+        session_store.read_session_record(tmp_path, fresh_id)
+    )
+    assert fresh_metadata["chat-url"] == binding_update["chat-url"]
+    assert not session_store._RECOVERY_CHECKPOINT_KEYS.intersection(fresh_metadata)
+
+    existing_id = "ses-binding-metadata-existing"
+    existing_checkpoint = {
+        "unresolved-turn-pending": True,
+        "unresolved-turn-id": "req-owned-turn",
+        "submission-state": "dispatching",
+        "submission-attempt-id": "attempt-owned",
+        "prompt-text-digest": "owned-digest",
+    }
+    existing = session_store.build_session_record(
+        session_id=existing_id,
+        created_by_request_id="req-binding-metadata-existing",
+        provider_transport_kind="provider-session",
+        execution_profile_id="gpt-auto",
+        provider_id="gpt-auto",
+        model_id="chatgpt",
+        provider_metadata=existing_checkpoint,
+    )
+    session_store.write_session_record(tmp_path, existing)
+    session_store.install_initial_provider_binding(
+        tmp_path,
+        existing_id,
+        provider_id="gpt-auto",
+        surface_id="gpt-auto-cdp",
+        provider_session_ref="provider-chat-existing",
+        metadata={
+            "chat-title": "Bound chat",
+            "unresolved-turn-pending": False,
+            "unresolved-turn-id": "req-foreign-turn",
+            "submission-state": "cleared",
+            "submission-attempt-id": "attempt-foreign",
+            "prompt-text-digest": "foreign-digest",
+        },
+    )
+    persisted = session_store.session_provider_metadata(
+        session_store.read_session_record(tmp_path, existing_id)
+    )
+    assert persisted["chat-title"] == "Bound chat"
+    for key, value in existing_checkpoint.items():
+        assert persisted[key] == value
+
+
+def test_request_owner_fence_rejection_records_exact_mismatch_facts(tmp_path, monkeypatch):
+    from audiagentic.components.agents.gateway import store as gateway_store
+
+    monkeypatch.setattr(
+        gateway_store,
+        "read_record",
+        lambda *_args: {
+            "request-id": "req-owner-fence",
+            "state": "running",
+            "session-id": "ses-owner-fence",
+            "dispatch-owner-epoch": "owner-current",
+            "worker-id": "worker-current",
+            "attempt-epoch": 3,
+            "recovery-required": False,
+        },
+    )
+    with pytest.raises(AudiaGenticError, match="lost its request owner fence") as caught:
+        session_store._assert_request_dispatch_owner(
+            tmp_path,
+            "req-owner-fence",
+            "ses-owner-fence",
+            dispatch_owner_epoch="owner-stale",
+            worker_id="worker-current",
+            attempt_epoch=3,
+        )
+
+    facts = caught.value.details["request-owner-fence"]
+    assert facts == {
+        "request-state-owned": True,
+        "session-id-matches": True,
+        "dispatch-owner-epoch-matches": False,
+        "worker-id-matches": True,
+        "attempt-epoch-matches": True,
+        "allow-queued-pre-send": False,
+        "recovery-required": False,
+    }
+
+
+def test_completed_attempt_residue_clear_rejects_corrupt_artifact(tmp_path):
+    from audiagentic.components.agents.gateway import store as gateway_store
+    from audiagentic.components.agents.gateway.output import persist_final_response
+
+    predecessor_id = "req-terminal-residue-reject"
+    session_id = "ses-terminal-residue-reject"
+    attempt_id = "attempt-terminal-residue-reject"
+    session = session_store.build_session_record(
+        session_id=session_id,
+        created_by_request_id=predecessor_id,
+        provider_transport_kind="provider-session",
+        execution_profile_id="gpt-auto",
+        provider_id="gpt-auto",
+        model_id="chatgpt",
+        provider_session_ref="provider-terminal-residue-reject",
+        surface_id="gpt-auto-cdp",
+        provider_metadata={
+            "unresolved-turn-pending": False,
+            "submission-attempt-id": attempt_id,
+            "submission-stage": "send-click-acknowledged",
+        },
+    )
+    session_store.write_session_record(tmp_path, session)
+    request = gateway_store.build_record(
+        request_id=predecessor_id,
+        execution_profile_id="gpt-auto",
+        prompt_body="previous request",
+        session_id=session_id,
+        resolved_provider_id="gpt-auto",
+    )
+    artifact = persist_final_response(tmp_path, predecessor_id, "previous response")
+    artifact.pop("output-preview", None)
+    artifact.pop("output-truncated", None)
+    artifact["sha256"] = "not-the-real-digest"
+    request.update(
+        {
+            "state": "completed",
+            "response-artifact": artifact,
+            "provider-metadata": {"submission-attempt-id": attempt_id},
+        }
+    )
+    gateway_store.write_record(tmp_path, request)
+    expected = session_store.session_provider_metadata(
+        session_store.read_session_record(tmp_path, session_id)
+    )
+    binding = session_store.read_session_record(tmp_path, session_id)["binding"]
+
+    assert not session_store.clear_completed_checkpoint_residue(
+        tmp_path,
+        session_id,
+        predecessor_id,
+        expected_metadata=expected,
+        expected_binding_identity={
+            "binding-id": binding["binding-id"],
+            "generation": binding["generation"],
+        },
+    )
+    assert session_store.session_provider_metadata(
+        session_store.read_session_record(tmp_path, session_id)
+    ) == expected
+
+
+def test_completed_residue_cleanup_rejects_replaced_session_binding_generation(tmp_path):
+    from audiagentic.components.agents.gateway import store as gateway_store
+    from audiagentic.components.agents.gateway.output import persist_final_response
+
+    predecessor_id = "req-terminal-residue-generation"
+    session_id = "ses-terminal-residue-generation"
+    attempt_id = "attempt-terminal-residue-generation"
+    session = session_store.build_session_record(
+        session_id=session_id,
+        created_by_request_id=predecessor_id,
+        provider_transport_kind="provider-session",
+        execution_profile_id="gpt-auto",
+        provider_id="gpt-auto",
+        model_id="chatgpt",
+        provider_session_ref="provider-terminal-residue-generation",
+        surface_id="gpt-auto-cdp",
+        provider_metadata={
+            "unresolved-turn-pending": False,
+            "submission-attempt-id": attempt_id,
+            "submission-stage": "send-click-acknowledged",
+        },
+    )
+    session_store.write_session_record(tmp_path, session)
+    request = gateway_store.build_record(
+        request_id=predecessor_id,
+        execution_profile_id="gpt-auto",
+        prompt_body="previous request",
+        session_id=session_id,
+        resolved_provider_id="gpt-auto",
+    )
+    artifact = persist_final_response(tmp_path, predecessor_id, "previous response")
+    artifact.pop("output-preview", None)
+    artifact.pop("output-truncated", None)
+    request.update(
+        {
+            "state": "completed",
+            "response-artifact": artifact,
+            "provider-metadata": {"submission-attempt-id": attempt_id},
+        }
+    )
+    gateway_store.write_record(tmp_path, request)
+    expected_record = session_store.read_session_record(tmp_path, session_id)
+    expected_metadata = session_store.session_provider_metadata(expected_record)
+    expected_binding = expected_record["binding"]
+
+    replacement = dict(expected_record)
+    replacement["binding"] = {
+        **expected_binding,
+        "binding-id": "sbind-replacement-generation",
+        "generation": expected_binding["generation"] + 1,
+    }
+    session_store.write_session_record(tmp_path, replacement)
+    before_cleanup = session_store.read_session_record(tmp_path, session_id)
+
+    assert not session_store.clear_completed_checkpoint_residue(
+        tmp_path,
+        session_id,
+        predecessor_id,
+        expected_metadata=expected_metadata,
+        expected_binding_identity={
+            "binding-id": expected_binding["binding-id"],
+            "generation": expected_binding["generation"],
+        },
+    )
+    after_cleanup = session_store.read_session_record(tmp_path, session_id)
+    assert after_cleanup["binding"] == before_cleanup["binding"]
+    assert session_store.session_provider_metadata(after_cleanup) == expected_metadata
+
+
+def test_completed_residue_artifact_validation_serializes_with_archive_removal(
+    tmp_path, monkeypatch
+):
+    from audiagentic.components.agents.agents_paths import (
+        gateway_final_response_path,
+        gateway_retention_lock_path,
+    )
+    from audiagentic.components.agents.gateway import output
+    from audiagentic.components.agents.gateway import store as gateway_store
+    from audiagentic.components.agents.gateway.output import persist_final_response
+    from audiagentic.foundation.system.process import StartupLock
+
+    predecessor_id = "req-terminal-residue-retention-lock"
+    session_id = "ses-terminal-residue-retention-lock"
+    attempt_id = "attempt-terminal-residue-retention-lock"
+    session = session_store.build_session_record(
+        session_id=session_id,
+        created_by_request_id=predecessor_id,
+        provider_transport_kind="provider-session",
+        execution_profile_id="gpt-auto",
+        provider_id="gpt-auto",
+        model_id="chatgpt",
+        provider_session_ref="provider-terminal-residue-retention-lock",
+        surface_id="gpt-auto-cdp",
+        provider_metadata={
+            "unresolved-turn-pending": False,
+            "submission-attempt-id": attempt_id,
+            "submission-stage": "send-click-acknowledged",
+        },
+    )
+    session_store.write_session_record(tmp_path, session)
+    request = gateway_store.build_record(
+        request_id=predecessor_id,
+        execution_profile_id="gpt-auto",
+        prompt_body="previous request",
+        session_id=session_id,
+        resolved_provider_id="gpt-auto",
+    )
+    artifact = persist_final_response(tmp_path, predecessor_id, "previous response")
+    artifact.pop("output-preview", None)
+    artifact.pop("output-truncated", None)
+    request.update(
+        {
+            "state": "completed",
+            "response-artifact": artifact,
+            "provider-metadata": {"submission-attempt-id": attempt_id},
+        }
+    )
+    gateway_store.write_record(tmp_path, request)
+    session_record = session_store.read_session_record(tmp_path, session_id)
+    expected_metadata = session_store.session_provider_metadata(session_record)
+    binding = session_record["binding"]
+
+    original_read = output.read_final_response
+    artifact_read_entered = threading.Event()
+    release_artifact_read = threading.Event()
+    archive_lock_acquired = threading.Event()
+    cleanup_results = []
+
+    def paused_read(*args, **kwargs):
+        artifact_read_entered.set()
+        if not release_artifact_read.wait(timeout=3):
+            raise TimeoutError("test did not release the artifact read")
+        return original_read(*args, **kwargs)
+
+    monkeypatch.setattr(output, "read_final_response", paused_read)
+
+    def clear_checkpoint():
+        cleanup_results.append(
+            session_store.clear_completed_checkpoint_residue(
+                tmp_path,
+                session_id,
+                predecessor_id,
+                expected_metadata=expected_metadata,
+                expected_binding_identity={
+                    "binding-id": binding["binding-id"],
+                    "generation": binding["generation"],
+                },
+            )
+        )
+
+    def archive_after_retention_fence():
+        with StartupLock(gateway_retention_lock_path(tmp_path)):
+            gateway_final_response_path(tmp_path, predecessor_id).unlink(missing_ok=True)
+            archive_lock_acquired.set()
+
+    cleanup_thread = threading.Thread(target=clear_checkpoint)
+    cleanup_thread.start()
+    try:
+        assert artifact_read_entered.wait(timeout=2)
+        archive_thread = threading.Thread(target=archive_after_retention_fence)
+        archive_thread.start()
+        assert not archive_lock_acquired.wait(timeout=0.1)
+    finally:
+        release_artifact_read.set()
+    cleanup_thread.join(timeout=2)
+    archive_thread.join(timeout=2)
+
+    assert not cleanup_thread.is_alive()
+    assert not archive_thread.is_alive()
+    assert cleanup_results == [True]
+    assert archive_lock_acquired.is_set()
+    assert not gateway_final_response_path(tmp_path, predecessor_id).exists()
+
+
+def test_owned_checkpoint_stage_rejection_records_bounded_trace_predicates(tmp_path):
+    from audiagentic.components.agents.gateway import store as gateway_store
+
+    request_id = "req-stage-diagnostic"
+    session_id = "ses-stage-diagnostic"
+    owner = {
+        "dispatch_owner_epoch": "owner-stage-diagnostic",
+        "worker_id": "worker-stage-diagnostic",
+        "attempt_epoch": 1,
+    }
+    session = session_store.build_session_record(
+        session_id=session_id,
+        created_by_request_id=request_id,
+        provider_transport_kind="provider-session",
+        execution_profile_id="profile-1",
+        provider_id="opencode",
+        model_id="model-1",
+        provider_metadata={
+            "unresolved-turn-pending": True,
+            "unresolved-turn-id": request_id,
+            "submission-state": "proven",
+            "submission-proven": True,
+        },
+    )
+    session_store.write_session_record(tmp_path, session)
+    request = gateway_store.build_record(
+        request_id=request_id,
+        execution_profile_id="profile-1",
+        prompt_body="not persisted in diagnostic details",
+        session_id=session_id,
+        resolved_provider_id="opencode",
+    )
+    request.update(
+        {
+            "state": "running",
+            "dispatch-owner-epoch": owner["dispatch_owner_epoch"],
+            "worker-id": owner["worker_id"],
+            "attempt-epoch": owner["attempt_epoch"],
+        }
+    )
+    gateway_store.write_record(tmp_path, request)
+
+    with pytest.raises(AudiaGenticError) as caught:
+        session_store.update_owned_submission_checkpoint(
+            tmp_path,
+            session_id,
+            request_id,
+            {"recovery-state": "submission-proven"},
+            **owner,
+        )
+
+    assert caught.value.code == "CON-AGW-125"
+    assert caught.value.details["checkpoint-diagnostics"] == {
+        "observed-stage": "proven",
+        "requested-stage": None,
+        "unresolved-turn-pending": True,
+        "turn-id-matches-request": True,
+        "claim-id-supplied": False,
+        "claim-present": False,
+        "claim-generation-present": False,
+        "submission-proven": True,
+        "request-recovery-required": False,
+        "proof-source-valid": False,
+        "proof-update-keys-safe": True,
+        "frozen-identity-unchanged": False,
+        "frozen-identity-mismatch-keys": ["unresolved-turn-id"],
+        "provider-anchor-valid": False,
+        "fingerprint-equal": False,
+        "baseline-user-count-matches": False,
+        "baseline-assistant-count-matches": False,
+        "baseline-user-id-is-new": True,
+        "request-owner-is-current": True,
+    }
+    sessions_module._record_submission_checkpoint_rejection(
+        tmp_path,
+        request_id,
+        session_id,
+        owner["attempt_epoch"],
+        caught.value,
+    )
+    from audiagentic.components.agents.agents_paths import gateway_observation_path
+
+    events = load_ndjson(gateway_observation_path(tmp_path, request_id))
+    assert events[-1]["source"] == "session-checkpoint"
+    assert events[-1]["facts"]["diagnostic-facts"]["checkpoint"] == {
+        "observed-stage": "proven",
+        "unresolved-turn-pending": True,
+        "turn-id-matches-request": True,
+        "claim-id-supplied": False,
+        "claim-present": False,
+        "claim-generation-present": False,
+        "submission-proven": True,
+        "request-recovery-required": False,
+        "proof-source-valid": False,
+        "proof-update-keys-safe": True,
+        "frozen-identity-unchanged": False,
+        "frozen-identity-mismatch-keys": ["unresolved-turn-id"],
+        "provider-anchor-valid": False,
+        "fingerprint-equal": False,
+        "baseline-user-count-matches": False,
+        "baseline-assistant-count-matches": False,
+        "baseline-user-id-is-new": True,
+        "request-owner-is-current": True,
+    }
+    assert events[-1]["facts"]["error-occurrence"]["failure-code"] == "CON-AGW-125"
+    serialized = str(events[-1])
+    assert "not persisted in diagnostic details" not in serialized
+
+
+@pytest.mark.parametrize("initial_alert_baseline", [None, []])
+@pytest.mark.parametrize("cleared_annotation", [None, "terminal-captured", "stale-terminal-checkpoint-residue-cleared", "orphaned-terminal-fence-cleared"])
 def test_fresh_owned_submission_checkpoint_is_durable_before_send_and_terminal_cleanup(
-    tmp_path,
+    tmp_path, initial_alert_baseline, cleared_annotation,
 ):
     from audiagentic.components.agents.gateway import store as gateway_store
 
@@ -1930,6 +2834,14 @@ def test_fresh_owned_submission_checkpoint_is_durable_before_send_and_terminal_c
         provider_metadata={
             "project-id": project_id,
             "project-url": f"https://chatgpt.com/{project_id}/project",
+            # GPT-auto includes these negative defaults in initial binding
+            # metadata, before this newly admitted request's first prepared
+            # checkpoint is written.
+            "unresolved-turn-pending": False,
+            "submission-proven": False,
+            **({"recovery-state": cleared_annotation} if cleared_annotation else {}),
+            **({"unresolved-baseline-error-alert-occurrences": initial_alert_baseline}
+               if initial_alert_baseline is not None else {}),
         },
     )
     session_store.write_session_record(tmp_path, session)
@@ -1953,6 +2865,47 @@ def test_fresh_owned_submission_checkpoint_is_durable_before_send_and_terminal_c
 
     # A newly admitted GPT session has no unresolved-turn checkpoint yet.
     # The active request owner may initialize exactly its own prepared turn.
+    fresh_submission_remove_keys = (
+        "submission-proven",
+        "prompt-message-id",
+        "assistant-message-id",
+        "assistant-before-message-id",
+        "assistant-before-id",
+        "terminal-evidence",
+    )
+    with pytest.raises(AudiaGenticError, match="cleanup exceeds the absent/default allowlist"):
+        session_store.update_provider_metadata(
+            tmp_path,
+            session_id,
+            {
+                "unresolved-turn-pending": True,
+                "unresolved-turn-id": request_id,
+                "submission-state": "prepared",
+                "submission-proven": False,
+                "recovery-state": "submission-prepared",
+                "prompt-text-digest": "prompt-digest",
+            },
+            request_id=request_id,
+            **owner,
+            remove_keys=("project-id",),
+        )
+    with pytest.raises(AudiaGenticError, match="cleanup exceeds the absent/default allowlist"):
+        session_store.update_provider_metadata(
+            tmp_path,
+            session_id,
+            {
+                "unresolved-turn-pending": True,
+                "unresolved-turn-id": request_id,
+                "submission-state": "prepared",
+                "submission-proven": False,
+                "recovery-state": "submission-prepared",
+                "prompt-text-digest": "prompt-digest",
+                "terminal-evidence": {"source": "test"},
+            },
+            request_id=request_id,
+            **owner,
+            remove_keys=("terminal-evidence",),
+        )
     session_store.update_provider_metadata(
         tmp_path,
         session_id,
@@ -1963,9 +2916,13 @@ def test_fresh_owned_submission_checkpoint_is_durable_before_send_and_terminal_c
             "submission-proven": False,
             "recovery-state": "submission-prepared",
             "prompt-text-digest": "prompt-digest",
+            "unresolved-baseline-user-count": 0,
+            "unresolved-baseline-assistant-count": 0,
+            "unresolved-baseline-error-alert-occurrences": [],
         },
         request_id=request_id,
         **owner,
+        remove_keys=fresh_submission_remove_keys,
     )
     persisted = session_store.session_provider_metadata(
         session_store.read_session_record(tmp_path, session_id)
@@ -1981,6 +2938,9 @@ def test_fresh_owned_submission_checkpoint_is_durable_before_send_and_terminal_c
         "submission-state": "dispatching",
         "submission-proven": False,
         "recovery-state": "side-effect-may-have-started",
+        "unresolved-baseline-user-count": 0,
+        "unresolved-baseline-assistant-count": 0,
+        "unresolved-baseline-error-alert-occurrences": [],
     }
     session_store.update_provider_metadata(
         tmp_path,
@@ -1988,6 +2948,9 @@ def test_fresh_owned_submission_checkpoint_is_durable_before_send_and_terminal_c
         dispatching_checkpoint,
         request_id=request_id,
         **owner,
+        # The live checkpoint sink applies the same cleanup list to both the
+        # prepared and prepared->dispatching callbacks.
+        remove_keys=fresh_submission_remove_keys,
     )
     restarted_metadata = session_store.session_provider_metadata(
         session_store.read_session_record(tmp_path, session_id)
@@ -1995,6 +2958,122 @@ def test_fresh_owned_submission_checkpoint_is_durable_before_send_and_terminal_c
     assert restarted_metadata["submission-state"] == "dispatching"
     assert restarted_metadata["unresolved-turn-pending"] is True
     assert restarted_metadata["unresolved-turn-id"] == request_id
+
+    # A provider-validated user-message proof advances this exact owned turn
+    # from dispatching to proven; it cannot be used to change turn identity.
+    session_record = session_store.read_session_record(tmp_path, session_id)
+    malformed_metadata = session_store.session_provider_metadata(session_record)
+    malformed_metadata["submission-proven"] = "false"
+    session_record.setdefault("provider", {})["metadata"] = malformed_metadata
+    session_store.write_session_record(tmp_path, session_record)
+    with pytest.raises(AudiaGenticError, match="does not match the current dispatch stage"):
+        session_store.update_provider_metadata(
+            tmp_path,
+            session_id,
+            {
+                "submission-state": "proven",
+                "submission-proven": True,
+                "unresolved-turn-pending": True,
+                "unresolved-turn-id": request_id,
+                "prompt-message-id": "provider-user-message-1",
+                "prompt-text-digest": "prompt-digest",
+                "unresolved-baseline-user-count": 0,
+            },
+            request_id=request_id,
+            **owner,
+        )
+    malformed_metadata.pop("submission-proven")
+    session_record.setdefault("provider", {})["metadata"] = malformed_metadata
+    session_store.write_session_record(tmp_path, session_record)
+
+    with pytest.raises(AudiaGenticError, match="does not match the current dispatch stage"):
+        session_store.update_provider_metadata(
+            tmp_path,
+            session_id,
+            {
+                "submission-state": "proven",
+                "submission-proven": True,
+                "unresolved-turn-pending": True,
+                "unresolved-turn-id": "req-another-turn",
+            },
+            request_id=request_id,
+            **owner,
+        )
+    with pytest.raises(AudiaGenticError, match="does not match the current dispatch stage"):
+        session_store.update_provider_metadata(
+            tmp_path,
+            session_id,
+            {
+                "submission-state": "proven",
+                "submission-proven": True,
+                "unresolved-turn-pending": True,
+                "unresolved-turn-id": request_id,
+                "unresolved-baseline-user-count": 0,
+            },
+            request_id=request_id,
+            **owner,
+        )
+    valid_proven_update = {
+        "submission-state": "proven",
+        "submission-proven": True,
+        "submission-proof-source": "provider-user-message",
+        "unresolved-turn-pending": True,
+        "unresolved-turn-id": request_id,
+        "prompt-message-id": "provider-user-message-1",
+        "prompt-text-digest": "prompt-digest",
+        "unresolved-baseline-user-count": 0,
+        "unresolved-baseline-assistant-count": 0,
+        "unresolved-baseline-error-alert-occurrences": [],
+        "recovery-state": "submission-proven",
+    }
+    dispatching_metadata = session_store.session_provider_metadata(
+        session_store.read_session_record(tmp_path, session_id)
+    )
+    for injected in (
+        {"unresolved-baseline-assistant-count": 999},
+        {"unresolved-baseline-user-id": "foreign-provider-message"},
+        {"unresolved-baseline-error-alert-occurrences": [{"digest": "foreign"}]},
+        {"prompt-text-digest": "different-digest"},
+        {"unapproved-checkpoint-field": "not-owned"},
+        {"prompt-message-id": "virtualized-prompt-for-assistant-1"},
+        {"submission-proof-source": "caller-asserted"},
+    ):
+        with pytest.raises(
+            AudiaGenticError,
+            match="does not match the current dispatch stage",
+        ) as rejected:
+            session_store.update_provider_metadata(
+                tmp_path,
+                session_id,
+                {**valid_proven_update, **injected},
+                request_id=request_id,
+                **owner,
+            )
+        if "prompt-message-id" in injected:
+            assert rejected.value.details["checkpoint-diagnostics"][
+                "provider-anchor-valid"
+            ] is False
+        if "prompt-text-digest" in injected:
+            assert rejected.value.details["checkpoint-diagnostics"][
+                "frozen-identity-mismatch-keys"
+            ] == ["prompt-text-digest"]
+        assert session_store.session_provider_metadata(
+            session_store.read_session_record(tmp_path, session_id)
+        ) == dispatching_metadata
+
+    session_store.update_provider_metadata(
+        tmp_path,
+        session_id,
+        valid_proven_update,
+        request_id=request_id,
+        **owner,
+    )
+    proven_metadata = session_store.session_provider_metadata(
+        session_store.read_session_record(tmp_path, session_id)
+    )
+    assert proven_metadata["submission-state"] == "proven"
+    assert proven_metadata["submission-proven"] is True
+
     with pytest.raises(AudiaGenticError, match="changed before recovery claim"):
         session_store.claim_prepared_submission_recovery(
             tmp_path,
@@ -2025,6 +3104,90 @@ def test_fresh_owned_submission_checkpoint_is_durable_before_send_and_terminal_c
     assert terminal_metadata["recovery-state"] == "terminal-completed"
     assert "submission-state" not in terminal_metadata
     assert "unresolved-turn-id" not in terminal_metadata
+
+
+def test_queued_owner_can_claim_only_proven_unsent_prepared_checkpoint(tmp_path):
+    from audiagentic.components.agents.gateway import store as gateway_store
+
+    request_id = "req-queued-prepared-checkpoint"
+    session_id = "ses-queued-prepared-checkpoint"
+    project_id = "g-p-audiagentic-exact"
+    owner = {
+        "dispatch_owner_epoch": "owner-queued",
+        "worker_id": "worker-queued",
+        "attempt_epoch": 1,
+    }
+    session = session_store.build_session_record(
+        session_id=session_id,
+        created_by_request_id=request_id,
+        provider_transport_kind="provider-session",
+        execution_profile_id="gpt-auto",
+        provider_id="gpt-auto",
+        model_id="chatgpt",
+        provider_metadata={
+            "project-id": project_id,
+            "unresolved-turn-pending": True,
+            "unresolved-turn-id": request_id,
+            "submission-state": "prepared",
+            "submission-proven": False,
+            "recovery-state": "submission-prepared",
+            "prompt-text-digest": "queued-prompt-digest",
+        },
+    )
+    session_store.write_session_record(tmp_path, session)
+    request = gateway_store.build_record(
+        request_id=request_id,
+        execution_profile_id="gpt-auto",
+        prompt_body="immutable queued prompt",
+        session_id=session_id,
+        resolved_provider_id="gpt-auto",
+    )
+    request.update(
+        {
+            "state": "queued",
+            "worker-id": owner["worker_id"],
+            "attempt-epoch": owner["attempt_epoch"],
+            "dispatch-owner-epoch": owner["dispatch_owner_epoch"],
+            "provider-metadata": {"project-id": project_id},
+        }
+    )
+    gateway_store.write_record(tmp_path, request)
+
+    with pytest.raises(AudiaGenticError, match="owner fence"):
+        session_store.claim_prepared_submission_recovery(
+            tmp_path,
+            session_id,
+            request_id,
+            dispatch_owner_epoch=owner["dispatch_owner_epoch"],
+            worker_id="stale-worker",
+            attempt_epoch=owner["attempt_epoch"],
+        )
+
+    claim = session_store.claim_prepared_submission_recovery(
+        tmp_path,
+        session_id,
+        request_id,
+        **owner,
+    )
+    session_store.advance_prepared_submission_to_dispatching(
+        tmp_path,
+        session_id,
+        request_id,
+        {
+            "unresolved-turn-pending": True,
+            "unresolved-turn-id": request_id,
+            "submission-state": "dispatching",
+            "submission-proven": False,
+            "recovery-state": "side-effect-may-have-started",
+        },
+        claim_id=claim["claim-id"],
+        **owner,
+    )
+    checkpoint = session_store.session_provider_metadata(
+        session_store.read_session_record(tmp_path, session_id)
+    )
+    assert checkpoint["submission-state"] == "dispatching"
+    assert checkpoint["submission-proven"] is False
 
 
 def test_restarted_prepared_checkpoint_requires_recovery_claim(tmp_path):
@@ -2119,6 +3282,21 @@ def test_restarted_prepared_checkpoint_requires_recovery_claim(tmp_path):
         request_id,
         **recovery_owner,
     )
+    with pytest.raises(AudiaGenticError, match="removal is not limited to absent/default fields"):
+        session_store.advance_prepared_submission_to_dispatching(
+            tmp_path,
+            session_id,
+            request_id,
+            dispatching_checkpoint,
+            claim_id=claim["claim-id"],
+            **recovery_owner,
+            remove_keys=("unresolved-turn-id",),
+        )
+    unchanged = session_store.session_provider_metadata(
+        session_store.read_session_record(tmp_path, session_id)
+    )
+    assert unchanged["submission-state"] == "prepared"
+    assert unchanged["unresolved-turn-id"] == request_id
     session_store.advance_prepared_submission_to_dispatching(
         tmp_path,
         session_id,
@@ -2132,6 +3310,43 @@ def test_restarted_prepared_checkpoint_requires_recovery_claim(tmp_path):
     )
     assert recovered["submission-state"] == "dispatching"
     assert recovered["unresolved-turn-pending"] is True
+
+    session_store.update_owned_submission_checkpoint(
+        tmp_path,
+        session_id,
+        request_id,
+        {
+            "submission-attempt-id": "attempt-stage-1",
+            "submission-stage": "send-intent",
+            "send-intent-ever": True,
+        },
+        **recovery_owner,
+    )
+    with pytest.raises(AudiaGenticError, match="cannot move backwards"):
+        session_store.update_owned_submission_checkpoint(
+            tmp_path,
+            session_id,
+            request_id,
+            {
+                "submission-attempt-id": "attempt-stage-1",
+                "submission-stage": "composer-filled",
+                "send-intent-ever": True,
+            },
+            **recovery_owner,
+        )
+    with pytest.raises(AudiaGenticError, match="latch cannot be cleared"):
+        session_store.update_owned_submission_checkpoint(
+            tmp_path,
+            session_id,
+            request_id,
+            {"send-intent-ever": False},
+            **recovery_owner,
+        )
+    staged = session_store.session_provider_metadata(
+        session_store.read_session_record(tmp_path, session_id)
+    )
+    assert staged["submission-stage"] == "send-intent"
+    assert staged["send-intent-ever"] is True
 
 
 def test_successor_claim_fences_stale_prepared_binding_checkpoint_and_open_commit(
@@ -3234,6 +4449,80 @@ def test_durable_idle_sweep_reconciles_nonterminal_request(tmp_path):
     assert session_store.read_session_record(tmp_path, session_id)["state"] == "expired"
 
 
+def test_expiry_waits_for_request_lock_before_taking_retention_lock(tmp_path, monkeypatch):
+    from audiagentic.components.agents.gateway import store
+
+    session = session_store.build_session_record(
+        execution_profile_id="gpt-auto",
+        provider_id="gpt-auto",
+        provider_session_ref="provider-session",
+        surface_id="surface-1",
+        provider_metadata={"provider-session-id": "provider-session"},
+        idle_timeout_seconds=60,
+    )
+    session_id = session["session-id"]
+    session["timing"]["last-activity-at"] = (
+        datetime.now(timezone.utc) - timedelta(hours=1)
+    ).isoformat().replace("+00:00", "Z")
+    session_store.write_session_record(tmp_path, session)
+    request = store.build_record(
+        request_id="req_expiry_lock_order",
+        execution_profile_id="gpt-auto",
+        prompt_body="x",
+        session_id=session_id,
+        session_keep_alive=True,
+        resolved_provider_id="gpt-auto",
+    )
+    request["provider-metadata"] = {"provider-session-id": "provider-session"}
+    store.write_record(tmp_path, request)
+
+    retention_requested = threading.Event()
+    request_lock_attempted = threading.Event()
+    real_request_lock = session_store._request_lock
+    real_startup_lock = session_store.StartupLock
+
+    def track_request_lock(root, request_id):
+        if request_id == request["request-id"]:
+            request_lock_attempted.set()
+        return real_request_lock(root, request_id)
+
+    def track_retention_lock(path, *args, **kwargs):
+        if Path(path).name == "retention.mutation.lock":
+            retention_requested.set()
+        return real_startup_lock(path, *args, **kwargs)
+
+    monkeypatch.setattr(session_store, "_request_lock", track_request_lock)
+    monkeypatch.setattr(session_store, "StartupLock", track_retention_lock)
+    result: list[dict[str, Any]] = []
+    errors: list[BaseException] = []
+
+    def expire():
+        try:
+            result.append(session_store.expire_session_if_policy_exceeded(tmp_path, session_id))
+        except BaseException as exc:  # surfaced in the parent test thread
+            errors.append(exc)
+
+    # Model a request finalizer holding request ownership while it proceeds to
+    # retention cleanup. Expiry must wait at the request fence, not hold the
+    # project fence and form the inverse half of a deadlock.
+    with real_request_lock(tmp_path, request["request-id"]):
+        worker = threading.Thread(target=expire)
+        worker.start()
+        assert request_lock_attempted.wait(timeout=2)
+        time.sleep(0.05)
+        assert not retention_requested.is_set()
+        with real_startup_lock(
+            session_store.gateway_retention_lock_path(tmp_path), timeout=1
+        ):
+            pass
+
+    worker.join(timeout=5)
+    assert not worker.is_alive()
+    assert not errors
+    assert result[0]["state"] == "expired"
+    assert store.read_record(tmp_path, request["request-id"])["state"] == "interrupted"
+
+
 def test_durable_idle_sweep_preserves_request_with_provider_activity_lease(tmp_path):
     from audiagentic.components.agents.gateway import api as api
     from audiagentic.components.agents.gateway import store
@@ -4238,3 +5527,56 @@ def test_handoff_shutdown_revokes_page_owner_without_closing_session(rig):
     stored = session_store.read_session_record(project_root, record["session-id"])
     assert stored["state"] == "active"
     assert stored.get("close-reason") is None
+
+
+def test_missing_provider_binding_observation_records_redacted_recovery_facts(
+    tmp_path, monkeypatch
+):
+    from audiagentic.components.agents.gateway import observability
+
+    observations = []
+    monkeypatch.setattr(
+        observability,
+        "append_observation",
+        lambda *args, **kwargs: observations.append((args, kwargs)),
+    )
+
+    sessions_module._observe_missing_provider_session_ref(
+        tmp_path,
+        request_id="req-missing-provider-ref",
+        session_id="ses-missing-provider-ref",
+        attempt_epoch=4,
+        metadata={
+            "target-id": "private-cdp-target",
+            "unresolved-turn-pending": True,
+            "unresolved-turn-id": "req-missing-provider-ref",
+            "submission-state": "prepared",
+            "submission-stage": "composer-filled",
+            "submission-proven": False,
+            "send-intent-ever": False,
+            "prompt-text-digest": "private-prompt-digest",
+        },
+    )
+
+    assert len(observations) == 1
+    _, observation = observations[0]
+    assert observation["source"] == "session-recovery"
+    assert observation["error_occurrence"] == {
+        "failure-code": "CON-AGW-124",
+        "classification": "provider-session-ref-unavailable",
+    }
+    facts = observation["diagnostic_facts"]["provider-binding"]
+    assert facts == {
+        "provider-binding-present": False,
+        "provider-session-ref-present": False,
+        "target-id-present": True,
+        "unresolved-turn-pending": True,
+        "turn-id-matches-request": True,
+        "submission-proven": False,
+        "send-intent-ever": False,
+        "submission-stage": "composer-filled",
+        "submission-state": "prepared",
+        "recovery-state": "unknown",
+    }
+    assert "private-cdp-target" not in repr(observation)
+    assert "private-prompt-digest" not in repr(observation)
