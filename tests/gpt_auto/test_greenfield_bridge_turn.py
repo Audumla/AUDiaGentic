@@ -35,6 +35,8 @@ from audiagentic.components.providers.adapters.gpt_auto.turn import (
     _terminal_same_response_slot_replacement,
     _terminal_same_turn_response_replacement,
     _terminal_single_response_remount,
+    _assistant_identity_is_pending,
+    _owned_prompt_response_remount,
 )
 from audiagentic.components.providers.adapters.gpt_auto.urls import (
     parse_provider_session_id,
@@ -1489,8 +1491,8 @@ async def test_stale_progress_focus_probe_is_configurable_and_disabled():
 
 
 @pytest.mark.asyncio
-async def test_terminal_response_slot_id_replacement_fails_closed() -> None:
-    """A terminal renderer ID bump must not adopt an unproven response node.
+async def test_terminal_response_slot_id_replacement_uses_owned_prompt_span() -> None:
+    """A renderer ID bump is not a failed provider request.
 
     The first terminal-looking snapshot exposes a provisional assistant ID;
     the next snapshot exposes a different ID in the same exact prompt-owned
@@ -1543,15 +1545,15 @@ async def test_terminal_response_slot_id_replacement_fails_closed() -> None:
         lambda _observation: None,
     )
 
-    with pytest.raises(AudiaGenticError, match="assistant identity changed"):
-        await turn.run()
+    result = await asyncio.wait_for(turn.run(), 2)
+    assert result.final_summary == "final response"
     assert chat.runtime.bridge.submit_calls == 1
     assert refresh_calls == 0
 
 
 @pytest.mark.asyncio
-async def test_nonterminal_response_slot_id_replacement_fails_before_controls_appear() -> None:
-    """A remount must fail on the first changed-ID poll, not later at completion."""
+async def test_nonterminal_response_slot_id_replacement_keeps_observing() -> None:
+    """A remount cannot terminalize a still-running same-prompt response."""
     chat = _Chat()
     chat._snapshots = iter(
         [
@@ -1581,7 +1583,8 @@ async def test_nonterminal_response_slot_id_replacement_fails_before_controls_ap
                 assistant_id="assistant-b",
                 complete=True,
             ),
-        ]
+        ] + [snap(users=1, assistants=1, user="Review AU01", assistant="complete later",
+                  assistant_id="assistant-b", complete=True)] * 20
     )
     turn = GptAutoTurn(
         chat,
@@ -1589,13 +1592,13 @@ async def test_nonterminal_response_slot_id_replacement_fails_before_controls_ap
         lambda _observation: None,
     )
 
-    with pytest.raises(AudiaGenticError, match="assistant identity changed"):
-        await turn.run()
+    result = await asyncio.wait_for(turn.run(), 2)
+    assert result.final_summary == "complete later"
 
 
 @pytest.mark.asyncio
-async def test_terminal_replacement_after_recovery_budget_fails_closed() -> None:
-    """A replacement with new text cannot bypass the identity boundary."""
+async def test_terminal_replacement_after_recovery_budget_can_complete() -> None:
+    """Owned terminal proof remains valid after recovery was exhausted."""
     chat = _Chat()
     final_snapshot = snap(
         users=1,
@@ -1647,8 +1650,8 @@ async def test_terminal_replacement_after_recovery_budget_fails_closed() -> None
 
     chat.snapshot = snapshot_with_exhausted_recovery
 
-    with pytest.raises(AudiaGenticError, match="assistant identity changed"):
-        await turn.run()
+    result = await asyncio.wait_for(turn.run(), 2)
+    assert result.final_summary == "final response"
     assert refresh_calls == 0
     assert chat.runtime.bridge.submit_calls == 1
 
@@ -1705,6 +1708,79 @@ def test_same_response_slot_replacement_requires_one_prompt_owned_assistant() ->
         old_assistant_id="assistant-old",
         new_assistant_id="assistant-new",
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("final_id", ["assistant-original", "fallback-assistant-4", "assistant-final-remount"])
+async def test_streaming_durable_synthetic_id_churn_completes_same_owned_turn(final_id):
+    chat = _Chat()
+    chat.provider_session_id = "conversation-1"
+    chat.chat_url = "https://chatgpt.com/g/g-p-project/c/conversation-1"
+    baseline = snap(users=4, assistants=4, user="Earlier", user_id="earlier-prompt",
+                    assistant="Earlier response", assistant_id="earlier-answer")
+    initial = snap(users=5, assistants=5, user="Review AU01", user_id="current-prompt",
+                   assistant="Working", assistant_id="assistant-original", generating=True)
+    synthetic = snap(users=5, assistants=5, user="Review AU01", user_id="current-prompt",
+                     assistant="Working with real progress", assistant_id="fallback-assistant-4", generating=True)
+    final = snap(users=5, assistants=5, user="Review AU01", user_id="current-prompt",
+                 assistant="Completed review", assistant_id=final_id, complete=True)
+    chat._snapshots = iter([synthetic] * 3 + [final] * 30)
+    observations = []
+    turn = GptAutoTurn(chat, SessionPrompt(turn_id="remount-live-regression", body="Review AU01"), observations.append)
+    turn.state = TurnState.AWAITING_RESPONSE
+    turn._prompt_message_id = "current-prompt"
+    turn._response_message_id = "assistant-original"
+    turn._submission_proof_assistant_id = "assistant-original"
+    assert await asyncio.wait_for(turn._await_response(baseline, initial), 2) == "Completed review"
+    assert turn._response_message_id == final_id
+    assert chat.runtime.bridge.submit_calls == 0
+    assert any(observation.kind == TransportObservationKind.ACTIVITY for observation in observations)
+
+
+def test_remount_rejects_foreign_turn_changed_prompt_and_conversation():
+    baseline = snap()
+    current = snap(users=1, assistants=1, user="Review AU01", user_id="current",
+                   assistant="Working", assistant_id="fallback-assistant-0", generating=True)
+    def remount(snapshot):
+        return _owned_prompt_response_remount(baseline, snapshot,
+            prompt_message_id="current", prompt_text="Review AU01", old_assistant_id="original")
+    assert remount(current) is not None
+    assert remount(replace(current, url=current.url + "-foreign")) is None
+    changed_prompt = replace(current, message_refs=(
+        replace(current.message_refs[0], text="Different request"), current.message_refs[1]))
+    assert remount(changed_prompt) is None
+    later = replace(current, latest_user_id="later", message_refs=current.message_refs + (
+        ChatMessageRef("user", "later", "Review AU01", 2),))
+    assert remount(later) is None
+    assert not _assistant_identity_is_pending(later, baseline, "current")
+
+
+@pytest.mark.asyncio
+async def test_unmounted_prompt_identity_loss_waits_without_refresh_or_resubmit():
+    chat = _Chat()
+    chat.provider_session_id = "conversation-1"
+    chat.chat_url = "https://chatgpt.com/g/g-p-project/c/conversation-1"
+    chat.config.turn.response_no_activity_refresh_seconds = 0.001
+    baseline = snap()
+    initial = snap(users=1, assistants=1, user="Review AU01", user_id="current",
+                   assistant="Working", assistant_id="original", generating=True)
+    unmounted = snap(users=0, assistants=1, assistant="Still working",
+                     assistant_id="fallback-assistant-0", generating=True)
+    refreshes = []
+    async def refresh(*args, **kwargs):
+        refreshes.append(True)
+    chat.refresh_bound_conversation = refresh
+    async def snapshot():
+        return unmounted
+    chat.snapshot = snapshot
+    turn = GptAutoTurn(chat, SessionPrompt(turn_id="uncertain-remount", body="Review AU01"), lambda _: None)
+    turn.state = TurnState.AWAITING_RESPONSE
+    turn._prompt_message_id = "current"
+    turn._response_message_id = "original"
+    turn._submission_proof_assistant_id = "original"
+    with pytest.raises(asyncio.TimeoutError):
+        await asyncio.wait_for(turn._await_response(baseline, initial), 0.05)
+    assert refreshes == [] and chat.runtime.bridge.submit_calls == 0
 
 
 def test_durable_assistant_remount_is_adopted_only_with_terminal_dom_witness() -> None:
@@ -1979,15 +2055,15 @@ async def test_repeated_id_only_replacements_cannot_bypass_recovery() -> None:
         lambda _observation: None,
     )
 
-    with pytest.raises(AudiaGenticError, match="assistant identity changed"):
-        await turn.run()
-    assert refresh_calls == 0
+    with pytest.raises(asyncio.TimeoutError):
+        await asyncio.wait_for(turn.run(), 0.1)
+    assert refresh_calls <= 1
     assert chat.runtime.bridge.submit_calls == 1
 
 
 @pytest.mark.asyncio
-async def test_terminal_verification_rejects_same_response_slot_replacement() -> None:
-    """Terminal verification must reject a changed assistant identity."""
+async def test_terminal_verification_uses_same_owned_response_slot() -> None:
+    """Terminal verification corroborates turn and body, not UUID stability."""
     chat = _Chat()
     final_snapshot = snap(
         users=1,
@@ -2045,15 +2121,15 @@ async def test_terminal_verification_rejects_same_response_slot_replacement() ->
         lambda _observation: None,
     )
 
-    with pytest.raises(AudiaGenticError, match="assistant identity changed"):
-        await turn.run()
+    result = await asyncio.wait_for(turn.run(), 2)
+    assert result.final_summary == "final response"
     assert chat.runtime.bridge.submit_calls == 1
     assert refresh_calls == 0
 
 
 @pytest.mark.asyncio
-async def test_stale_error_does_not_mask_id_only_remount_failure() -> None:
-    """A stale error cannot make an assistant identity change safe."""
+async def test_stale_error_remount_waits_for_clean_owned_terminal_response() -> None:
+    """A stale error or ID change alone is not terminal; clean proof completes."""
     chat = _Chat()
     final_snapshot = snap(
         users=1,
@@ -2098,13 +2174,13 @@ async def test_stale_error_does_not_mask_id_only_remount_failure() -> None:
         lambda _observation: None,
     )
 
-    with pytest.raises(AudiaGenticError, match="assistant identity changed"):
-        await turn.run()
+    result = await asyncio.wait_for(turn.run(), 2)
+    assert result.final_summary == "final response"
     assert chat.runtime.bridge.submit_calls == 1
 
 
 @pytest.mark.asyncio
-async def test_ambiguous_response_identity_fails_closed_immediately() -> None:
+async def test_ambiguous_response_identity_waits_without_capture_or_refresh() -> None:
     """Coexisting assistant nodes fail closed without recovery adoption."""
     chat = _Chat()
     ambiguous = replace(
@@ -2158,8 +2234,8 @@ async def test_ambiguous_response_identity_fails_closed_immediately() -> None:
         lambda _observation: None,
     )
 
-    with pytest.raises(AudiaGenticError, match="assistant identity changed"):
-        await turn.run()
+    with pytest.raises(asyncio.TimeoutError):
+        await asyncio.wait_for(turn.run(), 0.1)
     assert refresh_invocations == 0
     assert chat.runtime.bridge.submit_calls == 1
 
@@ -4100,7 +4176,8 @@ async def test_response_diagnostics_expose_empty_baseline_correlation_rejection(
     )
     chat.provider_session_id = "conversation-1"
     chat.chat_url = conversation_url
-    chat._snapshots = iter([unpinned])
+    from itertools import repeat
+    chat._snapshots = repeat(unpinned)
     turn = GptAutoTurn(
         chat,
         SessionPrompt(turn_id="turn-correlation-rejection-diagnostics", body="Review AU01"),
@@ -4113,15 +4190,10 @@ async def test_response_diagnostics_expose_empty_baseline_correlation_rejection(
         logger="audiagentic.components.providers.adapters.gpt_auto.turn",
     )
 
-    with pytest.raises(
-        ProviderBindingIntegrityError,
-        match="unpinned after prompt virtualization",
-    ):
-        await turn._await_response(
-            baseline,
-            proof,
-            allow_empty_baseline_virtualized_assistant=True,
-        )
+    with pytest.raises(asyncio.TimeoutError):
+        await asyncio.wait_for(turn._await_response(
+            baseline, proof, allow_empty_baseline_virtualized_assistant=True,
+        ), 0.05)
 
     decision = next(
         record.args

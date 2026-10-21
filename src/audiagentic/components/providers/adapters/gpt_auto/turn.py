@@ -464,7 +464,7 @@ class GptAutoTurn:
 
     def _virtualized_assistant_id(self) -> str | None:
         """Return the durable request-owned assistant identity, if known."""
-        for candidate in (self._submission_proof_assistant_id, self._response_message_id):
+        for candidate in (self._response_message_id, self._submission_proof_assistant_id):
             if _is_durable_assistant_message_id(candidate):
                 return candidate
         return None
@@ -1945,7 +1945,7 @@ class GptAutoTurn:
             raw: ChatSnapshot,
             *,
             allow_legacy_error: bool = False,
-        ) -> tuple[ChatSnapshot, ChatMessageRef | None]:
+        ) -> tuple[ChatSnapshot | None, ChatMessageRef | None]:
             try:
                 return _scope_response_snapshot(
                     baseline,
@@ -1964,6 +1964,26 @@ class GptAutoTurn:
                     ),
                 )
             except ProviderBindingIntegrityError as exc:
+                remount = _owned_prompt_response_remount(
+                    baseline, raw, prompt_message_id=prompt_message_id or "",
+                    prompt_text=self.request.body,
+                    old_assistant_id=(
+                        self._response_message_id
+                        if self._response_message_id != raw.latest_assistant_id
+                        else self._virtualized_assistant_id()
+                    ),
+                )
+                if remount is not None:
+                    # The request/conversation and unique ordered prompt span
+                    # are authoritative. A DOM UUID/ordinal is only a hint.
+                    # Re-scope using the observed node; completion still goes
+                    # through the unchanged independent stability verifier.
+                    return _scope_response_snapshot(
+                        baseline, raw, prompt_message_id=prompt_message_id or "",
+                        prompt_text=self.request.body,
+                        bound_assistant_id=remount.message_id,
+                        virtualized_assistant_id=remount.message_id,
+                    )
                 terminal_remount = _terminal_single_response_remount(
                     baseline,
                     raw,
@@ -2003,6 +2023,10 @@ class GptAutoTurn:
                         correlation_error=str(exc),
                     )
                 )
+                if _assistant_identity_is_pending(raw, baseline, prompt_message_id or ""):
+                    # No replay, refresh, terminal state or synthetic work
+                    # activity merely because a renderer identity is unclear.
+                    return None, None
                 raise
 
         def _replacement_proven(raw: ChatSnapshot, new_id: str) -> bool:
@@ -2022,6 +2046,11 @@ class GptAutoTurn:
                 or observed_url != bound_url
             ):
                 return False
+            if _owned_prompt_response_remount(
+                baseline, raw, prompt_message_id=prompt_message_id,
+                prompt_text=self.request.body, old_assistant_id=old_id,
+            ) is not None:
+                return True
             return (
                 _fallback_prompt_anchor_is_stable(
                     baseline, raw, prompt_message_id, prompt_text=self.request.body
@@ -2284,6 +2313,10 @@ class GptAutoTurn:
                 # its duplicate-tab finder fallback always set this before
                 # _await_response() can be reached.
                 current, response_ref = raw_current, None
+            if current is None:
+                tracker = ObservationTracker(policy=policy, now=loop.time())
+                await asyncio.sleep(self.chat.config.turn.poll_interval_seconds)
+                continue
             if (
                 current.generating
                 or bool(current.progress_blocks)
@@ -2422,6 +2455,10 @@ class GptAutoTurn:
                                 extra={"turn-id": self.request.turn_id},
                                 exc_info=True,
                             )
+            if current is None:
+                tracker = ObservationTracker(policy=policy, now=loop.time())
+                await asyncio.sleep(self.chat.config.turn.poll_interval_seconds)
+                continue
             now = loop.time()
             adopted_same_slot_replacement = False
             verification_replacement_adopted = False
@@ -2975,6 +3012,10 @@ class GptAutoTurn:
                 else:
                     verify = raw_verify
                     verify_ref = None
+                if verify is None:
+                    tracker = ObservationTracker(policy=policy, now=loop.time())
+                    await asyncio.sleep(self.chat.config.turn.poll_interval_seconds)
+                    continue
                 verify_facts = _facts(baseline, current, verify)
                 if verify_facts.get("auth-required"):
                     raise AudiaGenticError(
@@ -3701,6 +3742,53 @@ def _response_ref_for_prompt(
         if ref.role == "assistant":
             return ref
     return None
+
+
+def _owned_prompt_response_remount(
+    baseline: ChatSnapshot, snapshot: ChatSnapshot, *,
+    prompt_message_id: str, prompt_text: str,
+    old_assistant_id: str | None,
+) -> ChatMessageRef | None:
+    """Correlate a rendered replacement by the owned prompt, not UUID stability."""
+    if (
+        not old_assistant_id or not snapshot.latest_assistant_id
+        or snapshot.error_present
+        or not same_chat_identity(baseline.url, snapshot.url)
+        or not _same_response_slot_replacement(
+            snapshot, prompt_message_id=prompt_message_id,
+            old_assistant_id=old_assistant_id,
+            new_assistant_id=snapshot.latest_assistant_id,
+        )
+        or not _fallback_prompt_anchor_is_stable(
+            baseline, snapshot, prompt_message_id, prompt_text=prompt_text,
+        )
+    ):
+        return None
+    prompts = [ref for ref in snapshot.message_refs
+               if ref.role == "user" and ref.message_id == prompt_message_id]
+    if len(prompts) != 1 or not PromptFingerprint.from_text(prompt_text).matches_text(
+        prompts[0].correlation_text or prompts[0].text or ""
+    ):
+        return None
+    return next(ref for ref in snapshot.message_refs
+                if ref.role == "assistant" and ref.message_id == snapshot.latest_assistant_id)
+
+
+def _assistant_identity_is_pending(
+    snapshot: ChatSnapshot, baseline: ChatSnapshot, prompt_message_id: str,
+) -> bool:
+    """Ambiguous renderer evidence is not proof of provider/request failure."""
+    if not same_chat_identity(snapshot.url, baseline.url):
+        return False
+    prompts = [index for index, ref in enumerate(snapshot.message_refs)
+               if ref.role == "user" and ref.message_id == prompt_message_id]
+    if len(prompts) == 1 and snapshot.latest_user_id == prompt_message_id:
+        return not any(ref.role == "user" for ref in snapshot.message_refs[prompts[0] + 1:])
+    # Prompt virtualization without any explicit later user is uncertainty,
+    # not evidence authorizing capture or a terminal ownership failure.
+    return snapshot.latest_user_id is None and not any(
+        ref.role == "user" for ref in snapshot.message_refs
+    )
 
 
 def _same_response_slot_replacement(

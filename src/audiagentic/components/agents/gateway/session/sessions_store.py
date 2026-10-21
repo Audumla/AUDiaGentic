@@ -351,6 +351,68 @@ def session_provider_metadata(record: dict[str, Any]) -> dict[str, Any]:
     return dict((record.get("provider") or {}).get("metadata") or {})
 
 
+_LOAD_BUDGET_KEYS = frozenset({
+    "conversation-load-recovery-attempts", "conversation-load-recovery-revision",
+})
+
+
+def owned_conversation_load_budget(
+    project_root: Path, session_id: str, request_id: str, *,
+    dispatch_owner_epoch: str, worker_id: str, attempt_epoch: int,
+    action: str = "read", expected: tuple[int, int] | None = None,
+    maximum: int = 0,
+) -> tuple[int, int]:
+    """Session-authoritative budget CAS, independent of submission-stage CAS.
+
+    Revision survives reset and checkpoint retirement to prevent ABA. A crash
+    after this commit conservatively consumes the attempt; request metadata is
+    merely an advisory projection and is never the authority for this budget.
+    """
+    if (
+        action not in {"read", "increment", "reset"}
+        or type(maximum) is not int or not 0 <= maximum <= 1_000_000
+        or type(attempt_epoch) is not int or attempt_epoch < 0
+        or not isinstance(dispatch_owner_epoch, str) or not dispatch_owner_epoch
+        or not isinstance(worker_id, str) or not worker_id
+    ):
+        raise ValueError("invalid conversation load budget operation")
+    with _request_lock(project_root, request_id):
+        with _ordered_session_mutation_lock(project_root, session_id):
+            _assert_request_dispatch_owner(
+                project_root, request_id, session_id,
+                dispatch_owner_epoch=dispatch_owner_epoch, worker_id=worker_id,
+                attempt_epoch=attempt_epoch,
+            )
+            record = read_session_record(project_root, session_id)
+            metadata = session_provider_metadata(record)
+            count = metadata.get("conversation-load-recovery-attempts", 0)
+            revision = metadata.get("conversation-load-recovery-revision", 0)
+            if (
+                type(count) is not int or count < 0
+                or type(revision) is not int or revision < 0
+                or metadata.get("unresolved-turn-id") not in (None, request_id)
+                or (metadata.get("unresolved-turn-pending") is True
+                    and metadata.get("unresolved-turn-id") != request_id)
+            ):
+                raise AudiaGenticError(code="CON-AGW-125", kind="agents", message="conversation load budget has invalid or foreign authority")
+            current = (count, revision)
+            if action == "read":
+                return current
+            if (
+                not isinstance(expected, tuple) or len(expected) != 2
+                or any(type(value) is not int or value < 0 for value in expected)
+                or expected != current
+                or (action == "increment" and count >= maximum)
+            ):
+                raise AudiaGenticError(code="CON-AGW-125", kind="agents", message="conversation load budget compare-and-swap rejected")
+            updated = (count + 1 if action == "increment" else 0, revision + 1)
+            metadata.update(dict(zip(("conversation-load-recovery-attempts", "conversation-load-recovery-revision"), updated)))
+            record.setdefault("provider", {})["metadata"] = metadata
+            record.setdefault("timing", {})["updated-at"] = now_iso_z()
+            write_session_record(project_root, record)
+            return updated
+
+
 def update_provider_metadata(
     project_root: Path,
     session_id: str,
@@ -369,6 +431,9 @@ def update_provider_metadata(
     writer. Terminal cleanup uses ``clear_terminal_submission_checkpoint``;
     ordinary provider binding metadata remains independent of turn state.
     """
+    # Budget changes have their own owner-fenced CAS. Ignore stale projections.
+    metadata = {key: value for key, value in metadata.items() if key not in _LOAD_BUDGET_KEYS}
+    remove_keys = tuple(key for key in remove_keys if key not in _LOAD_BUDGET_KEYS)
     checkpoint_touched = bool(
         _RECOVERY_CHECKPOINT_KEYS.intersection(metadata)
         or _RECOVERY_CHECKPOINT_KEYS.intersection(remove_keys)
@@ -1208,6 +1273,8 @@ def update_owned_submission_checkpoint(
     remove_keys: tuple[str, ...] = (),
 ) -> dict[str, Any]:
     """Update recovery checkpoint only under its request owner and current stage."""
+    metadata_update = {key: value for key, value in metadata_update.items() if key not in _LOAD_BUDGET_KEYS}
+    remove_keys = tuple(key for key in remove_keys if key not in _LOAD_BUDGET_KEYS)
     if {"submission-recovery-claim", "submission-recovery-generation"}.intersection(
         metadata_update
     ):
@@ -1725,7 +1792,7 @@ def install_prepared_recovery_binding(
                     {
                         key: value
                         for key, value in binding_metadata.items()
-                        if key not in _RECOVERY_CHECKPOINT_KEYS
+                        if key not in _RECOVERY_CHECKPOINT_KEYS | _LOAD_BUDGET_KEYS
                     }
                 )
             record.setdefault("provider", {})["metadata"] = metadata
@@ -1820,7 +1887,7 @@ def commit_prepared_recovery_open(
                 {
                     key: value
                     for key, value in opened_metadata.items()
-                    if key not in _RECOVERY_CHECKPOINT_KEYS
+                    if key not in _RECOVERY_CHECKPOINT_KEYS | _LOAD_BUDGET_KEYS
                 }
             )
             provider["metadata"] = metadata
@@ -2709,7 +2776,7 @@ def install_initial_provider_binding(
                 {
                     key: value
                     for key, value in metadata.items()
-                    if key not in _RECOVERY_CHECKPOINT_KEYS
+                    if key not in _RECOVERY_CHECKPOINT_KEYS | _LOAD_BUDGET_KEYS
                 }
             )
         record.setdefault("timing", {})["updated-at"] = now_iso_z()
@@ -3144,7 +3211,7 @@ def record_session_turn(
             terminal_checkpoint_proven = _terminal_checkpoint_clear_is_proven(
                 existing_metadata, provider_metadata, request_id
             )
-            checkpoint_keys = set(_RECOVERY_CHECKPOINT_KEYS)
+            checkpoint_keys = _RECOVERY_CHECKPOINT_KEYS | _LOAD_BUDGET_KEYS
             current_metadata.update(
                 {
                     key: value
@@ -3189,7 +3256,7 @@ def record_session_turn(
             terminal_checkpoint_proven = _terminal_checkpoint_clear_is_proven(
                 existing_metadata, provider_metadata, request_id
             )
-            checkpoint_keys = set(_RECOVERY_CHECKPOINT_KEYS)
+            checkpoint_keys = _RECOVERY_CHECKPOINT_KEYS | _LOAD_BUDGET_KEYS
             current_metadata.update(
                 {
                     key: value

@@ -2037,6 +2037,19 @@ async def test_conversation_load_recovery_budget_survives_chat_reconstruction() 
     async def checkpoint(metadata: dict[str, object]) -> None:
         checkpointed.append(dict(metadata))
 
+    budget = (1, 0)
+
+    async def recovery_budget(*, action="read", expected=None, maximum=0):
+        nonlocal budget
+        if action != "read":
+            assert expected == budget
+            assert action != "increment" or budget[0] < maximum
+            budget = (budget[0] + 1 if action == "increment" else 0, budget[1] + 1)
+            checkpointed.append(dict(zip(("conversation-load-recovery-attempts", "conversation-load-recovery-revision"), budget)))
+        return budget
+
+    checkpoint.recovery_budget = recovery_budget
+
     first = PersistentChat(
         ag_session_id="session-load-error-budget",
         project_name="project",
