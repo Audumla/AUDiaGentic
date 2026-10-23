@@ -2046,49 +2046,11 @@ class GptAutoTurn:
                 or observed_url != bound_url
             ):
                 return False
-            if _owned_prompt_response_remount(
+            remount = _owned_prompt_response_remount(
                 baseline, raw, prompt_message_id=prompt_message_id,
                 prompt_text=self.request.body, old_assistant_id=old_id,
-            ) is not None:
-                return True
-            return (
-                _fallback_prompt_anchor_is_stable(
-                    baseline, raw, prompt_message_id, prompt_text=self.request.body
-                )
-                and (
-                    _is_fallback_assistant_message_id(old_id)
-                    or _terminal_same_response_slot_replacement(
-                        raw,
-                        prompt_message_id=prompt_message_id,
-                        old_assistant_id=old_id,
-                        new_assistant_id=new_id,
-                    )
-                    or _terminal_same_turn_response_replacement(
-                        raw,
-                        prompt_message_id=prompt_message_id,
-                        old_assistant_id=old_id,
-                        new_assistant_id=new_id,
-                    )
-                )
-                and (
-                    _is_fallback_assistant_message_id(new_id)
-                    or _is_durable_assistant_message_id(new_id)
-                )
-                and (
-                    _same_response_slot_replacement(
-                        raw,
-                        prompt_message_id=prompt_message_id,
-                        old_assistant_id=old_id,
-                        new_assistant_id=new_id,
-                    )
-                    or _terminal_same_turn_response_replacement(
-                        raw,
-                        prompt_message_id=prompt_message_id,
-                        old_assistant_id=old_id,
-                        new_assistant_id=new_id,
-                    )
-                )
             )
+            return remount is not None and remount.message_id == new_id
 
         seen_progress_blocks: Counter[ChatProgressBlock] = Counter()
         # GP47 (2026-08-19): _advance_with_trace only logs on a tracker STATE
@@ -3754,11 +3716,11 @@ def _owned_prompt_response_remount(
         not old_assistant_id or not snapshot.latest_assistant_id
         or snapshot.error_present
         or not same_chat_identity(baseline.url, snapshot.url)
-        or not _same_response_slot_replacement(
+        or not (_same_response_slot_replacement(
             snapshot, prompt_message_id=prompt_message_id,
             old_assistant_id=old_assistant_id,
             new_assistant_id=snapshot.latest_assistant_id,
-        )
+        ) or _terminal_owned_response_span(snapshot, prompt_message_id) is not None)
         or not _fallback_prompt_anchor_is_stable(
             baseline, snapshot, prompt_message_id, prompt_text=prompt_text,
         )
@@ -3772,6 +3734,41 @@ def _owned_prompt_response_remount(
         return None
     return next(ref for ref in snapshot.message_refs
                 if ref.role == "assistant" and ref.message_id == snapshot.latest_assistant_id)
+
+
+def _terminal_owned_response_span(snapshot: ChatSnapshot, prompt_message_id: str) -> ChatMessageRef | None:
+    """Select the terminal final node, not a renderer UUID, within an owned turn.
+
+    Callers must additionally prove conversation identity and the full prompt
+    fingerprint. This is correlation only; stability and fresh verification
+    still decide completion. Intermediate assistant nodes need not retain the
+    ID observed during streaming.
+    """
+    if (snapshot.error_present or snapshot.generating
+            or snapshot.latest_user_id != prompt_message_id
+            or not snapshot.latest_assistant_text
+            or snapshot.terminal_witness_assistant_id != snapshot.latest_assistant_id
+            or not snapshot.dom_signals & _REMOUNT_TERMINAL_WITNESS_SIGNALS):
+        return None
+    refs = snapshot.message_refs
+    indexes = [i for i, ref in enumerate(refs)
+               if ref.role == "user" and ref.message_id == prompt_message_id]
+    if len(indexes) != 1:
+        return None
+    tail = refs[indexes[0] + 1:]
+    if not tail or any(ref.role != "assistant" for ref in tail):
+        return None
+    ids = [ref.message_id for ref in tail]
+    prompt = refs[indexes[0]]
+    if not (len(ids) == 2 and all(ids) and len(set(ids)) == len(ids)
+            and ids[-1] == snapshot.latest_assistant_id
+            and prompt.renderer_turn_id
+            and all(ref.renderer_turn_id == prompt.renderer_turn_id for ref in tail)
+            and tail[0].renderer_unit_id
+            and tail[0].renderer_unit_id == tail[1].renderer_unit_id
+            and tail[0].sequence < tail[1].sequence):
+        return None
+    return tail[-1]
 
 
 def _assistant_identity_is_pending(
@@ -3836,14 +3833,14 @@ def _same_response_slot_replacement(
     return snapshot.latest_assistant_id == new_assistant_id
 
 
-def _terminal_same_response_slot_replacement(
+def _terminal_response_replacement(
     snapshot: ChatSnapshot,
     *,
     prompt_message_id: str,
     old_assistant_id: str,
     new_assistant_id: str,
 ) -> bool:
-    """Allow a durable assistant ID to change only after a proven remount.
+    """Shared terminal replacement proof for observation and operator capture.
 
     The provider can rematerialize the completed assistant node with a new
     ``data-message-id``.  A durable-ID change is normally unsafe, but it is
@@ -3853,59 +3850,23 @@ def _terminal_same_response_slot_replacement(
     a transient streaming remount from masking a submission/ownership bug.
     """
     return (
-        _same_response_slot_replacement(
+        not snapshot.error_present
+        and new_assistant_id != old_assistant_id
+        and (
+            _same_response_slot_replacement(
             snapshot,
             prompt_message_id=prompt_message_id,
             old_assistant_id=old_assistant_id,
             new_assistant_id=new_assistant_id,
+            )
+            or (
+                (selected := _terminal_owned_response_span(snapshot, prompt_message_id)) is not None
+                and selected.message_id == new_assistant_id
+            )
         )
         and not snapshot.generating
         and bool(snapshot.latest_assistant_text)
         and snapshot.terminal_witness_assistant_id == new_assistant_id
-        and bool(snapshot.dom_signals & _REMOUNT_TERMINAL_WITNESS_SIGNALS)
-    )
-
-
-def _terminal_same_turn_response_replacement(
-    snapshot: ChatSnapshot,
-    *,
-    prompt_message_id: str,
-    old_assistant_id: str,
-    new_assistant_id: str,
-) -> bool:
-    """Prove a terminal assistant remount within one prompt turn.
-
-    Some ChatGPT renderer revisions briefly retain the old assistant node
-    while mounting the terminal replacement.  The ordinary slot predicate
-    deliberately rejects that overlap because it is ambiguous in a normal
-    snapshot.  This narrower terminal-only predicate is safe when the
-    prompt is still the latest user turn, exactly two assistant nodes occupy
-    that turn (the bound node and its replacement), and the replacement is
-    the independent terminal witness.
-    """
-    if not new_assistant_id or new_assistant_id == old_assistant_id:
-        return False
-    if snapshot.latest_user_id != prompt_message_id:
-        return False
-    prompt_indexes = [
-        index
-        for index, ref in enumerate(snapshot.message_refs)
-        if ref.role == "user" and ref.message_id == prompt_message_id
-    ]
-    if len(prompt_indexes) != 1:
-        return False
-    tail = snapshot.message_refs[prompt_indexes[0] + 1 :]
-    if any(ref.role == "user" for ref in tail):
-        return False
-    assistants = [ref for ref in tail if ref.role == "assistant"]
-    return (
-        len(assistants) == 2
-        and assistants[0].message_id == old_assistant_id
-        and assistants[1].message_id == new_assistant_id
-        and snapshot.latest_assistant_id == new_assistant_id
-        and snapshot.terminal_witness_assistant_id == new_assistant_id
-        and not snapshot.generating
-        and bool(snapshot.latest_assistant_text)
         and bool(snapshot.dom_signals & _REMOUNT_TERMINAL_WITNESS_SIGNALS)
     )
 
@@ -4000,6 +3961,17 @@ def _scope_response_snapshot(
             "provider conversation changed during response observation"
         )
     response_ref = _response_ref_for_prompt(snapshot, prompt_message_id)
+    terminal_remount = (
+        _owned_prompt_response_remount(
+                baseline, snapshot, prompt_message_id=prompt_message_id,
+                prompt_text=prompt_text, old_assistant_id=bound_assistant_id,
+            ) if prompt_text and bound_assistant_id else None
+    )
+    if terminal_remount is not None and _terminal_owned_response_span(snapshot, prompt_message_id):
+        response_ref = terminal_remount
+        # The selected final node, not the first intermediate node, is now
+        # the scoped hint. Publishing still requires _replacement_proven.
+        virtualized_assistant_id = terminal_remount.message_id
     if (
         response_ref is not None
         and not _fallback_prompt_anchor_is_stable(
@@ -4016,7 +3988,7 @@ def _scope_response_snapshot(
         and response_ref.message_id == bound_assistant_id
         and snapshot.latest_assistant_id
         and snapshot.latest_assistant_id != bound_assistant_id
-        and _terminal_same_turn_response_replacement(
+        and _terminal_response_replacement(
             snapshot,
             prompt_message_id=prompt_message_id,
             old_assistant_id=bound_assistant_id,
@@ -4181,7 +4153,7 @@ def _scope_response_snapshot(
             )
             if (
                 latest_assistant_ref is not None
-                and _terminal_same_turn_response_replacement(
+                and _terminal_response_replacement(
                     snapshot,
                     prompt_message_id=matched_prompt_id,
                     old_assistant_id=bound_assistant_id,

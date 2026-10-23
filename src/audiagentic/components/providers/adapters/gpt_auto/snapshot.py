@@ -60,6 +60,8 @@ class ChatMessageRef:
     # visible text used for diagnostics and display.
     correlation_text: str | None = None
     structural_hr_count: int = 0
+    renderer_turn_id: str | None = None
+    renderer_unit_id: str | None = None
 
 
 _PROGRESS_KINDS = frozenset({
@@ -193,6 +195,8 @@ class ChatSnapshot:
                     markdown=_text(item.get("markdown")),
                     sequence=int(item.get("sequence") or 0),
                     correlation_text=_text(item.get("correlationText")),
+                    renderer_turn_id=_text(item.get("rendererTurnId")),
+                    renderer_unit_id=_text(item.get("rendererUnitId")),
                     structural_hr_count=(
                         int(item.get("structuralHrCount") or 0)
                         if isinstance(item.get("structuralHrCount"), int)

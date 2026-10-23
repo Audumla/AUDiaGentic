@@ -32,8 +32,7 @@ from audiagentic.components.providers.adapters.gpt_auto.turn import (
     _same_response_slot_replacement,
     _scope_response_snapshot,
     _terminal_checkpoint_fingerprint,
-    _terminal_same_response_slot_replacement,
-    _terminal_same_turn_response_replacement,
+    _terminal_response_replacement,
     _terminal_single_response_remount,
     _assistant_identity_is_pending,
     _owned_prompt_response_remount,
@@ -1737,6 +1736,90 @@ async def test_streaming_durable_synthetic_id_churn_completes_same_owned_turn(fi
     assert any(observation.kind == TransportObservationKind.ACTIVITY for observation in observations)
 
 
+@pytest.mark.asyncio
+async def test_terminal_multi_node_remount_completes_without_replay():
+    chat = _Chat()
+    chat.provider_session_id = "conversation-1"
+    chat.chat_url = "https://chatgpt.com/g/g-p-project/c/conversation-1"
+    baseline = snap()
+    initial = snap(users=1, assistants=1, user="Review AU01", user_id="current",
+                   assistant="Working", assistant_id="original", generating=True)
+    final = snap(users=1, assistants=2, user="Review AU01", user_id="current",
+                 assistant="Completed review", assistant_id="final", complete=True)
+    final = replace(final, message_refs=(replace(final.message_refs[0], renderer_turn_id="turn-1"),
+        ChatMessageRef("assistant", "intermediate", "Reasoning", 1,
+                       renderer_turn_id="turn-1", renderer_unit_id="unit-1"),
+        replace(final.message_refs[-1], sequence=2,
+                renderer_turn_id="turn-1", renderer_unit_id="unit-1")))
+    for invalid in (replace(final, generating=True), replace(final, error_present=True),
+                    replace(final, terminal_witness_assistant_id="other"),
+                    replace(final, url=final.url + "-foreign"),
+                    replace(final, message_refs=(replace(final.message_refs[0], text="Other prompt"),
+                                                *final.message_refs[1:])),
+                    replace(final, message_refs=(*final.message_refs,
+                        ChatMessageRef("user", "later", "Review AU01", 3))),
+                    replace(final, message_refs=(final.message_refs[0],
+                        replace(final.message_refs[1], message_id="final"), final.message_refs[2])),
+                    replace(final, message_refs=(*final.message_refs[:2],
+                        replace(final.message_refs[2], renderer_unit_id="other-branch"))),
+                    replace(final, message_refs=(*final.message_refs[:2],
+                        replace(final.message_refs[2], renderer_turn_id="other-turn"))),
+                    replace(final, message_refs=(*final.message_refs,
+                        replace(final.message_refs[2], message_id="third", sequence=3)))):
+        assert _owned_prompt_response_remount(baseline, invalid,
+            prompt_message_id="current", prompt_text="Review AU01",
+            old_assistant_id="original") is None
+    # Separate atomic observations, not a shared immutable object. A fresh
+    # poll must still pass the independent stability/verification gate.
+    chat._snapshots = iter([replace(final, message_refs=tuple(replace(r) for r in final.message_refs))
+                            for _ in range(100)])
+    turn = GptAutoTurn(chat, SessionPrompt(turn_id="multi-node", body="Review AU01"), lambda _: None)
+    turn.state = TurnState.AWAITING_RESPONSE
+    turn._prompt_message_id = "current"
+    turn._response_message_id = "original"
+    turn._submission_proof_assistant_id = "original"
+    assert await asyncio.wait_for(turn._await_response(baseline, initial), 2) == "Completed review"
+    assert chat.runtime.bridge.submit_calls == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("change", ["text", "generation", "controls"])
+async def test_multi_node_remount_does_not_complete_changing_observations(change):
+    chat = _Chat()
+    chat.provider_session_id = "conversation-1"
+    chat.chat_url = "https://chatgpt.com/g/g-p-project/c/conversation-1"
+    baseline = snap()
+    initial = snap(users=1, assistants=1, user="Review AU01", user_id="current",
+                   assistant="Working", assistant_id="original", generating=True)
+    final = snap(users=1, assistants=2, user="Review AU01", user_id="current",
+                 assistant="Final", assistant_id="final", complete=True)
+    final = replace(final, message_refs=(replace(final.message_refs[0], renderer_turn_id="turn"),
+        ChatMessageRef("assistant", "intermediate", "Reasoning", 1,
+                       renderer_turn_id="turn", renderer_unit_id="unit"),
+        replace(final.message_refs[-1], sequence=2, renderer_turn_id="turn", renderer_unit_id="unit")))
+    calls = 0
+    async def snapshot():
+        nonlocal calls
+        calls += 1
+        if calls % 2:
+            return replace(final)
+        if change == "generation":
+            return replace(final, generating=True)
+        if change == "controls":
+            return replace(final, dom_signals=frozenset(), terminal_witness_assistant_id=None)
+        return replace(final, latest_assistant_text="Still changing",
+            message_refs=(*final.message_refs[:2], replace(final.message_refs[-1], text="Still changing")))
+    chat.snapshot = snapshot
+    turn = GptAutoTurn(chat, SessionPrompt(turn_id="changing-multi", body="Review AU01"), lambda _: None)
+    turn.state = TurnState.AWAITING_RESPONSE
+    turn._prompt_message_id = "current"
+    turn._response_message_id = "original"
+    turn._submission_proof_assistant_id = "original"
+    with pytest.raises(asyncio.TimeoutError):
+        await asyncio.wait_for(turn._await_response(baseline, initial), 0.12)
+    assert calls > 1 and chat.runtime.bridge.submit_calls == 0
+
+
 def test_remount_rejects_foreign_turn_changed_prompt_and_conversation():
     baseline = snap()
     current = snap(users=1, assistants=1, user="Review AU01", user_id="current",
@@ -1805,14 +1888,14 @@ def test_durable_assistant_remount_is_adopted_only_with_terminal_dom_witness() -
         ),
     )
 
-    assert _terminal_same_response_slot_replacement(
+    assert _terminal_response_replacement(
         terminal,
         prompt_message_id="prompt-1",
         old_assistant_id="assistant-old",
         new_assistant_id="assistant-new",
     )
 
-    assert not _terminal_same_response_slot_replacement(
+    assert not _terminal_response_replacement(
         replace(terminal, generating=True, dom_signals=frozenset({"stop-control"})),
         prompt_message_id="prompt-1",
         old_assistant_id="assistant-old",
@@ -1838,7 +1921,10 @@ def test_terminal_same_turn_remount_allows_old_node_to_overlap_replacement() -> 
         ),
     )
 
-    assert _terminal_same_turn_response_replacement(
+    snapshot = replace(snapshot, message_refs=tuple(
+        replace(ref, renderer_turn_id="turn", renderer_unit_id="unit" if ref.role == "assistant" else "user")
+        for ref in snapshot.message_refs))
+    assert _terminal_response_replacement(
         snapshot,
         prompt_message_id="prompt-1",
         old_assistant_id="assistant-old",
@@ -1852,7 +1938,7 @@ def test_terminal_same_turn_remount_allows_old_node_to_overlap_replacement() -> 
         + (ChatMessageRef(role="user", message_id="prompt-2", text="later", sequence=3),),
         latest_user_id="prompt-2",
     )
-    assert not _terminal_same_turn_response_replacement(
+    assert not _terminal_response_replacement(
         later_user,
         prompt_message_id="prompt-1",
         old_assistant_id="assistant-old",
@@ -1899,6 +1985,9 @@ def test_scoping_adopts_terminal_second_assistant_in_same_prompt_turn() -> None:
         ),
     )
 
+    current = replace(current, message_refs=tuple(
+        replace(ref, renderer_turn_id="turn", renderer_unit_id="unit" if ref.role == "assistant" else "user")
+        for ref in current.message_refs))
     scoped, response_ref = _scope_response_snapshot(
         baseline,
         current,

@@ -17,6 +17,7 @@ import logging
 import re
 import time
 import traceback
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -29,6 +30,55 @@ from audiagentic.foundation.time import now_iso_z
 from audiagentic.foundation.transports.agent_session import SessionFailureDisposition
 
 logger = logging.getLogger(__name__)
+
+
+@contextmanager
+def _preparation_span(project_root: Path, record: dict[str, Any], phase: str):
+    """Persist bounded preparation spans without renewing provider activity.
+
+    Begin events make a hung phase observable; monotonic duration avoids wall
+    clock adjustments. Never record arguments, return values or exception text.
+    """
+    started = time.monotonic()
+
+    def emit(outcome: str) -> None:
+        if not isinstance(record.get("request-id"), str) or not record["request-id"]:
+            return  # Session API callers outside gateway dispatch have no journal.
+        try:
+            from audiagentic.components.agents.gateway.observability import append_observation
+
+            append_observation(
+                project_root, record["request-id"],
+                session_id=record.get("session-id"), turn_id=record["request-id"],
+                attempt_epoch=max(1, int(record.get("attempt-epoch") or 1)),
+                source="session-dispatch",
+                diagnostic_facts={
+                    "phase": phase,
+                    "elapsed-ms": round((time.monotonic() - started) * 1000, 3),
+                    "digest": hashlib.sha256(str(record.get("dispatch-owner-epoch") or "").encode()).hexdigest()[:16],
+                },
+                action={"event": "preparation-phase", "outcome": outcome},
+                force_flush=True,
+            )
+        except Exception:  # noqa: BLE001 - observation must not alter dispatch
+            logger.debug("preparation timing append failed", exc_info=True)
+
+    emit("begin")
+    started = time.monotonic()  # Exclude durable begin-event I/O from operation time.
+    try:
+        yield
+    except BaseException:
+        emit("failed")
+        raise
+    emit("completed")
+
+
+def _timed_preparation_call(
+    project_root: Path, record: dict[str, Any], phase: str,
+    operation: Any, *args: Any, **kwargs: Any,
+) -> Any:
+    with _preparation_span(project_root, record, phase):
+        return operation(*args, **kwargs)
 
 
 def _record_dispatch_failure_observation(
@@ -1546,7 +1596,7 @@ def _dispatch_session_request(
     request_runtime_root = gateway_request_dir(project_root, request_id) / "runtime"
     from audiagentic.components.agents.gateway.session import client_defaults
     preparation_guard = client_defaults.preparation_guard(record)
-    preparation_guard.acquire()
+    _timed_preparation_call(project_root, record, "default-session-guard", preparation_guard.acquire)
     guard_held = True
     runtime_invoked = False
     try:
@@ -1708,7 +1758,10 @@ def _dispatch_session_request(
             request_runtime = request_runtime_root
             from audiagentic.components.providers import providers_api
 
-            mcp_entries = providers_api.collect_management_mcp_launch_entries(project_root)
+            mcp_entries = _timed_preparation_call(
+                project_root, record, "management-mcp-catalog",
+                providers_api.collect_management_mcp_launch_entries, project_root,
+            )
             # AS28 slice 4a: pass provider context — the session runtime
             # resolves the transport via providers_api.prepare_provider_session_transport.
             # AS08: persist execution-context fingerprint on session create.
@@ -1741,7 +1794,8 @@ def _dispatch_session_request(
             # (AS49) is the correct, non-speculative behavior until a real
             # need for a finer split shows up.
             manifest_context_fingerprint = context_fingerprint or record.get("context-fingerprint")
-            session_record = runtime.open_session(
+            session_record = _timed_preparation_call(
+                project_root, record, "session-open", runtime.open_session,
                 project_root,
                 execution_profile_id=execution_profile_id,
                 provider_id=provider_id,
@@ -1955,7 +2009,8 @@ def _dispatch_session_request(
                         else None
                     )
                     try:
-                        runtime.rehydrate_session(
+                        _timed_preparation_call(
+                            project_root, record, "session-rehydrate", runtime.rehydrate_session,
                             project_root,
                             session_id,
                             execution_profile_id=execution_profile_id,
