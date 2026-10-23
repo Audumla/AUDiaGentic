@@ -2,7 +2,11 @@ name: ci-contracts
 
 on:
   push:
+    branches:
+      - main
+      - proof-release-*
   pull_request:
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
