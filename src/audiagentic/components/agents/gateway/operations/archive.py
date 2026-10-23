@@ -12,6 +12,7 @@ from typing import Any, Protocol
 
 from audiagentic.components.agents.agents_paths import (
     gateway_request_dir,
+    gateway_request_maintenance_lock_path,
     gateway_retention_lock_path,
     gateway_root,
 )
@@ -25,6 +26,12 @@ from audiagentic.foundation.io import atomic_write_json, read_text_with_retry
 from audiagentic.foundation.system.process import StartupLock
 
 from .retention_policy import load_retention_policy, policy_matches
+
+_TRACE_LOCKS = frozenset(
+    f"{kind}.ndjson.{lock}.lock"
+    for kind in ("timeline", "observations", "recovery-actions")
+    for lock in ("journal", "maintenance")
+)
 
 
 class RequestAccess(Protocol):
@@ -52,7 +59,8 @@ def _ids(operation: Mapping[str, Any]) -> list[str]:
 def _digest_tree(path: Path) -> str:
     digest = hashlib.sha256()
     for child in sorted(path.rglob("*")):
-        if child.is_file() and child.name != "archive-manifest.json":
+        if (child.is_file() and child.name != "archive-manifest.json"
+                and not (child.parent == path and child.name in _TRACE_LOCKS)):
             digest.update(child.relative_to(path).as_posix().encode())
             digest.update(child.read_bytes())
     return digest.hexdigest()
@@ -85,7 +93,10 @@ class GatewayArchiveExecutor:
             staging = archive_root / f".{request_id}.staging"
             if staging.exists():
                 shutil.rmtree(staging)
-            shutil.copytree(source, staging)
+            # OS advisory fences are transient coordination, not archive
+            # state. On Windows, reading a held lock byte can also fail.
+            shutil.copytree(source, staging, ignore=lambda directory, names:
+                            list(_TRACE_LOCKS.intersection(names)) if Path(directory) == source else [])
             tree_digest = _digest_tree(staging)
             staging.rename(destination)
             atomic_write_json(manifest, {
@@ -158,7 +169,7 @@ class GatewayPurgeExecutor:
             # Pin creation and deletion share this fence. This closes the
             # census-to-delete race where a session could become referentially
             # pinned after the final read but before rmtree.
-            with StartupLock(gateway_retention_lock_path(root)):
+            with StartupLock(gateway_request_maintenance_lock_path(root, request_id)), StartupLock(gateway_retention_lock_path(root)):
                 if not policy_matches(snapshot):
                     blocked += 1
                     continue

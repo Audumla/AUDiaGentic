@@ -56,6 +56,12 @@ def agent_gateway_set_config(implementation_id: str, updates: dict) -> dict:
 @mcp.tool()
 @tool_boundary
 def agent_gateway_get_retention_policy() -> dict:
+    """Read trace age (default five days), history count and segment byte caps.
+
+    Closed daily trace segments compress and expire in background; active,
+    unresolved, recovery-required and pinned evidence remains protected.
+    Request records and final responses are separate from trace expiry.
+    """
     return _call("gateway_get_retention_policy")
 
 

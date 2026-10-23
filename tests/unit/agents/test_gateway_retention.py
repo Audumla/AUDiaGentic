@@ -229,6 +229,9 @@ def test_terminal_timeline_schedules_retention_instead_of_running_inline(tmp_pat
 
 
 def test_background_retention_sweep_records_duration_and_result(tmp_path: Path, monkeypatch) -> None:
+    record = gateway_request_dir(tmp_path, "req_retention_trace") / "record.json"
+    record.parent.mkdir(parents=True)
+    record.write_text('{"request-id":"req_retention_trace","state":"completed"}', encoding="utf-8")
     observed: list[dict] = []
     threads: list[SimpleNamespace] = []
 
