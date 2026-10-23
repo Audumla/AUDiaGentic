@@ -196,7 +196,11 @@ def agent_task_observations(
     since_sequence: int | None = None,
     tail: int | None = None,
 ) -> dict[str, Any]:
-    """Return a finite page of redacted request-owned observations."""
+    """Read a bounded page across retained daily plain/gzip observations.
+
+    Eligible raw traces expire after five days by default; protected request
+    evidence is retained longer. Request outcome and final output are separate.
+    """
     project_root = _request_project_root(request_id)
     _page_limit(limit)
     params: dict[str, Any] = {

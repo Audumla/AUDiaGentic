@@ -272,12 +272,17 @@ def gateway_get_retention_policy(project_root: Path) -> dict[str, Any]:
     )
 
     policy = load_retention_policy()
+    from .journal_retention import journal_retention_days
+
     return {
         "available": policy.available,
         "purge-enabled": policy.enabled,
         "minimum-archive-age-seconds": policy.minimum_archive_age_seconds,
         "max-batch-size": policy.max_batch_size,
         "request-history-limit": policy.request_history_limit,
+        "journal-retention-days": journal_retention_days(),
+        "journal-rotation": "daily-utc-and-size",
+        "journal-compression": "gzip-closed-segments",
         "timeline-max-bytes": policy.timeline_max_bytes,
         "observation-max-bytes": policy.observation_max_bytes,
         "recovery-max-bytes": policy.recovery_max_bytes,

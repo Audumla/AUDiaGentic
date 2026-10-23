@@ -1,6 +1,8 @@
 """Causal recovery intents and offline replay analysis (GA04)."""
 from __future__ import annotations
 
+from audiagentic.foundation.observability.journal_segments import has_segments, head_read_lock
+
 import base64
 import json
 import os
@@ -151,32 +153,35 @@ def _read(project_root: Path, request_id: str) -> list[dict[str, Any]]:
 
 
 def _append(project_root: Path, request_id: str, event: dict[str, Any]) -> dict[str, Any]:
+    from audiagentic.foundation.observability.journal_segments import journal_lock
+
     path = gateway_recovery_action_path(project_root, request_id)
     path.parent.mkdir(parents=True, exist_ok=True)
+    with journal_lock(path):
+        return _append_locked(project_root, request_id, event)
+
+
+def _append_locked(project_root: Path, request_id: str, event: dict[str, Any]) -> dict[str, Any]:
+    from audiagentic.foundation.observability.journal_segments import prepare_append, journal_sequence_watermark
+    from .retention import journal_max_bytes
+
+    path = gateway_recovery_action_path(project_root, request_id)
     previous = last_ndjson(gateway_recovery_action_path(project_root, request_id))
     event = dict(event)
-    event["event-seq"] = (int(previous.get("event-seq", 0)) if previous else 0) + 1
+    event["event-seq"] = (int(previous.get("event-seq", 0)) if previous else journal_sequence_watermark(path)) + 1
     line = json.dumps(event, sort_keys=True, separators=(",", ":")) + "\n"
+    index = gateway_recovery_index_path(project_root, request_id)
+    prepare_append(path, index, max_bytes=journal_max_bytes("recovery"),
+                   incoming_bytes=len(line.encode("utf-8")))
     offset = path.stat().st_size if path.exists() else 0
     with path.open("a", encoding="utf-8", newline="\n") as handle:
         handle.write(line)
         handle.flush()
         os.fsync(handle.fileno())
-    index = gateway_recovery_index_path(project_root, request_id)
     with index.open("a", encoding="utf-8", newline="\n") as handle:
         handle.write(json.dumps({"event-seq": event["event-seq"], "offset": offset, "length": len(line.encode("utf-8"))}, separators=(",", ":")) + "\n")
         handle.flush()
         os.fsync(handle.fileno())
-    from audiagentic.components.agents.gateway.retention import (
-        compact_indexed_ndjson,
-        journal_max_bytes,
-    )
-    compact_indexed_ndjson(
-        path,
-        index,
-        max_bytes=journal_max_bytes("recovery"),
-        preserve=lambda row: row.get("event") in {"action-intent", "claim-renewal", "action-result", "recovery-terminal", "reconciliation-result"},
-    )
     return event
 
 
@@ -447,63 +452,64 @@ def _offset(cursor: str | None) -> int:
 
 
 def read_recovery_page(project_root: Path, request_id: str, *, limit: int = 25, cursor: str | None = None) -> dict[str, Any]:
-    if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= _PAGE_SIZE:
-        raise ValueError("recovery limit must be an integer between 1 and 100")
-    start = _offset(cursor)
-    index_offset: int | None = None
-    if cursor:
-        try:
-            padded = cursor + "=" * (-len(cursor) % 4)
-            value = json.loads(base64.urlsafe_b64decode(padded.encode()).decode())
-            index_offset = value.get("index-offset")
-            if index_offset is not None and (isinstance(index_offset, bool) or not isinstance(index_offset, int) or index_offset < 0):
-                raise ValueError
-        except (ValueError, KeyError, TypeError, UnicodeError, json.JSONDecodeError) as exc:
-            raise ValueError("invalid recovery cursor") from exc
-    items: list[dict[str, Any]] = []
-    has_more = False
-    next_index_offset: int | None = None
-    journal = gateway_recovery_action_path(project_root, request_id)
-    index_path = gateway_recovery_index_path(project_root, request_id)
-    if journal.exists() and index_path.exists():
-        with index_path.open("rb") as index_handle, journal.open("rb") as journal_handle:
-            if index_offset is not None:
-                index_handle.seek(index_offset)
-            index = 0
-            while True:
-                current_index_offset = index_handle.tell()
-                raw_index = index_handle.readline()
-                if not raw_index:
-                    break
-                if index_offset is None and index < start:
+    with head_read_lock(gateway_recovery_action_path(project_root, request_id)):
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= _PAGE_SIZE:
+            raise ValueError("recovery limit must be an integer between 1 and 100")
+        start = _offset(cursor)
+        index_offset: int | None = None
+        if cursor:
+            try:
+                padded = cursor + "=" * (-len(cursor) % 4)
+                value = json.loads(base64.urlsafe_b64decode(padded.encode()).decode())
+                index_offset = value.get("index-offset")
+                if index_offset is not None and (isinstance(index_offset, bool) or not isinstance(index_offset, int) or index_offset < 0):
+                    raise ValueError
+            except (ValueError, KeyError, TypeError, UnicodeError, json.JSONDecodeError) as exc:
+                raise ValueError("invalid recovery cursor") from exc
+        items: list[dict[str, Any]] = []
+        has_more = False
+        next_index_offset: int | None = None
+        journal = gateway_recovery_action_path(project_root, request_id)
+        index_path = gateway_recovery_index_path(project_root, request_id)
+        if journal.exists() and index_path.exists() and not has_segments(journal):
+            with index_path.open("rb") as index_handle, journal.open("rb") as journal_handle:
+                if index_offset is not None:
+                    index_handle.seek(index_offset)
+                index = 0
+                while True:
+                    current_index_offset = index_handle.tell()
+                    raw_index = index_handle.readline()
+                    if not raw_index:
+                        break
+                    if index_offset is None and index < start:
+                        index += 1
+                        continue
+                    if len(items) >= limit:
+                        has_more = True
+                        next_index_offset = current_index_offset
+                        break
+                    metadata = json.loads(raw_index)
+                    journal_handle.seek(int(metadata["offset"]))
+                    items.append(json.loads(journal_handle.readline().decode("utf-8")))
                     index += 1
+        else:
+            for index, entry in enumerate(iter_ndjson(journal)):
+                if index < start:
                     continue
-                if len(items) >= limit:
+                if len(items) < limit:
+                    items.append(entry)
+                else:
                     has_more = True
-                    next_index_offset = current_index_offset
                     break
-                metadata = json.loads(raw_index)
-                journal_handle.seek(int(metadata["offset"]))
-                items.append(json.loads(journal_handle.readline().decode("utf-8")))
-                index += 1
-    else:
-        for index, entry in enumerate(iter_ndjson(journal)):
-            if index < start:
-                continue
-            if len(items) < limit:
-                items.append(entry)
-            else:
-                has_more = True
-                break
-    result = {
-        "schema-version": SCHEMA_VERSION,
-        "request-id": request_id,
-        "items": items,
-        "returned": len(items),
-    }
-    if has_more:
-        result["next-cursor"] = _cursor(start + len(items), index_offset=next_index_offset)
-    return result
+        result = {
+            "schema-version": SCHEMA_VERSION,
+            "request-id": request_id,
+            "items": items,
+            "returned": len(items),
+        }
+        if has_more:
+            result["next-cursor"] = _cursor(start + len(items), index_offset=next_index_offset)
+        return result
 
 
 def replay_observations(entries: Iterable[Mapping[str, Any]]) -> dict[str, Any]:

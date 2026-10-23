@@ -173,8 +173,13 @@ def load_ndjson(path: Path) -> list[dict[str, Any]]:
     return list(iter_ndjson(path))
 
 
-def iter_ndjson(path: Path):
+def iter_ndjson(path: Path, *, _segments: bool = True):
     """Yield mapping rows from an NDJSON file without retaining the whole file."""
+    if _segments:
+        from audiagentic.foundation.observability.journal_segments import has_segments, iter_segment_rows
+        if has_segments(path) or path.with_name(path.name + ".rotation.json").is_file():
+            yield from iter_segment_rows(path)
+            return
     if not path.exists():
         return
     with path.open("r", encoding="utf-8") as handle:
@@ -191,10 +196,14 @@ def last_ndjson(path: Path) -> dict[str, Any] | None:
     return rows[0] if rows else None
 
 
-def tail_ndjson(path: Path, limit: int) -> list[dict[str, Any]]:
+def tail_ndjson(path: Path, limit: int, *, _segments: bool = True) -> list[dict[str, Any]]:
     """Return the last bounded number of mapping rows using reverse reads."""
     if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
         raise ValueError("NDJSON tail limit must be a positive integer")
+    if _segments:
+        from audiagentic.foundation.observability.journal_segments import has_segments, tail_segment_rows
+        if has_segments(path) or path.with_name(path.name + ".rotation.json").is_file():
+            return tail_segment_rows(path, limit)
     if not path.exists():
         return []
     rows: list[dict[str, Any]] = []

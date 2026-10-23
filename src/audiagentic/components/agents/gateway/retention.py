@@ -13,7 +13,6 @@ import logging
 import os
 import threading
 import time
-from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -37,7 +36,7 @@ from audiagentic.components.agents.gateway.operations.retention_policy import (
     load_retention_policy,
 )
 from audiagentic.components.agents.gateway.session.retention import request_retention_pin
-from audiagentic.foundation.io import atomic_write_bytes, iter_ndjson
+from audiagentic.foundation.observability.journal_segments import compact_indexed_ndjson
 from audiagentic.foundation.system.process import StartupLock
 
 logger = logging.getLogger(__name__)
@@ -120,72 +119,6 @@ def _terminal_recovery(row: dict[str, Any]) -> bool:
     return row.get("event") in {"action-result", "recovery-terminal", "reconciliation-result"}
 
 
-def _journal_content(rows: list[dict[str, Any]]) -> tuple[bytes, bytes]:
-    journal = bytearray()
-    index = bytearray()
-    for row in rows:
-        line = (json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
-        offset = len(journal)
-        journal.extend(line)
-        metadata: dict[str, Any] = {"offset": offset, "length": len(line)}
-        if "event_seq" in row:
-            metadata["event_seq"] = row["event_seq"]
-        if "event-seq" in row:
-            metadata["event-seq"] = row["event-seq"]
-        index.extend((json.dumps(metadata, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8"))
-    return bytes(journal), bytes(index)
-
-
-def compact_indexed_ndjson(
-    journal_path: Path,
-    index_path: Path,
-    *,
-    max_bytes: int,
-    preserve: Callable[[dict[str, Any]], bool] | None = None,
-) -> bool:
-    """Compact an indexed journal and rebuild its index as one atomic pair."""
-    if not journal_path.exists() or journal_path.stat().st_size <= max_bytes:
-        return False
-    try:
-        rows = list(iter_ndjson(journal_path))
-    except (OSError, ValueError, TypeError, UnicodeDecodeError, json.JSONDecodeError):
-        logger.warning("gateway journal compaction skipped for unreadable journal", extra={"path": str(journal_path)})
-        return False
-    if not rows:
-        return False
-    preserve = preserve or (lambda row: False)
-    must_keep = {index for index, row in enumerate(rows) if preserve(row)}
-    must_keep.add(len(rows) - 1)
-    encoded = [
-        (json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
-        for row in rows
-    ]
-
-    selected = set(must_keep)
-    selected_bytes = sum(len(encoded[index]) for index in selected)
-    if selected_bytes <= max_bytes:
-        # Leave headroom so the next append does not immediately rewrite
-        # both files again. Required evidence is never dropped for headroom.
-        target_bytes = max(selected_bytes, max_bytes * 3 // 4)
-        for index in range(len(rows) - 1, -1, -1):
-            if index in selected:
-                continue
-            row_bytes = len(encoded[index])
-            if selected_bytes + row_bytes > target_bytes:
-                break
-            selected.add(index)
-            selected_bytes += row_bytes
-    else:
-        # A single terminal row is irreducible evidence. Keep the newest
-        # terminal row even if an operator configured a cap smaller than it.
-        selected = {len(rows) - 1}
-    kept = [rows[index] for index in sorted(selected)]
-    journal, index = _journal_content(kept)
-    atomic_write_bytes(journal_path, journal)
-    atomic_write_bytes(index_path, index)
-    return True
-
-
 def compact_request_journals(project_root: Path, request_id: str) -> int:
     """Compact all three request journals under the request mutation fence."""
     changed = 0
@@ -194,6 +127,10 @@ def compact_request_journals(project_root: Path, request_id: str) -> int:
             journal_path = journal_fn(project_root, request_id)
             index_path = index_fn(project_root, request_id)
             if not journal_path.exists():
+                continue
+            # Rotated journals are append-only. Their daily segments are
+            # maintained by age, independently of the historical count cap.
+            if journal_path.with_name(journal_path.name + ".rotation.json").exists():
                 continue
             try:
                 maximum = journal_max_bytes(kind)
@@ -228,6 +165,7 @@ def _sort_key(record: dict[str, Any], path: Path) -> tuple[datetime, str]:
 
 def _eligible_record(
     project_root: Path, entry: Path, *, positive_lineage: frozenset[str] = frozenset(),
+    retention_fence_held: bool = False,
 ) -> tuple[dict[str, Any], tuple[datetime, str]] | None:
     record_path = entry / "record.json"
     try:
@@ -258,7 +196,11 @@ def _eligible_record(
         runtime_root = entry / "runtime"
         if runtime_root.is_dir() and next(runtime_root.iterdir(), None) is not None:
             return None
-        if request_retention_pin(project_root, request_id).pinned:
+        pin = request_retention_pin
+        if retention_fence_held:
+            from .session.retention import _request_retention_pin_unlocked
+            pin = _request_retention_pin_unlocked
+        if pin(project_root, request_id).pinned:
             return None
     except (OSError, ValueError, TypeError):
         return None
@@ -286,7 +228,7 @@ def enforce_request_retention(project_root: Path, *, exclude_request_id: str | N
         return result
     eligible: list[tuple[tuple[datetime, str], str]] = []
     for entry in root.iterdir():
-        if not entry.is_dir() or entry.name in {"idempotency", "sessions", "archive"}:
+        if not entry.is_dir() or entry.name in {"idempotency", "sessions", "archive", "maintenance-locks"}:
             continue
         candidate = _eligible_record(project_root, entry, positive_lineage=positive_lineage)
         if candidate is None:
@@ -355,6 +297,8 @@ def _drain_request_retention() -> None:
         error: Exception | None = None
         try:
             summary = enforce_request_retention(project_root)
+            from .journal_retention import maintain_project_journals
+            summary.update(maintain_project_journals(project_root))
         except Exception as exc:  # noqa: BLE001 - later terminal events can retry
             error = exc
             logger.exception(
@@ -368,26 +312,35 @@ def _drain_request_retention() -> None:
                     append_observation,
                 )
 
-                append_observation(
-                    project_root,
-                    trigger_request_id,
-                    source="request-retention",
-                    diagnostic_facts={
-                        "retention": {
-                            "sweep-duration-ms": duration_ms,
-                            "sweep-result": summary,
-                            "error-kind": type(error).__name__ if error else None,
-                        }
-                    },
-                    decision={"maintenance-is-asynchronous": True},
-                    action={
-                        "event": "request-retention-sweep",
-                        "kind": "retention-maintenance",
-                        "outcome": "failed" if error else "completed",
-                    },
-                    causal_input_ids=[trigger_request_id],
-                    force_flush=True,
+                from audiagentic.components.agents.agents_paths import (
+                    gateway_request_maintenance_lock_path, gateway_request_path,
                 )
+
+                # Purge and maintenance share an external fence. A completed sweep
+                # must not recreate a request removed while the worker ran.
+                with StartupLock(gateway_request_maintenance_lock_path(project_root, trigger_request_id)):
+                    if not gateway_request_path(project_root, trigger_request_id).is_file():
+                        continue
+                    append_observation(
+                        project_root,
+                        trigger_request_id,
+                        source="request-retention",
+                        diagnostic_facts={
+                            "retention": {
+                                "sweep-duration-ms": duration_ms,
+                                "sweep-result": summary,
+                                "error-kind": type(error).__name__ if error else None,
+                            }
+                        },
+                        decision={"maintenance-is-asynchronous": True},
+                        action={
+                            "event": "request-retention-sweep",
+                            "kind": "retention-maintenance",
+                            "outcome": "failed" if error else "completed",
+                        },
+                        causal_input_ids=[trigger_request_id],
+                        force_flush=True,
+                    )
             except Exception:  # noqa: BLE001 - tracing cannot affect request state
                 logger.debug(
                     "could not append gateway retention observation",
