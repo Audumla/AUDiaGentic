@@ -1,12 +1,27 @@
 """CI images must not depend on ignored developer-local generated surfaces."""
 import shlex
+from fnmatch import fnmatchcase
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
+import yaml
 
 ROOT = Path(__file__).resolve().parents[3]
+
+
+@pytest.mark.parametrize("workflow", ["ci-tests", "ci-contracts"])
+def test_ci_triggers_do_not_duplicate_feature_branch_pr_runs(workflow):
+    # YAML 1.1 SafeLoader interprets the Actions key `on` as boolean True.
+    config = yaml.load((ROOT / ".github/workflows" / f"{workflow}.yml").read_text(), Loader=yaml.BaseLoader)
+    triggers = config["on"]
+    assert set(triggers) == {"push", "pull_request", "workflow_dispatch"}
+    assert not triggers["pull_request"]  # retain default events for every PR/base/fork
+    patterns = triggers["push"]["branches"]
+    assert patterns == ["main", "proof-release-*"]
+    for branch, expected in [("main", True), ("proof-release-ci", True), ("fix/worker-progress", False), ("feature/example", False)]:
+        assert any(fnmatchcase(branch, pattern) for pattern in patterns) is expected
 
 
 @pytest.mark.parametrize("image", ["test", "packaging", "acp-e2e", "gateway-concurrency"])

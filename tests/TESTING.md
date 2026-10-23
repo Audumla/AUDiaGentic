@@ -565,3 +565,18 @@ make test-lsp-docker
 # Full Docker suite (authoritative)
 make test-docker
 ```
+
+### CI event ownership
+
+Feature-branch changes are validated by the pull request event (including fork
+PRs and PRs targeting non-main branches), not by a second push-triggered run.
+Push checks remain enabled for `main` and `proof-release-*`. To validate a
+standalone branch without opening a PR, run both workflows explicitly:
+
+```bash
+gh workflow run ci-tests.yml --ref <branch>
+gh workflow run ci-contracts.yml --ref <branch>
+```
+
+No test lane is removed by this trigger policy. Sharding, dependency/image
+caching, and release-gate optimization are tracked separately in CI04.
