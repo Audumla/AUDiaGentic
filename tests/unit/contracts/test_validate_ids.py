@@ -92,3 +92,28 @@ def test_validate_ids_ignores_schema_contents(tmp_path: Path, monkeypatch) -> No
     monkeypatch.setattr(validate_ids, "validate_schema_files", lambda _path: [])
     findings = validate_ids.scan_paths([docs_root], provider_ids=_PROVIDER_IDS)
     assert findings == []
+
+
+def test_reference_json_schema_is_not_a_runtime_provider_map(tmp_path):
+    (tmp_path / "providers.schema.json").write_text(
+        '{"properties":{"providers":{"type":"object"}}}', encoding="utf-8")
+    assert validate_ids.scan_paths([tmp_path], provider_ids=_PROVIDER_IDS) == []
+
+
+def test_external_capability_vendors_are_not_runtime_adapters(tmp_path):
+    _write_yaml(tmp_path / "providers.yaml",
+        "schema_version: 1\nproviders:\n  external-api:\n    endpoint_families: []\n")
+    assert validate_ids.scan_paths([tmp_path], provider_ids=_PROVIDER_IDS) == []
+
+
+def test_version_metadata_does_not_exempt_runtime_provider_ids(tmp_path):
+    _write_yaml(tmp_path / "providers.yaml",
+        "schema_version: 1\nproviders:\n  nonexistent:\n    enabled: true\n")
+    assert any("nonexistent" in row["issue"]
+               for row in validate_ids.scan_paths([tmp_path], provider_ids=_PROVIDER_IDS))
+
+
+def test_schema_findings_work_outside_configured_repo(tmp_path, monkeypatch):
+    monkeypatch.setattr(validate_ids, "SCHEMA_DIR", tmp_path / "schemas")
+    monkeypatch.setattr(validate_ids, "validate_schema_files", lambda _: ["missing schema ids: test"])
+    assert validate_ids.scan_paths([])[0]["issue"] == "missing schema ids: test"

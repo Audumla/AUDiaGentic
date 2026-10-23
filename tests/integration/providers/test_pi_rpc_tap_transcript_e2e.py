@@ -29,6 +29,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from tests.integration.providers.acp_io import read_acp_response
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 
@@ -143,6 +144,9 @@ def test_real_pi_rpc_transcript_through_the_tap_covers_a_full_prompt_turn(
 
     install_result = install_provider_cli("pi", timeout=900, project_root=tmp_path)
     assert_install_result_ok("pi", install_result)
+    from tests.helpers.pi_smoke import restrict_smoke_pi
+
+    restrict_smoke_pi(tmp_path, monkeypatch)
 
     harness_runtime = global_harness_runtime()
     provision_embedded_rig(harness_runtime, tmp_path)
@@ -245,18 +249,8 @@ def test_real_pi_rpc_transcript_through_the_tap_covers_a_full_prompt_turn(
             )
             # ACP streams sessionUpdate notifications (no "id") before the
             # final session/prompt response (id=3) -- drain until we see it.
-            prompt_resp = None
-            for _ in range(200):
-                line = proc.stdout.readline()
-                if not line:
-                    break
-                message = json.loads(line)
-                if _answer_server_request(proc, message):
-                    continue
-                if message.get("id") == 3:
-                    prompt_resp = message
-                    break
-            assert prompt_resp is not None, "session/prompt never resolved"
+            prompt_resp, reason, tail = read_acp_response(proc, 3, _answer_server_request)
+            assert prompt_resp is not None, f"session/prompt stopped: {reason}; tail={tail}"
             assert "result" in prompt_resp, json.dumps(prompt_resp, indent=2)
             assert prompt_resp["result"].get("stopReason") == "end_turn"
         finally:
@@ -281,8 +275,9 @@ def test_real_pi_rpc_transcript_through_the_tap_covers_a_full_prompt_turn(
 
 
 _TOOL_PROMPT_TEXT = (
-    "Use your shell tool right now to run exactly this command: "
-    "echo AS41_TOOL_TAP_PROOF_9f3a1c. Call the tool -- do not reply with text only."
+    "Call the bash tool exactly once with command: printf AS41_TOOL_TAP_PROOF_9f3a1c. "
+    "Do not create or edit files. After the tool returns, reply with only OK "
+    "and end the turn."
 )
 
 
@@ -342,6 +337,9 @@ def test_real_pi_rpc_transcript_captures_tool_call_frame_types(
 
     install_result = install_provider_cli("pi", timeout=900, project_root=tmp_path)
     assert_install_result_ok("pi", install_result)
+    from tests.helpers.pi_smoke import restrict_smoke_pi
+
+    restrict_smoke_pi(tmp_path, monkeypatch, tools="bash")
 
     harness_runtime = global_harness_runtime()
     provision_embedded_rig(harness_runtime, tmp_path)
@@ -448,23 +446,7 @@ def test_real_pi_rpc_transcript_captures_tool_call_frame_types(
                     },
                 },
             )
-            # A tool-invoking turn streams far more sessionUpdate notifications
-            # (thinking + tool call + tool result + reply) than a plain-text
-            # turn; 400 was proven too few empirically (this session, real
-            # Docker run); generous bound so we get a conclusive result.
-            prompt_resp = None
-            observed_messages: list[dict] = []
-            for _ in range(4000):
-                line = proc.stdout.readline()
-                if not line:
-                    break
-                message = json.loads(line)
-                observed_messages.append(message)
-                if _answer_server_request(proc, message):
-                    continue
-                if message.get("id") == 3:
-                    prompt_resp = message
-                    break
+            prompt_resp, reason, observed_messages = read_acp_response(proc, 3, _answer_server_request)
             if prompt_resp is None:
                 # AS41 diagnostic: the child exited (EOF) before the turn
                 # resolved. Surface the exit code and captured stderr so the
@@ -477,7 +459,7 @@ def test_real_pi_rpc_transcript_captures_tool_call_frame_types(
                     exit_code = proc.poll()
                 stderr_text = b"".join(stderr_chunks).decode("utf-8", errors="replace")
                 pytest.fail(
-                    f"session/prompt never resolved -- child EOF (exit_code={exit_code}).\n"
+                    f"session/prompt stopped: {reason} (exit_code={exit_code}).\n"
                     f"--- captured stderr (pi-acp + shim dump) ---\n{stderr_text}\n"
                     f"--- end stderr ---\n"
                     f"last protocol messages: {json.dumps(observed_messages[-10:], default=str)}"

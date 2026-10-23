@@ -5,6 +5,7 @@ stack wired together (store + queue + dispatch), against a fake execute_provider
 from __future__ import annotations
 
 import threading
+import os
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -55,9 +56,10 @@ def _result(data: dict) -> SimpleNamespace:
     return SimpleNamespace(result_data=data)
 
 
-def test_workspace_name_resolves_sibling_project_root(tmp_path: Path) -> None:
+def test_workspace_name_resolves_sibling_project_root(tmp_path: Path, monkeypatch) -> None:
     current = tmp_path / "AUDiaGentic"
     target = tmp_path / "bigcherry"
+    monkeypatch.setenv("AUDIAGENTIC_WORKSPACE_ROOTS", os.pathsep.join(map(str, (current, target))))
     for root in (current, target):
         (root / ".audiagentic" / "config").mkdir(parents=True)
     (target / ".audiagentic" / "config" / "project.yaml").write_text(

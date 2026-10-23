@@ -356,7 +356,7 @@ def test_gateway_cancel_of_real_provider_request_reaches_terminal_state(
         request_id = submitted["request-id"]
 
         wait_for(
-            lambda: client.get_execution_request(tmp_path, request_id)["state"] == "running",
+            lambda: client.get_execution_request(tmp_path, request_id)["lifecycle"] == "active",
             timeout=30, what=f"{provider_id} request to start running",
         )
 
@@ -365,7 +365,6 @@ def test_gateway_cancel_of_real_provider_request_reaches_terminal_state(
 
         final = client.wait_execution_request(tmp_path, request_id, timeout_seconds=30)
         assert final["state"] in {"cancelled", "failed", "completed"}, final
-        assert final["state"] != "running"
     finally:
         reset_gateway_client()
 
@@ -392,6 +391,7 @@ def test_gateway_rejects_unresolvable_profile_without_touching_provider(
     reset_gateway_client()
     client = get_gateway_client()
     try:
+        requests_before = list(_RigHandler.requests)
         with pytest.raises(AudiaGenticError):
             client.submit_execution_request(
                 tmp_path,
@@ -399,6 +399,6 @@ def test_gateway_rejects_unresolvable_profile_without_touching_provider(
                 prompt_body="should never reach the provider",
                 mode="async",
             )
-        assert _RigHandler.requests == []
+        assert _RigHandler.requests == requests_before
     finally:
         reset_gateway_client()

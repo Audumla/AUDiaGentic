@@ -54,7 +54,7 @@ class SharedApplication:
             self.requests[request_id] = record
             return dict(record)
 
-    def get_execution_request(self, project_root, request_id):
+    def get_execution_request(self, project_root, request_id, *, include_response=False):
         return dict(self.requests[request_id])
 
     def wait_execution_request(self, project_root, request_id, timeout_seconds=None):
@@ -127,6 +127,50 @@ def _raw_post(endpoint: str, token: str, route: str, body: dict) -> dict:
 def _raw_get(endpoint: str, route: str) -> tuple[str, bytes]:
     with urlopen(f"{endpoint}{route}", timeout=2) as response:
         return response.headers["Content-Type"], response.read()
+
+
+def test_service_background_expires_old_trace_without_new_requests(tmp_path, monkeypatch):
+    """Run the real host/poller/worker against isolated, old terminal data."""
+    import os
+    from audiagentic.components.agents.agents_paths import gateway_request_dir
+    from audiagentic.components.agents.gateway import retention, store
+    from audiagentic.foundation.observability.journal_segments import segment_paths
+
+    project = tmp_path / "project"
+    project.mkdir()
+    request_id = "req_daily_expiry"
+    with monkeypatch.context() as patch:
+        patch.setattr(retention, "schedule_request_retention", lambda *_a, **_kw: True)
+        store.write_record(project, store.build_record(request_id=request_id,
+            execution_profile_id="test", prompt_body="retention proof"))
+        store.transition_record(project, request_id, "running")
+        store.transition_record(project, request_id, "completed")
+    directory = gateway_request_dir(project, request_id)
+    head = directory / "observations.ndjson"
+    old = datetime.now(timezone.utc) - timedelta(days=6)
+    head.write_text('{"event_seq":1,"event":"old-trace"}\n', encoding="utf-8")
+    os.utime(head, (old.timestamp(), old.timestamp()))
+    response = directory / "output" / "final-response.txt"
+    response.parent.mkdir(exist_ok=True)
+    response.write_text("keep final response", encoding="utf-8")
+    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_RETENTION_POLICY", str(tmp_path / "absent-policy.json"))
+    host, thread, service_root, token_path = _start_host(tmp_path, SharedApplication())
+    client = StandaloneGatewayClient(host.endpoint, load_auth_token(token_path))
+    try:
+        record_known_project(host.service_store.root / "known-projects.json", project_root=project)
+        host._journal_maintenance_at = 0
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            if not head.exists() and not segment_paths(head):
+                break
+            time.sleep(0.05)
+        assert not head.exists() and not segment_paths(head)
+        assert client.health()["state"] == "running"
+        assert (directory / "record.json").is_file()
+        assert response.read_text() == "keep final response"
+    finally:
+        client.close()
+        _stop_host(host, thread)
 
 
 def _make_profile(project_root: Path) -> None:
@@ -221,13 +265,10 @@ def test_loopback_dashboard_is_public_but_redacted_and_independent_of_browser(
         assert b"setInterval(refresh,3000)" in page
         assert b"AbortController" not in page
         assert b'id="state-filter"' in page
-        assert b'id="show-closed"' in page
-        assert b'id="show-empty"' in page
-        # Empty sessions are available only when explicitly requested.  A
-        # live runtime handle is not evidence that the session has any task
-        # records; it must not bypass the default empty-session filter.
-        assert b"showEmpty.checked||hasRows" in page
-        assert b"showClosed.checked||!isClosed(s)||hasRows" in page
+        # The unified state selector replaces the old checkbox filters;
+        # sessions without matching requests remain hidden.
+        assert b"return hasRows&&" in page
+        assert b"s.state===wanted||hasRows" in page
         assert b"id=\"layout-filter\"" in page
         assert b'id="recent-window"' in page
         assert b"recent-seconds" in page
@@ -265,7 +306,7 @@ def test_loopback_dashboard_is_public_but_redacted_and_independent_of_browser(
         assert b"activity-badge" in page
         assert b"function watchdogFlag" not in page
         assert b"chat-link" in page
-        assert b"aria-label=\"Open or focus GPT tab\"" in page
+        assert b"aria-label=\"Open or focus GPT conversation\"" in page
         assert b"Open tab" not in page
         assert b"&quot;',\"'\":'&#39;'" in page
         assert b"@container (max-width:440px)" in page
@@ -376,7 +417,7 @@ def test_dashboard_recent_window_filters_history_and_supports_query_override(
     monkeypatch.setattr(
         gateway_api,
         "list_execution_sessions",
-        lambda _root: list(application.session_records[str(project_root)]),
+        lambda _root, *, state: list(application.session_records[str(project_root)]),
     )
     monkeypatch.setenv("AUDIAGENTIC_GATEWAY_DASHBOARD_RECENT_SECONDS", "60")
     host, thread, _service_root, _token_path = _start_host(tmp_path, application)

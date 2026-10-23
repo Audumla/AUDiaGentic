@@ -58,6 +58,20 @@ def gateway_request_dir(project_root: Path, request_id: str) -> Path:
     return gateway_root(project_root) / request_id
 
 
+def gateway_request_maintenance_lock_path(project_root: Path, request_id: str) -> Path:
+    """Fence late maintenance writes against purge without recreating request dirs."""
+    if not request_id.startswith("req_") or any(c in request_id for c in "/\\:") or ".." in request_id:
+        raise ValueError("invalid request id for maintenance fence")
+    return gateway_root(project_root) / "maintenance-locks" / (request_id + ".lock")
+
+
+def gateway_session_maintenance_lock_path(project_root: Path, session_id: str) -> Path:
+    """Serialize session trace maintenance with explicit session purge."""
+    if not session_id.startswith("ses_") or any(c in session_id for c in "/\\:") or ".." in session_id:
+        raise ValueError("invalid session id for maintenance fence")
+    return gateway_root(project_root) / "maintenance-locks" / (session_id + ".lock")
+
+
 def gateway_request_path(project_root: Path, request_id: str) -> Path:
     """Return the record.json path for a gateway request."""
     return gateway_request_dir(project_root, request_id) / "record.json"

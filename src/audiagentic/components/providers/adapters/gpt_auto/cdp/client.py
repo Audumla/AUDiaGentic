@@ -14,14 +14,20 @@ import time
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, TYPE_CHECKING
 from urllib.parse import urlparse
 
-try:
-    from websockets.asyncio.client import ClientConnection, connect
-except ImportError:  # websockets < 14
-    from websockets import connect
-    from websockets.client import WebSocketClientProtocol as ClientConnection
+if TYPE_CHECKING:
+    from websockets.asyncio.client import ClientConnection
+
+
+async def connect(*args: Any, **kwargs: Any) -> Any:
+    """Load the optional browser dependency only when CDP is actually used."""
+    try:
+        from websockets.asyncio.client import connect as websocket_connect
+    except ImportError:  # Supported websockets 13 exposes the older import path.
+        from websockets import connect as websocket_connect
+    return await websocket_connect(*args, **kwargs)
 
 
 # TEMPORARY GP18 debug instrumentation -- tests the event-loop-ownership

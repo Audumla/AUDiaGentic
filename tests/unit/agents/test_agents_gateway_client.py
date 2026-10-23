@@ -67,9 +67,12 @@ def test_inbound_adapters_depend_on_public_client_not_core_api() -> None:
         # get_gateway_client(...).method(...) directly; either public
         # client.py entry point satisfies the "public client, not core api"
         # boundary this test enforces.
-        assert (
-            "gateway.client import get_gateway_client" in source
-            or "gateway.client import call_gateway_method" in source
+        import ast
+        assert any(
+            isinstance(node, ast.ImportFrom)
+            and node.module == "audiagentic.components.agents.gateway.client"
+            and any(alias.name in {"get_gateway_client", "call_gateway_method"} for alias in node.names)
+            for node in ast.walk(ast.parse(source))
         ), rel
 
 

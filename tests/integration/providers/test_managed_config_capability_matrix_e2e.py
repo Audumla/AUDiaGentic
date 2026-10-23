@@ -222,7 +222,7 @@ class TestPluginConfigLifecycle:
 
 
 class TestHooksConfigLifecycle:
-    """codex hooks_config: HOME-relative (~/.codex/hooks.json), restart-required."""
+    """Codex hooks are project-scoped and require provider restart."""
 
     @_REAL_CLI
     @pytest.mark.timeout(600)
@@ -247,8 +247,8 @@ class TestHooksConfigLifecycle:
         assert applied.ok, applied
         assert "ma34-hook" in applied.managed_ids
 
-        hooks_path = home / ".codex" / "hooks.json"
-        assert hooks_path.exists(), "hooks.json not written under isolated HOME"
+        hooks_path = project_root / ".codex" / "hooks.json"
+        assert hooks_path.exists(), "hooks.json not written under selected project"
         data = json.loads(hooks_path.read_text(encoding="utf-8"))
         commands = {
             hook.get("command")
@@ -257,10 +257,10 @@ class TestHooksConfigLifecycle:
         }
         assert "echo ma34-hook-fired" in commands
 
-        # write_codex_hooks bypasses config_path and hardcodes Path.home() for
-        # the [features] hooks=true surgical upsert — verify it landed under
-        # the ISOLATED home, not the real container home.
-        config_toml = (home / ".codex" / "config.toml").read_text(encoding="utf-8")
+        # Enabling hooks belongs beside the project-owned hook file, never
+        # in the operator's global Codex configuration.
+        assert not (home / ".codex" / "hooks.json").exists()
+        config_toml = (project_root / ".codex" / "config.toml").read_text(encoding="utf-8")
         assert "hooks = true" in config_toml
 
         pruned = manage_hook_entries(project_root, "codex", mode="prune", request=request)
@@ -290,14 +290,17 @@ class TestModelConfigCapability:
         write_pi_models(
             config_path,
             {
-                "ma34-model": (
-                    "MA34 Test Model",
-                    {
+                "ma34-model": {
                         "model_id": "ma34-model",
                         "visible_name": "MA34 Test Model",
-                        "provider": "test",
-                    },
-                )
+                        "provider_id": "test",
+                        "baseUrl": "http://127.0.0.1:42001/v1",
+                        "api": "openai-completions",
+                        "apiKey": "test",
+                        "compat": {},
+                        "contextWindow": 4096,
+                        "maxTokens": 512,
+                }
             },
         )
         assert config_path.exists()
@@ -432,7 +435,7 @@ class TestCorruptedConfigMustNotBeSilentlyDiscarded:
     ) -> None:
         home = _isolated_home(tmp_path, monkeypatch)
         project_root = _project(tmp_path)
-        hooks_path = home / ".codex" / "hooks.json"
+        hooks_path = project_root / ".codex" / "hooks.json"
         hooks_path.parent.mkdir(parents=True, exist_ok=True)
         corrupted = '{"hooks": {"SessionStart": [ this is not valid json'
         hooks_path.write_text(corrupted, encoding="utf-8")

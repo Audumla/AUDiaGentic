@@ -64,6 +64,7 @@ def test_pi_acp_uses_request_owned_wrapper(tmp_path, monkeypatch) -> None:
     launch = pi_acp.build_acp_launch(
         tmp_path,
         model_id="model",
+        model_selector="vendor/model",
         request_runtime_root=tmp_path / "runtime",
         mcp_surface=surface,
     )

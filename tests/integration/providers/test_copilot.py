@@ -29,7 +29,7 @@ def test_copilot_recipe_contract(monkeypatch, tmp_path: Path) -> None:
     captured: dict[str, object] = {}
     monkeypatch.setattr(base_runner, "require_executable", lambda _pid, *_aliases: "/fake/gh")
 
-    def fake_run_streaming_command(command, *, cwd=None, input_text=None, stdout_sinks=None, stderr_sinks=None):
+    def fake_run_streaming_command(command, *, cwd=None, input_text=None, stdout_sinks=None, stderr_sinks=None, environment=None):
         captured["command"] = command
 
         class Completed:
@@ -42,7 +42,7 @@ def test_copilot_recipe_contract(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr(base_runner, "run_streaming_command", fake_run_streaming_command)
 
     result = make_runner_from_execution("copilot", execution)(
-        {"provider-id": "copilot", "job-id": "job-test-001", "working-root": str(tmp_path)},
+        {"prompt-body": "Reply with ok.", "provider-id": "copilot", "job-id": "job-test-001", "working-root": str(tmp_path)},
         {"default-model": "copilot-stub"},
     )
     assert result["provider-id"] == "copilot"
