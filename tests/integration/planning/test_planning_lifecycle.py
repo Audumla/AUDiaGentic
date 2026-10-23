@@ -30,6 +30,8 @@ def test_full_lifecycle_create_update_complete(tmp_path):
     planning_api.update_item(tmp_path, "LF01", {
         "description": "Updated description.",
         "steps": "Step 1. Step 2.",
+        "validation": "Lifecycle transition and persisted sections verified by this test.",
+        "acceptance_criteria": "Completed item is moved and retains updated sections.",
     })
 
     planning_api.set_state(tmp_path, "LF01", "completed")
@@ -57,7 +59,9 @@ def test_multiple_plans_isolated(tmp_path):
 def test_list_reflects_state_after_transition(tmp_path):
     """list_items with state filters is consistent after set_state."""
     for i in range(1, 4):
-        planning_api.create_item(tmp_path, {"id": f"LS{i:02d}", "plan": "list-test", "title": f"Item {i}"})
+        planning_api.create_item(tmp_path, {"id": f"LS{i:02d}", "plan": "list-test", "title": f"Item {i}",
+            "validation": "State-filtered lists verified by this test.",
+            "acceptance_criteria": "Completed and active IDs appear in their respective lists."})
 
     planning_api.set_state(tmp_path, "LS01", "completed")
     planning_api.set_state(tmp_path, "LS02", "completed")
@@ -82,7 +86,9 @@ def test_delete_removes_from_list(tmp_path):
 
 def test_completed_item_can_be_reopened(tmp_path):
     """set_state pending on a completed item moves it back to active/."""
-    planning_api.create_item(tmp_path, {"id": "RO01", "plan": "reopen", "title": "Reopen me"})
+    planning_api.create_item(tmp_path, {"id": "RO01", "plan": "reopen", "title": "Reopen me",
+        "validation": "Completion and reopening verified by this test.",
+        "acceptance_criteria": "Reopened item returns to active directory with pending state."})
     planning_api.set_state(tmp_path, "RO01", "completed")
     planning_api.set_state(tmp_path, "RO01", "pending")
 
@@ -166,7 +172,9 @@ def test_deprecated_state_lifecycle(tmp_path):
 def test_state_counts_use_config_driven_sets(tmp_path):
     """list_items_grouped counts terminal states (completed, superseded, deprecated) correctly."""
     planning_api.create_item(tmp_path, {"id": "SC01", "plan": "state-counts", "title": "Active"})
-    planning_api.create_item(tmp_path, {"id": "SC02", "plan": "state-counts", "title": "Done"})
+    planning_api.create_item(tmp_path, {"id": "SC02", "plan": "state-counts", "title": "Done",
+        "validation": "Grouped terminal-state counts verified by this test.",
+        "acceptance_criteria": "Completed item contributes to terminal count."})
     planning_api.create_item(tmp_path, {"id": "SC03", "plan": "state-counts", "title": "Superseded"})
     planning_api.create_item(tmp_path, {"id": "SC04", "plan": "state-counts", "title": "Deprecated"})
 
