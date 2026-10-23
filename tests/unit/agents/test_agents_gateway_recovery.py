@@ -319,6 +319,57 @@ def test_recovery_runner_fails_closed_when_session_checkpoint_is_empty(tmp_path:
     runner = recovery.recovery_runner(record, project_root=tmp_path)
 
     assert runner.keywords["resume_existing"] is True
+
+
+@pytest.mark.parametrize(
+    ("submission_state", "expected_resume_existing"),
+    [("prepared", False), ("dispatching", True), ("proven", True)],
+)
+def test_recovery_runner_replays_only_explicit_prepared_current_turn(
+    tmp_path: Path,
+    monkeypatch,
+    submission_state: str,
+    expected_resume_existing: bool,
+) -> None:
+    """Only a correlated pre-Send checkpoint may restore the frozen prompt."""
+    from audiagentic.components.agents.gateway.session import sessions_store
+
+    request_id = "req-prepared-restart"
+    record = _record(tmp_path)
+    record.update(
+        {
+            "request-id": request_id,
+            "session-id": "ses-prepared-restart",
+            "state": "running",
+            "recovery-required": True,
+            "resolved-provider-id": "gpt-auto",
+            "gateway-profile-runtime": {"provider-id": "gpt-auto", "params": {}},
+            "recovery": {
+                "phase": "rehydrate-retry",
+                "side-effect-state": "may-have-started",
+            },
+        }
+    )
+    monkeypatch.setattr(
+        sessions_store,
+        "read_session_record",
+        lambda *_args: {"session-id": "ses-prepared-restart"},
+    )
+    monkeypatch.setattr(sessions_store, "read_session_binding", lambda *_args: None)
+    monkeypatch.setattr(
+        sessions_store,
+        "session_provider_metadata",
+        lambda _record: {
+            "unresolved-turn-pending": True,
+            "unresolved-turn-id": request_id,
+            "submission-proven": False,
+            "submission-state": submission_state,
+        },
+    )
+
+    runner = recovery.recovery_runner(record, project_root=tmp_path)
+
+    assert runner.keywords["resume_existing"] is expected_resume_existing
 def test_recovery_runner_fails_closed_when_side_effect_checkpoint_is_uncorrelated(
     tmp_path: Path, monkeypatch
 ) -> None:

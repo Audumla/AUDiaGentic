@@ -60,6 +60,12 @@ _SAFE_TEXT_KEYS = frozenset(
         "id", "kind", "state", "status", "phase", "label", "event", "source",
         "code", "classification", "outcome", "digest", "hash", "sequence", "count",
         "model-activity", "tool-call-id", "tool-status", "stop-reason",
+        "observed-stage", "requested-stage",
+        "proof-source-valid", "proof-update-keys-safe", "frozen-identity-unchanged",
+        "frozen-identity-mismatch-keys",
+        "provider-anchor-valid", "fingerprint-equal",
+        "baseline-user-count-matches", "baseline-assistant-count-matches",
+        "baseline-user-id-is-new", "request-owner-is-current",
         "error-code", "reason", "timing-event", "diagnostic-signature",
         "correlation-quality", "assistant-id", "turn-id",
         "group", "activity-label", "activity-group", "completion-matched",
@@ -68,7 +74,10 @@ _SAFE_TEXT_KEYS = frozenset(
         "signals", "response-id", "identity-quality", "reconnect-classification",
         "side-effect-state", "resolution-state", "failure-code", "reason-code",
         "failure-reason", "submission-state", "submission-proven", "submission-ambiguous",
+        "failure-phase", "exception-type", "exception-origin", "exception-code",
+        "submission-stage", "turn-bound", "provider-binding-present", "send-intent-ever",
         "terminal", "terminal-witness", "media-type", "bytes", "attempt-epoch",
+        "clear-outcome",
     }
 )
 

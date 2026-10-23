@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
 
@@ -40,6 +40,24 @@ class ConversationFocusLocator:
 
 
 @dataclass(frozen=True, slots=True)
+class ConversationCaptureLocator(ConversationFocusLocator):
+    """Private capture checkpoint when publication lost the conversation URL.
+
+    The opaque provider target is only a candidate for observation, never a
+    conversation identity. Adapters must reprove project, prompt and ordered
+    turn ownership before returning output. Focus and serialized locators use
+    only the inherited durable identities.
+    """
+
+    provider_target_id: str | None = field(default=None, repr=False)
+    prompt_text_digest: str | None = field(default=None, repr=False)
+    baseline_user_count: int | None = None
+    baseline_assistant_count: int | None = None
+    send_intent_ever: bool = False
+    submission_stage: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class ConversationFocusResult:
     outcome: ConversationFocusOutcome
     reason: str | None = None
@@ -53,6 +71,7 @@ class ConversationFocusResult:
 
 __all__ = [
     "ConversationFocusLocator",
+    "ConversationCaptureLocator",
     "ConversationFocusOutcome",
     "ConversationFocusResult",
 ]
