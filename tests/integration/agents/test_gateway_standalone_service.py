@@ -129,6 +129,50 @@ def _raw_get(endpoint: str, route: str) -> tuple[str, bytes]:
         return response.headers["Content-Type"], response.read()
 
 
+def test_service_background_expires_old_trace_without_new_requests(tmp_path, monkeypatch):
+    """Run the real host/poller/worker against isolated, old terminal data."""
+    import os
+    from audiagentic.components.agents.agents_paths import gateway_request_dir
+    from audiagentic.components.agents.gateway import retention, store
+    from audiagentic.foundation.observability.journal_segments import segment_paths
+
+    project = tmp_path / "project"
+    project.mkdir()
+    request_id = "req_daily_expiry"
+    with monkeypatch.context() as patch:
+        patch.setattr(retention, "schedule_request_retention", lambda *_a, **_kw: True)
+        store.write_record(project, store.build_record(request_id=request_id,
+            execution_profile_id="test", prompt_body="retention proof"))
+        store.transition_record(project, request_id, "running")
+        store.transition_record(project, request_id, "completed")
+    directory = gateway_request_dir(project, request_id)
+    head = directory / "observations.ndjson"
+    old = datetime.now(timezone.utc) - timedelta(days=6)
+    head.write_text('{"event_seq":1,"event":"old-trace"}\n', encoding="utf-8")
+    os.utime(head, (old.timestamp(), old.timestamp()))
+    response = directory / "output" / "final-response.txt"
+    response.parent.mkdir(exist_ok=True)
+    response.write_text("keep final response", encoding="utf-8")
+    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_RETENTION_POLICY", str(tmp_path / "absent-policy.json"))
+    host, thread, service_root, token_path = _start_host(tmp_path, SharedApplication())
+    client = StandaloneGatewayClient(host.endpoint, load_auth_token(token_path))
+    try:
+        record_known_project(host.service_store.root / "known-projects.json", project_root=project)
+        host._journal_maintenance_at = 0
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            if not head.exists() and not segment_paths(head):
+                break
+            time.sleep(0.05)
+        assert not head.exists() and not segment_paths(head)
+        assert client.health()["state"] == "running"
+        assert (directory / "record.json").is_file()
+        assert response.read_text() == "keep final response"
+    finally:
+        client.close()
+        _stop_host(host, thread)
+
+
 def _make_profile(project_root: Path) -> None:
     create_execution_profile(project_root, {
         "profile_id": "default",

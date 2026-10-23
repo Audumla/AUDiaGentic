@@ -5,6 +5,8 @@ records. Imports _shared for constants — one-way edges only.
 """
 from __future__ import annotations
 
+from audiagentic.foundation.observability.journal_segments import has_segments, head_read_lock
+
 import base64
 import json
 import logging
@@ -19,7 +21,7 @@ from audiagentic.components.agents.agents_paths import (
     gateway_timeline_index_path,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError, redact_details
-from audiagentic.foundation.io import atomic_write_json, iter_ndjson, last_ndjson, load_ndjson, read_text_with_retry, tail_ndjson
+from audiagentic.foundation.io import atomic_write_json, iter_ndjson, last_ndjson, read_text_with_retry, tail_ndjson
 from audiagentic.foundation.time import now_iso_z
 
 from . import _shared
@@ -840,18 +842,19 @@ def latest_transition_projection(project_root: Path, request_id: str) -> dict[st
     identity, state, and timestamp, so it must never copy that free-form
     mapping into a public projection.
     """
-    try:
-        entry = last_ndjson(gateway_timeline_path(project_root, request_id))
-    except (OSError, ValueError):
-        logger.warning("failed to read gateway request timeline", extra={"request-id": request_id})
+    with head_read_lock(gateway_timeline_path(project_root, request_id)):
+        try:
+            entry = last_ndjson(gateway_timeline_path(project_root, request_id))
+        except (OSError, ValueError):
+            logger.warning("failed to read gateway request timeline", extra={"request-id": request_id})
+            return None
+        if entry:
+            event = entry.get("event")
+            timestamp = entry.get("timestamp")
+            state = entry.get("state")
+            if isinstance(event, str) and isinstance(timestamp, str) and (state is None or isinstance(state, str)):
+                return {"event": event, "state": state, "timestamp": timestamp}
         return None
-    if entry:
-        event = entry.get("event")
-        timestamp = entry.get("timestamp")
-        state = entry.get("state")
-        if isinstance(event, str) and isinstance(timestamp, str) and (state is None or isinstance(state, str)):
-            return {"event": event, "state": state, "timestamp": timestamp}
-    return None
 
 
 def transition_history_projection(
@@ -861,34 +864,35 @@ def transition_history_projection(
     limit: int = 100,
 ) -> list[dict[str, str | None]]:
     """Return bounded safe transition milestones for explicit evidence reads."""
-    if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
-        raise ValueError("transition history limit must be between 1 and 100")
-    try:
-        journal = gateway_timeline_path(project_root, request_id)
-        index_path = gateway_timeline_index_path(project_root, request_id)
-        entries: list[dict[str, str | None]] = []
-        if journal.exists() and index_path.exists():
-            offsets = tail_ndjson(index_path, limit)
-            with journal.open("rb") as journal_handle:
-                for metadata in offsets:
-                    journal_handle.seek(int(metadata["offset"]))
-                    entry = json.loads(journal_handle.readline().decode("utf-8"))
+    with head_read_lock(gateway_timeline_path(project_root, request_id)):
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
+            raise ValueError("transition history limit must be between 1 and 100")
+        try:
+            journal = gateway_timeline_path(project_root, request_id)
+            index_path = gateway_timeline_index_path(project_root, request_id)
+            entries: list[dict[str, str | None]] = []
+            if journal.exists() and index_path.exists() and not has_segments(journal):
+                offsets = tail_ndjson(index_path, limit)
+                with journal.open("rb") as journal_handle:
+                    for metadata in offsets:
+                        journal_handle.seek(int(metadata["offset"]))
+                        entry = json.loads(journal_handle.readline().decode("utf-8"))
+                        event = entry.get("event")
+                        timestamp = entry.get("timestamp")
+                        state = entry.get("state")
+                        if isinstance(event, str) and isinstance(timestamp, str) and (state is None or isinstance(state, str)):
+                            entries.append({"event": event, "state": state, "timestamp": timestamp})
+            else:
+                for entry in tail_ndjson(journal, limit):
                     event = entry.get("event")
                     timestamp = entry.get("timestamp")
                     state = entry.get("state")
                     if isinstance(event, str) and isinstance(timestamp, str) and (state is None or isinstance(state, str)):
                         entries.append({"event": event, "state": state, "timestamp": timestamp})
-        else:
-            for entry in tail_ndjson(journal, limit):
-                event = entry.get("event")
-                timestamp = entry.get("timestamp")
-                state = entry.get("state")
-                if isinstance(event, str) and isinstance(timestamp, str) and (state is None or isinstance(state, str)):
-                    entries.append({"event": event, "state": state, "timestamp": timestamp})
-    except (OSError, ValueError):
-        logger.warning("failed to read gateway request timeline", extra={"request-id": request_id})
-        return []
-    return entries
+        except (OSError, ValueError):
+            logger.warning("failed to read gateway request timeline", extra={"request-id": request_id})
+            return []
+        return entries
 
 
 def transition_history_page(
@@ -899,81 +903,82 @@ def transition_history_page(
     cursor: str | None = None,
 ) -> dict[str, Any]:
     """Return a deterministic, independently-cursorable history page."""
-    if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
-        raise ValueError("transition history limit must be between 1 and 100")
-    offset = 0
-    index_offset: int | None = None
-    if cursor:
+    with head_read_lock(gateway_timeline_path(project_root, request_id)):
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
+            raise ValueError("transition history limit must be between 1 and 100")
+        offset = 0
+        index_offset: int | None = None
+        if cursor:
+            try:
+                padded = cursor + "=" * (-len(cursor) % 4)
+                decoded = json.loads(base64.urlsafe_b64decode(padded.encode()).decode())
+                offset = decoded["offset"]
+                if decoded.get("v") != 1 or isinstance(offset, bool) or not isinstance(offset, int) or offset < 0:
+                    raise ValueError
+                index_offset = decoded.get("index-offset")
+                if index_offset is not None and (isinstance(index_offset, bool) or not isinstance(index_offset, int) or index_offset < 0):
+                    raise ValueError
+            except (ValueError, KeyError, TypeError, UnicodeError, json.JSONDecodeError):
+                raise ValueError("invalid history cursor") from None
+        items: list[dict[str, str | None]] = []
+        has_more = False
+        next_index_offset: int | None = None
+        journal = gateway_timeline_path(project_root, request_id)
+        index_path = gateway_timeline_index_path(project_root, request_id)
         try:
-            padded = cursor + "=" * (-len(cursor) % 4)
-            decoded = json.loads(base64.urlsafe_b64decode(padded.encode()).decode())
-            offset = decoded["offset"]
-            if decoded.get("v") != 1 or isinstance(offset, bool) or not isinstance(offset, int) or offset < 0:
-                raise ValueError
-            index_offset = decoded.get("index-offset")
-            if index_offset is not None and (isinstance(index_offset, bool) or not isinstance(index_offset, int) or index_offset < 0):
-                raise ValueError
-        except (ValueError, KeyError, TypeError, UnicodeError, json.JSONDecodeError):
-            raise ValueError("invalid history cursor") from None
-    items: list[dict[str, str | None]] = []
-    has_more = False
-    next_index_offset: int | None = None
-    journal = gateway_timeline_path(project_root, request_id)
-    index_path = gateway_timeline_index_path(project_root, request_id)
-    try:
-        if journal.exists() and index_path.exists():
-            with index_path.open("rb") as index_handle, journal.open("rb") as journal_handle:
-                if index_offset is not None:
-                    index_handle.seek(index_offset)
-                index = 0
-                while True:
-                    current_index_offset = index_handle.tell()
-                    raw_index = index_handle.readline()
-                    if not raw_index:
-                        break
-                    if index_offset is None and index < offset:
+            if journal.exists() and index_path.exists() and not has_segments(journal):
+                with index_path.open("rb") as index_handle, journal.open("rb") as journal_handle:
+                    if index_offset is not None:
+                        index_handle.seek(index_offset)
+                    index = 0
+                    while True:
+                        current_index_offset = index_handle.tell()
+                        raw_index = index_handle.readline()
+                        if not raw_index:
+                            break
+                        if index_offset is None and index < offset:
+                            index += 1
+                            continue
+                        if len(items) >= limit:
+                            has_more = True
+                            next_index_offset = current_index_offset
+                            break
+                        metadata = json.loads(raw_index)
+                        journal_handle.seek(int(metadata["offset"]))
+                        entry = json.loads(journal_handle.readline().decode("utf-8"))
+                        event = entry.get("event")
+                        timestamp = entry.get("timestamp")
+                        state = entry.get("state")
+                        if isinstance(event, str) and isinstance(timestamp, str) and (state is None or isinstance(state, str)):
+                            items.append({"event": event, "state": state, "timestamp": timestamp})
                         index += 1
+            else:
+                for index, entry in enumerate(iter_ndjson(journal)):
+                    if index < offset:
                         continue
                     if len(items) >= limit:
                         has_more = True
-                        next_index_offset = current_index_offset
                         break
-                    metadata = json.loads(raw_index)
-                    journal_handle.seek(int(metadata["offset"]))
-                    entry = json.loads(journal_handle.readline().decode("utf-8"))
                     event = entry.get("event")
                     timestamp = entry.get("timestamp")
                     state = entry.get("state")
                     if isinstance(event, str) and isinstance(timestamp, str) and (state is None or isinstance(state, str)):
                         items.append({"event": event, "state": state, "timestamp": timestamp})
-                    index += 1
-        else:
-            for index, entry in enumerate(iter_ndjson(journal)):
-                if index < offset:
-                    continue
-                if len(items) >= limit:
-                    has_more = True
-                    break
-                event = entry.get("event")
-                timestamp = entry.get("timestamp")
-                state = entry.get("state")
-                if isinstance(event, str) and isinstance(timestamp, str) and (state is None or isinstance(state, str)):
-                    items.append({"event": event, "state": state, "timestamp": timestamp})
-    except (OSError, ValueError, TypeError, UnicodeDecodeError, json.JSONDecodeError):
-        items = []
-        has_more = False
-    result: dict[str, Any] = {
-        "schema-version": "gateway-history.v1",
-        "request-id": request_id,
-        "items": items,
-        "returned": len(items),
-        "has-more": has_more,
-    }
-    if has_more:
-        result["next-cursor"] = base64.urlsafe_b64encode(
-            json.dumps({"v": 1, "offset": offset + len(items), "index-offset": next_index_offset}, separators=(",", ":")).encode()
-        ).decode().rstrip("=")
-    return result
+        except (OSError, ValueError, TypeError, UnicodeDecodeError, json.JSONDecodeError):
+            items = []
+            has_more = False
+        result: dict[str, Any] = {
+            "schema-version": "gateway-history.v1",
+            "request-id": request_id,
+            "items": items,
+            "returned": len(items),
+            "has-more": has_more,
+        }
+        if has_more:
+            result["next-cursor"] = base64.urlsafe_b64encode(
+                json.dumps({"v": 1, "offset": offset + len(items), "index-offset": next_index_offset}, separators=(",", ":")).encode()
+            ).decode().rstrip("=")
+        return result
 
 def project_public_status(
     record: dict[str, Any],

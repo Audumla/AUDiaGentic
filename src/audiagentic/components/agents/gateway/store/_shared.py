@@ -107,6 +107,8 @@ def record_gateway_timeline(
     state: str | None = None,
     attributes: dict | None = None,
 ) -> dict:
+    from ..retention import journal_max_bytes
+
     result = record_timeline_event(
         gateway_timeline_path(project_root, request_id),
         component=_COMPONENT_ID,
@@ -115,6 +117,7 @@ def record_gateway_timeline(
         event=event,
         state=state,
         attributes=attributes,
+        segment_max_bytes=journal_max_bytes("timeline"),
         correlation_id=(attributes or {}).get("correlation_id")
         or (attributes or {}).get("correlation-id"),
     )
