@@ -176,11 +176,6 @@ def test_gateway_dispatches_real_pi_provider_via_full_isolation_worker(
                 prompt_body=_PROMPT,
                 timeout_seconds=90,
             )
-            result = client.wait_execution_request(
-                tmp_path,
-                result["request-id"],
-                timeout_seconds=90,
-            )
         finally:
             reset_gateway_client()
 

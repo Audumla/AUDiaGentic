@@ -4,7 +4,8 @@ WORKDIR /app
 ENV AUDIAGENTIC_DOCKER_TESTS=1
 ENV AUDIAGENTIC_REAL_PROVIDER_CLI_TESTS=1
 ENV PYTHONPATH="/app/src"
-ENV PATH="/venv/bin:$PATH"
+ENV PATH="/tmp/audiagentic-test-home/.local/bin:/venv/bin:$PATH"
+ENV UV_TOOL_BIN_DIR=/tmp/audiagentic-test-home/.local/bin
 ENV HOME=/tmp/audiagentic-test-home
 ENV AUDIAGENTIC_HOME=/tmp/audiagentic-test-home/.audiagentic
 
