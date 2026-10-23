@@ -49,7 +49,9 @@ pytestmark = [
 ]
 
 _DOCKER_GATE_ENV = "AUDIAGENTIC_GATEWAY_PI_SMOKE_DOCKER"
-_MODEL_PROFILE = "qwen3.5-0.8b"
+# Use the same provisioned model as the passing full-turn RPC transcript
+# fixture; the 0.8B model repeatedly kept generating instead of ending turns.
+_MODEL_PROFILE = "qwen3.5-2b"
 _PI_MODEL_REF = "audiagentic/audiagentic-rig"
 _PROMPT = "Reply with exactly: OK"
 

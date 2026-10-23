@@ -272,8 +272,9 @@ def test_real_pi_rpc_transcript_through_the_tap_covers_a_full_prompt_turn(
 
 
 _TOOL_PROMPT_TEXT = (
-    "Use your shell tool right now to run exactly this command: "
-    "echo AS41_TOOL_TAP_PROOF_9f3a1c. Call the tool -- do not reply with text only."
+    "Call the bash tool exactly once with command: printf AS41_TOOL_TAP_PROOF_9f3a1c. "
+    "Do not create or edit files. After the tool returns, reply with only OK "
+    "and end the turn."
 )
 
 
