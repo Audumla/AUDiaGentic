@@ -43,11 +43,7 @@ RUN python3 -m pip install --no-cache-dir --no-compile --break-system-packages /
 WORKDIR /app
 COPY pyproject.toml ./pyproject.toml
 # Static template root + tests + smoke script used by the three checks.
-COPY .audiagentic/config ./.audiagentic/config
-COPY .audiagentic/skills ./.audiagentic/skills
-COPY .gemini ./.gemini
 COPY .github/workflows ./.github/workflows
-COPY .opencode ./.opencode
 COPY AGENTS.md CLAUDE.md GEMINI.md ./
 COPY tests ./tests
 

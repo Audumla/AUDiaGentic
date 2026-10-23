@@ -17,6 +17,7 @@ DEFAULT_TIMELINE_MAX_BYTES = 1 * 1024 * 1024
 DEFAULT_OBSERVATION_MAX_BYTES = 2 * 1024 * 1024
 DEFAULT_RECOVERY_MAX_BYTES = 1 * 1024 * 1024
 DEFAULT_CONSOLE_TRACE_MAX_BYTES = 4 * 1024 * 1024
+DEFAULT_JOURNAL_RETENTION_DAYS = 5
 _MAX_CONFIGURED_BYTES = 256 * 1024 * 1024
 _MAX_REQUEST_HISTORY_LIMIT = 10_000
 
@@ -34,6 +35,7 @@ class RetentionPolicy:
     policy_id: str
     digest: str
     available: bool
+    journal_retention_days: int = DEFAULT_JOURNAL_RETENTION_DAYS
 
     @property
     def snapshot(self) -> dict[str, Any]:
@@ -48,6 +50,7 @@ class RetentionPolicy:
             "observation-max-bytes": self.observation_max_bytes,
             "recovery-max-bytes": self.recovery_max_bytes,
             "console-trace-max-bytes": self.console_trace_max_bytes,
+            "journal-retention-days": self.journal_retention_days,
             "available": self.available,
         }
 
@@ -119,6 +122,9 @@ def load_retention_policy() -> RetentionPolicy:
         if not isinstance(raw, dict):
             raise ValueError
         enabled, minimum, batch, history_limit, timeline_max, observation_max, recovery_max, console_max = _policy_values(raw)
+        retention_days = raw.get("journal-retention-days", DEFAULT_JOURNAL_RETENTION_DAYS)
+        if isinstance(retention_days, bool) or not isinstance(retention_days, int) or not 1 <= retention_days <= 3650:
+            raise ValueError
         canonical = json.dumps(
             {
                 "purge-enabled": enabled,
@@ -129,6 +135,7 @@ def load_retention_policy() -> RetentionPolicy:
                 "observation-max-bytes": observation_max,
                 "recovery-max-bytes": recovery_max,
                 "console-trace-max-bytes": console_max,
+                "journal-retention-days": retention_days,
             },
             sort_keys=True,
             separators=(",", ":"),
@@ -146,6 +153,7 @@ def load_retention_policy() -> RetentionPolicy:
             str(raw.get("policy-id", "machine-default")),
             digest,
             True,
+            retention_days,
         )
     except (OSError, ValueError, TypeError):
         return RetentionPolicy(
@@ -169,6 +177,7 @@ def policy_matches(snapshot: dict[str, Any]) -> bool:
 
 
 __all__ = [
+    "DEFAULT_JOURNAL_RETENTION_DAYS",
     "DEFAULT_CONSOLE_TRACE_MAX_BYTES",
     "DEFAULT_OBSERVATION_MAX_BYTES",
     "DEFAULT_RECOVERY_MAX_BYTES",

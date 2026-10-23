@@ -318,6 +318,26 @@ def test_archive_is_integrity_manifest_and_purge_fails_closed_without_policy(tmp
     assert request_dir.exists()
 
 
+def test_archive_excludes_only_owned_trace_fences(tmp_path: Path) -> None:
+    from audiagentic.components.agents.gateway.operations.archive import _digest_tree
+    root = tmp_path / ".audiagentic" / "runtime" / "agent-execution-gateway"
+    request = root / "req_trace_archive"
+    request.mkdir(parents=True)
+    (request / "record.json").write_text('{"state":"completed"}', encoding="utf-8")
+    before = _digest_tree(request)
+    (request / "timeline.ndjson.journal.lock").write_bytes(b"\0")
+    assert _digest_tree(request) == before
+    runtime = request / "runtime"
+    runtime.mkdir()
+    (runtime / "timeline.ndjson.journal.lock").write_text("provider-owned", encoding="utf-8")
+    archived = GatewayArchiveExecutor(_ArchiveRequests({"state": "completed"})).execute(
+        {"scope": {"project-root": str(tmp_path), "request-ids": [request.name]}})
+    assert archived["changed"] == 1
+    destination = root / "archive" / request.name
+    assert not (destination / "timeline.ndjson.journal.lock").exists()
+    assert (destination / "runtime" / "timeline.ndjson.journal.lock").read_text() == "provider-owned"
+
+
 def test_archive_preserves_durable_runtime_lineage_for_resume(tmp_path: Path) -> None:
     request_id = "req_archive_resume"
     request_dir = tmp_path / ".audiagentic" / "runtime" / "agent-execution-gateway" / request_id

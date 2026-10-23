@@ -49,7 +49,9 @@ pytestmark = [
 ]
 
 _DOCKER_GATE_ENV = "AUDIAGENTIC_GATEWAY_PI_SMOKE_DOCKER"
-_MODEL_PROFILE = "qwen3.5-0.8b"
+# Use the same provisioned model as the passing full-turn RPC transcript
+# fixture; the 0.8B model repeatedly kept generating instead of ending turns.
+_MODEL_PROFILE = "qwen3.5-2b"
 _PI_MODEL_REF = "audiagentic/audiagentic-rig"
 _PROMPT = "Reply with exactly: OK"
 
@@ -129,6 +131,9 @@ def test_gateway_dispatches_real_pi_provider_via_full_isolation_worker(
     # so this call continues to exercise clean provider installation.
     install_result = install_provider_cli("pi", timeout=300, project_root=tmp_path)
     assert_install_result_ok("pi", install_result)
+    from tests.helpers.pi_smoke import restrict_smoke_pi
+
+    restrict_smoke_pi(tmp_path, monkeypatch)
 
     harness_runtime = global_harness_runtime()
     provision_embedded_rig(harness_runtime, tmp_path)
@@ -176,11 +181,11 @@ def test_gateway_dispatches_real_pi_provider_via_full_isolation_worker(
                 prompt_body=_PROMPT,
                 timeout_seconds=90,
             )
-            result = client.wait_execution_request(
-                tmp_path,
-                result["request-id"],
-                timeout_seconds=90,
-            )
+            if result.get("state") not in {"completed", "failed", "cancelled", "interrupted"}:
+                # Real CPU model generation may outlive the initial caller
+                # wait. Continue observing the same ID, never resubmit.
+                result = client.wait_execution_request(tmp_path, result["request-id"], timeout_seconds=180)
+            assert result.get("wait-outcome") != "timeout", json.dumps(result, indent=2, default=str)
         finally:
             reset_gateway_client()
 

@@ -55,6 +55,7 @@ def _fresh_bus():
     reset_bus()
 
 
+@pytest.mark.timeout(_SUBPROCESS_TIMEOUT + 15)
 def test_real_subprocess_flood_evicts_bounded_and_publishes_turn_events(tmp_path):
     received: list[tuple[str, dict]] = []
     completed = threading.Event()

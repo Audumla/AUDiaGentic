@@ -2559,29 +2559,43 @@ def purge_execution_session(project_root: Path, session_id: str) -> dict[str, An
         )
         binding_store.retire_binding(project_root, record, state="failed")
 
-    with StartupLock(gateway_retention_lock_path(project_root)):
-        # Re-read the session and all request records immediately before the
-        # destructive boundary; a newly admitted request must win the race.
-        current = session_store.read_session_record(project_root, session_id)
-        current_ids = set(session_store.session_request_ids(current)) | request_ids
-        for request_id in current_ids:
-            try:
-                current_request = store.read_record(project_root, request_id)
-            except AudiaGenticError:
-                continue
-            if current_request.get("state") not in store.TERMINAL_STATES:
-                return {
-                    "session-id": session_id,
-                    "outcome": "blocked",
-                    "reason": "session-has-active-requests",
-                    "request-count": len(current_ids),
-                }
-        for request_id in current_ids:
-            shutil.rmtree(gateway_request_dir(project_root, request_id), ignore_errors=True)
-            shutil.rmtree(root / "archive" / request_id, ignore_errors=True)
-        shutil.rmtree(gateway_session_dir(project_root, session_id), ignore_errors=True)
-        binding_store.purge_binding(project_root, current)
-        root_registry.unregister_session_root(project_root, session_id=session_id)
+    from contextlib import ExitStack
+    from audiagentic.components.agents.agents_paths import (
+        gateway_request_maintenance_lock_path, gateway_session_maintenance_lock_path,
+    )
+
+    with ExitStack() as maintenance_fences:
+        maintenance_fences.enter_context(StartupLock(
+            gateway_session_maintenance_lock_path(project_root, session_id)))
+        for request_id in sorted(request_ids):
+            maintenance_fences.enter_context(StartupLock(
+                gateway_request_maintenance_lock_path(project_root, request_id)))
+        with StartupLock(gateway_retention_lock_path(project_root)):
+            # Re-read the session and all request records immediately before the
+            # destructive boundary; a newly admitted request must win the race.
+            current = session_store.read_session_record(project_root, session_id)
+            if not set(session_store.session_request_ids(current)).issubset(request_ids):
+                return {"session-id": session_id, "outcome": "blocked",
+                        "reason": "session-lineage-changed", "request-count": len(request_ids)}
+            current_ids = set(session_store.session_request_ids(current)) | request_ids
+            for request_id in current_ids:
+                try:
+                    current_request = store.read_record(project_root, request_id)
+                except AudiaGenticError:
+                    continue
+                if current_request.get("state") not in store.TERMINAL_STATES:
+                    return {
+                        "session-id": session_id,
+                        "outcome": "blocked",
+                        "reason": "session-has-active-requests",
+                        "request-count": len(current_ids),
+                    }
+            for request_id in current_ids:
+                shutil.rmtree(gateway_request_dir(project_root, request_id), ignore_errors=True)
+                shutil.rmtree(root / "archive" / request_id, ignore_errors=True)
+            shutil.rmtree(gateway_session_dir(project_root, session_id), ignore_errors=True)
+            binding_store.purge_binding(project_root, current)
+            root_registry.unregister_session_root(project_root, session_id=session_id)
 
     return {
         "session-id": session_id,

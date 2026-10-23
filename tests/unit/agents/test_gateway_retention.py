@@ -157,6 +157,19 @@ def test_indexed_compaction_preserves_terminal_evidence_and_rebuilds_offsets(tmp
         offset += len(line)
 
 
+def test_compaction_leaves_room_for_following_appends(tmp_path: Path) -> None:
+    journal = tmp_path / "timeline.ndjson"
+    index = tmp_path / "timeline.index.ndjson"
+    rows = [{"event": str(number), "payload": "x" * 100} for number in range(100)]
+    journal.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+    assert compact_indexed_ndjson(journal, index, max_bytes=4000)
+    assert journal.stat().st_size <= 3000
+    assert json.loads(journal.read_text().splitlines()[-1])["event"] == "99"
+    with journal.open("a", encoding="utf-8") as stream:
+        stream.write(json.dumps({"event": "next"}) + "\n")
+    assert not compact_indexed_ndjson(journal, index, max_bytes=4000)
+
+
 def test_rolling_retention_compacts_old_resolved_histories_without_deleting_directories(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("AUDIAGENTIC_GATEWAY_REQUEST_RETENTION_COUNT", "1")
     monkeypatch.setenv("AUDIAGENTIC_GATEWAY_TIMELINE_MAX_BYTES", "500")
@@ -216,6 +229,9 @@ def test_terminal_timeline_schedules_retention_instead_of_running_inline(tmp_pat
 
 
 def test_background_retention_sweep_records_duration_and_result(tmp_path: Path, monkeypatch) -> None:
+    record = gateway_request_dir(tmp_path, "req_retention_trace") / "record.json"
+    record.parent.mkdir(parents=True)
+    record.write_text('{"request-id":"req_retention_trace","state":"completed"}', encoding="utf-8")
     observed: list[dict] = []
     threads: list[SimpleNamespace] = []
 

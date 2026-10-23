@@ -5,11 +5,13 @@ import json
 import logging
 import os
 import threading
+from contextlib import nullcontext
 from pathlib import Path
 from typing import Any
 
 from audiagentic.foundation.logging.context import get_correlation_id
 from audiagentic.foundation.time import now_iso_z
+from audiagentic.foundation.observability.journal_segments import journal_lock, prepare_append, compact_indexed_ndjson
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +40,7 @@ def record_timeline_event(
     attributes: dict[str, Any] | None = None,
     timestamp: str | None = None,
     correlation_id: str | None = None,
+    segment_max_bytes: int | None = None,
 ) -> dict[str, Any]:
     """Append one durable JSONL timeline event.
 
@@ -63,29 +66,26 @@ def record_timeline_event(
     }
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        with _lock_for(path):
-            offset = path.stat().st_size if path.exists() else 0
+        with _lock_for(path), (journal_lock(path) if segment_max_bytes is not None else nullcontext()):
             line = json.dumps(record, sort_keys=True) + "\n"
+            index_path = path.with_suffix(".index.ndjson")
+            if segment_max_bytes is not None:
+                prepare_append(path, index_path, max_bytes=segment_max_bytes,
+                               incoming_bytes=len(line.encode("utf-8")))
+            offset = path.stat().st_size if path.exists() else 0
             with path.open("a", encoding="utf-8") as handle:
                 handle.write(line)
                 handle.flush()
                 os.fsync(handle.fileno())
-            index_path = path.with_suffix(".index.ndjson")
             with index_path.open("a", encoding="utf-8") as handle:
                 handle.write(json.dumps({"offset": offset, "length": len(line.encode("utf-8"))}) + "\n")
                 handle.flush()
                 os.fsync(handle.fileno())
-            if path.name == "timeline.ndjson":
-                from audiagentic.components.agents.gateway.retention import (
-                    compact_indexed_ndjson,
-                    journal_max_bytes,
-                )
-                compact_indexed_ndjson(
-                    path,
-                    index_path,
-                    max_bytes=journal_max_bytes("timeline"),
-                    preserve=lambda row: row.get("state") in {"completed", "failed", "cancelled", "rejected", "interrupted", "timed-out", "expired", "abandoned"},
-                )
+            if segment_max_bytes is None and path.name == "timeline.ndjson":
+                # Non-gateway resource timelines retain their previous bound;
+                # foundation no longer imports a gateway retention policy.
+                compact_indexed_ndjson(path, index_path, max_bytes=1024 * 1024,
+                    preserve=lambda row: row.get("state") in {"completed", "failed", "cancelled", "rejected", "interrupted", "timed-out", "expired", "abandoned"})
     except Exception:  # noqa: BLE001
         logger.warning(
             "failed to record timeline event",
