@@ -59,20 +59,30 @@ def _provider_activity_path(execution_request: dict[str, object]) -> Path | None
     return candidate
 
 
+def _provider_activity_offset(path: Path | None) -> int:
+    """Capture the prior-attempt boundary before provider execution starts."""
+    if path is None:
+        return 0
+    try:
+        return path.stat().st_size
+    except OSError:
+        return 0
+
+
 def _watch_provider_activity(
     path: Path | None,
     stop: threading.Event,
     emit: Callable[[str], None],
+    offset: int,
 ) -> None:
-    """Relay newly appended normalized stream events without payloads."""
+    """Relay events appended after the synchronously captured attempt boundary.
+
+    Never establish the boundary in this background thread: a fast provider
+    can write events before the scheduler starts it. Retries still skip the
+    events already present when the caller admitted this worker attempt.
+    """
     if path is None:
         return
-    try:
-        # Retries reuse the request id and therefore the runtime directory;
-        # do not replay a prior attempt's events as fresh activity.
-        offset = path.stat().st_size
-    except (FileNotFoundError, OSError):
-        offset = 0
     last_emit = 0.0
     while not stop.wait(0.1):
         try:
@@ -241,9 +251,11 @@ def main() -> int:
 
         heartbeat_thread = threading.Thread(target=emit_heartbeat, name="worker-activity", daemon=True)
         heartbeat_thread.start()
+        activity_path = _provider_activity_path(request.execution_request)
+        activity_offset = _provider_activity_offset(activity_path)
         activity_thread = threading.Thread(
             target=_watch_provider_activity,
-            args=(_provider_activity_path(request.execution_request), heartbeat_stop, lambda source: emit_frame(source)),
+            args=(activity_path, heartbeat_stop, emit_frame, activity_offset),
             name="provider-activity",
             daemon=True,
         )

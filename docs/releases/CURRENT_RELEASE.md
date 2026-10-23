@@ -7,6 +7,7 @@
 - [chg_20261023_022035_prevent-ci-plugin-startup-erro_6279] Prevent CI plugin startup errors and false Pi RPC EOF failures during active long streaming turns.
 - [chg_20261023_023912_repair-ci-dependency-and-stale_2929] Repair CI dependency and stale integration-contract failures while preserving fail-closed gateway routing.
 - [chg_20261023_031451_prevent-bounded-journal-compac_4697] Prevent bounded journal compaction from repeatedly blocking active streaming sessions and stop duplicate CI runs consuming runner capacity.
+- [chg_20261023_233024_prevent-fast-provider-progress_9547] Prevent fast provider progress from being missed when the worker activity watcher starts late.
 
 ### feature
 - [chg_20261023_040315_rotate-gateway-traces-daily-c_7921] Rotate gateway traces daily, compress closed segments and expire eligible raw traces after five days without deleting results or protected recovery evidence.
