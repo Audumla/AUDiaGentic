@@ -4,10 +4,123 @@ import pytest
 from playwright.async_api import async_playwright
 
 from audiagentic.components.providers.adapters.gpt_auto.gpt_auto_cdp import (
+    _EXPAND_USER_PROMPT_FN,
     _RETRY_CONVERSATION_LOAD_FN,
     _RETRY_DELIVERY_TIMEOUT_FN,
     _SNAPSHOT_FN,
 )
+from audiagentic.components.providers.adapters.gpt_auto.prompt_fingerprint import PromptFingerprint
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("editor", ["editable", "textarea"])
+@pytest.mark.parametrize("real_banner", [False, True])
+@pytest.mark.parametrize("name,phrase", [
+    ("conversation-load-failed", "Could not load this ChatGPT conversation"),
+    ("network-error-alert", "A network error occurred. Please check your connection and try again."),
+    ("stream-cache-expired", "Stream cache expired"),
+])
+async def test_error_words_in_unsent_input_are_not_provider_failure(editor, real_banner, name, phrase):
+    input_html = (
+        f'<div contenteditable="true" role="textbox"><pre><code>{phrase}</code></pre></div>'
+        if editor == "editable" else f'<textarea>{phrase}</textarea>'
+    )
+    signal = {"name": name, "scope": "document", "selectors": ["body"],
+              "visible": True, "textContainsAny": [phrase]}
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            banner = f'<aside role="alert">{phrase}</aside>' if real_banner else ""
+            await page.set_content(f'<main>{input_html}</main>{banner}')
+            snapshot = await page.evaluate(_SNAPSHOT_FN, [signal])
+            assert bool(snapshot["domSignals"].get(name)) is real_banner
+        finally:
+            await browser.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("branches", [1, 2])
+async def test_intermediate_unit_identity_requires_one_active_assistant_unit(branches):
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            await page.set_content('<section data-content-search-turn-key="turn-1">'
+                '<div class="block-BQZwFn"><h4 class="sr-only">You said:</h4>'
+                '<div data-chatgpt-search-message-ids="user">Prompt</div></div>'
+                '<div class="block-BQZwFn"><h4 class="sr-only">ChatGPT said:</h4>'
+                '<div data-chatgpt-search-message-ids="thinking">Thinking</div></div>'
+                + ''.join(f'<div class="block-BQZwFn"><h4 class="sr-only">ChatGPT said:</h4>'
+                    f'<div data-chatgpt-search-message-ids="answer-{i}" '
+                    f'data-content-search-unit-key="turn-1:{i}:assistant">Answer</div></div>'
+                    for i in range(branches)) + '</section>')
+            snapshot = await page.evaluate(_SNAPSHOT_FN, [])
+            thinking = next(ref for ref in snapshot["messageRefs"] if ref["messageId"] == "thinking")
+            assert thinking["rendererTurnId"] == "turn-1"
+            assert thinking["rendererUnitId"] == ("turn-1:0:assistant" if branches == 1 else None)
+        finally:
+            await browser.close()
+
+
+@pytest.mark.asyncio
+async def test_user_fenced_language_attribute_restores_exact_prompt_correlation():
+    expected = "Reference\n```python\ndef run():\n    return 1\n```\nReply token"
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            await page.set_content(
+                '<div class="block-BQZwFn"><h4 class="sr-only">You said:</h4>'
+                '<div data-chatgpt-search-message-ids="user-code">'
+                '<div data-user-message-bubble="true">Reference\n'
+                '<pre data-markdown-copy="code-block"><code data-language="python" '
+                'data-markdown-copy-content="true">def run():\n    return 1</code></pre>'
+                '\nReply token<button>Show less</button></div></div></div>'
+            )
+            snapshot = await page.evaluate(_SNAPSHOT_FN, [])
+            observed = snapshot["messageRefs"][0]["correlationText"]
+            assert PromptFingerprint.from_text(expected).matches_text(observed)
+            assert not PromptFingerprint.from_text(expected.replace("return 1", "return 2")).matches_text(observed)
+            assert not PromptFingerprint.from_text(expected.replace("python", "javascript")).matches_text(observed)
+            await page.evaluate("document.querySelector('code').removeAttribute('data-language')")
+            missing = await page.evaluate(_SNAPSHOT_FN, [])
+            assert not PromptFingerprint.from_text(expected).matches_text(
+                missing["messageRefs"][0]["correlationText"]
+            )
+        finally:
+            await browser.close()
+
+
+@pytest.mark.asyncio
+async def test_collapsed_exact_user_prompt_expands_and_preserves_fingerprint():
+    expected = "Review source\n    def run():\n        return 1\nLast line"
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            await page.set_content(
+                '<div class="block-BQZwFn"><h4 class="sr-only">You said:</h4>'
+                '<div data-chatgpt-search-message-ids="exact-user exact-user">'
+                '<div data-user-message-bubble="true"><div data-testid="collapsible-user-message-content">'
+                'Review source…</div></div></div>'
+                '<button aria-expanded="false">Show more</button></div>'
+            )
+            await page.evaluate("""text => {
+              const button = document.querySelector('button');
+              button.onclick = () => {
+                document.querySelector('[data-testid="collapsible-user-message-content"]').textContent = text;
+                button.setAttribute('aria-expanded', 'true'); button.textContent = 'Show less';
+              };
+              window.focus = () => {throw new Error('prompt expansion must not focus')};
+            }""", expected)
+            assert await page.evaluate(_EXPAND_USER_PROMPT_FN, {"messageId": "foreign-user"}) is False
+            assert await page.evaluate(_EXPAND_USER_PROMPT_FN, {"messageId": "exact-user"}) is True
+            assert await page.evaluate(_EXPAND_USER_PROMPT_FN, {"messageId": "exact-user"}) is False
+            snapshot = await page.evaluate(_SNAPSHOT_FN, [])
+            assert PromptFingerprint.from_text(expected).matches_text(snapshot["messageRefs"][0]["correlationText"])
+        finally:
+            await browser.close()
 
 # The exact markup captured live 2026-09-27 from a stuck ChatGPT conversation:
 # a role="alert" aside with a plain <button>Retry</button> that carries
@@ -317,6 +430,64 @@ async def test_unlabelled_fallback_activity_block_still_renews_dom_activity():
             after = await page.evaluate(_SNAPSHOT_FN, [])
             assert after["domActivityDigest"] != before["domActivityDigest"]
             assert after["domActivityOwnerPromptMessageId"] is None
+        finally:
+            await browser.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("ambiguous", [False, True])
+async def test_current_turn_wrapper_activity_is_owned_by_its_contained_prompt(ambiguous) -> None:
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            await page.set_content('''
+                <div data-turn-key="old-user"><div data-content-search-turn-key="old-turn">
+                  <div class="block-BQZwFn"><h4 class="sr-only">You said:</h4>
+                    <div data-chatgpt-search-message-ids="old-user" data-user-message-bubble="true">old prompt</div></div>
+                  <div class="block-BQZwFn"><h4 class="sr-only">ChatGPT said:</h4>old answer</div>
+                </div></div>
+                <div data-turn-key="current-user"><div data-content-search-turn-key="current-turn">
+                  <div class="block-BQZwFn"><h4 class="sr-only">You said:</h4>
+                    <div data-chatgpt-search-message-ids="current-user" data-user-message-bubble="true">current prompt</div></div>
+                  <div class="block-BQZwFn"><div id="work" role="status">Checking identity matching</div></div>
+                </div></div>''')
+            if ambiguous:
+                await page.locator('[data-content-search-turn-key="current-turn"]').evaluate('''node => node.insertAdjacentHTML('afterbegin',
+                    '<div class="block-BQZwFn"><h4 class="sr-only">You said:</h4><div data-chatgpt-search-message-ids="other-user" data-user-message-bubble="true">other prompt</div></div>')''')
+            before = await page.evaluate(_SNAPSHOT_FN, [])
+            assert before["latestUserId"] == "current-user"
+            expected_owner = None if ambiguous else "current-user"
+            assert before["domActivityOwnerPromptMessageId"] == expected_owner
+            await page.locator("#work").evaluate("node => node.textContent = 'Reviewed more code'")
+            after = await page.evaluate(_SNAPSHOT_FN, [])
+            assert after["domActivityOwnerPromptMessageId"] == expected_owner
+            assert after["domActivityDigest"] != before["domActivityDigest"]
+            await page.locator('[data-turn-key="old-user"] .block-BQZwFn').last.evaluate("node => node.textContent = 'historical update'")
+            historical = await page.evaluate(_SNAPSHOT_FN, [])
+            assert historical["domActivityDigest"] == after["domActivityDigest"]
+        finally:
+            await browser.close()
+
+
+@pytest.mark.asyncio
+async def test_structural_activity_owner_accepts_character_data_target() -> None:
+    # Exercise the actual private helper with a Text node, not a rewritten
+    # attribution implementation, so future MutationObserver callers stay safe.
+    helper = _SNAPSHOT_FN.split("  const structuralActivityOwnerFor = node => {", 1)[1].split("  const ownerPromptFor = node => {", 1)[0]
+    probe = """() => {
+      const progressUserEntries = [{el: document.querySelector('#user'), messageId: 'current-user'}];
+      const structuralActivityOwnerFor = node => {""" + helper + """
+      return structuralActivityOwnerFor(document.querySelector('#work').firstChild);
+    }"""
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            await page.set_content('<div data-turn-key="current-user"><div id="user">prompt</div><div id="work">thinking</div></div>')
+            assert await page.evaluate(probe) == "current-user"
+            await page.locator("#work").evaluate("node => node.firstChild.nodeValue = 'streamed text'")
+            assert await page.evaluate(probe) == "current-user"
         finally:
             await browser.close()
 
@@ -973,6 +1144,155 @@ async def test_current_renderer_units_restore_prompt_and_repeated_assistant_iden
             assert snapshot["latestAssistantId"] == "real-assistant-uuid"
             assert snapshot["latestUserText"] == "prompt"
             assert snapshot["latestAssistantText"] == "answer"
+        finally:
+            await browser.close()
+
+
+@pytest.mark.asyncio
+async def test_fallback_deduplicates_same_durable_user_message_after_answer() -> None:
+    """A duplicated DOM copy of one provider message is not a later turn.
+
+    The live renderer can append another visible user node with the same
+    durable UUID after its answer. Collapse that copy while retaining truly
+    distinct later user messages as separate turns.
+    """
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            await page.set_content(
+                """
+                <div class="block-BQZwFn">
+                  <h4 class="sr-only">You said:</h4>
+                  <div data-chatgpt-search-message-ids="user-1">prompt</div>
+                </div>
+                <div class="block-BQZwFn">
+                  <h4 class="sr-only">ChatGPT said:</h4>
+                  <div data-chatgpt-search-message-ids="assistant-1">answer</div>
+                </div>
+                <div class="block-BQZwFn">
+                  <h4 class="sr-only">You said:</h4>
+                  <div data-chatgpt-search-message-ids="user-1">prompt</div>
+                </div>
+                """
+            )
+
+            snapshot = await page.evaluate(_SNAPSHOT_FN, [])
+
+            assert snapshot["userCount"] == 1
+            assert snapshot["assistantCount"] == 1
+            assert snapshot["latestUserId"] == "user-1"
+            assert [
+                (ref["role"], ref["messageId"]) for ref in snapshot["messageRefs"]
+            ] == [("user", "user-1"), ("assistant", "assistant-1")]
+
+            await page.set_content(
+                """
+                <div class="block-BQZwFn">
+                  <h4 class="sr-only">You said:</h4>
+                  <div data-chatgpt-search-message-ids="user-1">first prompt</div>
+                </div>
+                <div class="block-BQZwFn">
+                  <h4 class="sr-only">ChatGPT said:</h4>
+                  <div data-chatgpt-search-message-ids="assistant-1">answer</div>
+                </div>
+                <div class="block-BQZwFn">
+                  <h4 class="sr-only">You said:</h4>
+                  <div data-chatgpt-search-message-ids="user-2">second prompt</div>
+                </div>
+                """
+            )
+
+            distinct_turns = await page.evaluate(_SNAPSHOT_FN, [])
+
+            assert distinct_turns["userCount"] == 2
+            assert distinct_turns["latestUserId"] == "user-2"
+        finally:
+            await browser.close()
+
+
+@pytest.mark.asyncio
+async def test_fallback_dedup_precedes_unanswered_prompt_and_terminal_witness() -> None:
+    """Duplicate durable nodes must not poison completion state derived earlier.
+
+    Also cover duplicate assistant nodes and a hidden-first/visible-second
+    user copy: the visible element is selected, but the logical turn remains
+    in its first conversation position and keeps its terminal action bar.
+    """
+    signals = [
+        dict(name='completion-control', scope='latest-assistant-turn', selectors=['button[aria-label="Copy"]'], visible=True),
+        dict(name='more-actions-menu', scope='latest-assistant-turn', selectors=['button[aria-label="More actions"]'], visible=True),
+    ]
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            await page.set_content(
+                """
+                <div data-turn-key="turn-1">
+                  <div class="block-BQZwFn" style="display:none">
+                    <h4 class="sr-only">You said:</h4>
+                    <div data-chatgpt-search-message-ids="user-1">hidden copy</div>
+                  </div>
+                  <div class="block-BQZwFn">
+                    <h4 class="sr-only">ChatGPT said:</h4>
+                    <div data-chatgpt-search-message-ids="assistant-1">answer</div>
+                  </div>
+                  <div class="block-BQZwFn">
+                    <h4 class="sr-only">You said:</h4>
+                    <div data-chatgpt-search-message-ids="user-1">visible copy</div>
+                  </div>
+                  <div class="block-BQZwFn">
+                    <h4 class="sr-only">ChatGPT said:</h4>
+                    <div data-chatgpt-search-message-ids="assistant-1">answer copy</div>
+                  </div>
+                  <div class="turn-action-controls">
+                    <button aria-label="Copy">Copy</button>
+                    <button aria-label="More actions">More</button>
+                  </div>
+                </div>
+                """
+            )
+
+            snapshot = await page.evaluate(_SNAPSHOT_FN, signals)
+
+            assert snapshot["userCount"] == 1
+            assert snapshot["assistantCount"] == 1
+            assert snapshot["latestUserId"] == "user-1"
+            assert snapshot["latestAssistantId"] == "assistant-1"
+            assert snapshot["latestUserText"].endswith("visible copy")
+            assert "hidden copy" not in snapshot["latestUserText"]
+            assert snapshot["terminalWitnessAssistantId"] == "assistant-1"
+            assert snapshot["domSignals"]["completion-control"] is True
+            assert snapshot["domSignals"]["more-actions-menu"] is True
+        finally:
+            await browser.close()
+
+
+@pytest.mark.asyncio
+async def test_fallback_does_not_deduplicate_synthetic_message_ids() -> None:
+    """Without durable provider IDs, identical text is not message identity."""
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            await page.set_content(
+                """
+                <div class="block-BQZwFn">
+                  <h4 class="sr-only">ChatGPT said:</h4><div>same answer</div>
+                </div>
+                <div class="block-BQZwFn">
+                  <h4 class="sr-only">ChatGPT said:</h4><div>same answer</div>
+                </div>
+                """
+            )
+
+            snapshot = await page.evaluate(_SNAPSHOT_FN, [])
+
+            assert snapshot["assistantCount"] == 2
+            assert [
+                ref["messageId"] for ref in snapshot["messageRefs"]
+            ] == ["fallback-assistant-0", "fallback-assistant-1"]
         finally:
             await browser.close()
 

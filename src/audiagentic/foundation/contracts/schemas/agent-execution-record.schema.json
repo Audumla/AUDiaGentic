@@ -217,6 +217,33 @@
       "type": ["string", "null"],
       "enum": ["cancelled", "worker-process-exited", "provider-terminal-error", "verified-stall", "absolute-safety-ceiling", null]
     },
+    "terminal-finalization": {
+      "type": "object",
+      "properties": {
+        "session-id": {"type": "string", "minLength": 1},
+        "recovered-binding": {"type": "object", "additionalProperties": true},
+        "clear-unresolved-turn": {"type": "boolean"},
+        "pre-clear-checkpoint": {
+          "description": "Private frozen checkpoint retained until captured observer handoff.",
+          "type": "object", "maxProperties": 64, "additionalProperties": true
+        },
+        "expected-session-binding": {
+          "type": ["object", "null"], "additionalProperties": true
+        },
+        "capture-owner": {
+          "type": "object",
+          "properties": {
+            "dispatch-owner-epoch": {"type": ["string", "null"]},
+            "worker-id": {"type": ["string", "null"]},
+            "attempt-epoch": {"type": ["integer", "null"]}
+          },
+          "required": ["dispatch-owner-epoch", "worker-id", "attempt-epoch"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["session-id", "recovered-binding", "clear-unresolved-turn"],
+      "additionalProperties": false
+    },
     "diagnostics": {
       "type": ["object", "null"],
       "properties": {
@@ -487,6 +514,10 @@
     },
     "created-at": {
       "type": "string"
+    },
+    "enqueue-ordinal": {
+      "type": "integer",
+      "minimum": 1
     },
     "updated-at": {
       "type": "string"
