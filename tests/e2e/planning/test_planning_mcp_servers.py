@@ -183,6 +183,9 @@ def _call(
     resp = next((r for r in responses if r.get("id") == msg_id), None)
     assert resp is not None, f"no response for {tool!r}"
     assert "error" not in resp, f"tool {tool!r} returned error: {resp.get('error')}"
+    assert not resp["result"].get("isError"), resp["result"]
+    if "structuredContent" in resp["result"]:
+        return resp["result"]["structuredContent"]
     blocks = resp["result"]["content"]
     parsed = [json.loads(b["text"]) for b in blocks]
     return parsed[0] if len(parsed) == 1 else parsed
@@ -271,21 +274,21 @@ class TestPlanningMcpServer:
     def test_plan_create_then_list_roundtrip(self, tmp_path: Path) -> None:
         proc = _start_server("audiagentic.components.planning.planning_mcp", tmp_path)
         try:
-            item = {"id": "E2E01", "plan": "e2e-test", "title": "E2E test item"}
+            item = {"id": "EE01", "plan": "e2e-test", "title": "E2E test item"}
             create_result = _call(proc, "plan_create_item", {"item": item})
-            assert create_result.get("id") == "E2E01", f"create_item failed: {create_result}"
+            assert create_result.get("id") == "EE01", f"create_item failed: {create_result}"
 
             raw = _call(proc, "plan_list_items", {"plan": "e2e-test"}, msg_id=4)
             ids = [i["id"] for i in raw.get("items", [])]
-            assert "E2E01" in ids, f"E2E01 not in list after create: {raw}"
+            assert "EE01" in ids, f"EE01 not in list after create: {raw}"
         finally:
             _terminate(proc)
 
     def test_plan_set_state_completes_item(self, tmp_path: Path) -> None:
         proc = _start_server("audiagentic.components.planning.planning_mcp", tmp_path)
         try:
-            _call(proc, "plan_create_item", {"item": {"id": "E2E02", "plan": "e2e-test", "title": "Complete me"}})
-            result = _call(proc, "plan_set_state", {"item_id": "E2E02", "new_state": "completed"}, msg_id=4)
+            _call(proc, "plan_create_item", {"item": {"id": "EE02", "plan": "e2e-test", "title": "Complete me", "validation": "MCP completion and listing asserted by this test.", "acceptance_criteria": "Item is returned in completed list."}})
+            result = _call(proc, "plan_set_state", {"item_id": "EE02", "new_state": "completed"}, msg_id=4)
             assert result.get("ok") is True
             assert result.get("state") == "completed"
 
@@ -296,20 +299,20 @@ class TestPlanningMcpServer:
                 msg_id=5,
             )
             ids = [i["id"] for i in raw.get("items", [])]
-            assert "E2E02" in ids, f"E2E02 not in completed list: {raw}"
+            assert "EE02" in ids, f"EE02 not in completed list: {raw}"
         finally:
             _terminate(proc)
 
     def test_plan_delete_item_removes_item(self, tmp_path: Path) -> None:
         proc = _start_server("audiagentic.components.planning.planning_mcp", tmp_path)
         try:
-            _call(proc, "plan_create_item", {"item": {"id": "E2E03", "plan": "e2e-test", "title": "Delete me"}})
-            del_result = _call(proc, "plan_delete_item", {"item_id": "E2E03"}, msg_id=4)
+            _call(proc, "plan_create_item", {"item": {"id": "EE03", "plan": "e2e-test", "title": "Delete me"}})
+            del_result = _call(proc, "plan_delete_item", {"item_id": "EE03"}, msg_id=4)
             assert del_result.get("ok") is True
 
             raw = _call(proc, "plan_list_items", {"plan": "e2e-test"}, msg_id=5)
             ids = [i["id"] for i in raw.get("items", [])]
-            assert "E2E03" not in ids, f"E2E03 still present after delete: {raw}"
+            assert "EE03" not in ids, f"EE03 still present after delete: {raw}"
         finally:
             _terminate(proc)
 
