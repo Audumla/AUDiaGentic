@@ -131,6 +131,9 @@ def test_gateway_dispatches_real_pi_provider_via_full_isolation_worker(
     # so this call continues to exercise clean provider installation.
     install_result = install_provider_cli("pi", timeout=300, project_root=tmp_path)
     assert_install_result_ok("pi", install_result)
+    from tests.helpers.pi_smoke import restrict_smoke_pi
+
+    restrict_smoke_pi(tmp_path, monkeypatch)
 
     harness_runtime = global_harness_runtime()
     provision_embedded_rig(harness_runtime, tmp_path)
