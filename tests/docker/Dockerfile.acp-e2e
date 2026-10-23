@@ -32,7 +32,6 @@ RUN python3 -m pip install --no-cache-dir audiagentic[acp] pytest pytest-asyncio
 
 WORKDIR /app
 COPY tests ./tests
-COPY .audiagentic/config ./.audiagentic/config
 
 # Run the Docker-specific test that requires [acp] installed
 CMD ["python3", "-m", "pytest", \

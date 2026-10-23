@@ -27,6 +27,7 @@ def test_codex_adapter_executes_cli(monkeypatch, tmp_path: Path) -> None:
         stderr_sinks=None,
     ):
         captured["command"] = command
+        captured["input_text"] = input_text
         captured["cwd"] = cwd
         captured["stdout_sinks"] = stdout_sinks
         captured["stderr_sinks"] = stderr_sinks
@@ -44,7 +45,7 @@ def test_codex_adapter_executes_cli(monkeypatch, tmp_path: Path) -> None:
 
     result = codex.run(
         {
-            "provider-id": "codex",
+            "prompt-body": "Reply with ok.", "provider-id": "codex",
             "packet-id": "pkt-job-003",
             "project-id": "my-project",
             "workflow-profile": "standard",
@@ -64,9 +65,9 @@ def test_codex_adapter_executes_cli(monkeypatch, tmp_path: Path) -> None:
     assert "--dangerously-bypass-approvals-and-sandbox" in captured["command"]
     assert captured["command"][captured["command"].index("--model") + 1] == "gpt-5.6-luna"
     assert "model_reasoning_effort=xhigh" in captured["command"]
-    assert captured["command"][-1].startswith(
-        "AUDiaGentic Codex provider execution request."
-    )
+    assert captured["command"][-1] == "-"
+    assert "Execution request for Codex." in captured["input_text"]
+    assert "Reply with ok." in captured["input_text"]
     assert captured["cwd"] == tmp_path
     assert captured["stdout_sinks"]
     assert captured["stderr_sinks"]
@@ -81,7 +82,7 @@ def test_codex_adapter_requires_command(monkeypatch) -> None:
                 AudiaGenticError(code="EXT-CODEX-001", kind="providers", message="missing")
             ),
         )
-        codex.run({"provider-id": "codex"}, {"default-model": "codex-stub"})
+        codex.run({"prompt-body": "Reply with ok.", "provider-id": "codex"}, {"default-model": "codex-stub"})
     except AudiaGenticError as exc:
         assert exc.code == "EXT-CODEX-001"
         assert exc.kind == "providers"

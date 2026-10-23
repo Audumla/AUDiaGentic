@@ -15,6 +15,13 @@ from audiagentic.components.planning.contracts import PlanningIntegrityError
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 
+@pytest.fixture(autouse=True)
+def _register_planning_projection():
+    # Other suites can reset the process-global bus after module import.
+    # These integration-style tests require the real projection subscription.
+    planning_events.register()
+
+
 def _item(root: Path, item_id: str = "TST01") -> Path:
     planning_api.create_item(
         root,
@@ -85,22 +92,24 @@ def test_completed_parent_cannot_receive_or_reopen_active_review(tmp_path: Path)
 def test_runtime_roots_reject_ancestor_symlink_escape(tmp_path: Path) -> None:
     outside = tmp_path / "outside"
     outside.mkdir()
-    marker = tmp_path / ".audiagentic"
+    project = tmp_path / "project"
+    project.mkdir()
+    marker = project / ".audiagentic"
     try:
         marker.symlink_to(outside, target_is_directory=True)
     except OSError:
         pytest.skip("symlink creation is unavailable in this environment")
 
     with pytest.raises(AudiaGenticError):
-        durability.journal_root(tmp_path)
+        durability.journal_root(project)
     with pytest.raises(AudiaGenticError):
-        planning_events._outbox_dir(tmp_path)
+        planning_events._outbox_dir(project)
     with pytest.raises(AudiaGenticError):
-        ledger_outbox.outbox_dir(tmp_path)
+        ledger_outbox.outbox_dir(project)
     with pytest.raises(AudiaGenticError):
-        item_store._lock_path(tmp_path, "item-TST01")
+        item_store._lock_path(project, "item-TST01")
     with pytest.raises(AudiaGenticError):
-        ledger_fragments._fragment_dir(tmp_path)
+        ledger_fragments._fragment_dir(project)
 
 
 def test_ledger_projection_failure_remains_retryable(tmp_path: Path) -> None:

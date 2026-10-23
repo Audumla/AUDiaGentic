@@ -4149,11 +4149,15 @@ def test_reaper_proven_owned_child_death_cleans_through_owning_turn_once(rig, mo
     )
     import audiagentic.foundation.system.adopted_process as adopted_process
 
+    child_dead = threading.Event()
     monkeypatch.setattr(
         adopted_process,
         "observe_child",
         lambda _evidence: OwnershipCheckResult(
-            owned=False, alive=False, observed=None, refusal_reason="process-dead"
+            owned=not child_dead.is_set(),
+            alive=not child_dead.is_set(),
+            observed=None,
+            refusal_reason="process-dead" if child_dead.is_set() else None,
         ),
     )
     from audiagentic.components.agents.gateway.queue import queue as queue_module
@@ -4178,6 +4182,12 @@ def test_reaper_proven_owned_child_death_cleans_through_owning_turn_once(rig, mo
         lambda: runtime.session_runtime_status(session_id).get("current-request-id") == "req_orphan"
     )
 
+    # The fixture also runs a 50ms background reaper. Announcing death before
+    # observing admission races that reaper: it can correctly remove the
+    # session before this thread ever sees its transient busy state.
+    runtime._call(runtime._reap_once(), timeout=2)  # noqa: SLF001
+    assert runtime.session_runtime_status(session_id)["current-request-id"] == "req_orphan"
+    child_dead.set()
     runtime._call(runtime._reap_once(), timeout=2)  # noqa: SLF001 - direct deterministic sweep
     runtime._call(runtime._reap_once(), timeout=2)  # noqa: SLF001 - prove idempotence after removal
     worker.join(timeout=3)

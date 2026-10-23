@@ -70,7 +70,7 @@ def test_cline_adapter_executes_cli(monkeypatch, tmp_path: Path) -> None:
     assert str(captured["cwd"]) == str(tmp_path)
     assert captured["stdout_sinks"]
     assert captured["stderr_sinks"]
-    assert str(captured["command"][-1]).startswith("AUDiaGentic Cline provider execution request.")
+    assert str(captured["command"][-1]).startswith("Execution request for Cline.")
 
 
 def test_cline_adapter_requires_command(monkeypatch) -> None:

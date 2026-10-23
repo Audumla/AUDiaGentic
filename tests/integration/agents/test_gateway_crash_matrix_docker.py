@@ -65,13 +65,13 @@ def rig_server():
         stop_rig_server(server)
 
 
-def test_crash_while_admitted_but_unclaimed_recovers_as_replay_required(
+def test_crash_while_admitted_but_unclaimed_resumes_unsent_request(
     tmp_path: Path, rig_server
 ) -> None:
     """SH07 required scenario: crash after admission before claim. A second
     request queued behind a concurrency=1 slot stays phase=admitted with no
-    dispatch owner — killing the service there must recover it as terminal
-    interrupted + replay-required=true, never re-enqueued."""
+    dispatch owner. Restart must resume that proven-unsent request under its
+    original ID without replaying the already-running request."""
     _require_docker_gate()
     from audiagentic.components.agents.gateway.remote_client import (
         StandaloneGatewayClient,
@@ -95,6 +95,11 @@ def test_crash_while_admitted_but_unclaimed_recovers_as_replay_required(
         # First occupies the sole concurrency slot (rig holds its response);
         # second must sit admitted-only, never claimed, while the slot is full.
         wait_for_record_state(tmp_path, first["request-id"], {"running"})
+        # Running is persisted before provider I/O. Prove the first call
+        # reached the rig before killing it, so the exact dispatch count
+        # below cannot race the worker's first HTTP submission.
+        wait_for(lambda: _HoldableRigHandler.request_count == 1,
+                 timeout=10, what="first provider call reached rig")
         wait_for_index_phase(service_root, second["request-id"], "admitted")
         second_record = _read_record(tmp_path, second["request-id"])
         assert second_record.get("dispatch-owner-epoch") is None
@@ -111,11 +116,13 @@ def test_crash_while_admitted_but_unclaimed_recovers_as_replay_required(
     proc2 = start_gateway_subprocess(service_root, token_path2, port2)
     client2 = StandaloneGatewayClient(f"http://127.0.0.1:{port2}", load_auth_token(token_path2))
     try:
-        recovered = wait_for_record_state(tmp_path, second["request-id"], {"interrupted"})
-        assert recovered["replay-required"] is True
-        assert recovered["error"]["code"] == "CON-AGW-102"
-        # Never silently re-enqueued: no active dispatch owner, no queue re-entry.
-        assert recovered.get("dispatch-owner-epoch") is None
+        wait_for_record_state(tmp_path, first["request-id"], {"interrupted"})
+        # Admission proves the queued request was unsent. Restart resumes
+        # that same ID, while the previously running request is not replayed.
+        _HoldableRigHandler.hold.set()
+        recovered = wait_for_record_state(tmp_path, second["request-id"], {"completed"}, timeout=30)
+        assert recovered.get("error") is None
+        assert _HoldableRigHandler.request_count == 2
     finally:
         client2.close()
         _HoldableRigHandler.hold.set()
@@ -215,7 +222,7 @@ def test_cancel_raced_with_recovery_reaches_consistent_terminal_state(
     proc2 = start_gateway_subprocess(service_root, token_path, port2)
     client2 = StandaloneGatewayClient(f"http://127.0.0.1:{port2}", load_auth_token(token_path))
     try:
-        recovered = wait_for_record_state(tmp_path, request_id, {"interrupted"})
+        recovered = wait_for_record_state(tmp_path, request_id, {"interrupted", "cancelled"})
         assert recovered.get("cancel-requested") is True
         assert _HoldableRigHandler.request_count <= 1  # cancel race never caused a second dispatch
     finally:
@@ -300,16 +307,15 @@ _ENV_STALL_CLAIM_TO_START = "AUDIAGENTIC_GATEWAY_TEST_STALL_CLAIM_TO_START_MS"
 _ENV_STALL_TERMINAL_TO_CLEANUP = "AUDIAGENTIC_GATEWAY_TEST_STALL_TERMINAL_TO_CLEANUP_MS"
 
 
-def test_crash_after_claim_before_start_recovers_as_replay_required(
+def test_crash_after_claim_before_start_resumes_proven_unsent_request(
     tmp_path: Path, rig_server
 ) -> None:
     """SH07 required scenario: crash after dispatch claim but before the
     attempt starts. The stall hook widens this single-thread gap (claim_
     dispatch has already returned and written work-index phase=claimed with
     a real owner epoch; start_owned_attempt has not yet run) long enough for
-    a real SIGKILL to land inside it. Recovery must terminalize as
-    interrupted + replay-required=true (never left claimed forever, never
-    silently resumed as if it had started)."""
+    a real SIGKILL to land inside it. Recovery must resume the proven-unsent
+    request under its original ID and dispatch it exactly once."""
     _require_docker_gate()
     from audiagentic.components.agents.gateway.remote_client import (
         StandaloneGatewayClient,
@@ -352,10 +358,11 @@ def test_crash_after_claim_before_start_recovers_as_replay_required(
     proc2 = start_gateway_subprocess(service_root, token_path, port2)
     client2 = StandaloneGatewayClient(f"http://127.0.0.1:{port2}", load_auth_token(token_path))
     try:
-        recovered = wait_for_record_state(tmp_path, request_id, {"interrupted"})
-        assert recovered["replay-required"] is True
-        assert recovered["error"]["code"] == "CON-AGW-102"
-        assert _HoldableRigHandler.request_count == 0  # never dispatched to the provider at all
+        assert _HoldableRigHandler.request_count == 0  # no Send before the crash
+        _HoldableRigHandler.hold.set()
+        recovered = wait_for_record_state(tmp_path, request_id, {"completed"}, timeout=30)
+        assert recovered.get("error") is None
+        assert _HoldableRigHandler.request_count == 1  # one safe initial dispatch
     finally:
         client2.close()
         _HoldableRigHandler.hold.set()

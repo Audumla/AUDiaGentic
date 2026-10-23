@@ -6,6 +6,7 @@ import logging
 import os
 import secrets
 import threading
+import time
 from pathlib import Path
 from typing import Any
 
@@ -60,6 +61,7 @@ class GatewayServiceHost:
         self._ingress_thread: threading.Thread | None = None
         self._operations_stop = threading.Event()
         self._operations_thread: threading.Thread | None = None
+        self._journal_maintenance_at = 0.0
         # AS60 step 7 / RV888: this process's own composition root. Shutdown
         # uninstalls the shared-gateway execution-profile registry.
         self._composition_graph = composition_graph
@@ -340,6 +342,12 @@ class GatewayServiceHost:
                     self.run_watchdog_pass()
                 except Exception:  # noqa: BLE001 - keep the poller alive
                     logger.exception("gateway watchdog pass failed")
+                if time.monotonic() >= self._journal_maintenance_at:
+                    self._journal_maintenance_at = time.monotonic() + 3600
+                    try:
+                        self.schedule_journal_maintenance()
+                    except Exception:  # noqa: BLE001 - maintenance cannot stop operations
+                        logger.exception("gateway journal maintenance scheduling failed")
 
         # Startup scan makes notifier loss and host restart harmless. It is
         # best-effort: a malformed old operation must not prevent the poller
@@ -352,6 +360,15 @@ class GatewayServiceHost:
             target=_poll, name="gateway-operations-poller", daemon=True
         )
         self._operations_thread.start()
+
+    def schedule_journal_maintenance(self) -> None:
+        """Queue hourly/startup sweeps even when no new request finishes."""
+        from .known_projects import load_known_projects
+        from ..retention import schedule_request_retention
+
+        registry = load_known_projects(self.service_store.root / "known-projects.json")
+        for project in registry.projects:
+            schedule_request_retention(project.project_root)
 
     def run_watchdog_pass(self) -> tuple[dict[str, Any], ...]:
         """Diagnose running work and revalidate stale live transports safely.
