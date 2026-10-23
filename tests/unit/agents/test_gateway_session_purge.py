@@ -28,11 +28,17 @@ def test_purge_session_removes_terminal_requests_and_session_data(tmp_path: Path
     (gateway_request_dir(tmp_path, request_id) / "output").mkdir(parents=True, exist_ok=True)
     (gateway_request_dir(tmp_path, request_id) / "output" / "final-response.txt").write_text("done", encoding="utf-8")
 
+    # This storage test starts from a quiescent terminal session, including
+    # pending async timeline subscribers from its state transitions.
+    from audiagentic.foundation.event import get_bus
+    get_bus().wait_idle(timeout=5)
     result = api.purge_execution_session(tmp_path, session_id)
 
     assert result == {"session-id": session_id, "outcome": "purged", "request-count": 1}
     assert not gateway_session_dir(tmp_path, session_id).exists()
-    assert not gateway_request_dir(tmp_path, request_id).exists()
+    assert not gateway_request_dir(tmp_path, request_id).exists(), list(
+        gateway_request_dir(tmp_path, request_id).rglob("*")
+    )
 
 
 def test_purge_session_blocks_non_terminal_request(tmp_path: Path) -> None:
