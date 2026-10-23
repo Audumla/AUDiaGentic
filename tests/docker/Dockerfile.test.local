@@ -15,13 +15,8 @@ COPY pyproject.toml README.md release-please-config.json ./
 COPY src ./src
 COPY tests ./tests
 COPY docs/examples ./docs/examples
-COPY .audiagentic/config ./.audiagentic/config
-COPY .audiagentic/skills ./.audiagentic/skills
-COPY .clinerules ./.clinerules
-COPY .gemini ./.gemini
 COPY .github/workflows ./.github/workflows
 COPY .github/prompts ./.github/prompts
-COPY .opencode ./.opencode
 COPY AGENTS.md CLAUDE.md GEMINI.md ./
 
 CMD ["pytest", "tests/unit/provisioning/test_dynamic_agent_config.py", "tests/integration/lifecycle", "tests/e2e/cli/test_mcp_component_servers.py", "-q"]

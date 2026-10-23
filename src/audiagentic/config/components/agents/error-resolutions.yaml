@@ -1,4 +1,9 @@
 # Agent Gateway (AGW) and Execution Profile (EXP) error resolutions
+CON-AGSV-031: "Use a request ID that resolves uniquely within the selected project; check project scope and request history."
+VAL-AGSV-035: "Provide include_response as a JSON boolean, not a string or number."
+VAL-AGSV-036: "Provide since_sequence as an integer."
+VAL-AGSV-037: "Use the type specified for the named field: tail is an integer; observation inclusion flags are JSON booleans."
+VAL-AGSV-038: "Provide since_sequence as an integer."
 VAL-APT-001: "Every agent execution requires a non-empty prompt body."
 VAL-AGW-001: "The request mode must be 'async' or 'blocking'. Check the mode parameter."
 VAL-AGW-999: "The gateway received an invalid provider or configuration value. Read the error message, correct the named value, and retry; if the message is insufficient, inspect the private gateway diagnostic evidence."
