@@ -27,6 +27,7 @@ def _cli(*args: str, project: Path | None = None, expect_rc: int = 0) -> dict | 
         cmd += ["--project", str(project)]
     cmd += list(args)
     env = dict(os.environ)
+    env["PYTHONIOENCODING"] = "utf-8"
     env["PYTHONPATH"] = os.pathsep.join([str(_ROOT / "src"), env.get("PYTHONPATH", "")])
     result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", env=env, timeout=20)
     assert result.returncode == expect_rc, (
