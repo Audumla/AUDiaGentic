@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.1](https://github.com/Audumla/AUDiaGentic/compare/v0.3.0...v0.3.1) (2026-10-23)
+
+
+### Bug Fixes
+
+* **gateway:** recover completed turns and trace request startup ([872fef2](https://github.com/Audumla/AUDiaGentic/commit/872fef2f296958d58e24b17a2893a595e965058b))
+* **release:** reconcile legacy ledger before publish ([2d0dd6c](https://github.com/Audumla/AUDiaGentic/commit/2d0dd6c671c87e4733016bff243beb7c3e7485b5))
+
 ## [0.3.0](https://github.com/Audumla/AUDiaGentic/compare/v0.2.1...v0.3.0) (2026-10-20)
 
 
