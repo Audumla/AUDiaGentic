@@ -1,4 +1,5 @@
 CON-ART-001: "Restore or remove the corrupt artifact ownership registry after reviewing managed files; do not continue prune or adoption with unknown ownership."
+CFG-LOCAL-001: "Correct the named local runtime setting: use a valid host, a port from 1 to 65535, and an HTTP or HTTPS provider URL. Keep credentials in environment variables."
 RES-PROC-001: "No free port was found in the candidate range. Check local listeners and retry port allocation."
 TO-PROC-002: "The operation timed out waiting for its filesystem lock. Inspect the current holder and lock duration, then retry through the owning workflow after contention clears."
 IO-JOBSTORE-001: "Failed to read the job record file. Check that the file exists and is valid JSON."

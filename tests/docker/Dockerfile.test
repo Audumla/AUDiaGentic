@@ -30,13 +30,8 @@ COPY tests ./tests
 COPY docs/examples ./docs/examples
 COPY docs/reference ./docs/reference
 COPY docs/planning ./docs/planning
-COPY .audiagentic/config ./.audiagentic/config
-COPY .audiagentic/skills ./.audiagentic/skills
-COPY .gemini ./.gemini
-COPY .clinerules ./.clinerules
 COPY .github/workflows ./.github/workflows
 COPY .github/prompts ./.github/prompts
-COPY .opencode ./.opencode
 COPY AGENTS.md CLAUDE.md GEMINI.md ./
 
 # Runtime records are mutable user/process state and are excluded from the

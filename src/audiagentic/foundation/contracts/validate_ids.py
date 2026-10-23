@@ -25,6 +25,13 @@ def _extract_ids(payload: Any) -> tuple[list[str], list[str]]:
     providers: list[str] = []
     components: list[str] = []
     if isinstance(payload, dict):
+        # Capability-reference registries describe external API vendors, not
+        # installed AUDiaGentic provider adapters. Keep the namespaces separate.
+        catalog = payload.get("providers")
+        if (payload.get("schema_version") == 1 and isinstance(catalog, dict)
+                and catalog and all(isinstance(entry, dict) and "endpoint_families" in entry
+                                    for entry in catalog.values())):
+            return providers, components
         for key, value in payload.items():
             if key in {"provider-id", "provider_id"} and isinstance(value, str):
                 providers.append(value)
@@ -63,6 +70,8 @@ def _should_validate_content(path: Path) -> bool:
     name = path.name.lower()
     if ".invalid." in name:
         return False
+    if name.endswith(".schema.json"):
+        return False  # Schema properties are definitions, not configuration IDs.
     try:
         resolved = path.resolve()
     except FileNotFoundError:
@@ -105,7 +114,7 @@ def scan_paths(
                 findings.append({"path": str(file_path), "issue": issue})
     schema_findings = validate_schema_files(SCHEMA_DIR)
     for issue in schema_findings:
-        findings.append({"path": str(SCHEMA_DIR.relative_to(REPO_ROOT)), "issue": issue})
+        findings.append({"path": str(SCHEMA_DIR), "issue": issue})
     return findings
 
 
