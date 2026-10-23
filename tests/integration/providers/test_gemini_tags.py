@@ -65,7 +65,7 @@ def test_gemini_adapter_recognizes_tag(monkeypatch, tmp_path: Path) -> None:
         assert result["status"] == "ok"
         # Check the normalized execution prompt reaches gemini
         assert (
-            "AUDiaGentic Gemini provider execution request." in captured["command"][2]
+            "Execution request for Gemini." in captured["command"][2]
         )
         assert "Do the work." in captured["command"][2]
         assert "@plan" not in captured["command"][2]

@@ -35,7 +35,7 @@ def test_qwen_recipe_executes_cli(monkeypatch, tmp_path: Path) -> None:
 
     monkeypatch.setattr(base_runner, "require_executable", lambda _pid, *_aliases: r"C:\Tools\qwen.exe")
 
-    def fake_run_streaming_command(command, *, cwd=None, input_text=None, stdout_sinks=None, stderr_sinks=None):
+    def fake_run_streaming_command(command, *, cwd=None, input_text=None, stdout_sinks=None, stderr_sinks=None, environment=None):
         captured["command"] = command
         captured["cwd"] = cwd
 
@@ -50,7 +50,7 @@ def test_qwen_recipe_executes_cli(monkeypatch, tmp_path: Path) -> None:
 
     result = _qwen_runner()(
         {
-            "provider-id": "qwen",
+            "prompt-body": "Reply with ok.", "provider-id": "qwen",
             "packet-id": "pkt-job-003",
             "workflow-profile": "standard",
             "working-root": str(tmp_path),
@@ -65,7 +65,7 @@ def test_qwen_recipe_executes_cli(monkeypatch, tmp_path: Path) -> None:
     assert command[0] == r"C:\Tools\qwen.exe"
     # recipe args-template: [{approval-flags}, {model-flags}, {prompt}]
     assert "-m" in command and "qwen-coder" in command
-    assert command[-1].startswith("AUDiaGentic Qwen provider execution request.")
+    assert command[-1].startswith("Execution request for Qwen.")
 
 
 def test_qwen_recipe_requires_cli(monkeypatch, tmp_path: Path) -> None:
@@ -74,7 +74,7 @@ def test_qwen_recipe_requires_cli(monkeypatch, tmp_path: Path) -> None:
 
     monkeypatch.setattr(base_runner, "require_executable", _raise)
     try:
-        _qwen_runner()({"provider-id": "qwen"}, {"default-model": "qwen-coder"})
+        _qwen_runner()({"prompt-body": "Reply with ok.", "provider-id": "qwen"}, {"default-model": "qwen-coder"})
     except AudiaGenticError as exc:
         assert exc.code == "EXT-PROVCLI-001"
     else:

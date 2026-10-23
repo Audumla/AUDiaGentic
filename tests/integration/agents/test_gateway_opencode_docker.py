@@ -364,8 +364,7 @@ def test_gateway_cancel_of_real_provider_request_reaches_terminal_state(
         _RigHandler.hold.set()  # let the held HTTP call return so the process can wind down
 
         final = client.wait_execution_request(tmp_path, request_id, timeout_seconds=30)
-        assert final["lifecycle"] == "terminal", final
-        assert final["outcome"] in {"cancelled", "failed", "success"}, final
+        assert final["state"] in {"cancelled", "failed", "completed"}, final
     finally:
         reset_gateway_client()
 
