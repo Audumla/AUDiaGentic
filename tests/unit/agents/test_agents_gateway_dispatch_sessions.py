@@ -11,6 +11,8 @@ no AcpLaunch/AcpSessionTransport in the open path.
 
 from __future__ import annotations
 
+import hashlib
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -29,6 +31,39 @@ from audiagentic.components.agents.gateway.session import sessions_store
 from audiagentic.components.agents.gateway.session.sessions import SessionRuntime
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
+@pytest.mark.parametrize("blocked", [None, "binding", "chat-url", "provider-chat-url", "provider-session-id", "pending", "same-turn", "active", "ambiguous", "other-provider", "send-intent-ever", "submission-proven", "submission-state", "submission-stage", "unknown-proof"])
+def test_terminal_unbound_session_replacement_gate(blocked):
+    session = {
+        "state": "failed", "binding": None,
+        "provider": {"provider-id": "gpt-auto", "metadata": {
+            "unresolved-turn-id": "req_old", "unresolved-turn-pending": False,
+            "submission-proven": False,
+        }},
+    }
+    metadata = session["provider"]["metadata"]
+    if blocked == "binding":
+        session["binding"] = {"provider-session-ref": "conversation"}
+    elif blocked in {"chat-url", "provider-chat-url", "provider-session-id"}:
+        metadata[blocked] = "retained-conversation"
+    elif blocked == "pending":
+        metadata["unresolved-turn-pending"] = True
+    elif blocked == "same-turn":
+        metadata["unresolved-turn-id"] = "req_new"
+    elif blocked == "active":
+        session["state"] = "active"
+    elif blocked == "ambiguous":
+        metadata["submission-ambiguous"] = True
+    elif blocked == "other-provider":
+        session["provider"]["provider-id"] = "other"
+    elif blocked in {"send-intent-ever", "submission-proven"}:
+        metadata[blocked] = True
+    elif blocked in {"submission-state", "submission-stage"}:
+        metadata[blocked] = "dispatching"
+    elif blocked == "unknown-proof":
+        metadata.pop("submission-proven")
+    assert session_dispatch._terminal_session_needs_fresh_chat(session, "req_new") is (blocked is None)
+
+
 PROFILE = {
     "profile_id": "profile-1",
     "provider_id": "opencode",
@@ -37,6 +72,86 @@ PROFILE = {
     "surface_id": "test-surface",
     "params": {},
 }
+
+
+@pytest.mark.parametrize("clear_result", [False, "raise"])
+def test_terminal_checkpoint_finalization_trace_records_delay_and_rejection(
+    tmp_path, monkeypatch, clear_result
+):
+    request_id = "req_terminal_checkpoint_trace"
+    session_id = "ses_terminal_checkpoint_trace"
+    updated_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    request = {
+        "request-id": request_id,
+        "session-id": session_id,
+        "dispatch-owner-epoch": "owner",
+        "worker-id": "worker",
+        "attempt-epoch": 1,
+    }
+    updated = {**request, "state": "completed", "updated-at": updated_at}
+    metadata = {
+        "unresolved-turn-pending": True,
+        "unresolved-turn-id": request_id,
+        "submission-proven": True,
+        "terminal-evidence": {
+            "turn-id": request_id,
+            "policy": "response-complete",
+        },
+    }
+    session_record = {"session-id": session_id, "provider": {"metadata": metadata}}
+    monkeypatch.setattr(
+        session_dispatch.store,
+        "transition_owned_terminal",
+        lambda *_args, **_kwargs: updated,
+    )
+    monkeypatch.setattr(
+        sessions_store, "read_session_record", lambda *_args: session_record
+    )
+    monkeypatch.setattr(
+        sessions_store,
+        "session_provider_metadata",
+        lambda value: value["provider"]["metadata"],
+    )
+    def clear_checkpoint(*_args, **_kwargs):
+        if clear_result == "raise":
+            raise AudiaGenticError(
+                code="TO-AGW-002",
+                kind="agents",
+                message="checkpoint lock timeout",
+                details={},
+            )
+        return False
+
+    monkeypatch.setattr(sessions_store, "clear_terminal_submission_checkpoint", clear_checkpoint)
+    from audiagentic.components.agents.gateway import observability
+
+    observations = []
+    monkeypatch.setattr(
+        observability,
+        "append_observation",
+        lambda *_args, **kwargs: observations.append(kwargs),
+    )
+    from audiagentic.components.agents.gateway import observation_projection
+
+    monkeypatch.setattr(observation_projection, "append_request_projection", lambda *_args, **_kwargs: None)
+
+    result = session_dispatch._transition_owned_attempt(
+        tmp_path, request, "completed"
+    )
+
+    assert result["state"] == "completed"
+    facts = observations[0]["diagnostic_facts"]["checkpoint"]
+    assert facts["clear-outcome"] == (
+        "error" if clear_result == "raise" else "compare-and-clear-rejected"
+    )
+    assert facts["request-terminal-durable"] is True
+    assert facts["checkpoint-cas-ms"] >= 0
+    assert facts["terminal-transition-call-ms"] >= 0
+    assert facts["finalization-duration-ms"] >= 0
+    assert facts["terminal-state-to-finalization-ms"] >= 0
+    assert facts["checkpoint-error-code"] == (
+        "TO-AGW-002" if clear_result == "raise" else None
+    )
 
 # GP13: the real "opencode" descriptor used by PROFILE above does not
 # declare RESUME_BY_REF support, so auto-resume tests need their own
@@ -113,7 +228,11 @@ def rig(tmp_path, monkeypatch):
         transport = FakeAgentSessionTransport()
         transport.ag_session_id = kwargs["ag_session_id"]
         transports.append(transport)
-        return _build_fake_prepared(transport)
+        return _build_fake_prepared(
+            transport,
+            provider_id=provider_id,
+            surface_id=surface_hint.surface_id,
+        )
 
     runtime = SessionRuntime(
         clock=clock,
@@ -205,6 +324,7 @@ def _dispatch(
     provider_isolation_tier="full-isolation",
     context_fingerprint="0" * 64,
     resume_existing=False,
+    session_start=None,
 ):
     return dispatch.dispatch_request(
         tmp_path,
@@ -217,7 +337,103 @@ def _dispatch(
         provider_isolation_tier=provider_isolation_tier,
         worker_timeout_seconds=10,
         resume_existing=resume_existing,
+        session_start=session_start,
     )
+
+
+@pytest.mark.parametrize("lost_handle", [False, True])
+@pytest.mark.parametrize("queued", [False, True])
+@pytest.mark.parametrize("allocation_failure", [False, True])
+def test_terminal_unbound_session_dispatches_new_prompt_without_old_checkpoint(rig, lost_handle, queued, allocation_failure, monkeypatch):
+    runtime, transports, tmp_path = rig
+    first = _dispatch(tmp_path, _running_record(tmp_path, session_keep_alive=True), dispatch_prompt="first")
+    old_id = first["session-id"]
+    if lost_handle:
+        runtime.close_session(tmp_path, old_id, reason="shutdown")
+    source = sessions_store.read_session_record(tmp_path, old_id)
+    source["state"] = "failed"
+    source["binding"] = None
+    source["provider"] = {"provider-id": "gpt-auto", "metadata": {
+        "unresolved-turn-id": first["request-id"],
+        "unresolved-turn-pending": False,
+        "prompt-text-digest": "old-digest",
+        "submission-proven": False,
+    }}
+    sessions_store.write_session_record(tmp_path, source)
+    if allocation_failure:
+        from audiagentic.components.agents.gateway.session import client_defaults
+        monkeypatch.setattr(client_defaults, "replace_failed_session", lambda *args, **kwargs: None)
+    request = _running_record(tmp_path, session_id=old_id)
+    if queued:
+        request["state"] = "queued"
+        store.write_record(tmp_path, request)
+    def start():
+        return store.start_owned_session_attempt(
+            tmp_path, request["request-id"],
+            owner_epoch=request["dispatch-owner-epoch"],
+            worker_id=request["worker-id"], attempt_epoch=request["attempt-epoch"],
+        )
+    second = _dispatch(tmp_path, request, dispatch_prompt="second", session_start=start if queued else None)
+    if allocation_failure:
+        assert second["state"] == "failed"
+        assert second["error"]["code"] == "CON-AGW-125"
+        assert len(transports) == 1
+        assert transports[0].turns == ["first"]
+        return
+    assert second["state"] == "completed"
+    assert second["session-id"] != old_id
+    assert transports[0].turns == ["first"]
+    assert transports[1].turns == ["second"]
+    assert sessions_store.read_session_record(tmp_path, old_id)["provider"]["metadata"]["prompt-text-digest"] == "old-digest"
+
+
+def test_presubmit_exception_retry_preserves_queued_start_callback(rig):
+    runtime, transports, root = rig
+    prepare = runtime._provider_prepare_fn
+    calls = 0
+    def fail_once(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise RuntimeError("pre-submit initialization failure")
+        return prepare(*args, **kwargs)
+    runtime._provider_prepare_fn = fail_once
+    request = _running_record(root, session_keep_alive=True)
+    request["state"] = "queued"
+    store.write_record(root, request)
+    starts = []
+    def start():
+        starts.append(request["request-id"])
+        return store.start_owned_session_attempt(
+            root, request["request-id"], owner_epoch=request["dispatch-owner-epoch"],
+            worker_id=request["worker-id"], attempt_epoch=request["attempt-epoch"],
+        )
+    result = _dispatch(root, request, dispatch_prompt="once", session_start=start)
+    assert result["state"] == "completed", result
+    assert starts == [request["request-id"]]
+    assert transports[-1].turns == ["once"]
+
+
+def test_dispatch_returns_captured_winner_without_second_terminal_write(rig, monkeypatch):
+    from audiagentic.foundation.transports.agent_session import SessionTurnResult
+    runtime, transports, root = rig
+    request = _running_record(root, session_keep_alive=True)
+    calls = []
+    def captured_prompt(*args, **kwargs):
+        calls.append(kwargs["request_id"])
+        current = store.read_record(root, request["request-id"])
+        store.transition_operator_terminal(
+            root, request["request-id"], expected_revision=current["revision"],
+            updates={"__final-response-text": "captured winner", "completion": {"source": "operator-provider-capture"}},
+        )
+        return SessionTurnResult(request["request-id"], "externally-captured", 0, 0)
+    monkeypatch.setattr(runtime, "prompt_in_session", captured_prompt)
+    result = _dispatch(root, request, dispatch_prompt="once")
+    assert result["state"] == "completed"
+    assert result["completion"]["source"] == "operator-provider-capture"
+    assert calls == [request["request-id"]]
+    assert result.get("error") is None
+    assert result.get("attempts") == []
 
 
 def test_keep_alive_opens_session_and_completes(rig):
@@ -1140,7 +1356,8 @@ def test_idle_closed_session_transparently_resumes(resumable_rig):
     assert successor["binding"]["relation"] == "resumed-from"
 
 
-def test_auto_resume_skips_terminal_idempotent_successor(resumable_rig, monkeypatch):
+@pytest.mark.parametrize("successor_kind", ["shutdown", "failed", "failed-pending", "failed-ambiguous", "failed-missing", "failed-null", "failed-send-intent", "active-orphan"])
+def test_auto_resume_skips_terminal_idempotent_successor(resumable_rig, monkeypatch, successor_kind):
     """A shutdown can close the idempotent successor before its first use.
 
     The next continuation must advance one bounded generation instead of
@@ -1159,17 +1376,42 @@ def test_auto_resume_skips_terminal_idempotent_successor(resumable_rig, monkeypa
         result = original_resume(*args, **kwargs)
         calls.append(result["session-id"])
         if len(calls) == 1:
-            runtime.close_session(tmp_path, result["session-id"], reason="shutdown")
+            if successor_kind == "active-orphan":
+                runtime._handles.pop(result["session-id"], None)
+                return result
+            runtime.close_session(tmp_path, result["session-id"], reason="shutdown" if successor_kind == "shutdown" else "failed")
+            if successor_kind != "shutdown":
+                from audiagentic.components.agents.gateway.session import sessions_store
+                durable = sessions_store.read_session_record(tmp_path, result["session-id"])
+                durable["state"] = "failed"
+                durable["provider"].setdefault("metadata", {})["unresolved-turn-pending"] = False
+                if successor_kind == "failed-pending":
+                    durable["provider"].setdefault("metadata", {})["unresolved-turn-pending"] = True
+                elif successor_kind == "failed-ambiguous":
+                    durable["provider"].setdefault("metadata", {})["submission-ambiguous"] = True
+                elif successor_kind == "failed-missing":
+                    durable["provider"]["metadata"].pop("unresolved-turn-pending")
+                elif successor_kind == "failed-null":
+                    durable["provider"]["metadata"]["unresolved-turn-pending"] = None
+                elif successor_kind == "failed-send-intent":
+                    durable["provider"]["metadata"]["send-intent-ever"] = True
+                sessions_store.write_session_record(tmp_path, durable)
         return result
 
     monkeypatch.setattr(runtime, "resume_session", resume_then_shutdown)
     second = _dispatch(
         tmp_path, _running_record(tmp_path, session_id=source_id), dispatch_prompt="continue"
     )
+    if successor_kind not in {"shutdown", "failed", "active-orphan"}:
+        assert second["state"] == "failed", second
+        assert len(calls) == 1
+        assert not any(t.turns for t in transports[1:])
+        return
     assert second["state"] == "completed", second
-    assert len(calls) == 2
+    assert len(calls) == (1 if successor_kind == "active-orphan" else 2)
     assert second["session-id"] == calls[-1]
-    assert second["session-id"] != calls[0]
+    if successor_kind != "active-orphan":
+        assert second["session-id"] != calls[0]
 
 
 def test_closed_by_non_shutdown_reason_still_raises_res_agw_003(rig):
@@ -1260,6 +1502,9 @@ def test_failed_session_with_durable_binding_auto_resumes(resumable_rig):
         tmp_path, _running_record(tmp_path, session_keep_alive=True), dispatch_prompt="hello"
     )
     session_id = first["session-id"]
+    source = session_store.read_session_record(tmp_path, session_id)
+    source["provider"].setdefault("metadata", {})["unresolved-turn-pending"] = False
+    session_store.write_session_record(tmp_path, source)
     session_store.transition_session_record(
         tmp_path, session_id, "failed", updates={"close-reason": "failed"}
     )
@@ -1394,15 +1639,34 @@ def test_completed_predecessor_fence_is_cleared_before_followup(tmp_path, monkey
             "unresolved-turn-pending": True,
             "unresolved-turn-id": "req_previous",
             "prompt-text-digest": "stale",
+            "submission-attempt-id": "attempt-previous",
+            "submission-stage": "send-click-acknowledged",
+            "send-intent-ever": True,
+            "submission-proof-source": "provider-user-message",
+            "recovery-state": "submission-proven",
         },
     }
     monkeypatch.setattr(session_dispatch.store, "read_record", lambda *_args: predecessor)
+    session_record = {
+        "provider": {"metadata": dict(record["provider-metadata"])}
+    }
+    monkeypatch.setattr(sessions_store, "read_session_record", lambda *_args: session_record)
+    monkeypatch.setattr(sessions_store, "session_provider_metadata", lambda value: dict(value["provider"]["metadata"]))
+
+    def clear_checkpoint(*_args, **_kwargs):
+        session_record["provider"]["metadata"] = {
+            "unresolved-turn-pending": False,
+            "recovery-state": "stale-predecessor-fence-cleared",
+        }
+        return True
+
+    monkeypatch.setattr(sessions_store, "clear_terminal_submission_checkpoint", clear_checkpoint)
     session_updates = []
-    monkeypatch.setattr(
-        sessions_store,
-        "update_provider_metadata",
-        lambda *args, **kwargs: session_updates.append((args, kwargs)),
-    )
+    def update_metadata(_root, _session_id, update):
+        session_updates.append(((_root, _session_id), update))
+        session_record["provider"]["metadata"].update(update)
+
+    monkeypatch.setattr(sessions_store, "update_provider_metadata", update_metadata)
     monkeypatch.setattr(
         session_dispatch.store,
         "update_owned_running_session",
@@ -1425,7 +1689,344 @@ def test_completed_predecessor_fence_is_cleared_before_followup(tmp_path, monkey
     assert cleared["provider-metadata"]["recovery-state"] == "stale-predecessor-fence-cleared"
     assert cleared["provider-metadata"]["stale-predecessor-request-id"] == "req_previous"
     assert "unresolved-turn-id" not in cleared["provider-metadata"]
+    assert not {
+        "submission-attempt-id",
+        "submission-stage",
+        "send-intent-ever",
+        "submission-proof-source",
+    }.intersection(cleared["provider-metadata"])
     assert session_updates
+
+
+def test_nonpending_terminal_checkpoint_residue_is_reconciled_before_followup(
+    tmp_path, monkeypatch
+):
+    predecessor = {
+        "request-id": "req_terminal_residue",
+        "state": "completed",
+        "session-id": "ses_shared_residue",
+        "created-at": "2026-10-20T00:00:00Z",
+        "response-artifact": {
+            "request-id": "req_terminal_residue",
+            "artifact-id": "final-response",
+            "bytes": 10,
+            "sha256": "validated-by-store-helper",
+        },
+        "provider-metadata": {
+            "terminal-evidence": {
+                "turn-id": "req_terminal_residue",
+                "policy": "response-complete",
+                "submission-attempt-fingerprint": hashlib.sha256(
+                    b"attempt-terminal-residue"
+                ).hexdigest(),
+            }
+        },
+    }
+    record = {
+        "request-id": "req_followup_residue",
+        "session-id": "ses_shared_residue",
+        "created-at": "2026-10-20T00:01:00Z",
+        "dispatch-owner-epoch": "owner",
+        "worker-id": "worker",
+        "attempt-epoch": 2,
+        "provider-metadata": {},
+    }
+    residue = {
+        "unresolved-turn-pending": False,
+        "recovery-state": "terminal-captured",
+        "submission-state": "cleared",
+        "submission-attempt-id": "attempt-terminal-residue",
+        "submission-stage": "send-click-acknowledged",
+        "send-intent-ever": True,
+        "target-id": "target-1",
+    }
+    session_record = {
+        "state": "active",
+        "binding": {"binding-id": "sbind-residue", "generation": 1},
+        "provider": {"metadata": dict(residue)},
+    }
+    monkeypatch.setattr(session_dispatch.store, "list_records", lambda *_args, **_kwargs: [predecessor])
+    monkeypatch.setattr(sessions_store, "read_session_record", lambda *_args: session_record)
+    monkeypatch.setattr(
+        sessions_store,
+        "session_provider_metadata",
+        lambda value: dict(value["provider"]["metadata"]),
+    )
+    clear_calls = []
+
+    def clear_residue(
+        _root,
+        _session_id,
+        predecessor_id,
+        *,
+        expected_metadata,
+        expected_binding_identity,
+    ):
+        clear_calls.append((predecessor_id, expected_metadata, expected_binding_identity))
+        session_record["provider"]["metadata"] = {
+            "unresolved-turn-pending": False,
+            "target-id": "target-1",
+        }
+        return True
+
+    monkeypatch.setattr(sessions_store, "clear_completed_checkpoint_residue", clear_residue)
+    monkeypatch.setattr(
+        session_dispatch.store,
+        "update_owned_running_session",
+        lambda *_args, **kwargs: {
+            **record,
+            "state": "running",
+            "provider-metadata": kwargs["provider_metadata"],
+        },
+    )
+    timeline_events = []
+    monkeypatch.setattr(
+        session_dispatch.store,
+        "record_gateway_timeline",
+        lambda *_args, **kwargs: timeline_events.append(kwargs),
+    )
+    from audiagentic.components.agents.gateway import observability
+
+    observations = []
+    monkeypatch.setattr(observability, "append_observation", lambda *args, **kwargs: observations.append(kwargs))
+
+    cleared = session_dispatch._clear_terminal_predecessor_fence(
+        tmp_path,
+        record,
+        session_store=sessions_store,
+    )
+
+    assert cleared is not None
+    assert clear_calls == [
+        (
+            "req_terminal_residue",
+            residue,
+            {"binding-id": "sbind-residue", "generation": 1},
+        )
+    ]
+    assert cleared["provider-metadata"] == {
+        "unresolved-turn-pending": False,
+        "target-id": "target-1",
+    }
+    assert timeline_events[0]["attributes"]["reason"] == (
+        "completed-attempt-matched-cleared-session-residue"
+    )
+    assert observations[0]["source"] == "session-checkpoint-recovery"
+    assert observations[0]["diagnostic_facts"]["checkpoint-residue"][
+        "response-artifact-validated"
+    ] is True
+
+
+def test_terminal_residue_scan_finds_predecessor_beyond_newest_hundred(
+    tmp_path, monkeypatch
+):
+    predecessor = {
+        "request-id": "req_old_terminal_residue",
+        "state": "completed",
+        "session-id": "ses_old_terminal_residue",
+        "created-at": "2026-10-20T00:00:00Z",
+        "response-artifact": {"request-id": "req_old_terminal_residue"},
+        "provider-metadata": {"submission-attempt-id": "attempt-old-terminal-residue"},
+    }
+    newer = [
+        {
+            "request-id": f"req_newer_{index}",
+            "state": "completed",
+            "session-id": f"ses_other_{index}",
+            "provider-metadata": {"submission-attempt-id": f"attempt-other_{index}"},
+        }
+        for index in range(101)
+    ]
+    record = {
+        "request-id": "req_followup_after_long_history",
+        "session-id": "ses_old_terminal_residue",
+        "created-at": "2026-10-20T00:01:00Z",
+        "dispatch-owner-epoch": "owner",
+        "worker-id": "worker",
+        "attempt-epoch": 1,
+        "provider-metadata": {},
+    }
+    residue = {
+        "unresolved-turn-pending": False,
+        "submission-attempt-id": "attempt-old-terminal-residue",
+    }
+    session_record = {
+        "state": "active",
+        "binding": {"binding-id": "sbind-old", "generation": 1},
+        "provider": {"metadata": dict(residue)},
+    }
+
+    def list_records(_root, *, include_output, limit=None):
+        assert include_output is False
+        assert limit is None
+        return [*newer, predecessor]
+
+    monkeypatch.setattr(session_dispatch.store, "list_records", list_records)
+    monkeypatch.setattr(sessions_store, "read_session_record", lambda *_args: session_record)
+    monkeypatch.setattr(
+        sessions_store,
+        "session_provider_metadata",
+        lambda value: dict(value["provider"]["metadata"]),
+    )
+    cleared_ids = []
+
+    def clear_residue(
+        _root,
+        _session_id,
+        predecessor_id,
+        *,
+        expected_metadata,
+        expected_binding_identity,
+    ):
+        cleared_ids.append(predecessor_id)
+        session_record["provider"]["metadata"] = {"unresolved-turn-pending": False}
+        return True
+
+    monkeypatch.setattr(sessions_store, "clear_completed_checkpoint_residue", clear_residue)
+    monkeypatch.setattr(
+        session_dispatch.store,
+        "update_owned_running_session",
+        lambda *_args, **kwargs: {
+            **record,
+            "state": "running",
+            "provider-metadata": kwargs["provider_metadata"],
+        },
+    )
+    monkeypatch.setattr(session_dispatch.store, "record_gateway_timeline", lambda *_args, **_kwargs: None)
+    from audiagentic.components.agents.gateway import observability
+
+    monkeypatch.setattr(observability, "append_observation", lambda *_args, **_kwargs: None)
+
+    cleared = session_dispatch._clear_terminal_predecessor_fence(
+        tmp_path, record, session_store=sessions_store
+    )
+
+    assert cleared is not None
+    assert cleared_ids == ["req_old_terminal_residue"]
+
+
+def test_cleared_session_checkpoint_is_not_resurrected_from_stale_request_projection(
+    tmp_path, monkeypatch
+):
+    predecessor = {
+        "state": "completed",
+        "session-id": "ses_shared",
+        "provider-metadata": {
+            "terminal-evidence": {"terminal-witness-id": "assistant-prev"},
+        },
+    }
+    record = {
+        "request-id": "req_followup",
+        "session-id": "ses_shared",
+        "dispatch-owner-epoch": "owner",
+        "worker-id": "worker",
+        "attempt-epoch": 1,
+        "provider-metadata": {
+            "unresolved-turn-pending": True,
+            "unresolved-turn-id": "req_previous",
+        },
+    }
+    clean_session = {
+        "provider": {
+            "metadata": {
+                "unresolved-turn-pending": False,
+                "stale-predecessor-request-id": "req_previous",
+            }
+        }
+    }
+    monkeypatch.setattr(session_dispatch.store, "read_record", lambda *_args: predecessor)
+    monkeypatch.setattr(sessions_store, "read_session_record", lambda *_args: clean_session)
+    monkeypatch.setattr(
+        sessions_store,
+        "session_provider_metadata",
+        lambda value: dict(value.get("provider", {}).get("metadata") or {}),
+    )
+
+    def unexpected_clear(*_args, **_kwargs):
+        pytest.fail("a stale request projection must not clear or resurrect session state")
+
+    monkeypatch.setattr(sessions_store, "clear_terminal_submission_checkpoint", unexpected_clear)
+
+    assert session_dispatch._clear_terminal_predecessor_fence(
+        tmp_path, record, session_store=sessions_store
+    ) is None
+
+
+def test_session_checkpoint_precedes_missing_request_projection_for_predecessor_fence(
+    tmp_path, monkeypatch
+):
+    """A stale session fence is reconciled even when the new request lacks metadata."""
+    from audiagentic.components.agents.gateway.session import sessions_store
+
+    predecessor_id = "req_previous"
+    record = {
+        "request-id": "req_followup",
+        "session-id": "ses_shared",
+        "dispatch-owner-epoch": "owner",
+        "worker-id": "worker",
+        "attempt-epoch": 1,
+        "provider-metadata": {},
+    }
+    predecessor = {
+        "state": "completed",
+        "session-id": "ses_shared",
+        "provider-metadata": {
+            "terminal-evidence": {"terminal-witness-id": "assistant-prev"},
+        },
+    }
+    checkpoint = {
+        "unresolved-turn-pending": True,
+        "unresolved-turn-id": predecessor_id,
+        "submission-proven": True,
+        "terminal-evidence": {"terminal-witness-id": "assistant-prev"},
+    }
+    session_record = {"provider": {"metadata": dict(checkpoint)}}
+
+    monkeypatch.setattr(session_dispatch.store, "read_record", lambda *_args: predecessor)
+    monkeypatch.setattr(
+        sessions_store,
+        "read_session_record",
+        lambda *_args: session_record,
+    )
+    monkeypatch.setattr(
+        sessions_store,
+        "session_provider_metadata",
+        lambda value: dict(value.get("provider", {}).get("metadata") or {}),
+    )
+
+    def clear_checkpoint(*_args, **_kwargs):
+        session_record["provider"]["metadata"] = {
+            "unresolved-turn-pending": False,
+            "recovery-state": "stale-predecessor-fence-cleared",
+        }
+        return True
+
+    monkeypatch.setattr(sessions_store, "clear_terminal_submission_checkpoint", clear_checkpoint)
+    monkeypatch.setattr(
+        sessions_store,
+        "update_provider_metadata",
+        lambda _root, _session_id, update: session_record["provider"]["metadata"].update(update),
+    )
+    monkeypatch.setattr(
+        session_dispatch.store,
+        "update_owned_running_session",
+        lambda *_args, **kwargs: {
+            **record,
+            "state": "running",
+            "provider-metadata": kwargs["provider_metadata"],
+        },
+    )
+    monkeypatch.setattr(session_dispatch.store, "record_gateway_timeline", lambda *_args, **_kwargs: None)
+
+    cleared = session_dispatch._clear_terminal_predecessor_fence(
+        tmp_path,
+        record,
+        session_store=sessions_store,
+    )
+
+    assert cleared is not None
+    assert cleared["provider-metadata"]["unresolved-turn-pending"] is False
+    assert cleared["provider-metadata"]["stale-predecessor-request-id"] == predecessor_id
 
 
 
@@ -1447,6 +2048,7 @@ def test_completed_session_checkpoint_repairs_missing_predecessor_record(tmp_pat
     session_record = {
         "provider": {
             "metadata": {
+                "unresolved-turn-pending": True,
                 "unresolved-turn-id": "req_previous",
                 "terminal-evidence": {"terminal-witness-id": "assistant-prev"},
             }
@@ -1458,6 +2060,19 @@ def test_completed_session_checkpoint_repairs_missing_predecessor_record(tmp_pat
         )
     monkeypatch.setattr(session_dispatch.store, "read_record", missing)
     monkeypatch.setattr(sessions_store, "read_session_record", lambda *_args: session_record)
+    monkeypatch.setattr(
+        sessions_store,
+        "session_provider_metadata",
+        lambda value: dict(value.get("provider", {}).get("metadata") or {}),
+    )
+    def clear_checkpoint(*_args, **_kwargs):
+        session_record["provider"]["metadata"] = {
+            "unresolved-turn-pending": False,
+            "recovery-state": "stale-predecessor-fence-cleared",
+        }
+        return True
+
+    monkeypatch.setattr(sessions_store, "clear_terminal_submission_checkpoint", clear_checkpoint)
     monkeypatch.setattr(
         sessions_store,
         "update_provider_metadata",

@@ -1,19 +1,24 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
 
 from audiagentic.components.providers.adapters.gpt_auto import session_transport as transport_module
-from audiagentic.components.providers.adapters.gpt_auto.chat import ChatState, PersistentChat
 from audiagentic.components.providers.adapters.gpt_auto.cdp.client import CdpError
+from audiagentic.components.providers.adapters.gpt_auto.chat import ChatState, PersistentChat
 from audiagentic.components.providers.adapters.gpt_auto.config import GptAutoConfig
 from audiagentic.components.providers.adapters.gpt_auto.session_transport import (
     GptAutoSessionTransport,
 )
 from audiagentic.components.providers.adapters.gpt_auto.snapshot import ChatSnapshot
+from audiagentic.components.providers.adapters.gpt_auto.turn import (
+    _terminal_attempt_fingerprint,
+    _terminal_checkpoint_fingerprint,
+)
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.transports.agent_session import (
     ControlDisposition,
@@ -47,6 +52,224 @@ def _chat(*, response_stability_seconds: float = 6.0, unresolved: bool = True) -
     return chat
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("resume", [False, True])
+async def test_external_capture_releases_observer_without_stop_or_checkpoint_clear(monkeypatch, resume):
+    chat = _chat(unresolved=True)
+    chat.state = ChatState.READY
+    chat._checkpoint_metadata.update({"unresolved-turn-id": "req-captured", "submission-attempt-id": "attempt-captured"})
+    checkpoint = chat._private_terminal_checkpoint_projection()
+    async def ready():
+        return None
+    chat.ensure_ready = ready
+    started = asyncio.Event()
+    turns = []
+    async def observe(turn):
+        turns.append(turn)
+        turn.side_effect_attempted = True
+        started.set()
+        await asyncio.Event().wait()
+    if resume:
+        monkeypatch.setattr(transport_module.GptAutoTurn, "resume_existing", observe)
+    else:
+        monkeypatch.setattr(transport_module.GptAutoTurn, "_run", observe)
+    def forbidden_cancel(*args, **kwargs):
+        raise AssertionError("capture must not request provider Stop")
+    monkeypatch.setattr(transport_module.GptAutoTurn, "cancel", forbidden_cancel)
+    transport = GptAutoSessionTransport(chat)
+    captured = asyncio.Event()
+    request = SessionPrompt(turn_id="req-captured", body="original", completion_token=captured)
+    method = transport.resume_existing if resume else transport.prompt
+    pending = asyncio.create_task(method(request, lambda observation: None))
+    await asyncio.wait_for(started.wait(), timeout=1)
+    captured.set()
+    result = await asyncio.wait_for(pending, timeout=1)
+    assert result.stop_reason == "externally-captured"
+    assert result.final_summary is None
+    assert chat._private_terminal_checkpoint_projection() == checkpoint
+    assert transport._active_turn is None
+    assert turns[0]._stop_task is None
+
+
+@pytest.mark.asyncio
+async def test_delayed_turn_cleanup_cannot_clear_successor_checkpoint_writer():
+    chat = _chat(unresolved=False)
+    writes = []
+    old_sink = lambda metadata: writes.append(("old", metadata))
+    successor_sink = lambda metadata: writes.append(("successor", metadata))
+    chat.set_turn_session_checkpoint_sink(old_sink)
+    chat.set_turn_session_checkpoint_sink(successor_sink)
+    assert chat.clear_turn_session_checkpoint_sink(old_sink) is False
+    await chat._persist_checkpoint({"unresolved-turn-id": "req_successor"})
+    assert writes == [("successor", {"unresolved-turn-id": "req_successor"})]
+    assert chat.clear_turn_session_checkpoint_sink(successor_sink) is True
+    assert chat._turn_session_checkpoint_sink is None
+
+
+@pytest.mark.asyncio
+async def test_successor_turn_checkpoint_does_not_invoke_completed_opening_owner(tmp_path):
+    from audiagentic.components.agents.gateway import store
+    from audiagentic.components.agents.gateway.session import sessions_store
+    from audiagentic.components.agents.gateway.session.sessions import _make_submission_checkpoint_sink
+
+    session_id = "ses-reused-checkpoint"
+    project_id = "g-p-project"
+    owner = {"dispatch_owner_epoch": "owner", "worker_id": "worker", "attempt_epoch": 1}
+    for request_id, state in (("req_opener", "completed"), ("req_successor", "running")):
+        request = store.build_record(
+            request_id=request_id, execution_profile_id="gpt-auto", prompt_body="request",
+            session_id=session_id, resolved_provider_id="gpt-auto",
+        )
+        request.update({"state": state, "worker-id": "worker", "dispatch-owner-epoch": "owner",
+                        "attempt-epoch": 1, "provider-metadata": {"project-id": project_id}})
+        store.write_record(tmp_path, request)
+    session = sessions_store.build_session_record(
+        session_id=session_id, created_by_request_id="req_opener", execution_profile_id="gpt-auto",
+        provider_id="gpt-auto", provider_metadata={"project-id": project_id},
+    )
+    sessions_store.write_session_record(tmp_path, session)
+    old_sink = _make_submission_checkpoint_sink(tmp_path, session_id, request_id="req_opener", **owner)
+    current_sink = _make_submission_checkpoint_sink(tmp_path, session_id, request_id="req_successor", **owner)
+    checkpoint = {
+        "unresolved-turn-id": "req_successor", "unresolved-turn-pending": True,
+        "submission-state": "prepared", "submission-proven": False,
+        "prompt-text-digest": "current-prompt-fingerprint",
+        "unresolved-baseline-user-count": 1, "unresolved-baseline-assistant-count": 1,
+    }
+    # The former opener callback really is invalid now; invoking it was the
+    # live regression, even though the durable predecessor had completed.
+    with pytest.raises(AudiaGenticError, match="request owner fence"):
+        await old_sink(checkpoint)
+
+    chat = _chat(unresolved=False)
+    chat.checkpoint_sink = old_sink
+    chat.set_turn_session_checkpoint_sink(current_sink)
+    audit = []
+
+    def request_sink(metadata):
+        durable = sessions_store.session_provider_metadata(sessions_store.read_session_record(tmp_path, session_id))
+        assert durable["unresolved-turn-id"] == "req_successor"
+        audit.append(metadata)
+
+    chat.set_request_metadata_sink(request_sink)
+    await chat._persist_checkpoint(checkpoint)
+    assert audit == [checkpoint]
+    chat.set_turn_session_checkpoint_sink(None)
+    chat.set_request_metadata_sink(None)
+    assert chat._turn_session_checkpoint_sink is None
+
+
+@pytest.mark.parametrize("case", ["valid", "attempt-changed", "prompt-changed", "foreign-turn", "pending", "foreign-chat", "busy"])
+@pytest.mark.parametrize("proven", [False, True])
+def test_sync_cleared_predecessor_requires_exact_idle_checkpoint(case, proven):
+    chat = _chat(unresolved=True)
+    chat.state = ChatState.READY
+    chat._submission_proven = proven
+    chat.chat_url = "https://chatgpt.com/g/g-p-project/c/conversation"
+    chat._checkpoint_metadata.update({
+        "unresolved-turn-id": "req_previous", "submission-attempt-id": "attempt-previous",
+        "submission-state": "dispatching", "submission-stage": "send-click-acknowledged",
+        "send-intent-ever": True, "prompt-text-digest": "prompt-digest",
+        "unresolved-baseline-user-count": 0, "unresolved-baseline-assistant-count": 0,
+    })
+    expected = chat._private_terminal_checkpoint_projection()
+    cleared = {"unresolved-turn-pending": False, "chat-url": chat.chat_url}
+    if case == "attempt-changed":
+        expected["submission-attempt-id"] = "different-attempt"
+    elif case == "prompt-changed":
+        expected["prompt-text-digest"] = "different-prompt"
+    elif case == "foreign-turn":
+        expected["unresolved-turn-id"] = "req_foreign"
+    elif case == "pending":
+        cleared["unresolved-turn-pending"] = True
+    elif case == "foreign-chat":
+        cleared["chat-url"] = "https://chatgpt.com/g/g-p-project/c/other"
+    elif case == "busy":
+        chat.state = ChatState.BUSY
+    assert chat.synchronize_cleared_predecessor_checkpoint("req_previous", expected, cleared) is (case == "valid")
+    assert chat.unresolved_turn_pending is (case != "valid")
+    assert chat._submission_proven is (False if case == "valid" else proven)
+    if case == "valid":
+        assert chat.synchronize_cleared_predecessor_checkpoint("req_previous", expected, cleared) is True
+
+
+@pytest.mark.asyncio
+async def test_proof_checkpoint_rebuild_preserves_dispatch_identity_for_capture():
+    chat = _chat(unresolved=True)
+    chat.state = ChatState.READY
+    chat.chat_url = "https://chatgpt.com/g/g-p-project/c/conversation"
+    await chat.persist_unresolved_checkpoint(turn_id="req_previous", baseline=None)
+    await chat.mark_submission_dispatching(turn_id="req_previous")
+    await chat.persist_submission_stage(turn_id="req_previous", stage="send-intent")
+    await chat.persist_submission_stage(turn_id="req_previous", stage="send-click-acknowledged")
+    dispatch = chat._private_terminal_checkpoint_projection()
+    chat.mark_prompt_submitted("u_current", "a_previous", "current prompt")
+    await chat.persist_unresolved_checkpoint(turn_id="req_previous", baseline=None)
+    current = chat._private_terminal_checkpoint_projection()
+    for key in ("submission-attempt-id", "submission-stage", "send-intent-ever"):
+        assert current[key] == dispatch[key]
+    cleared = {"unresolved-turn-pending": False, "chat-url": chat.chat_url}
+    assert chat.synchronize_cleared_predecessor_checkpoint("req_previous", current, cleared)
+
+
+@pytest.mark.asyncio
+async def test_checkpoint_rebuild_does_not_copy_foreign_attempt_stage():
+    chat = _chat(unresolved=True)
+    chat._checkpoint_metadata = {
+        "unresolved-turn-id": "req_previous", "submission-attempt-id": "old-attempt",
+        "submission-stage": "send-click-acknowledged", "send-intent-ever": True,
+    }
+    await chat.persist_unresolved_checkpoint(turn_id="req_new", baseline=None)
+    projection = chat._private_terminal_checkpoint_projection()
+    assert projection["unresolved-turn-id"] == "req_new"
+    assert not {"submission-attempt-id", "submission-stage", "send-intent-ever"}.intersection(projection)
+
+
+@pytest.mark.parametrize("case", ["valid", "wrong-attempt", "wrong-prompt", "missing-checkpoint", "artifact-corrupt", "stage-changed", "busy", "foreign-chat"])
+def test_manual_capture_residue_uses_terminal_request_checkpoint_for_idle_memory(tmp_path, monkeypatch, case):
+    from audiagentic.components.agents.gateway import output
+    from audiagentic.components.agents.gateway.session import dispatch, sessions
+    chat = _chat(unresolved=True)
+    chat.state = ChatState.READY
+    chat.chat_url = "https://chatgpt.com/g/g-p-project/c/conversation"
+    chat._checkpoint_metadata.update({
+        "unresolved-turn-id": "req_captured", "submission-attempt-id": "attempt-captured",
+        "submission-state": "dispatching", "submission-stage": "send-click-acknowledged",
+        "send-intent-ever": True, "prompt-text-digest": "prompt-digest",
+    })
+    pre_clear = chat._private_terminal_checkpoint_projection()
+    artifact = output.persist_final_response(tmp_path, "req_captured", "verified answer", allow_terminal=True)
+    predecessor = {
+        "request-id": "req_captured", "state": "completed", "session-id": "ses_shared",
+        "response-artifact": artifact, "provider-metadata": pre_clear,
+    }
+    residue = {
+        "unresolved-turn-pending": False, "submission-attempt-id": "attempt-captured",
+        "submission-stage": "send-click-acknowledged", "send-intent-ever": True,
+    }
+    cleared = {"unresolved-turn-pending": False, "chat-url": chat.chat_url}
+    if case == "wrong-attempt":
+        predecessor["provider-metadata"] = {**pre_clear, "submission-attempt-id": "other-attempt"}
+    elif case == "wrong-prompt":
+        predecessor["provider-metadata"] = {**pre_clear, "prompt-text-digest": "other-prompt"}
+    elif case == "missing-checkpoint":
+        predecessor["provider-metadata"] = {}
+    elif case == "artifact-corrupt":
+        predecessor["response-artifact"] = {**artifact, "sha256": "0" * 64}
+    elif case == "stage-changed":
+        residue["submission-stage"] = "composer-filled"
+    elif case == "busy":
+        chat.state = ChatState.BUSY
+    elif case == "foreign-chat":
+        cleared["chat-url"] = "https://chatgpt.com/g/g-p-project/c/other"
+    def synchronize(session_id, predecessor_id, *, expected_metadata, persisted_session_metadata):
+        assert session_id == "ses_shared"
+        return chat.synchronize_cleared_predecessor_checkpoint(predecessor_id, expected_metadata, persisted_session_metadata)
+    monkeypatch.setattr(sessions, "peek_session_runtime", lambda: SimpleNamespace(synchronize_cleared_predecessor_checkpoint=synchronize))
+    assert dispatch._synchronize_cleared_predecessor(tmp_path, "ses_shared", predecessor, residue, cleared) is (case == "valid")
+    assert chat.unresolved_turn_pending is (case != "valid")
+
+
 class _HangingSnapshotBrowser:
     async def page_by_handle(self, _handle: str):
         return SimpleNamespace(target_id="target-1")
@@ -69,6 +292,291 @@ async def test_unresolved_reconciliation_bounds_a_hanging_cdp_snapshot() -> None
 
     assert result is False
     assert chat._unresolved_recovery_reason == "snapshot-observation-failed"
+
+
+@pytest.mark.asyncio
+async def test_submission_attempt_stages_are_persisted_monotonically_and_send_intent_is_sticky():
+    chat = _chat(unresolved=False)
+    persisted: list[dict[str, object]] = []
+    chat.checkpoint_sink = lambda metadata: persisted.append(dict(metadata))
+    chat.set_request_metadata_sink(lambda metadata: persisted.append(dict(metadata)))
+
+    await chat.persist_unresolved_checkpoint(
+        turn_id="req-stage",
+        baseline=ChatSnapshot(
+            url="https://chatgpt.com/g/g-p-project/project",
+            composer_present=True,
+            composer_editable=True,
+            user_count=0,
+            assistant_count=0,
+            latest_assistant_id=None,
+            latest_user_text=None,
+            latest_assistant_text=None,
+            dom_signals=frozenset(),
+            error_present=False,
+        ),
+    )
+    await chat.mark_submission_dispatching(turn_id="req-stage")
+    attempt_id = chat._checkpoint_metadata["submission-attempt-id"]
+
+    for stage in ("composer-focused", "composer-filled", "send-intent"):
+        assert await chat.persist_submission_stage(turn_id="req-stage", stage=stage) == attempt_id
+
+    assert chat._checkpoint_metadata["submission-stage"] == "send-intent"
+    assert chat._checkpoint_metadata["send-intent-ever"] is True
+    assert persisted[-1]["submission-attempt-id"] == attempt_id
+    assert persisted[-1]["submission-stage"] == "send-intent"
+
+    with pytest.raises(RuntimeError, match="cannot move backwards"):
+        await chat.persist_submission_stage(turn_id="req-stage", stage="composer-filled")
+    assert chat._checkpoint_metadata["send-intent-ever"] is True
+
+
+@pytest.mark.asyncio
+async def test_proven_checkpoint_preserves_provider_message_proof_source():
+    chat = _chat(unresolved=False)
+    persisted: list[dict[str, object]] = []
+    chat.checkpoint_sink = lambda metadata: persisted.append(dict(metadata))
+    chat.set_request_metadata_sink(lambda metadata: persisted.append(dict(metadata)))
+    baseline = ChatSnapshot(
+        url="https://chatgpt.com/g/g-p-project/project",
+        composer_present=True,
+        composer_editable=True,
+        user_count=0,
+        assistant_count=0,
+        latest_assistant_id=None,
+        latest_user_text=None,
+        latest_assistant_text=None,
+        dom_signals=frozenset(),
+        error_present=False,
+    )
+
+    await chat.persist_unresolved_checkpoint(turn_id="req-proof", baseline=baseline)
+    await chat.mark_submission_dispatching(turn_id="req-proof")
+    attempt_id = chat._checkpoint_metadata["submission-attempt-id"]
+    chat.mark_prompt_submitted("user-message-1", None, "a test prompt")
+    await chat.persist_unresolved_checkpoint(turn_id="req-proof", baseline=baseline)
+
+    assert persisted[-1]["submission-state"] == "proven"
+    assert persisted[-1]["submission-attempt-id"] == attempt_id
+    assert persisted[-1]["submission-proof-source"] == "provider-user-message"
+
+
+def test_terminal_finalization_ack_clears_only_the_matching_durable_checkpoint():
+    chat = _chat(unresolved=True)
+    chat._move(ChatState.RECOVERING)
+    chat.unresolved_turn_pending = True
+    chat._submission_proven = True
+    chat.unresolved_prompt_text_digest = "turn-digest"
+    chat._checkpoint_metadata.update(
+        {
+            "unresolved-turn-id": "req-terminal",
+            "submission-state": "proven",
+            "submission-proven": True,
+            "submission-proof-source": "provider-user-message",
+            "prompt-text-digest": "turn-digest",
+            "unresolved-baseline-user-count": 0,
+            "unresolved-baseline-assistant-count": 0,
+            "unresolved-baseline-error-alert-occurrences": [],
+        }
+    )
+    terminal_metadata = {
+        "unresolved-turn-id": "req-terminal",
+        "submission-proven": True,
+        "submission-proof-source": "provider-user-message",
+        "prompt-text-digest": "turn-digest",
+        "unresolved-baseline-user-count": 0,
+        "unresolved-baseline-assistant-count": 0,
+        "unresolved-baseline-error-alert-occurrences": [],
+        "terminal-evidence": {
+            "turn-id": "req-terminal",
+            "policy": "response-complete",
+            "checkpoint-clear-persisted": False,
+            "verification-evidence": [
+                "not-generating",
+                "text-present",
+                "completion-control",
+            ],
+        }
+    }
+    chat.capture_terminal_checkpoint_metadata("req-terminal")
+    # The provider clears its live memory before the gateway terminal write;
+    # the private snapshot must survive that handoff.
+    chat.clear_unresolved_turn()
+    chat._checkpoint_metadata = {}
+
+    assert not chat.acknowledge_terminal_checkpoint_finalization(
+        turn_id="req-other",
+        terminal_metadata=terminal_metadata,
+        persisted_session_metadata={"unresolved-turn-pending": False},
+    )
+    assert chat.state is ChatState.RECOVERING
+
+    assert chat.acknowledge_terminal_checkpoint_finalization(
+        turn_id="req-terminal",
+        terminal_metadata=terminal_metadata,
+        persisted_session_metadata={"unresolved-turn-pending": False},
+    )
+    assert not chat.unresolved_turn_pending
+    assert chat._checkpoint_metadata == {}
+    assert chat.state is ChatState.READY
+
+
+def test_terminal_checkpoint_metadata_is_private_and_turn_scoped():
+    chat = _chat(unresolved=True)
+    chat._submission_proven = True
+    chat.unresolved_prompt_text_digest = "private-digest"
+    chat._checkpoint_metadata.update(
+        {
+            "unresolved-turn-id": "req-private",
+            "submission-state": "proven",
+            "submission-attempt-id": "attempt-current",
+            "submission-proof-source": "provider-user-message",
+            "unresolved-baseline-user-count": 0,
+            "unresolved-baseline-assistant-count": 0,
+            "unresolved-baseline-error-alert-occurrences": [],
+        }
+    )
+
+    assert chat.terminal_checkpoint_metadata("req-other") == {}
+    chat.capture_terminal_checkpoint_metadata("req-private")
+    chat.clear_unresolved_turn()
+    chat._checkpoint_metadata = {}
+    envelope = chat.terminal_checkpoint_metadata("req-private")
+    assert envelope["submission-attempt-id"] == "attempt-current"
+    assert envelope["submission-proven"] is True
+    assert envelope["submission-proof-source"] == "provider-user-message"
+    assert envelope["prompt-text-digest"] == "private-digest"
+    envelope["unresolved-baseline-error-alert-occurrences"].append(
+        {"digest": "mutated-copy", "ownerPromptMessageId": "id"}
+    )
+    assert (
+        chat._terminal_checkpoint_finalization[
+            "unresolved-baseline-error-alert-occurrences"
+        ]
+        == []
+    )
+
+
+def test_terminal_attempt_fingerprint_links_private_checkpoint_without_exposing_id():
+    attempt_id = "attempt-private-opaque-id"
+    chat = SimpleNamespace(
+        terminal_checkpoint_metadata=lambda turn_id: (
+            {
+                "unresolved-turn-id": turn_id,
+                "submission-attempt-id": attempt_id,
+            }
+            if turn_id == "req-fingerprint"
+            else {}
+        )
+    )
+
+    fingerprint = _terminal_attempt_fingerprint(chat, "req-fingerprint")
+
+    assert fingerprint is not None
+    assert fingerprint != attempt_id
+    assert fingerprint == hashlib.sha256(attempt_id.encode()).hexdigest()
+    assert _terminal_attempt_fingerprint(chat, "req-other") is None
+
+
+def test_terminal_checkpoint_fingerprint_binds_turn_and_frozen_prompt_baseline():
+    checkpoint = {
+        "unresolved-turn-id": "req-checkpoint-fingerprint",
+        "submission-attempt-id": "attempt-private-opaque-id",
+        "submission-proven": True,
+        "prompt-text-digest": "prompt-digest",
+        "prompt-message-id": "user-private-id",
+        "unresolved-baseline-user-count": 2,
+        "unresolved-baseline-assistant-count": 2,
+        "unresolved-baseline-error-alert-occurrences": [],
+    }
+    chat = SimpleNamespace(
+        terminal_checkpoint_metadata=lambda turn_id: (
+            checkpoint if turn_id == "req-checkpoint-fingerprint" else {}
+        )
+    )
+
+    fingerprint = _terminal_checkpoint_fingerprint(
+        chat, "req-checkpoint-fingerprint"
+    )
+
+    assert fingerprint is not None
+    assert "attempt-private-opaque-id" not in fingerprint
+    assert "user-private-id" not in fingerprint
+    assert _terminal_checkpoint_fingerprint(chat, "req-other") is None
+    checkpoint["prompt-text-digest"] = "different-prompt-digest"
+    assert (
+        _terminal_checkpoint_fingerprint(chat, "req-checkpoint-fingerprint")
+        != fingerprint
+    )
+
+
+def test_terminal_finalization_ack_rejects_frozen_identity_mismatch():
+    chat = _chat(unresolved=True)
+    chat._checkpoint_metadata.update(
+        {
+            "unresolved-turn-id": "req-terminal",
+            "submission-state": "proven",
+            "submission-proven": True,
+            "submission-proof-source": "provider-user-message",
+            "prompt-text-digest": "original-digest",
+        }
+    )
+    terminal_metadata = {
+        "unresolved-turn-id": "req-terminal",
+        "submission-proven": True,
+        "submission-proof-source": "provider-user-message",
+        "prompt-text-digest": "different-digest",
+        "terminal-evidence": {
+            "turn-id": "req-terminal",
+            "policy": "response-complete",
+            "verification-evidence": [
+                "not-generating",
+                "text-present",
+                "completion-control",
+            ],
+        },
+    }
+
+    assert not chat.acknowledge_terminal_checkpoint_finalization(
+        turn_id="req-terminal",
+        terminal_metadata=terminal_metadata,
+        persisted_session_metadata={"unresolved-turn-pending": False},
+    )
+    assert chat.unresolved_turn_pending is True
+
+
+@pytest.mark.asyncio
+async def test_submission_stage_checkpoint_failure_is_fail_closed_before_send_intent():
+    chat = _chat(unresolved=False)
+    await chat.persist_unresolved_checkpoint(
+        turn_id="req-stage-failure",
+        baseline=ChatSnapshot(
+            url="https://chatgpt.com/g/g-p-project/project",
+            composer_present=True,
+            composer_editable=True,
+            user_count=0,
+            assistant_count=0,
+            latest_assistant_id=None,
+            latest_user_text=None,
+            latest_assistant_text=None,
+            dom_signals=frozenset(),
+            error_present=False,
+        ),
+    )
+    await chat.mark_submission_dispatching(turn_id="req-stage-failure")
+
+    async def fail_checkpoint(_metadata):
+        raise OSError("durable checkpoint unavailable")
+
+    chat.set_request_metadata_sink(fail_checkpoint)
+    with pytest.raises(OSError, match="checkpoint unavailable"):
+        await chat.persist_submission_stage(
+            turn_id="req-stage-failure", stage="send-intent"
+        )
+
+    assert chat._checkpoint_metadata["submission-stage"] == "dispatching"
+    assert chat._checkpoint_metadata["send-intent-ever"] is False
 
 
 @pytest.mark.asyncio
@@ -576,7 +1084,7 @@ async def test_retain_releases_fence_after_stable_request_owned_provider_error()
     assert retained is True
     assert chat.state.value == "ready"
     assert chat.unresolved_turn_pending is False
-    assert persisted == [{"unresolved-turn-pending": False}]
+    assert persisted == [{"unresolved-turn-pending": False, "submission-state": "cleared"}]
 
 
 @pytest.mark.asyncio
@@ -620,7 +1128,7 @@ async def test_retain_releases_fence_for_correlated_request_error_alert() -> Non
     )
     assert retained is True
     assert chat.unresolved_turn_pending is False
-    assert persisted == [{"unresolved-turn-pending": False}]
+    assert persisted == [{"unresolved-turn-pending": False, "submission-state": "cleared"}]
 
 
 @pytest.mark.asyncio
@@ -859,6 +1367,7 @@ async def test_reconcile_treats_empty_any_of_groups_as_no_completion_requirement
 
 @pytest.mark.asyncio
 async def test_reconcile_refreshes_stale_cdp_page_once_before_failure():
+    from itertools import chain, repeat
     chat = _chat(response_stability_seconds=0.001)
     chat.chat_url = "https://chatgpt.com/g/g-p-project/c/abc"
     chat.provider_session_id = "abc"
@@ -879,7 +1388,11 @@ async def test_reconcile_refreshes_stale_cdp_page_once_before_failure():
         user_message_texts=("hi",),
     )
     terminal = _terminal_snapshot(dom_signals=frozenset({"completion-control", "more-actions-menu"}))
-    snapshots = iter([stale, terminal, terminal])
+    # A terminal provider page remains terminal across stability/identity
+    # rechecks. Do not turn an extra valid read into StopIteration when the
+    # suite's scheduling changes; the once-only navigation assertion below
+    # remains the recovery invariant this test owns.
+    snapshots = chain([stale], repeat(terminal))
     navigations: list[str] = []
 
     class FakeBrowser:
@@ -1121,7 +1634,7 @@ async def test_reconciliation_clear_is_persisted_before_memory_is_exposed_ready(
     assert await chat._reconcile_unresolved_turn() is False
     await asyncio.sleep(0.05)
     assert await chat._reconcile_unresolved_turn() is True
-    assert writes == [({"unresolved-turn-pending": False}, True)]
+    assert writes == [({"unresolved-turn-pending": False, "submission-state": "cleared"}, True)]
     assert chat.unresolved_turn_pending is False
     reconstructed = PersistentChat(
         ag_session_id="session-restarted",
@@ -1161,7 +1674,7 @@ async def test_durable_terminal_clear_removes_stale_unresolved_marker_without_do
 
     assert await chat._reconcile_unresolved_turn() is True
     assert chat.unresolved_turn_pending is False
-    assert writes == [{"unresolved-turn-pending": False}]
+    assert writes == [{"unresolved-turn-pending": False, "submission-state": "cleared"}]
 
 
 @pytest.mark.asyncio
@@ -1184,7 +1697,10 @@ async def test_terminal_clear_from_different_turn_does_not_remove_unresolved_mar
 
 
 @pytest.mark.asyncio
-async def test_failed_durable_clear_keeps_unresolved_fence_in_memory():
+async def test_failed_durable_clear_keeps_unresolved_fence_in_memory(monkeypatch):
+    from audiagentic.components.providers.adapters.gpt_auto import chat as chat_module
+    clock = [1000.0]
+    monkeypatch.setattr(chat_module, "time", SimpleNamespace(monotonic=lambda: clock[0]))
     chat = _chat(response_stability_seconds=0.001)
     snapshot = _terminal_snapshot(
         dom_signals=frozenset({"completion-control", "more-actions-menu"})
@@ -1200,7 +1716,7 @@ async def test_failed_durable_clear_keeps_unresolved_fence_in_memory():
     chat.checkpoint_sink = checkpoint
 
     assert await chat._reconcile_unresolved_turn() is False
-    await asyncio.sleep(0.01)
+    clock[0] += 1.0
     with pytest.raises(OSError, match="disk unavailable"):
         await chat._reconcile_unresolved_turn()
     assert chat.unresolved_turn_pending is True
@@ -1339,7 +1855,7 @@ async def test_hanging_warning_sink_cannot_block_durable_clear():
     assert await chat._reconcile_unresolved_turn() is False
     await asyncio.sleep(0.05)
     assert await asyncio.wait_for(chat._reconcile_unresolved_turn(), timeout=2.0) is True
-    assert durable == [{"unresolved-turn-pending": False}]
+    assert durable == [{"unresolved-turn-pending": False, "submission-state": "cleared"}]
     assert chat.unresolved_turn_pending is False
 
 
@@ -1357,7 +1873,7 @@ async def test_page_loss_after_durable_clear_becomes_page_recovery_not_turn_ambi
 
     async def checkpoint(metadata):
         writes.append(dict(metadata))
-        if metadata == {"unresolved-turn-pending": False}:
+        if metadata == {"unresolved-turn-pending": False, "submission-state": "cleared"}:
             await chat.page_lost("page-1")
 
     chat.snapshot = fake_snapshot  # type: ignore[method-assign]
@@ -1368,7 +1884,7 @@ async def test_page_loss_after_durable_clear_becomes_page_recovery_not_turn_ambi
     assert await chat._reconcile_unresolved_turn() is True
     assert chat.unresolved_turn_pending is False
     assert chat.page_handle is None
-    assert writes == [{"unresolved-turn-pending": False}]
+    assert writes == [{"unresolved-turn-pending": False, "submission-state": "cleared"}]
     assert await chat._reconciled_binding_is_current() is False
 
 
@@ -1448,6 +1964,6 @@ async def test_same_target_navigation_after_clear_blocks_ready_but_does_not_rear
 
     with pytest.raises(RuntimeError, match="chat is not ready"):
         await chat.ensure_ready()
-    assert writes == [{"unresolved-turn-pending": False}]
+    assert writes == [{"unresolved-turn-pending": False, "submission-state": "cleared"}]
     assert chat.unresolved_turn_pending is False
     assert chat.state.value == "recovering"

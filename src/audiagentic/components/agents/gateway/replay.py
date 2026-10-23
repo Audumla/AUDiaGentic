@@ -234,10 +234,22 @@ def prepare_recovery_action(
                     if (now - created).total_seconds() < RECOVERY_UNRESOLVED_COOLDOWN_SECONDS:
                         return {**claim["intent"], **prior_result, "disposition": "reconciliation-required", "outcome": "recovery-cooldown-active"}
                 elif not claim.get("valid"):
-                    return {**claim["intent"], "disposition": "reconciliation-required", "outcome": "recovery-claim-timestamp-invalid"}
+                    # A malformed/future lease cannot prove another observer
+                    # still owns the reconciliation claim. Reconcile is
+                    # read-only with respect to provider prompts; advance the
+                    # generation so stale workers fail their owner fence.
+                    prior_generation = claim.get("claim-generation")
+                    claim_generation = (
+                        prior_generation
+                        if isinstance(prior_generation, int)
+                        and not isinstance(prior_generation, bool)
+                        and prior_generation > 0
+                        else 0
+                    ) + 1
                 elif claim.get("active"):
                     return {**claim["intent"], "disposition": "reconciliation-required", "outcome": "recovery-claim-active"}
-                claim_generation = int(claim.get("claim-generation") or 0) + 1
+                else:
+                    claim_generation = int(claim.get("claim-generation") or 0) + 1
             else:
                 claim_generation = 1
         remaining_budget = max(0, int(retry_budget) - consumed_budget)
