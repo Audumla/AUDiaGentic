@@ -1,5 +1,27 @@
 # Gateway observability retention
 
+## Request preparation timings
+
+The core request observation journal also records `preparation-phase` actions
+from `session-dispatch`. Read these through the existing observation API (or
+the request's `observations.ndjson`); no verbose data is added to compact MCP
+status responses. `facts.diagnostic-facts.phase` distinguishes
+`default-session-guard`, `management-mcp-catalog`, `session-open`,
+`session-rehydrate`, `provider-prepare`, and `transport-open`.
+
+Each span records `begin` followed by `completed` or `failed`, a monotonic
+`elapsed-ms`, attempt epoch, request/session identity and hashed owner identity.
+Nested phase durations overlap and must not be summed. An unmatched begin
+localizes an outstanding operation or process interruption; it does not prove
+failure. These observations never renew provider activity or alter inactivity
+timeouts. They contain no call arguments, prompt, response or exception text.
+They use the same bounded storage and retention as other observations.
+
+Compare admission/claim timestamps in the request timeline with these spans
+to distinguish actual queue wait from session preparation. Instrumentation is
+available only after the gateway has loaded the updated code; it cannot
+reconstruct individual phases for older requests.
+
 OB02 bounds durable gateway evidence without recursively deleting request
 directories.
 

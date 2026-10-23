@@ -241,16 +241,30 @@ def classify_error(
         # the root code as the diagnostic reason; otherwise retain the
         # historical service-restart fallback.
         reason = root_code or "service-restart"
+    # The FSM enters SIDE_EFFECT_ATTEMPTED before composer insertion. A
+    # completed pre-Send reconciliation can subsequently prove no submission;
+    # do not let the earlier phase label override that explicit outcome.
+    proven_unsent = (
+        code == "EXT-GPTAUTO-003"
+        and details.get("submission-state") == "not_started"
+        and details.get("submission-attempted") is False
+        and details.get("submission-proven") is False
+        and details.get("submission-ambiguous") is False
+        and not details.get("side-effect-attempted")
+        and not details.get("send-intent-ever")
+        and not details.get("send-button-clicked")
+        and not details.get("enter-dispatched")
+    )
     attempted = bool(
         details.get("submission-attempted")
         or details.get("side-effect-attempted")
-        or str(details.get("turn-state", "")) == "side-effect-attempted"
+        or (not proven_unsent and str(details.get("turn-state", "")) == "side-effect-attempted")
     )
     proven = bool(details.get("submission-proven"))
-    ambiguous = bool(details.get("submission-ambiguous")) or attempted and not proven or str(details.get("turn-state", "")) in {
+    ambiguous = bool(details.get("submission-ambiguous")) or attempted and not proven or (not proven_unsent and str(details.get("turn-state", "")) in {
         "side-effect-attempted",
         "submission-ambiguous",
-    }
+    })
     if code == "CON-AGW-084" and root_code and root_code.startswith("EXT-"):
         classification = FailureClass.PROVIDER_ERROR
         certainty = EvidenceCertainty.STRONG

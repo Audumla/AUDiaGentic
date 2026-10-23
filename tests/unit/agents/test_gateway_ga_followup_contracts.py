@@ -192,6 +192,17 @@ def test_reconnect_classification_is_read_only_and_fail_closed():
     assert safe["classification"] == "safe-reconnect"
     assert safe["read-only"] is True
     assert ambiguous["classification"] == "reconcile-required"
+    response_only_after_restart = replay.classify_reconnect(
+        {
+            "state": "running",
+            "provider-metadata": {
+                "unresolved-turn-pending": True,
+                "unresolved-turn-id": "turn-response-only",
+                "submission-proven": False,
+            },
+        }
+    )
+    assert response_only_after_restart["classification"] == "reconcile-required"
 
 def test_replay_uses_canonical_errors_meaningful_activity_and_actual_recovery_outcomes():
     entries = [

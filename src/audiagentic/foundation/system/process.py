@@ -31,9 +31,12 @@ def _claim_thread_lock(path: Path) -> threading.Lock:
     return lock
 
 
-def _release_thread_lock(path: Path, lock: threading.Lock) -> None:
+def _release_thread_lock(
+    path: Path, lock: threading.Lock, *, acquired: bool = True
+) -> None:
     key = os.path.normcase(os.path.abspath(path))
-    lock.release()
+    if acquired:
+        lock.release()
     with _thread_lock_guard:
         current, users = _thread_locks[key]
         if users == 1:
@@ -176,7 +179,9 @@ class StartupLock:
         deadline = time.monotonic() + self._timeout
         self._thread_lock = _claim_thread_lock(self._path)
         if not self._thread_lock.acquire(timeout=max(0.0, deadline - time.monotonic())):
-            _release_thread_lock(self._path, self._thread_lock)
+            # This reference never acquired the mutex. Releasing it here
+            # unlocks another thread's critical section and breaks exclusion.
+            _release_thread_lock(self._path, self._thread_lock, acquired=False)
             self._thread_lock = None
             raise self._timeout_error()
         try:
@@ -237,10 +242,12 @@ class StartupLock:
             except OSError:
                 pass
             self._fd = None
-        self._unlink()
-        if self._thread_lock is not None:
-            _release_thread_lock(self._path, self._thread_lock)
-            self._thread_lock = None
+        try:
+            self._unlink()
+        finally:
+            if self._thread_lock is not None:
+                _release_thread_lock(self._path, self._thread_lock)
+                self._thread_lock = None
 
 
 def find_pid_on_port(port: int) -> int | None:
