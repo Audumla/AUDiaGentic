@@ -783,6 +783,7 @@ def test_operations_poller_survives_operation_and_watchdog_exceptions(monkeypatc
     host.owner_epoch = "epoch-1"
     host._operations_stop = threading.Event()
     host._operations_thread = None
+    host._journal_maintenance_at = float("inf")
 
     class Pump:
         def __init__(self) -> None:
@@ -833,6 +834,7 @@ def test_operations_poller_starts_after_startup_scan_exception(monkeypatch) -> N
     host.owner_epoch = "epoch-1"
     host._operations_stop = threading.Event()
     host._operations_thread = None
+    host._journal_maintenance_at = float("inf")
 
     class Pump:
         def __init__(self) -> None:

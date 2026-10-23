@@ -1,4 +1,5 @@
 """Reusable gateway conformance scenarios for every provider descriptor."""
+
 from __future__ import annotations
 
 import threading
@@ -21,6 +22,7 @@ from audiagentic.foundation.transports import AcpLaunch
 from tests.unit.agents.test_agents_gateway_sessions import (
     FakeAgentSessionTransport,
     _build_fake_prepared,
+    _build_fake_surface,
     _Clock,
 )
 
@@ -47,14 +49,22 @@ def enable_profile(
     params: dict[str, Any] = {"max-concurrency": max_concurrency}
     if queue_max_size is not None:
         params["queue-max-size"] = queue_max_size
-    create_execution_profile(project_root, {
-        "profile_id": profile_id,
-        "provider_id": provider_id,
-        "model_id": f"{provider_id}-model",
-        "instances": [f"{provider_id}-model"],
-        "is_default": profile_id == "default",
-        "params": params,
-    })
+    create_execution_profile(
+        project_root,
+        {
+            "profile_id": profile_id,
+            "provider_id": provider_id,
+            **(
+                {"surface_id": "fake-conformance-surface"}
+                if provider_id.startswith("gpt-auto")
+                else {}
+            ),
+            "model_id": f"{provider_id}-model",
+            "instances": [f"{provider_id}-model"],
+            "is_default": profile_id == "default",
+            "params": params,
+        },
+    )
     set_implementation_state(
         project_root,
         "providers",
@@ -64,19 +74,73 @@ def enable_profile(
 
 
 def patch_gateway_provider_boundaries(monkeypatch: Any) -> None:
-    monkeypatch.setattr(gateway, "_resolve_provider_isolation_tier", lambda _provider_id: "full-isolation")
+    monkeypatch.setattr(
+        gateway, "_resolve_provider_isolation_tier", lambda _provider_id: "full-isolation"
+    )
     monkeypatch.setattr(
         "audiagentic.components.providers.providers_api.get_provider_runtime_config_state",
         lambda _root, provider_id: {"provider-id": provider_id, "enabled": True, "config": {}},
     )
 
 
-def assert_one_shot_state_matrix(project_root: Path, provider_id: str, monkeypatch: Any) -> None:
+def assert_one_shot_state_matrix(
+    project_root: Path, provider_id: str, monkeypatch: Any, request: Any
+) -> None:
     reset_gateway_queue()
     enable_profile(project_root, provider_id, queue_max_size=1)
     patch_gateway_provider_boundaries(monkeypatch)
     hold = threading.Event()
     provider_started = threading.Event()
+
+    # GPT admissions deliberately keep a provider session alive. Exercise that
+    # route rather than pretending their requests still use disposable workers.
+    if provider_id.startswith("gpt-auto"):
+        from dataclasses import replace
+        from audiagentic.foundation.transports.session_surface import (
+            SurfaceValidation,
+            ValidationEvidence,
+        )
+
+        monkeypatch.setattr(
+            "audiagentic.components.agents.gateway.profiles._default_surface_resolver",
+            lambda _root, provider, surface: replace(
+                _build_fake_surface(provider, surface),
+                validation=SurfaceValidation(
+                    evidence=ValidationEvidence(validated=True, reference=__file__)
+                ),
+            ),
+        )
+
+        class ControlledTransport(FakeAgentSessionTransport):
+            async def prompt(self, prompt, sink=None, **kwargs):
+                if "FAIL" in prompt.body:
+                    from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+                    raise AudiaGenticError(
+                        code="EXT-FAKE-500",
+                        kind="providers",
+                        message="fake provider failed on command",
+                    )
+                if "HOLD" in prompt.body:
+                    self.block_event = hold
+                    provider_started.set()
+                result = await super().prompt(prompt, sink, **kwargs)
+                return replace(result, final_summary=f"{provider_id}:ok:{prompt.body}")
+
+        def prepare(*_args, **kwargs):
+            transport = ControlledTransport()
+            transport.ag_session_id = kwargs["ag_session_id"]
+            return _build_fake_prepared(
+                transport, provider_id=provider_id, surface_id="fake-conformance-surface"
+            )
+
+        runtime = sessions_module.SessionRuntime(
+            reap_interval_seconds=60,
+            provider_prepare_fn=prepare,
+        )
+        request.addfinalizer(runtime.shutdown)
+        monkeypatch.setattr(sessions_module, "get_session_runtime", lambda: runtime)
+        monkeypatch.setattr(sessions_module, "peek_session_runtime", lambda: runtime)
 
     def controlled_provider(*, identity, execution_request, timeout_seconds):
         prompt = execution_request["packet-data"]["prompt-body"]
@@ -108,8 +172,10 @@ def assert_one_shot_state_matrix(project_root: Path, provider_id: str, monkeypat
         controlled_provider,
     )
 
-    completed = gateway.run_execution_request(project_root, prompt_body="COMPLETE", timeout_seconds=5)
-    assert completed["state"] == "completed"
+    completed = gateway.run_execution_request(
+        project_root, prompt_body="COMPLETE", timeout_seconds=5
+    )
+    assert completed["state"] == "completed", completed.get("error")
     assert completed["provider-id"] == provider_id
     assert completed["output"] == f"{provider_id}:ok:COMPLETE"
 
@@ -133,7 +199,9 @@ def assert_one_shot_state_matrix(project_root: Path, provider_id: str, monkeypat
     assert cancelled["state"] == "cancelled"
     assert cancelled["cancel-acknowledged-by"] == "queue-worker"
 
-    still_queued = gateway.submit_execution_request(project_root, prompt_body="STILL-QUEUED", mode="async")
+    still_queued = gateway.submit_execution_request(
+        project_root, prompt_body="STILL-QUEUED", mode="async"
+    )
     assert still_queued["state"] == "queued"
 
     overflow = gateway.submit_execution_request(project_root, prompt_body="OVERFLOW", mode="async")
@@ -141,11 +209,15 @@ def assert_one_shot_state_matrix(project_root: Path, provider_id: str, monkeypat
     assert overflow["error"]["code"] == "VAL-AGW-025"
 
     hold.set()
-    finished = gateway.wait_execution_request(project_root, running["request-id"], timeout_seconds=5)
+    finished = gateway.wait_execution_request(
+        project_root, running["request-id"], timeout_seconds=5
+    )
     assert finished["state"] == "completed"
 
 
-def assert_session_binding_open_flow(project_root: Path, provider_id: str, monkeypatch: Any) -> None:
+def assert_session_binding_open_flow(
+    project_root: Path, provider_id: str, monkeypatch: Any
+) -> None:
     reset_gateway_queue()
     enable_profile(project_root, provider_id)
     patch_gateway_provider_boundaries(monkeypatch)

@@ -144,6 +144,9 @@ def test_real_pi_rpc_transcript_through_the_tap_covers_a_full_prompt_turn(
 
     install_result = install_provider_cli("pi", timeout=900, project_root=tmp_path)
     assert_install_result_ok("pi", install_result)
+    from tests.helpers.pi_smoke import restrict_smoke_pi
+
+    restrict_smoke_pi(tmp_path, monkeypatch)
 
     harness_runtime = global_harness_runtime()
     provision_embedded_rig(harness_runtime, tmp_path)
@@ -334,6 +337,9 @@ def test_real_pi_rpc_transcript_captures_tool_call_frame_types(
 
     install_result = install_provider_cli("pi", timeout=900, project_root=tmp_path)
     assert_install_result_ok("pi", install_result)
+    from tests.helpers.pi_smoke import restrict_smoke_pi
+
+    restrict_smoke_pi(tmp_path, monkeypatch, tools="bash")
 
     harness_runtime = global_harness_runtime()
     provision_embedded_rig(harness_runtime, tmp_path)

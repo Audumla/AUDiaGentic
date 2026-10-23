@@ -41,5 +41,6 @@ def test_every_provider_exercises_gateway_request_states(
     provider_id: str,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    request: pytest.FixtureRequest,
 ) -> None:
-    conformance.assert_one_shot_state_matrix(tmp_path, provider_id, monkeypatch)
+    conformance.assert_one_shot_state_matrix(tmp_path, provider_id, monkeypatch, request)
