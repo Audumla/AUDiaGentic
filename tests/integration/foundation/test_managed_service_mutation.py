@@ -2,30 +2,38 @@
 from __future__ import annotations
 
 import multiprocessing
-import time
 from pathlib import Path
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.system.managed_service import ManagedServiceStore, ServiceKey
 
+_LEASE_NOW = "2026-01-01T00:00:00Z"
+
+
+def _store(root: Path, *, expired: bool = False) -> ManagedServiceStore:
+    # Exercise real multi-process file locking without expiring early merely
+    # because a loaded runner takes over two seconds to spawn eight children.
+    return ManagedServiceStore(ServiceKey("gateway", "docker-mutation"), root=root,
+        clock=lambda: "2026-01-01T00:00:03Z" if expired else _LEASE_NOW)
+
 
 def _acquire(root: str, client_index: int, epoch: str) -> None:
-    store = ManagedServiceStore(ServiceKey("gateway", "docker-mutation"), root=Path(root))
+    store = _store(Path(root))
     store.acquire_lease(f"client-{client_index}", ttl_seconds=2, expected_epoch=epoch)
 
 
 def _release(root: str, lease_id: str, epoch: str) -> None:
-    store = ManagedServiceStore(ServiceKey("gateway", "docker-mutation"), root=Path(root))
+    store = _store(Path(root))
     store.release_lease(lease_id, expected_epoch=epoch)
 
 
 def _expire(root: str, epoch: str) -> None:
-    store = ManagedServiceStore(ServiceKey("gateway", "docker-mutation"), root=Path(root))
+    store = _store(Path(root), expired=True)
     store.expire_leases(expected_epoch=epoch)
 
 
 def _reject_stale_epoch(root: str) -> None:
-    store = ManagedServiceStore(ServiceKey("gateway", "docker-mutation"), root=Path(root))
+    store = _store(Path(root))
     try:
         store.acquire_lease("stale-client", ttl_seconds=1, expected_epoch="stale-epoch")
     except AudiaGenticError as exc:
@@ -42,7 +50,7 @@ def _join_cleanly(processes: list[multiprocessing.Process]) -> None:
 
 
 def test_multiple_processes_mutate_one_service_without_lost_updates(tmp_path: Path) -> None:
-    store = ManagedServiceStore(ServiceKey("gateway", "docker-mutation"), root=tmp_path)
+    store = _store(tmp_path)
     created = store.create(protocol_version="v1", owner_epoch="epoch-docker")
     running = store.transition(
         "running", expected_revision=created.revision, expected_epoch=created.owner_epoch
@@ -62,7 +70,7 @@ def test_multiple_processes_mutate_one_service_without_lost_updates(tmp_path: Pa
     stale.start()
     _join_cleanly([stale])
 
-    time.sleep(2.1)
+    # The expiry worker advances its clock past the two-second lease TTL.
     mutations = [
         context.Process(target=_release, args=(str(tmp_path), lease.lease_id, running.owner_epoch))
         for lease in acquired.leases[:4]

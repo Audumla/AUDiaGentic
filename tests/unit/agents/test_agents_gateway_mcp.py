@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 from audiagentic.components.agents.mcp import gateway_mcp as agents_gateway_mcp
 
-_ROOT = Path("C:/fake/root")
+_ROOT = Path("/fake/root").resolve()
 
 
 def test_agent_task_list_definitions_is_a_registered_mcp_tool():
