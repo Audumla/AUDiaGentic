@@ -18,3 +18,4 @@
 - [chg_20261023_031007_make-real-model-smoke-prompts_5115] Make real-model smoke prompts and model choice consistent with the working RPC baseline and preserve Windows CLI diagnostics.
 - [chg_20261023_044332_repair-ci-test-composition-for_6729] Repair CI test composition for persistent GPT sessions and bound real-model Pi smoke behavior without skipping checks.
 - [chg_20261023_051043_remove-a-flaky-session-reaper_4555] Remove a flaky session-reaper test race while preserving real background cleanup and exact-once assertions.
+- [chg_20261023_235149_stabilize-the-real-pi-resume-s_4570] Stabilize the real Pi resume smoke test and expose stage timings instead of an opaque fifteen-minute wait.
