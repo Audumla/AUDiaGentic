@@ -176,6 +176,11 @@ def test_gateway_dispatches_real_pi_provider_via_full_isolation_worker(
                 prompt_body=_PROMPT,
                 timeout_seconds=90,
             )
+            if result.get("state") not in {"completed", "failed", "cancelled", "interrupted"}:
+                # Real CPU model generation may outlive the initial caller
+                # wait. Continue observing the same ID, never resubmit.
+                result = client.wait_execution_request(tmp_path, result["request-id"], timeout_seconds=180)
+            assert result.get("wait-outcome") != "timeout", json.dumps(result, indent=2, default=str)
         finally:
             reset_gateway_client()
 

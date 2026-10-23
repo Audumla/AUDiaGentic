@@ -12,15 +12,11 @@ GatewayClient seam, just not over MCP
 
 from __future__ import annotations
 
-import os
-from pathlib import Path
 from typing import Any
-from audiagentic.components.agents.gateway.api import _resolve_workspace_project_root
-from audiagentic.components.agents.gateway import store as gateway_store
-from audiagentic.components.agents.gateway.session import sessions_store
-from audiagentic.foundation.contracts.errors import AudiaGenticError
 
-from audiagentic.components.agents.gateway.client import call_gateway_method
+from audiagentic.components.agents.gateway.client import (
+    call_gateway_method, resolve_request_project_root, resolve_session_project_root,
+)
 from audiagentic.foundation.mcp.component_server import (
     mcp_server,
     project_root_from_env,
@@ -36,103 +32,12 @@ _MAX_PAGE = 100
 
 
 def _request_project_root(request_id: str):
-    """Route project-scoped request IDs back to their owning checkout."""
-    root = project_root_from_env()
-    if not isinstance(request_id, str) or not request_id.startswith("req_"):
-        return root
-    parts = request_id.split("_")
-    if len(parts) < 3 or len(parts[-1]) != 12 or any(
-        character not in "0123456789abcdef" for character in parts[-1].casefold()
-    ):
-        return root
-    # The project slug is not necessarily unique across configured worktrees
-    # (for example, a main checkout and a detached Codex worktree can share
-    # project-id/project-name). Prefer the durable request record, which is
-    # authoritative and already carries the exact project root, before using
-    # the human-readable slug resolver.
-    configured = os.environ.get("AUDIAGENTIC_WORKSPACE_ROOTS", "")
-    if configured.strip():
-        candidates = [
-            Path(value).expanduser().resolve()
-            for value in configured.split(os.pathsep)
-            if value.strip()
-        ]
-    else:
-        candidates = [root]
-        if root.parent.is_dir():
-            candidates.extend(
-                child.resolve()
-                for child in root.parent.iterdir()
-                if child.is_dir() and child.resolve() != root
-            )
-    matches: list[Path] = []
-    for candidate in dict.fromkeys(candidates):
-        try:
-            gateway_store.read_record(candidate, request_id)
-        except AudiaGenticError as exc:
-            if exc.code == "RES-AGW-001":
-                continue
-            raise
-        matches.append(candidate)
-    if len(matches) == 1:
-        return matches[0]
-    if len(matches) > 1:
-        raise AudiaGenticError(
-            code="VAL-AGW-152",
-            kind="agents",
-            message="gateway request id is ambiguous across project checkouts",
-            details={"request-id": request_id, "project-roots": [str(path) for path in matches]},
-        )
-    return _resolve_workspace_project_root(root, "_".join(parts[1:-1]))
+    return resolve_request_project_root(project_root_from_env(), request_id)
 
 
 def _session_project_root(session_id: str):
-    """Find the owning checkout for a session before dispatching resume.
+    return resolve_session_project_root(project_root_from_env(), session_id)
 
-    Session IDs are intentionally opaque and therefore cannot encode a
-    project slug.  The MCP process may nevertheless serve sibling checkouts;
-    probing their durable session records avoids routing resume through the
-    process CWD.  Multiple matches fail closed rather than selecting a
-    session from the wrong project.
-    """
-    root = project_root_from_env().resolve()
-    configured = os.environ.get("AUDIAGENTIC_WORKSPACE_ROOTS", "")
-    if configured.strip():
-        candidates = [
-            Path(value).expanduser().resolve()
-            for value in configured.split(os.pathsep)
-            if value.strip()
-        ]
-    else:
-        parent = root.parent
-        candidates = [root]
-        if parent.is_dir():
-            candidates.extend(
-                child.resolve()
-                for child in parent.iterdir()
-                if child.is_dir() and child.resolve() != root
-            )
-
-    matches: list[Path] = []
-    for candidate in dict.fromkeys(candidates):
-        try:
-            sessions_store.read_session_record(candidate, session_id)
-        except AudiaGenticError as exc:
-            if exc.code == "RES-AGW-002":
-                continue
-            raise
-        matches.append(candidate)
-
-    if len(matches) == 1:
-        return matches[0]
-    if len(matches) > 1:
-        raise AudiaGenticError(
-            code="VAL-AGW-152",
-            kind="agents",
-            message="gateway session id is ambiguous across project checkouts",
-            details={"session-id": session_id, "project-roots": [str(path) for path in matches]},
-        )
-    return root
 
 def _page_limit(value: int) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= _MAX_PAGE:
@@ -240,11 +145,11 @@ def _agent_card(definition: dict[str, Any]) -> dict[str, Any]:
 @tool_boundary
 def agent_task_list_definitions() -> list[dict[str, Any]]:
     """List valid agent_id values with concise names, descriptions, and skills."""
-    from audiagentic.components.agents.configuration.global_catalog import (
-        list_global_agent_definitions,
+    from audiagentic.components.agents.configuration.management import (
+        list_agent_definitions,
     )
 
-    definitions = list_global_agent_definitions(project_root_from_env())
+    definitions = list_agent_definitions(project_root_from_env())
     return _sparse([_agent_card(definition) for definition in definitions])
 
 

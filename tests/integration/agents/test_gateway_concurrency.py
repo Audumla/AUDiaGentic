@@ -22,17 +22,20 @@ def test_real_gateway_serializes_profile_lane_and_drains_queue(tmp_path: Path, s
 
     rig = start_rig_server()
     roots = [tmp_path / "first", tmp_path / ("second" if separate_projects else "first")]
-    for root in set(roots):
-        root.mkdir(parents=True, exist_ok=True)
-        write_execution_profile(root, provider_id="local-openai", model_id="audiagentic-rig",
-                                virtual_capacity=1, pending_capacity=2)
-        enable_local_openai(root, rig.server_address[1])
     state = tmp_path / "service-state"
     token = tmp_path / "auth.token"
     port = free_port()
     proc = None
     client = None
     try:
+        for root in set(roots):
+            root.mkdir(parents=True, exist_ok=True)
+        # Profiles are machine-global: create the shared lane once, not once
+        # per project (which correctly rejects the duplicate profile ID).
+        write_execution_profile(roots[0], provider_id="local-openai", model_id="audiagentic-rig",
+                                virtual_capacity=1, pending_capacity=2)
+        for root in set(roots):
+            enable_local_openai(root, rig.server_address[1])
         proc = start_gateway_subprocess(state, token, port)
         client = StandaloneGatewayClient(f"http://127.0.0.1:{port}", load_auth_token(token))
         first = client.submit_execution_request(roots[0], prompt_body="first", mode="async")
