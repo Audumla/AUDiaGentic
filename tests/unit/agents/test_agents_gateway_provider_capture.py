@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import hashlib
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -13,6 +14,7 @@ from audiagentic.components.agents.gateway.session import sessions as session_ru
 from audiagentic.components.agents.gateway.session import sessions_store
 from audiagentic.components.providers.adapters.gpt_auto.prompt_fingerprint import PromptFingerprint
 from audiagentic.components.providers.adapters.gpt_auto.snapshot import ChatMessageRef, ChatSnapshot
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.components.providers.contracts.conversation_focus import ConversationCaptureLocator
 
 
@@ -199,8 +201,9 @@ def test_complete_execution_from_provider_persists_correlated_response(monkeypat
     assert calls["updates"]["__final-response-text"] == "captured answer"
 
 
+@pytest.mark.parametrize("variant", ["retained", "missing", "foreign", "branch", "third", "changed-verification"])
 def test_complete_from_provider_accepts_terminal_durable_assistant_remount(
-    monkeypatch, tmp_path: Path
+    monkeypatch, tmp_path: Path, variant
 ):
     record = {
         "request-id": "req_remount",
@@ -215,9 +218,12 @@ def test_complete_from_provider_accepts_terminal_durable_assistant_remount(
             "prompt-message-id": "prompt-1",
             "assistant-message-id": "assistant-before-remount",
             "submission-proven": True,
+            "prompt-text-digest": PromptFingerprint.from_text("request").digest,
         },
     }
     snapshot = SimpleNamespace(
+        url=record["provider-metadata"]["chat-url"],
+        error_present=False,
         latest_assistant_text="captured answer after remount",
         latest_user_text="request",
         latest_user_id="prompt-1",
@@ -241,6 +247,22 @@ def test_complete_from_provider_accepts_terminal_durable_assistant_remount(
             ),
         ),
     )
+    snapshot.message_refs = (
+            replace(snapshot.message_refs[0], renderer_turn_id="turn"),
+            replace(snapshot.message_refs[1], message_id=("assistant-before-remount" if variant == "retained" else "thinking"), renderer_turn_id="turn", renderer_unit_id="unit"),
+            replace(snapshot.message_refs[2], renderer_turn_id="turn", renderer_unit_id="unit"),
+    )
+    if variant == "foreign":
+        snapshot.message_refs = (replace(snapshot.message_refs[0], text="foreign"), *snapshot.message_refs[1:])
+    if variant == "branch":
+        snapshot.message_refs = (*snapshot.message_refs[:2], replace(snapshot.message_refs[2], renderer_unit_id="other"))
+    if variant == "third":
+        snapshot.message_refs += (replace(snapshot.message_refs[2], message_id="third", sequence=3),)
+    snapshots = iter([snapshot, copy.deepcopy(snapshot)])
+    if variant == "changed-verification":
+        changed = copy.deepcopy(snapshot)
+        changed.message_refs = (*changed.message_refs[:2], replace(changed.message_refs[2], renderer_unit_id="other"))
+        snapshots = iter([snapshot, changed])
     monkeypatch.setattr(api.store, "read_record", lambda *_: record)
     monkeypatch.setattr(
         sessions_store,
@@ -255,7 +277,7 @@ def test_complete_from_provider_accepts_terminal_durable_assistant_remount(
         lambda: SimpleNamespace(
             capture_latest_response=lambda *_args, **_kwargs: {
                 "outcome": "captured",
-                "snapshot": snapshot,
+                "snapshot": next(snapshots),
             }
         ),
     )
@@ -265,6 +287,10 @@ def test_complete_from_provider_accepts_terminal_durable_assistant_remount(
         lambda *_args, **_kwargs: {**record, "state": "completed", "revision": 10},
     )
 
+    if variant in {"foreign", "branch", "third", "changed-verification"}:
+        with pytest.raises(AudiaGenticError):
+            api.complete_execution_from_provider(tmp_path, "req_remount")
+        return
     result = api.complete_execution_from_provider(tmp_path, "req_remount")
 
     assert result["state"] == "completed"

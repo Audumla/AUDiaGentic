@@ -2312,7 +2312,14 @@ class SessionRuntime:
             model_id,
             extra={"session-runtime-phase": "open.prepare.begin", "correlation-id": correlation_id},
         )
-        prepared = self._provider_prepare_fn(project_root, **prepare_kwargs)
+        from audiagentic.components.agents.gateway.session.dispatch import _preparation_span
+
+        timing_record = {
+            "request-id": request_id, "session-id": session_id,
+            "attempt-epoch": attempt_epoch, "dispatch-owner-epoch": dispatch_owner_epoch,
+        }
+        with _preparation_span(project_root, timing_record, "provider-prepare"):
+            prepared = self._provider_prepare_fn(project_root, **prepare_kwargs)
         logger.info(
             "gateway open phase prepare-provider complete elapsed-ms=%.1f transport=%s",
             (time.monotonic() - prepare_started) * 1000,
@@ -2419,7 +2426,8 @@ class SessionRuntime:
             },
         )
         try:
-            open_result = await transport.open()
+            with _preparation_span(project_root, timing_record, "transport-open"):
+                open_result = await transport.open()
         except BaseException as exc:
             logger.exception(
                 "gateway open phase transport-open failed elapsed-ms=%.1f",

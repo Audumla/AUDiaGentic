@@ -1550,6 +1550,24 @@ _SNAPSHOT_FN = r"""
   const messageRefs = messageEntries.map((m, sequence) => ({
     role: m.role,
     messageId: m.messageId,
+    rendererTurnId: fallbackTurnIdentity(m.el),
+    rendererUnitId: (() => {
+      const owner = m.el.closest('[data-content-search-unit-key]');
+      if (owner) return owner.getAttribute('data-content-search-unit-key');
+      const keys = [...new Set(Array.from(m.el.querySelectorAll('[data-content-search-unit-key]'))
+        .map(el => el.getAttribute('data-content-search-unit-key')).filter(Boolean))];
+      if (keys.length === 1) return keys[0];
+      // Thinking/intermediate blocks may sit beside, not inside, the one
+      // active assistant unit. Never infer a unit if the turn renders more
+      // than one branch. Exact prompt and turn checks remain in Python.
+      const turn = m.el.closest('[data-content-search-turn-key]');
+      const active = turn && m.role === 'assistant' ? [...new Set(
+        Array.from(turn.querySelectorAll('[data-content-search-unit-key]'))
+          .filter(el => el.closest('[data-content-search-turn-key]') === turn)
+          .map(el => el.getAttribute('data-content-search-unit-key'))
+          .filter(key => key && key.endsWith(':assistant')))] : [];
+      return active.length === 1 ? active[0] : null;
+    })(),
     text: m.role === "user" ? userText(m.el) : assistantText(m.el),
     ...(m.role === "assistant" ? {markdown: assistantMarkdown(m.el)} : {}),
     ...(m.role === "user" ? (() => {

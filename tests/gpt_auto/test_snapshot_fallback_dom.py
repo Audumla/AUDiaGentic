@@ -40,6 +40,30 @@ async def test_error_words_in_unsent_input_are_not_provider_failure(editor, real
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("branches", [1, 2])
+async def test_intermediate_unit_identity_requires_one_active_assistant_unit(branches):
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            await page.set_content('<section data-content-search-turn-key="turn-1">'
+                '<div class="block-BQZwFn"><h4 class="sr-only">You said:</h4>'
+                '<div data-chatgpt-search-message-ids="user">Prompt</div></div>'
+                '<div class="block-BQZwFn"><h4 class="sr-only">ChatGPT said:</h4>'
+                '<div data-chatgpt-search-message-ids="thinking">Thinking</div></div>'
+                + ''.join(f'<div class="block-BQZwFn"><h4 class="sr-only">ChatGPT said:</h4>'
+                    f'<div data-chatgpt-search-message-ids="answer-{i}" '
+                    f'data-content-search-unit-key="turn-1:{i}:assistant">Answer</div></div>'
+                    for i in range(branches)) + '</section>')
+            snapshot = await page.evaluate(_SNAPSHOT_FN, [])
+            thinking = next(ref for ref in snapshot["messageRefs"] if ref["messageId"] == "thinking")
+            assert thinking["rendererTurnId"] == "turn-1"
+            assert thinking["rendererUnitId"] == ("turn-1:0:assistant" if branches == 1 else None)
+        finally:
+            await browser.close()
+
+
+@pytest.mark.asyncio
 async def test_user_fenced_language_attribute_restores_exact_prompt_correlation():
     expected = "Reference\n```python\ndef run():\n    return 1\n```\nReply token"
     async with async_playwright() as pw:

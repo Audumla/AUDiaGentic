@@ -1900,6 +1900,9 @@ def complete_execution_from_provider(
             getattr(value, "terminal_witness_assistant_id", None),
             bool(getattr(value, "generating", True)),
             tuple(sorted(getattr(value, "dom_signals", frozenset()))),
+            tuple((getattr(ref, "role", None), getattr(ref, "message_id", None), getattr(ref, "sequence", None),
+                   getattr(ref, "renderer_turn_id", None), getattr(ref, "renderer_unit_id", None))
+                  for ref in getattr(value, "message_refs", ())),
         )
 
     if snapshot_signature(snapshot) != snapshot_signature(confirmed_snapshot):
@@ -1968,21 +1971,41 @@ def complete_execution_from_provider(
         # witness prove that it is the same response.  Ambiguous/later-turn
         # captures remain fail-closed.
         from audiagentic.components.providers.adapters.gpt_auto.turn import (
-            _terminal_same_turn_response_replacement,
-            _terminal_same_response_slot_replacement,
+            _terminal_owned_response_span,
+            _terminal_response_replacement,
+            _same_response_slot_replacement,
+        )
+        from audiagentic.components.providers.adapters.gpt_auto.prompt_fingerprint import PromptFingerprint
+        from audiagentic.components.providers.adapters.gpt_auto.urls import canonical_chat_url
+
+        # The new structural proof is deliberately stricter than legacy
+        # capture: require persisted full prompt digest and exact chat URL.
+        selected = (
+            _terminal_owned_response_span(snapshot, str(prompt_id or ""))
+            if hasattr(snapshot, "error_present") else None
+        )
+        selected_owned = bool(
+            selected is not None and selected.message_id == latest_assistant_id
+            and canonical_chat_url(locator.chat_url or "")
+            and canonical_chat_url(getattr(snapshot, "url", "")) == canonical_chat_url(locator.chat_url or "")
+            and isinstance(effective_metadata.get("prompt-text-digest"), str)
+            and latest_user_ref is not None
+            and PromptFingerprint.from_text(latest_user_ref.correlation_text or latest_user_ref.text or "").digest
+                == effective_metadata["prompt-text-digest"]
         )
 
-        if not _terminal_same_response_slot_replacement(
+        single_slot = _same_response_slot_replacement(
             snapshot,
             prompt_message_id=str(prompt_id or ""),
             old_assistant_id=str(expected_assistant),
             new_assistant_id=str(latest_assistant_id or ""),
-        ) and not _terminal_same_turn_response_replacement(
+        )
+        if not _terminal_response_replacement(
             snapshot,
             prompt_message_id=str(prompt_id or ""),
             old_assistant_id=str(expected_assistant),
             new_assistant_id=str(latest_assistant_id or ""),
-        ):
+        ) or not (single_slot or selected_owned):
             raise AudiaGenticError(code="CON-AGW-156", kind="agents", message="provider assistant identity does not match request", details={"request-id": request_id})
     if before_assistant_is_real and before_assistant == latest_assistant_id:
         raise AudiaGenticError(code="CON-AGW-156", kind="agents", message="provider response did not advance", details={"request-id": request_id})
