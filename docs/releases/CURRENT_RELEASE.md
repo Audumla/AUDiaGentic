@@ -16,3 +16,4 @@
 - [chg_20261023_030830_repair-linux-ci-portability-s_1888] Repair Linux CI portability, startup prerequisites, deterministic crash/lease tests, and planning integrity while retaining diagnostic evidence.
 - [chg_20261023_031007_make-real-model-smoke-prompts_5115] Make real-model smoke prompts and model choice consistent with the working RPC baseline and preserve Windows CLI diagnostics.
 - [chg_20261023_044332_repair-ci-test-composition-for_6729] Repair CI test composition for persistent GPT sessions and bound real-model Pi smoke behavior without skipping checks.
+- [chg_20261023_051043_remove-a-flaky-session-reaper_4555] Remove a flaky session-reaper test race while preserving real background cleanup and exact-once assertions.
