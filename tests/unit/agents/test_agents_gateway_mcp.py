@@ -55,7 +55,7 @@ def test_agent_task_list_definitions_returns_slim_client_facing_cards():
     with (
         _patch_root(),
         patch(
-            "audiagentic.components.agents.configuration.global_catalog.list_global_agent_definitions",
+            "audiagentic.components.agents.configuration.management.list_agent_definitions",
             return_value=raw,
         ),
     ):
@@ -77,7 +77,7 @@ def test_agent_task_list_definitions_delegates():
     with (
         _patch_root(),
         patch(
-            "audiagentic.components.agents.configuration.global_catalog.list_global_agent_definitions",
+            "audiagentic.components.agents.configuration.management.list_agent_definitions",
             return_value=[{"agent_id": "reviewer-agent"}],
         ) as mock_list,
     ):
@@ -118,7 +118,7 @@ def test_request_status_prefers_durable_record_when_project_slug_is_ambiguous():
     with (
         _patch_root(),
         patch.dict("os.environ", {"AUDIAGENTIC_WORKSPACE_ROOTS": str(_ROOT)}),
-        patch("audiagentic.components.agents.mcp.gateway_mcp.gateway_store.read_record") as read,
+        patch("audiagentic.components.agents.gateway.store.read_record") as read,
         patch("audiagentic.components.agents.mcp.gateway_mcp.call_gateway_method") as mock_call,
     ):
         read.return_value = {"request-id": request_id}

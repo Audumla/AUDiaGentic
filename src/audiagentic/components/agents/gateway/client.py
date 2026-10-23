@@ -22,6 +22,111 @@ from audiagentic.components.agents.gateway.application import (
 
 logger = logging.getLogger(__name__)
 
+
+def resolve_request_project_root(root: Path, request_id: str) -> Path:
+    """Route a project-scoped request using the public client boundary."""
+    from . import store as gateway_store
+    from .api import _resolve_workspace_project_root
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+    if not isinstance(request_id, str) or not request_id.startswith("req_"):
+        return root
+    parts = request_id.split("_")
+    if len(parts) < 3 or len(parts[-1]) != 12 or any(
+        character not in "0123456789abcdef" for character in parts[-1].casefold()
+    ):
+        return root
+    # The project slug is not necessarily unique across configured worktrees
+    # (for example, a main checkout and a detached Codex worktree can share
+    # project-id/project-name). Prefer the durable request record, which is
+    # authoritative and already carries the exact project root, before using
+    # the human-readable slug resolver.
+    configured = os.environ.get("AUDIAGENTIC_WORKSPACE_ROOTS", "")
+    if configured.strip():
+        candidates = [
+            Path(value).expanduser().resolve()
+            for value in configured.split(os.pathsep)
+            if value.strip()
+        ]
+    else:
+        candidates = [root]
+        if root.parent.is_dir():
+            candidates.extend(
+                child.resolve()
+                for child in root.parent.iterdir()
+                if child.is_dir() and child.resolve() != root
+            )
+    matches: list[Path] = []
+    for candidate in dict.fromkeys(candidates):
+        try:
+            gateway_store.read_record(candidate, request_id)
+        except AudiaGenticError as exc:
+            if exc.code == "RES-AGW-001":
+                continue
+            raise
+        matches.append(candidate)
+    if len(matches) == 1:
+        return matches[0]
+    if len(matches) > 1:
+        raise AudiaGenticError(
+            code="VAL-AGW-152",
+            kind="agents",
+            message="gateway request id is ambiguous across project checkouts",
+            details={"request-id": request_id, "project-roots": [str(path) for path in matches]},
+        )
+    return _resolve_workspace_project_root(root, "_".join(parts[1:-1]))
+
+
+def resolve_session_project_root(root: Path, session_id: str) -> Path:
+    """Find the owning checkout for a session before dispatching resume.
+
+    Session IDs are intentionally opaque and therefore cannot encode a
+    project slug.  The MCP process may nevertheless serve sibling checkouts;
+    probing their durable session records avoids routing resume through the
+    process CWD.  Multiple matches fail closed rather than selecting a
+    session from the wrong project.
+    """
+    from .session import sessions_store
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+    root = root.resolve()
+    configured = os.environ.get("AUDIAGENTIC_WORKSPACE_ROOTS", "")
+    if configured.strip():
+        candidates = [
+            Path(value).expanduser().resolve()
+            for value in configured.split(os.pathsep)
+            if value.strip()
+        ]
+    else:
+        parent = root.parent
+        candidates = [root]
+        if parent.is_dir():
+            candidates.extend(
+                child.resolve()
+                for child in parent.iterdir()
+                if child.is_dir() and child.resolve() != root
+            )
+
+    matches: list[Path] = []
+    for candidate in dict.fromkeys(candidates):
+        try:
+            sessions_store.read_session_record(candidate, session_id)
+        except AudiaGenticError as exc:
+            if exc.code == "RES-AGW-002":
+                continue
+            raise
+        matches.append(candidate)
+
+    if len(matches) == 1:
+        return matches[0]
+    if len(matches) > 1:
+        raise AudiaGenticError(
+            code="VAL-AGW-152",
+            kind="agents",
+            message="gateway session id is ambiguous across project checkouts",
+            details={"session-id": session_id, "project-roots": [str(path) for path in matches]},
+        )
+    return root
+
 _COMPONENT_ID = "agents"
 # SH11 migration compatibility: AUDIAGENTIC_GATEWAY_MODE historically used
 # "in-process"; the component-implementation id is "embedded". Accept both

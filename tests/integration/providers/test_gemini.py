@@ -42,7 +42,7 @@ def test_gemini_adapter_executes_cli(monkeypatch, tmp_path: Path) -> None:
 
     result = gemini.run(
         {
-            "provider-id": "gemini",
+            "prompt-body": "Reply with ok.", "provider-id": "gemini",
             "packet-id": "pkt-job-003",
             "project-id": "my-project",
             "workflow-profile": "standard",
@@ -59,7 +59,7 @@ def test_gemini_adapter_executes_cli(monkeypatch, tmp_path: Path) -> None:
     assert captured["command"][0] == r"C:\\Tools\\gemini.exe"
     assert captured["command"][1] == "-p"
     assert str(captured["command"][2]).startswith(
-        "AUDiaGentic Gemini provider execution request."
+        "Execution request for Gemini."
     )
     assert captured["command"][3:5] == ["-o", "text"]
     assert "--yolo" not in captured["command"]
@@ -77,7 +77,7 @@ def test_gemini_adapter_requires_command(monkeypatch) -> None:
                 AudiaGenticError(code="EXT-GEMINI-001", kind="providers", message="missing")
             ),
         )
-        gemini.run({"provider-id": "gemini"}, {"default-model": "gemini-stub"})
+        gemini.run({"prompt-body": "Reply with ok.", "provider-id": "gemini"}, {"default-model": "gemini-stub"})
     except AudiaGenticError as exc:
         assert exc.code == "EXT-GEMINI-001"
         assert exc.kind == "providers"

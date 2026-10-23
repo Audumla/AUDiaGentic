@@ -43,7 +43,7 @@ def test_claude_adapter_executes_cli(monkeypatch, tmp_path: Path) -> None:
 
     result = claude.run(
         {
-            "provider-id": "claude",
+            "prompt-body": "Reply with ok.", "provider-id": "claude",
             "packet-id": "pkt-job-003",
             "project-id": "my-project",
             "workflow-profile": "standard",
@@ -59,7 +59,8 @@ def test_claude_adapter_executes_cli(monkeypatch, tmp_path: Path) -> None:
     assert result["output"] == "claude completed"
     assert captured["command"][0] == r"C:\\Tools\\claude.exe"
     assert captured["command"][1:4] == ["--print", "--output-format", "text"]
-    assert captured["input_text"].startswith("AUDiaGentic Claude provider execution request.")
+    assert "Execution request for Claude." in captured["input_text"]
+    assert "Reply with ok." in captured["input_text"]
     assert captured["cwd"] == tmp_path
     assert captured["stdout_sinks"]
     assert captured["stderr_sinks"]
@@ -74,7 +75,7 @@ def test_claude_adapter_requires_command(monkeypatch) -> None:
                 AudiaGenticError(code="EXT-CLAUDE-001", kind="providers", message="missing")
             ),
         )
-        claude.run({"provider-id": "claude"}, {"default-model": "claude-stub"})
+        claude.run({"prompt-body": "Reply with ok.", "provider-id": "claude"}, {"default-model": "claude-stub"})
     except AudiaGenticError as exc:
         assert exc.code == "EXT-CLAUDE-001"
         assert exc.kind == "providers"
