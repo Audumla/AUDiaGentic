@@ -34,7 +34,7 @@ def test_build_record_defaults(tmp_path: Path) -> None:
 
 
 def test_generate_request_id_includes_safe_project_slug() -> None:
-    request_id = store.generate_request_id(Path(r"C:\example-dev-root\Big Cherry"))
+    request_id = store.generate_request_id(Path("projects") / "Big Cherry")
     assert request_id.startswith("req_big-cherry_")
     assert len(request_id.rsplit("_", 1)[-1]) == 12
 

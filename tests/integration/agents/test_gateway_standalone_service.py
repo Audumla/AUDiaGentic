@@ -54,7 +54,7 @@ class SharedApplication:
             self.requests[request_id] = record
             return dict(record)
 
-    def get_execution_request(self, project_root, request_id):
+    def get_execution_request(self, project_root, request_id, *, include_response=False):
         return dict(self.requests[request_id])
 
     def wait_execution_request(self, project_root, request_id, timeout_seconds=None):
@@ -221,13 +221,10 @@ def test_loopback_dashboard_is_public_but_redacted_and_independent_of_browser(
         assert b"setInterval(refresh,3000)" in page
         assert b"AbortController" not in page
         assert b'id="state-filter"' in page
-        assert b'id="show-closed"' in page
-        assert b'id="show-empty"' in page
-        # Empty sessions are available only when explicitly requested.  A
-        # live runtime handle is not evidence that the session has any task
-        # records; it must not bypass the default empty-session filter.
-        assert b"showEmpty.checked||hasRows" in page
-        assert b"showClosed.checked||!isClosed(s)||hasRows" in page
+        # The unified state selector replaces the old checkbox filters;
+        # sessions without matching requests remain hidden.
+        assert b"return hasRows&&" in page
+        assert b"s.state===wanted||hasRows" in page
         assert b"id=\"layout-filter\"" in page
         assert b'id="recent-window"' in page
         assert b"recent-seconds" in page
@@ -265,7 +262,7 @@ def test_loopback_dashboard_is_public_but_redacted_and_independent_of_browser(
         assert b"activity-badge" in page
         assert b"function watchdogFlag" not in page
         assert b"chat-link" in page
-        assert b"aria-label=\"Open or focus GPT tab\"" in page
+        assert b"aria-label=\"Open or focus GPT conversation\"" in page
         assert b"Open tab" not in page
         assert b"&quot;',\"'\":'&#39;'" in page
         assert b"@container (max-width:440px)" in page
@@ -376,7 +373,7 @@ def test_dashboard_recent_window_filters_history_and_supports_query_override(
     monkeypatch.setattr(
         gateway_api,
         "list_execution_sessions",
-        lambda _root: list(application.session_records[str(project_root)]),
+        lambda _root, *, state: list(application.session_records[str(project_root)]),
     )
     monkeypatch.setenv("AUDIAGENTIC_GATEWAY_DASHBOARD_RECENT_SECONDS", "60")
     host, thread, _service_root, _token_path = _start_host(tmp_path, application)

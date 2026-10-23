@@ -28,7 +28,7 @@ def _cli(*args: str, project: Path | None = None, expect_rc: int = 0) -> dict | 
     cmd += list(args)
     env = dict(os.environ)
     env["PYTHONPATH"] = os.pathsep.join([str(_ROOT / "src"), env.get("PYTHONPATH", "")])
-    result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", env=env)
+    result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", env=env, timeout=20)
     assert result.returncode == expect_rc, (
         f"CLI {args!r} returned rc={result.returncode}\nstdout: {result.stdout}\nstderr: {result.stderr}"
     )
@@ -149,6 +149,7 @@ def test_uninstall_removes_marker(tmp_path, component_id):
 
 
 @pytest.mark.parametrize("component_id", LIFECYCLE_COMPONENTS)
+@pytest.mark.timeout(90)
 def test_full_lifecycle_roundtrip(tmp_path, component_id):
     """install → disable → enable → uninstall — state correct at each step."""
     status = _cli("component", "status", component_id, project=tmp_path)

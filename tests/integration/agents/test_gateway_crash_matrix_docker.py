@@ -95,6 +95,11 @@ def test_crash_while_admitted_but_unclaimed_resumes_unsent_request(
         # First occupies the sole concurrency slot (rig holds its response);
         # second must sit admitted-only, never claimed, while the slot is full.
         wait_for_record_state(tmp_path, first["request-id"], {"running"})
+        # Running is persisted before provider I/O. Prove the first call
+        # reached the rig before killing it, so the exact dispatch count
+        # below cannot race the worker's first HTTP submission.
+        wait_for(lambda: _HoldableRigHandler.request_count == 1,
+                 timeout=10, what="first provider call reached rig")
         wait_for_index_phase(service_root, second["request-id"], "admitted")
         second_record = _read_record(tmp_path, second["request-id"])
         assert second_record.get("dispatch-owner-epoch") is None

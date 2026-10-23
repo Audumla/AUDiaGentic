@@ -115,7 +115,7 @@ def test_terminal_checkpoint_finalization_trace_records_delay_and_rejection(
     def clear_checkpoint(*_args, **_kwargs):
         if clear_result == "raise":
             raise AudiaGenticError(
-                code="TO-AGW-002",
+                code="TO-PROC-002",
                 kind="agents",
                 message="checkpoint lock timeout",
                 details={},
@@ -150,7 +150,7 @@ def test_terminal_checkpoint_finalization_trace_records_delay_and_rejection(
     assert facts["finalization-duration-ms"] >= 0
     assert facts["terminal-state-to-finalization-ms"] >= 0
     assert facts["checkpoint-error-code"] == (
-        "TO-AGW-002" if clear_result == "raise" else None
+        "TO-PROC-002" if clear_result == "raise" else None
     )
 
 # GP13: the real "opencode" descriptor used by PROFILE above does not
