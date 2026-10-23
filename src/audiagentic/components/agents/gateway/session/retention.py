@@ -63,4 +63,16 @@ def request_retention_pin(project_root: Path, request_id: str) -> RequestRetenti
         return _request_retention_pin_unlocked(project_root, request_id)
 
 
-__all__ = ["RequestRetentionPin", "request_retention_pin", "_request_retention_pin_unlocked"]
+def positive_session_lineage_snapshot(project_root: Path) -> frozenset[str]:
+    """Snapshot positive keep facts only; absence never authorizes deletion."""
+    with StartupLock(gateway_retention_lock_path(project_root)):
+        referenced: set[str] = set()
+        for record in list_session_records(project_root):
+            activity = record.get("activity")
+            ids = activity.get("request-ids") if isinstance(activity, dict) else None
+            if isinstance(ids, list):
+                referenced.update(value for value in ids if isinstance(value, str) and value)
+        return frozenset(referenced)
+
+
+__all__ = ["RequestRetentionPin", "request_retention_pin", "_request_retention_pin_unlocked", "positive_session_lineage_snapshot"]

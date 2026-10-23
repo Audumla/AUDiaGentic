@@ -60,6 +60,8 @@ class ChatMessageRef:
     # visible text used for diagnostics and display.
     correlation_text: str | None = None
     structural_hr_count: int = 0
+    renderer_turn_id: str | None = None
+    renderer_unit_id: str | None = None
 
 
 _PROGRESS_KINDS = frozenset({
@@ -193,6 +195,8 @@ class ChatSnapshot:
                     markdown=_text(item.get("markdown")),
                     sequence=int(item.get("sequence") or 0),
                     correlation_text=_text(item.get("correlationText")),
+                    renderer_turn_id=_text(item.get("rendererTurnId")),
+                    renderer_unit_id=_text(item.get("rendererUnitId")),
                     structural_hr_count=(
                         int(item.get("structuralHrCount") or 0)
                         if isinstance(item.get("structuralHrCount"), int)
@@ -224,6 +228,22 @@ class ChatSnapshot:
             error_alert_occurrences=_error_alert_occurrences(
                 value.get("errorAlertOccurrences")
             ),
+        )
+
+    def has_ordered_message_advance(self, role: str, baseline_id: object, candidate_id: object) -> bool:
+        """Prove advancement inside one DOM window without counting mounted history."""
+        if any(
+            not isinstance(value, str) or not value
+            or value.startswith(("fallback-", "virtualized-"))
+            for value in (baseline_id, candidate_id)
+        ) or baseline_id == candidate_id:
+            return False
+        before = [ref for ref in self.message_refs if ref.message_id == baseline_id]
+        after = [ref for ref in self.message_refs if ref.message_id == candidate_id]
+        return bool(
+            len(before) == len(after) == 1
+            and before[0].role == after[0].role == role
+            and before[0].sequence < after[0].sequence
         )
 
     def latest_user_ref(self) -> ChatMessageRef | None:

@@ -1197,17 +1197,27 @@ async def test_tab_creation_is_serialized_under_concurrency():
 
 
 class _GptOperationBridge:
-    def __init__(self, *, send_enabled: bool = True, stop_visible: bool = True) -> None:
+    def __init__(
+        self,
+        *,
+        send_enabled: bool = True,
+        stop_visible: bool = True,
+        composer_matches: bool = True,
+    ) -> None:
         self.send_enabled = send_enabled
         self.stop_visible = stop_visible
+        self.composer_matches = composer_matches
         self.inserted_text = ""
         self.calls: list[tuple[str, dict]] = []
 
     async def evaluate(self, page_handle, function, argument=None, **kwargs):
+        self.calls.append(("evaluate", {"function": function, "argument": argument}))
         if "editor?.innerText" in function:
             return self.inserted_text
         if "send-button" in function:
-            return self.send_enabled
+            if "validated" in function:
+                return {"validated": self.composer_matches and self.inserted_text == argument, "ready": self.send_enabled}
+            return self.send_enabled and self.composer_matches
         if "stop-button" in function or "stop-generating" in function:
             return self.stop_visible
         return {"ok": True}
@@ -1230,9 +1240,60 @@ class _NavigationOnClickBridge(_GptOperationBridge):
 
 class _HungClickAcknowledgementBridge(_GptOperationBridge):
     async def evaluate(self, page_handle, function, argument=None, **kwargs):
-        if "send-button" in function:
+        if "button.click()" in function:
             await asyncio.Event().wait()
         return await super().evaluate(page_handle, function, argument, **kwargs)
+
+
+class _HungInsertAcknowledgementBridge(_GptOperationBridge):
+    async def call(self, method, params=None, **kwargs):
+        result = await super().call(method, params, **kwargs)
+        if method == "insert_text":
+            await asyncio.Event().wait()
+        return result
+
+
+@pytest.mark.asyncio
+async def test_existing_exact_draft_is_not_inserted_again(monkeypatch):
+    bridge = _HungInsertAcknowledgementBridge()
+    bridge.inserted_text = "already rendered draft"
+    browser = GptAutoCdpBrowserController(bridge)  # type: ignore[arg-type]
+    monkeypatch.setattr(browser, "_PAGE_READY_PAUSE_SECONDS", 0)
+    monkeypatch.setattr(browser, "_TYPED_PAUSE_SECONDS", 0)
+    result = await browser.submit(CdpPageRef("page-1", "target-1"), bridge.inserted_text)
+    assert result["sendButtonClicked"] is True
+    assert not any(method == "insert_text" for method, _ in bridge.calls)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("matches", [True, False])
+async def test_lost_insert_ack_requires_exact_draft_before_send(monkeypatch, matches):
+    bridge = _HungInsertAcknowledgementBridge(composer_matches=matches)
+    browser = GptAutoCdpBrowserController(bridge)  # type: ignore[arg-type]
+    monkeypatch.setattr(browser, "_INSERT_TEXT_ACK_TIMEOUT_SECONDS", 0.01)
+    monkeypatch.setattr(browser, "_PAGE_READY_PAUSE_SECONDS", 0)
+    monkeypatch.setattr(browser, "_TYPED_PAUSE_SECONDS", 0)
+    stages = []
+
+    async def checkpoint(stage):
+        stages.append(stage)
+
+    if matches:
+        result = await browser.submit(
+            CdpPageRef("page-1", "target-1"), "exact draft", stage_callback=checkpoint
+        )
+        assert result["sendButtonClicked"] is True
+        assert "send-intent" in stages
+    else:
+        with pytest.raises(TimeoutError):
+            await browser.submit(
+                CdpPageRef("page-1", "target-1"), "exact draft", stage_callback=checkpoint
+            )
+        assert "send-intent" not in stages
+    assert sum(method == "insert_text" for method, _ in bridge.calls) == 1
+    clicks = [params for method, params in bridge.calls
+              if method == "evaluate" and "button.click()" in params["function"]]
+    assert len(clicks) == int(matches)
 
 
 @pytest.mark.asyncio
@@ -1246,6 +1307,121 @@ async def test_gpt_provider_send_click_is_synchronous():
         "sendButtonClicked": True,
         "enterDispatched": False,
     }
+
+
+@pytest.mark.asyncio
+async def test_gpt_provider_records_submission_stages_around_send_click():
+    bridge = _NavigationOnClickBridge()
+    browser = GptAutoCdpBrowserController(bridge)  # type: ignore[arg-type]
+    stages: list[str] = []
+
+    async def stage_callback(stage: str) -> None:
+        stages.append(stage)
+
+    result = await browser.submit(
+        CdpPageRef("page-1", "target-1"),
+        "stage observed",
+        stage_callback=stage_callback,
+    )
+
+    assert result["sendButtonClicked"] is True
+    assert stages == [
+        "composer-focused",
+        "composer-filled",
+        "composer-validated",
+        "send-intent",
+        "send-click-acknowledged",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_gpt_provider_aborts_click_when_send_intent_persistence_fails():
+    bridge = _NavigationOnClickBridge()
+    browser = GptAutoCdpBrowserController(bridge)  # type: ignore[arg-type]
+    stages: list[str] = []
+
+    async def stage_callback(stage: str) -> None:
+        stages.append(stage)
+        if stage == "send-intent":
+            raise RuntimeError("durable send-intent checkpoint unavailable")
+
+    with pytest.raises(RuntimeError, match="send-intent checkpoint unavailable"):
+        await browser.submit(
+            CdpPageRef("page-1", "target-1"),
+            "must not click",
+            stage_callback=stage_callback,
+        )
+
+    assert stages == [
+        "composer-focused",
+        "composer-filled",
+        "composer-validated",
+        "send-intent",
+    ]
+    assert not any(
+        method == "evaluate" and "button.click()" in str(params)
+        for method, params in bridge.calls
+    )
+
+
+@pytest.mark.asyncio
+async def test_send_intent_checkpoint_timeout_is_proven_pre_click():
+    from audiagentic.components.providers.adapters.gpt_auto.gpt_auto_cdp import (
+        ComposerSubmissionTimeout,
+    )
+
+    bridge = _NavigationOnClickBridge()
+    browser = GptAutoCdpBrowserController(bridge)  # type: ignore[arg-type]
+
+    async def timed_out_checkpoint(stage: str) -> None:
+        if stage == "send-intent":
+            raise TimeoutError("send-intent checkpoint timed out")
+
+    with pytest.raises(ComposerSubmissionTimeout) as captured:
+        await browser.submit(
+            CdpPageRef("page-1", "target-1"),
+            "checkpoint boundary",
+            stage_callback=timed_out_checkpoint,
+        )
+
+    assert captured.value.send_attempted is False
+    assert captured.value.stage == "send-button"
+    assert not any(
+        method == "evaluate" and "button.click()" in str(params)
+        for method, params in bridge.calls
+    )
+
+
+@pytest.mark.asyncio
+async def test_composer_text_mismatch_never_reaches_send_intent_or_click(monkeypatch):
+    from audiagentic.components.providers.adapters.gpt_auto.gpt_auto_cdp import (
+        ComposerSubmissionTimeout,
+    )
+
+    bridge = _NavigationOnClickBridge(composer_matches=False)
+    browser = GptAutoCdpBrowserController(bridge, action_pause_seconds=0.0)  # type: ignore[arg-type]
+    monkeypatch.setattr(GptAutoCdpBrowserController, "_PAGE_READY_PAUSE_SECONDS", 0.0)
+    monkeypatch.setattr(GptAutoCdpBrowserController, "_TYPED_PAUSE_SECONDS", 0.0)
+    monkeypatch.setattr(GptAutoCdpBrowserController, "_ACTION_PAUSE_SECONDS", 0.0)
+    stages: list[str] = []
+
+    async def record_stage(stage: str) -> None:
+        stages.append(stage)
+
+    with pytest.raises(ComposerSubmissionTimeout) as captured:
+        await browser.submit(
+            CdpPageRef("page-1", "target-1"),
+            "must match exactly",
+            timeout=0.1,
+            stage_callback=record_stage,
+        )
+
+    assert captured.value.send_attempted is False
+    assert stages == ["composer-focused", "composer-filled"]
+    assert not any(
+        method == "evaluate" and "button.click()" in str(params)
+        for method, params in bridge.calls
+    )
 
 
 @pytest.mark.asyncio
@@ -1341,14 +1517,14 @@ class _TransientSendFailureBridge(_GptOperationBridge):
         self._send_checks = 0
 
     async def evaluate(self, page_handle, function, argument=None, **kwargs):
-        if "send-button" in function:
+        if "send-button" in function and self.inserted_text:
             self._send_checks += 1
             self.send_enabled = self._send_checks > self._fail_attempts
         return await super().evaluate(page_handle, function, argument, **kwargs)
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("fail_at,ambiguous", [(1, False), (2, True)])
+@pytest.mark.parametrize("fail_at,ambiguous", [(1, False), (2, False), (3, False), (4, True)])
 async def test_composer_timeout_preserves_send_boundary(monkeypatch, fail_at, ambiguous):
     from audiagentic.components.providers.adapters.gpt_auto.gpt_auto_cdp import (
         ComposerSubmissionTimeout,
@@ -1362,13 +1538,18 @@ async def test_composer_timeout_preserves_send_boundary(monkeypatch, fail_at, am
         calls += 1
         if calls == fail_at:
             raise TimeoutError("simulated CDP timeout")
+        function = args[1]
+        if "validated" in function:
+            return {"validated": True, "ready": True}
+        if "button.click()" in function:
+            return True
         return "prompt"
 
     monkeypatch.setattr(browser, "evaluate", evaluate)
     with pytest.raises(ComposerSubmissionTimeout) as raised:
         await browser.submit(CdpPageRef("page-1", "target-1"), "prompt")
     assert raised.value.send_attempted is ambiguous
-    assert raised.value.stage == ("send-button" if ambiguous else "composer-insertion")
+    assert raised.value.stage == ("send-button" if fail_at > 2 else "composer-insertion")
 
 
 @pytest.mark.asyncio

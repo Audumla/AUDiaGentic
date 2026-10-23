@@ -5,14 +5,22 @@ import json
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from audiagentic.components.agents.gateway import observability, replay
+
 from audiagentic.components.agents.agents_paths import (
     gateway_observation_artifact_dir,
-    gateway_recovery_index_path,
     gateway_recovery_action_path,
+    gateway_recovery_index_path,
 )
-from audiagentic.components.agents.gateway.evidence_projection import project_public_gateway_evidence
-from audiagentic.components.agents.gateway.observation_projection import append_transport_observation
+from audiagentic.components.agents.gateway import observability, replay
+from audiagentic.components.agents.gateway.evidence_projection import (
+    project_public_gateway_evidence,
+)
+from audiagentic.components.agents.gateway.observation_projection import (
+    append_transport_observation,
+    project_transport_observation,
+)
+from audiagentic.components.agents.gateway.session import dispatch as session_dispatch
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.transports.agent_session import (
     CorrelationQuality,
     TransportObservation,
@@ -52,6 +60,77 @@ def test_observation_journal_is_redacted_coalesced_and_ordered(tmp_path):
     assert raw["items"][0]["facts"]["dom-signals"]["stop-control"] is True
 
 
+def test_session_dispatch_exception_trace_records_bounded_origin_and_send_state(tmp_path):
+    def fail_unregistered_code():
+        raise ValueError(
+            "Error code 'TO-PROC-002' is not registered in any component's error-resolutions.yaml"
+        )
+
+    with pytest.raises(ValueError) as caught:
+        fail_unregistered_code()
+
+    session_dispatch._record_dispatch_failure_observation(
+        tmp_path,
+        {
+            "request-id": "req_dispatch_failure",
+            "session-id": "ses_dispatch_failure",
+            "attempt-epoch": 2,
+            "provider-metadata": {"send-intent-ever": False},
+        },
+        caught.value,
+        resume_existing=False,
+    )
+
+    page = observability.read_observation_page(tmp_path, "req_dispatch_failure", limit=5)
+    facts = page["items"][0]["facts"]
+    assert facts["diagnostic-facts"]["exception-type"] == "ValueError"
+    assert facts["diagnostic-facts"]["exception-origin"].endswith(".fail_unregistered_code")
+    assert facts["diagnostic-facts"]["exception-code"] == "TO-PROC-002"
+    assert facts["diagnostic-facts"]["send-intent-ever"] is False
+    assert facts["diagnostic-facts"]["turn-bound"] is False
+    assert facts["error-occurrence"]["classification"] == "unregistered-error-code"
+    encoded = json.dumps(page)
+    assert "error-resolutions.yaml" not in encoded
+    assert "ValueError(" not in encoded
+
+
+def test_request_owner_fence_details_are_copied_to_failure_observation(tmp_path):
+    error = AudiaGenticError(
+        code="CON-AGW-125",
+        kind="agents",
+        message="prepared submission recovery lost its request owner fence",
+        details={
+            "request-owner-fence": {
+                "request-state-owned": True,
+                "session-id-matches": True,
+                "dispatch-owner-epoch-matches": False,
+                "worker-id-matches": True,
+                "attempt-epoch-matches": True,
+                "allow-queued-pre-send": False,
+                "recovery-required": False,
+            }
+        },
+    )
+    session_dispatch._record_dispatch_failure_observation(
+        tmp_path,
+        {
+            "request-id": "req_owner_fence_failure",
+            "session-id": "ses_owner_fence_failure",
+            "attempt-epoch": 1,
+            "provider-metadata": {},
+        },
+        error,
+        resume_existing=False,
+    )
+
+    page = observability.read_observation_page(
+        tmp_path, "req_owner_fence_failure", limit=5
+    )
+    facts = page["items"][0]["facts"]["diagnostic-facts"]
+    assert facts["request-owner-fence"]["dispatch-owner-epoch-matches"] is False
+    assert facts["request-owner-fence"]["attempt-epoch-matches"] is True
+
+
 def test_transport_timing_completion_diagnostics_reach_journal_and_public_evidence(tmp_path):
     observation = TransportObservation(
         ag_session_id="ses_timing",
@@ -66,6 +145,15 @@ def test_transport_timing_completion_diagnostics_reach_journal_and_public_eviden
             "diagnostic-details": json.dumps({
                 "completion-gates": {"completion-satisfied": True, "terminal-witness-present": True},
                 "completion-matched": ["assistant-bound", "stable-output"],
+                "terminal-node-unmounted": True,
+                "terminal-node-rematerialization-attempted": True,
+                "turn-anchor-ref-count": 1,
+                "turn-anchor-ref-sequence": 4,
+                "refs-after-anchor-user-count": 0,
+                "refs-after-anchor-assistant-count": 2,
+                "latest-user-matches-turn-anchor": True,
+                "latest-assistant-matches-terminal-witness": True,
+                "assistant-id-changed-from-bound": True,
             }),
         },
     )
@@ -74,10 +162,88 @@ def test_transport_timing_completion_diagnostics_reach_journal_and_public_eviden
     diagnostic = item["facts"]["diagnostic-facts"]
     assert diagnostic["completion-gates"]["completion-satisfied"] is True
     assert diagnostic["completion-matched"] == ["assistant-bound", "stable-output"]
+    assert diagnostic["terminal-node-unmounted"] is True
+    assert diagnostic["terminal-node-rematerialization-attempted"] is True
+    assert diagnostic["turn-anchor-ref-count"] == 1
+    assert diagnostic["refs-after-anchor-assistant-count"] == 2
+    assert diagnostic["assistant-id-changed-from-bound"] is True
     public = project_public_gateway_evidence({"observations": {"items": [item]}})
     assert public["observations"]["items"][0]["facts"]["diagnostic-facts"]["completion-matched"] == [
         "assistant-bound", "stable-output"
     ]
+
+
+def test_turn_accepted_reason_is_not_misclassified_as_error_in_trace(tmp_path):
+    accepted = TransportObservation(
+        ag_session_id="ses_accepted",
+        turn_id="turn_accepted",
+        sequence=1,
+        kind=TransportObservationKind.TURN_ACCEPTED,
+        observed_at="2026-10-20T00:00:00Z",
+        correlation_quality=CorrelationQuality.REQUEST_SCOPED,
+        attributes={"reason": "provider-accepted"},
+    )
+    append_transport_observation(tmp_path, "req_accepted", accepted, session_id="ses_accepted")
+    observability.append_observation(
+        tmp_path,
+        "req_accepted",
+        session_id="ses_accepted",
+        activity={"kind": "terminal"},
+        response_identity={
+            "terminal": True,
+            "assistant-id": "assistant-hash",
+            "terminal-witness-present": True,
+        },
+    )
+
+    page = observability.read_observation_page(tmp_path, "req_accepted", limit=10)
+    assert page["items"][0]["facts"]["error-occurrence"] == {}
+    replayed = replay.replay_observations(page["items"])
+    assert replayed["groups"]["none"]["errors"] == 0
+    assert replayed["outcome-classification"] == "completed-with-witness"
+
+
+def test_transport_error_reason_remains_in_trace_error_occurrence():
+    observation = TransportObservation(
+        ag_session_id="ses_transport_error",
+        turn_id="turn_transport_error",
+        sequence=1,
+        kind=TransportObservationKind.TRANSPORT_ERROR,
+        observed_at="2026-10-20T00:00:00Z",
+        correlation_quality=CorrelationQuality.REQUEST_SCOPED,
+        attributes={"reason": "provider connection lost"},
+    )
+
+    projected = project_transport_observation(observation)
+
+    assert projected["error-occurrence"] == {"reason": "provider connection lost"}
+
+
+def test_submission_stage_and_attempt_are_projected_without_composer_content():
+    observation = TransportObservation(
+        ag_session_id="ses_submission_stage",
+        turn_id="turn_submission_stage",
+        sequence=1,
+        kind=TransportObservationKind.TIMING,
+        observed_at="2026-10-20T00:00:00Z",
+        correlation_quality=CorrelationQuality.REQUEST_SCOPED,
+        attributes={
+            "timing-event": "submission-stage",
+            "submission-stage": "send-intent",
+            "submission-attempt-id": "attempt-123",
+            "send-intent-ever": True,
+        },
+    )
+
+    projected = project_transport_observation(observation)
+
+    assert projected["decision"] == {
+        "timing-event": "submission-stage",
+        "submission-stage": "send-intent",
+        "submission-attempt-id": "attempt-123",
+        "send-intent-ever": True,
+    }
+    assert "composer-text" not in projected["decision"]
 
 
 def test_unchanged_polls_are_periodically_coalesced(tmp_path):
@@ -362,6 +528,13 @@ def test_future_dated_recovery_claim_is_invalid_and_can_be_replaced(tmp_path):
 
     assert replacement["disposition"] == "intent-persisted"
     assert replacement["claim-generation"] == 2
+    with pytest.raises(replay.RecoveryClaimLostError):
+        replay.assert_recovery_claim_owner(
+            tmp_path,
+            "req_future_claim",
+            action_attempt_id="attempt_1",
+            claim_generation=1,
+        )
 
 
 def test_native_continuation_fence_persists_intent_before_provider_action(tmp_path):
@@ -450,9 +623,14 @@ def test_recovery_deep_cursor_carries_index_offset(tmp_path, monkeypatch):
     assert next_page["items"][0]["event-index"] == 55
 
 def test_native_fence_never_synthesizes_terminal_witness_from_assistant(tmp_path):
-    from audiagentic.components.agents.gateway.session.dispatch import _prepare_native_recovery_fence
+    from audiagentic.components.agents.gateway.session.dispatch import (
+        _prepare_native_recovery_fence,
+    )
+    from audiagentic.components.agents.gateway.session.sessions_store import (
+        build_session_record,
+        write_session_record,
+    )
     from audiagentic.foundation.contracts.errors import AudiaGenticError
-    from audiagentic.components.agents.gateway.session.sessions_store import build_session_record, write_session_record
     write_session_record(tmp_path, build_session_record(
         session_id="session", execution_profile_id="gpt-auto", provider_id="gpt-auto",
         provider_session_ref="chat", surface_id="chatgpt-web",

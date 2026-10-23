@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import inspect
 import logging
 import time
+import uuid
 from collections.abc import Callable
 from dataclasses import replace
 from enum import StrEnum
@@ -27,14 +29,36 @@ from .snapshot import ChatSnapshot
 from .urls import (
     canonical_chat_url,
     canonical_project_url,
+    normalize_chat_title,
     parse_project_id,
     parse_provider_session_id,
-    normalize_chat_title,
     same_chat_identity,
     url_matches_provider_session,
 )
 
 logger = logging.getLogger(__name__)
+
+_TERMINAL_CHECKPOINT_METADATA_KEYS = frozenset(
+    {
+        "unresolved-turn-pending",
+        "unresolved-turn-id",
+        "submission-state",
+        "submission-attempt-id",
+        "submission-stage",
+        "send-intent-ever",
+        "submission-proven",
+        "submission-proof-source",
+        "submission-recovery-claim",
+        "submission-recovery-generation",
+        "recovery-state",
+        "prompt-text-digest",
+        "unresolved-baseline-user-id",
+        "unresolved-baseline-assistant-id",
+        "unresolved-baseline-user-count",
+        "unresolved-baseline-assistant-count",
+        "unresolved-baseline-error-alert-occurrences",
+    }
+)
 
 
 class ProviderBindingIntegrityError(RuntimeError):
@@ -121,6 +145,7 @@ class PersistentChat:
         self.config = config
         self.binding_sink = binding_sink
         self._session_checkpoint_sink = checkpoint_sink
+        self._turn_session_checkpoint_sink = None
         self._request_checkpoint_sink = None
         self._lost_during_turn = False
         self._last_url: str | None = None
@@ -182,10 +207,18 @@ class PersistentChat:
         self._conversation_load_recovery_attempts = _metadata_int(
             metadata, "conversation-load-recovery-attempts"
         )
+        self._conversation_load_recovery_revision = _metadata_int(
+            metadata, "conversation-load-recovery-revision"
+        )
+        self._load_budget_observation = None
         self._checkpoint_metadata: dict[str, object] = {
             key: metadata[key]
             for key in (
                 "recovery-state",
+                "submission-state",
+                "submission-attempt-id",
+                "submission-stage",
+                "send-intent-ever",
                 "unresolved-turn-id",
                 "unresolved-baseline-user-id",
                 "unresolved-baseline-assistant-id",
@@ -197,6 +230,7 @@ class PersistentChat:
             )
             if key in metadata and metadata[key] not in (None, "")
         }
+        self._terminal_checkpoint_finalization: dict[str, object] = {}
         self._recovery_ready = asyncio.Event()
         self._recovery_ready.set()
 
@@ -206,13 +240,44 @@ class PersistentChat:
         turn_id: str,
         baseline: ChatSnapshot | None,
     ) -> None:
-        """Write the side-effect checkpoint before browser Send is invoked."""
+        """Persist a prepared checkpoint before any browser submission action."""
         self._reconciliation_delivery_retry_attempted = False
         load_recovery_attempts = self._conversation_load_recovery_attempts
+        same_turn = self._checkpoint_metadata.get("unresolved-turn-id") == turn_id
+        submission_attempt_id = self._checkpoint_metadata.get("submission-attempt-id") if same_turn else None
+        attempt_metadata = {
+            key: copy.deepcopy(self._checkpoint_metadata[key])
+            for key in (
+                "submission-stage", "send-intent-ever",
+            )
+            if same_turn and key in self._checkpoint_metadata
+        }
+        submission_state = "proven" if self._submission_proven else "prepared"
         self._checkpoint_metadata = {
-            "recovery-state": "side-effect-may-have-started",
+            **attempt_metadata,
+            "recovery-state": (
+                "submission-proven" if self._submission_proven else "submission-prepared"
+            ),
+            "submission-state": submission_state,
             "unresolved-turn-id": turn_id,
         }
+        # Proof is persisted after the dispatch-stage checkpoint. Preserve its
+        # immutable attempt identity when rebuilding the provider metadata; the
+        # gateway compares that identity under the session lock before it
+        # accepts the transition from dispatching to proven.
+        if isinstance(submission_attempt_id, str) and submission_attempt_id:
+            self._checkpoint_metadata["submission-attempt-id"] = submission_attempt_id
+        if self.unresolved_prompt_text_digest:
+            self._checkpoint_metadata["prompt-text-digest"] = (
+                self.unresolved_prompt_text_digest
+            )
+        if self._submission_proven:
+            # The source is part of the proof contract consumed by the
+            # request-owned checkpoint CAS. Rebuilding this metadata dict must
+            # not drop the evidence that mark_prompt_submitted established.
+            self._checkpoint_metadata["submission-proof-source"] = (
+                "provider-user-message"
+            )
         if load_recovery_attempts:
             self._checkpoint_metadata[
                 "conversation-load-recovery-attempts"
@@ -238,8 +303,65 @@ class PersistentChat:
                     self._checkpoint_metadata[key] = value
         await self._persist_checkpoint({**self.unresolved_metadata(), **self._checkpoint_metadata})
 
+    async def mark_submission_dispatching(self, *, turn_id: str) -> None:
+        """Persist the attempt identity before touching the browser composer.
+
+        This is deliberately not evidence that Send was invoked. The durable
+        ``send-intent-ever`` latch is advanced separately at the exact browser
+        click boundary by ``persist_submission_stage``.
+        """
+        self._checkpoint_metadata.update(
+            {
+                "recovery-state": "side-effect-may-have-started",
+                "submission-state": "dispatching",
+                "submission-attempt-id": uuid.uuid4().hex,
+                "submission-stage": "dispatching",
+                "send-intent-ever": bool(
+                    self._checkpoint_metadata.get("send-intent-ever", False)
+                ),
+                "unresolved-turn-id": turn_id,
+            }
+        )
+        await self._persist_checkpoint({**self.unresolved_metadata(), **self._checkpoint_metadata})
+
+    async def persist_submission_stage(self, *, turn_id: str, stage: str) -> str:
+        """Durably record one monotonic, content-free browser-submit stage."""
+        stage_order = {
+            "dispatching": 0,
+            "composer-focused": 1,
+            "composer-filled": 2,
+            "composer-validated": 3,
+            "send-intent": 4,
+            "send-click-acknowledged": 5,
+        }
+        if stage not in stage_order:
+            raise ValueError("unknown gpt-auto submission stage")
+        if self._checkpoint_metadata.get("unresolved-turn-id") != turn_id:
+            raise RuntimeError("submission stage does not match the unresolved turn")
+        attempt_id = self._checkpoint_metadata.get("submission-attempt-id")
+        if not isinstance(attempt_id, str) or not attempt_id:
+            raise RuntimeError("submission stage has no durable attempt identity")
+        current_stage = self._checkpoint_metadata.get("submission-stage")
+        if (
+            isinstance(current_stage, str)
+            and current_stage in stage_order
+            and stage_order[stage] < stage_order[current_stage]
+        ):
+            raise RuntimeError("submission stage cannot move backwards")
+        updated = dict(self._checkpoint_metadata)
+        updated["submission-stage"] = stage
+        if stage == "send-intent":
+            # Sticky for the lifetime of this request/attempt. A click
+            # acknowledgement is not provider acceptance, but once intent is
+            # durable a restart must treat the outcome as ambiguous.
+            updated["send-intent-ever"] = True
+        await self._persist_checkpoint({**self.unresolved_metadata(), **updated})
+        self._checkpoint_metadata = updated
+        return attempt_id
+
     async def _persist_checkpoint(self, metadata: dict[str, object]) -> None:
-        sinks = (self._session_checkpoint_sink, self._request_checkpoint_sink)
+        session_sink = self._turn_session_checkpoint_sink or self._session_checkpoint_sink
+        sinks = (session_sink, self._request_checkpoint_sink)
         seen: set[int] = set()
         for sink in sinks:
             if sink is None or id(sink) in seen:
@@ -262,6 +384,16 @@ class PersistentChat:
         """Bind only the request leg; retain the durable session leg."""
         self._request_checkpoint_sink = sink
 
+    def set_turn_session_checkpoint_sink(self, sink) -> None:
+        """Use the FIFO owner's session writer instead of the opening writer."""
+        self._turn_session_checkpoint_sink = sink
+
+    def clear_turn_session_checkpoint_sink(self, expected_sink) -> bool:
+        if self._turn_session_checkpoint_sink is not expected_sink:
+            return False
+        self._turn_session_checkpoint_sink = None
+        return True
+
     async def persist_request_metadata(self, metadata: dict[str, object]) -> None:
         """Persist provider identity only to the current request leg."""
         sink = self._request_checkpoint_sink
@@ -275,24 +407,46 @@ class PersistentChat:
         """Persist prompt identity without rewriting the pre-send baseline."""
         await self._persist_checkpoint(self.unresolved_metadata())
 
+    async def persist_proven_unsent_clear(self) -> None:
+        """Retire this exact no-Send attempt after independent DOM reconciliation."""
+        checkpoint = self._checkpoint_metadata
+        if (
+            self._submission_proven
+            or checkpoint.get("send-intent-ever") is not False
+            or checkpoint.get("submission-stage") not in {
+                "dispatching", "composer-focused", "composer-filled", "composer-validated",
+            }
+            or not checkpoint.get("submission-attempt-id")
+        ):
+            raise RuntimeError("unsent retirement requires an exact pre-Send attempt")
+        await self._persist_checkpoint({
+            "unresolved-turn-pending": False,
+            "submission-state": "not_started",
+            "submission-proven": False,
+            "submission-attempt-id": checkpoint["submission-attempt-id"],
+            "unresolved-turn-id": checkpoint["unresolved-turn-id"],
+        })
+        self._checkpoint_metadata = {}
+
     async def persist_unresolved_clear(self) -> None:
         """Durably clear the checkpoint only after terminal proof."""
-        if self._session_checkpoint_sink is None and self._request_checkpoint_sink is None:
+        if (
+            self._session_checkpoint_sink is None
+            and self._turn_session_checkpoint_sink is None
+            and self._request_checkpoint_sink is None
+        ):
             self._checkpoint_metadata = {}
             return
         # Emit the intended durable state explicitly.  Callers may persist
         # before mutating the in-memory marker so a failed write cannot expose
         # READY and then resurrect an unresolved lock after restart.
-        metadata: dict[str, object] = {"unresolved-turn-pending": False}
-        # Explicit terminal cleanup only when this session actually carried a
-        # recovery budget.  The retry budget is intentionally not part of the
-        # generic pending=false removal set because idle session recovery can
-        # consume it without an unresolved turn.
-        if (
-            self._conversation_load_recovery_attempts
-            or "conversation-load-recovery-attempts" in self._checkpoint_metadata
-        ):
-            metadata["conversation-load-recovery-attempts"] = 0
+        metadata: dict[str, object] = {
+            "unresolved-turn-pending": False,
+            "submission-state": "cleared",
+        }
+        # Budget authority is separate from submission-checkpoint cleanup.
+        if self._conversation_load_recovery_attempts and self._last_snapshot is not None:
+            await self._reset_load_recovery_budget_after_positive_snapshot(self._last_snapshot)
         if self._submission_proven:
             metadata["submission-proven"] = True
             for key, value in (
@@ -305,7 +459,6 @@ class PersistentChat:
                     metadata[key] = value
         await self._persist_checkpoint(metadata)
         self._checkpoint_metadata = {}
-        self._conversation_load_recovery_attempts = 0
 
     def _claim_page(self, page_handle: str) -> bool:
         """Claim a page when the runtime exposes ownership tracking.
@@ -953,7 +1106,7 @@ class PersistentChat:
 
     def _replacement_snapshot_is_positive(self, snapshot: ChatSnapshot | None) -> bool:
         """Require exact, positive DOM evidence before clearing recovery budget."""
-        if snapshot is None or "conversation-load-failed" in snapshot.dom_signals:
+        if snapshot is None or snapshot.error_present or "conversation-load-failed" in snapshot.dom_signals:
             return False
         if self.provider_session_id and not url_matches_provider_session(
             snapshot.url, self.provider_session_id
@@ -998,9 +1151,58 @@ class PersistentChat:
         """Clear replacement budget only after positive conversation proof."""
         if self.unresolved_turn_pending and self._defer_unresolved_reconciliation:
             return
-        self._conversation_load_recovery_attempts = 0
-        self._checkpoint_metadata["conversation-load-recovery-attempts"] = 0
-        await self._persist_checkpoint(self.unresolved_metadata())
+        observation = self._load_budget_observation
+        if (
+            not self._replacement_snapshot_is_positive(snapshot)
+            or observation is None or observation[0] is not snapshot
+            or observation[2] != self._binding_token(snapshot)
+            or observation[1] != (
+                self._conversation_load_recovery_attempts,
+                self._conversation_load_recovery_revision,
+            )
+            or not self._conversation_load_recovery_attempts
+        ):
+            return
+        if (
+            not await self._binding_token_is_current(observation[2])
+            or observation[2] != self._binding_token(snapshot)
+        ):
+            return
+        await self._persist_load_recovery_budget("reset", expected=observation[1])
+
+    async def _persist_load_recovery_budget(
+        self, action: str, *, expected: tuple[int, int] | None = None,
+    ) -> tuple[int, int]:
+        """Commit session authority before navigation; request copy is advisory."""
+        maximum = self.config.workflow.recovery.conversation_load_failure_max_attempts
+        if type(maximum) is not int or not 0 <= maximum <= 1_000_000:
+            raise ValueError("invalid conversation load replacement budget")
+        sink = self._turn_session_checkpoint_sink or self._session_checkpoint_sink
+        budget_sink = getattr(sink, "recovery_budget", None)
+        if sink is not None and not callable(budget_sink):
+            raise RuntimeError("durable checkpoint sink has no recovery budget capability")
+        if callable(budget_sink):
+            result = await budget_sink(action=action, expected=expected, maximum=maximum)
+        else:
+            # Standalone provider use has no durable gateway or request owner.
+            current = (self._conversation_load_recovery_attempts, self._conversation_load_recovery_revision)
+            if action == "read":
+                return current
+            if expected != current or (action == "increment" and current[0] >= maximum):
+                raise RuntimeError("conversation load budget compare-and-swap rejected")
+            result = (current[0] + 1 if action == "increment" else 0, current[1] + 1)
+        self._conversation_load_recovery_attempts, self._conversation_load_recovery_revision = result
+        if action != "read":
+            projection = dict(zip(("conversation-load-recovery-attempts", "conversation-load-recovery-revision"), result))
+            self._checkpoint_metadata.update(projection)
+            try:
+                await self.persist_request_metadata(projection)
+            except Exception:  # noqa: BLE001 - session commit is authoritative
+                logger.warning("request recovery budget projection failed; session authority retained", exc_info=True)
+            if callable(budget_sink):
+                # Projection failure must not hide owner retirement before a side effect.
+                await budget_sink(action="read", maximum=maximum)
+        return result
 
     def _conversation_load_recovery_allowed(self) -> bool:
         workflow = getattr(self.config, "workflow", None)
@@ -1259,26 +1461,22 @@ class PersistentChat:
                 dom_signals=sorted(snapshot.dom_signals),
             )
             return True
-        if not self._conversation_load_recovery_allowed():
-            return False
         if not self._page_mutation_owner_is_live():
             self._set_unresolved_recovery(
                 "conversation-load-owner-not-live",
                 attempts=retry_attempts,
             )
             return False
+        current_budget = await self._persist_load_recovery_budget("read")
+        if not self._conversation_load_recovery_allowed():
+            return False
         old_handle = self.page_handle
+        await self._persist_load_recovery_budget("increment", expected=current_budget)
+        if not self._page_mutation_owner_is_live():
+            return False
         if old_handle:
             self.page_handle = None
             self.runtime.release_page(self, old_handle)
-        self._conversation_load_recovery_attempts += 1
-        self._checkpoint_metadata[
-            "conversation-load-recovery-attempts"
-        ] = self._conversation_load_recovery_attempts
-        # Fence the increment before creating a replacement tab.  If the
-        # gateway dies during navigation, the next chat instance inherits the
-        # consumed budget instead of starting over.
-        await self._persist_checkpoint(self.unresolved_metadata())
         replacement_handle: str | None = None
         try:
             replacement_handle = await self._create_recovery_page()
@@ -1323,9 +1521,7 @@ class PersistentChat:
             if stable_replacement and not (
                 self.unresolved_turn_pending and self._defer_unresolved_reconciliation
             ):
-                self._conversation_load_recovery_attempts = 0
-                self._checkpoint_metadata["conversation-load-recovery-attempts"] = 0
-                await self._persist_checkpoint(self.unresolved_metadata())
+                await self._reset_load_recovery_budget_after_positive_snapshot(ready_snapshot)
             return True
         except Exception:
             if replacement_handle:
@@ -1388,15 +1584,21 @@ class PersistentChat:
                     raise RuntimeError("gpt-auto chat recovery timed out") from exc
         if not self.page_handle:
             raise RuntimeError("chat page is not bound")
-        page = await self._gpt_browser().page_by_handle(self.page_handle)
+        observed_binding = (
+            self._page_generation, self.page_handle, self.target_id,
+            self.provider_session_id, canonical_chat_url(self.chat_url or ""),
+        )
+        page = await self._gpt_browser().page_by_handle(str(observed_binding[1]))
         target_id = str(getattr(page, "target_id", "") or "")
         if target_id:
             self.target_id = target_id
+        budget_observed = (self._conversation_load_recovery_attempts, self._conversation_load_recovery_revision)
         snapshot = ChatSnapshot.from_bridge(
             await self._gpt_browser().snapshot(page, signals=self.config.workflow.bridge_signals())
         )
         self._last_url = snapshot.url
         self._last_snapshot = snapshot
+        self._load_budget_observation = (snapshot, budget_observed, observed_binding)
         remember = getattr(self.runtime, "remember_tab_activity", None)
         if callable(remember):
             remember(self)
@@ -1884,6 +2086,60 @@ class PersistentChat:
         values.update(self._checkpoint_metadata)
         return values
 
+    def terminal_checkpoint_metadata(self, turn_id: str) -> dict[str, object]:
+        """Return private checkpoint proof for gateway-owned finalization only.
+
+        These values are deliberately not part of SessionTurnResult.metadata:
+        they contain provider message identity and a prompt fingerprint. The
+        gateway uses this envelope to compare-and-clear the same durable turn.
+        """
+        if not isinstance(turn_id, str) or not turn_id:
+            return {}
+        retained = self._terminal_checkpoint_finalization
+        if retained.get("unresolved-turn-id") == turn_id:
+            return copy.deepcopy(retained)
+        if (
+            self._checkpoint_metadata.get("unresolved-turn-id") != turn_id
+            or not self.unresolved_turn_pending
+        ):
+            return {}
+        return self._private_terminal_checkpoint_projection()
+
+    def capture_terminal_checkpoint_metadata(self, turn_id: str) -> dict[str, object]:
+        """Retain the exact private checkpoint before provider-local clear.
+
+        The provider turn clears its live recovery state after terminal DOM
+        proof, while the gateway still has to durably finalize the request
+        and session. Keep one turn-scoped copy across that boundary; the
+        gateway acknowledges and releases it only after its compare-and-clear
+        succeeds.
+        """
+        if (
+            not isinstance(turn_id, str)
+            or not turn_id
+            or self._checkpoint_metadata.get("unresolved-turn-id") != turn_id
+            or not self.unresolved_turn_pending
+            or not self._submission_proven
+        ):
+            return {}
+        self._terminal_checkpoint_finalization = (
+            self._private_terminal_checkpoint_projection()
+        )
+        return copy.deepcopy(self._terminal_checkpoint_finalization)
+
+    def _private_terminal_checkpoint_projection(self) -> dict[str, object]:
+        # Some frozen identity fields are represented by dedicated in-memory
+        # attributes rather than _checkpoint_metadata (notably prompt-text-
+        # digest and submission-proven). Build from the complete private
+        # projection, then allowlist the fields required by the gateway CAS.
+        # Copy nested baseline data so a finalizer cannot mutate live state.
+        private_projection = self.unresolved_metadata()
+        return {
+            key: copy.deepcopy(private_projection[key])
+            for key in _TERMINAL_CHECKPOINT_METADATA_KEYS
+            if key in private_projection
+        }
+
     def mark_submission_unresolved(self, prompt_text: str | None = None) -> None:
         """Record that a send command completed but its provider identity is unknown."""
         self.unresolved_turn_pending = True
@@ -1897,6 +2153,8 @@ class PersistentChat:
         self.unresolved_prompt_text_digest = None
         self._unresolved_recovery_reason = None
         self._unresolved_recovery_details = {}
+        self._checkpoint_metadata = {}
+        self._terminal_checkpoint_finalization = {}
         self._reconciliation_refresh_attempted = False
         if prompt_text:
             self.unresolved_prompt_text_digest = PromptFingerprint.from_text(prompt_text).digest
@@ -1909,6 +2167,13 @@ class PersistentChat:
     ) -> None:
         self.unresolved_turn_pending = True
         self._submission_proven = True
+        self._checkpoint_metadata.update(
+            {
+                "recovery-state": "submission-proven",
+                "submission-state": "proven",
+                "submission-proof-source": "provider-user-message",
+            }
+        )
         self._unresolved_recovery_reason = None
         self._unresolved_recovery_details = {}
         self._reconciliation_refresh_attempted = False
@@ -1944,6 +2209,124 @@ class PersistentChat:
         self._unresolved_match_fingerprint_at = None
         self._unresolved_recovery_reason = None
         self._unresolved_recovery_details = {}
+
+    def acknowledge_terminal_checkpoint_finalization(
+        self,
+        *,
+        turn_id: str,
+        terminal_metadata: dict[str, object],
+        persisted_session_metadata: dict[str, object],
+    ) -> bool:
+        """Clear live recovery state after the gateway durably finalized a turn.
+
+        The provider cannot clear its checkpoint while its request is still
+        running. The gateway therefore owns the terminal write and invokes
+        this acknowledgement only after its session record confirms that the
+        exact request's terminal evidence cleared the durable fence.
+        """
+        evidence = terminal_metadata.get("terminal-evidence")
+        observed = evidence.get("verification-evidence") if isinstance(evidence, dict) else None
+        observed_set = set(observed) if isinstance(observed, (list, tuple, set)) else set()
+        checkpoint = self._terminal_checkpoint_finalization
+        checkpoint_turn_id = checkpoint.get("unresolved-turn-id")
+        identity_keys = (
+            "unresolved-turn-id",
+            "submission-attempt-id",
+            "submission-recovery-generation",
+            "submission-recovery-claim",
+            "unresolved-baseline-user-id",
+            "unresolved-baseline-assistant-id",
+            "unresolved-baseline-user-count",
+            "unresolved-baseline-assistant-count",
+            "unresolved-baseline-error-alert-occurrences",
+            "prompt-text-digest",
+        )
+        identity_matches = all(
+            (key in terminal_metadata) == (key in checkpoint)
+            and (
+                key not in checkpoint
+                or terminal_metadata.get(key) == checkpoint.get(key)
+            )
+            for key in identity_keys
+        )
+        if not (
+            isinstance(turn_id, str)
+            and turn_id
+            and checkpoint.get("unresolved-turn-pending") is True
+            and checkpoint_turn_id == turn_id
+            and isinstance(evidence, dict)
+            and evidence.get("turn-id") == turn_id
+            and evidence.get("policy") == "response-complete"
+            and terminal_metadata.get("submission-proven") is True
+            and terminal_metadata.get("submission-proof-source")
+            == "provider-user-message"
+            and identity_matches
+            and {"not-generating", "text-present"}.issubset(observed_set)
+            and observed_set.intersection({"completion-control", "response-complete-status"})
+            and persisted_session_metadata.get("unresolved-turn-pending") is False
+            and not persisted_session_metadata.get("unresolved-turn-id")
+        ):
+            return False
+
+        self.clear_unresolved_turn()
+        self._checkpoint_metadata = {}
+        self._submission_proven = False
+        self._terminal_checkpoint_finalization = {}
+        if self.state is ChatState.RECOVERING and self.page_handle:
+            self._move(ChatState.READY)
+        return True
+
+    def synchronize_cleared_predecessor_checkpoint(
+        self, predecessor_id: str, expected_metadata: dict[str, object],
+        persisted_session_metadata: dict[str, object],
+    ) -> bool:
+        """Mirror a gateway-verified terminal predecessor clear in idle memory.
+
+        The gateway has verified the terminal artifact and compared/cleared
+        this exact durable checkpoint. This only releases the matching local
+        fence; it never upgrades submission proof or writes a checkpoint.
+        """
+        current = self._private_terminal_checkpoint_projection()
+        identity_keys = _TERMINAL_CHECKPOINT_METADATA_KEYS - {"recovery-state"}
+        if (
+            self.state in {ChatState.READY, ChatState.RECOVERING}
+            and not self.active_turn_id
+            and not self.unresolved_turn_pending
+            and not self._submission_proven
+            and not current.get("unresolved-turn-id")
+            and expected_metadata.get("unresolved-turn-id") == predecessor_id
+            and expected_metadata.get("submission-attempt-id")
+            and expected_metadata.get("prompt-text-digest")
+            and persisted_session_metadata.get("unresolved-turn-pending") is False
+            and not persisted_session_metadata.get("unresolved-turn-id")
+            and same_chat_identity(self.chat_url or "", str(persisted_session_metadata.get("chat-url") or ""))
+        ):
+            # The exact clear already reached idle memory before a crash or
+            # duplicate acknowledgment. No mutation is needed to retire its marker.
+            return True
+        if (
+            self.state not in {ChatState.READY, ChatState.RECOVERING}
+            or current.get("unresolved-turn-id") != predecessor_id
+            or expected_metadata.get("unresolved-turn-id") != predecessor_id
+            or not expected_metadata.get("submission-attempt-id")
+            or not expected_metadata.get("prompt-text-digest")
+            or persisted_session_metadata.get("unresolved-turn-pending") is not False
+            or persisted_session_metadata.get("unresolved-turn-id")
+            or not same_chat_identity(self.chat_url or "", str(persisted_session_metadata.get("chat-url") or ""))
+            or any(
+                (key in current) != (key in expected_metadata)
+                or current.get(key) != expected_metadata.get(key)
+                for key in identity_keys
+            )
+        ):
+            return False
+        self.clear_unresolved_turn()
+        self._checkpoint_metadata = {}
+        self._terminal_checkpoint_finalization = {}
+        self._submission_proven = False
+        if self.state is ChatState.RECOVERING and self.page_handle:
+            self._move(ChatState.READY)
+        return True
 
     async def refresh_bound_conversation(
         self,
