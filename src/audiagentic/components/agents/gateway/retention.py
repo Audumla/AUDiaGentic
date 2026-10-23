@@ -161,18 +161,20 @@ def compact_indexed_ndjson(
         for row in rows
     ]
 
-    def size(indices: set[int]) -> int:
-        return sum(len(encoded[index]) for index in indices)
-
     selected = set(must_keep)
-    if size(selected) <= max_bytes:
+    selected_bytes = sum(len(encoded[index]) for index in selected)
+    if selected_bytes <= max_bytes:
+        # Leave headroom so the next append does not immediately rewrite
+        # both files again. Required evidence is never dropped for headroom.
+        target_bytes = max(selected_bytes, max_bytes * 3 // 4)
         for index in range(len(rows) - 1, -1, -1):
             if index in selected:
                 continue
-            candidate = selected | {index}
-            if size(candidate) > max_bytes:
+            row_bytes = len(encoded[index])
+            if selected_bytes + row_bytes > target_bytes:
                 break
-            selected = candidate
+            selected.add(index)
+            selected_bytes += row_bytes
     else:
         # A single terminal row is irreducible evidence. Keep the newest
         # terminal row even if an operator configured a cap smaller than it.
