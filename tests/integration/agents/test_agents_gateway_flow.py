@@ -152,4 +152,5 @@ def test_missing_default_profile_raises_user_facing_error(tmp_path: Path) -> Non
     execution-profile-id must raise a clear resolution error, not crash."""
     with pytest.raises(AudiaGenticError) as exc_info:
         gateway.submit_execution_request(tmp_path, prompt_body="hi")
-    assert exc_info.value.code == "RES-EXP-003"
+    assert exc_info.value.code == "RES-EXP-002"
+    assert "global agents catalog" in str(exc_info.value)

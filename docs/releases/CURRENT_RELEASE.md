@@ -9,3 +9,4 @@
 
 ### tests
 - [chg_20261023_024359_bring-planning-and-pi-isolatio_2751] Bring planning and Pi isolation test fixtures and generated capability reference in line with current contracts.
+- [chg_20261023_030830_repair-linux-ci-portability-s_1888] Repair Linux CI portability, startup prerequisites, deterministic crash/lease tests, and planning integrity while retaining diagnostic evidence.
