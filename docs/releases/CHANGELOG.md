@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.4.2](https://github.com/Audumla/AUDiaGentic/compare/v0.4.1...v0.4.2) (2026-10-24)
+
+
+### Bug Fixes
+
+* **release:** validate and merge version bumps automatically ([5eb4275](https://github.com/Audumla/AUDiaGentic/commit/5eb42752245851feb60e1bc0bbf314a3d3224488))
+* **release:** validate and merge version bumps automatically ([9677eb2](https://github.com/Audumla/AUDiaGentic/commit/9677eb26f7c4caddd16c5d8ce54759c99705c3fa))
+
+
+### Documentation
+
+* **hygiene:** close verified cleanup and history purge ([05873da](https://github.com/Audumla/AUDiaGentic/commit/05873daa0a75ff3ff2a189a2a33f0207eb34ae2e))
+* **hygiene:** record verified cleanup and history-purge completion ([1bf83f8](https://github.com/Audumla/AUDiaGentic/commit/1bf83f80c4c54550291d8f3da62b79a6111e2a9f))
+* **planning:** close validated CI and release work ([c5f6caf](https://github.com/Audumla/AUDiaGentic/commit/c5f6caf86fe9bb28a7e51346c1b6b97bf5110a73))
+* **planning:** close validated CI and release work ([d8021b2](https://github.com/Audumla/AUDiaGentic/commit/d8021b22860f81a6d53b923a24482144ee82c7b1))
+
 ## [0.4.1](https://github.com/Audumla/AUDiaGentic/compare/v0.4.0...v0.4.1) (2026-10-24)
 
 
