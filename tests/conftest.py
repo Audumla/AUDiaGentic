@@ -313,6 +313,8 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     """
     if os.environ.get("AUDIAGENTIC_DOCKER_TESTS") != "1":
         return
+    if session.config.option.collectonly:
+        return  # Inventory proves collection, not execution; execution lanes remain guarded.
     if not session.testscollected:
         return
     terminalreporter = session.config.pluginmanager.get_plugin("terminalreporter")
