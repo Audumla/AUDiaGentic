@@ -23,6 +23,8 @@ jobs:
     outputs:
       release_created: ${{ steps.rp.outputs.release_created == 'true' || (github.event_name == 'workflow_dispatch' && inputs.release_id != '') }}
       tag_name: ${{ steps.rp.outputs.tag_name || inputs.release_id }}
+      release_pr: ${{ steps.release-pr.outputs.number }}
+      release_head: ${{ steps.release-pr.outputs.sha }}
     steps:
       - uses: googleapis/release-please-action@v5
         id: rp
@@ -31,6 +33,76 @@ jobs:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
           target-branch: ${{ github.ref_name }}
+
+      - name: Identify the generated release PR
+        if: steps.rp.outputs.release_created != 'true' && inputs.release_id == ''
+        id: release-pr
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const {owner, repo} = context.repo;
+            const base = context.ref.replace('refs/heads/', '');
+            const head = `release-please--branches--${base}`;
+            const {data: prs} = await github.rest.pulls.list({owner, repo, state: 'open', base, head: `${owner}:${head}`});
+            if (!prs.length) return;
+            if (prs.length !== 1) throw new Error('Ambiguous release PR');
+            const pr = prs[0];
+            if (pr.user.login !== 'github-actions[bot]' || pr.head.repo.full_name !== `${owner}/${repo}` ||
+                !pr.labels.some(label => label.name === 'autorelease: pending')) {
+              throw new Error('Release PR provenance mismatch');
+            }
+            const allowed = new Set(['.release-please-manifest.json', 'docs/releases/CHANGELOG.md',
+                                     'pyproject.toml', 'src/audiagentic/__init__.py']);
+            const files = await github.paginate(github.rest.pulls.listFiles, {owner, repo, pull_number: pr.number});
+            if (!files.length || files.some(file => !allowed.has(file.filename) || file.previous_filename)) {
+              throw new Error('Unexpected files in generated release PR');
+            }
+            core.setOutput('number', String(pr.number));
+            core.setOutput('sha', pr.head.sha);
+
+  release-pr-tests:
+    needs: release-please
+    if: needs.release-please.outputs.release_pr != ''
+    uses: ./.github/workflows/ci-tests.yml
+    with:
+      source_ref: ${{ needs.release-please.outputs.release_head }}
+    permissions:
+      contents: read
+
+  merge-release-pr:
+    needs: [release-please, release-pr-tests]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    steps:
+      - name: Merge the validated release head and dispatch publication
+        uses: actions/github-script@v8
+        env:
+          RELEASE_PR: ${{ needs.release-please.outputs.release_pr }}
+          RELEASE_HEAD: ${{ needs.release-please.outputs.release_head }}
+        with:
+          script: |
+            const {owner, repo} = context.repo;
+            const pull_number = Number(process.env.RELEASE_PR);
+            const sha = process.env.RELEASE_HEAD;
+            const base = context.ref.replace('refs/heads/', '');
+            const {data: pr} = await github.rest.pulls.get({owner, repo, pull_number});
+            if (pr.head.sha !== sha || pr.base.ref !== base ||
+                pr.head.repo.full_name !== `${owner}/${repo}` ||
+                pr.head.ref !== `release-please--branches--${base}` ||
+                pr.user.login !== 'github-actions[bot]') {
+              throw new Error('Release PR changed after validation; refusing merge');
+            }
+            if (!pr.merged) {
+              if (pr.state !== 'open') throw new Error('Release PR closed without merge');
+              const {data: merged} = await github.rest.pulls.merge({owner, repo, pull_number, sha, merge_method: 'merge'});
+              if (!merged.merged) throw new Error('Release PR was not merged');
+            }
+            // Retry dispatch safely if the previous attempt merged but dispatch failed.
+            // GITHUB_TOKEN merges do not trigger push workflows. Dispatch explicitly.
+            await github.rest.actions.createWorkflowDispatch({owner, repo, workflow_id: 'release.yml', ref: base});
 
   finalize-ledger:
     needs: release-please
