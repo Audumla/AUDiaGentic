@@ -228,6 +228,27 @@ def test_release_requires_fast_finalized_source_and_installed_distribution_proof
     assert proof < publish
 
 
+def test_release_pr_auto_merge_validates_exact_head_and_dispatches_publication():
+    jobs = load_workflow("release.yml")["jobs"]
+    select = next(step for step in jobs["release-please"]["steps"] if step.get("id") == "release-pr")
+    assert "release_created != 'true'" in select["if"]
+    assert "inputs.release_id == ''" in select["if"]
+    assert "github-actions[bot]" in select["with"]["script"]
+    assert "autorelease: pending" in select["with"]["script"]
+    assert "Unexpected files" in select["with"]["script"]
+    gate = jobs["release-pr-tests"]
+    assert gate["uses"] == "./.github/workflows/ci-tests.yml"
+    assert "release_head" in gate["with"]["source_ref"]
+    merge = jobs["merge-release-pr"]
+    assert set(merge["needs"]) == {"release-please", "release-pr-tests"}
+    assert merge["permissions"]["actions"] == "write"
+    script = merge["steps"][0]["with"]["script"]
+    assert "pr.head.sha !== sha" in script
+    assert "pulls.merge({owner, repo, pull_number, sha," in script
+    assert script.index("if (!merged.merged)") < script.index("createWorkflowDispatch")
+    assert "--admin" not in script and "--force" not in script
+
+
 def test_full_is_background_scheduled_and_has_all_coverage_roles():
     config = load_workflow("ci-full.yml")
     assert {"push", "schedule", "release", "workflow_dispatch"} <= set(config["on"])
