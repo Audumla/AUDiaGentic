@@ -223,3 +223,16 @@ def test_full_is_background_scheduled_and_has_all_coverage_roles():
     assert set(jobs["coverage-audit"]["needs"]) == {"inventory", "suite", "browser"}
     assert "ci-full" in jobs["inventory"]["if"]
     assert not any("docker" in name for name in load_workflow("ci-tests.yml")["jobs"])
+    for lane in ("inventory", "suite"):
+        bake = next(step for step in jobs[lane]["steps"] if "docker/bake-action@" in step.get("uses", ""))
+        assert bake["with"]["source"] == "."  # Build the exact checkout, not a moving event ref.
+
+
+@pytest.mark.parametrize("workflow", ["ci-tests.yml", "ci-contracts.yml", "ci-full.yml", "release.yml"])
+def test_hidden_ci_evidence_is_explicitly_uploaded(workflow):
+    for job in load_workflow(workflow)["jobs"].values():
+        for step in job.get("steps", []):
+            if "actions/upload-artifact@" in step.get("uses", ""):
+                settings = step.get("with", {})
+                if ".ci-results" in settings.get("path", ""):
+                    assert settings.get("include-hidden-files") == "true"

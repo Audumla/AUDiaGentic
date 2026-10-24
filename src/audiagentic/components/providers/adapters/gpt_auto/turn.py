@@ -850,7 +850,19 @@ class GptAutoTurn:
         )
         if protocol_timeout <= 0:
             protocol_timeout = 30.0
-        return await asyncio.wait_for(self.chat.snapshot(), timeout=protocol_timeout)
+        # Keep outer cancellation distinct from an observation timeout. On
+        # Python 3.11 wait_for can consume cancellation when the snapshot
+        # finishes in the same loop tick, leaving the observer running.
+        observation = asyncio.ensure_future(self.chat.snapshot())
+        try:
+            done, _ = await asyncio.wait({observation}, timeout=protocol_timeout)
+            if not done:
+                raise asyncio.TimeoutError
+            return observation.result()
+        finally:
+            if not observation.done():
+                observation.cancel()
+            await asyncio.gather(observation, return_exceptions=True)
 
     async def _run(self) -> SessionTurnResult:
         if self.cancel_event.is_set():

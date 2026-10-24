@@ -324,6 +324,43 @@ async def test_snapshot_for_observation_is_bounded_without_turn_deadline():
 
 
 @pytest.mark.asyncio
+async def test_snapshot_completion_cannot_consume_outer_cancellation():
+    chat = _Chat()
+    turn = GptAutoTurn(chat, SessionPrompt(turn_id="snapshot-cancel", body="prompt"), lambda _: None)
+
+    async def completing_snapshot():
+        asyncio.get_running_loop().call_soon(observer.cancel)
+        return snap()
+
+    chat.snapshot = completing_snapshot
+    observer = asyncio.create_task(turn._snapshot_for_observation())
+    with pytest.raises(asyncio.CancelledError):
+        await observer
+
+
+@pytest.mark.asyncio
+async def test_cancelled_snapshot_observer_retires_its_pending_read():
+    chat = _Chat()
+    entered, retired = asyncio.Event(), asyncio.Event()
+
+    async def pending_snapshot():
+        entered.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            retired.set()
+
+    chat.snapshot = pending_snapshot
+    turn = GptAutoTurn(chat, SessionPrompt(turn_id="snapshot-retire", body="prompt"), lambda _: None)
+    observer = asyncio.create_task(turn._snapshot_for_observation())
+    await asyncio.wait_for(entered.wait(), timeout=1)
+    observer.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await observer
+    assert retired.is_set()
+
+
+@pytest.mark.asyncio
 async def test_await_response_never_returns_a_later_foreign_turns_answer():
     """GP08/GP30 core regression: once a later, unrelated turn (from any
     actor -- a human typing in the same tab, or a later gateway request)
