@@ -63,11 +63,11 @@ class TestPathCanonicalization:
             assert canonicalize_project_root(variant, windows=True).fingerprint == base.fingerprint
 
     def test_posix_form_preserves_case_and_normalizes_nfc(self) -> None:
-        assert fingerprint_form("/example-home/proj", windows=False) != fingerprint_form(
-            "/example-home/proj", windows=False
+        assert fingerprint_form("/example-root/Alice/proj", windows=False) != fingerprint_form(
+            "/example-root/alice/proj", windows=False
         )
-        composed = "/example-home"
-        decomposed = "/example-home"
+        composed = "/example-root/caf\u00e9"
+        decomposed = "/example-root/cafe\u0301"
         assert fingerprint_form(composed, windows=False) == fingerprint_form(decomposed, windows=False)
 
     def test_relative_root_rejected(self) -> None:

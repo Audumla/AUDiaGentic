@@ -14,7 +14,7 @@ options-schema:
   host:
     type: string
     required: true
-    description: Hindsight server host or IP (e.g. 192.0.2.123 or hindsight.example.com)
+    description: Hindsight server host or IP (e.g. hindsight.example.com)
   port:
     type: integer
     default: 8888
