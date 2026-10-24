@@ -19,6 +19,13 @@ already exists. Add a GitHub Trusted Publisher with:
 PyPI may label this a pending publisher until the first matching workflow run.
 No GitHub secret or `PYPI_PUBLISH` variable is required.
 
+OIDC removes the need for a stored PyPI publishing token; it does not sanitize
+source files or distribution contents. GitHub assets, PyPI packages, release
+notes and CI evidence are public outputs. Follow the
+[public repository boundary and incident guidance](../standards/SECRETS_MANAGEMENT.md#public-repository-boundary)
+before publishing. Local paths and diagnostic identifiers can disclose private
+information even when no API credential is present.
+
 ## Publishing
 
 Merge a release-producing change to `main` (or run the supported release

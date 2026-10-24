@@ -114,7 +114,7 @@ def test_agent_task_status_delegates():
 
 
 def test_request_status_prefers_durable_record_when_project_slug_is_ambiguous():
-    request_id = "req_audiagentic_0123456789ab"
+    request_id = "req_example_84c8ae891c30"
     with (
         _patch_root(),
         patch.dict("os.environ", {"AUDIAGENTIC_WORKSPACE_ROOTS": str(_ROOT)}),
@@ -277,7 +277,7 @@ def test_agent_task_session_resume_delegates_to_gateway_client():
 
 
 def test_agent_task_session_resume_routes_to_session_owning_checkout():
-    owning_root = Path("H:/development/projects/bigcherry")
+    owning_root = Path("C:/example-dev-root/bigcherry")
     with (
         _patch_root(),
         patch(

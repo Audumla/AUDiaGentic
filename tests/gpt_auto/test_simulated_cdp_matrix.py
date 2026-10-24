@@ -406,19 +406,19 @@ async def test_sidebar_project_uses_trusted_pointer_for_exact_project(monkeypatc
 
     async def evaluate(_page, _function, value=None):
         inputs.append(value)
-        return {"action": "selected", "projectId": "g-p-69cc8c4cc7648191a009f358113d8dd2", "x": 101.5, "y": 202.5}
+        return {"action": "selected", "projectId": "g-p-000000000000000005ef8b326bf7cec8", "x": 101.5, "y": 202.5}
 
     monkeypatch.setattr(browser, "evaluate", evaluate)
 
     assert await browser._select_project_from_sidebar(
         page,
         "AUDiaGentic",
-        expected_project_id="g-p-69cc8c4cc7648191a009f358113d8dd2",
+        expected_project_id="g-p-000000000000000005ef8b326bf7cec8",
         timeout=2,
-    ) == {"clicked": True, "projectId": "g-p-69cc8c4cc7648191a009f358113d8dd2"}
+    ) == {"clicked": True, "projectId": "g-p-000000000000000005ef8b326bf7cec8"}
     assert inputs == [{
         "name": "AUDiaGentic",
-        "expectedProjectId": "g-p-69cc8c4cc7648191a009f358113d8dd2",
+        "expectedProjectId": "g-p-000000000000000005ef8b326bf7cec8",
     }]
     assert calls == [
         ("keep_page_active", {"pageHandle": "page-1"}),
@@ -629,7 +629,7 @@ async def test_new_session_selects_exact_project_from_sidebar(monkeypatch) -> No
     browser = GptAutoCdpBrowserController(_NoopBridge())
     anchor = CdpPageRef("anchor", "anchor-target", 7, "http://127.0.0.1:8765/dashboard", "")
     page = CdpPageRef("page-1", "target-1", 7, "about:blank", "")
-    project_id = "g-p-6a7bbf85d06c8191835b0d64958b4d7a"
+    project_id = "g-p-0000000000000000603e9bb65863874e"
     # The current ChatGPT sidebar New Chat action can land directly in a
     # project-scoped conversation rather than the project landing route.
     selected_url = f"https://chatgpt.com/g/{project_id}-bigcherry/c/new-chat"
@@ -708,7 +708,7 @@ async def test_new_session_selects_exact_project_from_sidebar(monkeypatch) -> No
 async def test_new_session_uses_direct_projects_fallback_when_sidebar_has_no_project(monkeypatch) -> None:
     browser = GptAutoCdpBrowserController(_NoopBridge())
     page = CdpPageRef("page-1", "target-1", 7, "about:blank", "")
-    project_id = "g-p-6a7bbf85d06c8191835b0d64958b4d7a"
+    project_id = "g-p-0000000000000000603e9bb65863874e"
     selected_url = f"https://chatgpt.com/g/{project_id}-bigcherry/project"
     calls: list[tuple[str, object]] = []
 
@@ -781,7 +781,7 @@ async def test_new_session_maps_composer_timeout_to_project_readiness(monkeypatc
 
     browser = GptAutoCdpBrowserController(_NoopBridge())
     page = CdpPageRef("page-1", "target-1", 7, "about:blank", "")
-    project_id = "g-p-6a7bbf85d06c8191835b0d64958b4d7a"
+    project_id = "g-p-0000000000000000603e9bb65863874e"
     selected_url = f"https://chatgpt.com/g/{project_id}-bigcherry/project"
     selected_page = CdpPageRef("selected", "target-2", 7, selected_url, "")
 
@@ -957,7 +957,7 @@ async def test_new_session_rejects_wrong_projects_fallback_target_without_config
 async def test_new_session_adopts_ui_opened_target_and_closes_projects_tab(monkeypatch) -> None:
     browser = GptAutoCdpBrowserController(_NoopBridge())
     projects_page = CdpPageRef("projects", "projects-target", 7, "about:blank", "")
-    project_id = "g-p-6a7bbf85d06c8191835b0d64958b4d7a"
+    project_id = "g-p-0000000000000000603e9bb65863874e"
     opened_page = CdpPageRef(
         "chat", "chat-target", 7,
         f"https://chatgpt.com/g/{project_id}-bigcherry/project", "BigCherry",

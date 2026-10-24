@@ -19,7 +19,7 @@ fi
 
 mkdir -p "$RUNTIME_DIR/sessions" "$RUNTIME_DIR/logs" "$RUNTIME_DIR/config" "$RUNTIME_DIR/state" "$RUNTIME_DIR/data"
 
-export OPENAI_HOST="${OPENAI_HOST:-http://10.10.200.52:13305/v1}"
+export OPENAI_HOST="${OPENAI_HOST:-http://192.0.2.128:13305/v1}"
 export OPENAI_API_KEY="${OPENAI_API_KEY:-dummy}"
 export GOOSE_PROVIDER="${GOOSE_PROVIDER:-openai}"
 export GOOSE_MODEL="${GOOSE_MODEL:-qwen3.5-2b}"

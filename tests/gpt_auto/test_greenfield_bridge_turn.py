@@ -2927,8 +2927,8 @@ def test_scope_rejects_unpinned_prompt_unmounted_completion():
 
 
 def test_scope_adopts_terminal_response_after_proven_submission_virtualization():
-    old_assistant_id = "76f09062-4cd7-4179-84f2-4da57cf8ac62"
-    new_assistant_id = "3cff157d-2b9a-4140-a7bd-3d4c1440f349"
+    old_assistant_id = "00000000-0000-4000-8000-7f66df619813"
+    new_assistant_id = "00000000-0000-4000-8000-393d1aa5d8af"
     conversation_url = "https://chatgpt.com/g/g-p-project/c/conversation-1"
     baseline = replace(
         snap(
@@ -2989,8 +2989,8 @@ def test_scope_adopts_terminal_response_after_proven_submission_virtualization()
 
 def test_scope_rejects_multiple_mounted_assistant_bubbles_without_turn_anchor():
     """A fully virtualized later turn must remain fail-closed."""
-    first_id = "76f09062-4cd7-4179-84f2-4da57cf8ac62"
-    latest_id = "3cff157d-2b9a-4140-a7bd-3d4c1440f349"
+    first_id = "00000000-0000-4000-8000-7f66df619813"
+    latest_id = "00000000-0000-4000-8000-393d1aa5d8af"
     conversation_url = "https://chatgpt.com/g/g-p-project/c/conversation-1"
     baseline = replace(snap(url=conversation_url), user_count=0, assistant_count=0)
     raw = replace(
@@ -3028,7 +3028,7 @@ def test_scope_rejects_multiple_mounted_assistant_bubbles_without_turn_anchor():
 
 
 def test_scope_pins_first_terminal_assistant_after_empty_baseline_prompt_virtualization():
-    assistant_id = "76f09062-4cd7-4179-84f2-4da57cf8ac62"
+    assistant_id = "00000000-0000-4000-8000-7f66df619813"
     baseline = snap()
     raw = replace(
         snap(
@@ -3064,10 +3064,10 @@ def test_scope_pins_first_terminal_assistant_after_empty_baseline_prompt_virtual
                 snap(
                     assistants=1,
                     assistant="Answer",
-                    assistant_id="76f09062-4cd7-4179-84f2-4da57cf8ac62",
+                    assistant_id="00000000-0000-4000-8000-7f66df619813",
                     complete=True,
                 ),
-                assistant_message_ids=("76f09062-4cd7-4179-84f2-4da57cf8ac62",),
+                assistant_message_ids=("00000000-0000-4000-8000-7f66df619813",),
             ),
             id="nonempty-baseline",
         ),
@@ -3077,23 +3077,23 @@ def test_scope_pins_first_terminal_assistant_after_empty_baseline_prompt_virtual
                 snap(
                     assistants=2,
                     assistant="Newest answer",
-                    assistant_id="76f09062-4cd7-4179-84f2-4da57cf8ac62",
+                    assistant_id="00000000-0000-4000-8000-7f66df619813",
                     complete=True,
                 ),
                 assistant_message_ids=(
-                    "4e6a06b1-ff8a-4ba7-9944-4d0edfeab521",
-                    "76f09062-4cd7-4179-84f2-4da57cf8ac62",
+                    "00000000-0000-4000-8000-5bba8e55bbcb",
+                    "00000000-0000-4000-8000-7f66df619813",
                 ),
                 message_refs=(
                     ChatMessageRef(
                         "assistant",
-                        "4e6a06b1-ff8a-4ba7-9944-4d0edfeab521",
+                        "00000000-0000-4000-8000-5bba8e55bbcb",
                         "Earlier answer",
                         0,
                     ),
                     ChatMessageRef(
                         "assistant",
-                        "76f09062-4cd7-4179-84f2-4da57cf8ac62",
+                        "00000000-0000-4000-8000-7f66df619813",
                         "Newest answer",
                         1,
                     ),
@@ -3131,7 +3131,7 @@ def test_scope_rejects_ambiguous_empty_baseline_virtualized_assistant(baseline, 
 
 
 def test_scope_rejects_empty_baseline_virtualized_assistant_route_drift():
-    assistant_id = "76f09062-4cd7-4179-84f2-4da57cf8ac62"
+    assistant_id = "00000000-0000-4000-8000-7f66df619813"
     baseline = snap()
     raw = replace(
         snap(
@@ -3158,7 +3158,7 @@ def test_scope_rejects_empty_baseline_virtualized_assistant_route_drift():
 
 
 def test_scope_does_not_correlate_across_later_user_boundary():
-    assistant_id = "76f09062-4cd7-4179-84f2-4da57cf8ac62"
+    assistant_id = "00000000-0000-4000-8000-7f66df619813"
     raw = replace(
         snap(
             users=1,
@@ -3575,7 +3575,7 @@ def test_terminal_single_response_remount_accepts_completed_new_assistant_identi
         user="Request A",
         user_id="prompt-a",
         assistant="Streaming answer",
-        assistant_id="11111111-1111-4111-8111-111111111111",
+        assistant_id="00000000-0000-4000-8000-bd7662a5eeb4",
     )
     raw = replace(
         snap(
@@ -3584,20 +3584,20 @@ def test_terminal_single_response_remount_accepts_completed_new_assistant_identi
             user="Request A",
             user_id="prompt-a",
             assistant="Completed answer",
-            assistant_id="22222222-2222-4222-8222-222222222222",
+            assistant_id="00000000-0000-4000-8000-b454f82c5857",
             complete=True,
         ),
         message_refs=(
             ChatMessageRef("user", "prompt-a", "Request A", 0),
             ChatMessageRef(
                 "assistant",
-                "22222222-2222-4222-8222-222222222222",
+                "00000000-0000-4000-8000-b454f82c5857",
                 "Completed answer",
                 1,
             ),
         ),
         latest_user_id="prompt-a",
-        terminal_witness_assistant_id="22222222-2222-4222-8222-222222222222",
+        terminal_witness_assistant_id="00000000-0000-4000-8000-b454f82c5857",
     )
 
     response_ref = _terminal_single_response_remount(
@@ -3608,7 +3608,7 @@ def test_terminal_single_response_remount_accepts_completed_new_assistant_identi
     )
 
     assert response_ref is not None
-    assert response_ref.message_id == "22222222-2222-4222-8222-222222222222"
+    assert response_ref.message_id == "00000000-0000-4000-8000-b454f82c5857"
 
 
 def test_response_scope_rebinds_real_prompt_id_and_reused_fallback_assistant_slot():
@@ -3872,7 +3872,7 @@ async def test_submission_proof_finder_fallback_receives_raw_prompt_text():
 async def test_completed_response_rescues_submission_proof_after_dom_mismatch():
     """A completed answer must not be discarded when proof catches up late.
 
-    The real BigCherry incident (req_e8abb53596d34f6f) had a fresh completed
+    The real BigCherry incident (req_example_056fa3d2ee05ec85) had a fresh completed
     assistant response, but DOM whitespace/presentation differences prevented
     the user prompt fingerprint from matching before the proof lease expired.
     The final identity pass should accept the fresh matching user message and
@@ -3982,8 +3982,8 @@ async def test_full_turn_correlates_first_assistant_after_prompt_virtualizes_pos
     chat = _Chat()
     landing = snap(url="https://chatgpt.com/g/g-p-project/project")
     conversation_url = "https://chatgpt.com/g/g-p-project/c/conversation-fresh"
-    prompt_id = "8c813b3d-f6b9-4f04-91a5-7d827ad7c599"
-    assistant_id = "76f09062-4cd7-4179-84f2-4da57cf8ac62"
+    prompt_id = "00000000-0000-4000-8000-488c19206fbd"
+    assistant_id = "00000000-0000-4000-8000-7f66df619813"
     proof = replace(
         snap(
             users=1,
@@ -4054,8 +4054,8 @@ async def test_post_submission_identity_pins_conversation_when_proof_path_did_no
     chat = _Chat()
     landing = snap(url="https://chatgpt.com/g/g-p-project/project")
     conversation_url = "https://chatgpt.com/g/g-p-project/c/conversation-unpinned"
-    prompt_id = "8c813b3d-f6b9-4f04-91a5-7d827ad7c599"
-    assistant_id = "76f09062-4cd7-4179-84f2-4da57cf8ac62"
+    prompt_id = "00000000-0000-4000-8000-488c19206fbd"
+    assistant_id = "00000000-0000-4000-8000-7f66df619813"
     proof = replace(
         snap(
             users=1,
@@ -4116,7 +4116,7 @@ async def test_post_submission_identity_rejects_conflicting_existing_conversatio
     proof = snap(
         users=1,
         user="Review AU01",
-        user_id="8c813b3d-f6b9-4f04-91a5-7d827ad7c599",
+        user_id="00000000-0000-4000-8000-488c19206fbd",
         url="https://chatgpt.com/g/g-p-project/c/conversation-proven",
     )
     chat._snapshots = iter([landing])
@@ -4160,8 +4160,8 @@ async def test_full_turn_diagnostics_expose_worker_dom_change_after_refresh(capl
     chat.config.turn.response_refresh_final_grace_seconds = 0
     landing = snap(url="https://chatgpt.com/g/g-p-project/project")
     conversation_url = "https://chatgpt.com/g/g-p-project/c/conversation-1"
-    prompt_id = "8c813b3d-f6b9-4f04-91a5-7d827ad7c599"
-    assistant_id = "76f09062-4cd7-4179-84f2-4da57cf8ac62"
+    prompt_id = "00000000-0000-4000-8000-488c19206fbd"
+    assistant_id = "00000000-0000-4000-8000-7f66df619813"
     proof = replace(
         snap(
             users=1,
@@ -4281,8 +4281,8 @@ async def test_full_turn_diagnostics_expose_worker_dom_change_after_refresh(capl
 async def test_response_diagnostics_expose_empty_baseline_correlation_rejection(caplog):
     chat = _Chat()
     conversation_url = "https://chatgpt.com/g/g-p-project/c/conversation-1"
-    prompt_id = "8c813b3d-f6b9-4f04-91a5-7d827ad7c599"
-    assistant_id = "76f09062-4cd7-4179-84f2-4da57cf8ac62"
+    prompt_id = "00000000-0000-4000-8000-488c19206fbd"
+    assistant_id = "00000000-0000-4000-8000-7f66df619813"
     baseline = snap(url=conversation_url)
     proof = replace(
         snap(

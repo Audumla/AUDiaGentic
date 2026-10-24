@@ -28,7 +28,7 @@ def test_json_roundtrip_remote(tmp_path):
     cfg_path = tmp_path / "test.mcp.json"
     entry = McpServerEntry(
         name="hindsight",
-        url="http://10.10.100.10:8888/mcp",
+        url="http://192.0.2.123:8888/mcp",
         headers={"Authorization": "Bearer secret"},
         transport="http",
     )
@@ -37,7 +37,7 @@ def test_json_roundtrip_remote(tmp_path):
     read_entries = read_mcp_json(cfg_path)
     read_entry = read_entries["hindsight"]
     assert read_entry.is_remote is True
-    assert read_entry.url == "http://10.10.100.10:8888/mcp"
+    assert read_entry.url == "http://192.0.2.123:8888/mcp"
     assert read_entry.headers["Authorization"] == "Bearer secret"
     assert read_entry.transport == "http"
 

@@ -28,21 +28,21 @@
 
 ### Stage-2 Implementation (Gateway Agents - In Progress)
 
-#### Request: req_8c8c57fa9d9649e5
+#### Request: req_example_4a8e07b8414af221
 - **Task**: AS19 Stage-2 - Observer Ingress + Descriptor Types
 - **Agent Profile**: mid-coder
 - **Status**: RUNNING
 - **Expected Completion**: ~11:15
 - **Review File**: [To be created after completion]
 
-#### Request: req_b73ab979c1d1451f
+#### Request: req_example_45ac7315ea5cfbd2
 - **Task**: AS30 Stage-2 - Binding Persistence + Index Management
 - **Agent Profile**: mid-coder
 - **Status**: QUEUED
 - **Expected Completion**: ~11:15
 - **Review File**: [To be created after completion]
 
-#### Request: req_f4b75dc674824810
+#### Request: req_example_b9e29cfe37fb474a
 - **Task**: AS31 Stage-1 - Output Event Contracts
 - **Agent Profile**: mid-coder
 - **Status**: QUEUED
@@ -51,21 +51,21 @@
 
 ### Stage-3 Implementation (Gateway Agents - Queued)
 
-#### Request: req_7808cbf6a01142d2
+#### Request: req_example_24442554fb8b9c68
 - **Task**: AS19 Stage-3 - Full Integration + Tests
 - **Agent Profile**: mid-coder
 - **Status**: QUEUED (auto-execute after Stage-2)
 - **Expected Completion**: ~11:45
 - **Review File**: [To be created after completion]
 
-#### Request: req_ac44bc603f144dc9
+#### Request: req_example_2974b425f58a44dd
 - **Task**: AS30 Stage-3 - Race Protection + Recovery Tests
 - **Agent Profile**: mid-coder
 - **Status**: QUEUED (auto-execute after Stage-2)
 - **Expected Completion**: ~11:45
 - **Review File**: [To be created after completion]
 
-#### Request: req_861c500c69c543ed
+#### Request: req_example_d4348b729b9d2c02
 - **Task**: AS31 Stage-2 - Output Relay + Storage Design
 - **Agent Profile**: mid-coder
 - **Status**: QUEUED (auto-execute after Stage-2)
@@ -74,7 +74,7 @@
 
 ### Validation & Review (Queued)
 
-#### Request: req_d583fa38d9dd4cf8
+#### Request: req_example_7ca72268c10daf52
 - **Task**: Code Review Validator - Architecture & Test Compliance
 - **Agent Profile**: mid-coder
 - **Status**: QUEUED (auto-execute after Stage-3)
@@ -82,7 +82,7 @@
 - **Review File**: code_review_validation.md
 - **Purpose**: Validate all Stage-2/3 code before merge
 
-#### Request: req_1c186c94d04a40a7
+#### Request: req_example_962aa54bef238e25
 - **Task**: Docker Integration Tests - Consumer Pipeline End-to-End
 - **Agent Profile**: mid-coder
 - **Status**: QUEUED (auto-execute after Stage-3)
@@ -96,14 +96,14 @@
 |-----------|------|--------|-------|--------|-----------|
 | AS19 S1 | Foundation contracts | Complete | A+ | None | PASS |
 | AS30 S1 | Foundation contracts | Complete | A+ | None | PASS |
-| req_8c8c57fa9d9649e5 | AS19 Stage-2 | Running | [Pending] | [TBD] | [TBD] |
-| req_b73ab979c1d1451f | AS30 Stage-2 | Queued | [Pending] | [TBD] | [TBD] |
-| req_f4b75dc674824810 | AS31 Stage-1 | Queued | [Pending] | [TBD] | [TBD] |
-| req_7808cbf6a01142d2 | AS19 Stage-3 | Queued | [Pending] | [TBD] | [TBD] |
-| req_ac44bc603f144dc9 | AS30 Stage-3 | Queued | [Pending] | [TBD] | [TBD] |
-| req_861c500c69c543ed | AS31 Stage-2 | Queued | [Pending] | [TBD] | [TBD] |
-| req_d583fa38d9dd4cf8 | Code Review | Queued | [Pending] | [TBD] | [TBD] |
-| req_1c186c94d04a40a7 | Docker Tests | Queued | [Pending] | [TBD] | [TBD] |
+| req_example_4a8e07b8414af221 | AS19 Stage-2 | Running | [Pending] | [TBD] | [TBD] |
+| req_example_45ac7315ea5cfbd2 | AS30 Stage-2 | Queued | [Pending] | [TBD] | [TBD] |
+| req_example_b9e29cfe37fb474a | AS31 Stage-1 | Queued | [Pending] | [TBD] | [TBD] |
+| req_example_24442554fb8b9c68 | AS19 Stage-3 | Queued | [Pending] | [TBD] | [TBD] |
+| req_example_2974b425f58a44dd | AS30 Stage-3 | Queued | [Pending] | [TBD] | [TBD] |
+| req_example_d4348b729b9d2c02 | AS31 Stage-2 | Queued | [Pending] | [TBD] | [TBD] |
+| req_example_7ca72268c10daf52 | Code Review | Queued | [Pending] | [TBD] | [TBD] |
+| req_example_962aa54bef238e25 | Docker Tests | Queued | [Pending] | [TBD] | [TBD] |
 
 ## Quality Metrics
 

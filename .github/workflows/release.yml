@@ -25,6 +25,7 @@ jobs:
       tag_name: ${{ steps.rp.outputs.tag_name || inputs.release_id }}
       release_pr: ${{ steps.release-pr.outputs.number }}
       release_head: ${{ steps.release-pr.outputs.sha }}
+      release_base: ${{ steps.release-pr.outputs.base }}
     steps:
       - uses: googleapis/release-please-action@v5
         id: rp
@@ -59,6 +60,7 @@ jobs:
             }
             core.setOutput('number', String(pr.number));
             core.setOutput('sha', pr.head.sha);
+            core.setOutput('base', pr.base.sha);
 
   release-pr-tests:
     needs: release-please
@@ -70,12 +72,13 @@ jobs:
       contents: read
 
   merge-release-pr:
-    needs: [release-please, release-pr-tests]
+    needs: [release-please, release-pr-tests, release-pr-privacy]
     runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: write
       actions: write
+      statuses: write
     steps:
       - name: Merge the validated release head and dispatch publication
         uses: actions/github-script@v8
@@ -97,12 +100,29 @@ jobs:
             }
             if (!pr.merged) {
               if (pr.state !== 'open') throw new Error('Release PR closed without merge');
+              // The reusable privacy gate validated this exact SHA; publish its
+              // result on the bot PR, whose GITHUB_TOKEN push creates no PR run.
+              await github.rest.repos.createCommitStatus({owner, repo, sha, state: 'success', context: 'privacy',
+                description: 'Exact release head passed the required privacy gate',
+                target_url: `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`});
               const {data: merged} = await github.rest.pulls.merge({owner, repo, pull_number, sha, merge_method: 'merge'});
               if (!merged.merged) throw new Error('Release PR was not merged');
             }
             // Retry dispatch safely if the previous attempt merged but dispatch failed.
             // GITHUB_TOKEN merges do not trigger push workflows. Dispatch explicitly.
             await github.rest.actions.createWorkflowDispatch({owner, repo, workflow_id: 'release.yml', ref: base});
+
+  release-pr-privacy:
+    needs: release-please
+    if: needs.release-please.outputs.release_pr != ''
+    uses: ./.github/workflows/privacy.yml
+    secrets: inherit
+    with:
+      source_ref: ${{ needs.release-please.outputs.release_head }}
+      base_sha: ${{ needs.release-please.outputs.release_base }}
+    permissions:
+      contents: read
+      statuses: write
 
   finalize-ledger:
     needs: release-please
@@ -113,6 +133,7 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+      statuses: write
     env:
       PYTHONPATH: src
     steps:
@@ -144,6 +165,7 @@ jobs:
       - name: Commit release artifacts
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          AUDIAGENTIC_PRIVATE_TERMS: ${{ secrets.AUDIAGENTIC_PRIVATE_TERMS }}
           RELEASE_TAG: ${{ needs.release-please.outputs.tag_name }}
           RELEASE_BASE: ${{ github.ref_name }}
         run: |
@@ -159,7 +181,13 @@ jobs:
             git switch -c "$branch"
             git commit -m "chore(release): finalize ledger for $RELEASE_TAG"
             finalized_head=$(git rev-parse HEAD)
+            privacy_base=$(git rev-parse "origin/$RELEASE_BASE")
+            python tools/privacy_guard.py --base "$privacy_base"
             git push --set-upstream origin "$branch"
+            gh api "repos/$GITHUB_REPOSITORY/statuses/$finalized_head" \
+              -f state=success -f context=privacy \
+              -f description='Exact ledger head passed the required privacy gate' \
+              -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
             pr=$(gh pr create --base "$RELEASE_BASE" --head "$branch" --title "chore(release): finalize ledger for $RELEASE_TAG" --body "Generated release ledger artifacts only. Publication waits for this normal PR merge; repository rules are not bypassed.")
             gh pr merge "$pr" --merge --match-head-commit "$finalized_head"
             merged_sha=$(gh pr view "$pr" --json mergeCommit --jq '.mergeCommit.oid // empty')

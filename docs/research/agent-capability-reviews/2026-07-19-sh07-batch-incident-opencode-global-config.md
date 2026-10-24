@@ -6,8 +6,8 @@ reviews of the same date.
 
 ## Symptom
 
-All three first-attempt requests (`req_c225d5d59b464d40`,
-`req_190fd714e829434a`, `req_0e8467f2ac694a33`) failed 4-7 seconds after ACP
+All three first-attempt requests (`req_example_20b7db74a8408fb7`,
+`req_example_91dc04fce9c39432`, `req_example_99b70a74b3e323a4`) failed 4-7 seconds after ACP
 session open, error redacted to `UNKNOWN unexpected error (see server logs)`.
 Sessions showed `close-reason: failed`, turn-count 0, but each had a
 `session.turn.started` timeline event — the launch worked, the model turn died.
@@ -36,7 +36,7 @@ Sessions showed `close-reason: failed`, turn-count 0, but each had a
   `prt_f79253f7a00180dkHdAeP7n07D`) contained the full 150-line file from the
   Jul 17 RV739 investigation. Line-number prefixes stripped, JSON validated.
 - Restored to `<user-home>/.config/opencode/opencode.json` (local provider at
-  a private OpenAI-compatible endpoint with the coder-quality model family, ymir,
+  a private OpenAI-compatible endpoint with the coder-quality model family, {dev-host},
   enabled_providers, hindsight plugin, agent defaults). The stub was preserved
   as `opencode.json.clobbered-20260719`.
 - All three lanes resubmitted and completed successfully.

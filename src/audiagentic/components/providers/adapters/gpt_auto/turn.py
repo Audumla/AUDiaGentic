@@ -1464,7 +1464,7 @@ class GptAutoTurn:
         # Keep the local classification variable initialized even when the
         # first post-submit snapshot fails. Without this, the exhaustion
         # path itself raised UnboundLocalError and discarded the real CDP
-        # observation failure (seen live in req_84bd92224f2a44b0).
+        # observation failure (seen live in req_example_09b4a7efefec5dd8).
         last_observation_error: BaseException | None = None
         while True:
             if self.cancel_event.is_set():

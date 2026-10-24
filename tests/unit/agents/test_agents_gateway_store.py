@@ -1228,7 +1228,7 @@ def test_sh21_rv769_int_agw_076_persists_private_worker_evidence(
     """INT-AGW-076 error with worker-diagnostic in details persists a bounded
     redacted private evidence field. The public error remains generic/redacted.
 
-    Regression for the gap where req_0764e2e390f644ca failed INT-AGW-076 yet
+    Regression for the gap where req_example_dc9d69ab5200a449 failed INT-AGW-076 yet
     its durable record/timeline held only a generic public error despite the
     initial worker diagnostics patch.
 

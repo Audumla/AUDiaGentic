@@ -639,7 +639,7 @@
 - The dashboard now explains watchdog states clearly and presents requests only within sessions; legacy sessionless history was purged.
 - Enabled the Rig Tester gateway agent against the local embedded rig and verified both Rig Tester and Pi agent requests complete successfully through the gateway.
 - The gateway dashboard now shows recent tasks and sessions by a configurable time window, while live work stays visible. Use AUDIAGENTIC_GATEWAY_DASHBOARD_RECENT_SECONDS for the gateway default or change the Recent window control in the dashboard.
-- Pi Rig Agent now runs through Brutus at 10.10.100.10 using qwen3.6-27b-0.
+- Pi Rig Agent now runs through Brutus at {dev-host} using qwen3.6-27b-0.
 - Cleaned stale agent config duplicates: agents.yaml is now the sole project authoring document, while generated provider registries remain derived runtime state.
 - Codex now has selectable Luna low/medium/high/xhigh/max ACP agents with model and effort passed explicitly; GPT-auto waits slightly longer after injection before clicking Send to reduce the typed-but-not-submitted failure.
 - Codex ACP now works through the managed gateway with selectable Luna effort levels, and GPT-auto waits briefly after prompt injection so the submit control can settle. A live gateway request completed successfully and its test session was closed.
@@ -928,7 +928,7 @@
 - Fixed BigCherry healthy-session over-blocking: a clearly failed provider turn no longer poisons the session or blocks subsequent requests, while uncertain turns remain protected.
 - Hardened seamless BigCherry recovery so clearly failed requests can reuse a healthy session without weakening protection against races or ambiguous turns.
 - Documented the remaining gateway recovery, client-isolation, tab-cleanup, response-adoption, and Claude event work so implementation can proceed in a dependency-ordered way.
-- Documented the queued-versus-running lifecycle defect reproduced by req_e0b45a76b0254f83 behind req_dbb511cb377b4823.
+- Documented the queued-versus-running lifecycle defect reproduced by req_example_75191befc161ed33 behind req_example_5354809c3ecb1c77.
 - Started the recovery design implementation by removing the packaged hard response deadline and making v3 response observation unbounded; focused gpt-auto tests pass.
 - Added the first seamless GPT-auto recovery workflow: silence/interruption refreshes the existing tab without resending, resets on real activity, and only fails after the configured recovery budget.
 - Hardened planning identity handling against traversal and wildcard lookup risks and tracked the remaining hardening work.

@@ -418,7 +418,7 @@ class TestConfidence:
 
 class TestSH07Incident:
     def test_sh07_c2_incident_shape(self):
-        """req_03fdae3e068d46ad: completed, end_turn, dropped=0, total=2790,
+        """req_example_6ddd8c05bcddf8b7: completed, end_turn, dropped=0, total=2790,
         output ending mid-progress instruction."""
         rec = {
             "state": "completed",

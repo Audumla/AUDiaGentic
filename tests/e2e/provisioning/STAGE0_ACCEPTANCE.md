@@ -11,7 +11,7 @@ Stage 0 is accepted when all of these are true:
 ## Model endpoint
 
 - The configured endpoint responds to an OpenAI-compatible chat request.
-- Default endpoint: `http://10.10.200.52:13305/v1` (llama-swap).
+- Default endpoint: `http://{dev-host}:13305/v1` (llama-swap).
 - Model name configurable with `GOOSE_MODEL` (default: `qwen3.5-2b`).
 
 ## Smoke test

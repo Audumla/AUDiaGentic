@@ -35,7 +35,7 @@ def _envelope(tmp_path: Path, **overrides) -> SubmissionEnvelope:
 
 def _identity(**overrides) -> ManifestIdentity:
     values = {
-        "project_root": "h:/projects/a",
+        "project_root": "C:/example-dev-root/a",
         "execution_profile_id": "deep-coder-opencode",
         "provider_id": "opencode",
         "model_id": "brutus/coder-quality-mid",
@@ -63,11 +63,11 @@ class TestPathCanonicalization:
             assert canonicalize_project_root(variant, windows=True).fingerprint == base.fingerprint
 
     def test_posix_form_preserves_case_and_normalizes_nfc(self) -> None:
-        assert fingerprint_form("/home/User/proj", windows=False) != fingerprint_form(
-            "/home/user/proj", windows=False
+        assert fingerprint_form("/example-root/Alice/proj", windows=False) != fingerprint_form(
+            "/example-root/alice/proj", windows=False
         )
-        composed = "/home/café"
-        decomposed = "/home/café"
+        composed = "/example-root/caf\u00e9"
+        decomposed = "/example-root/cafe\u0301"
         assert fingerprint_form(composed, windows=False) == fingerprint_form(decomposed, windows=False)
 
     def test_relative_root_rejected(self) -> None:
@@ -100,7 +100,7 @@ class TestDeterminism:
             {"component_profile": "bench"},
             {"agent_runtime_digest": "e" * 64},
             {"provider_isolation_tier": "no-isolation"},
-            {"project_root": "h:/projects/b"},
+            {"project_root": "C:/example-dev-root/b"},
         ],
     )
     def test_identity_change_changes_fingerprint(self, change: dict) -> None:

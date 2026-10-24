@@ -702,7 +702,7 @@ Total changes: 1132
 - Fixed BigCherry healthy-session over-blocking: a clearly failed provider turn no longer poisons the session or blocks subsequent requests, while uncertain turns remain protected.
 - Hardened seamless BigCherry recovery so clearly failed requests can reuse a healthy session without weakening protection against races or ambiguous turns.
 - Documented the remaining gateway recovery, client-isolation, tab-cleanup, response-adoption, and Claude event work so implementation can proceed in a dependency-ordered way.
-- Documented the queued-versus-running lifecycle defect reproduced by req_e0b45a76b0254f83 behind req_dbb511cb377b4823.
+- Documented the queued-versus-running lifecycle defect reproduced by req_example_75191befc161ed33 behind req_example_5354809c3ecb1c77.
 - Started the recovery design implementation by removing the packaged hard response deadline and making v3 response observation unbounded; focused gpt-auto tests pass.
 - Added the first seamless GPT-auto recovery workflow: silence/interruption refreshes the existing tab without resending, resets on real activity, and only fails after the configured recovery budget.
 - Hardened planning identity handling against traversal and wildcard lookup risks and tracked the remaining hardening work.

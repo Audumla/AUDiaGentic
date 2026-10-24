@@ -30,7 +30,7 @@ async def test_submitted_load_error_retries_same_conversation_before_completion(
         assistants=1,
         user="Review AU01",
         assistant="done",
-        assistant_id="12345678-1234-4234-8234-1234567890ab",
+        assistant_id="00000000-0000-4000-8000-9df94d3ec267",
         complete=True,
     )
     chat._snapshots = iter([load_error, load_error, answer, answer, answer])

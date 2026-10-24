@@ -135,9 +135,9 @@ class TestRenderPromptTemplate:
 
     def test_hyphenated_key(self) -> None:
         result = render_prompt_template(
-            "{project-root}", {"project-root": "/home/user/project"}
+            "{project-root}", {"project-root": "/example-home/project"}
         )
-        assert "/home/user/project" in result
+        assert "/example-home/project" in result
 
 
 class TestPathSafetyIntegration:

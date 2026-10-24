@@ -145,7 +145,7 @@ def test_session_transport_uses_provider_project_name_for_pinned_profile(
     config = valid_config()
     config["project-name"] = "gpt-t2"
     config["project-url"] = (
-        "https://chatgpt.com/g/g-p-6a897f6df91081919747556a86ea4d82/project"
+        "https://chatgpt.com/g/g-p-00000000000000009a68838cfbc78e31/project"
     )
 
     session_transport.build_session_transport(

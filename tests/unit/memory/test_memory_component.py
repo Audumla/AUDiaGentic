@@ -161,10 +161,10 @@ class TestConfigValidation:
         from audiagentic.components.memory.memory_api import memory_set_config
 
         result = memory_set_config(project_root, "hindsight", {
-            "host": "10.10.100.10",
+            "host": "192.0.2.123",
         })
         assert result["implementation"] == "hindsight"
-        assert result["config"]["host"] == "10.10.100.10"
+        assert result["config"]["host"] == "192.0.2.123"
         assert "host" in result["updated_keys"]
 
 
@@ -210,7 +210,7 @@ class TestMemoryStatus:
         )
 
         memory_set_config(project_root, "hindsight", {
-            "host": "10.10.100.10",
+            "host": "192.0.2.123",
         })
         result = memory_status(project_root).to_dict()
         assert result["configured"] is True
@@ -240,7 +240,7 @@ class TestBoundaryExports:
         from audiagentic.components.memory.memory_api import memory_set_config
 
         result = memory_set_config(project_root, "hindsight", {
-            "host": "10.10.100.10",
+            "host": "192.0.2.123",
         })
         assert result["needs_provider_recipe_refresh"] is True
 
@@ -252,7 +252,7 @@ class TestIdempotentApply:
         """Setting the same config twice yields no extra drift."""
         from audiagentic.components.memory.memory_api import memory_set_config
 
-        updates = {"host": "10.10.100.10"}
+        updates = {"host": "192.0.2.123"}
         result1 = memory_set_config(project_root, "hindsight", updates)
         result2 = memory_set_config(project_root, "hindsight", updates)
 
@@ -266,11 +266,11 @@ class TestBackendUrlComposition:
         from audiagentic.components.memory.hindsight.export import build_hindsight_backend
         from audiagentic.components.memory.memory_api import memory_set_config
 
-        memory_set_config(project_root, "hindsight", {"host": "10.10.100.10"})
+        memory_set_config(project_root, "hindsight", {"host": "192.0.2.123"})
         backend = build_hindsight_backend(project_root)
         assert backend is not None
-        assert backend.base_url == "http://10.10.100.10:8888"
-        assert backend.mcp_url == "http://10.10.100.10:8888/mcp"
+        assert backend.base_url == "http://192.0.2.123:8888"
+        assert backend.mcp_url == "http://192.0.2.123:8888/mcp"
 
     def test_custom_port_and_scheme_override_defaults(self, project_root: Path) -> None:
         from audiagentic.components.memory.hindsight.export import build_hindsight_backend
@@ -293,11 +293,11 @@ class TestBackendUrlComposition:
         # Persist a legacy option directly (schema no longer advertises base-url).
         set_implementation_state(
             project_root, "memory", "hindsight",
-            ImplementationState(enabled=True, options={"base-url": "http://10.10.100.10:8888"}),
+            ImplementationState(enabled=True, options={"base-url": "http://192.0.2.123:8888"}),
         )
         backend = build_hindsight_backend(project_root)
         assert backend is not None
-        assert backend.base_url == "http://10.10.100.10:8888"
+        assert backend.base_url == "http://192.0.2.123:8888"
 
     def test_no_host_and_no_base_url_yields_no_backend(self, project_root: Path) -> None:
         from audiagentic.components.memory.hindsight.export import build_hindsight_backend

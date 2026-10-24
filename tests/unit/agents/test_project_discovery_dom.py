@@ -10,8 +10,8 @@ from audiagentic.components.providers.adapters.gpt_auto.gpt_auto_cdp import (
 )
 
 
-_PROJECT_ID = "g-p-69cc8c4cc7648191a009f358113d8dd2"
-_OTHER_PROJECT_ID = "g-p-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+_PROJECT_ID = "g-p-000000000000000005ef8b326bf7cec8"
+_OTHER_PROJECT_ID = "g-p-00000000000000003ba3f5f43b926026"
 
 
 def _markup(sidebar_ids: list[str]) -> str:

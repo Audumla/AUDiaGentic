@@ -323,9 +323,9 @@ class TestCodexTomlFormat:
         path = tmp_path / ".codex" / "config.toml"
         entry = McpServerEntry(
             name="srv",
-            command=r"C:\Users\mgs\AppData\Local\python.exe",
+            command=r"C:\example-home\AppData\Local\python.exe",
             args=("-m", "mod"),
-            env={"AUDIAGENTIC_REPO_ROOT": r"H:\development\projects\AUDia\AUDiaGentic"},
+            env={"AUDIAGENTIC_REPO_ROOT": r"C:\example-dev-root\audiagentic"},
         )
 
         write_codex_toml(path, {"srv": entry})
