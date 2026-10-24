@@ -121,6 +121,11 @@ def test_real_acp_agent_session_transport_resumes_after_real_process_death(
 
     install_result = install_provider_cli("pi", timeout=900, project_root=tmp_path)
     assert_install_result_ok("pi", install_result)
+    from tests.helpers.pi_smoke import restrict_smoke_pi
+
+    # This proves persistence/replay, not a coding-agent tool loop. Keep the
+    # real CLI/model/bridge, with the same native echo policy as other Pi smokes.
+    restrict_smoke_pi(tmp_path, monkeypatch)
 
     harness_runtime = global_harness_runtime()
     provision_embedded_rig(harness_runtime, tmp_path)
@@ -162,11 +167,20 @@ def test_real_acp_agent_session_transport_resumes_after_real_process_death(
             return acp_launch
 
         async def _run() -> tuple[bool, int, str]:
+            import time
+
+            started = time.monotonic()
+
+            def phase(name: str) -> None:
+                print(f"pi-resume phase={name} elapsed={time.monotonic() - started:.2f}s", flush=True)
+
             # ── Transport #1: real session/new + one real turn ──────────
+            phase("first-open-start")
             transport_1 = AcpAgentSessionTransport(
                 _build_launch(), cwd=project_root, ag_session_id="ag-pi-acp-resume"
             )
             open_result = await transport_1.open()
+            phase("first-open-complete")
             provider_session_ref = open_result.provider_session_ref.value
 
             events_1: list = []
@@ -178,12 +192,14 @@ def test_real_acp_agent_session_transport_resumes_after_real_process_death(
                 SessionPrompt(turn_id="turn-1", body=_TURN_1_PROMPT), _sink_1
             )
             assert turn_1.stop_reason == "end_turn", turn_1
+            phase("first-turn-complete")
 
             # Genuine hard death -- SIGKILL the real child, not close()'s
             # polite SDK-unwind path. Public child_pid property only.
             child_pid = transport_1._inner.child_pid
             assert child_pid is not None
             os.kill(child_pid, signal.SIGKILL)
+            phase("first-process-killed")
             await asyncio.sleep(0.5)  # let the OS reap / SDK notice, best-effort
 
             # ── Transport #2: brand-new object AND brand-new process,
@@ -195,6 +211,7 @@ def test_real_acp_agent_session_transport_resumes_after_real_process_death(
                 resume_provider_ref=provider_session_ref,
             )
             await transport_2.open()
+            phase("resume-open-complete")
 
             supports_resume = transport_2._inner.supports_resume
             dropped = transport_2._inner.dropped_between_turns
@@ -208,6 +225,7 @@ def test_real_acp_agent_session_transport_resumes_after_real_process_death(
                 SessionPrompt(turn_id="turn-2", body=_TURN_2_PROMPT), _sink_2
             )
             resumed_turn_ok = turn_2.stop_reason == "end_turn"
+            phase("resumed-turn-complete")
 
             await transport_2.close()
             return supports_resume, dropped, ("end_turn" if resumed_turn_ok else turn_2.stop_reason)
