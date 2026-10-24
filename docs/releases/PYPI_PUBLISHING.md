@@ -22,8 +22,16 @@ No GitHub secret or `PYPI_PUBLISH` variable is required.
 ## Publishing
 
 Merge a release-producing change to `main` (or run the supported release
-workflow on a `proof-release-*` branch). Release-please creates the tag; the
-release job then builds, uploads the GitHub assets, and publishes to PyPI.
+workflow on a `proof-release-*` branch). The repository release workflow finds
+the bot-generated release PR, validates its exact head with the fast CI gate,
+and merges that same head through the normal pull-request rules. It then
+explicitly dispatches the next release run: merges made with `GITHUB_TOKEN`
+do not trigger push workflows themselves. No manual release-PR merge is needed.
+
+Release-please creates the tag after that merge. Ledger finalization, tests
+against the finalized source, distribution validation, GitHub asset upload,
+and PyPI publication follow automatically. A failed validation or changed PR
+head blocks automatic merging; repository protections are not bypassed.
 
 ## Installing and updating
 
