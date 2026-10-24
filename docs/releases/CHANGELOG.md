@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.4.3](https://github.com/Audumla/AUDiaGentic/compare/v0.4.2...v0.4.3) (2026-10-24)
+
+
+### Bug Fixes
+
+* **privacy:** keep browser defaults and CI fixtures portable ([75db1f4](https://github.com/Audumla/AUDiaGentic/commit/75db1f49e3df64776b38a8ad4d99e24a5c4bc9aa))
+* **privacy:** redact private metadata and enforce clean Git content ([d35d1e0](https://github.com/Audumla/AUDiaGentic/commit/d35d1e0ebda525962292f1211e36e567845cca01))
+* **privacy:** redact private metadata and require clean Git content ([691696c](https://github.com/Audumla/AUDiaGentic/commit/691696cb2bfabf7b58a5ddfc703d506f217cbbea))
+
 ## [0.4.2](https://github.com/Audumla/AUDiaGentic/compare/v0.4.1...v0.4.2) (2026-10-24)
 
 
