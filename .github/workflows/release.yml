@@ -125,6 +125,7 @@ jobs:
         with:
           name: release-distribution-proof
           path: .ci-results/artifact-provenance.json
+          include-hidden-files: true
           retention-days: 30
 
       - name: Upload to GitHub Release

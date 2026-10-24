@@ -40,4 +40,5 @@ jobs:
         with:
           name: contract-evidence
           path: .ci-results
+          include-hidden-files: true
           retention-days: 7
