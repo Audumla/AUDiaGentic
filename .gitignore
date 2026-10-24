@@ -11,6 +11,9 @@
 *~
 
 # --- Agent / tool working directories ---
+/.agents/mcp_config.json
+/.qwen/settings.json
+/.qwen/settings.json.orig
 /.audiagentic/
 /.pi-subagents/
 /.claude/
@@ -48,6 +51,16 @@
 /COPILOT.md
 /GEMINI.md
 /QWEN.md
+/SYSTEM.md
+
+# Generated backups, root experiments and retired browser-debug dependencies.
+/_gp14_review_output.txt
+/test_section_parser.py
+/package.json
+/package-lock.json
+/.uv-cache*/
+/.ruff_cache/
+/tmp/
 
 # --- AUDiaGentic runtime / private state ---
 /.audiagentic/components/
