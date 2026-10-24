@@ -1,8 +1,14 @@
 name: ci-tests
 
 on:
+  # PR updates own feature-branch validation. Listening to every push as well
+  # starts a duplicate full matrix and makes the PR wait for its cancellation.
   push:
+    branches:
+      - main
+      - proof-release-*
   pull_request:
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
