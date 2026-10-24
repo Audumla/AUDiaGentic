@@ -89,3 +89,8 @@ tests/unit/runtime/Qwen3.5-0.8B-UD-Q5_K_XL.gguf
 .audiagentic/logs/**
 .pi/sessions
 .pi/sessions/**
+
+# Generated CI manifests/JUnit reports are not build inputs.
+.ci-results/
+.ci-plan/
+.ci-audit/

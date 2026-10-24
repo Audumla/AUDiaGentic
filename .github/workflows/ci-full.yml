@@ -1,0 +1,286 @@
+name: ci-full
+
+on:
+  push:
+    branches: [main, proof-release-*]
+  pull_request:
+    types: [labeled, synchronize]
+  release:
+    types: [published]
+  schedule:
+    - cron: "0 16 * * *" # 02:00/03:00 Australia/Sydney, depending on DST
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Exact commit or tag to validate (blank uses selected branch)
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-full-${{ github.event_name }}-${{ inputs.source_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
+
+jobs:
+  inventory:
+    timeout-minutes: 20
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ci-full')
+    runs-on: ubuntu-24.04
+    outputs:
+      source_sha: ${{ steps.source.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref || github.event.release.tag_name || github.sha }}
+      - uses: docker/setup-buildx-action@v3
+      - name: Build cached hermetic suite
+        uses: docker/bake-action@v6
+        with:
+          files: tests/docker/ci.hcl
+          targets: suite
+          source: .
+        env:
+          CI_CACHE_WRITE: "true"
+      - id: source
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Collect canonical full-suite inventory
+        env:
+          CI_SOURCE_SHA: ${{ steps.source.outputs.sha }}
+        run: |
+          mkdir -p .ci-results/inventory
+          docker run --rm -e CI_SOURCE_SHA -v "$PWD/.ci-results/inventory:/app/.ci-results/inventory" audiagentic-test:ci python -m tests.ci.run --tier full --lane inventory --shards 4 --results .ci-results/inventory
+      - uses: actions/upload-artifact@v4
+        with:
+          name: full-inventory
+          path: .ci-results/inventory
+          include-hidden-files: true
+          retention-days: 7
+
+  suite:
+    timeout-minutes: 30
+    needs: inventory
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        lane: [shard-0, shard-1, shard-2, shard-3, serial]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.inventory.outputs.source_sha }}
+      - uses: docker/setup-buildx-action@v3
+      - name: Build cached hermetic suite
+        uses: docker/bake-action@v6
+        with:
+          files: tests/docker/ci.hcl
+          targets: suite
+          source: .
+      - uses: actions/download-artifact@v4
+        with:
+          name: full-inventory
+          path: .ci-plan
+      - name: Run assigned modules
+        env:
+          CI_LANE: ${{ matrix.lane }}
+          CI_SOURCE_SHA: ${{ needs.inventory.outputs.source_sha }}
+        run: |
+          mkdir -p ".ci-results/$CI_LANE"
+          lane=shard
+          index=0
+          if [ "$CI_LANE" = serial ]; then lane=serial; else index="${CI_LANE#shard-}"; fi
+          docker run --rm -e CI_SOURCE_SHA -v "$PWD/.ci-plan:/ci-plan:ro" -v "$PWD/.ci-results/$CI_LANE:/app/.ci-results/$CI_LANE" audiagentic-test:ci python -m tests.ci.run --tier full --lane "$lane" --index "$index" --shards 4 --workers 2 --plan /ci-plan/plan.json --results ".ci-results/$CI_LANE"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: full-${{ matrix.lane }}
+          path: .ci-results/${{ matrix.lane }}
+          include-hidden-files: true
+          retention-days: 7
+
+  browser:
+    timeout-minutes: 15
+    needs: inventory
+    runs-on: ubuntu-24.04
+    container:
+      image: mcr.microsoft.com/playwright/python:v1.63.0-noble
+      options: --ipc=host
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.inventory.outputs.source_sha }}
+      - run: python -m pip install -c tests/ci/requirements.txt -e ".[test,acp]" "playwright==1.63.0"
+      - uses: actions/download-artifact@v4
+        with:
+          name: full-inventory
+          path: .ci-plan
+      - run: python -m tests.ci.run --tier full --lane browser --shards 4 --plan .ci-plan/plan.json --results .ci-results/browser
+        env:
+          CI_SOURCE_SHA: ${{ needs.inventory.outputs.source_sha }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: full-browser
+          path: .ci-results/browser
+          include-hidden-files: true
+          retention-days: 7
+
+  coverage-audit:
+    timeout-minutes: 5
+    needs: [inventory, suite, browser]
+    if: always() && needs.inventory.result == 'success'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.inventory.outputs.source_sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: full-*
+          path: .ci-audit
+      - run: python -m tests.ci.audit .ci-audit --sha "$CI_EXPECTED_SHA" --shards 4
+        env:
+          CI_EXPECTED_SHA: ${{ needs.inventory.outputs.source_sha }}
+
+  docker-tests:
+    timeout-minutes: 35
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ci-full')
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: packaging        # clean-room wheel/install/server checks
+            dockerfile: Dockerfile.packaging
+            tag: audia-packaging
+            base: false
+          - name: provider-cli-comprehensive
+            dockerfile: Dockerfile.provider-cli-comprehensive
+            tag: audia-provider-cli-comprehensive
+            base: true
+          - name: provider-lifecycle
+            dockerfile: Dockerfile.provider-lifecycle-e2e
+            tag: audiagentic-provider-lifecycle-e2e
+            base: true
+          - name: provider-lsp
+            dockerfile: Dockerfile.provider-lsp-e2e
+            tag: audia-provider-lsp-e2e
+            base: true
+          - name: mcp-tools
+            dockerfile: Dockerfile.mcp-tools-e2e
+            tag: audia-mcp-tools-e2e
+            base: true
+          - name: lsp-install      # slow clean-toolchain recipe (rust compile)
+            dockerfile: Dockerfile.lsp-install-test
+            tag: audiagentic-lsp-install-test
+            base: true
+          - name: gateway-crash-matrix   # SH07 real-subprocess crash/recovery
+            dockerfile: Dockerfile.gateway-crash-matrix
+            tag: audiagentic-gateway-crash-matrix
+            base: true
+          - name: gateway-opencode       # real npm-CLI-provider dispatch (dynamic discovery)
+            dockerfile: Dockerfile.gateway-opencode
+            tag: audiagentic-gateway-opencode
+            base: true
+          - name: gateway-concurrency    # real concurrent load + negative paths
+            dockerfile: Dockerfile.gateway-concurrency
+            tag: audiagentic-gateway-concurrency
+            base: true
+          - name: gateway-pi-smoke       # SH16 real Pi CLI + embedded rig gateway dispatch
+            dockerfile: Dockerfile.gateway-pi-smoke
+            tag: audiagentic-gateway-pi-smoke
+            base: true
+          - name: gateway-session-orphan # AS91 real session orphan/reaper lifecycle
+            dockerfile: Dockerfile.gateway-session-orphan
+            tag: audiagentic-gateway-session-orphan
+            base: true
+          - name: pi-rpc-tap-e2e         # AS40 real pi-acp RPC tee shim, tapped conversational turn
+            dockerfile: Dockerfile.pi-rpc-tap-e2e
+            tag: audiagentic-pi-rpc-tap-e2e
+            base: true
+          - name: pi-acp-resume-e2e      # AS49 real pi-acp session/load resume after process death
+            dockerfile: Dockerfile.pi-acp-resume-e2e
+            tag: audiagentic-pi-acp-resume-e2e
+            base: true
+          - name: acp-e2e                # MA18 step 6 clean-room [acp] extra install + protocol fixture
+            dockerfile: Dockerfile.acp-e2e
+            tag: audia-acp-e2e
+            base: false
+          - name: consumer-pipeline      # AS19/AS30/AS31 observer/session-binding/output-relay pipeline
+            dockerfile: Dockerfile.consumer-pipeline
+            tag: audiagentic-consumer-pipeline
+            base: true
+          - name: harness-user-path      # credential-free harness materialization gate
+            dockerfile: Dockerfile.harness-user-path
+            tag: audiagentic-harness-user-path
+            base: false
+          - name: provider-config-matrix-e2e   # real provider CLI managed-config capability matrix
+            dockerfile: Dockerfile.provider-config-matrix-e2e
+            tag: audiagentic-provider-config-matrix-e2e
+            base: true
+          - name: opencode-recipe-live   # opencode upgrade recipe against a real toolchain
+            dockerfile: Dockerfile.opencode-recipe-live
+            tag: audiagentic-opencode-recipe-live
+            base: true
+          - name: rig-recipe-live        # llama.cpp rig recipe against a real toolchain
+            dockerfile: Dockerfile.rig-recipe-live
+            tag: audiagentic-rig-recipe-live
+            base: true
+          - name: reconciliation-policy-e2e  # real-CLI reconciliation policy acceptance
+            dockerfile: Dockerfile.reconciliation-policy-e2e
+            tag: audiagentic-reconciliation-policy-e2e
+            base: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref || github.event.release.tag_name || github.sha }}
+      - uses: docker/setup-buildx-action@v3
+
+      # Build the shared toolchain base with GHA layer cache (only images that
+      # FROM it need this). Packaging uses a slim base and skips this.
+      - name: Build base image
+        if: ${{ matrix.base }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: tests/docker/Dockerfile.test-base
+          tags: audia-test-base:latest
+          load: true
+          cache-from: type=gha,scope=test-base
+          # The inventory build owns base-cache export; recipe lanes only read it.
+
+      - name: Build ${{ matrix.name }} image
+        run: docker build -f tests/docker/${{ matrix.dockerfile }} -t ${{ matrix.tag }} .
+
+      - name: Run ${{ matrix.name }} image
+        run: docker run --rm ${{ matrix.tag }}
+
+
+
+  failure-alert:
+    timeout-minutes: 5
+    needs: [inventory, suite, browser, coverage-audit, docker-tests]
+    if: failure() && github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Record visible full-suite failure
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          CI_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          CI_SHA: ${{ needs.inventory.outputs.source_sha || inputs.source_ref || github.sha }}
+        run: |
+          issue=$(gh issue list --state open --search '"CI full validation failed" in:title' --json number --jq '.[0].number // empty')
+          body="Full background validation failed for $CI_SHA. Evidence and failed jobs: $CI_RUN_URL. This failure is not a passing release gate."
+          if [ -n "$issue" ]; then
+            gh issue comment "$issue" --body "$body"
+          else
+            gh issue create --title "CI full validation failed" --body "$body"
+          fi

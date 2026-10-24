@@ -142,3 +142,8 @@ crash-*.txt
 
 # Windows system drive placeholder
 %SystemDrive%/
+
+# Per-run CI evidence is uploaded with bounded retention, not committed.
+.ci-results/
+.ci-plan/
+.ci-audit/
