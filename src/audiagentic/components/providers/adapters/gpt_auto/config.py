@@ -328,7 +328,12 @@ class GptAutoConfig:
                 "dedicated-window",
             },
         )
-        executable = Path(_string(browser_data, "executable"))
+        executable_value = _string(browser_data, "executable")
+        if executable_value == "auto":
+            candidates = discover_browser_candidates()
+            executable = candidates[0] if candidates else Path("auto")
+        else:
+            executable = Path(executable_value)
         port = _integer(browser_data, "remote-debugging-port")
         if not 1 <= port <= 65535:
             _invalid("browser.remote-debugging-port must be between 1 and 65535")

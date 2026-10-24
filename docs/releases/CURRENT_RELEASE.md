@@ -2,6 +2,9 @@
 
 ## Changes
 
+### code-fix
+- [chg_20261024_092732_public-browser-defaults-no-lon_4785] Public browser defaults no longer depend on a developer Windows installation, and related unit fixtures remain isolated across CI platforms.
+
 ### config
 - [chg_20261024_090623_replace-private-operational-me_9182] Replace private operational metadata with public placeholders and reject future disclosures before commits merge.
 

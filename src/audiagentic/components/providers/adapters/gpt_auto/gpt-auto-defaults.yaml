@@ -14,7 +14,7 @@
 settings:
   contract-version: v3
   browser:
-    executable: 'C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe'
+    executable: auto
     remote-debugging-port: 9222
     existing-browser-policy: fail
     shutdown-timeout-seconds: 10

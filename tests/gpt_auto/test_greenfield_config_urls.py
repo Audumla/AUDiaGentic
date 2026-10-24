@@ -283,6 +283,16 @@ def test_project_url_is_optional_for_project_name_discovery():
     assert GptAutoConfig.from_dict(value).project_url is None
 
 
+def test_automatic_browser_path_uses_platform_discovery(monkeypatch):
+    from audiagentic.components.providers.adapters.gpt_auto import config as config_module
+
+    executable = Path(sys.executable)
+    monkeypatch.setattr(config_module, 'discover_browser_candidates', lambda: [executable])
+    value = valid_config()
+    value['browser']['executable'] = 'auto'
+    assert GptAutoConfig.from_dict(value).browser.executable == executable
+
+
 def test_repository_base_gpt_auto_profile_does_not_pin_a_chatgpt_project():
     """The shared base profile must use the admitted project name.
 
