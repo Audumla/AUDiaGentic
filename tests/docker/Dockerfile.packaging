@@ -44,7 +44,6 @@ WORKDIR /app
 COPY pyproject.toml ./pyproject.toml
 # Static template root + tests + smoke script used by the three checks.
 COPY .github/workflows ./.github/workflows
-COPY AGENTS.md CLAUDE.md GEMINI.md ./
 COPY tests ./tests
 
 # Default cwd is disposable: any command omitting --project must still remain
