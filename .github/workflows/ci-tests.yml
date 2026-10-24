@@ -50,4 +50,5 @@ jobs:
         with:
           name: fast-evidence-${{ github.job }}-${{ inputs.source_ref || github.sha }}
           path: .ci-results
+          include-hidden-files: true
           retention-days: 7

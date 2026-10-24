@@ -40,6 +40,7 @@ jobs:
         with:
           files: tests/docker/ci.hcl
           targets: suite
+          source: .
         env:
           CI_CACHE_WRITE: "true"
       - id: source
@@ -54,6 +55,7 @@ jobs:
         with:
           name: full-inventory
           path: .ci-results/inventory
+          include-hidden-files: true
           retention-days: 7
 
   suite:
@@ -74,6 +76,7 @@ jobs:
         with:
           files: tests/docker/ci.hcl
           targets: suite
+          source: .
       - uses: actions/download-artifact@v4
         with:
           name: full-inventory
@@ -93,6 +96,7 @@ jobs:
         with:
           name: full-${{ matrix.lane }}
           path: .ci-results/${{ matrix.lane }}
+          include-hidden-files: true
           retention-days: 7
 
   browser:
@@ -117,6 +121,7 @@ jobs:
         with:
           name: full-browser
           path: .ci-results/browser
+          include-hidden-files: true
           retention-days: 7
 
   coverage-audit:

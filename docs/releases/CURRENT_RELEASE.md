@@ -8,6 +8,7 @@
 - [chg_20261023_023912_repair-ci-dependency-and-stale_2929] Repair CI dependency and stale integration-contract failures while preserving fail-closed gateway routing.
 - [chg_20261023_031451_prevent-bounded-journal-compac_4697] Prevent bounded journal compaction from repeatedly blocking active streaming sessions and stop duplicate CI runs consuming runner capacity.
 - [chg_20261023_233024_prevent-fast-provider-progress_9547] Prevent fast provider progress from being missed when the worker activity watcher starts late.
+- [chg_20261024_011637_prevent-snapshot-cancellation_1883] Prevent snapshot cancellation from leaving observation running and retain CI diagnostic artifacts.
 
 ### config
 - [chg_20261023_235506_avoid-duplicate-full-ci-runs-f_4865] Avoid duplicate full CI runs for feature-branch PR updates while retaining main/release and manual branch validation.
