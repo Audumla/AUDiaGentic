@@ -17,6 +17,5 @@ COPY tests ./tests
 COPY docs/examples ./docs/examples
 COPY .github/workflows ./.github/workflows
 COPY .github/prompts ./.github/prompts
-COPY AGENTS.md CLAUDE.md GEMINI.md ./
 
 CMD ["pytest", "tests/unit/provisioning/test_dynamic_agent_config.py", "tests/integration/lifecycle", "tests/e2e/cli/test_mcp_component_servers.py", "-q"]

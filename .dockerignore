@@ -6,9 +6,6 @@
 !release-please-config.json
 !README.md
 !.gitignore
-!AGENTS.md
-!CLAUDE.md
-!GEMINI.md
 !.tmp/
 !.tmp/wheels/
 !.tmp/wheels/mcp-1.27.0-py3-none-any.whl

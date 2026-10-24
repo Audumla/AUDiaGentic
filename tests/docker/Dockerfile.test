@@ -44,7 +44,6 @@ COPY docs/reference ./docs/reference
 COPY docs/planning ./docs/planning
 COPY .github/workflows ./.github/workflows
 COPY .github/prompts ./.github/prompts
-COPY AGENTS.md CLAUDE.md GEMINI.md ./
 
 # Runtime records are mutable user/process state and are excluded from the
 # build context. Tests that need the conventional location receive a clean
