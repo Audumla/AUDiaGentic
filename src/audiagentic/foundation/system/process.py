@@ -157,8 +157,9 @@ def _windows_pid_alive(pid: int) -> bool:
 class StartupLock:
     """Exclusive startup lock backed by an atomic file.
 
-    Uses ``O_CREAT|O_EXCL`` which is atomic on NTFS and POSIX.  Stale locks
-    (holder PID dead) are automatically cleared and retried.
+    Uses ``O_CREAT|O_EXCL`` with a stable OS-backed companion fence around
+    claim publication and reaping. Stale PID claims are cleared only while
+    holding that fence; the OS releases the fence on process death.
 
     Parameters
     ----------
@@ -173,10 +174,29 @@ class StartupLock:
         self._timeout = timeout
         self._fd: int | None = None
         self._thread_lock: threading.Lock | None = None
+        self._claim_fence = None
 
     def __enter__(self) -> StartupLock:
-        self._path.parent.mkdir(parents=True, exist_ok=True)
+        from .advisory_lock import AdvisoryLock
+
         deadline = time.monotonic() + self._timeout
+        # PID publication and stale-claim cleanup must themselves be exclusive.
+        # Otherwise a contender can see the freshly created but still empty
+        # PID file, unlink a live claim and enter the same critical section.
+        # Keep this OS-backed companion inode stable; never unlink it on exit.
+        self._claim_fence = AdvisoryLock(
+            self._path.with_name(self._path.name + ".guard"), timeout=self._timeout
+        )
+        self._claim_fence.__enter__()
+        try:
+            return self._enter_pid_claim(deadline)
+        except BaseException:
+            self._claim_fence.__exit__(*sys.exc_info())
+            self._claim_fence = None
+            raise
+
+    def _enter_pid_claim(self, deadline: float) -> StartupLock:
+        self._path.parent.mkdir(parents=True, exist_ok=True)
         self._thread_lock = _claim_thread_lock(self._path)
         if not self._thread_lock.acquire(timeout=max(0.0, deadline - time.monotonic())):
             # This reference never acquired the mutex. Releasing it here
@@ -236,6 +256,14 @@ class StartupLock:
                 time.sleep(0.01)
 
     def __exit__(self, *_: object) -> None:
+        try:
+            self._exit_pid_claim()
+        finally:
+            if self._claim_fence is not None:
+                self._claim_fence.__exit__(None, None, None)
+                self._claim_fence = None
+
+    def _exit_pid_claim(self) -> None:
         if self._fd is not None:
             try:
                 os.close(self._fd)
