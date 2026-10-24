@@ -40,6 +40,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pull-requests: write
     env:
       PYTHONPATH: src
     steps:
@@ -69,6 +70,10 @@ jobs:
           PY
 
       - name: Commit release artifacts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ needs.release-please.outputs.tag_name }}
+          RELEASE_BASE: ${{ github.ref_name }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -77,8 +82,19 @@ jobs:
                   docs/releases/RELEASE_NOTES.md \
                   docs/releases/VERSION_HISTORY.md \
                   docs/releases/CURRENT_RELEASE.md
-          git diff --cached --quiet || git commit -m "chore(release): finalize ledger for ${{ needs.release-please.outputs.tag_name }} [skip ci]"
-          git push
+          if ! git diff --cached --quiet; then
+            branch="release-ledger/${RELEASE_TAG}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+            git switch -c "$branch"
+            git commit -m "chore(release): finalize ledger for $RELEASE_TAG"
+            finalized_head=$(git rev-parse HEAD)
+            git push --set-upstream origin "$branch"
+            pr=$(gh pr create --base "$RELEASE_BASE" --head "$branch" --title "chore(release): finalize ledger for $RELEASE_TAG" --body "Generated release ledger artifacts only. Publication waits for this normal PR merge; repository rules are not bypassed.")
+            gh pr merge "$pr" --merge --match-head-commit "$finalized_head"
+            merged_sha=$(gh pr view "$pr" --json mergeCommit --jq '.mergeCommit.oid // empty')
+            test -n "$merged_sha"
+            git fetch origin "$RELEASE_BASE"
+            git checkout --detach "$merged_sha"
+          fi
 
       - name: Record finalized commit
         id: finalized-sha
