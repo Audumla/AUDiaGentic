@@ -6,7 +6,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
 DOCKER_DIR = ROOT / "tests" / "docker"
-CI_WORKFLOW = ROOT / ".github" / "workflows" / "ci-tests.yml"
+CI_WORKFLOW = ROOT / ".github" / "workflows" / "ci-full.yml"
 
 
 def _dockerfiles() -> list[Path]:
@@ -17,6 +17,8 @@ def test_ci_matrix_covers_all_test_dockerfiles() -> None:
     """Prevent a new Docker test image from silently never running in CI."""
     workflow = CI_WORKFLOW.read_text(encoding="utf-8")
     referenced = set(re.findall(r"dockerfile:\s*(Dockerfile\S+)", workflow))
+    bake = (DOCKER_DIR / "ci.hcl").read_text(encoding="utf-8")
+    referenced.update(re.findall(r'dockerfile\s*=\s*"tests/docker/(Dockerfile[^\"]+)"', bake))
     available = {path.name for path in _dockerfiles()}
     intentionally_unbuilt = {"Dockerfile.test-base", "Dockerfile.test.local"}
 

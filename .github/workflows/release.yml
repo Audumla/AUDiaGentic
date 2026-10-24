@@ -100,8 +100,17 @@ jobs:
         id: finalized-sha
         run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
-  build-and-publish:
+  release-tests:
     needs: [release-please, finalize-ledger]
+    if: needs.release-please.outputs.release_created == 'true'
+    uses: ./.github/workflows/ci-tests.yml
+    with:
+      source_ref: ${{ needs.finalize-ledger.outputs.finalized_sha }}
+    permissions:
+      contents: read
+
+  build-and-publish:
+    needs: [release-please, finalize-ledger, release-tests]
     if: needs.release-please.outputs.release_created == 'true'
     runs-on: ubuntu-latest
     permissions:
@@ -122,11 +131,27 @@ jobs:
       - name: Build wheel and sdist
         run: python -m build
 
+      - name: Validate the distribution bytes before publication
+        env:
+          CI_RELEASE_VERSION: ${{ needs.release-please.outputs.tag_name }}
+          CI_RELEASE_SHA: ${{ needs.finalize-ledger.outputs.finalized_sha }}
+        run: python tests/ci/package_smoke.py --dist dist --version "$CI_RELEASE_VERSION" --source-sha "$CI_RELEASE_SHA"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-distribution-proof
+          path: .ci-results/artifact-provenance.json
+          include-hidden-files: true
+          retention-days: 30
+
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ needs.release-please.outputs.tag_name }}
-          files: dist/*
+          files: |
+            dist/*.whl
+            dist/*.tar.gz
+            .ci-results/artifact-provenance.json
 
       - name: Update GitHub release notes from ledger
         env:

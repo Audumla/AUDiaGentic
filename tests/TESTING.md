@@ -578,5 +578,52 @@ gh workflow run ci-tests.yml --ref <branch>
 gh workflow run ci-contracts.yml --ref <branch>
 ```
 
-No test lane is removed by this trigger policy. Sharding, dependency/image
-caching, and release-gate optimization are tracked separately in CI04.
+### CI tiers and evidence (CI04)
+
+`ci-tests` is the fast PR/main gate: contracts, whole-plan integrity, critical
+gateway lifecycle/completion/restart tests, hermetic CDP simulations, and tests
+for changed components. It does not install browser OS dependencies or contact
+external GPT. `ci-contracts` retains independent schema and ID validation.
+
+`ci-full` retains the full hermetic suite and every dedicated Docker recipe.
+It runs on main pushes, published releases, nightly, and manual dispatch. Add
+the `ci-full` label to a PR to request full validation before merge. Full failures
+remain failed and create/comment on a tracking issue outside PR events; they
+are not converted into successful release gates.
+
+The full inventory is partitioned into four parallel module-safe shards, a
+serial lane (the entire module if any test requires serial execution), and a
+browser lane using matching Playwright package/image versions. Coverage audit
+requires the same source SHA and exactly-once execution of every collected
+test across the assigned lanes. Missing artifacts, duplicate execution, foreign
+source evidence, and all-skipped lanes fail validation.
+
+```bash
+python -m tests.ci.run --tier fast --base <immutable-base-sha> --results .ci-results/local-fast
+gh workflow run ci-full.yml --ref main -f source_ref=<commit-or-tag>
+gh run download <run-id> --pattern 'full-*' --dir .ci-audit
+python -m tests.ci.audit .ci-audit --sha <source-sha> --shards 4
+```
+
+Each invocation needs a fresh results directory. Plans, worker outcomes, JUnit,
+slow-test durations, and phase timings are uploaded for seven days. Workflow job
+timeouts bound hung CI processes without changing gateway/product timeouts.
+These CI artifacts are separate from gateway request journals.
+
+Release publication additionally validates the finalized-ledger source through
+the reusable fast gate, then installs the actual built wheel in an isolated
+environment outside the checkout. Version, CLI, gateway imports, source SHA,
+and wheel/sdist hashes are checked before publishing those same bytes. Artifact
+provenance is retained separately for 30 days, never mixed into PyPI's dist input.
+
+CI dependency snapshots are separate from the application lockfile. Refresh
+deliberately and test both fast and full lanes:
+
+```bash
+uv pip compile pyproject.toml --extra test --extra acp --universal --constraint tests/ci/browser-constraints.txt --output-file tests/ci/requirements.txt
+```
+
+The Docker Bake suite caches dependencies before copying source; one inventory
+job exports cache while shard/recipe jobs consume it. Timing targets are not a
+guarantee: compare cold and warm GitHub runs and require coverage audit before
+claiming an end-to-end speedup.
