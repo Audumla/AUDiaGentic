@@ -14,7 +14,7 @@ import yaml
 from tests.ci.audit import audit
 from tests.ci.package_smoke import distribution_hashes
 from tests.ci.policy import BROWSER_MODULES, CRITICAL, fast_paths, partition
-from tests.ci.run import changed_paths
+from tests.ci.run import changed_paths, source_sha
 
 ROOT = Path(__file__).resolve().parents[3]
 SHA = "a" * 40
@@ -174,6 +174,25 @@ def test_package_artifact_hashes_require_exact_distribution_pair(tmp_path):
 
 def load_workflow(name):
     return yaml.load((ROOT / ".github/workflows" / name).read_text(), Loader=yaml.BaseLoader)
+
+
+def test_source_sha_checks_checkout_and_metadata_free_tree(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+
+    calls = []
+    def git(args, **kwargs):
+        calls.append(args)
+        return SimpleNamespace(returncode=0, stdout=SHA + "\n", stderr="")
+    monkeypatch.setattr(subprocess, "run", git)
+    assert source_sha(tmp_path, SHA) == SHA
+    assert f"safe.directory={tmp_path}" in calls[0]
+    with pytest.raises(ValueError, match="differs from expected"):
+        source_sha(tmp_path, "b" * 40)
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: SimpleNamespace(returncode=128, stdout="", stderr="dubious ownership"))
+    assert source_sha(tmp_path, SHA) == SHA
+    (tmp_path / ".git").mkdir()
+    with pytest.raises(ValueError, match="cannot verify checkout"):
+        source_sha(tmp_path, SHA)
 
 
 @pytest.mark.parametrize("collect_only,passed,expected", [(True, 0, 0), (False, 0, 1), (False, 1, 0)])

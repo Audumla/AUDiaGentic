@@ -17,6 +17,23 @@ from tests.ci.policy import BROWSER_MODULES, CRITICAL, FULL_ROOTS, HERMETIC, fas
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def source_sha(root: Path, expected: str | None = None) -> str:
+    result = subprocess.run(
+        ["git", "-c", f"safe.directory={root}", "rev-parse", "HEAD"],
+        cwd=root, capture_output=True, text=True, check=False,
+    )
+    actual = result.stdout.strip() if result.returncode == 0 else ""
+    if actual:
+        if expected and actual != expected:
+            raise ValueError(f"checkout source {actual} differs from expected {expected}")
+        return actual
+    if (root / ".git").exists():
+        raise ValueError(f"cannot verify checkout source: {result.stderr.strip()}")
+    if expected and re.fullmatch(r"[a-fA-F0-9]{40,64}", expected):
+        return expected  # Docker source tree intentionally excludes Git metadata.
+    raise ValueError("source SHA is required for a tree without Git metadata")
+
+
 def command(args: list[str], *, env: dict[str, str]) -> int:
     print("+", " ".join(args), flush=True)
     return subprocess.run(args, cwd=ROOT, env=env, check=False).returncode
@@ -59,10 +76,7 @@ def main() -> int:
     env = dict(os.environ)
     env["AUDIAGENTIC_REPO_ROOT"] = str(ROOT)
     env["AUDIAGENTIC_SERIAL_PHASE"] = "1"  # collect the complete canonical universe
-    sha = subprocess.run(
-        ["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True, check=False
-    )
-    env["CI_SOURCE_SHA"] = sha.stdout.strip() or os.environ.get("CI_SOURCE_SHA", "unknown")
+    env["CI_SOURCE_SHA"] = source_sha(ROOT, os.environ.get("CI_SOURCE_SHA"))
     roots = fast_paths(ROOT, changed_paths(args.base)) if args.tier == "fast" else list(FULL_ROOTS)
     mark = HERMETIC + (
         " and not slow and not long_running and not requires_network" if args.tier == "fast" else ""

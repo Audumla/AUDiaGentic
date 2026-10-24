@@ -25,3 +25,4 @@
 - [chg_20261023_051043_remove-a-flaky-session-reaper_4555] Remove a flaky session-reaper test race while preserving real background cleanup and exact-once assertions.
 - [chg_20261023_235149_stabilize-the-real-pi-resume-s_4570] Stabilize the real Pi resume smoke test and expose stage timings instead of an opaque fifteen-minute wait.
 - [chg_20261024_011148_allow-full-ci-test-inventory-w_6766] Allow full CI test inventory without weakening empty-execution failure checks.
+- [chg_20261024_012426_make-ci-source-provenance-chec_6124] Make CI source-provenance checks reliable inside browser containers.
