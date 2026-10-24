@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.4.1](https://github.com/Audumla/AUDiaGentic/compare/v0.4.0...v0.4.1) (2026-10-24)
+
+
+### Bug Fixes
+
+* **ci:** distinguish inventory from Docker test execution ([878bc6a](https://github.com/Audumla/AUDiaGentic/commit/878bc6a7c04d02d7f1af0b638a9143cdf889925a))
+* **ci:** preserve snapshot cancellation and diagnostic evidence ([f7aeb19](https://github.com/Audumla/AUDiaGentic/commit/f7aeb19d7e732b51a6f8893bee4ca1ac3d3629c5))
+* **ci:** verify exact checkout identity in browser containers ([de04777](https://github.com/Audumla/AUDiaGentic/commit/de0477765e66054ccaac171b3b1996755ccab044))
+* **foundation:** fence startup PID claim publication ([fe5901c](https://github.com/Audumla/AUDiaGentic/commit/fe5901cfcb9348247b2fd495567c3a7ee31cdaae))
+* **foundation:** fence startup PID claim publication ([d07988d](https://github.com/Audumla/AUDiaGentic/commit/d07988d71338734bad845f5fba8624ab38d16c6a))
+* **release:** finalize ledger through protected-branch PR ([f906627](https://github.com/Audumla/AUDiaGentic/commit/f906627ece8e98253c2c6daa4751be3f3a98f372))
+* **release:** finalize ledger through protected-branch PR ([c145a9f](https://github.com/Audumla/AUDiaGentic/commit/c145a9fbd318f66010ae87ccfdfb5ddc0f182830))
+
+
+### Performance Improvements
+
+* **ci:** fast gates and audited background full coverage ([5259def](https://github.com/Audumla/AUDiaGentic/commit/5259def0a822da157e1ba1fd9eaf55640ff109f5))
+* **ci:** separate fast gates from audited full validation ([7f82616](https://github.com/Audumla/AUDiaGentic/commit/7f826161d10139eb6c956f92abe5db1de3d1a9ac))
+
 ## [0.4.0](https://github.com/Audumla/AUDiaGentic/compare/v0.3.1...v0.4.0) (2026-10-24)
 
 
