@@ -1,0 +1,75 @@
+name: Privacy guard
+
+on:
+  # Use trusted base workflow/policy; PR contents are scanned only as data.
+  pull_request_target:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      source_ref:
+        type: string
+        default: ""
+      base_sha:
+        type: string
+        default: ""
+    secrets:
+      AUDIAGENTIC_PRIVATE_TERMS:
+        required: false
+
+permissions:
+  contents: read
+  statuses: write
+
+jobs:
+  privacy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref || github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Scan published tree and every newly introduced commit
+        env:
+          PRIVACY_BASE: ${{ inputs.base_sha || github.event.pull_request.base.sha || github.event.before }}
+          AUDIAGENTIC_PRIVATE_TERMS: ${{ secrets.AUDIAGENTIC_PRIVATE_TERMS }}
+          PRIVACY_EVENT: ${{ github.event_name }}
+        run: |
+          set -eu
+          scanner=tools/privacy_guard.py
+          # PR content is data, not executable scanner policy. Use the base
+          # scanner and binary manifest once this guard exists on the base.
+          if [ -n "$PRIVACY_BASE" ] && git cat-file -e "$PRIVACY_BASE:tools/privacy_guard.py" 2>/dev/null; then
+            mkdir -p "$RUNNER_TEMP/trusted-privacy"
+            git show "$PRIVACY_BASE:tools/privacy_guard.py" > "$RUNNER_TEMP/trusted-privacy/privacy_guard.py"
+            git show "$PRIVACY_BASE:tools/privacy_binary_allow.json" > "$RUNNER_TEMP/trusted-privacy/privacy_binary_allow.json"
+            scanner="$RUNNER_TEMP/trusted-privacy/privacy_guard.py"
+          elif [ "$PRIVACY_EVENT" = pull_request_target ]; then
+            echo 'Trusted base privacy policy is unavailable' >&2
+            exit 1
+          fi
+          case "$PRIVACY_BASE" in
+            ""|0000000000000000000000000000000000000000)
+              python "$scanner" --all
+              ;;
+            *) python "$scanner" --base "$PRIVACY_BASE" ;;
+          esac
+      - name: Publish the trusted result on the exact PR head
+        if: always() && github.event_name == 'pull_request_target'
+        uses: actions/github-script@v8
+        env:
+          PRIVACY_RESULT: ${{ job.status }}
+        with:
+          script: |
+            const {owner, repo} = context.repo;
+            await github.rest.repos.createCommitStatus({owner, repo,
+              sha: context.payload.pull_request.head.sha,
+              state: process.env.PRIVACY_RESULT === 'success' ? 'success' : 'failure',
+              context: 'privacy', description: 'Trusted base privacy policy result',
+              target_url: `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`});

@@ -41,6 +41,8 @@ jobs:
         run: |
           python -m audiagentic.foundation.contracts.validate_schemas
           python -m audiagentic.components.providers.validate_ids
+      - name: Reject private metadata in the validated source
+        run: python tools/privacy_guard.py --all
       - name: Critical gateway and changed-component gates
         env:
           CI_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
