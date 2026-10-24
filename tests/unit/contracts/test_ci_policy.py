@@ -176,6 +176,22 @@ def load_workflow(name):
     return yaml.load((ROOT / ".github/workflows" / name).read_text(), Loader=yaml.BaseLoader)
 
 
+@pytest.mark.parametrize("collect_only,passed,expected", [(True, 0, 0), (False, 0, 1), (False, 1, 0)])
+def test_docker_execution_guard_distinguishes_inventory(monkeypatch, collect_only, passed, expected):
+    from types import SimpleNamespace
+    from tests.conftest import pytest_sessionfinish
+
+    monkeypatch.setenv("AUDIAGENTIC_DOCKER_TESTS", "1")
+    reporter = SimpleNamespace(stats={"passed": [object()] * passed}, write_sep=lambda *a, **k: None)
+    config = SimpleNamespace(
+        option=SimpleNamespace(collectonly=collect_only),
+        pluginmanager=SimpleNamespace(get_plugin=lambda name: reporter),
+    )
+    session = SimpleNamespace(config=config, testscollected=1, exitstatus=0)
+    pytest_sessionfinish(session, 0)
+    assert int(session.exitstatus) == expected
+
+
 def test_release_requires_fast_finalized_source_and_installed_distribution_proof():
     jobs = load_workflow("release.yml")["jobs"]
     assert "release-tests" in jobs["build-and-publish"]["needs"]
