@@ -11,6 +11,7 @@
 
 ### config
 - [chg_20261023_235506_avoid-duplicate-full-ci-runs-f_4865] Avoid duplicate full CI runs for feature-branch PR updates while retaining main/release and manual branch validation.
+- [chg_20261024_010041_reduce-routine-ci-latency-whil_8472] Reduce routine CI latency while preserving full background coverage and adding release artifact verification.
 
 ### feature
 - [chg_20261023_040315_rotate-gateway-traces-daily-c_7921] Rotate gateway traces daily, compress closed segments and expire eligible raw traces after five days without deleting results or protected recovery evidence.
