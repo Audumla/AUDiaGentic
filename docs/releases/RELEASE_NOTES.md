@@ -1,14 +1,9 @@
 # Release Notes
 
-## v0.4.1
+## v0.4.2
 
 ### Configuration
-- Reduce routine CI latency while preserving full background coverage and adding release artifact verification.
+- Clean up generated root artifacts without disrupting local agent setup; prevent their return to Git and Docker builds.
 
-### Fixes
-- Prevent snapshot cancellation from leaving observation running and retain CI diagnostic artifacts.
-- Prevent concurrent startup-lock claims from losing gateway session updates.
-
-### Testing
-- Allow full CI test inventory without weakening empty-execution failure checks.
-- Make CI source-provenance checks reliable inside browser containers.
+### Workflow
+- Release version bumps now validate and merge automatically, then continue to build and PyPI publication without a manual release-PR merge.
