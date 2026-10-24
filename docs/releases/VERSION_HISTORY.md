@@ -1514,3 +1514,16 @@
 - Repair CI test composition for persistent GPT sessions and bound real-model Pi smoke behavior without skipping checks.
 - Remove a flaky session-reaper test race while preserving real background cleanup and exact-once assertions.
 - Stabilize the real Pi resume smoke test and expose stage timings instead of an opaque fifteen-minute wait.
+
+## v0.4.1
+
+### Configuration
+- Reduce routine CI latency while preserving full background coverage and adding release artifact verification.
+
+### Fixes
+- Prevent snapshot cancellation from leaving observation running and retain CI diagnostic artifacts.
+- Prevent concurrent startup-lock claims from losing gateway session updates.
+
+### Testing
+- Allow full CI test inventory without weakening empty-execution failure checks.
+- Make CI source-provenance checks reliable inside browser containers.
