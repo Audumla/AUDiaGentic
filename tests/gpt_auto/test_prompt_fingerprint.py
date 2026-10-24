@@ -24,7 +24,7 @@ def test_normalize_preserves_case_and_presence_of_indentation() -> None:
 
 
 def test_normalize_collapses_whitespace_runs_but_keeps_single_spaces_significant() -> None:
-    """GP43 (2026-08-17, root-caused live against req_c4c7f7b3ac03444b's
+    """GP43 (2026-08-17, root-caused live against req_example_7e4d43178596f042's
     35850-char diff-heavy prompt): ChatGPT's renderer re-encodes horizontal
     whitespace runs using a lossy mix of non-breaking-space substitution
     and outright collapsing that does not preserve run length -- a byte-
@@ -42,7 +42,7 @@ def test_normalize_treats_single_tabs_and_unicode_spaces_as_plain_spaces() -> No
     """The DOM can serialize one source tab as one NBSP/Unicode space.
 
     A two-plus-only collapse leaves that single tab intact and caused the
-    live BigCherry submission-proof false failure (req_e8abb53596d34f6f).
+    live BigCherry submission-proof false failure (req_example_056fa3d2ee05ec85).
     """
     submitted = "if ok:\n\treturn\u00a0True\n\u202f# done"
     rendered = "if ok:\n return True\n # done"
@@ -106,7 +106,7 @@ def test_fingerprint_matches_text_consistent_with_match_prompt() -> None:
 
 
 def test_real_incident_delta_gp10_resubmission_2324_vs_2306_chars() -> None:
-    """GP19/GP10 live incident (req_1250368b8f2f4477): a long multi-paragraph
+    """GP19/GP10 live incident (req_example_7060add07e854efd): a long multi-paragraph
     prompt with an 18-char delta between typed-text-length (2324) and
     expected-prompt-length (2306) never matched under the old exact-text
     comparison. Reproduce the same shape here: backtick-heavy text whose
@@ -127,7 +127,7 @@ def test_real_incident_delta_gp10_resubmission_2324_vs_2306_chars() -> None:
 
 
 def test_normalize_keeps_fenced_code_language_tag_as_visible_text() -> None:
-    """Real live gap found 2026-08-17 (req_27c9251fa0c54d73): ChatGPT's
+    """Real live gap found 2026-08-17 (req_example_9d42324ac57ef477): ChatGPT's
     renderer displays a fenced block's language tag (the "python" in
     ```python) as its own visible text line, a syntax-highlighter UI
     label -- it is not simply discarded like the rest of the fence syntax.
@@ -142,7 +142,7 @@ def test_normalize_keeps_fenced_code_language_tag_as_visible_text() -> None:
 
 
 def test_real_incident_gp43_diff_heavy_prompt_lossy_whitespace_reencoding() -> None:
-    """GP43 (2026-08-17, req_c4c7f7b3ac03444b): a 35850-char diff-heavy
+    """GP43 (2026-08-17, req_example_7e4d43178596f042): a 35850-char diff-heavy
     review prompt was reported composer-typed-text-mismatch (33866 typed
     vs 35850 expected) and, separately, submission-proof-not-observed --
     the gateway's own status stayed 'running' for ~12 minutes before
@@ -175,7 +175,7 @@ def test_real_incident_gp43_diff_heavy_prompt_lossy_whitespace_reencoding() -> N
 
 
 def test_real_incident_gp44_blank_line_padding_around_fenced_code_block() -> None:
-    """GP44 (2026-08-17, req_42f9580ebfcd45d6): a design-consultation prompt
+    """GP44 (2026-08-17, req_example_9089abc76d93151f): a design-consultation prompt
     containing one fenced code block got stuck in submission-proof
     indefinitely -- the gateway's persisted request record never advanced
     past 'running' even though ChatGPT had received and fully, correctly

@@ -56,9 +56,9 @@ class TestHyphenatedKeySyntax:
     def test_hyphenated_flat_key(self) -> None:
         result = render_template(
             "{project-root}",
-            {"project-root": "/home/user/proj"},
+            {"project-root": "/example-home/proj"},
         )
-        assert result == "/home/user/proj"
+        assert result == "/example-home/proj"
 
     def test_hyphenated_nested_segment(self) -> None:
         ctx = {

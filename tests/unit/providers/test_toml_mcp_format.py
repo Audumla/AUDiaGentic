@@ -16,7 +16,7 @@ def test_write_and_read_remote_entry(tmp_path: Path):
     entries = {
         "hindsight": McpServerEntry(
             name="hindsight",
-            url="http://10.10.100.10:8888/mcp",
+            url="http://192.0.2.123:8888/mcp",
             headers={"Authorization": "Bearer secret"},
             transport="http",
         )
@@ -26,7 +26,7 @@ def test_write_and_read_remote_entry(tmp_path: Path):
     result = read_mcp_toml(cfg)
     assert "hindsight" in result
     assert result["hindsight"].is_remote is True
-    assert result["hindsight"].url == "http://10.10.100.10:8888/mcp"
+    assert result["hindsight"].url == "http://192.0.2.123:8888/mcp"
     assert result["hindsight"].headers["Authorization"] == "Bearer secret"
 
 

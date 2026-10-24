@@ -1,4 +1,5 @@
 import asyncio
+import sys
 from dataclasses import replace
 from types import SimpleNamespace
 
@@ -111,7 +112,7 @@ def test_capture_from_exact_checkpoint_target_reproves_turn_without_page_actions
         async def create_chat_page(self):
             raise AssertionError("missing binding must never create a new page")
 
-    monkeypatch.setattr(conversation_focus, "load_provider_config", lambda _: {"providers": {"gpt-auto": {}}})
+    monkeypatch.setattr(conversation_focus, "load_provider_config", lambda _: {"providers": {"gpt-auto": {"settings": {"browser": {"executable": sys.executable}}}}})
     monkeypatch.setattr(conversation_focus, "get_runtime", lambda *_: Runtime())
     monkeypatch.setattr(conversation_focus.ChatSnapshot, "from_bridge", lambda value: value)
     result = asyncio.run(conversation_focus.capture_latest_response(
@@ -214,7 +215,7 @@ def test_focus_existing_conversation_activates_target_before_renderer_focus(monk
     monkeypatch.setattr(
         conversation_focus,
         "load_provider_config",
-        lambda project_root: {"providers": {"gpt-auto": {}}},
+        lambda project_root: {"providers": {"gpt-auto": {"settings": {"browser": {"executable": sys.executable}}}}},
     )
     monkeypatch.setattr(conversation_focus, "get_runtime", lambda project_root, config: FakeRuntime())
 
@@ -256,7 +257,7 @@ def test_focus_existing_conversation_falls_back_to_other_window(monkeypatch, tmp
     monkeypatch.setattr(
         conversation_focus,
         "load_provider_config",
-        lambda project_root: {"providers": {"gpt-auto": {}}},
+        lambda project_root: {"providers": {"gpt-auto": {"settings": {"browser": {"executable": sys.executable}}}}},
     )
     monkeypatch.setattr(conversation_focus, "get_runtime", lambda project_root, config: FakeRuntime())
 
@@ -297,7 +298,7 @@ def test_focus_existing_conversation_uses_live_gateway_session_before_url_exists
     monkeypatch.setattr(
         conversation_focus,
         "load_provider_config",
-        lambda project_root: {"providers": {"gpt-auto": {}}},
+        lambda project_root: {"providers": {"gpt-auto": {"settings": {"browser": {"executable": sys.executable}}}}},
     )
     monkeypatch.setattr(conversation_focus, "get_runtime", lambda project_root, config: FakeRuntime())
 
@@ -342,7 +343,7 @@ def test_focus_existing_conversation_opens_retained_url_when_tab_is_missing(monk
     monkeypatch.setattr(
         conversation_focus,
         "load_provider_config",
-        lambda project_root: {"providers": {"gpt-auto": {}}},
+        lambda project_root: {"providers": {"gpt-auto": {"settings": {"browser": {"executable": sys.executable}}}}},
     )
     monkeypatch.setattr(conversation_focus, "get_runtime", lambda project_root, config: FakeRuntime())
 
@@ -424,7 +425,7 @@ def test_capture_reopens_exact_conversation_and_requires_terminal_dom(monkeypatc
             calls.append(("create_chat_page", None))
             return "new-page"
 
-    monkeypatch.setattr(conversation_focus, "load_provider_config", lambda _: {"providers": {"gpt-auto": {}}})
+    monkeypatch.setattr(conversation_focus, "load_provider_config", lambda _: {"providers": {"gpt-auto": {"settings": {"browser": {"executable": sys.executable}}}}})
     monkeypatch.setattr(conversation_focus, "get_runtime", lambda *_: FakeRuntime())
     monkeypatch.setattr(conversation_focus.ChatSnapshot, "from_bridge", lambda value: value)
 
@@ -466,7 +467,7 @@ def test_capture_missing_tab_without_durable_url_never_opens_or_submits(monkeypa
         async def create_chat_page(self):
             raise AssertionError("no durable conversation URL must not create a tab")
 
-    monkeypatch.setattr(conversation_focus, "load_provider_config", lambda _: {"providers": {"gpt-auto": {}}})
+    monkeypatch.setattr(conversation_focus, "load_provider_config", lambda _: {"providers": {"gpt-auto": {"settings": {"browser": {"executable": sys.executable}}}}})
     monkeypatch.setattr(conversation_focus, "get_runtime", lambda *_: FakeRuntime())
 
     result = asyncio.run(
@@ -506,7 +507,7 @@ def test_passive_capture_missing_tab_never_reopens_or_navigates(monkeypatch, tmp
         async def create_chat_page(self):
             raise AssertionError("passive capture must not create a tab")
 
-    monkeypatch.setattr(conversation_focus, "load_provider_config", lambda _: {"providers": {"gpt-auto": {}}})
+    monkeypatch.setattr(conversation_focus, "load_provider_config", lambda _: {"providers": {"gpt-auto": {"settings": {"browser": {"executable": sys.executable}}}}})
     monkeypatch.setattr(conversation_focus, "get_runtime", lambda *_: FakeRuntime())
 
     result = asyncio.run(

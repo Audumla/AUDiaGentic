@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from audiagentic.components.providers.adapters import _register_standard_surfaces
 from audiagentic.components.providers.descriptors.base import Capability, ProviderDescriptor
 from audiagentic.components.providers.surfaces.base import (
@@ -21,6 +23,18 @@ from audiagentic.components.providers.surfaces.registry import (
     load_renderer_registry,
 )
 from audiagentic.foundation.registry_utils import reset_all_registries
+
+
+@pytest.fixture(autouse=True)
+def isolate_renderer_registrations(monkeypatch):
+    """Test-only renderers must not leak into other descriptor contract tests."""
+    from audiagentic.components.providers.surfaces import registry
+
+    load_renderer_registry()
+    load_contribution_renderer_registry()
+    for target in (registry._renderer_registry, registry._contribution_renderer_registry):
+        monkeypatch.setattr(target, "_items", dict(target._items))
+        monkeypatch.setattr(target, "_loaded", target._loaded)
 
 _SKILL = SkillDefinition(
     tag="jobs",

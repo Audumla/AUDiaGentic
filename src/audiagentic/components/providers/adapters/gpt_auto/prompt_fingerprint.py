@@ -7,7 +7,7 @@ syntax (fenced/inline code backticks, link brackets) from the DOM text it
 shows relative to the originally-submitted source, so exact-string
 comparison against DOM-observed text intermittently and unpredictably
 fails on long/code-heavy prompts -- confirmed live three times (a
-bigcherry incident, GP10's re-consultation req_1250368b8f2f4477, and
+bigcherry incident, GP10's re-consultation req_example_7060add07e854efd, and
 GP24/GP30's own code-dense design-consultation prompt, 2026-08-16/17).
 
 Case and non-whitespace content remain semantically significant for coding
@@ -18,7 +18,7 @@ byte-perfect formatting was retained; the assistant reads and responds to
 semantic content, not exact indentation width.
 
 RESOLVED (GP43, 2026-08-17, root-caused live against a real 35850-char
-diff-heavy prompt, req_c4c7f7b3ac03444b): ChatGPT's renderer re-encodes
+diff-heavy prompt, req_example_7e4d43178596f042): ChatGPT's renderer re-encodes
 runs of horizontal whitespace inside rendered message text using a mix of
 non-breaking-space (\xa0) substitution and outright collapsing that does
 NOT preserve the original run length 1:1 -- confirmed live: a lone leading
@@ -34,7 +34,7 @@ any run of 2+ horizontal-whitespace characters (after normalizing \xa0 to
 a plain space) to one canonical space closes the gap exactly -- verified
 against that same 35850-char capture to produce a byte-for-byte match.
 
-RESOLVED (GP44, 2026-08-17, root-caused live against req_42f9580ebfcd45d6 -- a
+RESOLVED (GP44, 2026-08-17, root-caused live against req_example_9089abc76d93151f -- a
 design-consultation prompt containing one fenced code block): a request
 was observed stuck indefinitely in submission-proof (never reaching
 completion detection) despite ChatGPT having received and fully answered

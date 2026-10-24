@@ -1429,7 +1429,7 @@ async def test_reconcile_refreshes_stale_cdp_page_once_before_failure():
 async def test_reconcile_materializes_virtualized_completed_response_before_blocking_successor():
     """A completed background turn must not poison its persistent session.
 
-    Live incident req_634f7c5c595c496f retained a fresh assistant id and
+    Live incident req_example_ed03bb215495d05f retained a fresh assistant id and
     terminal controls, but no assistant text.  The queued successor was then
     rejected as unresolved even though materializing the background tab would
     expose the completed response.
@@ -1890,8 +1890,8 @@ async def test_page_loss_after_durable_clear_becomes_page_recovery_not_turn_ambi
 
 @pytest.mark.asyncio
 async def test_same_target_navigation_before_clear_keeps_unresolved_fence():
-    conversation_1 = "6a9d1f7a-199c-83ec-93a8-e1deafd5c1c7"
-    conversation_2 = "6a9d1f7a-199c-83ec-93a8-e1deafd5c1c8"
+    conversation_1 = "00000000-0000-4000-8000-ad40ca019414"
+    conversation_2 = "00000000-0000-4000-8000-67835a5d984b"
     url_1 = f"https://chatgpt.com/g/g-p-project/c/{conversation_1}"
     url_2 = f"https://chatgpt.com/g/g-p-project/c/{conversation_2}"
     chat = _chat(response_stability_seconds=0.001)
@@ -1927,8 +1927,8 @@ async def test_same_target_navigation_before_clear_keeps_unresolved_fence():
 
 @pytest.mark.asyncio
 async def test_same_target_navigation_after_clear_blocks_ready_but_does_not_rearm_old_turn():
-    conversation_1 = "6a9d1f7a-199c-83ec-93a8-e1deafd5c1c7"
-    conversation_2 = "6a9d1f7a-199c-83ec-93a8-e1deafd5c1c8"
+    conversation_1 = "00000000-0000-4000-8000-ad40ca019414"
+    conversation_2 = "00000000-0000-4000-8000-67835a5d984b"
     url_1 = f"https://chatgpt.com/g/g-p-project/c/{conversation_1}"
     url_2 = f"https://chatgpt.com/g/g-p-project/c/{conversation_2}"
     current_url = url_1

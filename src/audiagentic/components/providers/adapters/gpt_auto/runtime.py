@@ -63,7 +63,7 @@ def _snapshot_has_positive_conversation_evidence(snapshot: ChatSnapshot) -> bool
 # are redirected to DEVNULL and no file log handler is configured, so
 # logger calls are unrecoverable. Writes directly to disk instead. Remove
 # once GP31's browser-kill mechanism is found.
-_GP31_TRACE_PATH = r"C:\Users\mgs\AppData\Local\Temp\claude\h--development-projects-AUDia-AUDiaGentic\7cc783d7-5e01-4bf2-9c53-db8095b37fa2\scratchpad\gp31_trace.log"
+_GP31_TRACE_PATH = r"C:\example-home\AppData\Local\Temp\claude\h--development-projects-AUDia-AUDiaGentic\00000000-0000-4000-8000-21d26ba52ce6\scratchpad\gp31_trace.log"
 
 
 def _gp31_trace(message: str) -> None:

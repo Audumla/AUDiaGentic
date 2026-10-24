@@ -79,10 +79,10 @@ class TestRedactText:
 
 class TestRedactEnvLike:
     def test_redacts_api_key(self):
-        data = {"API_KEY": "secret123", "HOME": "/home/user"}
+        data = {"API_KEY": "secret123", "HOME": "/example-home"}
         result = redact_env_like(data)
         assert result["API_KEY"] == "[REDACTED]"
-        assert result["HOME"] == "/home/user"
+        assert result["HOME"] == "/example-home"
 
     def test_redacts_token(self):
         data = {"AUTH_TOKEN": "xyz", "PATH": "/usr/bin"}
@@ -109,7 +109,7 @@ class TestRedactEnvLike:
         assert result["USER"] == "root"
 
     def test_preserves_normal_keys(self):
-        data = {"PATH": "/usr/bin", "HOME": "/home/user", "LANG": "en_US.UTF-8"}
+        data = {"PATH": "/usr/bin", "HOME": "/example-home", "LANG": "en_US.UTF-8"}
         result = redact_env_like(data)
         assert result == data
 

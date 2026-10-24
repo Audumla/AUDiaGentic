@@ -101,7 +101,7 @@ def test_config_change_event_triggers_reconcile(tmp_path, monkeypatch):
     install_component("memory", tmp_path)
 
     # Set initial config and reconcile to create provider artifacts
-    memory_set_config(tmp_path, "hindsight", {"host": "10.0.0.1"})
+    memory_set_config(tmp_path, "hindsight", {"host": "192.0.2.243"})
     prov.reconcile_hindsight(tmp_path, ["gemini"])
 
     # Spy on the provision module's reconcile so observer lazy import sees it
@@ -128,7 +128,7 @@ def test_memory_set_config_returns_refresh_hint(tmp_path):
     """Direct API config change returns neutral refresh hint only."""
     from audiagentic.components.memory.memory_api import memory_set_config
 
-    result = memory_set_config(tmp_path, "hindsight", {"host": "10.0.0.5"})
+    result = memory_set_config(tmp_path, "hindsight", {"host": "192.0.2.242"})
     assert result["needs_provider_recipe_refresh"] is True
     # No provider-specific detail in the return
     assert "providers" not in result

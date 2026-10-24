@@ -9,9 +9,9 @@ updated plan state, and closed sessions.
 
 | Request | Profile | Plan | Slice | Result | Overall |
 | --- | --- | --- | --- | --- | --- |
-| `req_29f1b762e18a4c36` | `lite-coder-opencode` | AS11 | Research hygiene | Completed | 4/5 |
-| `req_6fcce83c451442f0` | `supp-coder-opencode` | AS16 | Snapshot/race tests | Completed | 3/5 |
-| `req_979fd124e1814376` | `deep-coder-opencode` | AS16 | Public diagnostics stack | Completed | 4/5 |
+| `req_example_69820a6f09de0ce3` | `lite-coder-opencode` | AS11 | Research hygiene | Completed | 4/5 |
+| `req_example_8d388f6cdab27e92` | `supp-coder-opencode` | AS16 | Snapshot/race tests | Completed | 3/5 |
+| `req_example_e041c7db3ce33fea` | `deep-coder-opencode` | AS16 | Public diagnostics stack | Completed | 4/5 |
 | local overseer | `codex` | AS26 | Corrective slice | Completed slice only | 4/5 |
 
 Gateway lifecycle result: all three worker requests completed, all three live
@@ -20,7 +20,7 @@ requests or live sessions.
 
 ## Review: AS11 Research Hygiene
 
-- Request: `req_29f1b762e18a4c36`
+- Request: `req_example_69820a6f09de0ce3`
 - Agent profile: `lite-coder-opencode`
 - Model: `<local-provider>/coder-quality-lite`
 - Plan item: AS11
@@ -57,7 +57,7 @@ is explicit and overseer validation is cheap.
 
 ## Review: AS16 Snapshot And Race Tests
 
-- Request: `req_6fcce83c451442f0`
+- Request: `req_example_8d388f6cdab27e92`
 - Agent profile: `supp-coder-opencode`
 - Model: `<local-provider>/coder-quality-suppliment`
 - Plan item: AS16
@@ -94,7 +94,7 @@ without asking for exact invariants and expecting controller cleanup.
 
 ## Review: AS16 Public Diagnostics Stack
 
-- Request: `req_979fd124e1814376`
+- Request: `req_example_e041c7db3ce33fea`
 - Agent profile: `deep-coder-opencode`
 - Model: `<local-provider>/coder-quality-mid`
 - Plan item: AS16
@@ -179,10 +179,10 @@ subtasks under AS26 can be delegated more safely.
 
 | Request | Profile | Plan | Slice | Result | Overall |
 | --- | --- | --- | --- | --- | --- |
-| `req_ad827a310e8d430f` | `deep-coder-opencode` | AS33 | Capability projection implementation | Completed | 4/5 |
-| `req_d420c8d9e82e4bb5` | `lite-coder-opencode` | AS33 | Diagnostics test/review | Completed | 3/5 |
-| `req_17cc8cf079704c2e` | `supp-coder-opencode` | AS33 | Static contract guards | Completed | 4/5 |
-| `req_611a248fcc774a52` | `deep-coder-opencode` reused session | AS33 | Controller repair review | Completed | 4/5 |
+| `req_example_edee53b87d787915` | `deep-coder-opencode` | AS33 | Capability projection implementation | Completed | 4/5 |
+| `req_example_7fe00d491faa7ee5` | `lite-coder-opencode` | AS33 | Diagnostics test/review | Completed | 3/5 |
+| `req_example_2bf426e1e727e4b2` | `supp-coder-opencode` | AS33 | Static contract guards | Completed | 4/5 |
+| `req_example_08f5d4de992d2ea3` | `deep-coder-opencode` reused session | AS33 | Controller repair review | Completed | 4/5 |
 
 Controller validation after review/repair:
 
@@ -191,15 +191,15 @@ Controller validation after review/repair:
 
 Harness cleanup validation:
 
-- Reusing `ses_a5023cf5bd0444b1` for `req_611a248fcc774a52` was materially faster than the cold AS33 implementation turn and preserved context well.
-- After all AS33 turns completed, controller explicitly closed `ses_c42f438741a047b0`, `ses_599cc8c701534b3f`, and `ses_a5023cf5bd0444b1`.
+- Reusing `ses_example_715ed17f8d27928a` for `req_example_08f5d4de992d2ea3` was materially faster than the cold AS33 implementation turn and preserved context well.
+- After all AS33 turns completed, controller explicitly closed `ses_example_0fc433c2e96a105c`, `ses_example_997184e959b22679`, and `ses_example_715ed17f8d27928a`.
 - Gateway overview after close reported seven completed requests, zero queued/running requests, and `active-count: 0` live sessions.
 - `agent_llm_session_list(state="active")` still reported two older non-live persisted sessions from 2026-07-17. That is not a live harness leak from this batch, but it is stale active-record hygiene to plan separately.
 - `agent_llm_session_close` returns richer protected binding details than overview/list. Do not paste those raw close results into review artifacts; the close tool output surface should get redaction review.
 
 ## Review: AS33 Capability Projection Implementation
 
-- Request: `req_ad827a310e8d430f`
+- Request: `req_example_edee53b87d787915`
 - Agent profile: `deep-coder-opencode`
 - Model: `<local-provider>/coder-quality-mid`
 - Plan item: AS33
@@ -237,7 +237,7 @@ state why capability reads must happen before schema-aware runtime/status writes
 
 ## Review: AS33 Diagnostics Test/Review
 
-- Request: `req_d420c8d9e82e4bb5`
+- Request: `req_example_7fe00d491faa7ee5`
 - Agent profile: `lite-coder-opencode`
 - Model: `<local-provider>/coder-quality-lite`
 - Plan item: AS33
@@ -268,7 +268,7 @@ another worker's edits.
 
 ## Review: AS33 Static Contract Guards
 
-- Request: `req_17cc8cf079704c2e`
+- Request: `req_example_2bf426e1e727e4b2`
 - Agent profile: `supp-coder-opencode`
 - Model: `<local-provider>/coder-quality-suppliment`
 - Plan item: AS33
@@ -298,10 +298,10 @@ long as nested/adversarial cases are spelled out.
 
 ## Review: AS33 Reused-Session Controller Repair Review
 
-- Request: `req_611a248fcc774a52`
+- Request: `req_example_08f5d4de992d2ea3`
 - Agent profile: `deep-coder-opencode`
 - Model: `<local-provider>/coder-quality-mid`
-- Session reused: `ses_a5023cf5bd0444b1`
+- Session reused: `ses_example_715ed17f8d27928a`
 - Plan item: AS33
 - Task class: review-only validation of controller repairs
 - Outcome: accepted
@@ -349,9 +349,9 @@ implementation.
 
 | Request | Profile | Plan | Slice | Result | Overall |
 | --- | --- | --- | --- | --- | --- |
-| `req_91cd09dde7504853` | `deep-coder-opencode` | AS34 | Session listing implementation | Completed | 3/5 |
-| `req_375f80a47ab84f30` | `lite-coder-opencode` | AS34 | Test-only stale session coverage | Completed | 4/5 |
-| `req_1c08f1e977a3435f` | `supp-coder-opencode` | AS34 | Review/static contract | Completed | 3/5 |
+| `req_example_c866611fddcf3f2f` | `deep-coder-opencode` | AS34 | Session listing implementation | Completed | 3/5 |
+| `req_example_5dd8d8060ad76f8e` | `lite-coder-opencode` | AS34 | Test-only stale session coverage | Completed | 4/5 |
+| `req_example_1a8359d4a20ffabf` | `supp-coder-opencode` | AS34 | Review/static contract | Completed | 3/5 |
 
 Controller validation after review/repair:
 
@@ -367,7 +367,7 @@ Harness cleanup validation:
 
 ## Review: AS34 Session Listing Implementation
 
-- Request: `req_91cd09dde7504853`
+- Request: `req_example_c866611fddcf3f2f`
 - Agent profile: `deep-coder-opencode`
 - Model: `<local-provider>/coder-quality-mid`
 - Plan item: AS34
@@ -404,7 +404,7 @@ must pass." This needs to be in the plan template for any recovery-adjacent work
 
 ## Review: AS34 Test-Only Coverage
 
-- Request: `req_375f80a47ab84f30`
+- Request: `req_example_5dd8d8060ad76f8e`
 - Agent profile: `lite-coder-opencode`
 - Model: `<local-provider>/coder-quality-lite`
 - Plan item: AS34
@@ -434,7 +434,7 @@ use store builders instead of hand-crafted records when schemas are strict.
 
 ## Review: AS34 Review/Contract Slice
 
-- Request: `req_1c08f1e977a3435f`
+- Request: `req_example_1a8359d4a20ffabf`
 - Agent profile: `supp-coder-opencode`
 - Model: `<local-provider>/coder-quality-suppliment`
 - Plan item: AS34
@@ -478,7 +478,7 @@ review note or one static test only" when another worker owns the implementation
 
 ## Review: AS35 Close-Redaction With Self-Review Prompt
 
-- Request: `req_4a8a1dd00e684e9e`
+- Request: `req_example_f7304cbc710e5f92`
 - Agent profile: `deep-coder-opencode`
 - Plan item: AS35
 - Task class: implementation with requested self-review
@@ -533,7 +533,7 @@ Prompting lessons:
 
 ## Review: Architecture/Reuse Validation Delegation
 
-- Requests: `req_35c330dab4334dac`, `req_54bd99c2ea23496a`
+- Requests: `req_example_4b939b35d80d633c`, `req_example_46ae6dc29ae60e45`
 - Agent profiles: `lite-coder-opencode`, `supp-coder-opencode`
 - Plan area: AS gateway/session architecture reuse
 - Task class: review-only architecture validation

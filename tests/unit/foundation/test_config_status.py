@@ -105,7 +105,7 @@ class TestImplementationConfigStatus:
             tmp_path,
             "memory",
             "hindsight",
-            ImplementationState(enabled=True, options={"host": "10.10.100.10"}),
+            ImplementationState(enabled=True, options={"host": "192.0.2.123"}),
         )
         status = implementation_config_status(tmp_path, "memory", "hindsight")
         assert status.enabled is True

@@ -5,7 +5,8 @@
 provider: openai
 
 # llama-swap proxy endpoint
-host: http://10.10.200.52:13305/v1
+# Configure a remote host in local settings/environment, not the public template.
+host: http://127.0.0.1:13305/v1
 api_key: dummy
 
 # Default model for agent tasks. Override with GOOSE_MODEL / LLM_MODEL env var.

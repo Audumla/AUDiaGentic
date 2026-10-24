@@ -6,7 +6,7 @@ from audiagentic.components.providers.adapters.gpt_auto.urls import (
     same_chat_identity,
 )
 
-BASE = "https://chatgpt.com/g/g-p-69cc8c4cc7648191a009f358113d8dd2"
+BASE = "https://chatgpt.com/g/g-p-000000000000000005ef8b326bf7cec8"
 
 
 @pytest.mark.parametrize('temporary', ['local-chatgpt:abc', 'local-chatgpt%3Aabc', 'LOCAL-CHATGPT%3aabc'])
@@ -24,7 +24,7 @@ def test_conversation_identity_ignores_display_slug(suffix):
 @pytest.mark.parametrize("other", [
     BASE + "/c/other",
     "https://chatgpt.com/g/g-p-00000000000000000000000000000000/c/chat",
-    "https://evil.example/g/g-p-69cc8c4cc7648191a009f358113d8dd2/c/chat",
+    "https://evil.example/g/g-p-000000000000000005ef8b326bf7cec8/c/chat",
     "https://chatgpt.com/c/chat",
     BASE.replace("https:", "http:") + "/c/chat",
 ])

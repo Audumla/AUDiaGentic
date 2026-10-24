@@ -21,7 +21,7 @@ const {script, scenario} = JSON.parse(require('fs').readFileSync(0, 'utf8'));
 const calls = [], outputs = {};
 const pr = {number:44, state:'open', user:{login:'github-actions[bot]'},
   head:{sha:'a'.repeat(40), ref:'release-please--branches--main', repo:{full_name:'Audumla/AUDiaGentic'}},
-  base:{ref:'main'}, labels:[{name:'autorelease: pending'}]};
+  base:{ref:'main',sha:'b'.repeat(40)}, labels:[{name:'autorelease: pending'}]};
 if(scenario === 'stale') pr.head.sha = 'b'.repeat(40);
 if(scenario === 'foreign') pr.head.repo.full_name = 'evil/fork';
 if(scenario === 'human') pr.user.login = 'some-user';
@@ -32,7 +32,8 @@ const github = {rest:{pulls:{
   list: async () => ({data: scenario === 'none' ? [] : scenario === 'ambiguous' ? [pr,pr] : [pr]}),
   get: async () => ({data:pr}), listFiles: ()=>{},
   merge: async args => {calls.push(['merge',args]); return {data:{merged: scenario !== 'merge-failed'}};}
-}, actions:{createWorkflowDispatch: async args => {calls.push(['dispatch',args]);}}},
+}, repos:{createCommitStatus: async args => {calls.push(['privacy-status',args]);}},
+actions:{createWorkflowDispatch: async args => {calls.push(['dispatch',args]);}}},
 paginate: async () => [{filename: scenario === 'unexpected-file' ? '.github/workflows/release.yml' : 'pyproject.toml'}]};
 const core = {setOutput:(key,value)=>{outputs[key]=value;}};
 const context = {repo:{owner:'Audumla',repo:'AUDiaGentic'},ref:'refs/heads/main'};
@@ -50,7 +51,7 @@ process.stdout.write(JSON.stringify({error,calls,outputs}));})();
 def test_generated_pr_selects_exact_head():
     result = execute("release-please")
     assert result["error"] is None
-    assert result["outputs"] == {"number": "44", "sha": "a" * 40}
+    assert result["outputs"] == {"number": "44", "sha": "a" * 40, "base": "b" * 40}
 
 
 @pytest.mark.parametrize("case", ["foreign", "human", "unexpected-file", "ambiguous"])
@@ -66,9 +67,11 @@ def test_no_release_pr_is_a_noop():
 def test_merge_is_sha_guarded_and_then_dispatches():
     result = execute("merge-release-pr")
     assert result["error"] is None
-    assert [call[0] for call in result["calls"]] == ["merge", "dispatch"]
+    assert [call[0] for call in result["calls"]] == ["privacy-status", "merge", "dispatch"]
+    assert result["calls"][0][1]["context"] == "privacy"
     assert result["calls"][0][1]["sha"] == "a" * 40
-    assert result["calls"][1][1]["workflow_id"] == "release.yml"
+    assert result["calls"][1][1]["sha"] == "a" * 40
+    assert result["calls"][2][1]["workflow_id"] == "release.yml"
 
 
 @pytest.mark.parametrize("case", ["stale", "foreign", "human", "wrong-base", "closed"])
@@ -80,7 +83,7 @@ def test_changed_pr_blocks_merge_and_dispatch(case):
 def test_failed_merge_never_dispatches():
     result = execute("merge-release-pr", "merge-failed")
     assert result["error"]
-    assert [call[0] for call in result["calls"]] == ["merge"]
+    assert [call[0] for call in result["calls"]] == ["privacy-status", "merge"]
 
 
 def test_retry_after_merge_dispatches_without_merging_again():

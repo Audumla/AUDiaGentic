@@ -71,7 +71,7 @@ def test_codex_launch_uses_shared_bridge_before_path_or_npx(monkeypatch, tmp_pat
     monkeypatch.setattr(
         codex_acp,
         "shared_codex_acp_node_launch",
-        lambda: (r"C:\Program Files\nodejs\node.exe", (r"C:\Users\shared\codex-acp\index.js",)),
+        lambda: (r"C:\Program Files\nodejs\node.exe", (r"C:\example-home\codex-acp\index.js",)),
     )
     monkeypatch.setattr(
         codex_acp.shutil,
@@ -86,7 +86,7 @@ def test_codex_launch_uses_shared_bridge_before_path_or_npx(monkeypatch, tmp_pat
     launch = codex_acp.build_acp_launch(tmp_path)
 
     assert launch.executable.endswith("node.exe")
-    assert launch.args == (r"C:\Users\shared\codex-acp\index.js",)
+    assert launch.args == (r"C:\example-home\codex-acp\index.js",)
 
 
 def test_codex_acp_recipe_is_pinned_and_shared(tmp_path, monkeypatch):

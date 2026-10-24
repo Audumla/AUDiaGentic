@@ -7,13 +7,13 @@ from audiagentic.components.memory.hindsight.export import (
 
 
 def test_build_backend_url():
-    backend = HindsightBackendConfig(base_url="http://10.10.100.10:8888")
-    assert backend.mcp_url == "http://10.10.100.10:8888/mcp"
+    backend = HindsightBackendConfig(base_url="http://192.0.2.123:8888")
+    assert backend.mcp_url == "http://192.0.2.123:8888/mcp"
 
 
 def test_build_backend_url_already_has_mcp():
-    backend = HindsightBackendConfig(base_url="http://10.10.100.10:8888/mcp")
-    assert backend.mcp_url == "http://10.10.100.10:8888/mcp"
+    backend = HindsightBackendConfig(base_url="http://192.0.2.123:8888/mcp")
+    assert backend.mcp_url == "http://192.0.2.123:8888/mcp"
 
 
 def test_headers_api_key_only():

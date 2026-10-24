@@ -56,7 +56,7 @@ def test_load_tolerates_unsupported_schema_version_read_only(tmp_path: Path) -> 
 
 def test_record_round_trips_a_project(tmp_path: Path) -> None:
     path = tmp_path / "known-projects.json"
-    root = Path("C:/projects/alpha")
+    root = Path("C:/example-dev-root/alpha")
 
     record_known_project(
         path,
@@ -76,21 +76,21 @@ def test_record_round_trips_a_project(tmp_path: Path) -> None:
 def test_record_merges_existing_entries_does_not_erase_other_projects(tmp_path: Path) -> None:
     path = tmp_path / "known-projects.json"
     record_known_project(
-        path, project_root=Path("C:/projects/alpha"), config_status="compatible"
+        path, project_root=Path("C:/example-dev-root/alpha"), config_status="compatible"
     )
 
-    record_known_project(path, project_root=Path("C:/projects/beta"), config_status="unknown")
+    record_known_project(path, project_root=Path("C:/example-dev-root/beta"), config_status="unknown")
 
     registry = load_known_projects(path)
-    assert registry.get(Path("C:/projects/alpha")) is not None
-    assert registry.get(Path("C:/projects/beta")) is not None
+    assert registry.get(Path("C:/example-dev-root/alpha")) is not None
+    assert registry.get(Path("C:/example-dev-root/beta")) is not None
 
 
 def test_record_rejects_invalid_status(tmp_path: Path) -> None:
     with pytest.raises(ValueError):
         record_known_project(
             tmp_path / "known-projects.json",
-            project_root=Path("C:/projects/alpha"),
+            project_root=Path("C:/example-dev-root/alpha"),
             config_status="bogus",  # type: ignore[arg-type]
         )
 
@@ -100,10 +100,10 @@ def test_record_touches_last_seen_and_preserves_it_on_later_check(tmp_path: Path
     first = _dt("2026-08-17T01:00:00Z")
     second = _dt("2026-08-17T02:00:00Z")
 
-    record_known_project(path, project_root=Path("C:/projects/alpha"), checked_at=first)
-    record_known_project(path, project_root=Path("C:/projects/alpha"), checked_at=second)
+    record_known_project(path, project_root=Path("C:/example-dev-root/alpha"), checked_at=first)
+    record_known_project(path, project_root=Path("C:/example-dev-root/alpha"), checked_at=second)
 
-    project = load_known_projects(path).get(Path("C:/projects/alpha"))
+    project = load_known_projects(path).get(Path("C:/example-dev-root/alpha"))
     assert project is not None
     # last_seen_at stays at the first recorded touch (advisory timestamps).
     assert project.last_seen_at == first
@@ -180,7 +180,7 @@ def test_registry_is_advisory_missing_file_never_blocks(tmp_path: Path) -> None:
 def test_known_projects_registry_get_normalizes_roots(tmp_path: Path) -> None:
     registry = KnownProjectsRegistry(
         REGISTRY_SCHEMA_VERSION,
-        (KnownProject(Path("C:/projects/alpha"), _dt("2026-08-17T00:00:00Z"), None, "unknown"),),
+        (KnownProject(Path("C:/example-dev-root/alpha"), _dt("2026-08-17T00:00:00Z"), None, "unknown"),),
     )
 
-    assert registry.get(Path("C:/projects/alpha")) is not None
+    assert registry.get(Path("C:/example-dev-root/alpha")) is not None

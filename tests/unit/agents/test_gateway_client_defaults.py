@@ -115,7 +115,7 @@ def test_presubmit_retry_requires_explicit_same_session_proof():
 
 
 def test_presubmit_cause_is_bounded_and_redacted():
-    cause = RuntimeError("https://private.example/x C:\\Users\\mgs\\secret " + "x" * 500)
+    cause = RuntimeError("https://private.example/x C:\\example-home\\secret " + "x" * 500)
     value = defaults._bounded_cause_message(cause)
     assert len(value) <= 240
     assert "private.example" not in value

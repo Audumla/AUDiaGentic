@@ -240,7 +240,7 @@ def test_release_pr_auto_merge_validates_exact_head_and_dispatches_publication()
     assert gate["uses"] == "./.github/workflows/ci-tests.yml"
     assert "release_head" in gate["with"]["source_ref"]
     merge = jobs["merge-release-pr"]
-    assert set(merge["needs"]) == {"release-please", "release-pr-tests"}
+    assert set(merge["needs"]) == {"release-please", "release-pr-tests", "release-pr-privacy"}
     assert merge["permissions"]["actions"] == "write"
     script = merge["steps"][0]["with"]["script"]
     assert "pr.head.sha !== sha" in script
