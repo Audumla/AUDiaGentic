@@ -116,6 +116,8 @@ jobs:
           name: full-inventory
           path: .ci-plan
       - run: python -m tests.ci.run --tier full --lane browser --shards 4 --plan .ci-plan/plan.json --results .ci-results/browser
+        env:
+          CI_SOURCE_SHA: ${{ needs.inventory.outputs.source_sha }}
       - uses: actions/upload-artifact@v4
         if: always()
         with:
