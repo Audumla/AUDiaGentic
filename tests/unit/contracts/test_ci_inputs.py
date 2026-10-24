@@ -1,4 +1,5 @@
 """CI images must not depend on ignored developer-local generated surfaces."""
+
 import shlex
 from fnmatch import fnmatchcase
 import subprocess
@@ -14,13 +15,22 @@ ROOT = Path(__file__).resolve().parents[3]
 @pytest.mark.parametrize("workflow", ["ci-tests", "ci-contracts"])
 def test_ci_triggers_do_not_duplicate_feature_branch_pr_runs(workflow):
     # YAML 1.1 SafeLoader interprets the Actions key `on` as boolean True.
-    config = yaml.load((ROOT / ".github/workflows" / f"{workflow}.yml").read_text(), Loader=yaml.BaseLoader)
+    config = yaml.load(
+        (ROOT / ".github/workflows" / f"{workflow}.yml").read_text(), Loader=yaml.BaseLoader
+    )
     triggers = config["on"]
-    assert set(triggers) == {"push", "pull_request", "workflow_dispatch"}
+    assert set(triggers) == {"push", "pull_request", "workflow_dispatch"} | (
+        {"workflow_call"} if workflow == "ci-tests" else set()
+    )
     assert not triggers["pull_request"]  # retain default events for every PR/base/fork
     patterns = triggers["push"]["branches"]
     assert patterns == ["main", "proof-release-*"]
-    for branch, expected in [("main", True), ("proof-release-ci", True), ("fix/worker-progress", False), ("feature/example", False)]:
+    for branch, expected in [
+        ("main", True),
+        ("proof-release-ci", True),
+        ("fix/worker-progress", False),
+        ("feature/example", False),
+    ]:
         assert any(fnmatchcase(branch, pattern) for pattern in patterns) is expected
 
 
@@ -44,6 +54,7 @@ def guarded(name, *args, **kwargs):
 builtins.__import__ = guarded
 import audiagentic.components.agents.gateway.service.process
 """
-    result = subprocess.run([sys.executable, "-c", script], cwd=ROOT,
-                            capture_output=True, text=True, timeout=30)
+    result = subprocess.run(
+        [sys.executable, "-c", script], cwd=ROOT, capture_output=True, text=True, timeout=30
+    )
     assert result.returncode == 0, result.stderr
