@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.4.0](https://github.com/Audumla/AUDiaGentic/compare/v0.3.1...v0.4.0) (2026-10-24)
+
+
+### Features
+
+* **gateway:** rotate daily journals with protected five-day trace retention ([83e3dd5](https://github.com/Audumla/AUDiaGentic/commit/83e3dd5393df4c3b413c3f5d267d3aa914792615))
+
+
+### Bug Fixes
+
+* **ci:** align gateway boundaries and integration contracts ([81e8ca4](https://github.com/Audumla/AUDiaGentic/commit/81e8ca426be16db5c4f82ea746d1ef9004b50af4))
+* **ci:** repair contract checks and clean-room test inputs ([abd84de](https://github.com/Audumla/AUDiaGentic/commit/abd84de34b483bf4bcbfab1e9e58690f403a7377))
+* **ci:** repair contract validation and clean-room test baselines ([39a3080](https://github.com/Audumla/AUDiaGentic/commit/39a3080621277ede9f7f6c1c4f9fdbe995516298))
+* **ci:** use declared test dependencies and time-bound ACP responses ([dce4c07](https://github.com/Audumla/AUDiaGentic/commit/dce4c072ec8fb2913854c822a9d5eb73217f2b86))
+* **gateway:** avoid repeated quadratic journal compaction ([38ff048](https://github.com/Audumla/AUDiaGentic/commit/38ff048a57fc305ad3841bf7f86bdc8164b827d4))
+* **gateway:** capture activity boundary before provider execution ([c2664ab](https://github.com/Audumla/AUDiaGentic/commit/c2664ab10ba44f0a4fc1c3bcf3c5f1ab1e9c320d))
+* **gateway:** preserve progress before watcher thread starts ([7a8b831](https://github.com/Audumla/AUDiaGentic/commit/7a8b831f52c3357750f1774407d63789f1b8b782))
+
+
+### Documentation
+
+* **ci:** synchronize repair ledger and validation status ([3d7f8a2](https://github.com/Audumla/AUDiaGentic/commit/3d7f8a2cd5e1041a9da9a41f6d9ba2b632bf1d28))
+* **planning:** disambiguate pull request references from plan IDs ([9dc6882](https://github.com/Audumla/AUDiaGentic/commit/9dc6882893fe37f9a9dd5fca13f517cc7a5e056c))
+
 ## [0.3.1](https://github.com/Audumla/AUDiaGentic/compare/v0.3.0...v0.3.1) (2026-10-23)
 
 
