@@ -5,6 +5,7 @@ async output bridging so component MCP servers can stream progress and
 log events without coupling to the transport layer, and the
 tool_boundary decorator for tool call tracing and error redaction.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -29,6 +30,7 @@ from audiagentic.foundation.logging.redaction import (
     redact_error_envelope,
     redact_text,
 )
+
 try:
     from mcp.server.fastmcp import FastMCP
     from mcp.server.fastmcp.exceptions import ToolError
@@ -158,6 +160,7 @@ def tool_boundary(func: Callable) -> Callable:
     tool can produce, which is what makes its outputSchema honest.
     """
     if asyncio.iscoroutinefunction(func):
+
         @functools.wraps(func)
         async def _async_wrapper(*args: Any, **kwargs: Any) -> Any:
             logger.debug(
@@ -177,6 +180,7 @@ def tool_boundary(func: Callable) -> Callable:
                 },
             )
             return result
+
         return _async_wrapper
 
     @functools.wraps(func)
@@ -198,6 +202,7 @@ def tool_boundary(func: Callable) -> Callable:
             },
         )
         return result
+
     return _sync_wrapper
 
 
@@ -234,6 +239,7 @@ def _resolve_mcp_server_name(module_name: str) -> str:
     try:
         from audiagentic.foundation.components.loader import register_all_components
         from audiagentic.foundation.components.registry import all_descriptors
+
         register_all_components()
         for descriptor in all_descriptors().values():
             for server in descriptor.mcp_servers:
@@ -258,11 +264,13 @@ class _AutoDescFastMCP(FastMCP):  # type: ignore[misc,valid-type]
         module_name: str,
         *args: Any,
         structured_output_only: bool = False,
+        structured_output_tool_names: frozenset[str] = frozenset(),
         **kwargs: Any,
     ) -> None:
         super().__init__(*args, **kwargs)
         self._module_name = module_name
         self._structured_output_only = structured_output_only
+        self._structured_output_tool_names = frozenset(structured_output_tool_names)
         # Cache resolved declaration to avoid repeated registry lookups.
         self._decl: Any = None
 
@@ -314,21 +322,71 @@ class _AutoDescFastMCP(FastMCP):  # type: ignore[misc,valid-type]
         return super().tool(*args, **kwargs)
 
     def add_tool(self, fn: Any, *args: Any, **kwargs: Any) -> None:
-        """Register an MCP tool with one canonical structured result channel.
-
-        FastMCP's compatibility serializer emits both a text content block and
-        structuredContent for typed return annotations.  Component servers that
-        opt in here already expose machine-readable schemas, so retaining the
-        compatibility text is redundant and needlessly increases client work.
-        """
-        if self._structured_output_only:
+        """Register SDK-derived schemas with optional transport-only metadata."""
+        name = kwargs.get("name") or (args[0] if args else None) or fn.__name__
+        selected = self._structured_output_only or name in self._structured_output_tool_names
+        if selected:
             fn = _structured_output_only_wrapper(fn)
         super().add_tool(fn, *args, **kwargs)
+
+        # MCP SDK 1.27.0 exposes the registered Tool through get_tool().
+        tool = self._tool_manager.get_tool(name)
+        if tool is None:
+            raise ValueError(f"registered MCP tool not found: {name}")
+        try:
+            _apply_parameter_descriptions(tool, tool_parameter_spec(self._get_decl(), name))
+            if selected:
+                _align_structured_output_schema(tool)
+        except (TypeError, ValueError):
+            self._tool_manager.remove_tool(name)
+            raise
+
+
+def _apply_parameter_descriptions(tool: Any, descriptions: dict[str, Any]) -> None:
+    """Overlay YAML prose only on SDK-generated input properties."""
+    properties = tool.parameters.get("properties", {})
+    unknown = set(descriptions) - set(properties)
+    if unknown:
+        raise ValueError(f"MCP tool {tool.name}: unknown parameter descriptions: {sorted(unknown)}")
+    for name, annotation in descriptions.items():
+        if (
+            not isinstance(annotation, dict)
+            or set(annotation) != {"description"}
+            or not isinstance(annotation["description"], str)
+        ):
+            raise ValueError(
+                f"MCP tool {tool.name}: parameter {name!r} must declare only a description"
+            )
+        properties[name]["description"] = annotation["description"]
+
+
+def _align_structured_output_schema(tool: Any) -> None:
+    """Describe the existing structured-only {"result": value} wire envelope."""
+    metadata = tool.fn_metadata
+    if metadata.output_model is None:
+        # Explicit CallToolResult / untyped tools retain their SDK contract.
+        return
+
+    from pydantic import create_model
+
+    # SDK 1.27.0 resolves annotations at registration. Primitive/list
+    # returns already have a result field; mappings use an unwrapped model.
+    result_type = (
+        metadata.output_model.model_fields["result"].annotation
+        if metadata.wrap_output
+        else metadata.output_model
+    )
+    result_model = create_model(f"{tool.name}StructuredResult", result=(result_type, ...))
+    metadata.output_model = result_model
+    metadata.output_schema = result_model.model_json_schema()
+    metadata.wrap_output = False
+    tool.__dict__.pop("output_schema", None)
 
 
 def _structured_output_only_wrapper(fn: Any) -> Any:
     """Make a typed FastMCP tool return structuredContent without text shadow data."""
     if inspect.iscoroutinefunction(fn):
+
         @functools.wraps(fn)
         async def _async(*args: Any, **kwargs: Any) -> Any:
             return _as_structured_only(await fn(*args, **kwargs))
@@ -353,6 +411,7 @@ def mcp_server(
     instructions: str = "",
     *,
     structured_output_only: bool = False,
+    structured_output_tool_names: frozenset[str] = frozenset(),
 ) -> FastMCP:
     """Create a FastMCP instance whose name is resolved from component config.
 
@@ -365,6 +424,7 @@ def mcp_server(
         name,
         instructions=instructions,
         structured_output_only=structured_output_only,
+        structured_output_tool_names=structured_output_tool_names,
     )  # type: ignore[return-value]
 
 
@@ -375,6 +435,7 @@ def run_mcp_server(server: FastMCP, bootstrap_name: str) -> None:
     the bootstrap + run sequence.
     """
     from audiagentic.foundation.logging import bootstrap
+
     bootstrap(bootstrap_name)
     server.run()
 
@@ -444,7 +505,10 @@ async def run_blocking_with_output(
                     break
             if emitted:
                 last_emit = asyncio.get_running_loop().time()
-            elif heartbeat_message and asyncio.get_running_loop().time() - last_emit >= heartbeat_seconds:
+            elif (
+                heartbeat_message
+                and asyncio.get_running_loop().time() - last_emit >= heartbeat_seconds
+            ):
                 await bridge.emit(ComponentOutputEvent(message=heartbeat_message))
                 last_emit = asyncio.get_running_loop().time()
             await asyncio.sleep(poll_seconds)
@@ -473,4 +537,5 @@ async def ask_via_ctx(
     Mirrors the McpOutputBridge pattern: per-request ctx, not global backend.
     """
     from audiagentic.foundation.interaction import ask_async
+
     return await ask_async(title, description, choices, default_choice, timeout_seconds, ctx=ctx)
