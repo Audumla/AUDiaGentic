@@ -43,6 +43,22 @@ def test_detailed_help_never_registers_implementation_metadata(root, monkeypatch
     assert not list(root.iterdir())
 
 
+def test_target_discovery_reads_prepared_identities_without_claiming_ownership(root, monkeypatch):
+    from types import SimpleNamespace
+
+    from audiagentic.components.providers.services.mcp import managed_mcp_registry
+
+    registry = SimpleNamespace(
+        document=lambda: {
+            "providers": {"opencode/component-mcp": {}},
+            "prepared": {"pi/component-mcp": {}},
+        },
+        load=lambda: pytest.fail("prepared transitions do not grant ordinary ownership"),
+    )
+    monkeypatch.setattr(managed_mcp_registry, "mcp_ownership_registry", lambda _: registry)
+    assert providers.list_component_mcp_targets(root) == ("opencode", "pi")
+
+
 def test_multiple_mcps_selection_removal_refresh_and_noop(root):
     assert project.install_mcp(root, mcp_id="ag-planning", harness_ids=["pi", "codex"])["ok"]
     assert project.install_mcp(root, mcp_id="ag-ledger", harness_ids=["pi"])["ok"]

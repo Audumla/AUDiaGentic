@@ -150,15 +150,13 @@ def discover_component_mcp_bindings(
 
 
 def list_component_mcp_targets(project_root: Path) -> tuple[str, ...]:
-    """Read provider identities with existing component-owned native fragments."""
+    """Read existing/prepared target identities without granting ownership."""
     from .services.mcp.managed_mcp_registry import mcp_ownership_registry
 
+    document = mcp_ownership_registry(project_root).document()
+    scopes = set(document["providers"]) | set(document.get("prepared", {}))
     return tuple(
-        sorted(
-            scope.split("/")[0]
-            for scope in mcp_ownership_registry(project_root).load()
-            if scope.endswith("/component-mcp")
-        )
+        sorted({scope.split("/")[0] for scope in scopes if scope.endswith("/component-mcp")})
     )
 
 
