@@ -1,6 +1,10 @@
 # Release Notes
 
-## v0.5.0
+## v0.5.1
 
-### Features
-- Build and test standalone MCP bundles without shipping a repository checkout; planning and ledger support isolated functional round trips. Minimal co-installable component packages remain separate follow-up work.
+### Fixes
+- Restore full-suite test collection and allow headless gateways serving non-browser providers to start without requiring a local browser.
+- Ensure hermetic full-suite Docker builds receive the tool scripts required by contract-test collection.
+
+### Testing
+- Make full-suite configuration and Docker-policy checks portable on clean headless test machines.
