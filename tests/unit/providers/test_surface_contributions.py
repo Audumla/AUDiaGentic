@@ -7,6 +7,7 @@ the post-reset repopulation path, so sharing an xdist worker with a foundation
 test leaves the registry permanently short and these assertions see empty
 contributions. Marked no_parallel until that repopulation is fixed (AS74).
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -120,7 +121,7 @@ def test_apply_migrates_legacy_per_block_fences() -> None:
     block = SurfaceBlock(path=Path("AGENTS.md"), block_id="new/b", content="## New B\n\nfresh")
     result = apply_managed_blocks(legacy, [block])
 
-    assert "AUDIAGENTIC:BEGIN" not in result   # legacy fence migrated away
+    assert "AUDIAGENTIC:BEGIN" not in result  # legacy fence migrated away
     assert "stale" not in result
     assert "fresh" in result
     assert result.count(MANAGED_REGION_BEGIN) == 1
@@ -133,7 +134,8 @@ def test_provider_surface_blocks_dedupe_shared_agents_file(tmp_path: Path) -> No
     _enable_provider(tmp_path, "codex", "opencode")
     blocks = build_provider_surface_blocks(tmp_path)
     agents_blocks = [
-        block for block in blocks
+        block
+        for block in blocks
         if block.path == tmp_path / "AGENTS.md" and block.block_id == "agent-ledger/process"
     ]
 
@@ -159,7 +161,10 @@ def test_operate_provider_surfaces_only_targets_enabled_providers(tmp_path: Path
     results = operate_provider_surfaces(tmp_path, mode="plan")
 
     assert len(results) == 2
-    assert all(result.managed_block_ids == ("agent-ledger/process",) for result in results)
+    assert all(
+        set(result.managed_block_ids) == {"agent-ledger/process", "project/mcp-onboarding"}
+        for result in results
+    )
 
 
 def test_roo_provider_surface_owns_roo_rules_path(tmp_path: Path) -> None:

@@ -14,6 +14,7 @@ them is the entire feature. Config is the SOURCE of the secret, not a leak of
 it. Redacting there breaks MCP auth. Protection for config is ownership/scoping
 and gitignore, not redaction.
 """
+
 from __future__ import annotations
 
 import json
@@ -73,6 +74,8 @@ class McpConfigSpec(ManagedConfigSpec):
     """
 
     transports: frozenset[str] = field(default_factory=frozenset)
+    raw_reader: Callable[[Path], dict[str, Any]] | None = None
+    project_scoped: bool | None = None
 
     def __post_init__(self) -> None:
         if not self.transports:
@@ -102,7 +105,9 @@ def resolve_managed_config_path(spec: ManagedConfigSpec, project_root: Path | No
     return project_root / path
 
 
-def apply_managed_config_write(spec: ManagedConfigSpec, path: Path, entries: dict[str, Any]) -> None:
+def apply_managed_config_write(
+    spec: ManagedConfigSpec, path: Path, entries: dict[str, Any]
+) -> None:
     """Sanctioned call site for a spec's writer outside the fragment core.
 
     Kinds without per-entry ownership tracking (e.g. LSP language-server sync,
@@ -129,8 +134,11 @@ class ManagedFragmentRegistry:
         *,
         top_level_key: str = "owners",
         contract_version: str = "v1",
+        storage_path: Path | None = None,
     ) -> None:
-        self._path = project_root / ".audiagentic" / "runtime" / "providers" / filename
+        self._path = (
+            storage_path or project_root / ".audiagentic" / "runtime" / "providers" / filename
+        )
         self._top_level_key = top_level_key
         self._contract_version = contract_version
 
@@ -145,7 +153,10 @@ class ManagedFragmentRegistry:
             payload = json.loads(self._path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
             raise _registry_error(1, "managed fragment registry is unreadable") from exc
-        if not isinstance(payload, dict) or payload.get("contract-version") != self._contract_version:
+        if (
+            not isinstance(payload, dict)
+            or payload.get("contract-version") != self._contract_version
+        ):
             raise _registry_error(1, "managed fragment registry has an invalid contract")
         owners = payload.get(self._top_level_key)
         if not isinstance(owners, dict):
@@ -154,8 +165,12 @@ class ManagedFragmentRegistry:
         for scope, entries in owners.items():
             if not isinstance(scope, str) or not isinstance(entries, dict):
                 raise _registry_error(1, "managed fragment registry has an invalid ownership entry")
-            if not all(isinstance(key, str) and isinstance(value, str) for key, value in entries.items()):
-                raise _registry_error(1, "managed fragment registry contains a non-string ownership entry")
+            if not all(
+                isinstance(key, str) and isinstance(value, str) for key, value in entries.items()
+            ):
+                raise _registry_error(
+                    1, "managed fragment registry contains a non-string ownership entry"
+                )
             result[scope] = dict(entries)
         return result
 
@@ -163,14 +178,19 @@ class ManagedFragmentRegistry:
         if not all(
             isinstance(scope, str)
             and isinstance(entries, dict)
-            and all(isinstance(key, str) and isinstance(value, str) for key, value in entries.items())
+            and all(
+                isinstance(key, str) and isinstance(value, str) for key, value in entries.items()
+            )
             for scope, entries in owners.items()
         ):
             raise _config_error(1, "managed fragment ownership must be string mappings")
-        atomic_write_json(self._path, {
-            "contract-version": self._contract_version,
-            self._top_level_key: owners,
-        })
+        atomic_write_json(
+            self._path,
+            {
+                "contract-version": self._contract_version,
+                self._top_level_key: owners,
+            },
+        )
 
 
 @dataclass

@@ -2,8 +2,9 @@
 available on install alone — not install+enabled, which would be circular
 (you need the mgmt tool reachable to enable the component in the first
 place). Contrast with providers-propagated servers, gated on install-to-sync +
-enabled-to-populate in components/providers/services/mcp_sync.py.
+explicit Project-owned native selection rather than provider-wide broadcast.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -43,7 +44,9 @@ def _descriptor(component_id: str, *, core: bool = False) -> ComponentDescriptor
 def test_mgmt_server_available_when_installed_but_not_enabled(monkeypatch, tmp_path) -> None:
     # Installed-but-disabled must still expose its mgmt tool — otherwise there is
     # no way to reach the tool that would enable it.
-    monkeypatch.setattr(mcp_projection, "all_descriptors", lambda: {"widgets": _descriptor("widgets")})
+    monkeypatch.setattr(
+        mcp_projection, "all_descriptors", lambda: {"widgets": _descriptor("widgets")}
+    )
     monkeypatch.setattr(mcp_projection, "is_installed", lambda _cid, _root: True)
     monkeypatch.setattr(mcp_projection, "get_external_probe_results", lambda _cid, _root: {})
 
@@ -52,7 +55,9 @@ def test_mgmt_server_available_when_installed_but_not_enabled(monkeypatch, tmp_p
 
 
 def test_mgmt_server_absent_when_not_installed(monkeypatch, tmp_path) -> None:
-    monkeypatch.setattr(mcp_projection, "all_descriptors", lambda: {"widgets": _descriptor("widgets")})
+    monkeypatch.setattr(
+        mcp_projection, "all_descriptors", lambda: {"widgets": _descriptor("widgets")}
+    )
     monkeypatch.setattr(mcp_projection, "is_installed", lambda _cid, _root: False)
     monkeypatch.setattr(mcp_projection, "get_external_probe_results", lambda _cid, _root: {})
 
@@ -62,7 +67,9 @@ def test_mgmt_server_absent_when_not_installed(monkeypatch, tmp_path) -> None:
 
 def test_core_component_mgmt_server_available_without_install_marker(monkeypatch, tmp_path) -> None:
     # Core components are conceptually always "installed" for mgmt purposes.
-    monkeypatch.setattr(mcp_projection, "all_descriptors", lambda: {"project": _descriptor("project", core=True)})
+    monkeypatch.setattr(
+        mcp_projection, "all_descriptors", lambda: {"project": _descriptor("project", core=True)}
+    )
     monkeypatch.setattr(mcp_projection, "is_installed", lambda _cid, _root: False)
     monkeypatch.setattr(mcp_projection, "get_external_probe_results", lambda _cid, _root: {})
 
@@ -89,9 +96,12 @@ def test_functional_projection_requires_enabled(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(mcp_projection, "is_enabled", lambda _cid, _root: False)
     monkeypatch.setattr(mcp_projection, "get_external_probe_results", lambda _cid, _root: {})
 
-    assert mcp_projection.collect_component_mcp_entries(
-        tmp_path, propagation_target="providers", require_enabled=True
-    ) == {}
+    assert (
+        mcp_projection.collect_component_mcp_entries(
+            tmp_path, propagation_target="providers", require_enabled=True
+        )
+        == {}
+    )
 
     monkeypatch.setattr(mcp_projection, "is_enabled", lambda _cid, _root: True)
     assert "ag-widgets" in mcp_projection.collect_component_mcp_entries(

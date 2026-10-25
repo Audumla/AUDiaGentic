@@ -4,6 +4,7 @@ Format: {"mcpServers": [{"name": ..., "command": ..., "args": [...]}]}
 Also accepts the map form used by some Continue configs:
 {"mcpServers": {"name": {"command": ..., "args": [...]}}}
 """
+
 from __future__ import annotations
 
 import json
@@ -63,6 +64,15 @@ def read_continue_json(path: Path) -> dict[str, McpServerEntry]:
                 env=dict(server.get("env", {})),
             )
     return result
+
+
+def read_raw_continue_mcp(path: Path) -> dict[str, Any]:
+    """Read all native server fields without normalization loss."""
+    return {
+        item["name"]: item
+        for item in _server_items(_load_continue_json(path).get("mcpServers", []))
+        if item.get("name")
+    }
 
 
 def write_continue_json(path: Path, entries: dict[str, McpServerEntry]) -> None:

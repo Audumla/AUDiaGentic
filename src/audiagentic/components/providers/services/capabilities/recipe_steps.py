@@ -133,7 +133,11 @@ class ManagedMcpStep(_ManagedProviderStep):
             project_root,
             self.provider_id,
             mode=cast(ManagedMcpMode, mode),
-            request=ManagedMcpRequest(ownership_scope=self.ownership_scope, entries=entries),
+            request=ManagedMcpRequest(
+                ownership_scope=self.ownership_scope,
+                managed_ids=frozenset({self.entry["managed_id"]}),
+                entries=entries,
+            ),
         )
 
     def _summary(self):
@@ -377,8 +381,7 @@ _PROVIDER_STEPS = (
     ("managed-mcp", _build_managed_mcp, _MANAGED_MCP_SCHEMA),
     ("managed-hooks", _build_managed_hooks, _MANAGED_HOOKS_SCHEMA),
     ("managed-plugin", _build_managed_plugin, _MANAGED_PLUGIN_SCHEMA),
-    ("generated-surfaces", _build_generated_surfaces,
-     _GENERATED_SURFACES_SCHEMA),
+    ("generated-surfaces", _build_generated_surfaces, _GENERATED_SURFACES_SCHEMA),
 )
 
 

@@ -22,7 +22,9 @@ Usage
 from __future__ import annotations
 
 import argparse
+import contextvars
 import logging
+import sys
 from collections.abc import Callable
 from pathlib import Path
 
@@ -49,6 +51,19 @@ from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 logger = logging.getLogger(__name__)
 
+_capture_parse_error = contextvars.ContextVar("capture_cli_parse_error", default=False)
+
+
+class _IncompletePrefix(Exception):
+    pass
+
+
+class _ArgumentParser(argparse.ArgumentParser):
+    def error(self, message):
+        if _capture_parse_error.get():
+            raise _IncompletePrefix(message)
+        super().error(message)
+
 
 # SH10 lifecycle command aliases — keyed by gateway sub-command name.
 _GATEWAY_LIFECYCLE_HANDLERS: dict[str, Callable] = {
@@ -74,7 +89,7 @@ _COMMAND_HANDLERS: dict[str, Callable] = {
 
 
 def _main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
+    parser = _ArgumentParser(
         prog="audiagentic",
         description="AUDiaGentic",
         add_help=True,
@@ -211,17 +226,48 @@ def _main(argv: list[str] | None = None) -> int:
     )
 
     # Private stdio entrypoint retained for generated MCP configuration.
-    mcp_parser = subparsers.add_parser("mcp", help="Internal MCP stdio entrypoint")
-    mcp_parser.add_argument("module", metavar="MODULE")
-    mcp_parser.add_argument("module_args", nargs=argparse.REMAINDER)
+    mcp_parser = subparsers.add_parser(
+        "mcp", help="Discover and configure MCP servers", add_help=False
+    )
+    mcp_parser.add_argument("-h", "--help", action="store_true", dest="management_help")
+    mcp_parser.add_argument("tail", nargs=argparse.REMAINDER)
+    harness_parser = subparsers.add_parser(
+        "harness", help="Discover harness capabilities", add_help=False
+    )
+    harness_parser.add_argument("-h", "--help", action="store_true", dest="management_help")
+    harness_parser.add_argument("tail", nargs=argparse.REMAINDER)
+    help_parser = subparsers.add_parser("help", help="Show management help")
+    help_parser.set_defaults(tail=[])
 
-    args, remaining = parser.parse_known_args(argv)
+    tokens = list(sys.argv[1:] if argv is None else argv)
+    candidate = None
+    if "--" in tokens:
+        boundary = tokens.index("--")
+        capture = _capture_parse_error.set(True)
+        try:
+            candidate = parser.parse_known_args(tokens[:boundary])
+        except _IncompletePrefix:
+            pass  # The separator may belong to a command requiring more operands.
+        finally:
+            _capture_parse_error.reset(capture)
+    if candidate is not None and candidate[0].command is None:
+        args, remaining = candidate
+        remaining = [*remaining, *tokens[boundary + 1 :]]
+    else:
+        args, remaining = parser.parse_known_args(tokens)
 
     # Registered commands own a closed argument contract. Unknown tokens must
     # not leak through to handlers or be mistaken for harness passthrough args.
     # No-command invocation intentionally retains passthrough for provider CLIs.
     if args.command is not None and remaining:
         parser.error(f"unrecognized arguments: {' '.join(remaining)}")
+
+    if args.command in {"mcp", "harness", "help"}:
+        from audiagentic.commands.mcp import dispatch
+
+        result = dispatch(args, parser)
+        if result is not None:
+            return result
 
     # Propagate --component-profile and --project to env so loader and other
     # modules pick them up (AUDIAGENTIC_REPO_ROOT drives profile resolution,

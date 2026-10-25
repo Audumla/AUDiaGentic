@@ -87,6 +87,7 @@ from audiagentic.components.providers.contracts.session_surface import (
     ResolvedSessionSurface,
     SurfaceHint,
 )
+from audiagentic.components.providers.events import PROVIDER_STATE_CHANGED
 from audiagentic.foundation.transports import ProviderLaunch
 from audiagentic.foundation.transports.harness_status_observer import (
     StatusObserverLease,
@@ -96,6 +97,67 @@ from audiagentic.foundation.transports.harness_status_observer import (
 from audiagentic.foundation.transports.session_surface import PreparedSessionTransport
 
 logger = logging.getLogger(__name__)
+
+
+def list_harness_mcp_targets():
+    """Read static native MCP registration metadata without adapter initialization."""
+    from .onboarding_metadata import list_targets
+
+    return list_targets()
+
+
+def is_native_mcp_target_enabled(project_root: Path, provider_id: str) -> bool:
+    """Read effective native eligibility from canonical provider feature state."""
+    from .services.config.provider_config import is_native_mcp_target_enabled as _enabled
+
+    return _enabled(project_root, provider_id)
+
+
+def preflight_managed_mcp(
+    project_root: Path,
+    provider_id: str,
+    *,
+    request: ManagedMcpRequest,
+    adopt_entries: tuple[ManagedMcpEntry, ...] = (),
+) -> dict:
+    """Read native ownership/revisions without mutation; return an opaque apply revision."""
+    from .services.mcp.onboarding import preflight
+
+    return preflight(project_root, provider_id, request, adopt_entries)
+
+
+def apply_managed_mcp(
+    project_root: Path,
+    provider_id: str,
+    *,
+    request: ManagedMcpRequest,
+    expected_revision: str,
+    adopt_entries: tuple[ManagedMcpEntry, ...] = (),
+) -> dict:
+    """Apply provider-native entries only while the preflight revision still matches."""
+    from .services.mcp.onboarding import apply
+
+    return apply(project_root, provider_id, request, expected_revision, adopt_entries)
+
+
+def discover_component_mcp_bindings(
+    project_root: Path, entries: tuple[ManagedMcpEntry, ...]
+) -> dict:
+    """Read ownership-evidenced exposures for bounded component-selection migration."""
+    from .services.mcp.onboarding import discover_bindings
+
+    return discover_bindings(project_root, entries)
+
+
+def list_component_mcp_targets(project_root: Path) -> tuple[str, ...]:
+    """Read existing/prepared target identities without granting ownership."""
+    from .services.mcp.managed_mcp_registry import mcp_ownership_registry
+
+    document = mcp_ownership_registry(project_root).document()
+    scopes = set(document["providers"]) | set(document.get("prepared", {}))
+    return tuple(
+        sorted({scope.split("/")[0] for scope in scopes if scope.endswith("/component-mcp")})
+    )
 
 
 def build_admitted_agent_prompt(
@@ -109,6 +171,7 @@ def build_admitted_agent_prompt(
 ) -> str:
     """Return the gateway-admitted prompt without consulting config."""
     from audiagentic.components.providers.adapters.base_runner import default_build_prompt
+
     return default_build_prompt(
         packet_ctx,
         provider_cfg,
@@ -137,7 +200,9 @@ def read_provider_capability_evidence(
     from audiagentic.components.providers.descriptors.registry import get_descriptor
 
     descriptor = get_descriptor(provider_id)
-    return ProviderCapabilityEvidenceSnapshot(provider_id, surface_id, tuple(descriptor.capability_facts))
+    return ProviderCapabilityEvidenceSnapshot(
+        provider_id, surface_id, tuple(descriptor.capability_facts)
+    )
 
 
 def get_provider_execution_isolation_tier(provider_id: str) -> ProviderIsolationTier:
@@ -585,9 +650,14 @@ def manage_mcp_entries_all(
         if descriptor.mcp_config is None:
             continue
         enabled = is_provider_enabled(project_root, descriptor.provider_id)
-        effective_request = request if enabled else ManagedMcpRequest(
-            ownership_scope=request.ownership_scope,
-            entries=(),
+        effective_request = (
+            request
+            if enabled
+            else ManagedMcpRequest(
+                ownership_scope=request.ownership_scope,
+                managed_ids=request.managed_ids,
+                entries=(),
+            )
         )
         result = manage_mcp_entries(
             project_root,
@@ -1340,8 +1410,10 @@ def resolve_instance_capacity(
         provider_namespace = overrides.get("provider-id") if isinstance(overrides, dict) else None
         selector = (
             f"{provider_namespace}/{model_id}"
-            if isinstance(provider_namespace, str) and provider_namespace
-            and isinstance(model_id, str) and model_id
+            if isinstance(provider_namespace, str)
+            and provider_namespace
+            and isinstance(model_id, str)
+            and model_id
             else None
         )
         result[source_id] = {
@@ -1802,6 +1874,7 @@ async def capture_latest_response(
     from audiagentic.components.providers.services.execution.public_execution import (
         capture_latest_response as _capture,
     )
+
     return await _capture(
         project_root,
         provider_id=provider_id,
@@ -2026,6 +2099,12 @@ def _build_transport_lease(binding_id: str) -> StatusObserverLease:
 
 
 __all__ = [
+    "PROVIDER_STATE_CHANGED",
+    "list_harness_mcp_targets",
+    "preflight_managed_mcp",
+    "apply_managed_mcp",
+    "discover_component_mcp_bindings",
+    "list_component_mcp_targets",
     # One-shot provider execution
     "PreparedSessionTransport",
     "ProviderExecutionRequest",
@@ -2057,6 +2136,7 @@ __all__ = [
     "load_prompt_syntax",
     "get_provider_prompt_settings_profile",
     "is_provider_enabled_for_launch",
+    "is_native_mcp_target_enabled",
     "resolve_launch_model",
     "load_packaged_prompt_template",
     "execute_provider_review_turn",

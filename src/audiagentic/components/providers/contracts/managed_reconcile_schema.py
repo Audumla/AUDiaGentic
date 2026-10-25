@@ -19,6 +19,7 @@ GENERATED from the builders below — run this module as a script to
 regenerate; ``test_managed_reconcile_schema_files_match_generator`` is the
 drift guard that keeps the checked-in files honest.
 """
+
 from __future__ import annotations
 
 import json
@@ -96,8 +97,15 @@ def _result_schema(
     if extra_properties:
         properties.update(extra_properties)
     required = [
-        "ok", "supported", "changed", "managed_ids", "removed_ids",
-        "collision_ids", "action_needed", "error_code", *extra_required,
+        "ok",
+        "supported",
+        "changed",
+        "managed_ids",
+        "removed_ids",
+        "collision_ids",
+        "action_needed",
+        "error_code",
+        *extra_required,
     ]
     return {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -110,7 +118,15 @@ def _result_schema(
 
 
 def build_managed_mcp_payload_schema() -> dict[str, Any]:
-    return _payload_schema("provider-managed-mcp-payload/v1", MCP_ENTRY_ITEM)
+    schema = _payload_schema("provider-managed-mcp-payload/v2", MCP_ENTRY_ITEM)
+    schema["required"].append("managed_ids")
+    schema["properties"]["managed_ids"] = {
+        "oneOf": [
+            {"type": "null"},
+            {"type": "array", "uniqueItems": True, "items": {"type": "string", "minLength": 1}},
+        ],
+    }
+    return schema
 
 
 def build_managed_mcp_result_schema() -> dict[str, Any]:

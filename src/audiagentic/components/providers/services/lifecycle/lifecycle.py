@@ -16,6 +16,12 @@ from ...workflow import (
     workflow_provider_cli_plan,
     workflow_provider_cli_run,
 )
+from ..reconcile import (  # noqa: F401
+    reconcile_all,
+    reconcile_all_providers,
+    reconcile_provider,
+    resolve_reconciliation_policy,
+)
 
 
 def _build_surface_request(project_root: Path, provider_id: str):
@@ -29,16 +35,6 @@ def _build_surface_request(project_root: Path, provider_id: str):
         ownership_scope=provider_id,
         contribution_ids=contribution_ids or ("__all__",),
     )
-
-
-# Re-exported from reconcile module
-from ..reconcile import (  # noqa: F401
-    _sync_provider_mcp,
-    reconcile_all,
-    reconcile_all_providers,
-    reconcile_provider,
-    resolve_reconciliation_policy,
-)
 
 
 def _emit(output: ComponentOutputSink | None, message: str, **data: Any) -> None:
@@ -269,21 +265,50 @@ def upgrade_provider_cli(
     descriptor = _descriptor(provider_id)
     recipe = descriptor.cli_install
     if recipe is None or recipe.upgrade is None:
-        return _result(provider_id=provider_id, action="upgrade", status="skipped", recipe=recipe,
-                       reason="provider CLI has no declared upgrade recipe")
+        return _result(
+            provider_id=provider_id,
+            action="upgrade",
+            status="skipped",
+            recipe=recipe,
+            reason="provider CLI has no declared upgrade recipe",
+        )
     probe = probe_provider_cli(descriptor)
     if probe is not None and not probe.get("available"):
-        return _result(provider_id=provider_id, action="upgrade", status="skipped", recipe=recipe,
-                       probe=probe, reason="provider CLI is absent; install is required")
+        return _result(
+            provider_id=provider_id,
+            action="upgrade",
+            status="skipped",
+            recipe=recipe,
+            probe=probe,
+            reason="provider CLI is absent; install is required",
+        )
     _emit(on_progress, f"Upgrading {provider_id}...", provider_id=provider_id, action="upgrade")
     workflow_result, probe, status, workflow_events = workflow_provider_cli_run(
-        provider_id, action="upgrade", descriptor=descriptor, dry_run=dry_run, timeout=timeout,
-        project_root=project_root, on_progress=on_progress, probe_fn=_probe_provider_cli_after_install,
+        provider_id,
+        action="upgrade",
+        descriptor=descriptor,
+        dry_run=dry_run,
+        timeout=timeout,
+        project_root=project_root,
+        on_progress=on_progress,
+        probe_fn=_probe_provider_cli_after_install,
     )
-    result = _result(provider_id=provider_id, action="upgrade", status=status, recipe=recipe,
-                     invocation=_invocation_result_from_workflow(workflow_result, step_id="upgrade"), probe=probe)
+    result = _result(
+        provider_id=provider_id,
+        action="upgrade",
+        status=status,
+        recipe=recipe,
+        invocation=_invocation_result_from_workflow(workflow_result, step_id="upgrade"),
+        probe=probe,
+    )
     result["workflow-events"] = workflow_events
-    _emit(on_progress, f"{provider_id}: {status}", provider_id=provider_id, action="upgrade", status=status)
+    _emit(
+        on_progress,
+        f"{provider_id}: {status}",
+        provider_id=provider_id,
+        action="upgrade",
+        status=status,
+    )
     return result
 
 

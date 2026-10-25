@@ -14,13 +14,11 @@ decoupled via the event bus.
 
 from __future__ import annotations
 
-from functools import partial
 from pathlib import Path
 
-from audiagentic.foundation.event import get_bus, subscribe_component_lifecycle
+from audiagentic.foundation.event import subscribe_component_lifecycle
 
 from ..providers_api import operate_provider_surfaces
-from ..services.mcp.mcp_projection import sync_component_mcp_to_providers
 
 
 def _apply_surfaces(project_root: Path, payload: dict, metadata: dict) -> None:
@@ -32,21 +30,6 @@ def _prune_then_apply_surfaces(project_root: Path, payload: dict, metadata: dict
     operate_provider_surfaces(project_root, mode="apply")
 
 
-def _sync_component_mcp(
-    project_root: Path, payload: dict, metadata: dict, *, enabled: bool
-) -> None:
-    sync_component_mcp_to_providers(payload["component_id"], project_root, enabled=enabled)
-
-
-def _on_component_mcp_sync(event_type: str, payload: dict, metadata: dict) -> None:
-    project_root = payload.get("project_root")
-    component_id = payload.get("component_id")
-    enabled = payload.get("enabled", True)
-    if not isinstance(project_root, Path) or not isinstance(component_id, str):
-        return
-    sync_component_mcp_to_providers(component_id, project_root, enabled=bool(enabled))
-
-
 # Dispatchers retained for tests exercising the event→action mapping.
 _on_component_lifecycle = subscribe_component_lifecycle(
     None,
@@ -55,12 +38,3 @@ _on_component_lifecycle = subscribe_component_lifecycle(
     on_disabled=_prune_then_apply_surfaces,
     on_uninstalled=_prune_then_apply_surfaces,
 )
-_on_component_mcp_lifecycle = subscribe_component_lifecycle(
-    None,
-    on_installed=partial(_sync_component_mcp, enabled=True),
-    on_enabled=partial(_sync_component_mcp, enabled=True),
-    on_disabled=partial(_sync_component_mcp, enabled=False),
-    on_uninstalled=partial(_sync_component_mcp, enabled=False),
-    on_config_changed=partial(_sync_component_mcp, enabled=True),
-)
-get_bus().subscribe("lifecycle.component.mcp.sync", _on_component_mcp_sync)

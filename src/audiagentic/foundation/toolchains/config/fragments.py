@@ -22,6 +22,7 @@ Algorithm (per owner scope):
 Unknown entries in the target are preserved — only entries recorded in the
 ownership registry are ever removed.
 """
+
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -70,6 +71,7 @@ def reconcile_fragments(
     registry_load: RegistryLoad,
     registry_save: RegistrySave,
     managed_ids: set[str] | None = None,
+    target_scopes: set[str] | None = None,
 ) -> ReconcileResult:
     """Reconcile owned fragments at *path* toward *desired* for *owner_scope*.
 
@@ -96,6 +98,31 @@ def reconcile_fragments(
     collisions: list[dict[str, str]] = []
 
     current = store.read(path)
+
+    # Validate the complete request before ANY removal or write. Unknown names
+    # are user-owned, even when their payload happens to equal the desired one.
+    ownership = {
+        name: (scope, mid)
+        for scope, rows in registry.items()
+        if scope in (target_scopes or {owner_scope})
+        for mid, name in rows.items()
+    }
+    names: set[str] = set()
+    for mid, (name, payload) in desired.items():
+        if managed_ids is not None and mid not in managed_ids:
+            continue
+        incumbent = ownership.get(name)
+        if name in names or (name in current and incumbent != (owner_scope, mid)):
+            collisions.append(
+                {
+                    "managed_id": mid,
+                    "desired_name": name,
+                    "reason": "name is unowned or belongs to another entry",
+                }
+            )
+        names.add(name)
+    if collisions:
+        return ReconcileResult(ok=False, changed=False, collisions=collisions)
 
     removal_source = (
         {mid: name for mid, name in scope_registry.items() if mid in managed_ids}
@@ -124,27 +151,31 @@ def reconcile_fragments(
         owners_by_name = _owner_by_name()
 
         if desired_name in current and owners_by_name.get(desired_name) not in (None, managed_id):
-            collisions.append({
-                "managed_id": managed_id,
-                "desired_name": desired_name,
-                "reason": "name already owned by another managed entry",
-            })
+            collisions.append(
+                {
+                    "managed_id": managed_id,
+                    "desired_name": desired_name,
+                    "reason": "name already owned by another managed entry",
+                }
+            )
             continue
 
-        store.write(path, {desired_name: payload})
-        current[desired_name] = payload
+        if current.get(desired_name) != payload:
+            store.write(path, {desired_name: payload})
+            current[desired_name] = payload
+            if desired_name not in updated:
+                updated.append(desired_name)
+            changed = True
         scope_registry[managed_id] = desired_name
-        if desired_name not in updated:
-            updated.append(desired_name)
-        changed = True
 
         if old_name and old_name != desired_name and old_name in current:
             if store.remove(path, old_name):
                 removed.append(old_name)
                 current.pop(old_name, None)
 
-    registry[owner_scope] = scope_registry
-    registry_save(registry)
+    if registry.get(owner_scope, {}) != scope_registry:
+        registry[owner_scope] = scope_registry
+        registry_save(registry)
 
     return ReconcileResult(
         ok=not collisions,

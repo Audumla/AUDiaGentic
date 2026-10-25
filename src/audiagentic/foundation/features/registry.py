@@ -154,6 +154,8 @@ def resolve_active_implementation(
     component_id: str,
     *,
     fallback: str | None = None,
+    implementation_descriptors: dict | None = None,
+    component_state: dict | None = None,
 ) -> str | None:
     """Return the active implementation ID for a component.
 
@@ -166,21 +168,27 @@ def resolve_active_implementation(
     try:
         from .state import get_component_state
 
-        component = get_component_state(project_root, component_id)
+        component = (
+            component_state
+            if component_state is not None
+            else get_component_state(project_root, component_id)
+        )
         implementations = component.get("implementations") or {}
         if isinstance(implementations, dict):
             for impl_id, state in implementations.items():
                 if isinstance(state, dict) and state.get("enabled"):
                     return impl_id
-        impls = get_implementations(component_id)
+        impls = (
+            implementation_descriptors
+            if implementation_descriptors is not None
+            else get_implementations(component_id)
+        )
         for impl_id in sorted(impls):
             if impls[impl_id].raw.get("default"):
                 return impl_id
         return next(iter(sorted(impls)), fallback)
     except Exception:
-        _logger.debug(
-            "Could not resolve active implementation for %s", component_id, exc_info=True
-        )
+        _logger.debug("Could not resolve active implementation for %s", component_id, exc_info=True)
         return fallback
 
 
@@ -194,7 +202,9 @@ def is_default_implementation(descriptor: ImplementationDescriptor) -> bool:
     return bool(descriptor.raw.get("default"))
 
 
-def get_binding(parent: str, implementation: str, feature_kind: str, feature: str) -> BindingDescriptor | None:
+def get_binding(
+    parent: str, implementation: str, feature_kind: str, feature: str
+) -> BindingDescriptor | None:
     key = (parent, implementation, feature_kind, feature)
     if key not in _bindings:
         _self_populate(force=True)
