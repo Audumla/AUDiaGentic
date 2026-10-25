@@ -398,12 +398,16 @@ def install(
 
 def reconcile(root: Path) -> list[dict]:
     """Converge native selections after lifecycle events, without legacy broadcast."""
-    if not _config_path(root).exists():
+    if _installing.get() or not _config_path(root).exists():
         return []
+    with AdvisoryLock(_operations(root) / ".run.lock"):
+        return _reconcile_locked(root)
+
+
+def _reconcile_locked(root: Path) -> list[dict]:
+    """Resolve desired state only after competing installers have finished."""
     pending = status(root)
     if pending.get("phase") in {"prepared", "intent_committed", "applying"}:
-        if _installing.get():
-            return []  # Synchronous callbacks defer to the owning installation.
         return [
             {
                 "error_code": "VAL-MCPONB-001",
@@ -427,26 +431,23 @@ def reconcile(root: Path) -> list[dict]:
     for pid in recorded_targets:
         requests.setdefault(pid, providers_api.ManagedMcpRequest("component-mcp", None, ()))
     errors = []
-    with AdvisoryLock(_operations(root) / ".run.lock"):
-        for pid, request in requests.items():
-            try:
-                plan = providers_api.preflight_managed_mcp(root, pid, request=request)
-                if any(c.get("updates_existing") for c in plan["changes"]):
-                    raise error(
-                        "Background native payload changes require an explicit installation"
-                    )
-                outcome = providers_api.apply_managed_mcp(
-                    root, pid, request=request, expected_revision=plan["revision"]
+    for pid, request in requests.items():
+        try:
+            plan = providers_api.preflight_managed_mcp(root, pid, request=request)
+            if any(c.get("updates_existing") for c in plan["changes"]):
+                raise error("Background native payload changes require an explicit installation")
+            outcome = providers_api.apply_managed_mcp(
+                root, pid, request=request, expected_revision=plan["revision"]
+            )
+            if not outcome["ok"]:
+                errors.append(
+                    {
+                        "harness_id": pid,
+                        "error_code": outcome.get("error_code", "VAL-MCPONB-001"),
+                    }
                 )
-                if not outcome["ok"]:
-                    errors.append(
-                        {
-                            "harness_id": pid,
-                            "error_code": outcome.get("error_code", "VAL-MCPONB-001"),
-                        }
-                    )
-            except AudiaGenticError as exc:
-                errors.append({"harness_id": pid, "error_code": exc.code})
+        except AudiaGenticError as exc:
+            errors.append({"harness_id": pid, "error_code": exc.code})
     return errors
 
 

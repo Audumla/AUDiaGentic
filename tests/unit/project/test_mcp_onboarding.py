@@ -303,6 +303,40 @@ def test_resume_rejects_changed_profile_fingerprint(root):
     assert (root / ".pi/mcp.json").read_bytes() == before
 
 
+def test_background_reconcile_resolves_selection_after_acquiring_fence(root, monkeypatch):
+    from contextlib import contextmanager
+
+    from audiagentic.components.project.onboarding import service
+    from audiagentic.foundation.io import load_yaml_file, save_yaml_file
+
+    assert project.install_mcp(root, mcp_id="ag-planning", harness_ids=["pi"])["ok"]
+
+    @contextmanager
+    def competing_install_finished(path):
+        config_path = root / ".audiagentic/config/project.yaml"
+        config = load_yaml_file(config_path)
+        config["mcp-onboarding"]["bindings"]["ag-planning"] = []
+        save_yaml_file(config_path, config, atomic=True)
+        yield
+
+    monkeypatch.setattr(service, "AdvisoryLock", competing_install_finished)
+    assert project.reconcile_mcp_bindings(root) == []
+    assert not json.loads((root / ".pi/mcp.json").read_text())["mcpServers"]
+
+
+def test_onboarding_contribution_preserves_user_surface_and_is_idempotent(root):
+    from audiagentic.components.providers.surfaces.manager import apply_provider_surfaces
+
+    path = root / "AGENTS.md"
+    path.write_text("User instructions remain here.\n", encoding="utf8")
+    apply_provider_surfaces(root, provider_id="codex")
+    text = path.read_text(encoding="utf8")
+    assert "User instructions remain here." in text
+    assert "MCP onboarding" in text and "complete native target selection" in text
+    apply_provider_surfaces(root, provider_id="codex")
+    assert path.read_text(encoding="utf8") == text
+
+
 def test_intent_write_failure_has_terminal_actionable_record(root, monkeypatch):
     from audiagentic.components.project.onboarding import service
 
