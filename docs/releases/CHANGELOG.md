@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.5.1](https://github.com/Audumla/AUDiaGentic/compare/v0.5.0...v0.5.1) (2026-10-25)
+
+
+### Bug Fixes
+
+* **ci:** include tool inputs in the Docker context whitelist ([5096ad6](https://github.com/Audumla/AUDiaGentic/commit/5096ad6a3c7938985247c6514df04976f510e8bc))
+* **ci:** restore full-suite collection and headless gateway startup ([c0f31cb](https://github.com/Audumla/AUDiaGentic/commit/c0f31cbd6ecf16fdf67ebc7a404c5eec58fd3baf))
+* **ci:** restore full-suite collection and headless gateway startup ([363bb48](https://github.com/Audumla/AUDiaGentic/commit/363bb48644f716cbffde7cda77012750b51b17d0))
+
+
+### Documentation
+
+* **ci:** record completed full baseline qualification ([1d2fa30](https://github.com/Audumla/AUDiaGentic/commit/1d2fa30b75ee88d199ac2f89ff9458f51114b9b6))
+
 ## [0.5.0](https://github.com/Audumla/AUDiaGentic/compare/v0.4.3...v0.5.0) (2026-10-25)
 
 
