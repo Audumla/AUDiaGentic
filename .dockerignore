@@ -6,6 +6,7 @@
 !release-please-config.json
 !README.md
 !.gitignore
+!.dockerignore
 !.tmp/
 !.tmp/wheels/
 !.tmp/wheels/mcp-1.27.0-py3-none-any.whl
