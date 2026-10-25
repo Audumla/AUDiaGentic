@@ -5,6 +5,17 @@ on:
     branches: [main, proof-release-*]
   pull_request:
   workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Exact source commit to validate (blank uses selected branch)
+        type: string
+        required: false
+        default: ""
+      release_only:
+        description: Measure the focused generated-release gate without publishing
+        type: boolean
+        required: false
+        default: false
   workflow_call:
     inputs:
       source_ref:
@@ -21,7 +32,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-fast-${{ github.workflow }}-${{ github.head_ref || github.ref }}-${{ inputs.source_ref }}
+  group: ci-fast-${{ github.workflow }}-${{ github.head_ref || github.ref }}-${{ inputs.source_ref }}-${{ inputs.release_only || false }}
   cancel-in-progress: true
 
 jobs:

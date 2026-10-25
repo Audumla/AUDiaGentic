@@ -290,6 +290,9 @@ def test_release_only_scope_does_not_replace_ordinary_component_checks():
     narrow = next(step for step in steps if "pytest tests/unit/release" in step.get("run", ""))
     assert fast["if"] == "${{ !inputs.release_only }}"
     assert narrow["if"] == "${{ inputs.release_only }}"
+    manual = workflow["on"]["workflow_dispatch"]["inputs"]
+    assert manual["release_only"]["default"] == "false"
+    assert manual["source_ref"]["default"] == ""
 
 
 @pytest.mark.parametrize("workflow", ["ci-tests.yml", "ci-contracts.yml", "ci-full.yml", "release.yml"])
