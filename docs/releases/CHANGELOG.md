@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.5.0](https://github.com/Audumla/AUDiaGentic/compare/v0.4.3...v0.5.0) (2026-10-25)
+
+
+### Features
+
+* **mcp:** extract and validate standalone server bundles ([5b3b2ce](https://github.com/Audumla/AUDiaGentic/commit/5b3b2ce7641741cda298e8514070cbbf85c8b78d))
+* **mcp:** extract and validate standalone server bundles ([3cb5ca2](https://github.com/Audumla/AUDiaGentic/commit/3cb5ca23947803eb0ad656106ed68a7e6fc667ba))
+
 ## [0.4.3](https://github.com/Audumla/AUDiaGentic/compare/v0.4.2...v0.4.3) (2026-10-24)
 
 
