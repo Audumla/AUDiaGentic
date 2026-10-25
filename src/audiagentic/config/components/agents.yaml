@@ -373,9 +373,8 @@ mcp-servers:
         parameters:
           source_session_id: "Terminal source session with a validated provider binding"
           control_id: "Caller idempotency identifier for the resume request"
-          identity_context_fingerprint: "Current provider identity context fingerprint"
-          execution_context_fingerprint: "Current execution context fingerprint"
           model_id: "Optional current model identifier"
+          component_profile: "Optional component profile for the resumed execution, validated by the gateway; does not change the server process profile"
 
 # AS31 Stage-2: output relay policy
 # Defaults: disabled until surface is validated; 64KiB fragments, 512KB turns.
