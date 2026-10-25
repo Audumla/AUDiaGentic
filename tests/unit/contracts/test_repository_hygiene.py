@@ -1,9 +1,9 @@
 """Generated local surfaces are not repository or Docker build inputs."""
 
-from pathlib import Path
 import json
 import shlex
 import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -70,3 +70,10 @@ def test_docker_recipes_do_not_copy_generated_root_surfaces():
 def test_canonical_harness_template_is_retained():
     assert (ROOT / "src/audiagentic/components/providers/adapters/pi/templates/agent/SYSTEM.md").is_file()
     assert (ROOT / "src/audiagentic/components/providers/adapters/opencode/templates/AGENTS.md").is_file()
+
+
+def test_full_suite_image_contains_tools_used_by_contract_collection():
+    recipe = (ROOT / "tests/docker/Dockerfile.test").read_text(encoding="utf-8")
+    assert any("tools" in _copy_sources(line) for line in recipe.splitlines())
+    for tool in ("privacy_guard.py", "privacy_binary_allow.json", "extract_mcp.py"):
+        assert (ROOT / "tools" / tool).is_file()
