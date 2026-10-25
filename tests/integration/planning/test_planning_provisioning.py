@@ -37,7 +37,6 @@ _MCP_CONFIG_PATHS: dict[str, str] = {
     "mcp-json-claude": ".mcp.json",
     "opencode-mcp": ".opencode/opencode.json",
     "mcp-json-gemini": ".gemini/settings.json",
-    "goose-yaml": ".config/goose/config.yaml",  # ~/.config/goose/config.yaml
     "continue-json": ".continue/config.json",
 }
 
@@ -60,18 +59,28 @@ def setup_provider_surfaces(project_root: Path) -> None:
     # Keep Goose inside the sandbox.  Path.home() is not redirected by
     # monkeypatching HOME on Windows, so using it would make this test mutate
     # the real user profile and race with xdist workers.
-    _stub(project_root / ".config" / "goose" / "config.yaml", yaml.dump({"extensions": []}, default_flow_style=False))
+    _stub(
+        project_root / ".config" / "goose" / "config.yaml",
+        yaml.dump({"extensions": []}, default_flow_style=False),
+    )
     _stub(project_root / ".continue" / "config.json", json.dumps({"mcpServers": []}))
 
-    from audiagentic.components.providers.descriptors.registry import (
-        all_descriptors as all_provider_descriptors,
-    )
     from audiagentic.components.providers.services.config.provider_config import (
         set_provider_enabled,
     )
 
-    for provider_id in all_provider_descriptors():
+    for provider_id in ("claude", "opencode", "gemini", "continue"):
         set_provider_enabled(project_root, provider_id, enabled=True)
+
+    from audiagentic.foundation.io import load_yaml_file, save_yaml_file
+
+    path = project_root / ".audiagentic/config/project.yaml"
+    config = load_yaml_file(path)
+    config["mcp-onboarding"] = {
+        "contract-version": "v1",
+        "bindings": {"ag-planning": ["claude", "opencode", "gemini", "continue"]},
+    }
+    save_yaml_file(path, config, atomic=True, sort_keys=False)
 
 
 def _stub(path: Path, content: str) -> None:
@@ -81,13 +90,13 @@ def _stub(path: Path, content: str) -> None:
 
 
 def apply_surfaces(project_root: Path) -> None:
-    from audiagentic.components.providers.services.mcp.mcp_sync import sync_all_provider_mcp_servers
+    from audiagentic.components.project.project_api import reconcile_mcp_bindings
     from audiagentic.components.providers.surfaces.manager import (
         apply_provider_surfaces,
         prune_provider_surfaces,
     )
 
-    sync_all_provider_mcp_servers(project_root)
+    assert reconcile_mcp_bindings(project_root) == []
     prune_provider_surfaces(project_root)
     apply_provider_surfaces(project_root)
 
@@ -113,15 +122,9 @@ def mcp_servers_in(project_root: Path, config_path: str) -> set[str]:
             return set()
         extensions = data.get("extensions", [])
         if isinstance(extensions, dict):
-            return {
-                str(name)
-                for name, ext in extensions.items()
-                if isinstance(ext, dict) and name
-            }
+            return {str(name) for name, ext in extensions.items() if isinstance(ext, dict) and name}
         return {
-            ext.get("name", "")
-            for ext in extensions
-            if isinstance(ext, dict) and ext.get("name")
+            ext.get("name", "") for ext in extensions if isinstance(ext, dict) and ext.get("name")
         }
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
@@ -157,8 +160,7 @@ def mcp_config_paths(project_root: Path) -> list[str]:
 
 def planning_in_surfaces(project_root: Path) -> bool:
     return any(
-        _PLANNING_CONTRIBUTION in managed_blocks_in(project_root / rel)
-        for rel in _SURFACE_FILES
+        _PLANNING_CONTRIBUTION in managed_blocks_in(project_root / rel) for rel in _SURFACE_FILES
     )
 
 
@@ -195,7 +197,7 @@ def test_planning_mcp_propagates_to_providers_only() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_install_propagates_ag_planning_to_all_provider_configs(
+def test_install_propagates_ag_planning_to_selected_provider_configs(
     tmp_path: Path, monkeypatch
 ) -> None:
     with component_sandbox(tmp_path, "plan-mcp-install") as sb:
@@ -314,7 +316,9 @@ def test_disable_removes_planning_contribution_from_surfaces(tmp_path: Path, mon
         disable_component("agent-planning", sb.repo)
         apply_surfaces(sb.repo)
 
-        assert not planning_in_surfaces(sb.repo), f"{_PLANNING_CONTRIBUTION} still present after disable"
+        assert not planning_in_surfaces(sb.repo), (
+            f"{_PLANNING_CONTRIBUTION} still present after disable"
+        )
 
 
 def test_enable_reinjection_restores_planning_contribution(tmp_path: Path, monkeypatch) -> None:
@@ -334,7 +338,9 @@ def test_enable_reinjection_restores_planning_contribution(tmp_path: Path, monke
         enable_component("agent-planning", sb.repo)
         apply_surfaces(sb.repo)
 
-        assert planning_in_surfaces(sb.repo), f"{_PLANNING_CONTRIBUTION} not reinjected after re-enable"
+        assert planning_in_surfaces(sb.repo), (
+            f"{_PLANNING_CONTRIBUTION} not reinjected after re-enable"
+        )
 
 
 def test_uninstall_removes_planning_contribution_from_surfaces(tmp_path: Path, monkeypatch) -> None:
@@ -352,7 +358,9 @@ def test_uninstall_removes_planning_contribution_from_surfaces(tmp_path: Path, m
         uninstall_component("agent-planning", sb.repo)
         apply_surfaces(sb.repo)
 
-        assert not planning_in_surfaces(sb.repo), f"{_PLANNING_CONTRIBUTION} still present after uninstall"
+        assert not planning_in_surfaces(sb.repo), (
+            f"{_PLANNING_CONTRIBUTION} still present after uninstall"
+        )
 
 
 # ---------------------------------------------------------------------------

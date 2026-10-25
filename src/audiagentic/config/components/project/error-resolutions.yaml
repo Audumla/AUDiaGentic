@@ -4,3 +4,5 @@ RES-PROJFILE-001: "The file was not found at the specified path. Verify the path
 VAL-PROJFILE-003: "The path points to a directory, not a file. Provide a file path instead."
 VAL-PROJFILE-004: "The JSON file could not be parsed. Check for syntax errors in the file."
 CON-PROJCOMP-001: "Core components cannot be uninstalled. Only optional components can be removed."
+VAL-MCPONB-001: "Check the canonical MCP and harness IDs using mcp list and harness list. Resolve the reported configuration or ownership conflict before retrying; use dry-run to inspect changes."
+RES-MCPONB-001: "No matching installation operation exists in this project. Inspect the latest unresolved operation or submit the intended installation explicitly."

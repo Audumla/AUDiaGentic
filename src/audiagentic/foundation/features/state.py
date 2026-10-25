@@ -79,7 +79,9 @@ def save_feature_state(project_root: Path, state: dict[str, Any]) -> None:
         )
 
 
-def get_component_state(project_root: Path, parent: str) -> dict[str, Any]:
+def get_component_state(
+    project_root: Path, parent: str, *, persist_migration: bool = True
+) -> dict[str, Any]:
     path = shard_path(project_root, parent)
     if path.exists():
         component_state = load_yaml_file(path)
@@ -91,14 +93,16 @@ def get_component_state(project_root: Path, parent: str) -> dict[str, Any]:
             return {}
         if component_state:
             migrate_component_state_to_flat(component_state)
-            set_component_state(project_root, parent, component_state)
+            if persist_migration:
+                set_component_state(project_root, parent, component_state)
             return dict(component_state)
         return {}
     if not isinstance(component_state, dict):
         return {}
     if _needs_migration(component_state):
         migrate_component_state_to_flat(component_state)
-        set_component_state(project_root, parent, component_state)
+        if persist_migration:
+            set_component_state(project_root, parent, component_state)
     return dict(component_state)
 
 
@@ -140,6 +144,7 @@ def migrate_to_shards(project_root: Path) -> list[str]:
 # Composite key helpers
 # ---------------------------------------------------------------------------
 
+
 def _needs_migration(component_state: dict[str, Any]) -> bool:
     """Check if component state needs migration from nested to flat format."""
     features = component_state.get("features")
@@ -174,12 +179,15 @@ def parse_feature_composite_key(key: str) -> tuple[str, str] | None:
 # Migration: nested features -> flat composite keys
 # ---------------------------------------------------------------------------
 
+
 def _is_nested_features_map(features: dict[str, Any]) -> bool:
     """Check if features dict uses old nested format (kind -> id -> state)."""
     for value in features.values():
         if isinstance(value, dict):
             for inner_value in value.values():
-                if isinstance(inner_value, dict) and ("enabled" in inner_value or "options" in inner_value):
+                if isinstance(inner_value, dict) and (
+                    "enabled" in inner_value or "options" in inner_value
+                ):
                     return True
     return False
 
@@ -242,6 +250,7 @@ def migrate_component_state_to_flat(component_state: dict[str, Any]) -> dict[str
 # Feature state access (flat composite key format)
 # ---------------------------------------------------------------------------
 
+
 def get_feature_state(project_root: Path, parent: str, kind: str, feature_id: str) -> FeatureState:
     component = get_component_state(project_root, parent)
     features = component.get("features") or {}
@@ -277,7 +286,10 @@ def set_feature_state(
 # Implementation state access
 # ---------------------------------------------------------------------------
 
-def get_implementation_state(project_root: Path, parent: str, implementation_id: str) -> ImplementationState:
+
+def get_implementation_state(
+    project_root: Path, parent: str, implementation_id: str
+) -> ImplementationState:
     component = get_component_state(project_root, parent)
     implementation_data = (component.get("implementations") or {}).get(implementation_id, {})
     if not isinstance(implementation_data, dict):
@@ -326,6 +338,7 @@ def remove_implementation_state(project_root: Path, parent: str, implementation_
 # ---------------------------------------------------------------------------
 # Implementation-scoped feature state (flat composite key format)
 # ---------------------------------------------------------------------------
+
 
 def get_implementation_feature_state(
     project_root: Path,

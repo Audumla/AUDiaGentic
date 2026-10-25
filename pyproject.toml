@@ -62,9 +62,8 @@ dev = [
 
 [project.scripts]
 # Only the user-facing CLI is a public entry point.
-# MCP servers are internal modules invoked via `python -m` within the Pi
-# harness session only. They must not appear on PATH or be discoverable
-# by other tools.
+# Component MCP servers use the module route from generated native configuration;
+# the public CLI also owns metadata discovery and explicit targeted registration.
 audiagentic = "audiagentic.launcher:main"
 
 [tool.setuptools.packages.find]
@@ -72,6 +71,7 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "audiagentic" = [
+  "components/project/contracts/*.json",
   "components/agents/gateway/service/client_icons/*.png",
   # Component descriptors and embedded markdown assets
   "config/components/**/*.yaml",

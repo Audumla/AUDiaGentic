@@ -7,6 +7,7 @@ Multi-agent workflow orchestration system for AI coding agents. Provides the inf
 - **[docs/README.md](docs/README.md)** — documentation map and authority rules
 - **[docs/planning/](docs/planning/)** — planning system (requests, specs, tasks, plans, work packages)
 - **[docs/releases/](docs/releases/)** — current release and audit docs
+- **[MCP onboarding](docs/guides/MCP_ONBOARDING.md)** — discover and configure MCPs for explicitly selected harnesses
 - **[docs/examples/](docs/examples/)** — example project scaffold
 
 ## Source code

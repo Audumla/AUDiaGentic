@@ -18,18 +18,15 @@ def _patch_config_dependencies(monkeypatch, *, provider_errors=None):
     calls: list[tuple[str, object]] = []
     monkeypatch.setattr(bootstrap, "global_harness_runtime", lambda: Path("runtime"))
     monkeypatch.setattr(
-        bootstrap,
-        "refresh_materialized_agent_config",
+        "audiagentic.runtime.harness.refresh_materialized_agent_config",
         lambda target, project_root=None: calls.append(("materialize", target)),
     )
     monkeypatch.setattr(
-        bootstrap,
-        "request_runtime_reload",
+        "audiagentic.runtime.harness.request_runtime_reload",
         lambda project_root, reason: calls.append(("reload", reason)),
     )
     monkeypatch.setattr(
-        bootstrap,
-        "cleanup_runtime",
+        "audiagentic.runtime.harness.cleanup_runtime",
         lambda target: calls.append(("cleanup", target)) or 0,
     )
     monkeypatch.setattr(
@@ -37,7 +34,7 @@ def _patch_config_dependencies(monkeypatch, *, provider_errors=None):
         lambda project_root, mode: _SurfaceResult(ok=True, mode=mode),
     )
     monkeypatch.setattr(
-        "audiagentic.components.providers.services.mcp.mcp_sync.sync_all_provider_mcp_servers",
+        "audiagentic.components.project.project_api.reconcile_mcp_bindings",
         lambda project_root: provider_errors or [],
     )
     return calls
@@ -67,6 +64,8 @@ def test_config_clean_prunes_surfaces_and_runtime(monkeypatch, tmp_path):
 
 
 def test_config_refresh_fails_when_provider_sync_reports_errors(monkeypatch, tmp_path):
-    _patch_config_dependencies(monkeypatch, provider_errors=[{"component": "agents", "error": "broken"}])
+    _patch_config_dependencies(
+        monkeypatch, provider_errors=[{"component": "agents", "error": "broken"}]
+    )
 
     assert bootstrap.cmd_config_sync(Namespace(config_cmd="refresh"), tmp_path) == 1

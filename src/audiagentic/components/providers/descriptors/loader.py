@@ -159,6 +159,8 @@ def _build_mcp_config_spec(data: dict[str, Any]) -> McpConfigSpec:
         else raw_mcp_path
     )
     return McpConfigSpec(
+        project_scoped=data.get("project_scoped"),
+        raw_reader=resolve_ref(data["raw_reader"]) if data.get("raw_reader") else None,
         config_path=mcp_config_path,
         reader=resolve_ref(data["reader"]),
         writer=resolve_ref(data["writer"]),

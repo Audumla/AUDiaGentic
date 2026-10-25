@@ -18,6 +18,22 @@ from .options import load_option_schema
 from .registry import register
 
 
+def read_implementation_metadata(
+    project_root: Path | None = None,
+) -> tuple[ImplementationDescriptor, ...]:
+    """Read base/profile implementation declarations without registration."""
+    from audiagentic.foundation.components.loader import component_metadata_directories
+
+    result = {}
+    for directory in component_metadata_directories(project_root):
+        for path in sorted(directory.rglob("*.yaml")):
+            data = load_yaml_file(path)
+            if data.get("type") == "implementation":
+                descriptor = load_implementation_from_yaml(path)
+                result[(descriptor.parent, descriptor.implementation_id)] = descriptor
+    return tuple(result.values())
+
+
 def _descriptor_error(path: Path, code: str, **details: Any) -> AudiaGenticError:
     return AudiaGenticError(
         code=code,
@@ -58,7 +74,9 @@ def load_feature_from_yaml(path: Path) -> FeatureDescriptor:
             "VAL-FDESC-003",
             value=implementation,
         )
-    scope = data.get("scope") or (FEATURE_SCOPE_IMPLEMENTATION if implementation else FEATURE_SCOPE_SHARED)
+    scope = data.get("scope") or (
+        FEATURE_SCOPE_IMPLEMENTATION if implementation else FEATURE_SCOPE_SHARED
+    )
     if scope not in {FEATURE_SCOPE_SHARED, FEATURE_SCOPE_IMPLEMENTATION}:
         raise _descriptor_error(
             path,
@@ -134,7 +152,9 @@ def load_binding_from_yaml(path: Path) -> BindingDescriptor:
     feature = _require_string(data, "feature", path)
     feature_kind = _require_string(data, "feature-kind", path)
     uses_dependencies = data.get("uses-dependencies") or []
-    if not isinstance(uses_dependencies, list) or not all(isinstance(item, str) for item in uses_dependencies):
+    if not isinstance(uses_dependencies, list) or not all(
+        isinstance(item, str) for item in uses_dependencies
+    ):
         raise _descriptor_error(
             path,
             "VAL-FDESC-009",
@@ -168,7 +188,9 @@ def load_binding_from_yaml(path: Path) -> BindingDescriptor:
     return descriptor
 
 
-def register_from_yaml(path: Path) -> FeatureDescriptor | ImplementationDescriptor | BindingDescriptor:
+def register_from_yaml(
+    path: Path,
+) -> FeatureDescriptor | ImplementationDescriptor | BindingDescriptor:
     data = load_yaml_file(path)
     type_value = data.get("type")
     if not isinstance(type_value, str) or not type_value:

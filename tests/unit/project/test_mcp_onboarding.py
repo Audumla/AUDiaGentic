@@ -1,0 +1,356 @@
+"""Owner API/CLI/protocol proofs in disposable projects; no real harness writes."""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+from jsonschema import validate
+
+from audiagentic.components.project import project_api as project
+from audiagentic.components.providers import providers_api as providers
+from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+
+@pytest.fixture
+def root(tmp_path, monkeypatch):
+    monkeypatch.setenv("AUDIAGENTIC_REPO_ROOT", str(tmp_path))
+    monkeypatch.delenv("AUDIAGENTIC_COMPONENT_PROFILE", raising=False)
+    return tmp_path
+
+
+def test_dry_run_creates_no_project_files(root):
+    outcome = project.install_mcp(root, mcp_id="ag-planning", harness_ids=["pi"], dry_run=True)
+    assert outcome["ok"] and not outcome["changed"]
+    assert "operation_id" not in outcome
+    assert not list(root.iterdir())
+
+
+def test_multiple_mcps_selection_removal_refresh_and_noop(root):
+    assert project.install_mcp(root, mcp_id="ag-planning", harness_ids=["pi", "codex"])["ok"]
+    assert project.install_mcp(root, mcp_id="ag-ledger", harness_ids=["pi"])["ok"]
+    outcome = project.install_mcp(root, mcp_id="ag-planning", harness_ids=["codex"])
+    assert outcome["ok"] and outcome["removed_harness_ids"] == ["pi"]
+    assert set(json.loads((root / ".pi/mcp.json").read_text())["mcpServers"]) == {"ag-ledger"}
+    paths = [
+        root / ".pi/mcp.json",
+        root / ".codex/config.toml",
+        root / ".audiagentic/state/providers/managed-mcp-servers.json",
+    ]
+    before = [(path.read_bytes(), path.stat().st_mtime_ns) for path in paths]
+    assert project.reconcile_mcp_bindings(root) == []
+    assert not project.install_mcp(root, mcp_id="ag-planning", harness_ids=["codex"])["changed"]
+    assert before == [(path.read_bytes(), path.stat().st_mtime_ns) for path in paths]
+    assert project.get_mcp_install_status(root) == {"has_unresolved_operation": False}
+
+
+def test_foreign_equal_payload_never_adopted(root):
+    project.install_mcp(root, mcp_id="ag-planning", harness_ids=["pi"])
+    registry = root / ".audiagentic/state/providers/managed-mcp-servers.json"
+    registry.unlink()
+    before = (root / ".pi/mcp.json").read_bytes()
+    with pytest.raises(AudiaGenticError):
+        project.install_mcp(root, mcp_id="ag-planning", harness_ids=["pi"], dry_run=True)
+    assert (root / ".pi/mcp.json").read_bytes() == before
+    assert not registry.exists()
+
+
+def test_full_raw_entry_fingerprint_catches_unknown_user_fields(root):
+    project.install_mcp(root, mcp_id="ag-planning", harness_ids=["codex"])
+    native = root / ".codex/config.toml"
+    native.write_text(native.read_text() + "\nstartup_timeout_sec = 999\n")
+    before = native.read_bytes()
+    with pytest.raises(AudiaGenticError):
+        project.install_mcp(root, mcp_id="ag-planning", harness_ids=["codex"], dry_run=True)
+    assert native.read_bytes() == before
+
+
+def test_all_targets_preflight_before_any_mutation(root):
+    path = root / ".pi/mcp.json"
+    path.parent.mkdir()
+    path.write_text(json.dumps({"mcpServers": {"ag-planning": {"command": "foreign"}}}))
+    before = {p.relative_to(root): p.read_bytes() for p in root.rglob("*") if p.is_file()}
+    with pytest.raises(AudiaGenticError):
+        project.install_mcp(root, mcp_id="ag-planning", harness_ids=["codex", "pi"])
+    assert before == {p.relative_to(root): p.read_bytes() for p in root.rglob("*") if p.is_file()}
+
+
+def test_partial_operation_resumes_same_id_without_repeating_completed_writes(root, monkeypatch):
+    actual = providers.apply_managed_mcp
+
+    def fail_second(path, pid, **kwargs):
+        if pid == "pi":
+            raise OSError("injected writer failure")
+        return actual(path, pid, **kwargs)
+
+    monkeypatch.setattr(providers, "apply_managed_mcp", fail_second)
+    first = project.install_mcp(root, mcp_id="ag-planning", harness_ids=["opencode", "pi"])
+    assert not first["ok"] and first["phase"] == "needs_reconciliation"
+    native = root / ".opencode/opencode.json"
+    before = native.read_bytes(), native.stat().st_mtime_ns
+    monkeypatch.setattr(providers, "apply_managed_mcp", actual)
+    second = project.install_mcp(root, mcp_id="ag-planning", harness_ids=["opencode", "pi"])
+    assert second["ok"] and second["operation_id"] == first["operation_id"]
+    assert before == (native.read_bytes(), native.stat().st_mtime_ns)
+    assert len(second["applied_changes"]) == 2
+
+
+def test_provider_cas_rejects_changed_file(root):
+    entry = providers.ManagedMcpEntry("test", "test", command=sys.executable)
+    request = providers.ManagedMcpRequest("test", None, (entry,))
+    plan = providers.preflight_managed_mcp(root, "pi", request=request)
+    native = root / ".pi/mcp.json"
+    native.parent.mkdir()
+    native.write_text('{"user": true}')
+    with pytest.raises(AudiaGenticError):
+        providers.apply_managed_mcp(root, "pi", request=request, expected_revision=plan["revision"])
+    assert native.read_text() == '{"user": true}'
+
+
+@pytest.mark.parametrize(
+    "mcp_id,targets",
+    [
+        ("ag-planning-mgmt", ["pi"]),
+        ("unknown", ["pi"]),
+        ("ag-planning", []),
+        ("ag-planning", ["unknown"]),
+    ],
+)
+def test_invalid_input_is_nonmutating(root, mcp_id, targets):
+    with pytest.raises(AudiaGenticError):
+        project.install_mcp(root, mcp_id=mcp_id, harness_ids=targets)
+    assert not list(root.iterdir())
+
+
+def test_metadata_and_selective_protocol_output(root):
+    from audiagentic.components.project.project_mcp import build_server
+    from audiagentic.foundation.components.registry import get_mcp_server_declaration
+
+    async def exercise():
+        server = build_server()
+        tools = {t.name: t for t in await server.list_tools()}
+        declaration = get_mcp_server_declaration("project", "ag-project-mgmt")
+        assert set(tools) == set(declaration.direct_tools) == set(declaration.tool_descriptions)
+        assert len(tools) == 22  # 19 actual baseline tools plus three additions.
+        assert tools["install_mcp"].inputSchema["properties"]["harness_ids"]["description"]
+        result = await server.call_tool("get_mcp_install_status", {})
+        assert result.content == []
+        assert result.structuredContent == {"result": {"has_unresolved_operation": False}}
+        validate(result.structuredContent, tools["get_mcp_install_status"].outputSchema)
+        old = await server.call_tool("get_option_provenance", {})
+        assert isinstance(old, tuple) and old[0]  # Existing text channel retained.
+
+    asyncio.run(exercise())
+
+
+def test_cli_discovery_does_not_initialize_runtime_or_adapters(root):
+    source = Path(__file__).resolve().parents[3] / "src"
+    env = {**os.environ, "PYTHONPATH": str(source), "AUDIAGENTIC_REPO_ROOT": str(root)}
+    script = """
+import sys
+from audiagentic.launcher import _main
+assert _main(['mcp','list','output','json']) == 0
+assert 'audiagentic.runtime.harness' not in sys.modules
+assert not any(n.startswith('audiagentic.components.providers.adapters') for n in sys.modules)
+"""
+    completed = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=root,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=20,
+    )
+    assert completed.returncode == 0, completed.stderr
+    assert len(completed.stdout.encode()) < 8192
+    assert not list(root.iterdir())
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        ["help"],
+        ["mcp", "help"],
+        ["mcp", "-h"],
+        ["mcp", "install", "help"],
+        ["mcp", "ag-planning", "help"],
+        ["harness", "list"],
+        ["harness", "pi", "help"],
+    ],
+)
+def test_cli_help_paths_are_nonmutating(root, capsys, command):
+    from audiagentic.launcher import _main
+
+    assert _main(command) == 0
+    assert capsys.readouterr().out
+    assert not list(root.iterdir())
+
+
+def test_cli_root_escape_and_literal_module_use_same_parser(root, monkeypatch):
+    from types import SimpleNamespace
+
+    from audiagentic import launcher
+    from audiagentic.runtime import bootstrap
+
+    graph = SimpleNamespace(
+        shutdown=lambda: None, root=lambda _key: SimpleNamespace(start=lambda **_kw: None)
+    )
+    monkeypatch.setattr(bootstrap, "build_application_graph", lambda **_kw: graph)
+    launched = []
+    monkeypatch.setattr(
+        launcher, "_cmd_launch", lambda root, tokens, params: launched.append(tokens) or 0
+    )
+    assert launcher._main(["--project", str(root), "--", "mcp", "--opaque"]) == 0
+    assert launched == [["mcp", "--opaque"]]
+    modules = []
+    monkeypatch.setitem(
+        launcher._COMMAND_HANDLERS,
+        "mcp",
+        lambda args, root: modules.append((args.module, args.module_args)) or 0,
+    )
+    assert launcher._main(["mcp", "--", "install", "help", "--opaque"]) == 0
+    assert modules == [("install", ["help", "--opaque"])]
+
+
+@pytest.mark.parametrize(
+    "tail",
+    [
+        ["install"],
+        ["install", "ag-planning", "harness", ""],
+        ["install", "ag-planning", "harness", "pi,"],
+        ["install", "ag-planning", "harness", "pi", "dry-run", "dry-run"],
+        ["list", "unknown-clause"],
+    ],
+)
+def test_malformed_management_never_starts_application(root, monkeypatch, tail):
+    from audiagentic.launcher import _main
+    from audiagentic.runtime import bootstrap
+
+    monkeypatch.setattr(
+        bootstrap,
+        "build_application_graph",
+        lambda **_kw: pytest.fail("malformed management launched the application"),
+    )
+    with pytest.raises(SystemExit) as exc:
+        _main(["mcp", *tail])
+    assert exc.value.code == 2
+    assert not list(root.iterdir())
+
+
+def test_component_disable_enable_uses_persisted_selection(root):
+    project.install_mcp(root, mcp_id="ag-planning", harness_ids=["pi"])
+    project.disable_component(root, "agent-planning")
+    assert not json.loads((root / ".pi/mcp.json").read_text())["mcpServers"]
+    project.enable_component(root, "agent-planning")
+    assert set(json.loads((root / ".pi/mcp.json").read_text())["mcpServers"]) == {"ag-planning"}
+    assert not (root / ".codex/config.toml").exists()
+
+
+def test_damaged_history_does_not_block_new_installation(root):
+    path = root / ".audiagentic/state/mcp-onboarding/operations/broken.json"
+    path.parent.mkdir(parents=True)
+    path.write_text("{damaged", encoding="utf8")
+    assert project.install_mcp(root, mcp_id="ag-planning", harness_ids=["pi"])["ok"]
+    assert project.get_mcp_install_status(root)["phase"] == "needs_reconciliation"
+    assert path.read_text() == "{damaged"
+
+
+def test_owner_requirements_use_schema_and_hide_sensitive_defaults(root, monkeypatch):
+    from types import SimpleNamespace
+
+    from audiagentic.components.project.onboarding import requirements
+    from audiagentic.foundation.features.base import OptionSchema
+
+    implementation = SimpleNamespace(
+        parent="owner",
+        implementation_id="default",
+        options_schema={
+            "directory": OptionSchema("string", required=True),
+            "api_key": OptionSchema("string", default="do-not-disclose"),
+        },
+    )
+    monkeypatch.setattr(requirements, "read_implementation_metadata", lambda _: [implementation])
+    monkeypatch.setattr(requirements, "resolve_active_implementation", lambda *a, **k: "default")
+    monkeypatch.setattr(requirements, "get_component_state", lambda *a, **k: {})
+    owner = SimpleNamespace(component_id="owner")
+    assert "default" not in requirements.describe(root, "owner")[0]["fields"]["api_key"]
+    with pytest.raises(AudiaGenticError):
+        requirements.resolve(root, owner, None)
+    config = root / "owner.yaml"
+    config.write_text("options:\n  directory: sandbox\n", encoding="utf8")
+    assert requirements.resolve(root, owner, config)["values"]["directory"] == "sandbox"
+    config.write_text("options:\n  api_key: secret\n", encoding="utf8")
+    with pytest.raises(AudiaGenticError):
+        requirements.resolve(root, owner, config)
+
+
+def test_resume_rejects_changed_profile_fingerprint(root):
+    from audiagentic.components.project.onboarding import service
+
+    result = project.install_mcp(root, mcp_id="ag-planning", harness_ids=["pi"])
+    path = root / ".audiagentic/state/mcp-onboarding/operations" / f"{result['operation_id']}.json"
+    record = json.loads(path.read_text())
+    record.update(phase="applying", fingerprint="old-profile-fingerprint")
+    path.write_text(json.dumps(record), encoding="utf8")
+    before = (root / ".pi/mcp.json").read_bytes()
+    resumed = service.resume(root)[0]
+    assert not resumed["ok"] and resumed["phase"] == "needs_reconciliation"
+    assert (root / ".pi/mcp.json").read_bytes() == before
+
+
+def test_intent_write_failure_has_terminal_actionable_record(root, monkeypatch):
+    from audiagentic.components.project.onboarding import service
+
+    def fail(*args, **kwargs):
+        raise OSError("injected intent failure")
+
+    monkeypatch.setattr(service, "save_yaml_file", fail)
+    result = project.install_mcp(root, mcp_id="ag-planning", harness_ids=["pi"])
+    assert not result["ok"] and result["phase"] == "needs_reconciliation"
+    assert result["action_needed"]
+    assert not (root / ".pi/mcp.json").exists()
+
+
+def test_owner_configuration_changed_after_preflight_is_rejected(root, monkeypatch):
+    from audiagentic.components.project.onboarding import requirements
+
+    monkeypatch.setattr(
+        requirements, "get_component_state", lambda *a, **k: {"options": {"changed": True}}
+    )
+    with pytest.raises(AudiaGenticError):
+        requirements.validate_current(root, "agent-planning", {"state": {}})
+
+
+@pytest.mark.parametrize("ids", ["pi", [None], [{}], [], [""]])
+def test_owner_api_rejects_malformed_target_selection(root, ids):
+    with pytest.raises(AudiaGenticError):
+        project.install_mcp(root, mcp_id="ag-planning", harness_ids=ids)
+    assert not list(root.iterdir())
+
+
+@pytest.mark.parametrize("ids", ["a", [1], ["a", "a"], {}])
+def test_managed_request_rejects_invalid_subsets(ids):
+    with pytest.raises(ValueError):
+        providers.ManagedMcpRequest.from_mapping(
+            {"ownership_scope": "component-mcp", "managed_ids": ids}
+        )
+
+
+def test_managed_request_empty_subset_and_complete_scope_are_distinct():
+    assert (
+        providers.ManagedMcpRequest.from_mapping(
+            {"ownership_scope": "x", "managed_ids": []}
+        ).managed_ids
+        == frozenset()
+    )
+    assert (
+        providers.ManagedMcpRequest.from_mapping(
+            {"ownership_scope": "x", "managed_ids": None}
+        ).managed_ids
+        is None
+    )

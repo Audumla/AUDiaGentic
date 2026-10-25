@@ -5,3 +5,6 @@ workflow-profile: standard
 tracked-docs-root: docs
 runtime-root: .audiagentic/runtime
 release-strategy: semver
+mcp-onboarding:
+  contract-version: v1
+  bindings: {}

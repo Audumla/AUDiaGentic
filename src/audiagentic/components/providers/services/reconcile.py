@@ -14,25 +14,6 @@ from ..descriptors.registry import all_descriptors
 logger = logging.getLogger(__name__)
 
 
-def _sync_provider_mcp(project_root: Path, on_progress: ComponentOutputSink | None = None) -> None:
-    """Sync all component MCP servers to provider configs — adds missing, removes stale.
-
-    Delegates to sync_all_provider_mcp_servers, which iterates every installed +
-    enabled component and projects its managed MCP entries to all MCP-capable
-    providers (active or not).
-    """
-    from .lifecycle.lifecycle import _emit
-
-    try:
-        from .mcp.mcp_sync import sync_all_provider_mcp_servers
-
-        sync_all_provider_mcp_servers(project_root)
-        _emit(on_progress, "MCP server configs synced")
-    except Exception:  # noqa: BLE001
-        logger.warning("MCP server config sync failed", exc_info=True)
-        _emit(on_progress, "MCP server config sync failed (non-fatal)", level="warning")
-
-
 def _reconcile_model_projection(
     provider_id: str,
     project_root: Path,
@@ -170,7 +151,11 @@ def reconcile_provider(
     action_taken: str
     surfaces_result: dict[str, Any] | None = None
 
-    if cli_available and not currently_enabled and not _should_auto_enable(project_root, provider_id):
+    if (
+        cli_available
+        and not currently_enabled
+        and not _should_auto_enable(project_root, provider_id)
+    ):
         _emit(
             on_progress,
             f"Skipping {provider_id} — not in reconciliation-policy allowlist",
@@ -189,7 +174,6 @@ def reconcile_provider(
             request=_build_surface_request(project_root, provider_id),
         )
         surfaces_result = surface_result.to_mapping()
-        _sync_provider_mcp(project_root, on_progress)
         _reconcile_model_projection(
             provider_id, project_root, enabled=True, on_progress=on_progress
         )
@@ -236,7 +220,6 @@ def reconcile_provider(
             on_progress,
             f"{provider_id} already in sync ({('enabled' if currently_enabled else 'disabled')})",
         )
-        _sync_provider_mcp(project_root, on_progress)
         _reconcile_model_projection(
             provider_id, project_root, enabled=currently_enabled, on_progress=on_progress
         )

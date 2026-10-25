@@ -1,0 +1,7 @@
+providers.state.changed:
+  description: Provider enablement changed; owners reconcile their explicit contributions.
+  payload-required: [project_root, provider_id, enabled]
+  payload-optional: []
+  metadata-keys: []
+  delivery: sync
+  since: v1.0.0

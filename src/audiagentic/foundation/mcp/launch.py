@@ -1,4 +1,5 @@
 """Launch helpers for component MCP servers."""
+
 from __future__ import annotations
 
 import sys
@@ -25,11 +26,10 @@ def component_mcp_launch(
 
     The canonical launch sequence is::
 
-        <pythonw> -m audiagentic.launcher mcp <module> [extra_args...]
+        <sys.executable> -m audiagentic.launcher mcp <module> [extra_args...]
 
     invoking the launcher module directly rather than the ``audiagentic``
-    console-script stub. See :func:`mcp_interpreter` for why the windowless
-    interpreter is used.
+    console-script stub. The live interpreter preserves the stdio transport.
 
     Parameters
     ----------

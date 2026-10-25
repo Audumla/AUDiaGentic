@@ -37,9 +37,7 @@ def _discover_adapter_packages() -> dict[str, ModuleType]:
         try:
             modules[name] = importlib.import_module(f"{__name__}.{name}")
         except ImportError as exc:
-            logger.warning(
-                "Skipping adapter %r: missing optional dependency (%s)", name, exc
-            )
+            logger.warning("Skipping adapter %r: missing optional dependency (%s)", name, exc)
     return modules
 
 
@@ -97,6 +95,9 @@ def load_providers() -> None:
     Invalid descriptors are skipped and logged at WARNING level; a summary
     is emitted if any were skipped.
     """
+    from ..services.capabilities.recipe_steps import register_provider_steps
+
+    register_provider_steps()
     # Import surface modules first (catalog.py, hooks.py, mcp_format.py)
     _ADAPTER_MODULES = _discover_adapter_packages()
 

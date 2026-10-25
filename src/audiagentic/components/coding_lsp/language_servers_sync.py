@@ -1,4 +1,5 @@
 """Language server projection sync from the LSP component."""
+
 from __future__ import annotations
 
 import logging
@@ -73,7 +74,9 @@ def _generic_mcp_managed_ids() -> set[str]:
 
 
 def _to_managed_mcp_entry(
-    managed_id: str, name: str, entry: McpServerEntry,
+    managed_id: str,
+    name: str,
+    entry: McpServerEntry,
 ) -> ManagedMcpEntry:
     """Convert an McpServerEntry projection to a ManagedMcpEntry."""
     cmd = entry.command or None
@@ -85,11 +88,15 @@ def _to_managed_mcp_entry(
         env=tuple(sorted(entry.env.items())) if entry.env else (),
         url=entry.url,
         headers=tuple(sorted(entry.headers.items())) if entry.headers else (),
-        transport=("http" if entry.transport == "http" else ("sse" if entry.transport == "sse" else None)),
+        transport=(
+            "http" if entry.transport == "http" else ("sse" if entry.transport == "sse" else None)
+        ),
     )
 
 
-def _generic_mcp_projection(project_root: Path, implementation: str) -> dict[str, tuple[str, McpServerEntry]]:
+def _generic_mcp_projection(
+    project_root: Path, implementation: str
+) -> dict[str, tuple[str, McpServerEntry]]:
     spec = _generic_mcp_projection_spec(implementation)
     managed_id = spec.get("managed-id")
     name = spec.get("name")
@@ -124,7 +131,9 @@ def _generic_mcp_projection(project_root: Path, implementation: str) -> dict[str
     }
 
 
-def _lsp_json_language_server_projection(project_root: Path, feature: str) -> dict[str, LanguageServerEntry]:
+def _lsp_json_language_server_projection(
+    project_root: Path, feature: str
+) -> dict[str, LanguageServerEntry]:
     servers = resolve_active_runtime_servers(project_root).get(feature, [])
     if not servers:
         return {}
@@ -143,7 +152,9 @@ def _lsp_json_language_server_projection(project_root: Path, feature: str) -> di
     }
 
 
-def _blackwell_agent_lsp_mcp_args_projection(project_root: Path) -> dict[str, tuple[str, McpServerEntry]]:
+def _blackwell_agent_lsp_mcp_args_projection(
+    project_root: Path,
+) -> dict[str, tuple[str, McpServerEntry]]:
     """Writer for blackwell-agent-lsp.mcp-args bindings: produce MCP args from runtime servers."""
     implementation = "blackwell-agent-lsp"
     spec = _generic_mcp_projection_spec(implementation)
@@ -202,7 +213,9 @@ def _generic_lsp_projection_for_active_implementation(
             continue
         writer = get_binding_writer(_COMPONENT_ID, writer_key, projection_kind="generic-mcp")
         desired.update(
-            writer(project_root) if writer is not None else _generic_mcp_projection(project_root, implementation)
+            writer(project_root)
+            if writer is not None
+            else _generic_mcp_projection(project_root, implementation)
         )
         seen_writer_keys.add(writer_key)
     if not desired:
@@ -278,10 +291,11 @@ def sync_generic_lsp_mcp_to_providers(project_root: Path) -> dict[str, Any]:
     )
 
     entries = tuple(
-        _to_managed_mcp_entry(mid, name, entry)
-        for mid, (name, entry) in desired_entry.items()
+        _to_managed_mcp_entry(mid, name, entry) for mid, (name, entry) in desired_entry.items()
     )
-    request = ManagedMcpRequest(ownership_scope=_MCP_OWNERSHIP_SCOPE, entries=entries)
+    request = ManagedMcpRequest(
+        ownership_scope=_MCP_OWNERSHIP_SCOPE, managed_ids=None, entries=entries
+    )
     results = manage_mcp_entries_all(
         project_root,
         mode="apply",
@@ -373,7 +387,7 @@ def prune_generic_lsp_mcp_from_providers(project_root: Path) -> dict[str, Any]:
         managed_ids=frozenset(_generic_mcp_managed_ids()),
     )
 
-    request = ManagedMcpRequest(ownership_scope=_MCP_OWNERSHIP_SCOPE, entries=())
+    request = ManagedMcpRequest(ownership_scope=_MCP_OWNERSHIP_SCOPE, managed_ids=None, entries=())
     results = manage_mcp_entries_all(
         project_root,
         mode="prune",

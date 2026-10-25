@@ -11,6 +11,17 @@
     "release-strategy"
   ],
   "properties": {
+    "mcp-onboarding": {
+      "type": "object", "required": ["contract-version", "bindings"],
+      "additionalProperties": false,
+      "properties": {
+        "contract-version": {"const": "v1"},
+        "bindings": {"type": "object", "additionalProperties": {
+          "type": "array", "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        }}
+      }
+    },
     "contract-version": {
       "const": "v1"
     },

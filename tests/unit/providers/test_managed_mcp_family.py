@@ -42,6 +42,7 @@ def _entry(*, remote: bool = False):
 def _request(*, remote: bool = False, empty: bool = False):
     return ManagedMcpRequest(
         ownership_scope="memory/hindsight/hindsight",
+        managed_ids=None,
         entries=() if empty else (_entry(remote=remote),),
     )
 
@@ -53,7 +54,7 @@ def test_descriptor_backed_provider_is_supported(monkeypatch, tmp_path):
         tmp_path,
         "any-provider",
         mode="status",
-        request=ManagedMcpRequest(ownership_scope="test/scope"),
+        request=ManagedMcpRequest(ownership_scope="test/scope", managed_ids=None),
     )
     assert result.supported is True
 
@@ -65,7 +66,7 @@ def test_no_mcp_config_is_unsupported(monkeypatch, tmp_path):
         tmp_path,
         "no-mcp-provider",
         mode="status",
-        request=ManagedMcpRequest(ownership_scope="test/scope"),
+        request=ManagedMcpRequest(ownership_scope="test/scope", managed_ids=None),
     )
     assert result.ok is False
     assert result.supported is False

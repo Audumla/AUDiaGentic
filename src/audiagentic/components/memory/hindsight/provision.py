@@ -240,6 +240,7 @@ def _status_mcp(
         mode="status",
         request=ManagedMcpRequest(
             ownership_scope=hindsight_ownership_scope(backend),
+            managed_ids=None,
             entries=(build_hindsight_managed_entry(backend),),
         ),
     )

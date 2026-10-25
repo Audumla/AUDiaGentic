@@ -1,4 +1,5 @@
 """Provider config loading and validation helpers."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -39,7 +40,9 @@ def validate_prompt_surface(provider_id: str, provider_cfg: dict[str, Any]) -> l
     vscode_mode = prompt_surface.get("vscode-mode")
 
     if enabled:
-        supported_modes = [mode for mode in (cli_mode, vscode_mode) if mode and mode != "unsupported"]
+        supported_modes = [
+            mode for mode in (cli_mode, vscode_mode) if mode and mode != "unsupported"
+        ]
         if not supported_modes:
             issues.append(
                 f"{provider_id}: prompt-surface.enabled requires at least one supported cli-mode or vscode-mode"
@@ -184,6 +187,14 @@ def set_provider_enabled(project_root: Path, provider_id: str, *, enabled: bool)
             from ..lifecycle.project_purge import purge_provider_project
 
             purge_provider_project(project_root, provider_id)
+        from audiagentic.foundation.event import get_bus
+
+        from ...events import PROVIDER_STATE_CHANGED
+
+        get_bus().publish(
+            PROVIDER_STATE_CHANGED,
+            {"project_root": project_root, "provider_id": provider_id, "enabled": enabled},
+        )
         return
     state = get_implementation_state(project_root, _COMPONENT_ID, provider_id)
     set_implementation_state(
@@ -196,6 +207,14 @@ def set_provider_enabled(project_root: Path, provider_id: str, *, enabled: bool)
         from ..lifecycle.project_purge import purge_provider_project
 
         purge_provider_project(project_root, provider_id)
+    from audiagentic.foundation.event import get_bus
+
+    from ...events import PROVIDER_STATE_CHANGED
+
+    get_bus().publish(
+        PROVIDER_STATE_CHANGED,
+        {"project_root": project_root, "provider_id": provider_id, "enabled": enabled},
+    )
 
 
 _VALID_RECONCILIATION_MODES = ("auto", "allowlist", "prompt")

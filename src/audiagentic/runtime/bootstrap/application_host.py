@@ -72,6 +72,16 @@ class ApplicationHost:
 
         register_harness_status(harness_status_functions())
 
+        # This process root composes the owning Project surface directly.
+        # Internal stdio launches must never re-enter an install holding a fence.
+        if command != "mcp":
+            from audiagentic.components.project import project_api
+
+            try:
+                project_api.resume_mcp_installations(project_root)
+            except Exception:
+                logger.warning("MCP onboarding startup recovery needs operator attention")
+
     def shutdown(self) -> None:
         """Record process exit. Idempotent, and safe after logging teardown."""
         if not self._started:

@@ -5,10 +5,15 @@ id: project
 display-name: Project
 description: Core project scaffold — config, prompts, and workflow files
 context-hook: audiagentic.components.project.project_api.context
+lifecycle-observer: audiagentic.components.project.onboarding_events
 files:
   - path: .audiagentic/config/project.yaml
     lifecycle: create-if-missing
     description: Project identity and workflow config
+  - path: .audiagentic/state/mcp-onboarding
+    lifecycle: create-if-missing
+    recursive: true
+    description: Recoverable MCP installation receipts and bounded reconciliation diagnostics
   - path: .audiagentic/config/interoperability/config.yaml
     lifecycle: create-if-missing
     description: Event bus and interoperability runtime config
@@ -18,20 +23,24 @@ files:
 mcp-servers:
   - name: ag-project-mgmt
     module: audiagentic.components.project.project_mcp
-    direct-tools: [project_status, list_components, install_component, uninstall_component, enable_component, disable_component, read_project_file, list_project_instructions, get_project_instruction, create_project_instruction, update_project_instruction, delete_project_instruction, list_project_skills, get_project_skill, create_project_skill, update_project_skill, delete_project_skill, runtime_sync_contract, get_option_provenance]
+    direct-tools: [project_status, list_components, install_component, uninstall_component, enable_component, disable_component, read_project_file, list_project_instructions, get_project_instruction, create_project_instruction, update_project_instruction, delete_project_instruction, list_project_skills, get_project_skill, create_project_skill, update_project_skill, delete_project_skill, runtime_sync_contract, get_option_provenance, list_mcp_catalog, install_mcp, get_mcp_install_status]
     description: Project MCP server for project-level component management
     propagate: audiagentic
     instructions: >
-      AUDiaGentic project component server.
-      Use project_status to inspect target project.
-      Use list_components to see all registered components and their status.
+      Manage project components and explicitly selected MCP access.
+      Discover declarations with list_mcp_catalog; pass an MCP ID for details.
+      Use install_mcp only for explicitly requested targets and dry_run for preflight.
+      Inspect interrupted work with get_mcp_install_status; repeating a matching
+      install safely resumes proven incomplete work. Configured is distinct from
+      reachable or verified. Installing a component does not expose all MCPs.
+      Never overwrite foreign native configuration or install harness binaries.
     tool-descriptions:
       project_status: Return current project installation state and installed components.
       list_components: List all registered AUDiaGentic components with install and enabled status.
-      install_component: Install a component into target project. Harness config is regenerated automatically — no manual refresh needed. The sync field in the result is a runtime hint for the harness adapter; the agent does not need to act on it.
-      uninstall_component: Uninstall a component from target project. Harness config is regenerated automatically — no manual refresh needed.
-      enable_component: Enable a component in target project. Harness config is regenerated automatically — no manual refresh needed.
-      disable_component: Disable a component in target project. Harness config is regenerated automatically — no manual refresh needed.
+      install_component: Install a component and perform its existing runtime refresh. Native MCP exposure follows explicit Project selections; component installation does not select every MCP or harness.
+      uninstall_component: Uninstall a component and refresh its runtime surfaces. Prune only its owned native exposure; preserve foreign entries.
+      enable_component: Enable a component and refresh its runtime surfaces. Restore native MCP exposure only for explicit Project selections.
+      disable_component: Disable a component and refresh its runtime surfaces. Prune its owned native exposure without selecting additional harnesses.
       read_project_file: >
         Read a file inside the project .audiagentic directory. relative_path must
         start with '.audiagentic/' (e.g. '.audiagentic/config/runtime/features/memory.yaml').
@@ -47,7 +56,35 @@ mcp-servers:
       create_project_skill: Create a project-owned skill with YAML frontmatter and reconcile enabled provider surfaces.
       update_project_skill: Update a project-owned skill and reconcile enabled provider surfaces.
       delete_project_skill: Delete a project-owned skill and reconcile enabled provider surfaces.
-      runtime_sync_contract: Return the runtime sync contract — describes what harness
-        refresh actions follow component mutations and which are automatic.
+      runtime_sync_contract: Return the Pi runtime sync contract for existing component mutations, distinct from native MCP onboarding operation status.
+      list_mcp_catalog:
+        description: List declared MCP servers, or inspect one server's owned help and eligible native targets. Metadata-only; no installation, provider startup or external probes.
+        parameters:
+          mcp_id: Canonical MCP ID such as ag-planning. Omit for the compact catalog; supply an ID for detailed metadata.
+      install_mcp:
+        description: Set one declared MCP's complete native target selection for this project. Preflight all affected targets and preserve other MCP bindings. Repeating a matching request safely resumes proven incomplete work. Does not install harness binaries or authenticate accounts.
+        parameters:
+          mcp_id: Canonical MCP ID to configure, such as ag-planning.
+          harness_ids: Nonempty explicit harness IDs. This is the complete selection for this MCP; omitted previous targets are removed. Other MCPs and foreign configuration remain untouched.
+          dry_run: Default false. True reports planned changes without persisting selection or modifying native files.
+      get_mcp_install_status:
+        description: Read bounded installation progress, per-target outcomes and safe next actions. Does not retry, probe or disclose native configuration.
+        parameters:
+          operation_id: Installation operation ID. Omit for the latest unresolved operation; returns has_unresolved_operation false when none exists.
       get_option_provenance: Show where each option value came from (project config,
         harness defaults, or override). Optionally filter by component_id.
+
+contributions:
+  - id: project/mcp-onboarding
+    owner: project
+    title: MCP onboarding
+    preferred-targets: [instruction]
+    content:
+      body: |
+        Configure MCP access only for explicitly requested harnesses.
+        Discover servers with `audiagentic mcp list` and targets with
+        `audiagentic harness list`. Use `audiagentic mcp MCP_ID help` for setup.
+        Install with `audiagentic mcp install MCP_ID harness ID[,ID...]`.
+        This sets that MCP's complete native target selection; other MCPs remain unchanged.
+        Component installation alone does not select native MCP exposure.
+        Report configured separately from verified.

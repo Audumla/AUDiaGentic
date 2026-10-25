@@ -51,6 +51,24 @@ Descriptor under `src/audiagentic/config/components/` is **data**; package under
 
 ## 3. Discovery
 
+### Native MCP onboarding metadata
+
+Declare MCP IDs, modules, tool descriptions and parameter descriptions in the owning
+component YAML. Read-only onboarding catalog/help consumes these declarations without
+starting adapters or importing MCP modules. Only declarations with `providers` in
+`propagate` are eligible for explicit native installation. Internal management entries
+remain separate.
+
+Use `audiagentic mcp <mcp-id> help` to inspect schema-derived configuration requirements
+and `audiagentic mcp install <mcp-id> harness <ids>` to select native targets. Components
+must not write a harness configuration themselves or broadcast MCPs to every detected
+client. Project owns selection and Providers owns native serialization and ownership.
+
+Keep instructions as short, owned contributions; do not copy catalogs into managed
+agent files. For new MCP tools, maintain YAML parameter prose and declare structured
+output selectively so existing tools keep their wire contract. See
+[MCP onboarding](../guides/MCP_ONBOARDING.md) for recovery and qualification commands.
+
 `foundation/components/loader.py::register_all_components()` globs `src/audiagentic/config/components/*.yaml` and nested descriptor YAML recursively, reads each file's `type`, and registers it. `type: component` → `ComponentDescriptor`; `type: feature|implementation|binding` → handed to `foundation/features/loader.py`. It validates IDs/links and imports each declared `lifecycle-observer` module.
 
 Hard constraints:

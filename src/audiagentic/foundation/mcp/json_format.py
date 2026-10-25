@@ -14,6 +14,7 @@ tools trying to spawn a program literally named ``__AUDIAGENTIC_PYTHON__``. The
 placeholder is still resolved on read for backward compatibility with any file
 that already contains it.
 """
+
 from __future__ import annotations
 
 import json
@@ -75,6 +76,11 @@ def read_mcp_json(path: Path) -> dict[str, McpServerEntry]:
                 env=dict(cfg.get("env", {})),
             )
     return entries
+
+
+def read_raw_mcp_json(path: Path) -> dict[str, Any]:
+    """Read full native entries for ownership edit detection."""
+    return _load_mcp_json(path).get("mcpServers", {})
 
 
 def write_mcp_json(path: Path, entries: dict[str, McpServerEntry]) -> None:

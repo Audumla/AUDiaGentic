@@ -13,6 +13,61 @@ from audiagentic.foundation.io import load_yaml_file
 from . import project_components, project_files, project_surfaces
 
 
+def list_mcp_catalog(project_root: Path | None = None, mcp_id: str | None = None):
+    """Read canonical MCP declarations, or owned help for one declaration."""
+    from .onboarding.catalog import catalog
+
+    return catalog(project_root, mcp_id)
+
+
+def get_mcp_help(mcp_id: str, project_root: Path | None = None):
+    """Read detailed owner metadata for one MCP."""
+    return list_mcp_catalog(project_root, mcp_id)
+
+
+def install_mcp(
+    project_root: Path,
+    *,
+    mcp_id: str,
+    harness_ids,
+    dry_run: bool = False,
+    config_file: Path | None = None,
+    non_interactive: bool = True,
+) -> dict:
+    """Set one MCP's explicit native selection through Project-owned onboarding."""
+    from .onboarding.service import install
+
+    return install(
+        project_root,
+        mcp_id=mcp_id,
+        harness_ids=harness_ids,
+        dry_run=dry_run,
+        config_file=config_file,
+        non_interactive=non_interactive,
+    )
+
+
+def get_mcp_install_status(project_root: Path, operation_id: str | None = None) -> dict:
+    """Read one operation or the latest unresolved operation without retrying it."""
+    from .onboarding.service import status
+
+    return status(project_root, operation_id)
+
+
+def reconcile_mcp_bindings(project_root: Path) -> list[dict]:
+    """Reconcile explicit selections only; report bounded owner failures."""
+    from .onboarding.service import reconcile
+
+    return reconcile(project_root)
+
+
+def resume_mcp_installations(project_root: Path) -> list[dict]:
+    """Resume interrupted local install intent at deliberate process startup."""
+    from .onboarding.service import resume
+
+    return resume(project_root)
+
+
 def resolve_project_name(
     project_root: Path,
     *,
@@ -99,29 +154,54 @@ def read_project_file(project_root: Path, relative_path: str) -> dict[str, Any]:
 def list_project_instructions(project_root: Path) -> list[dict[str, Any]]:
     return project_surfaces.list_project_instructions(project_root)
 
+
 def get_project_instruction(project_root: Path, item_id: str) -> dict[str, Any]:
     return project_surfaces.get_project_instruction(project_root, item_id)
 
-def create_project_instruction(project_root: Path, item_id: str, title: str, body: str, preferred_targets: list[str] | None = None) -> dict[str, Any]:
-    return project_surfaces.create_project_instruction(project_root, item_id, title, body, preferred_targets)
 
-def update_project_instruction(project_root: Path, item_id: str, title: str | None = None, body: str | None = None, preferred_targets: list[str] | None = None) -> dict[str, Any]:
-    return project_surfaces.update_project_instruction(project_root, item_id, title, body, preferred_targets)
+def create_project_instruction(
+    project_root: Path,
+    item_id: str,
+    title: str,
+    body: str,
+    preferred_targets: list[str] | None = None,
+) -> dict[str, Any]:
+    return project_surfaces.create_project_instruction(
+        project_root, item_id, title, body, preferred_targets
+    )
+
+
+def update_project_instruction(
+    project_root: Path,
+    item_id: str,
+    title: str | None = None,
+    body: str | None = None,
+    preferred_targets: list[str] | None = None,
+) -> dict[str, Any]:
+    return project_surfaces.update_project_instruction(
+        project_root, item_id, title, body, preferred_targets
+    )
+
 
 def delete_project_instruction(project_root: Path, item_id: str) -> dict[str, Any]:
     return project_surfaces.delete_project_instruction(project_root, item_id)
 
+
 def list_project_skills(project_root: Path) -> list[dict[str, Any]]:
     return project_surfaces.list_project_skills(project_root)
+
 
 def get_project_skill(project_root: Path, item_id: str) -> dict[str, Any]:
     return project_surfaces.get_project_skill(project_root, item_id)
 
+
 def create_project_skill(project_root: Path, item_id: str, content: str) -> dict[str, Any]:
     return project_surfaces.create_project_skill(project_root, item_id, content)
 
+
 def update_project_skill(project_root: Path, item_id: str, content: str) -> dict[str, Any]:
     return project_surfaces.update_project_skill(project_root, item_id, content)
+
 
 def delete_project_skill(project_root: Path, item_id: str) -> dict[str, Any]:
     return project_surfaces.delete_project_skill(project_root, item_id)

@@ -32,6 +32,7 @@ capabilities:
     mechanism:
       config_path: ".opencode/opencode.json"
       reader: "audiagentic.components.providers.adapters.opencode.mcp_format:read_opencode_mcp"
+      raw_reader: "audiagentic.components.providers.adapters.opencode.mcp_format:read_raw_opencode_mcp"
       writer: "audiagentic.components.providers.adapters.opencode.mcp_format:write_opencode_mcp"
       remover: "audiagentic.components.providers.adapters.opencode.mcp_format:remove_opencode_mcp"
       transports: [stdio, http]  # writer emits url-form entries

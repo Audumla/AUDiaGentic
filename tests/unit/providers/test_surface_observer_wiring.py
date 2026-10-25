@@ -6,6 +6,7 @@ suite covers that gap: it verifies the observer reacts to the right lifecycle
 events. Regression guard for disable/enable falling through silently (the
 ag-* tag blocks lingering in AGENTS.md after disabling agent-jobs).
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -65,90 +66,25 @@ def test_observer_ignores_non_path_project_root(recorded: dict[str, list]) -> No
 
 
 @pytest.mark.parametrize(
-    ("event_type", "expect_prune", "expect_apply"),
+    "event_type",
     [
-        ("lifecycle.component.installed", False, True),
-        ("lifecycle.component.enabled", False, True),
-        ("lifecycle.component.uninstalled", True, True),
-        ("lifecycle.component.disabled", True, True),
-    ],
-)
-def test_observer_maps_events_to_actions(
-    recorded: dict[str, list],
-    event_type: str,
-    expect_prune: bool,
-    expect_apply: bool,
-) -> None:
-    root = Path("/tmp/project")
-    observer._on_component_lifecycle(
-        event_type, {"component_id": "agent-jobs", "project_root": root}, {}
-    )
-
-    assert (len(recorded["prune"]) == 1) is expect_prune
-    assert (len(recorded["apply"]) == 1) is expect_apply
-    if expect_prune:
-        assert recorded["prune"] == [root]
-    if expect_apply:
-        assert recorded["apply"] == [root]
-
-
-def test_observer_ignores_non_path_project_root(recorded: dict[str, list]) -> None:
-    observer._on_component_lifecycle(
+        "lifecycle.component.installed",
+        "lifecycle.component.enabled",
         "lifecycle.component.disabled",
-        {"component_id": "agent-jobs", "project_root": "/tmp/project"},
-        {},
-    )
-    assert recorded["prune"] == []
-    assert recorded["apply"] == []
-
-
-@pytest.fixture()
-def recorded_mcp(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, Path, bool]]:
-    calls: list[tuple[str, Path, bool]] = []
-    monkeypatch.setattr(
-        observer,
-        "sync_component_mcp_to_providers",
-        lambda component_id, project_root, *, enabled=True: calls.append(
-            (component_id, project_root, enabled)
-        ),
-    )
-    return calls
-
-
-@pytest.mark.parametrize(
-    ("event_type", "expected_enabled"),
-    [
-        ("lifecycle.component.installed", True),
-        ("lifecycle.component.enabled", True),
-        ("lifecycle.component.disabled", False),
-        ("lifecycle.component.uninstalled", False),
+        "lifecycle.component.uninstalled",
+        "lifecycle.component.config_changed",
     ],
 )
-def test_observer_maps_lifecycle_events_to_mcp_projection(
-    recorded_mcp: list[tuple[str, Path, bool]],
-    event_type: str,
-    expected_enabled: bool,
-) -> None:
-    root = Path("/tmp/project")
+def test_project_owner_reconciles_selection_for_lifecycle(monkeypatch, tmp_path, event_type):
+    from audiagentic.components.project import onboarding_events
 
-    observer._on_component_mcp_lifecycle(
-        event_type,
-        {"component_id": "coding-lsp", "project_root": root},
-        {},
+    calls = []
+    monkeypatch.setattr(
+        onboarding_events.project_api,
+        "reconcile_mcp_bindings",
+        lambda root: calls.append(root) or [],
     )
-
-    assert recorded_mcp == [("coding-lsp", root, expected_enabled)]
-
-
-def test_observer_maps_explicit_mcp_sync_event(
-    recorded_mcp: list[tuple[str, Path, bool]],
-) -> None:
-    root = Path("/tmp/project")
-
-    observer._on_component_mcp_sync(
-        "lifecycle.component.mcp.sync",
-        {"component_id": "coding-lsp", "project_root": root, "enabled": False},
-        {},
+    onboarding_events._on_lifecycle(
+        event_type, {"component_id": "coding-lsp", "project_root": tmp_path}, {}
     )
-
-    assert recorded_mcp == [("coding-lsp", root, False)]
+    assert calls == [tmp_path]

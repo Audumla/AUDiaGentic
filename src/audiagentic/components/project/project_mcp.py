@@ -1,4 +1,5 @@
 """AUDiaGentic project component MCP server."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -23,7 +24,30 @@ def _server_decl():
 
 def build_server() -> FastMCP:
     decl = _server_decl()
-    mcp = mcp_server(__name__, instructions=server_instructions(decl))
+    mcp = mcp_server(
+        __name__,
+        instructions=server_instructions(decl),
+        structured_output_tool_names=frozenset(
+            {"list_mcp_catalog", "install_mcp", "get_mcp_install_status"}
+        ),
+    )
+
+    @mcp.tool()
+    @tool_boundary
+    def list_mcp_catalog(mcp_id: str | None = None) -> dict[str, Any] | list[dict[str, Any]]:
+        return project_api.list_mcp_catalog(project_root_from_env(), mcp_id)
+
+    @mcp.tool()
+    @tool_boundary
+    def install_mcp(mcp_id: str, harness_ids: list[str], dry_run: bool = False) -> dict[str, Any]:
+        return project_api.install_mcp(
+            project_root_from_env(), mcp_id=mcp_id, harness_ids=harness_ids, dry_run=dry_run
+        )
+
+    @mcp.tool()
+    @tool_boundary
+    def get_mcp_install_status(operation_id: str | None = None) -> dict[str, Any]:
+        return project_api.get_mcp_install_status(project_root_from_env(), operation_id)
 
     @mcp.tool()
     @tool_boundary
@@ -76,13 +100,24 @@ def build_server() -> FastMCP:
 
     @mcp.tool()
     @tool_boundary
-    def create_project_instruction(item_id: str, title: str, body: str, preferred_targets: list[str] | None = None) -> dict[str, Any]:
-        return project_api.create_project_instruction(project_root_from_env(), item_id, title, body, preferred_targets)
+    def create_project_instruction(
+        item_id: str, title: str, body: str, preferred_targets: list[str] | None = None
+    ) -> dict[str, Any]:
+        return project_api.create_project_instruction(
+            project_root_from_env(), item_id, title, body, preferred_targets
+        )
 
     @mcp.tool()
     @tool_boundary
-    def update_project_instruction(item_id: str, title: str | None = None, body: str | None = None, preferred_targets: list[str] | None = None) -> dict[str, Any]:
-        return project_api.update_project_instruction(project_root_from_env(), item_id, title, body, preferred_targets)
+    def update_project_instruction(
+        item_id: str,
+        title: str | None = None,
+        body: str | None = None,
+        preferred_targets: list[str] | None = None,
+    ) -> dict[str, Any]:
+        return project_api.update_project_instruction(
+            project_root_from_env(), item_id, title, body, preferred_targets
+        )
 
     @mcp.tool()
     @tool_boundary
@@ -139,6 +174,7 @@ def main() -> int:
         os.environ["AUDIAGENTIC_REPO_ROOT"] = args.project_root
 
     from audiagentic.runtime.harness import wire_harness_status
+
     wire_harness_status()
 
     run_mcp_server(build_server(), "project")

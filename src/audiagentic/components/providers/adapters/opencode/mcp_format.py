@@ -3,6 +3,7 @@
 Opencode uses .opencode/opencode.json with format:
   {"mcp": {"name": {"type": "local", "command": [...], "environment": {...}}}}
 """
+
 from __future__ import annotations
 
 import json
@@ -42,7 +43,9 @@ def read_opencode_mcp(path: Path) -> dict[str, McpServerEntry]:
             continue
         result[name] = McpServerEntry(
             name=name,
-            command=cfg.get("command", [""])[0] if isinstance(cfg.get("command"), list) else cfg.get("command", ""),
+            command=cfg.get("command", [""])[0]
+            if isinstance(cfg.get("command"), list)
+            else cfg.get("command", ""),
             args=(
                 tuple(cfg.get("command", [])[1:])
                 if isinstance(cfg.get("command"), list) and len(cfg.get("command", [])) > 1
@@ -51,6 +54,11 @@ def read_opencode_mcp(path: Path) -> dict[str, McpServerEntry]:
             env=dict(cfg.get("environment", {})),
         )
     return result
+
+
+def read_raw_opencode_mcp(path: Path) -> dict[str, Any]:
+    """Read full native entries including fields unknown to the neutral DTO."""
+    return _load_opencode_json(path).get("mcp", {})
 
 
 def write_opencode_mcp(path: Path, entries: dict[str, McpServerEntry]) -> None:

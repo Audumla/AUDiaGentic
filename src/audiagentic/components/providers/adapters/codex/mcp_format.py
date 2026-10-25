@@ -3,6 +3,7 @@
 Codex stores MCP server entries under `[mcp_servers.<name>]` in
 `.codex/config.toml`.
 """
+
 from __future__ import annotations
 
 import json
@@ -109,6 +110,11 @@ def read_codex_toml(path: Path) -> dict[str, McpServerEntry]:
             env=dict(server.get("env", {})),
         )
     return result
+
+
+def read_raw_codex_mcp(path: Path) -> dict[str, Any]:
+    """Read the complete native entries for safe ownership checks."""
+    return _load_toml(path).get("mcp_servers", {})
 
 
 def write_codex_toml(path: Path, entries: dict[str, McpServerEntry]) -> None:

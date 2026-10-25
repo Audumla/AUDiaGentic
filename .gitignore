@@ -160,3 +160,5 @@ crash-*.txt
 .ci-results/
 .ci-plan/
 .ci-audit/
+# Durable local ownership/recovery evidence is never source data.
+.audiagentic/state/
