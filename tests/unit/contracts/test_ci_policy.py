@@ -10,7 +10,6 @@ from pathlib import Path
 
 import pytest
 import yaml
-
 from tests.ci.audit import audit
 from tests.ci.package_smoke import distribution_hashes
 from tests.ci.policy import BROWSER_MODULES, CRITICAL, fast_paths, partition
@@ -198,6 +197,7 @@ def test_source_sha_checks_checkout_and_metadata_free_tree(monkeypatch, tmp_path
 @pytest.mark.parametrize("collect_only,passed,expected", [(True, 0, 0), (False, 0, 1), (False, 1, 0)])
 def test_docker_execution_guard_distinguishes_inventory(monkeypatch, collect_only, passed, expected):
     from types import SimpleNamespace
+
     from tests.conftest import pytest_sessionfinish
 
     monkeypatch.setenv("AUDIAGENTIC_DOCKER_TESTS", "1")
@@ -211,11 +211,10 @@ def test_docker_execution_guard_distinguishes_inventory(monkeypatch, collect_onl
     assert int(session.exitstatus) == expected
 
 
-def test_release_requires_fast_finalized_source_and_installed_distribution_proof():
+def test_release_requires_finalized_source_and_installed_distribution_proof():
     jobs = load_workflow("release.yml")["jobs"]
-    assert "release-tests" in jobs["build-and-publish"]["needs"]
-    assert jobs["release-tests"]["uses"] == "./.github/workflows/ci-tests.yml"
-    assert "finalized_sha" in jobs["release-tests"]["with"]["source_ref"]
+    assert set(jobs["build-and-publish"]["needs"]) == {"release-please", "finalize-ledger"}
+    assert "finalized_sha" in jobs["build-and-publish"]["steps"][0]["with"]["ref"]
     steps = jobs["build-and-publish"]["steps"]
     proof = next(
         index for index, step in enumerate(steps) if "package_smoke.py" in step.get("run", "")
@@ -239,6 +238,7 @@ def test_release_pr_auto_merge_validates_exact_head_and_dispatches_publication()
     gate = jobs["release-pr-tests"]
     assert gate["uses"] == "./.github/workflows/ci-tests.yml"
     assert "release_head" in gate["with"]["source_ref"]
+    assert gate["with"]["release_only"] == "true"
     merge = jobs["merge-release-pr"]
     assert set(merge["needs"]) == {"release-please", "release-pr-tests", "release-pr-privacy"}
     assert merge["permissions"]["actions"] == "write"
@@ -251,7 +251,7 @@ def test_release_pr_auto_merge_validates_exact_head_and_dispatches_publication()
 
 def test_full_is_background_scheduled_and_has_all_coverage_roles():
     config = load_workflow("ci-full.yml")
-    assert {"push", "schedule", "release", "workflow_dispatch"} <= set(config["on"])
+    assert set(config["on"]) == {"pull_request", "schedule", "workflow_dispatch"}
     jobs = config["jobs"]
     assert jobs["suite"]["strategy"]["matrix"]["lane"] == [
         "shard-0",
@@ -266,6 +266,33 @@ def test_full_is_background_scheduled_and_has_all_coverage_roles():
     for lane in ("inventory", "suite"):
         bake = next(step for step in jobs[lane]["steps"] if "docker/bake-action@" in step.get("uses", ""))
         assert bake["with"]["source"] == "."  # Build the exact checkout, not a moving event ref.
+
+
+def test_full_dispatch_waits_for_publication_and_uses_finalized_sha():
+    jobs = load_workflow("release.yml")["jobs"]
+    dispatch = jobs["dispatch-full-validation"]
+    assert set(dispatch["needs"]) == {"release-please", "finalize-ledger", "build-and-publish"}
+    assert "always()" not in dispatch["if"]
+    assert dispatch["permissions"] == {"actions": "write"}
+    step = dispatch["steps"][0]
+    assert "finalized_sha" in step["env"]["SOURCE_SHA"]
+    assert "workflow_id: 'ci-full.yml'" in step["with"]["script"]
+    assert "source_ref: source" in step["with"]["script"]
+    assert "dispatch-full-validation" not in jobs["build-and-publish"]["needs"]
+
+
+def test_release_only_scope_does_not_replace_ordinary_component_checks():
+    workflow = load_workflow("ci-tests.yml")
+    setting = workflow["on"]["workflow_call"]["inputs"]["release_only"]
+    assert setting["default"] == "false"
+    steps = workflow["jobs"]["tests"]["steps"]
+    fast = next(step for step in steps if "--tier fast" in step.get("run", ""))
+    narrow = next(step for step in steps if "pytest tests/unit/release" in step.get("run", ""))
+    assert fast["if"] == "${{ !inputs.release_only }}"
+    assert narrow["if"] == "${{ inputs.release_only }}"
+    manual = workflow["on"]["workflow_dispatch"]["inputs"]
+    assert manual["release_only"]["default"] == "false"
+    assert manual["source_ref"]["default"] == ""
 
 
 @pytest.mark.parametrize("workflow", ["ci-tests.yml", "ci-contracts.yml", "ci-full.yml", "release.yml"])

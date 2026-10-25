@@ -5,18 +5,34 @@ on:
     branches: [main, proof-release-*]
   pull_request:
   workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Exact source commit to validate (blank uses selected branch)
+        type: string
+        required: false
+        default: ""
+      release_only:
+        description: Measure the focused generated-release gate without publishing
+        type: boolean
+        required: false
+        default: false
   workflow_call:
     inputs:
       source_ref:
         type: string
         required: false
         default: ""
+      release_only:
+        description: Generated release PR only; application changes use the fast component gate
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-fast-${{ github.workflow }}-${{ github.head_ref || github.ref }}-${{ inputs.source_ref }}
+  group: ci-fast-${{ github.workflow }}-${{ github.head_ref || github.ref }}-${{ inputs.source_ref }}-${{ inputs.release_only || false }}
   cancel-in-progress: true
 
 jobs:
@@ -44,9 +60,13 @@ jobs:
       - name: Reject private metadata in the validated source
         run: python tools/privacy_guard.py --all
       - name: Critical gateway and changed-component gates
+        if: ${{ !inputs.release_only }}
         env:
           CI_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: python -m tests.ci.run --tier fast --base "$CI_BASE_SHA" --workers 2 --results .ci-results/fast
+      - name: Generated release metadata and automation regressions
+        if: ${{ inputs.release_only }}
+        run: python -m pytest tests/unit/release tests/unit/contracts/test_ci_policy.py -q
       - uses: actions/upload-artifact@v4
         if: always()
         with:
