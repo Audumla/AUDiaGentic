@@ -1546,3 +1546,8 @@
 
 ### Fixes
 - Public browser defaults no longer depend on a developer Windows installation, and related unit fixtures remain isolated across CI platforms.
+
+## v0.5.0
+
+### Features
+- Build and test standalone MCP bundles without shipping a repository checkout; planning and ledger support isolated functional round trips. Minimal co-installable component packages remain separate follow-up work.
