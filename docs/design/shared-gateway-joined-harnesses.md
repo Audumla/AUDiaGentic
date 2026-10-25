@@ -75,6 +75,26 @@ successful prompt delivery based only on observation or a heartbeat.
 
 ## Decisions reserved for round-table review
 
+### Primary upstream documentation leads
+
+These are research leads, not installed-version attachment qualification:
+
+- [Claude Code Remote Control](https://code.claude.com/docs/en/remote-control)
+  documents enabling remote access from an existing local session through Claude's
+  interfaces. A general third-party gateway control API still needs verification.
+- [Codex App Server](https://developers.openai.com/codex/app-server) documents a
+  remote TUI, turn start and in-flight steer. Its WebSocket transport is labeled
+  experimental/unsupported; exact live TUI/backend identity and supported versions
+  require proof.
+- [Pi RPC](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/rpc.md)
+  describes a long-lived JSONL subprocess and a separate in-process SDK. Neither
+  statement proves retroactive control of an existing interactive instance.
+- [OpenCode server](https://dev.opencode.ai/docs/server/) documents a server behind
+  the TUI and session-specific APIs. Starting a new `opencode serve` is not joining
+  the running TUI's server; registration must bind the actual endpoint/session.
+
+### Contract decisions
+
 1. Local node lifetime and how a current stdio MCP discovers or starts it.
 2. Trusted self-registration proof for each of the four harnesses.
 3. Durable routing handle versus Context/Work/session/native ref and generations.
