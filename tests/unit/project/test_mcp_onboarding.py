@@ -31,6 +31,18 @@ def test_dry_run_creates_no_project_files(root):
     assert not list(root.iterdir())
 
 
+def test_detailed_help_never_registers_implementation_metadata(root, monkeypatch):
+    from audiagentic.foundation.features import loader
+
+    monkeypatch.setattr(
+        loader,
+        "register",
+        lambda *a, **k: pytest.fail("metadata-only help registered runtime state"),
+    )
+    assert project.get_mcp_help("ag-planning", root)["mcp_id"] == "ag-planning"
+    assert not list(root.iterdir())
+
+
 def test_multiple_mcps_selection_removal_refresh_and_noop(root):
     assert project.install_mcp(root, mcp_id="ag-planning", harness_ids=["pi", "codex"])["ok"]
     assert project.install_mcp(root, mcp_id="ag-ledger", harness_ids=["pi"])["ok"]

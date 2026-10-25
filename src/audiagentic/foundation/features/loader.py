@@ -29,7 +29,7 @@ def read_implementation_metadata(
         for path in sorted(directory.rglob("*.yaml")):
             data = load_yaml_file(path)
             if data.get("type") == "implementation":
-                descriptor = load_implementation_from_yaml(path)
+                descriptor = parse_implementation_descriptor(path)
                 result[(descriptor.parent, descriptor.implementation_id)] = descriptor
     return tuple(result.values())
 
@@ -108,6 +108,13 @@ def load_feature_from_yaml(path: Path) -> FeatureDescriptor:
 
 
 def load_implementation_from_yaml(path: Path) -> ImplementationDescriptor:
+    descriptor = parse_implementation_descriptor(path)
+    register(descriptor)
+    return descriptor
+
+
+def parse_implementation_descriptor(path: Path) -> ImplementationDescriptor:
+    """Validate implementation metadata without registering runtime state."""
     data = load_yaml_file(path)
     if data.get("type") != DescriptorType.IMPLEMENTATION.value:
         raise _descriptor_error(
@@ -134,7 +141,6 @@ def load_implementation_from_yaml(path: Path) -> ImplementationDescriptor:
         options_schema=load_option_schema(data.get("options-schema")),
         raw=data,
     )
-    register(descriptor)
     return descriptor
 
 
