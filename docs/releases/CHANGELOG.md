@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.3](https://github.com/Audumla/AUDiaGentic/compare/v0.5.2...v0.5.3) (2026-10-25)
+
+
+### Bug Fixes
+
+* **gateway:** recover submitted turns across browser outages ([#64](https://github.com/Audumla/AUDiaGentic/issues/64)) ([6571545](https://github.com/Audumla/AUDiaGentic/commit/6571545d56a642c28db0e4655da30a4f790a3af2))
+
 ## [0.5.2](https://github.com/Audumla/AUDiaGentic/compare/v0.5.1...v0.5.2) (2026-10-25)
 
 
