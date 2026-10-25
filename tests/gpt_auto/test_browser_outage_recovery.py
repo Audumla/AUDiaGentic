@@ -189,6 +189,7 @@ async def test_replacement_target_reproves_owned_turn_without_send(case):
 
 
 @pytest.mark.asyncio
+@pytest.mark.no_parallel
 async def test_real_socket_outage_rebinds_new_target_and_reads_completed_reply(monkeypatch, tmp_path):
     """Real disposable sockets + runtime + chat; no live user browser is stopped."""
     from websockets.asyncio.server import serve

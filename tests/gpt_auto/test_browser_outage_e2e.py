@@ -24,6 +24,7 @@ from .test_greenfield_config_urls import valid_config
 
 
 @pytest.mark.asyncio
+@pytest.mark.no_parallel
 async def test_restart_offline_to_terminal_artifact_through_production_observer(monkeypatch, tmp_path):
     with socket.socket() as reservation:
         reservation.bind(("127.0.0.1", 0))
