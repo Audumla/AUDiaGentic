@@ -99,6 +99,12 @@ receipts and retain unresolved receipts. Local state is gitignored and contains
 safe identity/phases/outcomes, not native snapshots or credentials.
 
 Foreign edits, changed target identity and stale revisions block unsafe writes.
+Native changes are staged through the existing format adapters. Before publication,
+a prepared transition records the exact pre/post file hashes and resulting ownership
+proofs in the same v2 registry, without native payloads or credentials. An identical
+retry can recover a proven native write after an interrupted ownership commit.
+Read-only preflight interprets that evidence without modifying it. Ownership and
+proofs are finalized together; unrelated native edits require reconciliation.
 Inspect the owning error/status before retrying. Interrupted writes without enough
 ownership proof require reconciliation; retry does not claim unknown entries.
 Per-target recovery does not promise a global transaction across clients.

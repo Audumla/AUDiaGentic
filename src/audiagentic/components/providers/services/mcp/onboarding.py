@@ -105,7 +105,6 @@ def discover_bindings(root: Path, entries: tuple) -> dict[str, list[str]]:
     return bindings
 
 
-
 def _authority_hash(document: dict) -> str:
     """Only owners and raw proofs grant authority; prepared metadata never does."""
     return digest([document["providers"], document.get("proofs", {})])
@@ -163,7 +162,13 @@ def _recover_prepared(root: Path, registry) -> dict | None:
     updated["contract-version"] = "v2"
     registry.write_document(updated)
     if state == "post":
-        return {"scope": scope, "created": record["pre_hash"] == "absent", "removed": sorted(set(original["providers"].get(scope, {})) - set(updated["providers"].get(scope, {})))}
+        return {
+            "scope": scope,
+            "created": record["pre_hash"] == "absent",
+            "removed": sorted(
+                set(original["providers"].get(scope, {})) - set(updated["providers"].get(scope, {}))
+            ),
+        }
     return None
 
 
@@ -228,7 +233,6 @@ def _atomic_native_replace(path: Path, content: bytes) -> None:
                 os.close(fd)
 
 
-
 def preflight(
     root: Path, provider_id: str, request: ManagedMcpRequest, adopt_entries: tuple = ()
 ) -> dict:
@@ -251,6 +255,13 @@ def preflight(
     affected = (
         set(owned) | set(desired) if request.managed_ids is None else set(request.managed_ids)
     )
+    for mid, name in owned.items():
+        if mid not in affected:
+            expected = proof.get("entries", {}).get(mid)
+            if name not in raw or expected is None or digest(raw[name]) != expected:
+                raise conflict(
+                    "Untouched owned MCP evidence changed; reconcile before a subset update"
+                )
     claims = {}
     for other_scope, rows in document["providers"].items():
         other_provider = other_scope.split("/")[0]
@@ -300,8 +311,14 @@ def preflight(
         for mid in sorted(set(before_rows) | set(after_rows)):
             if mid not in after_rows:
                 recovered_action = {"managed_id": mid, "action": "remove"}
-            elif before_rows.get(mid) != after_rows[mid] or before_hashes.get(mid) != after_hashes.get(mid):
-                recovered_action = {"managed_id": mid, "action": "configure", "updates_existing": mid in before_rows}
+            elif before_rows.get(mid) != after_rows[mid] or before_hashes.get(
+                mid
+            ) != after_hashes.get(mid):
+                recovered_action = {
+                    "managed_id": mid,
+                    "action": "configure",
+                    "updates_existing": mid in before_rows,
+                }
             else:
                 continue
             if not any(change["managed_id"] == mid for change in actions):
@@ -345,7 +362,8 @@ def apply(
         original = registry.document()
         normalized = (
             _adopt(original, provider_id, scope, spec, path, adopt_entries)
-            if adopt_entries else deepcopy(original)
+            if adopt_entries
+            else deepcopy(original)
         )
         owned_before = dict(normalized["providers"].get(scope, {}))
         desired = _desired(request)
@@ -365,9 +383,7 @@ def apply(
         content, owners_after, proofs_after, staged_result = _stage(
             spec, path, scope, desired, normalized, request.managed_ids, target_scopes
         )
-        post_image = (
-            hashlib.sha256(content).hexdigest() if content is not None else "absent"
-        )
+        post_image = hashlib.sha256(content).hexdigest() if content is not None else "absent"
         changed = pre_image != post_image
         native_created = pre_image == "absent" and changed
         final = deepcopy(original)
@@ -403,7 +419,10 @@ def apply(
 
         owned_after = owners_after.get(scope, {})
         recovered_here = recovered is not None and recovered["scope"] == scope
-        removed_ids = sorted((set(owned_before) - set(owned_after)) | (set(recovered["removed"]) if recovered_here else set()))
+        removed_ids = sorted(
+            (set(owned_before) - set(owned_after))
+            | (set(recovered["removed"]) if recovered_here else set())
+        )
         result = {
             "ok": True,
             "supported": True,

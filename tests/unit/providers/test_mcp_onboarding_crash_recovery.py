@@ -25,13 +25,17 @@ def root(tmp_path, monkeypatch):
 
 def _request(mid="crash-mcp", name="crash-mcp", *, command=None, secret=None, present=True):
     entry = (
-        providers_api.ManagedMcpEntry(
-            managed_id=mid,
-            name=name,
-            command=command or sys.executable,
-            env=(("SERVICE_TOKEN", secret),) if secret else (),
-        ),
-    ) if present else ()
+        (
+            providers_api.ManagedMcpEntry(
+                managed_id=mid,
+                name=name,
+                command=command or sys.executable,
+                env=(("SERVICE_TOKEN", secret),) if secret else (),
+            ),
+        )
+        if present
+        else ()
+    )
     return providers_api.ManagedMcpRequest("crash-fixture", None, entry)
 
 
@@ -54,9 +58,7 @@ def _break_commit(monkeypatch):
 
 
 @pytest.mark.parametrize("provider", ["pi", "codex", "opencode"])
-def test_crash_after_native_before_registry_commit_replays_proven_post(
-    root, monkeypatch, provider
-):
+def test_crash_after_native_before_registry_commit_replays_proven_post(root, monkeypatch, provider):
     request = _request(secret="PRIVATE_NATIVE_SECRET")
     spec, target = onboarding._context(root, provider)
     _break_commit(monkeypatch)
@@ -74,7 +76,9 @@ def test_crash_after_native_before_registry_commit_replays_proven_post(
     # Read-only preflight may virtually interpret the exact post-image, never commit it.
     state_before = registry.path.read_bytes(), registry.path.stat().st_mtime_ns
     recovered = providers_api.preflight_managed_mcp(root, provider, request=request)["changes"]
-    assert recovered == [{"managed_id": "crash-mcp", "action": "configure", "updates_existing": False}]
+    assert recovered == [
+        {"managed_id": "crash-mcp", "action": "configure", "updates_existing": False}
+    ]
     assert state_before == (registry.path.read_bytes(), registry.path.stat().st_mtime_ns)
     monkeypatch.undo()
     assert _apply(root, request, provider)["ok"]
@@ -151,12 +155,15 @@ def test_changed_native_crash_replays_without_duplicate_mutation(root, monkeypat
     assert _apply(root, request)["ok"]
     assert before == (path.read_bytes(), path.stat().st_mtime_ns)
     rows = McpOwnershipRegistry(root).load()["pi/crash-fixture"]
-    assert rows == {
-        "add": {"crash-mcp": "old-mcp", "second-mcp": "second-mcp"},
-        "update": {"crash-mcp": "old-mcp"},
-        "rename": {"crash-mcp": "new-mcp"},
-        "remove": {},
-    }[change]
+    assert (
+        rows
+        == {
+            "add": {"crash-mcp": "old-mcp", "second-mcp": "second-mcp"},
+            "update": {"crash-mcp": "old-mcp"},
+            "rename": {"crash-mcp": "new-mcp"},
+            "remove": {},
+        }[change]
+    )
 
 
 def test_malformed_or_retargeted_prepared_intent_is_refused(root):

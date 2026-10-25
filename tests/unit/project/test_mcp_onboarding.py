@@ -24,6 +24,109 @@ def root(tmp_path, monkeypatch):
     return tmp_path
 
 
+@pytest.mark.parametrize("targets", [["pi"], ["opencode", "pi"]])
+def test_project_recovers_native_publication_before_ownership_commit(root, monkeypatch, targets):
+    from audiagentic.components.providers.services.mcp.managed_mcp_registry import (
+        McpOwnershipRegistry,
+    )
+
+    original = McpOwnershipRegistry.write_document
+
+    def crash(self, data):
+        if not data.get("prepared") and "pi/component-mcp" in self.document().get("prepared", {}):
+            raise OSError("after native publication")
+        return original(self, data)
+
+    monkeypatch.setattr(McpOwnershipRegistry, "write_document", crash)
+    first = project.install_mcp(root, mcp_id="ag-planning", harness_ids=targets)
+    assert not first["ok"] and first["phase"] == "needs_reconciliation"
+    paths = [root / ".pi/mcp.json"]
+    if "opencode" in targets:
+        paths.append(root / ".opencode/opencode.json")
+    before = [(path.read_bytes(), path.stat().st_mtime_ns) for path in paths]
+    monkeypatch.setattr(McpOwnershipRegistry, "write_document", original)
+    repeat = project.install_mcp(root, mcp_id="ag-planning", harness_ids=targets)
+    assert repeat["ok"] and repeat["operation_id"] == first["operation_id"]
+    assert all(target["configured"] for target in repeat["targets"])
+    assert before == [(path.read_bytes(), path.stat().st_mtime_ns) for path in paths]
+
+
+def test_conflicting_dual_ownership_authorities_are_not_guessed(root):
+    from audiagentic.components.providers.services.mcp.managed_mcp_registry import (
+        McpOwnershipRegistry,
+    )
+    from audiagentic.foundation.io import atomic_write_json
+
+    registry = McpOwnershipRegistry(root)
+    atomic_write_json(
+        registry.legacy_path, {"contract-version": "v1", "providers": {"pi": {"one": "old"}}}
+    )
+    atomic_write_json(
+        registry.path,
+        {"contract-version": "v2", "providers": {"pi/component-mcp": {"two": "new"}}, "proofs": {}},
+    )
+    with pytest.raises(AudiaGenticError):
+        registry.document()
+
+
+def test_migration_source_hash_recovers_crash_before_legacy_retirement(root, monkeypatch):
+    from audiagentic.components.providers.services.mcp.managed_mcp_registry import (
+        McpOwnershipRegistry,
+    )
+    from audiagentic.foundation.io import atomic_write_json
+
+    registry = McpOwnershipRegistry(root)
+    atomic_write_json(
+        registry.legacy_path, {"contract-version": "v1", "providers": {"pi": {"one": "old"}}}
+    )
+    unlink = Path.unlink
+
+    def crash(path, *args, **kwargs):
+        if path == registry.legacy_path:
+            raise OSError("before retiring v1")
+        return unlink(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "unlink", crash)
+    with pytest.raises(OSError):
+        registry.write_document(
+            {
+                "contract-version": "v2",
+                "providers": {"pi/component-mcp": {"one": "new"}},
+                "proofs": {},
+            }
+        )
+    migrated = registry.document()
+    assert migrated["providers"] == {"pi/component-mcp": {"one": "new"}}
+    before = registry.path.read_bytes(), registry.path.stat().st_mtime_ns
+    monkeypatch.setattr(Path, "unlink", unlink)
+    registry.write_document(migrated)
+    assert not registry.legacy_path.exists()
+    assert before == (registry.path.read_bytes(), registry.path.stat().st_mtime_ns)
+
+
+def test_subset_cannot_rebase_proof_for_an_untouched_external_edit(root):
+    entries = tuple(providers.ManagedMcpEntry(mid, mid, command="python") for mid in ("one", "two"))
+    request = providers.ManagedMcpRequest("subset-fixture", None, entries)
+    plan = providers.preflight_managed_mcp(root, "pi", request=request)
+    assert providers.apply_managed_mcp(
+        root, "pi", request=request, expected_revision=plan["revision"]
+    )["ok"]
+    path = root / ".pi/mcp.json"
+    data = json.loads(path.read_text())
+    data["mcpServers"]["two"]["user_option"] = "preserve"
+    path.write_text(json.dumps(data), encoding="utf8")
+    registry = root / ".audiagentic/state/providers/managed-mcp-servers.json"
+    before = path.read_bytes(), registry.read_bytes()
+    subset = providers.ManagedMcpRequest(
+        "subset-fixture",
+        frozenset({"one"}),
+        (providers.ManagedMcpEntry("one", "one", command="different"),),
+    )
+    with pytest.raises(AudiaGenticError):
+        providers.preflight_managed_mcp(root, "pi", request=subset)
+    assert before == (path.read_bytes(), registry.read_bytes())
+
+
 def test_dry_run_creates_no_project_files(root):
     outcome = project.install_mcp(root, mcp_id="ag-planning", harness_ids=["pi"], dry_run=True)
     assert outcome["ok"] and not outcome["changed"]
