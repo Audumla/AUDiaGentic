@@ -75,5 +75,7 @@ def test_canonical_harness_template_is_retained():
 def test_full_suite_image_contains_tools_used_by_contract_collection():
     recipe = (ROOT / "tests/docker/Dockerfile.test").read_text(encoding="utf-8")
     assert any("tools" in _copy_sources(line) for line in recipe.splitlines())
+    context_rules = set((ROOT / ".dockerignore").read_text(encoding="utf-8").splitlines())
+    assert {"!tools/", "!tools/**"} <= context_rules
     for tool in ("privacy_guard.py", "privacy_binary_allow.json", "extract_mcp.py"):
         assert (ROOT / "tools" / tool).is_file()
