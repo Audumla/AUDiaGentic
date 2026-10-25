@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.5.2](https://github.com/Audumla/AUDiaGentic/compare/v0.5.1...v0.5.2) (2026-10-25)
+
+
+### Performance Improvements
+
+* **ci:** move full qualification off release critical path ([e3891dd](https://github.com/Audumla/AUDiaGentic/commit/e3891dd119189c809f93bb228b86ed5a1f6afbd8))
+* **ci:** shorten release gates and qualify asynchronously ([10af496](https://github.com/Audumla/AUDiaGentic/commit/10af496a80da52a815e4c85a59fefdc75dd09507))
+
 ## [0.5.1](https://github.com/Audumla/AUDiaGentic/compare/v0.5.0...v0.5.1) (2026-10-25)
 
 
