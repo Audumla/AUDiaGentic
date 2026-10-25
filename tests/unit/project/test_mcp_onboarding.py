@@ -446,6 +446,21 @@ def test_owner_configuration_changed_after_preflight_is_rejected(root, monkeypat
         requirements.validate_current(root, "agent-planning", {"state": {}})
 
 
+def test_repeating_owner_options_never_rewrites_state(root, monkeypatch):
+    from audiagentic.components.project.onboarding import requirements
+
+    state = {"options": {"directory": "same"}}
+    monkeypatch.setattr(requirements, "get_component_state", lambda *a, **k: state)
+    monkeypatch.setattr(
+        requirements,
+        "set_component_state",
+        lambda *a, **k: pytest.fail("no-op rewrote owner state"),
+    )
+    assert not requirements.persist(
+        root, "owner", {"state": state, "options": {"directory": "same"}}
+    )
+
+
 @pytest.mark.parametrize("ids", ["pi", [None], [{}], [], [""]])
 def test_owner_api_rejects_malformed_target_selection(root, ids):
     with pytest.raises(AudiaGenticError):

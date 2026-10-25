@@ -81,7 +81,13 @@ def qualify_native_clients(root, home, env):
         )
         assert run.returncode == 0, (name, run.stderr[-1000:])
         assert "ag-planning" in run.stdout, (name, run.stdout[-1000:])
-        results[name] = "recognized"
+        if name == "opencode":
+            assert "connected" in run.stdout.lower(), (name, run.stdout[-1000:])
+            results[name] = "connected"
+        else:
+            rows = json.loads(run.stdout)
+            assert any(row.get("name") == "ag-planning" and row.get("enabled") for row in rows)
+            results[name] = "recognized"
     # Pi's installed CLI has no read-only MCP listing command; format/protocol
     # proof alone cannot establish discovery by its optional MCP extension.
     results["pi"] = "no_readonly_discovery_command"

@@ -294,7 +294,7 @@ def install(
                 if after != before:
                     save_yaml_file(_config_path(root), after, atomic=True, sort_keys=False)
                     record["changed"] = True
-                requirements.persist(root, owner.component_id, resolved)
+                record["changed"] |= requirements.persist(root, owner.component_id, resolved)
                 record["phase"] = "intent_committed"
             except Exception as exc:
                 record.update(

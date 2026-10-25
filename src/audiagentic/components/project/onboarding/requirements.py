@@ -86,12 +86,15 @@ def resolve(
     return {"options": options, "state": state, "values": values}
 
 
-def persist(root: Path, component_id: str, resolution: dict) -> None:
+def persist(root: Path, component_id: str, resolution: dict) -> bool:
     if resolution["options"]:
         validate_current(root, component_id, resolution)
         state = resolution["state"]
-        state["options"] = {**state.get("options", {}), **resolution["options"]}
-        set_component_state(root, component_id, state)
+        options = {**state.get("options", {}), **resolution["options"]}
+        if options != state.get("options", {}):
+            set_component_state(root, component_id, {**state, "options": options})
+            return True
+    return False
 
 
 def validate_current(root: Path, component_id: str, resolution: dict) -> None:
