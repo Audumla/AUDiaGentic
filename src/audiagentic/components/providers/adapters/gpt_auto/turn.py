@@ -406,6 +406,7 @@ class GptAutoTurn:
         # virtualizes that user node out of later snapshots. Recovery turns
         # remain stricter and use the existing unresolved-correlation rules.
         self._recovered_existing_turn = False
+        self._recovery_correlation_text: str | None = None
         self._submission_settled = asyncio.Event()
         self._done = asyncio.Event()
         # Keep the last bounded observation locally so an unprovable provider
@@ -701,6 +702,18 @@ class GptAutoTurn:
             self._move(TurnState.SUBMITTING)
             self._move(TurnState.SIDE_EFFECT_ATTEMPTED)
             current = await self._snapshot_for_observation()
+            if not self.request.body:
+                candidate_text = current.latest_user_correlation_text() or ""
+                expected_digest = checkpoint.get("prompt-text-digest")
+                if (
+                    current.latest_user_id == self._prompt_message_id
+                    and candidate_text and expected_digest
+                    and PromptFingerprint.from_text(candidate_text).digest == expected_digest
+                ):
+                    # Promptless restart is observation-only. Recover a local
+                    # correlation projection, never change raw provenance or
+                    # grant Send authority from reconstructed provider text.
+                    self._recovery_correlation_text = candidate_text
             persisted_alerts = checkpoint.get(
                 "unresolved-baseline-error-alert-occurrences"
             )
@@ -768,7 +781,9 @@ class GptAutoTurn:
             if final is None:
                 raise RuntimeError("recovered response observation ended without a result")
             await self._publish_message_ids(strict=False)
-            await self._persist_and_clear_unresolved()
+            capture_checkpoint = getattr(self.chat, "capture_terminal_checkpoint_metadata", None)
+            if callable(capture_checkpoint):
+                capture_checkpoint(self.request.turn_id)
             self._move(TurnState.COMPLETE)
             await self._emit(TransportObservationKind.TERMINAL, {"stop_reason": "end-turn"})
             result = self._result("end-turn")
@@ -1963,7 +1978,7 @@ class GptAutoTurn:
                     baseline,
                     raw,
                     prompt_message_id=prompt_message_id or "",
-                    prompt_text=self.request.body,
+                    prompt_text=self.request.body or self._recovery_correlation_text,
                     allow_virtualized_prompt=not self._recovered_existing_turn,
                     virtualized_assistant_id=self._virtualized_assistant_id(),
                     bound_assistant_id=self._response_message_id,
@@ -1978,7 +1993,7 @@ class GptAutoTurn:
             except ProviderBindingIntegrityError as exc:
                 remount = _owned_prompt_response_remount(
                     baseline, raw, prompt_message_id=prompt_message_id or "",
-                    prompt_text=self.request.body,
+                    prompt_text=self.request.body or self._recovery_correlation_text,
                     old_assistant_id=(
                         self._response_message_id
                         if self._response_message_id != raw.latest_assistant_id
@@ -1992,7 +2007,7 @@ class GptAutoTurn:
                     # through the unchanged independent stability verifier.
                     return _scope_response_snapshot(
                         baseline, raw, prompt_message_id=prompt_message_id or "",
-                        prompt_text=self.request.body,
+                        prompt_text=self.request.body or self._recovery_correlation_text,
                         bound_assistant_id=remount.message_id,
                         virtualized_assistant_id=remount.message_id,
                     )
@@ -2000,7 +2015,7 @@ class GptAutoTurn:
                     baseline,
                     raw,
                     prompt_message_id=prompt_message_id or "",
-                    prompt_text=self.request.body,
+                    prompt_text=self.request.body or self._recovery_correlation_text,
                 )
                 if terminal_remount is not None:
                     # ChatGPT can replace the completed assistant node while
@@ -2060,7 +2075,7 @@ class GptAutoTurn:
                 return False
             remount = _owned_prompt_response_remount(
                 baseline, raw, prompt_message_id=prompt_message_id,
-                prompt_text=self.request.body, old_assistant_id=old_id,
+                prompt_text=self.request.body or self._recovery_correlation_text, old_assistant_id=old_id,
             )
             return remount is not None and remount.message_id == new_id
 

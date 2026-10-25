@@ -619,8 +619,12 @@ async def test_reopen_closes_created_target_if_owner_expires_after_await(monkeyp
 
 
 @pytest.mark.asyncio
-async def test_background_reopen_without_anchor_does_not_create_window():
+@pytest.mark.parametrize("stale_cached_anchor", [False, True])
+async def test_background_reopen_without_anchor_does_not_create_window(stale_cached_anchor):
     runtime, _, _ = recovery_runtime()
+    if stale_cached_anchor:
+        runtime._dedicated_window_anchor = "closed-anchor"
+        runtime._dedicated_window_id = 42
     methods = []
 
     async def call(method, params=None):

@@ -335,8 +335,15 @@ class GptAutoProviderRuntime:
         navigates a page; normal session admission continues to use
         ``ensure_dedicated_window_anchor`` when a new tab is required.
         """
-        if not self.config.browser.dedicated_window or self._dedicated_window_id is not None:
-            return self._dedicated_window_id is not None
+        if not self.config.browser.dedicated_window:
+            return False
+        if self._dedicated_window_id is not None:
+            if any(str(page.get("pageHandle") or "") == self._dedicated_window_anchor
+                   and _window_id(page) == self._dedicated_window_id
+                   and is_gateway_dashboard_url(str(page.get("url") or "")) for page in pages):
+                return True
+            self._dedicated_window_anchor = None
+            self._dedicated_window_id = None
         dashboard_pages = [
             page for page in pages if is_gateway_dashboard_url(str(page.get("url") or ""))
         ]
