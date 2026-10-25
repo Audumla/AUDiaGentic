@@ -15,6 +15,7 @@ from audiagentic.foundation.components.base import (
 )
 from audiagentic.foundation.mcp import McpServerEntry
 from audiagentic.foundation.mcp.launch import component_mcp_launch
+from audiagentic.foundation.paths.names import get_active_profile
 
 
 def entry_from_mcp_declaration(
@@ -27,6 +28,9 @@ def entry_from_mcp_declaration(
     repo_root = str(project_root.resolve())
     if repo_root:
         env["AUDIAGENTIC_REPO_ROOT"] = repo_root
+    profile = get_active_profile()
+    if profile:
+        env["AUDIAGENTIC_COMPONENT_PROFILE"] = profile
     return McpServerEntry(
         name=decl.name,
         command=command,

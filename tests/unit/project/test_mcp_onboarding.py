@@ -337,6 +337,20 @@ def test_onboarding_contribution_preserves_user_surface_and_is_idempotent(root):
     assert path.read_text(encoding="utf8") == text
 
 
+def test_profile_launch_change_requires_explicit_install(root, monkeypatch):
+    assert project.install_mcp(root, mcp_id="ag-planning", harness_ids=["pi"])["ok"]
+    native = root / ".pi/mcp.json"
+    before = native.read_bytes()
+    monkeypatch.setenv("AUDIAGENTIC_COMPONENT_PROFILE", "alternate")
+    assert project.reconcile_mcp_bindings(root)
+    assert native.read_bytes() == before
+    dry = project.install_mcp(root, mcp_id="ag-planning", harness_ids=["pi"], dry_run=True)
+    assert dry["planned_changes"] and not dry["changed"]
+    assert project.install_mcp(root, mcp_id="ag-planning", harness_ids=["pi"])["ok"]
+    entry = json.loads(native.read_text())["mcpServers"]["ag-planning"]
+    assert entry["env"]["AUDIAGENTIC_COMPONENT_PROFILE"] == "alternate"
+
+
 def test_intent_write_failure_has_terminal_actionable_record(root, monkeypatch):
     from audiagentic.components.project.onboarding import service
 
