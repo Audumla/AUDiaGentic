@@ -1,8 +1,8 @@
 """Execute the actual github-script snippets against a mocked GitHub API."""
 import json
-from pathlib import Path
 import shutil
 import subprocess
+from pathlib import Path
 
 import pytest
 import yaml
@@ -38,6 +38,7 @@ paginate: async () => [{filename: scenario === 'unexpected-file' ? '.github/work
 const core = {setOutput:(key,value)=>{outputs[key]=value;}};
 const context = {repo:{owner:'Audumla',repo:'AUDiaGentic'},ref:'refs/heads/main'};
 process.env.RELEASE_PR='44'; process.env.RELEASE_HEAD='a'.repeat(40);
+process.env.SOURCE_SHA=scenario === 'invalid-source' ? 'main' : 'c'.repeat(40);
 (async()=>{let error=null; try {
   await new (Object.getPrototypeOf(async function(){}).constructor)('github','context','core',script)(github,context,core);
 } catch(e){error=e.message;}
@@ -90,3 +91,15 @@ def test_retry_after_merge_dispatches_without_merging_again():
     result = execute("merge-release-pr", "already-merged")
     assert result["error"] is None
     assert [call[0] for call in result["calls"]] == ["dispatch"]
+
+
+def test_post_publication_dispatch_uses_immutable_source():
+    result = execute("dispatch-full-validation")
+    assert result["error"] is None
+    assert result["calls"][0][1]["workflow_id"] == "ci-full.yml"
+    assert result["calls"][0][1]["inputs"] == {"source_ref": "c" * 40}
+
+
+def test_post_publication_dispatch_rejects_mutable_source():
+    result = execute("dispatch-full-validation", "invalid-source")
+    assert result["error"] and not result["calls"]
