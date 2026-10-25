@@ -752,6 +752,32 @@ async def test_unresolved_prior_turn_blocks_presubmit_replay(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("metadata,after_metadata", [
+    ({}, {}), ({"unresolved-turn-pending": "false"}, {}), (None, {}),
+    ({"unresolved-turn-pending": False}, {}), ({}, {"unresolved-turn-pending": False}),
+])
+async def test_missing_predecessor_evidence_is_not_negative_send_proof(metadata, after_metadata) -> None:
+    from audiagentic.components.agents.gateway.diagnostics import classify_error
+
+    chat = _chat(unresolved=False)
+    chat.state = ChatState.READY
+    checkpoints = iter((metadata, after_metadata))
+    chat.unresolved_metadata = lambda: next(checkpoints)  # type: ignore[method-assign]
+    transport = GptAutoSessionTransport(chat)
+
+    async def fail_ready() -> None:
+        raise RuntimeError("not ready")
+
+    chat.ensure_ready = fail_ready  # type: ignore[method-assign]
+    chat.retain_after_turn_failure = lambda _error: asyncio.sleep(0, result=True)  # type: ignore[method-assign]
+    with pytest.raises(AudiaGenticError) as raised:
+        await transport.prompt(SessionPrompt(turn_id="req-unknown", body="hello"), lambda _observation: None)
+    assert raised.value.details["previous-turn-unresolved"] is None
+    assert raised.value.details["retryable-same-session"] is False
+    assert classify_error(raised.value)["classification"] == "ambiguous-side-effect"
+
+
+@pytest.mark.asyncio
 async def test_failed_session_does_not_retain_request_after_readiness_failure() -> None:
     chat = _chat(unresolved=True)
     chat.state = ChatState.FAILED

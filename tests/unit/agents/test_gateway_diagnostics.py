@@ -70,6 +70,7 @@ def test_readiness_unsent_proof_survives_redaction_and_is_not_ambiguous():
         details={**proof, "cause-message": "private diagnostic", "prompt-body": "private prompt"},
     ))
     assert saved["details"] == proof
+    assert _redact_error(saved) == saved
     result = classify_error(saved)
     assert result["classification"] == "browser-adapter-error"
     assert result["phase"] == "pre-submit"
@@ -89,8 +90,15 @@ def test_readiness_unsent_proof_survives_redaction_and_is_not_ambiguous():
         {"submission-proven": True}, {"submission-ambiguous": True},
         {"send-intent-ever": True}, {"side-effect-attempted": True},
         {"send-button-clicked": True}, {"enter-dispatched": True},
+        {"turn-state": "submission-ambiguous"}, {"turn-state": "side-effect-attempted"},
+        {"turn-state": "submitted"}, {"turn-state": "unknown"},
+        {"side-effect-state": "may-have-started"},
+        {"side-effect-state": "submission-proven"},
     ):
         assert classify_error({"code": "EXT-GPTAUTO-004", "details": {**proof, **extra}})["classification"] == "ambiguous-side-effect"
+    for state in ("may-have-started", "submission-proven", "terminal-evidence-seen"):
+        result = classify_error({"code": "EXT-GPTAUTO-004", "details": proof}, side_effect_state=state)
+        assert result["recovery"]["disposition"] != "retry-safe"
 
 
 def test_saved_gpt_error_retains_typed_unsent_recovery_proof_without_prompt_text():

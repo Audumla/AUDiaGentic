@@ -251,6 +251,9 @@ def classify_error(
             or (
                 details.get("failure-stage") == "readiness"
                 and details.get("previous-turn-unresolved") is False
+                and details.get("turn-state") in (None, "not-started", "pre-submit")
+                and details.get("side-effect-state") in (None, "not-started")
+                and side_effect_state in (None, "not-started")
             )
         )
         and details.get("submission-state") == "not_started"
