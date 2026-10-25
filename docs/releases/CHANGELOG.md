@@ -1,5 +1,36 @@
 # Changelog
 
+## [0.6.0](https://github.com/Audumla/AUDiaGentic/compare/v0.5.3...v0.6.0) (2026-10-25)
+
+
+### Features
+
+* **mcp:** expose YAML parameter metadata and per-tool structured output ([afe4786](https://github.com/Audumla/AUDiaGentic/commit/afe4786c58f8e4b9bea12891b70777dcacbe590b))
+* **project:** add keyword MCP onboarding with explicit harness selection ([00d3f9c](https://github.com/Audumla/AUDiaGentic/commit/00d3f9c3b7d5331b2cca9dc1f92a4f75e084f659))
+* **project:** implement explicit keyword MCP onboarding (MP03-MP10) ([90f0f9c](https://github.com/Audumla/AUDiaGentic/commit/90f0f9cbb2a3d175700254c50d84d4ca2c2b51e0))
+
+
+### Bug Fixes
+
+* **mcp:** align gateway resume metadata and gate remote execution on release ([b26a3b4](https://github.com/Audumla/AUDiaGentic/commit/b26a3b4295057c3a14dc1fcb9d9b9e00f9f681f1))
+* **mcp:** bound migration authority and validate crash recovery integration ([df11187](https://github.com/Audumla/AUDiaGentic/commit/df11187500d23be2abf87c2d5d995249a43f43a5))
+* **mcp:** discover pending targets before guarded recovery ([f6cbfab](https://github.com/Audumla/AUDiaGentic/commit/f6cbfabdef42af68bb726f6128cd37f7c5173306))
+* **mcp:** parse detailed help without registering implementations ([96a6dba](https://github.com/Audumla/AUDiaGentic/commit/96a6dba5a7b008485ef7fc1479a7a95fc7dc6787))
+* **mcp:** preserve component profile in native server launches ([53dac6d](https://github.com/Audumla/AUDiaGentic/commit/53dac6df0198f5f9bf9e958f07cbdf9fd8bf445a))
+* **mcp:** preserve option no-ops and verify native connection outcomes ([ce7b2f9](https://github.com/Audumla/AUDiaGentic/commit/ce7b2f9ae5844a8f7fb6f9ce1ea72ea01ae98f2a))
+* **mcp:** recover proven native writes with staged atomic ownership commits ([9eeb856](https://github.com/Audumla/AUDiaGentic/commit/9eeb85659b410b7181a084efe2cab35dbacb0d01))
+* **project:** honor provider disablement without deleting shared configuration ([7c2f728](https://github.com/Audumla/AUDiaGentic/commit/7c2f72856c717e5ed951fb5567e42c2181dcf734))
+* **project:** resolve MCP refresh intent inside install fence ([07c4ec9](https://github.com/Audumla/AUDiaGentic/commit/07c4ec946a9ed7b1acc8b36eda177fe23b7d80fa))
+
+
+### Documentation
+
+* **gateway:** distinguish pull request references from plan IDs ([9594d26](https://github.com/Audumla/AUDiaGentic/commit/9594d26b9be997e5238e7c6365dc367de33b725c))
+* **gateway:** plan shared-server keyword CLI and remote admission ([f568088](https://github.com/Audumla/AUDiaGentic/commit/f5680885e3cea21661a3addd9d0bea7a4b3de2ea))
+* **mcp:** complete reviewed onboarding plans and qualification ([0787bdb](https://github.com/Audumla/AUDiaGentic/commit/0787bdb1755b37510db7923e3eb563c8f89d9ca9))
+* **mcp:** plan tool metadata and instruction rollout ([21bad94](https://github.com/Audumla/AUDiaGentic/commit/21bad941540712e734c887dae818db3d1c6920ac))
+* **mcp:** refine onboarding containment and recovery design ([749657b](https://github.com/Audumla/AUDiaGentic/commit/749657b5a8b8e8d4581ce12ee655f07e169aac80))
+
 ## [0.5.3](https://github.com/Audumla/AUDiaGentic/compare/v0.5.2...v0.5.3) (2026-10-25)
 
 
