@@ -1560,3 +1560,11 @@
 
 ### Testing
 - Make full-suite configuration and Docker-policy checks portable on clean headless test machines.
+
+## v0.5.2
+
+### Testing
+- Allow safe timing comparisons of focused release checks without creating a release.
+
+### Workflow
+- Speed up release by running focused release checks before publication and full tests asynchronously afterward.
