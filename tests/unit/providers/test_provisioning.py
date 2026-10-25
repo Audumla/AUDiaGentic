@@ -51,13 +51,7 @@ def test_cli_install_does_not_dispatch_other_automation_families(
             AssertionError("CLI lifecycle must not dispatch generated surfaces")
         ),
     )
-    monkeypatch.setattr(
-        lifecycle,
-        "_sync_provider_mcp",
-        lambda *args, **kwargs: (_ for _ in ()).throw(
-            AssertionError("CLI lifecycle must not dispatch managed MCP")
-        ),
-    )
+    assert not hasattr(lifecycle, "_sync_provider_mcp")
 
     result = lifecycle.install_provider_cli("codex", project_root=tmp_path)
 
@@ -67,6 +61,7 @@ def test_cli_install_does_not_dispatch_other_automation_families(
 
 # --- reconcile tests ---
 
+
 def test_reconcile_provider_enables_when_cli_available_and_not_enabled(
     monkeypatch, tmp_path: Path
 ) -> None:
@@ -75,8 +70,14 @@ def test_reconcile_provider_enables_when_cli_available_and_not_enabled(
     monkeypatch.setattr(
         lifecycle,
         "probe_provider_cli",
-        lambda d: {"available": True, "command": ["codex", "--version"],
-                   "executable": "/usr/bin/codex", "returncode": 0, "stdout": "1.0", "stderr": ""},
+        lambda d: {
+            "available": True,
+            "command": ["codex", "--version"],
+            "executable": "/usr/bin/codex",
+            "returncode": 0,
+            "stdout": "1.0",
+            "stderr": "",
+        },
     )
 
     result = reconcile_provider("codex", project_root=tmp_path)
@@ -99,8 +100,14 @@ def test_reconcile_provider_disables_when_cli_absent_and_was_enabled(
     monkeypatch.setattr(
         lifecycle,
         "probe_provider_cli",
-        lambda d: {"available": False, "command": ["codex", "--version"],
-                   "executable": None, "returncode": None, "stdout": "", "stderr": "not found"},
+        lambda d: {
+            "available": False,
+            "command": ["codex", "--version"],
+            "executable": None,
+            "returncode": None,
+            "stdout": "",
+            "stderr": "not found",
+        },
     )
 
     result = reconcile_provider("codex", project_root=tmp_path)
@@ -110,9 +117,7 @@ def test_reconcile_provider_disables_when_cli_absent_and_was_enabled(
     assert result["was-enabled"] is True
 
 
-def test_reconcile_provider_noop_when_already_in_sync_enabled(
-    monkeypatch, tmp_path: Path
-) -> None:
+def test_reconcile_provider_noop_when_already_in_sync_enabled(monkeypatch, tmp_path: Path) -> None:
     import audiagentic.components.providers.services.lifecycle.lifecycle as lifecycle
     from audiagentic.components.providers.services.config.provider_config import (
         set_provider_enabled,
@@ -122,8 +127,14 @@ def test_reconcile_provider_noop_when_already_in_sync_enabled(
     monkeypatch.setattr(
         lifecycle,
         "probe_provider_cli",
-        lambda d: {"available": True, "command": ["codex", "--version"],
-                   "executable": "/usr/bin/codex", "returncode": 0, "stdout": "1.0", "stderr": ""},
+        lambda d: {
+            "available": True,
+            "command": ["codex", "--version"],
+            "executable": "/usr/bin/codex",
+            "returncode": 0,
+            "stdout": "1.0",
+            "stderr": "",
+        },
     )
 
     result = reconcile_provider("codex", project_root=tmp_path)
@@ -132,16 +143,20 @@ def test_reconcile_provider_noop_when_already_in_sync_enabled(
     assert "surfaces" not in result
 
 
-def test_reconcile_provider_noop_when_already_in_sync_disabled(
-    monkeypatch, tmp_path: Path
-) -> None:
+def test_reconcile_provider_noop_when_already_in_sync_disabled(monkeypatch, tmp_path: Path) -> None:
     import audiagentic.components.providers.services.lifecycle.lifecycle as lifecycle
 
     monkeypatch.setattr(
         lifecycle,
         "probe_provider_cli",
-        lambda d: {"available": False, "command": ["codex", "--version"],
-                   "executable": None, "returncode": None, "stdout": "", "stderr": "not found"},
+        lambda d: {
+            "available": False,
+            "command": ["codex", "--version"],
+            "executable": None,
+            "returncode": None,
+            "stdout": "",
+            "stderr": "not found",
+        },
     )
 
     result = reconcile_provider("codex", project_root=tmp_path)
@@ -158,8 +173,14 @@ def test_reconcile_all_providers_returns_one_entry_per_descriptor(
     monkeypatch.setattr(
         lifecycle,
         "probe_provider_cli",
-        lambda d: {"available": False, "command": [], "executable": None,
-                   "returncode": None, "stdout": "", "stderr": ""},
+        lambda d: {
+            "available": False,
+            "command": [],
+            "executable": None,
+            "returncode": None,
+            "stdout": "",
+            "stderr": "",
+        },
     )
 
     result = reconcile_all_providers(project_root=tmp_path)
@@ -167,16 +188,15 @@ def test_reconcile_all_providers_returns_one_entry_per_descriptor(
     assert result["action"] == "reconcile"
     assert result["ok"] is True
     expected = {
-        pid for pid, d in all_descriptors().items()
+        pid
+        for pid, d in all_descriptors().items()
         if not (d.cli_install and d.cli_install.package_manager == "vscode")
     }
     provider_ids = {entry["provider-id"] for entry in result["providers"]}
     assert provider_ids == expected
 
 
-def test_reconcile_provider_does_not_fetch_catalog_by_default(
-    monkeypatch, tmp_path: Path
-) -> None:
+def test_reconcile_provider_does_not_fetch_catalog_by_default(monkeypatch, tmp_path: Path) -> None:
     import audiagentic.components.providers.services.catalog.catalog as catalog_mod
     import audiagentic.components.providers.services.lifecycle.lifecycle as lifecycle
 
@@ -185,8 +205,14 @@ def test_reconcile_provider_does_not_fetch_catalog_by_default(
     monkeypatch.setattr(
         lifecycle,
         "probe_provider_cli",
-        lambda d: {"available": True, "command": ["claude", "--version"],
-                   "executable": "/usr/bin/claude", "returncode": 0, "stdout": "1.0", "stderr": ""},
+        lambda d: {
+            "available": True,
+            "command": ["claude", "--version"],
+            "executable": "/usr/bin/claude",
+            "returncode": 0,
+            "stdout": "1.0",
+            "stderr": "",
+        },
     )
     monkeypatch.setattr(
         catalog_mod,
@@ -199,9 +225,7 @@ def test_reconcile_provider_does_not_fetch_catalog_by_default(
     assert catalog_called == [], "catalog fetch must not run when fetch_catalog=False"
 
 
-def test_reconcile_provider_fetches_catalog_when_flag_set(
-    monkeypatch, tmp_path: Path
-) -> None:
+def test_reconcile_provider_fetches_catalog_when_flag_set(monkeypatch, tmp_path: Path) -> None:
     import audiagentic.components.providers.services.lifecycle.lifecycle as lifecycle
 
     catalog_called: list[str] = []
@@ -209,15 +233,24 @@ def test_reconcile_provider_fetches_catalog_when_flag_set(
     monkeypatch.setattr(
         lifecycle,
         "probe_provider_cli",
-        lambda d: {"available": True, "command": ["claude", "--version"],
-                   "executable": "/usr/bin/claude", "returncode": 0, "stdout": "1.0", "stderr": ""},
+        lambda d: {
+            "available": True,
+            "command": ["claude", "--version"],
+            "executable": "/usr/bin/claude",
+            "returncode": 0,
+            "stdout": "1.0",
+            "stderr": "",
+        },
     )
 
     import audiagentic.components.providers.services.catalog.catalog as catalog_mod
+
     monkeypatch.setattr(
         catalog_mod,
         "fetch_provider_catalog",
-        lambda provider_id, **_: catalog_called.append(provider_id) or {"ok": True, "model_count": 3},
+        lambda provider_id, **_: (
+            catalog_called.append(provider_id) or {"ok": True, "model_count": 3}
+        ),
     )
 
     result = reconcile_provider("claude", project_root=tmp_path, fetch_catalog=True)
@@ -232,12 +265,20 @@ def test_reconcile_provider_emits_progress(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr(
         lifecycle,
         "probe_provider_cli",
-        lambda d: {"available": True, "command": ["codex", "--version"],
-                   "executable": "/usr/bin/codex", "returncode": 0, "stdout": "1.0", "stderr": ""},
+        lambda d: {
+            "available": True,
+            "command": ["codex", "--version"],
+            "executable": "/usr/bin/codex",
+            "returncode": 0,
+            "stdout": "1.0",
+            "stderr": "",
+        },
     )
 
     events: list[str] = []
-    reconcile_provider("codex", project_root=tmp_path, on_progress=lambda e: events.append(e.message))
+    reconcile_provider(
+        "codex", project_root=tmp_path, on_progress=lambda e: events.append(e.message)
+    )
 
     assert any("codex" in msg.lower() or "probing" in msg.lower() for msg in events)
     assert len(events) >= 2
@@ -254,8 +295,14 @@ def test_reconcile_all_providers_does_not_fetch_catalogs_by_default(
     monkeypatch.setattr(
         lifecycle,
         "probe_provider_cli",
-        lambda d: {"available": False, "command": [], "executable": None,
-                   "returncode": None, "stdout": "", "stderr": ""},
+        lambda d: {
+            "available": False,
+            "command": [],
+            "executable": None,
+            "returncode": None,
+            "stdout": "",
+            "stderr": "",
+        },
     )
     monkeypatch.setattr(
         catalog_mod,
@@ -268,17 +315,21 @@ def test_reconcile_all_providers_does_not_fetch_catalogs_by_default(
     assert catalog_called == [], "no catalog fetches should occur by default"
 
 
-def test_reconcile_all_providers_emits_progress_with_total(
-    monkeypatch, tmp_path: Path
-) -> None:
+def test_reconcile_all_providers_emits_progress_with_total(monkeypatch, tmp_path: Path) -> None:
     import audiagentic.components.providers.services.lifecycle.lifecycle as lifecycle
     from audiagentic.foundation.contracts.output import ComponentOutputEvent
 
     monkeypatch.setattr(
         lifecycle,
         "probe_provider_cli",
-        lambda d: {"available": False, "command": [], "executable": None,
-                   "returncode": None, "stdout": "", "stderr": ""},
+        lambda d: {
+            "available": False,
+            "command": [],
+            "executable": None,
+            "returncode": None,
+            "stdout": "",
+            "stderr": "",
+        },
     )
 
     progress_events: list[ComponentOutputEvent] = []
@@ -292,6 +343,7 @@ def test_reconcile_all_providers_emits_progress_with_total(
 
 # --- CLI lifecycle registry tests ---
 
+
 def test_cli_lifecycle_plan_returns_installed_when_cli_available(
     monkeypatch, tmp_path: Path
 ) -> None:
@@ -300,8 +352,14 @@ def test_cli_lifecycle_plan_returns_installed_when_cli_available(
     monkeypatch.setattr(
         lifecycle,
         "probe_provider_cli",
-        lambda d: {"available": True, "command": ["codex", "--version"],
-                   "executable": "/usr/bin/codex", "returncode": 0, "stdout": "1.0", "stderr": ""},
+        lambda d: {
+            "available": True,
+            "command": ["codex", "--version"],
+            "executable": "/usr/bin/codex",
+            "returncode": 0,
+            "stdout": "1.0",
+            "stderr": "",
+        },
     )
 
     from audiagentic.components.providers.services.capabilities.automation_registry import (
@@ -317,16 +375,20 @@ def test_cli_lifecycle_plan_returns_installed_when_cli_available(
     assert result.changed is False
 
 
-def test_cli_lifecycle_plan_predicts_install_when_cli_absent(
-    monkeypatch, tmp_path: Path
-) -> None:
+def test_cli_lifecycle_plan_predicts_install_when_cli_absent(monkeypatch, tmp_path: Path) -> None:
     import audiagentic.components.providers.services.lifecycle.lifecycle as lifecycle
 
     monkeypatch.setattr(
         lifecycle,
         "probe_provider_cli",
-        lambda d: {"available": False, "command": ["codex", "--version"],
-                   "executable": None, "returncode": None, "stdout": "", "stderr": "not found"},
+        lambda d: {
+            "available": False,
+            "command": ["codex", "--version"],
+            "executable": None,
+            "returncode": None,
+            "stdout": "",
+            "stderr": "not found",
+        },
     )
 
     from audiagentic.components.providers.services.capabilities.automation_registry import (
@@ -351,8 +413,14 @@ def test_cli_lifecycle_status_returns_installed_when_cli_available(
     monkeypatch.setattr(
         lifecycle,
         "probe_provider_cli",
-        lambda d: {"available": True, "command": ["codex", "--version"],
-                   "executable": "/usr/bin/codex", "returncode": 0, "stdout": "1.0", "stderr": ""},
+        lambda d: {
+            "available": True,
+            "command": ["codex", "--version"],
+            "executable": "/usr/bin/codex",
+            "returncode": 0,
+            "stdout": "1.0",
+            "stderr": "",
+        },
     )
 
     from audiagentic.components.providers.services.capabilities.automation_registry import (
@@ -375,8 +443,14 @@ def test_cli_lifecycle_status_returns_uninstalled_when_cli_absent(
     monkeypatch.setattr(
         lifecycle,
         "probe_provider_cli",
-        lambda d: {"available": False, "command": ["codex", "--version"],
-                   "executable": None, "returncode": None, "stdout": "", "stderr": "not found"},
+        lambda d: {
+            "available": False,
+            "command": ["codex", "--version"],
+            "executable": None,
+            "returncode": None,
+            "stdout": "",
+            "stderr": "not found",
+        },
     )
 
     from audiagentic.components.providers.services.capabilities.automation_registry import (
@@ -391,7 +465,9 @@ def test_cli_lifecycle_status_returns_uninstalled_when_cli_absent(
     assert result.state == "uninstalled"
 
 
-def test_opencode_cli_upgrade_is_explicit_and_descriptor_declared(monkeypatch, tmp_path: Path) -> None:
+def test_opencode_cli_upgrade_is_explicit_and_descriptor_declared(
+    monkeypatch, tmp_path: Path
+) -> None:
     import audiagentic.components.providers.services.lifecycle.lifecycle as lifecycle
     from audiagentic.components.providers.services.capabilities.automation_registry import (
         build_automation_registry,
@@ -423,16 +499,20 @@ def test_cli_upgrade_is_not_applicable_without_declared_step(monkeypatch, tmp_pa
     assert status.state == "installed"
 
 
-def test_cli_lifecycle_apply_noop_when_already_installed(
-    monkeypatch, tmp_path: Path
-) -> None:
+def test_cli_lifecycle_apply_noop_when_already_installed(monkeypatch, tmp_path: Path) -> None:
     import audiagentic.components.providers.services.lifecycle.lifecycle as lifecycle
 
     monkeypatch.setattr(
         lifecycle,
         "probe_provider_cli",
-        lambda d: {"available": True, "command": ["codex", "--version"],
-                   "executable": "/usr/bin/codex", "returncode": 0, "stdout": "1.0", "stderr": ""},
+        lambda d: {
+            "available": True,
+            "command": ["codex", "--version"],
+            "executable": "/usr/bin/codex",
+            "returncode": 0,
+            "stdout": "1.0",
+            "stderr": "",
+        },
     )
 
     from audiagentic.components.providers.services.capabilities.automation_registry import (
@@ -448,16 +528,20 @@ def test_cli_lifecycle_apply_noop_when_already_installed(
     assert result.changed is False
 
 
-def test_cli_lifecycle_prune_noop_when_already_uninstalled(
-    monkeypatch, tmp_path: Path
-) -> None:
+def test_cli_lifecycle_prune_noop_when_already_uninstalled(monkeypatch, tmp_path: Path) -> None:
     import audiagentic.components.providers.services.lifecycle.lifecycle as lifecycle
 
     monkeypatch.setattr(
         lifecycle,
         "probe_provider_cli",
-        lambda d: {"available": False, "command": ["codex", "--version"],
-                   "executable": None, "returncode": None, "stdout": "", "stderr": "not found"},
+        lambda d: {
+            "available": False,
+            "command": ["codex", "--version"],
+            "executable": None,
+            "returncode": None,
+            "stdout": "",
+            "stderr": "not found",
+        },
     )
 
     from audiagentic.components.providers.services.capabilities.automation_registry import (
@@ -494,8 +578,12 @@ def test_cli_lifecycle_result_to_mapping_contains_semantic_fields() -> None:
     from audiagentic.components.providers.contracts.cli_lifecycle import CliLifecycleResult
 
     result = CliLifecycleResult(
-        ok=True, supported=True, changed=True, state="installed",
-        action_needed=None, error_code=None,
+        ok=True,
+        supported=True,
+        changed=True,
+        state="installed",
+        action_needed=None,
+        error_code=None,
     )
     mapping = result.to_mapping()
 

@@ -363,6 +363,66 @@ def test_profile_launch_change_requires_explicit_install(root, monkeypatch):
     assert entry["env"]["AUDIAGENTIC_COMPONENT_PROFILE"] == "alternate"
 
 
+def test_provider_disable_prunes_and_enable_restores_persisted_selection(root):
+    from audiagentic.components.providers.services.config.provider_config import (
+        set_provider_enabled,
+    )
+    from audiagentic.foundation.io import load_yaml_file
+
+    assert project.install_mcp(root, mcp_id="ag-planning", harness_ids=["pi"])["ok"]
+    assert project.install_mcp(root, mcp_id="ag-ledger", harness_ids=["pi"])["ok"]
+    assert providers.manage_mcp_entries(
+        root,
+        "pi",
+        mode="apply",
+        request=providers.ManagedMcpRequest(
+            "independent-lsp",
+            frozenset({"lsp"}),
+            (providers.ManagedMcpEntry("lsp", "separate-lsp", command="python"),),
+        ),
+    ).ok
+    native = root / ".pi/mcp.json"
+    data = json.loads(native.read_text())
+    data["mcpServers"]["foreign"] = {"command": "user-owned"}
+    native.write_text(json.dumps(data), encoding="utf8")
+    config = root / ".audiagentic/config/project.yaml"
+    bindings = load_yaml_file(config)["mcp-onboarding"]["bindings"]
+    set_provider_enabled(root, "pi", enabled=False)
+    assert set(json.loads(native.read_text())["mcpServers"]) == {"foreign", "separate-lsp"}
+    assert project.resume_mcp_installations(root) == []
+    assert load_yaml_file(config)["mcp-onboarding"]["bindings"] == bindings
+    assert not providers.is_native_mcp_target_enabled(root, "pi")
+    set_provider_enabled(root, "pi", enabled=True)
+    assert set(json.loads(native.read_text())["mcpServers"]) == {
+        "foreign",
+        "separate-lsp",
+        "ag-planning",
+        "ag-ledger",
+    }
+    assert project.reconcile_mcp_bindings(root) == []
+
+
+def test_install_rechecks_provider_state_after_lifecycle(root, monkeypatch):
+    from audiagentic.components.providers.services.config.provider_config import (
+        set_provider_enabled,
+    )
+    from audiagentic.foundation.lifecycle import components
+
+    actual_install = components.install_component
+
+    def disable_during_install(component_id, project_root):
+        result = actual_install(component_id, project_root)
+        if component_id == "agent-planning":
+            set_provider_enabled(project_root, "pi", enabled=False)
+        return result
+
+    monkeypatch.setattr(components, "install_component", disable_during_install)
+    result = project.install_mcp(root, mcp_id="ag-planning", harness_ids=["pi"])
+    assert result["ok"] and not result["targets"][0]["configured"]
+    native = root / ".pi/mcp.json"
+    assert not native.exists() or not json.loads(native.read_text())["mcpServers"]
+
+
 def test_intent_write_failure_has_terminal_actionable_record(root, monkeypatch):
     from audiagentic.components.project.onboarding import service
 

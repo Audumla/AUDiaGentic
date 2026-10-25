@@ -99,7 +99,7 @@ def _requests(root, bindings, declarations, include_mcp=None):
         owner, _, entry = declarations[mid]
         for pid in ids:
             targets.setdefault(pid, [])
-            if (
+            if providers_api.is_native_mcp_target_enabled(root, pid) and (
                 mid == include_mcp
                 or owner.core
                 or (is_installed(owner.component_id, root) and is_enabled(owner.component_id, root))
@@ -332,6 +332,13 @@ def install(
             _write_operation(root, record)
             for pid, request in requests.items():
                 active_target = pid
+                if _hash(_config(root)) != _hash(after):
+                    raise error("Project selection changed during installation; retry preflight")
+                # Lifecycle callbacks can change effective provider/component state
+                # after initial preflight. Never replay the pre-install exposure.
+                request = _requests(root, bindings, declarations).get(
+                    pid, providers_api.ManagedMcpRequest("component-mcp", None, ())
+                )
                 # Own previous target commits change the shared registry revision.
                 fresh = providers_api.preflight_managed_mcp(
                     root, pid, request=request, adopt_entries=all_entries
@@ -345,7 +352,9 @@ def install(
                 )
                 target = {
                     "harness_id": pid,
-                    "configured": bool(receipt["ok"]) and pid in selected,
+                    "configured": bool(receipt["ok"])
+                    and pid in selected
+                    and providers_api.is_native_mcp_target_enabled(root, pid),
                     "changed": bool(receipt["changed"]),
                     "restart_required": receipt["restart_required"],
                     "phase": "completed" if receipt["ok"] else "needs_reconciliation",
@@ -353,6 +362,10 @@ def install(
                 for key in ("error_code", "action_needed"):
                     if receipt.get(key):
                         target[key] = receipt[key]
+                if pid in selected and not providers_api.is_native_mcp_target_enabled(root, pid):
+                    target["action_needed"] = (
+                        "Enable this provider to restore its selected native MCP entries."
+                    )
                 record["targets"].append(target)
                 if receipt["ok"]:
                     for change in fresh["changes"]:

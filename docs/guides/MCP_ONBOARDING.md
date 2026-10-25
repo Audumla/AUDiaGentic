@@ -88,6 +88,9 @@ an explicit mutation using recorded ownership and matching native evidence.
 Matching names or bytes without ownership are never adopted. Lifecycle, provider
 state and config refresh reuse this resolver instead of broadcasting.
 Internal management and independent LSP ownership retain separate policies.
+Explicit native selection works without configuring an interactive execution provider.
+If that provider is explicitly disabled, its selected native entries are pruned and
+the binding is retained. Enabling it restores those entries through the same resolver.
 
 Authoritative MCP ownership migrates from runtime storage into
 `.audiagentic/state/providers/managed-mcp-servers.json`. Operation receipts live

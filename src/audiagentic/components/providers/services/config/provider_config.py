@@ -9,6 +9,7 @@ from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.contracts.schema_registry import validate_with_schema
 from audiagentic.foundation.features.base import ImplementationState
 from audiagentic.foundation.features.state import (
+    get_component_state,
     get_implementation_state,
     set_implementation_state,
 )
@@ -109,6 +110,19 @@ def is_provider_enabled(project_root: Path, provider_id: str) -> bool:
     return get_implementation_state(project_root, _COMPONENT_ID, provider_id).enabled
 
 
+def is_native_mcp_target_enabled(project_root: Path, provider_id: str) -> bool:
+    """Explicit native selection works without interactive provider setup.
+
+    Once provider state exists, its canonical disabled state suppresses exposure.
+    This is a read of the existing feature authority, not another enablement map.
+    """
+    implementations = get_component_state(project_root, _COMPONENT_ID, persist_migration=False).get(
+        "implementations", {}
+    )
+    state = implementations.get(provider_id)
+    return state is None or bool(state.get("enabled", False))
+
+
 def apply_feature_enabled_state(
     project_root: Path,
     provider_id: str,
@@ -182,11 +196,18 @@ def set_provider_enabled(project_root: Path, provider_id: str, *, enabled: bool)
     )
 
     fn = enable_implementation if enabled else disable_implementation
+    previous = get_implementation_state(project_root, _COMPONENT_ID, provider_id)
     if fn(project_root, _COMPONENT_ID, provider_id).get("ok"):
         if not enabled:
             from ..lifecycle.project_purge import purge_provider_project
 
             purge_provider_project(project_root, provider_id)
+            set_implementation_state(
+                project_root,
+                _COMPONENT_ID,
+                provider_id,
+                ImplementationState(enabled=False, options=previous.options),
+            )
         from audiagentic.foundation.event import get_bus
 
         from ...events import PROVIDER_STATE_CHANGED
@@ -207,6 +228,12 @@ def set_provider_enabled(project_root: Path, provider_id: str, *, enabled: bool)
         from ..lifecycle.project_purge import purge_provider_project
 
         purge_provider_project(project_root, provider_id)
+        set_implementation_state(
+            project_root,
+            _COMPONENT_ID,
+            provider_id,
+            ImplementationState(enabled=False, options=previous.options),
+        )
     from audiagentic.foundation.event import get_bus
 
     from ...events import PROVIDER_STATE_CHANGED

@@ -106,6 +106,13 @@ def list_harness_mcp_targets():
     return list_targets()
 
 
+def is_native_mcp_target_enabled(project_root: Path, provider_id: str) -> bool:
+    """Read effective native eligibility from canonical provider feature state."""
+    from .services.config.provider_config import is_native_mcp_target_enabled as _enabled
+
+    return _enabled(project_root, provider_id)
+
+
 def preflight_managed_mcp(
     project_root: Path,
     provider_id: str,
@@ -2131,6 +2138,7 @@ __all__ = [
     "load_prompt_syntax",
     "get_provider_prompt_settings_profile",
     "is_provider_enabled_for_launch",
+    "is_native_mcp_target_enabled",
     "resolve_launch_model",
     "load_packaged_prompt_template",
     "execute_provider_review_turn",
