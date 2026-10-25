@@ -1653,15 +1653,14 @@ async def test_find_conversation_page_restores_window_before_selecting_retained_
     calls: list[str] = []
 
     async def ensure_anchor() -> str:
-        calls.append("anchor")
-        runtime._dedicated_window_id = 7
-        return "anchor"
+        raise AssertionError("conversation discovery must not create an anchor window")
 
     class _Bridge:
         async def call(self, method, params=None):
             assert method == "list_pages"
             calls.append("pages")
             return [
+                {"pageHandle": "anchor", "windowId": 7, "url": gateway_dashboard_anchor_url()},
                 {
                     "pageHandle": "manual-copy",
                     "targetId": "target-manual",
@@ -1684,7 +1683,7 @@ async def test_find_conversation_page_restores_window_before_selecting_retained_
         preferred_target_id="target-retained",
     )
 
-    assert calls == ["anchor", "pages"]
+    assert calls == ["pages"]
     assert page is not None
     assert page["pageHandle"] == "retained"
 

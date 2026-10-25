@@ -17,6 +17,70 @@ def _locator(url=None, session=None):
     return ConversationFocusLocator(chat_url=url, provider_session_id=session)
 
 
+@pytest.mark.parametrize("reverse", [False, True])
+def test_duplicate_physical_tabs_choose_stable_exact_conversation(reverse):
+    url = "https://chatgpt.com/g/g-p-x/c/s1"
+    pages = [
+        {"pageHandle": "h2", "targetId": "target-b", "url": url},
+        {"pageHandle": "h1", "targetId": "target-a", "url": url},
+    ]
+    page, error = select_focus_page(list(reversed(pages)) if reverse else pages, _locator(url, "s1"))
+    assert error is None
+    assert page["targetId"] == "target-a"
+
+
+@pytest.mark.parametrize("changed_final", [False, True])
+def test_capture_duplicate_tabs_skips_stale_renderer_for_owned_terminal(monkeypatch, tmp_path, changed_final):
+    url = "https://chatgpt.com/g/g-p-x/c/s1"
+    user = ChatMessageRef(role="user", message_id="u1", text="owned", sequence=0)
+    assistant = ChatMessageRef(role="assistant", message_id="a1", text="answer", sequence=1)
+    snapshot = ChatSnapshot(url=url, composer_present=True, composer_editable=True,
+        user_count=1, assistant_count=1, latest_user_id="u1", latest_assistant_id="a1",
+        latest_user_text="owned", latest_assistant_text="answer", generating=False,
+        terminal_witness_assistant_id="a1", error_present=False,
+        dom_signals=frozenset({"completion-control"}), message_refs=(user, assistant))
+
+    class Browser:
+        reads = 0
+        async def page_by_handle(self, handle):
+            return SimpleNamespace(handle=handle, target_id=handle)
+
+        async def snapshot(self, page, **kwargs):
+            self.reads += 1
+            stale = page.handle == "a-stale" or (changed_final and self.reads > 2)
+            return replace(snapshot, latest_user_text="previous", message_refs=(replace(user, text="previous"), assistant)) if stale else snapshot
+
+    class Bridge:
+        async def call(self, method, params=None):
+            assert method == "list_pages", "passive capture must not mutate browser"
+            return [{"pageHandle": handle, "targetId": handle, "url": url} for handle in ("a-stale", "z-complete")]
+
+    class Runtime:
+        bridge, gpt_browser = Bridge(), Browser()
+        config = SimpleNamespace(workflow=SimpleNamespace(bridge_signals=lambda: ()))
+
+        async def connect_existing(self):
+            return True
+
+        def adopt_existing_dedicated_window(self, pages):
+            pass
+
+        def page_belongs_to_dedicated_window(self, page):
+            return True
+
+    monkeypatch.setattr(conversation_focus, "load_provider_config", lambda _: {"providers": {"gpt-auto": {"settings": {"browser": {"executable": sys.executable}}}}})
+    monkeypatch.setattr(conversation_focus, "get_runtime", lambda *_: Runtime())
+    monkeypatch.setattr(conversation_focus.ChatSnapshot, "from_bridge", lambda value: value)
+    result = asyncio.run(conversation_focus.capture_latest_response(tmp_path, provider_id="gpt-auto",
+        locator=ConversationCaptureLocator(chat_url=url, provider_session_id="s1",
+            prompt_text_digest=PromptFingerprint.from_text("owned").digest, baseline_user_count=0), passive=True))
+    if changed_final:
+        assert result == {"outcome": "unavailable", "reason": "duplicate-owned-turn-changed"}
+    else:
+        assert result["outcome"] == "captured"
+        assert result["binding"]["target-id"] == "z-complete"
+
+
 @pytest.mark.parametrize(
     "case",
     ["valid", "target-missing", "target-replaced", "wrong-project", "wrong-prompt",

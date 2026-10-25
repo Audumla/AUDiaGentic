@@ -219,7 +219,9 @@ class GptAutoSessionTransport:
         except Exception as exc:
             metadata_fn = getattr(self.chat, "unresolved_metadata", None)
             metadata = metadata_fn() if callable(metadata_fn) else {}
-            unresolved = bool(metadata.get("unresolved-turn-pending"))
+            metadata = metadata if isinstance(metadata, dict) else {}
+            pending = metadata.get("unresolved-turn-pending")
+            unresolved = pending if isinstance(pending, bool) else None
             # Preserve the typed load-error evidence emitted by
             # PersistentChat.  The gateway's dispatch policy uses the
             # explicit unsent/ambiguous fields to decide whether a fresh
@@ -250,10 +252,12 @@ class GptAutoSessionTransport:
                     details={
                         "failure-stage": "readiness",
                         "submission-state": "not_started",
+                        "submission-attempted": False,
                         "submission-proven": False,
                         "submission-ambiguous": False,
                         "retryable-same-session": False,
                         "previous-turn-unresolved": unresolved,
+                        "chat-state": getattr(getattr(self.chat, "state", None), "value", "unknown"),
                         "cause-type": type(exc).__name__,
                         "cause-message": _bounded_cause_message(exc),
                         "request-id": request.turn_id,
@@ -271,14 +275,21 @@ class GptAutoSessionTransport:
             post_retain_metadata = (
                 post_retain_metadata_fn() if callable(post_retain_metadata_fn) else {}
             )
-            post_retain_unresolved = bool(
-                post_retain_metadata.get("unresolved-turn-pending")
+            post_retain_metadata = (
+                post_retain_metadata if isinstance(post_retain_metadata, dict) else {}
             )
+            post_pending = post_retain_metadata.get("unresolved-turn-pending")
+            if unresolved is True or post_pending is True or details.get("previous-turn-unresolved") is True:
+                details["previous-turn-unresolved"] = True
+            elif unresolved is False and post_pending is False:
+                details["previous-turn-unresolved"] = False
+            else:
+                details["previous-turn-unresolved"] = None
             session_state = getattr(self.chat, "state", None)
             session_usable = session_state not in {ChatState.FAILED, ChatState.CLOSED}
             details["retryable-same-session"] = bool(
                 retained
-                and not post_retain_unresolved
+                and details["previous-turn-unresolved"] is False
                 and session_usable
             )
             failure = AudiaGenticError(

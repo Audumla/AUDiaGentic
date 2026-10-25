@@ -262,6 +262,36 @@ Resolved 2026-07-17:
 Foundation prerequisite status: PR05, PR06, and PR07 completed on 2026-07-17;
 SH04 reuses their service record, lease, ownership, and guarded lifecycle APIs.
 
+## Browser endpoint recovery (GA22)
+
+The GPT-auto runtime owns one shared browser recovery task. A connection-attempt
+timeout is not a request deadline: a remote endpoint may remain offline across
+multiple attempts while the existing request owner and outer recovery budgets
+remain valid. Backoff starts at 250 ms and caps at 5 seconds. Remote endpoint
+loss never starts a local browser implicitly.
+
+Bridge replacement invalidates physical handles, not durable conversations or
+submitted-turn checkpoints. Active requests, including restart rehydration,
+reattach to the saved project/conversation and reprove the owned prompt before
+publishing a new target binding. Missing tabs reopen serially in the background;
+recovery forbids the foreground-capable window-placement fallback. Idle sessions
+remain lazy. Duplicate renderers are checked for owned turn evidence rather than
+being treated as distinct conversations or selected solely by tab ordering.
+
+Reconnection is observational: it never resends an ambiguous prompt, releases a
+FIFO follower early, or clears an unresolved checkpoint as proof of success.
+Completed replies still require the normal request-owned terminal/artifact path.
+Cancelled/expired owners and shutdown end recovery demand. Existing request,
+genuine-inactivity and physical-tab-idle policies remain independent and unchanged;
+connection retries and synthetic client heartbeats do not renew genuine progress.
+Content-free recovery logs include attempt number, backoff, elapsed outage and
+rebound-chat count. Existing request journals remain the diagnostic record.
+
+Qualification uses disposable WebSocket endpoints and temporary gateway stores,
+not destructive fault injection against a user's browser. See
+`tests/gpt_auto/test_browser_outage_recovery.py` for outage, target generation,
+ownership, duplicate renderer, restart-open and queue/FIFO coverage.
+
 ## Appendix A — v1 decision record (EDJ13, superseded)
 
 Status: decided (v1) — 2026-07-12; superseded by v2 above on 2026-07-17.

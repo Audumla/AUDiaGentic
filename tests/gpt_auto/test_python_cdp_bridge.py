@@ -137,7 +137,8 @@ async def test_session_command_retries_once_when_reconnect_happens_between_sessi
 
 
 @pytest.mark.asyncio
-async def test_create_page_in_window_repairs_target_created_in_active_window():
+@pytest.mark.parametrize("background_only", [False, True])
+async def test_create_page_in_window_repairs_target_created_in_active_window(background_only):
     bridge = PythonCdpBridge(GptAutoConfig.from_dict(valid_config()))
     fake = _FakeClient()
     fake.created_target = None
@@ -184,9 +185,14 @@ async def test_create_page_in_window_repairs_target_created_in_active_window():
 
     result = await bridge.call(
         "create_page_in_window",
-        {"anchorPageHandle": "page-anchor", "url": "https://chatgpt.com/g/g-p-project"},
+        {"anchorPageHandle": "page-anchor", "url": "https://chatgpt.com/g/g-p-project", "backgroundOnly": background_only},
     )
 
+    if background_only:
+        assert result["targetId"] == "target-misplaced"
+        assert not any(method == "Runtime.evaluate" for method, _, _ in fake.calls)
+        assert next(params for method, params, _ in fake.calls if method == "Target.createTarget")["background"] is True
+        return
     assert result["targetId"] == "target-repaired"
     assert result["windowId"] == 42
     assert any(

@@ -2154,6 +2154,7 @@ def _dispatch_session_request(
             dispatch_claim = _claim_session_turn
         # Promptless resume is observation-only; no provider side effect is
         # possible until a prompt exists, so do not create a native retry intent.
+        recovery_intent = None
         if resume_existing and dispatch_prompt:
             recovery_intent = _prepare_native_recovery_fence(
                 project_root,

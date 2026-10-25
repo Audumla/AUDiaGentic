@@ -164,6 +164,9 @@ class PersistentChat:
         # unresolved-turn reconciler must never navigate the same physical
         # tab concurrently or allow a stale page handle to win.
         self._page_mutation_lock = asyncio.Lock()
+        self._reconcile_lock = asyncio.Lock()
+        self._replacement_target_pending = False
+        self._browser_generation_recovery = False
         self._page_mutation_owner_probe: Callable[[], bool] | None = None
         self._physical_idle_closed = False
         self._idle_closed_turn_id: str | None = None
@@ -219,6 +222,9 @@ class PersistentChat:
                 "submission-attempt-id",
                 "submission-stage",
                 "send-intent-ever",
+                "submission-proof-source",
+                "submission-recovery-claim",
+                "submission-recovery-generation",
                 "unresolved-turn-id",
                 "unresolved-baseline-user-id",
                 "unresolved-baseline-assistant-id",
@@ -521,6 +527,14 @@ class PersistentChat:
             raise
 
     async def _open_impl(self) -> None:
+        recover_chat = getattr(self.runtime, "recover_chat", None)
+        if (
+            self.provider_session_id and self.chat_url and self.unresolved_turn_pending
+            and self._defer_unresolved_reconciliation and callable(recover_chat)
+        ):
+            self._move(ChatState.RECOVERING)
+            await recover_chat(self)
+            return
         await self.runtime.ensure_available()
         await self.runtime.register_chat(self)
         if not self._page_mutation_owner_is_live():
@@ -1600,11 +1614,11 @@ class PersistentChat:
         self._last_snapshot = snapshot
         self._load_budget_observation = (snapshot, budget_observed, observed_binding)
         remember = getattr(self.runtime, "remember_tab_activity", None)
-        if callable(remember):
+        if callable(remember) and not self._replacement_target_pending:
             remember(self)
         # Capture labels during recovery/baseline observations too, not only
         # the normal response loop. Never relay a label from a different tab.
-        if snapshot.conversation_title and (
+        if not self._replacement_target_pending and snapshot.conversation_title and (
             not self.provider_session_id
             or url_matches_provider_session(snapshot.url, self.provider_session_id)
         ):
@@ -2751,10 +2765,12 @@ class PersistentChat:
         try:
             pages = await self.runtime.bridge.call("list_pages")
             await self.reconcile(pages)
-        except BaseException:
-            if self.state is ChatState.RECOVERING:
-                self._move(ChatState.FAILED)
+        except asyncio.CancelledError:
             raise
+        except Exception:
+            # Target loss commonly precedes the shared socket-loss event.
+            # Retain the owned checkpoint for that coordinator, not FAILED.
+            logger.info("gpt-auto page lost; awaiting conversation reconciliation", exc_info=True)
 
     async def retain_after_turn_failure(self, error: BaseException) -> bool:
         """Return to READY when a failed turn left this browser chat usable.
@@ -2900,9 +2916,12 @@ class PersistentChat:
 
     def bridge_replaced(self) -> None:
         """Invalidate bridge-local binding before runtime-level recovery."""
+        if self.state is ChatState.CLOSED:
+            return
         if self.page_handle is not None:
             self._page_generation += 1
         self.page_handle = None
+        self._browser_generation_recovery = True
         if self.state is not ChatState.RECOVERING:
             self._move(ChatState.RECOVERING)
 
@@ -2912,6 +2931,94 @@ class PersistentChat:
             self._move(ChatState.FAILED)
 
     async def reconcile(self, pages: list[dict]) -> None:
+        # Event recovery, admission and response observation may all notice a
+        # lost target. Only one actor may rebind/reopen this conversation.
+        async with self._reconcile_lock:
+            await self._reconcile_page(pages)
+
+    async def _adopt_recovery_page(self, page: dict) -> bool:
+        """Rebind a physical tab only after reobserving the owned prompt."""
+        if not self._page_mutation_owner_is_live():
+            return False
+        expected_url = self.chat_url or ""
+        if not same_chat_identity(str(page.get("url") or ""), expected_url):
+            return False
+        handle = str(page.get("pageHandle") or "")
+        previous = (self.page_handle, self.target_id, self._page_generation)
+        previous_observation = (self._last_snapshot, self._last_url, self._load_budget_observation)
+        if not self._claim_page(handle):
+            return False
+        self._replacement_target_pending = True
+        self._bind_page(page)
+        adopted = False
+        try:
+            adopted = await self._prove_recovery_page(expected_url)
+            return adopted
+        finally:
+            release = getattr(self.runtime, "release_page", None)
+            if adopted and callable(release) and handle != previous[0]:
+                release(self, previous[0])
+            if not adopted:
+                if callable(release) and handle != previous[0]:
+                    release(self, handle)
+                self.page_handle, self.target_id, self._page_generation = previous
+                self._last_snapshot, self._last_url, self._load_budget_observation = previous_observation
+                self._replacement_target_pending = False
+
+    async def _prove_recovery_page(self, expected_url: str) -> bool:
+        snapshot = await self.snapshot(allow_recovering=True)
+        if (
+            not self._page_mutation_owner_is_live()
+            or not same_chat_identity(snapshot.url, expected_url)
+            or snapshot.error_present
+            or "auth-required" in snapshot.dom_signals
+            or not _unresolved_prompt_match_diagnostics(self, snapshot)[0]
+        ):
+            self._set_unresolved_recovery("replacement-target-turn-not-proven")
+            self._move(ChatState.RECOVERING)
+            return False
+        update = self.binding_sink(ProviderSessionBindingUpdate(
+            provider_session_ref=ProviderSessionRef(self.provider_session_id),
+            metadata={"chat-url": self.chat_url, "target-id": self.target_id},
+        ))
+        if asyncio.iscoroutine(update):
+            await update
+        if not self._page_mutation_owner_is_live():
+            raise ProviderBindingIntegrityError("recovery owner expired during binding persistence")
+        self._replacement_target_pending = False
+        self._browser_generation_recovery = False
+        if self.active_turn_id:
+            self._move(ChatState.BUSY)
+        elif getattr(self, "_restart_recovery_pending", False):
+            self._move(ChatState.READY)
+        return True
+
+    async def _rank_recovery_pages(self, pages: list[dict]) -> list[dict]:
+        """Prefer an owned completed reply over a stale duplicate renderer."""
+        ranked = []
+        browser = self._gpt_browser()
+        for index, page in enumerate(pages):
+            rank = -1
+            try:
+                ref = await browser.page_by_handle(str(page["pageHandle"]))
+                snapshot = ChatSnapshot.from_bridge(await asyncio.wait_for(
+                    browser.snapshot(ref, signals=self.config.workflow.bridge_signals()),
+                    timeout=self.config.cdp.protocol_timeout_seconds,
+                ))
+                if same_chat_identity(snapshot.url, self.chat_url or "") and _unresolved_prompt_match_diagnostics(self, snapshot)[0]:
+                    terminal = (
+                        not snapshot.generating and not snapshot.error_present
+                        and snapshot.latest_assistant_id
+                        and snapshot.terminal_witness_assistant_id == snapshot.latest_assistant_id
+                        and snapshot.dom_signals.intersection({"completion-control", "response-complete-status"})
+                    )
+                    rank = 2 if terminal else int(snapshot.generating)
+            except Exception:
+                pass  # Candidate proof is retried by adoption/coordinator.
+            ranked.append((rank, -index, page))
+        return [page for _, _, page in sorted(ranked, key=lambda row: row[:2], reverse=True)]
+
+    async def _reconcile_page(self, pages: list[dict]) -> None:
         if self._physical_idle_closed:
             return
         if self.state is ChatState.CLOSED:
@@ -2938,23 +3045,36 @@ class PersistentChat:
             )
             if (
                 page is not None
-                and self.target_id
                 and (self.unresolved_turn_pending or self._submission_proven)
-                and str(page.get("targetId") or "") != self.target_id
-            ):
-                # A matching conversation URL on a new CDP target is not proof
-                # that the unresolved Send survived. Require explicit
-                # reattachment rather than reviving the stale observer.
-                self._set_unresolved_recovery(
-                    "conversation-load-observation-deferred",
-                    provider_session_id=self.provider_session_id,
-                    chat_url=self.chat_url,
-                    defer_reason="replacement-target-requires-explicit-reattach",
-                    observed_target_id=str(page.get("targetId") or ""),
-                    expected_target_id=self.target_id,
+                and (
+                    (bool(self.target_id) and str(page.get("targetId") or "") != self.target_id)
+                    or self._replacement_target_pending
+                    or self._browser_generation_recovery
+                    or getattr(self, "_restart_recovery_pending", False)
+                    or sum(same_chat_identity(str(p.get("url") or ""), self.chat_url or "") for p in pages) > 1
                 )
-                self._move(ChatState.RECOVERING)
-                return
+            ):
+                # A target id belongs to a browser generation, not the turn.
+                # Reobserve the exact prompt before continuing read-only
+                # observation. This path never sends a provider prompt.
+                if (self.active_turn_id or getattr(self, "_restart_recovery_pending", False)) and self._page_mutation_owner_is_live():
+                    candidates = [page] + [p for p in pages if p.get("pageHandle") != page.get("pageHandle") and same_chat_identity(str(p.get("url") or ""), self.chat_url or "")]
+                    if len(candidates) > 1:
+                        candidates = await self._rank_recovery_pages(candidates)
+                    for candidate in candidates:
+                        try:
+                            if await self._adopt_recovery_page(candidate):
+                                return
+                        except asyncio.CancelledError:
+                            raise
+                        except Exception:
+                            logger.debug("gpt-auto candidate proof pending", exc_info=True)
+                    self._move(ChatState.RECOVERING)
+                    return
+                else:
+                    self._set_unresolved_recovery("replacement-target-requires-owned-observer")
+                    self._move(ChatState.RECOVERING)
+                    return
             if page is not None and self._claim_page(str(page["pageHandle"])):
                 self._bind_page(page)
                 retained = await self._retained_page_snapshot()
@@ -2971,6 +3091,7 @@ class PersistentChat:
             if (
                 self._defer_page_creation_on_recovery
                 and self.provider_session_id
+                and not self._browser_generation_recovery
             ):
                 self._move(ChatState.RECOVERING)
                 raise RuntimeError('gpt-auto restart recovery deferred: exact provider conversation tab is not attached')
@@ -2987,6 +3108,11 @@ class PersistentChat:
                 self._set_unresolved_recovery("reconcile-owner-not-live")
                 return
             if self.unresolved_turn_pending or self._submission_proven:
+                reopen = getattr(self.runtime, "reopen_conversation_page", None)
+                if (self.active_turn_id or getattr(self, "_restart_recovery_pending", False)) and callable(reopen):
+                    page = await reopen(self.chat_url, owner_is_live=self._page_mutation_owner_is_live)
+                    await self._adopt_recovery_page(page)
+                    return
                 self._set_unresolved_recovery(
                     "conversation-load-observation-deferred",
                     provider_session_id=self.provider_session_id,
