@@ -12,6 +12,12 @@ import yaml
 ROOT = Path(__file__).resolve().parents[3]
 
 
+@pytest.mark.parametrize("workflow", ["ci-tests", "ci-full"])
+def test_cdp_recovery_gates_install_optional_socket_dependency(workflow):
+    text = (ROOT / ".github/workflows" / f"{workflow}.yml").read_text()
+    assert '.[test,acp,gpt-auto]' in text
+
+
 @pytest.mark.parametrize("workflow", ["ci-tests", "ci-contracts"])
 def test_ci_triggers_do_not_duplicate_feature_branch_pr_runs(workflow):
     # YAML 1.1 SafeLoader interprets the Actions key `on` as boolean True.
