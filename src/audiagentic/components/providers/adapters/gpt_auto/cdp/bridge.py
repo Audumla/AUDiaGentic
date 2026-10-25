@@ -409,7 +409,7 @@ class PythonCdpBridge:
                 )
                 target_id = str(result["targetId"])
                 window_id = await self._window_id(target_id)
-                if window_id != anchor_window:
+                if window_id != anchor_window and not params.get("backgroundOnly"):
                     repaired = await self._open_page_from_anchor(
                         anchor,
                         anchor_target,

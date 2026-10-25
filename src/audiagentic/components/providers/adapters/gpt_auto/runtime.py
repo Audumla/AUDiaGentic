@@ -108,6 +108,7 @@ class GptAutoProviderRuntime:
         self.state = ProviderState.STOPPED
         self._lifecycle_lock = asyncio.Lock()
         self._recovery_task: asyncio.Task[None] | None = None
+        self._disconnect_epoch = 0
         self._conversation_reopen_lock = asyncio.Lock()
         self._owner_loop: asyncio.AbstractEventLoop | None = None
         self._bridge: PythonCdpBridge | None = None
@@ -356,6 +357,7 @@ class GptAutoProviderRuntime:
         while self._bridge is bridge:
             event = await bridge.events.get()
             if event.name in {"browser_disconnected", "helper_disconnected"}:
+                self._disconnect_epoch += 1
                 asyncio.create_task(self.recover())
                 return
             # Navigation, target metadata changes and lifecycle notifications
@@ -381,10 +383,29 @@ class GptAutoProviderRuntime:
             self._recovery_task = task
         await asyncio.shield(task)
 
+    async def recover_chat(self, chat: PersistentChat) -> None:
+        """Join the same recovery owner when rehydrating a submitted turn."""
+        await self.register_chat(chat)
+        chat._restart_recovery_pending = True
+        try:
+            try:
+                await self.ensure_available()
+                await chat.reconcile(await self.bridge.call("list_pages"))
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                pass  # One connection/renderer attempt is not a request deadline.
+            if getattr(chat, "state", None) != "ready":
+                await self.recover()
+            if getattr(chat, "state", None) != "ready":
+                raise RuntimeError("submitted conversation recovery owner is no longer live")
+        finally:
+            chat._restart_recovery_pending = False
+
     def _active_recovery_chats(self) -> list[PersistentChat]:
         return [
             chat for chat in tuple(self._chats.values())
-            if chat.active_turn_id is not None
+            if (chat.active_turn_id is not None or getattr(chat, "_restart_recovery_pending", False))
             and getattr(chat, "state", None) not in {"closed", "failed"}
             and (
                 not callable(getattr(chat, "_page_mutation_owner_is_live", None))
@@ -394,9 +415,10 @@ class GptAutoProviderRuntime:
 
     async def _recover_browser(self) -> None:
         async with self._lifecycle_lock:
-            if self.state is not ProviderState.AVAILABLE:
+            if self.state not in {ProviderState.AVAILABLE, ProviderState.FAILED, ProviderState.RECOVERING}:
                 return
-            self._move(ProviderState.RECOVERING)
+            if self.state is ProviderState.AVAILABLE:
+                self._move(ProviderState.RECOVERING)
             old, self._bridge = self._bridge, None
             self._gpt_browser = None
             # Handles are allocated by each bridge instance. Never carry a
@@ -416,24 +438,33 @@ class GptAutoProviderRuntime:
             # real actor (a chat starting a turn, ensure_dedicated_window_
             # anchor, etc.) drive the ordinary STOPPED/FAILED -> CONNECTING
             # lazy path in ensure_available().
-            if not any(chat.active_turn_id is not None for chat in self._chats.values()):
-                self._move(ProviderState.FAILED)
+            if not self._active_recovery_chats():
+                if self.state is not ProviderState.FAILED:
+                    self._move(ProviderState.FAILED)
                 return
         # A connect timeout bounds one attempt, not the lifetime of provider
         # work. The turn/gateway retain their existing outer timeouts and
         # cancellation authority. Never count retries as genuine DOM progress.
         delay = 0.25
+        started_at = time.monotonic()
+        attempt = 0
         restored: set[int] = set()
         while self._active_recovery_chats():
             if self.state in {ProviderState.STOPPED, ProviderState.STOPPING}:
                 return
             try:
+                attempt += 1
                 await self.ensure_available()
+                connected_epoch = self._disconnect_epoch
                 pages = await self.bridge.call("list_pages")
             except asyncio.CancelledError:
                 raise
             except Exception:
-                logger.info("gpt-auto browser offline; retaining active turns for reconnect")
+                logger.info(
+                    "gpt-auto browser offline; retaining active turns for reconnect",
+                    extra={"reconnect-attempt": attempt, "retry-delay-seconds": delay,
+                           "outage-seconds": round(time.monotonic() - started_at, 3)},
+                )
                 async with self._lifecycle_lock:
                     failed_bridge, self._bridge = self._bridge, None
                     self._gpt_browser = None
@@ -449,8 +480,9 @@ class GptAutoProviderRuntime:
                         await failed_bridge.stop()
             else:
                 for chat in self._active_recovery_chats():
-                    if id(chat) in restored:
+                    if id(chat) in restored and getattr(chat, "state", None) != "recovering":
                         continue
+                    restored.discard(id(chat))
                     try:
                         await chat.reconcile(pages)
                     except asyncio.CancelledError:
@@ -463,6 +495,30 @@ class GptAutoProviderRuntime:
                         if getattr(chat, "state", None) != "recovering":
                             restored.add(id(chat))
                 if all(id(chat) in restored for chat in self._active_recovery_chats()):
+                    if connected_epoch != self._disconnect_epoch:
+                        # A new socket loss arrived while this owner was
+                        # reconciling. The router's recover() joins us; do
+                        # not drop that wake-up by returning as "restored".
+                        async with self._lifecycle_lock:
+                            old, self._bridge = self._bridge, None
+                            self._gpt_browser = None
+                            self._dedicated_window_anchor = None
+                            self._dedicated_window_id = None
+                            self._page_owners.clear()
+                            if self.state is ProviderState.AVAILABLE:
+                                self._move(ProviderState.RECOVERING)
+                            for chat in tuple(self._chats.values()):
+                                chat.bridge_replaced()
+                            if old:
+                                await old.stop()
+                        restored.clear()
+                        continue
+                    logger.info(
+                        "gpt-auto active conversations reattached",
+                        extra={"reconnect-attempt": attempt,
+                               "outage-seconds": round(time.monotonic() - started_at, 3),
+                               "rebound-count": len(restored)},
+                    )
                     return
             await asyncio.sleep(delay)
             delay = min(delay * 2, 5.0)
@@ -473,11 +529,14 @@ class GptAutoProviderRuntime:
         if mark_failed is not None:
             mark_failed()
 
-    async def create_chat_page(self) -> str:
+    async def create_chat_page(self, *, background_only: bool = False) -> str:
         """Create a session page through the one shared-window admission path."""
         if self.config.browser.dedicated_window:
             anchor = await self.ensure_dedicated_window_anchor()
-            page = await self.bridge.call("create_page_in_window", {"anchorPageHandle": anchor})
+            params = {"anchorPageHandle": anchor}
+            if background_only:
+                params["backgroundOnly"] = True
+            page = await self.bridge.call("create_page_in_window", params)
         else:
             page = await self.bridge.call("create_page")
         return str(page["pageHandle"])
@@ -494,16 +553,16 @@ class GptAutoProviderRuntime:
             raise ValueError("recovery requires a durable conversation URL")
         async with self._conversation_reopen_lock:
             if owner_is_live is not None and not owner_is_live():
-                raise asyncio.CancelledError("conversation recovery owner expired")
+                raise RuntimeError("conversation recovery owner expired")
             page = await self.find_conversation_page(provider_session_id)
             if page is not None and canonical_chat_url(str(page.get("url") or "")) == url:
                 return page
             if owner_is_live is not None and not owner_is_live():
-                raise asyncio.CancelledError("conversation recovery owner expired")
-            handle = await self.create_chat_page()
+                raise RuntimeError("conversation recovery owner expired")
+            handle = await self.create_chat_page(background_only=True)
             try:
                 if owner_is_live is not None and not owner_is_live():
-                    raise asyncio.CancelledError("conversation recovery owner expired")
+                    raise RuntimeError("conversation recovery owner expired")
                 await self.bridge.call("navigate", {"pageHandle": handle, "url": url})
             except BaseException:
                 # Do not abandon a newly created empty tab on cancellation.

@@ -319,6 +319,36 @@ async def capture_latest_response(
             "outcome": "unavailable",
             "reason": result.reason if result else "conversation-tab-not-found",
         }
+    duplicates = [p for p in pages if canonical_chat_url(str(p.get("url") or ""))
+                  == canonical_chat_url(str(selected.get("url") or ""))]
+    if len(duplicates) > 1:
+        if not isinstance(locator, ConversationCaptureLocator) or not locator.prompt_text_digest:
+            return {"outcome": "unavailable", "reason": "duplicate-turn-proof-missing"}
+        proven = []
+        for candidate in duplicates:
+            try:
+                candidate_page = await runtime.gpt_browser.page_by_handle(str(candidate["pageHandle"]))
+                candidate_snapshot = ChatSnapshot.from_bridge(await runtime.gpt_browser.snapshot(
+                    candidate_page, signals=runtime.config.workflow.bridge_signals(),
+                ))
+                user = candidate_snapshot.latest_user_ref()
+                assistant = next((ref for ref in reversed(candidate_snapshot.message_refs) if ref.role == "assistant"), None)
+                if (
+                    canonical_chat_url(candidate_snapshot.url) == canonical_chat_url(str(selected.get("url") or ""))
+                    and not candidate_snapshot.generating and not candidate_snapshot.error_present
+                    and candidate_snapshot.latest_assistant_id
+                    and candidate_snapshot.terminal_witness_assistant_id == candidate_snapshot.latest_assistant_id
+                    and candidate_snapshot.dom_signals.intersection({"completion-control", "response-complete-status"})
+                    and user is not None and assistant is not None and user.sequence < assistant.sequence
+                    and PromptFingerprint.from_text(candidate_snapshot.latest_user_correlation_text() or "").digest == locator.prompt_text_digest
+                    and (locator.baseline_user_count is None or candidate_snapshot.user_count == locator.baseline_user_count + 1)
+                ):
+                    proven.append(candidate)
+            except Exception:
+                continue
+        if not proven:
+            return {"outcome": "unavailable", "reason": "duplicate-owned-terminal-not-proven"}
+        selected = min(proven, key=lambda p: str(p.get("targetId") or p.get("pageHandle") or ""))
     handle = str(selected.get("pageHandle") or "")
     if not handle:
         return {"outcome": "unavailable", "reason": "target-handle-missing"}
