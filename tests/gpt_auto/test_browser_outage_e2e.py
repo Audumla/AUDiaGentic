@@ -23,7 +23,9 @@ from audiagentic.components.providers.adapters.gpt_auto.runtime import GptAutoPr
 from audiagentic.components.providers.adapters.gpt_auto.session_transport import (
     GptAutoSessionTransport,
 )
+from audiagentic.components.providers.adapters.gpt_auto.turn import GptAutoTurn
 from audiagentic.foundation.paths import home
+from audiagentic.foundation.transports.agent_session import TransportObservationKind
 from tests.unit.agents.test_agents_gateway_dispatch_sessions import (
     _RESUMABLE_PROFILE,
     _RESUMABLE_PROVIDER_ID,
@@ -38,7 +40,17 @@ from .test_greenfield_config_urls import valid_config
 @pytest.mark.asyncio
 @pytest.mark.no_parallel
 @pytest.mark.parametrize("remounted_final", [False, True])
-async def test_restart_offline_to_terminal_artifact_through_production_observer(monkeypatch, tmp_path, remounted_final):
+@pytest.mark.parametrize("missing_prompt_id", [False, True])
+@pytest.mark.parametrize("terminal_sink_fails", [False, True])
+async def test_restart_offline_to_terminal_artifact_through_production_observer(monkeypatch, tmp_path, remounted_final, missing_prompt_id, terminal_sink_fails):
+    original_emit = GptAutoTurn._emit
+
+    async def emit(turn, kind, attributes):
+        if terminal_sink_fails and kind is TransportObservationKind.TERMINAL:
+            raise RuntimeError("injected terminal telemetry failure")
+        await original_emit(turn, kind, attributes)
+
+    monkeypatch.setattr(GptAutoTurn, "_emit", emit)
     with socket.socket() as reservation:
         reservation.bind(("127.0.0.1", 0))
         port = reservation.getsockname()[1]
@@ -81,6 +93,10 @@ async def test_restart_offline_to_terminal_artifact_through_production_observer(
             "prompt-text-digest": PromptFingerprint.from_text("owned prompt").digest,
             "submission-attempt-id": "prior-attempt", "submission-state": "proven",
             "send-intent-ever": True, "submission-stage": "send-click-acknowledged"}
+    if missing_prompt_id:
+        checkpoint.pop("prompt-message-id")
+        checkpoint["unresolved-baseline-user-count"] = 0
+        checkpoint["unresolved-baseline-assistant-count"] = 0
     first["provider-metadata"] = checkpoint.copy()
     store.write_record(tmp_path, first)
     sessions_store.write_session_record(tmp_path, sessions_store.build_session_record(

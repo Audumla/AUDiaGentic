@@ -637,3 +637,30 @@ async def test_background_reopen_without_anchor_does_not_create_window(stale_cac
     runtime._bridge = SimpleNamespace(call=call)
     assert await runtime.create_chat_page(background_only=True) == "background"
     assert methods == ["list_pages", "create_page"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("invalid", ["digest", "missing-digest", "baseline-bool", "baseline-negative"])
+async def test_promptless_pre_id_recovery_rejects_unproven_identity(invalid):
+    from audiagentic.components.providers.adapters.gpt_auto.snapshot import ChatSnapshot
+    from audiagentic.components.providers.adapters.gpt_auto.turn import GptAutoTurn
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+    from audiagentic.foundation.transports.agent_session import SessionPrompt
+
+    chat = _chat()
+    turn = GptAutoTurn(chat, SessionPrompt(turn_id="owned", body=""), lambda observation: None)
+    checkpoint = {"unresolved-baseline-user-count": 0, "prompt-text-digest": "wrong"}
+    if invalid == "missing-digest":
+        checkpoint.pop("prompt-text-digest")
+    elif invalid == "baseline-bool":
+        checkpoint["unresolved-baseline-user-count"] = True
+    elif invalid == "baseline-negative":
+        checkpoint["unresolved-baseline-user-count"] = -1
+    snapshot = ChatSnapshot(url="https://chatgpt.com/g/g-p-original/c/conversation",
+        composer_present=True, composer_editable=True, user_count=1, assistant_count=0,
+        latest_user_id="u1", latest_assistant_id=None, latest_user_text="foreign",
+        latest_assistant_text=None, generating=False, error_present=False, dom_signals=frozenset())
+    with pytest.raises(AudiaGenticError) as caught:
+        await turn._await_recovered_prompt_identity(checkpoint, snapshot)
+    assert caught.value.code == "EXT-GPTAUTO-004"
+    assert turn._recovery_correlation_text is None

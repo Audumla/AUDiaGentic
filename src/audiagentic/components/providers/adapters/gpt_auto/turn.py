@@ -729,12 +729,17 @@ class GptAutoTurn:
                 )
                 self._prompt_message_id = self._prompt_id_for_snapshot(current)
                 derived_prompt_id = True
+                if not self.request.body:
+                    candidate_text = current.latest_user_correlation_text() or ""
+                    if (candidate_text and checkpoint.get("prompt-text-digest")
+                            == PromptFingerprint.from_text(candidate_text).digest):
+                        self._recovery_correlation_text = candidate_text
                 mark_prompt = getattr(self.chat, "mark_prompt_submitted", None)
                 if mark_prompt is not None and self._prompt_message_id is not None:
                     mark_prompt(
                         self._prompt_message_id,
                         checkpoint.get("unresolved-baseline-assistant-id"),
-                        self.request.body,
+                        self.request.body or self._recovery_correlation_text or "",
                     )
             response_ref = _response_ref_for_prompt(current, self._prompt_message_id)
             # Build a synthetic pre-response baseline when the assistant
@@ -766,9 +771,10 @@ class GptAutoTurn:
                 self._response_message_id = response_ref.message_id
             self._baseline_snapshot = baseline
             if derived_prompt_id:
-                persist_identity = getattr(self.chat, "persist_unresolved_identity", None)
-                if persist_identity is not None:
-                    await persist_identity()
+                # This is new observational identity, not another dispatch
+                # or submission-proof transition. Keep the frozen recovered
+                # checkpoint intact until terminal gateway finalization.
+                await self._publish_message_ids(strict=False)
             self._move(TurnState.SUBMITTED)
             self._move(TurnState.AWAITING_RESPONSE)
             final = await self._await_response(
@@ -785,7 +791,7 @@ class GptAutoTurn:
             if callable(capture_checkpoint):
                 capture_checkpoint(self.request.turn_id)
             self._move(TurnState.COMPLETE)
-            await self._emit(TransportObservationKind.TERMINAL, {"stop_reason": "end-turn"})
+            await self._emit_terminal_success()
             result = self._result("end-turn")
             return SessionTurnResult(**{**result.__dict__, "final_summary": final, "final_media_type": self._final_media_type})
         except asyncio.CancelledError:
@@ -804,7 +810,9 @@ class GptAutoTurn:
         """Wait through renderer lag before classifying a pre-ID recovery."""
         baseline_count = checkpoint.get("unresolved-baseline-user-count")
         try:
-            baseline_count_value = int(baseline_count)
+            if not isinstance(baseline_count, int) or isinstance(baseline_count, bool) or baseline_count < 0:
+                raise ValueError("invalid recovered baseline count")
+            baseline_count_value = baseline_count
         except (TypeError, ValueError) as exc:
             raise AudiaGenticError(
                 "EXT-GPTAUTO-004", "providers",
@@ -827,7 +835,12 @@ class GptAutoTurn:
                     "user", checkpoint.get("unresolved-baseline-user-id"), candidate_id,
                 )
             ):
-                if not match_prompt(self.request.body, candidate_text):
+                matches = (
+                    match_prompt(self.request.body, candidate_text) if self.request.body else
+                    bool(checkpoint.get("prompt-text-digest") and candidate_text
+                         and checkpoint["prompt-text-digest"] == PromptFingerprint.from_text(candidate_text).digest)
+                )
+                if not matches:
                     raise AudiaGenticError(
                         "EXT-GPTAUTO-004", "providers",
                         "gpt-auto recovered a conflicting prompt identity",
@@ -1072,6 +1085,11 @@ class GptAutoTurn:
 
         self._move(TurnState.COMPLETE)
 
+        await self._emit_terminal_success()
+        result = self._result("end-turn")
+        return SessionTurnResult(**{**result.__dict__, "final_summary": final, "final_media_type": self._final_media_type})
+
+    async def _emit_terminal_success(self) -> None:
         try:
             await self._emit(
                 TransportObservationKind.TERMINAL,
@@ -1083,9 +1101,6 @@ class GptAutoTurn:
                 "gpt-auto terminal observation sink failed after proven completion",
                 extra={"turn-id": self.request.turn_id},
             )
-        result = self._result("end-turn")
-        return SessionTurnResult(**{**result.__dict__, "final_summary": final, "final_media_type": self._final_media_type})
-
     def _require_admitted_project(self, snapshot: ChatSnapshot, *, phase: str) -> None:
         """Fence every browser side effect to the admitted ChatGPT Project."""
         expected = parse_project_id(self.chat.project_url or "")
