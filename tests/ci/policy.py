@@ -13,6 +13,8 @@ BROWSER_MODULES = frozenset(
     }
 )
 CDP_MODULES = (
+    "tests/gpt_auto/test_browser_outage_recovery.py",
+    "tests/gpt_auto/test_browser_outage_e2e.py",
     "tests/gpt_auto/test_greenfield_bridge_turn.py",
     "tests/gpt_auto/test_simulated_cdp_matrix.py",
     "tests/gpt_auto/test_python_cdp_bridge.py",

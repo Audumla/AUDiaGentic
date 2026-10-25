@@ -75,7 +75,15 @@ def _redact_error(error: BaseException | dict[str, Any] | None) -> dict[str, Any
             return {"code": "VAL-AGW-999", "message": str(error), "kind": type(error).__name__}
         return {"code": "UNKNOWN", "message": "unexpected error (see server logs)", "kind": type(error).__name__}
     projected = {k: v for k, v in error.items() if k in _shared._REDACTED_ERROR_KEYS}
-    if error.get("code") == "CON-AGW-084" and isinstance(error.get("details"), dict):
+    if (
+        isinstance(error.get("code"), str)
+        and error["code"].startswith("EXT-GPTAUTO-")
+        and isinstance(error.get("details"), dict)
+    ):
+        details = _project_gpt_auto_error_details(error["details"])
+        if details:
+            projected["details"] = details
+    elif error.get("code") == "CON-AGW-084" and isinstance(error.get("details"), dict):
         details = _project_bounded_recovery_error_details(error["details"])
         if details:
             projected["details"] = details
@@ -260,6 +268,7 @@ _GPT_AUTO_DETAIL_KEYS = frozenset(
         "submission-state",
         "failure-stage",
         "retryable-same-session",
+        "previous-turn-unresolved",
         "send-intent-ever",
         "submission-stage",
         "action-complete",

@@ -67,32 +67,43 @@ def select_focus_page(
         if wanted_session and parse_provider_session_id(str(p.get("url") or "")) == wanted_session
     ]
 
+    def duplicate_result(matches, reason):
+        # Physical tabs can duplicate one durable conversation after browser
+        # restoration. Only collapse that ambiguity when every canonical
+        # project/conversation identity agrees. Capture still proves its turn.
+        identities = {canonical_chat_url(str(p.get("url") or "")) for p in matches}
+        if len(identities) == 1 and None not in identities:
+            preferred = getattr(locator, "provider_target_id", None)
+            exact = [p for p in matches if preferred and p.get("targetId") == preferred]
+            return min(exact or matches, key=lambda p: str(p.get("targetId") or p.get("pageHandle") or "")), None
+        return None, ConversationFocusResult(ConversationFocusOutcome.AMBIGUOUS, reason)
+
     if wanted_url and wanted_session:
         intersection = [p for p in url_matches if p in session_matches]
         if len(intersection) == 1:
             return intersection[0], None
         if len(intersection) > 1:
-            return None, ConversationFocusResult(ConversationFocusOutcome.AMBIGUOUS, "duplicate-target-identity")
+            return duplicate_result(intersection, "duplicate-target-identity")
         if url_matches and session_matches:
             return None, ConversationFocusResult(ConversationFocusOutcome.IDENTITY_CONFLICT, "url-session-mismatch")
         if len(session_matches) == 1:
             return session_matches[0], None
         if len(session_matches) > 1:
-            return None, ConversationFocusResult(ConversationFocusOutcome.AMBIGUOUS, "duplicate-session-identity")
+            return duplicate_result(session_matches, "duplicate-session-identity")
         if len(url_matches) == 1:
             return url_matches[0], None
         if len(url_matches) > 1:
-            return None, ConversationFocusResult(ConversationFocusOutcome.AMBIGUOUS, "duplicate-url-identity")
+            return duplicate_result(url_matches, "duplicate-url-identity")
     elif wanted_session:
         if len(session_matches) == 1:
             return session_matches[0], None
         if len(session_matches) > 1:
-            return None, ConversationFocusResult(ConversationFocusOutcome.AMBIGUOUS, "duplicate-session-identity")
+            return duplicate_result(session_matches, "duplicate-session-identity")
     elif wanted_url:
         if len(url_matches) == 1:
             return url_matches[0], None
         if len(url_matches) > 1:
-            return None, ConversationFocusResult(ConversationFocusOutcome.AMBIGUOUS, "duplicate-url-identity")
+            return duplicate_result(url_matches, "duplicate-url-identity")
     return None, ConversationFocusResult(ConversationFocusOutcome.NOT_FOUND, "conversation-tab-not-found")
 
 
@@ -288,11 +299,15 @@ async def capture_latest_response(
         chat_url = canonical_chat_url(locator.chat_url or "")
         if chat_url is not None and not passive:
             try:
-                handle = await runtime.create_chat_page()
-                await runtime.bridge.call(
-                    "navigate", {"pageHandle": handle, "url": chat_url}
-                )
-                selected = {"pageHandle": handle, "url": chat_url, "type": "page"}
+                reopen = getattr(runtime, "reopen_conversation_page", None)
+                if callable(reopen):
+                    selected = await reopen(chat_url)
+                else:
+                    handle = await runtime.create_chat_page()
+                    await runtime.bridge.call(
+                        "navigate", {"pageHandle": handle, "url": chat_url}
+                    )
+                    selected = {"pageHandle": handle, "url": chat_url, "type": "page"}
                 result = None
             except Exception:
                 return {
@@ -304,6 +319,36 @@ async def capture_latest_response(
             "outcome": "unavailable",
             "reason": result.reason if result else "conversation-tab-not-found",
         }
+    duplicates = [p for p in pages if canonical_chat_url(str(p.get("url") or ""))
+                  == canonical_chat_url(str(selected.get("url") or ""))]
+    if len(duplicates) > 1:
+        if not isinstance(locator, ConversationCaptureLocator) or not locator.prompt_text_digest:
+            return {"outcome": "unavailable", "reason": "duplicate-turn-proof-missing"}
+        proven = []
+        for candidate in duplicates:
+            try:
+                candidate_page = await runtime.gpt_browser.page_by_handle(str(candidate["pageHandle"]))
+                candidate_snapshot = ChatSnapshot.from_bridge(await runtime.gpt_browser.snapshot(
+                    candidate_page, signals=runtime.config.workflow.bridge_signals(),
+                ))
+                user = candidate_snapshot.latest_user_ref()
+                assistant = next((ref for ref in reversed(candidate_snapshot.message_refs) if ref.role == "assistant"), None)
+                if (
+                    canonical_chat_url(candidate_snapshot.url) == canonical_chat_url(str(selected.get("url") or ""))
+                    and not candidate_snapshot.generating and not candidate_snapshot.error_present
+                    and candidate_snapshot.latest_assistant_id
+                    and candidate_snapshot.terminal_witness_assistant_id == candidate_snapshot.latest_assistant_id
+                    and candidate_snapshot.dom_signals.intersection({"completion-control", "response-complete-status"})
+                    and user is not None and assistant is not None and user.sequence < assistant.sequence
+                    and PromptFingerprint.from_text(candidate_snapshot.latest_user_correlation_text() or "").digest == locator.prompt_text_digest
+                    and (locator.baseline_user_count is None or candidate_snapshot.user_count == locator.baseline_user_count + 1)
+                ):
+                    proven.append(candidate)
+            except Exception:
+                continue
+        if not proven:
+            return {"outcome": "unavailable", "reason": "duplicate-owned-terminal-not-proven"}
+        selected = min(proven, key=lambda p: str(p.get("targetId") or p.get("pageHandle") or ""))
     handle = str(selected.get("pageHandle") or "")
     if not handle:
         return {"outcome": "unavailable", "reason": "target-handle-missing"}
@@ -365,6 +410,17 @@ async def capture_latest_response(
             "outcome": "unavailable",
             "reason": "terminal-response-not-proven",
         }
+    if len(duplicates) > 1:
+        user = snapshot.latest_user_ref()
+        assistant = next((ref for ref in reversed(snapshot.message_refs) if ref.role == "assistant"), None)
+        if (
+            user is None or assistant is None or user.sequence >= assistant.sequence
+            or assistant.message_id != snapshot.latest_assistant_id
+            or user.message_id != snapshot.latest_user_id
+            or PromptFingerprint.from_text(snapshot.latest_user_correlation_text() or "").digest != locator.prompt_text_digest
+            or (locator.baseline_user_count is not None and snapshot.user_count != locator.baseline_user_count + 1)
+        ):
+            return {"outcome": "unavailable", "reason": "duplicate-owned-turn-changed"}
     return {
         "outcome": "captured",
         "snapshot": snapshot,
