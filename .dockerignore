@@ -6,6 +6,7 @@
 !release-please-config.json
 !README.md
 !.gitignore
+!.dockerignore
 !.tmp/
 !.tmp/wheels/
 !.tmp/wheels/mcp-1.27.0-py3-none-any.whl
@@ -17,6 +18,8 @@
 !src/**
 !tests/
 !tests/**
+!tools/
+!tools/**
 tests/**/__pycache__
 tests/**/__pycache__/**
 tests/unit/runtime/Qwen3.5-0.8B-UD-Q5_K_XL.gguf

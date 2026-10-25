@@ -37,8 +37,10 @@ RUN if [ "$CI_BROWSER_ASSETS" = 1 ]; then /venv/bin/python -m playwright install
 
 COPY release-please-config.json ./
 COPY .gitignore ./
+COPY .dockerignore ./
 COPY src ./src
 COPY tests ./tests
+COPY tools ./tools
 COPY docs/examples ./docs/examples
 COPY docs/reference ./docs/reference
 COPY docs/planning ./docs/planning

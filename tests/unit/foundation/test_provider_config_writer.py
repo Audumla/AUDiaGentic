@@ -5,6 +5,7 @@ holds only rich runtime config and never carries `enabled`.
 """
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import pytest
@@ -141,7 +142,10 @@ def test_patch_provider_config_validates_gpt_auto_before_persisting(
     assert not path.exists()
 
 
-def test_patch_provider_config_persists_valid_gpt_auto(tmp_path: Path) -> None:
+def test_patch_provider_config_persists_valid_gpt_auto(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from audiagentic.components.providers.adapters.gpt_auto import config as gpt_config
+
+    monkeypatch.setattr(gpt_config, "discover_browser_candidates", lambda: ())
     path = _provider_yaml(tmp_path, "gpt-auto")
 
     result = patch_provider_config(
@@ -152,6 +156,7 @@ def test_patch_provider_config_persists_valid_gpt_auto(tmp_path: Path) -> None:
             "access-mode": "none",
             "settings": {
                 "contract-version": "v1",
+                "browser": {"executable": sys.executable},
                 "turn": {"response-timeout-seconds": 42},
             },
         },
