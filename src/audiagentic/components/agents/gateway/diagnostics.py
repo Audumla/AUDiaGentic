@@ -245,7 +245,14 @@ def classify_error(
     # completed pre-Send reconciliation can subsequently prove no submission;
     # do not let the earlier phase label override that explicit outcome.
     proven_unsent = (
-        code == "EXT-GPTAUTO-003"
+        code in {"EXT-GPTAUTO-003", "EXT-GPTAUTO-004"}
+        and (
+            code == "EXT-GPTAUTO-003"
+            or (
+                details.get("failure-stage") == "readiness"
+                and details.get("previous-turn-unresolved") is False
+            )
+        )
         and details.get("submission-state") == "not_started"
         and details.get("submission-attempted") is False
         and details.get("submission-proven") is False
@@ -277,6 +284,15 @@ def classify_error(
         recovery = RecoveryDisposition.RECONCILE_REQUIRED
         default_phase = ObservationPhase.RECONCILIATION
         default_side_effect = SideEffectState.MAY_HAVE_STARTED
+    elif proven_unsent and code == "EXT-GPTAUTO-004":
+        # Admission failed before a turn existed. Explicit negative proof,
+        # including absence of a prior unresolved turn, outranks the generic
+        # EXT-004 code. Missing or contradictory proof stays conservative.
+        classification = FailureClass.BROWSER_ADAPTER_ERROR
+        certainty = EvidenceCertainty.STRONG
+        recovery = RecoveryDisposition.RETRY_SAFE
+        default_phase = ObservationPhase.PRE_SUBMIT
+        default_side_effect = SideEffectState.NOT_STARTED
     elif ambiguous or code == "EXT-GPTAUTO-004":
         classification = FailureClass.AMBIGUOUS_SIDE_EFFECT
         certainty = EvidenceCertainty.STRONG

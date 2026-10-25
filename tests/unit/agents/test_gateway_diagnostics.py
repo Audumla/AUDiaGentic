@@ -55,6 +55,44 @@ def test_explicit_unsent_outcome_supersedes_earlier_fsm_phase_only_with_full_pro
         assert classify_error({"code": "EXT-GPTAUTO-003", "details": {**details, **extra}})["side-effect-state"] == "may-have-started"
 
 
+def test_readiness_unsent_proof_survives_redaction_and_is_not_ambiguous():
+    from audiagentic.components.agents.gateway.store._records import _redact_error
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+    proof = {
+        "failure-stage": "readiness", "submission-state": "not_started",
+        "submission-attempted": False, "submission-proven": False,
+        "submission-ambiguous": False, "previous-turn-unresolved": False,
+        "chat-state": "failed", "retryable-same-session": False,
+    }
+    saved = _redact_error(AudiaGenticError(
+        code="EXT-GPTAUTO-004", kind="providers", message="admission failed",
+        details={**proof, "cause-message": "private diagnostic", "prompt-body": "private prompt"},
+    ))
+    assert saved["details"] == proof
+    result = classify_error(saved)
+    assert result["classification"] == "browser-adapter-error"
+    assert result["phase"] == "pre-submit"
+    assert result["side-effect-state"] == "not-started"
+    assert result["recovery"]["disposition"] == "retry-safe"
+    # Safe to retry does not mean the failed transport can be reused.
+    assert saved["details"]["retryable-same-session"] is False
+    for key in (
+        "failure-stage", "submission-state", "submission-attempted",
+        "submission-proven", "submission-ambiguous", "previous-turn-unresolved",
+    ):
+        incomplete = dict(proof)
+        del incomplete[key]
+        assert classify_error({"code": "EXT-GPTAUTO-004", "details": incomplete})["classification"] == "ambiguous-side-effect"
+    for extra in (
+        {"previous-turn-unresolved": True}, {"submission-attempted": True},
+        {"submission-proven": True}, {"submission-ambiguous": True},
+        {"send-intent-ever": True}, {"side-effect-attempted": True},
+        {"send-button-clicked": True}, {"enter-dispatched": True},
+    ):
+        assert classify_error({"code": "EXT-GPTAUTO-004", "details": {**proof, **extra}})["classification"] == "ambiguous-side-effect"
+
+
 def test_saved_gpt_error_retains_typed_unsent_recovery_proof_without_prompt_text():
     from audiagentic.components.agents.gateway.store._records import _redact_error
     from audiagentic.foundation.contracts.errors import AudiaGenticError

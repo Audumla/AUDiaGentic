@@ -747,6 +747,7 @@ async def test_unresolved_prior_turn_blocks_presubmit_replay(
 
     assert raised.value.details["submission-state"] == "not_started"
     assert raised.value.details["previous-turn-unresolved"] is True
+    assert raised.value.details["submission-attempted"] is False
     assert raised.value.details["retryable-same-session"] is False
 
 
@@ -769,6 +770,7 @@ async def test_failed_session_does_not_retain_request_after_readiness_failure() 
         )
 
     assert raised.value.details["retryable-same-session"] is False
+    assert raised.value.details["chat-state"] == "failed"
     assert transport.turn_failure_disposition() is SessionFailureDisposition.TERMINATE
 
 

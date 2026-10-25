@@ -250,10 +250,12 @@ class GptAutoSessionTransport:
                     details={
                         "failure-stage": "readiness",
                         "submission-state": "not_started",
+                        "submission-attempted": False,
                         "submission-proven": False,
                         "submission-ambiguous": False,
                         "retryable-same-session": False,
                         "previous-turn-unresolved": unresolved,
+                        "chat-state": getattr(getattr(self.chat, "state", None), "value", "unknown"),
                         "cause-type": type(exc).__name__,
                         "cause-message": _bounded_cause_message(exc),
                         "request-id": request.turn_id,

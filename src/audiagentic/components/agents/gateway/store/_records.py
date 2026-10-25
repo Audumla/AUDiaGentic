@@ -260,6 +260,7 @@ _GPT_AUTO_DETAIL_KEYS = frozenset(
         "submission-state",
         "failure-stage",
         "retryable-same-session",
+        "previous-turn-unresolved",
         "send-intent-ever",
         "submission-stage",
         "action-complete",
