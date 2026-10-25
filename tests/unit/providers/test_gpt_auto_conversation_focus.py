@@ -17,6 +17,18 @@ def _locator(url=None, session=None):
     return ConversationFocusLocator(chat_url=url, provider_session_id=session)
 
 
+@pytest.mark.parametrize("reverse", [False, True])
+def test_duplicate_physical_tabs_choose_stable_exact_conversation(reverse):
+    url = "https://chatgpt.com/g/g-p-x/c/s1"
+    pages = [
+        {"pageHandle": "h2", "targetId": "target-b", "url": url},
+        {"pageHandle": "h1", "targetId": "target-a", "url": url},
+    ]
+    page, error = select_focus_page(list(reversed(pages)) if reverse else pages, _locator(url, "s1"))
+    assert error is None
+    assert page["targetId"] == "target-a"
+
+
 @pytest.mark.parametrize(
     "case",
     ["valid", "target-missing", "target-replaced", "wrong-project", "wrong-prompt",

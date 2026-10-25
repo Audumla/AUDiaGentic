@@ -67,32 +67,43 @@ def select_focus_page(
         if wanted_session and parse_provider_session_id(str(p.get("url") or "")) == wanted_session
     ]
 
+    def duplicate_result(matches, reason):
+        # Physical tabs can duplicate one durable conversation after browser
+        # restoration. Only collapse that ambiguity when every canonical
+        # project/conversation identity agrees. Capture still proves its turn.
+        identities = {canonical_chat_url(str(p.get("url") or "")) for p in matches}
+        if len(identities) == 1 and None not in identities:
+            preferred = getattr(locator, "provider_target_id", None)
+            exact = [p for p in matches if preferred and p.get("targetId") == preferred]
+            return min(exact or matches, key=lambda p: str(p.get("targetId") or p.get("pageHandle") or "")), None
+        return None, ConversationFocusResult(ConversationFocusOutcome.AMBIGUOUS, reason)
+
     if wanted_url and wanted_session:
         intersection = [p for p in url_matches if p in session_matches]
         if len(intersection) == 1:
             return intersection[0], None
         if len(intersection) > 1:
-            return None, ConversationFocusResult(ConversationFocusOutcome.AMBIGUOUS, "duplicate-target-identity")
+            return duplicate_result(intersection, "duplicate-target-identity")
         if url_matches and session_matches:
             return None, ConversationFocusResult(ConversationFocusOutcome.IDENTITY_CONFLICT, "url-session-mismatch")
         if len(session_matches) == 1:
             return session_matches[0], None
         if len(session_matches) > 1:
-            return None, ConversationFocusResult(ConversationFocusOutcome.AMBIGUOUS, "duplicate-session-identity")
+            return duplicate_result(session_matches, "duplicate-session-identity")
         if len(url_matches) == 1:
             return url_matches[0], None
         if len(url_matches) > 1:
-            return None, ConversationFocusResult(ConversationFocusOutcome.AMBIGUOUS, "duplicate-url-identity")
+            return duplicate_result(url_matches, "duplicate-url-identity")
     elif wanted_session:
         if len(session_matches) == 1:
             return session_matches[0], None
         if len(session_matches) > 1:
-            return None, ConversationFocusResult(ConversationFocusOutcome.AMBIGUOUS, "duplicate-session-identity")
+            return duplicate_result(session_matches, "duplicate-session-identity")
     elif wanted_url:
         if len(url_matches) == 1:
             return url_matches[0], None
         if len(url_matches) > 1:
-            return None, ConversationFocusResult(ConversationFocusOutcome.AMBIGUOUS, "duplicate-url-identity")
+            return duplicate_result(url_matches, "duplicate-url-identity")
     return None, ConversationFocusResult(ConversationFocusOutcome.NOT_FOUND, "conversation-tab-not-found")
 
 
@@ -288,11 +299,15 @@ async def capture_latest_response(
         chat_url = canonical_chat_url(locator.chat_url or "")
         if chat_url is not None and not passive:
             try:
-                handle = await runtime.create_chat_page()
-                await runtime.bridge.call(
-                    "navigate", {"pageHandle": handle, "url": chat_url}
-                )
-                selected = {"pageHandle": handle, "url": chat_url, "type": "page"}
+                reopen = getattr(runtime, "reopen_conversation_page", None)
+                if callable(reopen):
+                    selected = await reopen(chat_url)
+                else:
+                    handle = await runtime.create_chat_page()
+                    await runtime.bridge.call(
+                        "navigate", {"pageHandle": handle, "url": chat_url}
+                    )
+                    selected = {"pageHandle": handle, "url": chat_url, "type": "page"}
                 result = None
             except Exception:
                 return {

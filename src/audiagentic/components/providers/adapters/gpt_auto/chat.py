@@ -164,6 +164,9 @@ class PersistentChat:
         # unresolved-turn reconciler must never navigate the same physical
         # tab concurrently or allow a stale page handle to win.
         self._page_mutation_lock = asyncio.Lock()
+        self._reconcile_lock = asyncio.Lock()
+        self._replacement_target_pending = False
+        self._browser_generation_recovery = False
         self._page_mutation_owner_probe: Callable[[], bool] | None = None
         self._physical_idle_closed = False
         self._idle_closed_turn_id: str | None = None
@@ -2900,9 +2903,12 @@ class PersistentChat:
 
     def bridge_replaced(self) -> None:
         """Invalidate bridge-local binding before runtime-level recovery."""
+        if self.state is ChatState.CLOSED:
+            return
         if self.page_handle is not None:
             self._page_generation += 1
         self.page_handle = None
+        self._browser_generation_recovery = True
         if self.state is not ChatState.RECOVERING:
             self._move(ChatState.RECOVERING)
 
@@ -2912,6 +2918,46 @@ class PersistentChat:
             self._move(ChatState.FAILED)
 
     async def reconcile(self, pages: list[dict]) -> None:
+        # Event recovery, admission and response observation may all notice a
+        # lost target. Only one actor may rebind/reopen this conversation.
+        async with self._reconcile_lock:
+            await self._reconcile_page(pages)
+
+    async def _adopt_recovery_page(self, page: dict) -> bool:
+        """Rebind a physical tab only after reobserving the owned prompt."""
+        if not self._page_mutation_owner_is_live():
+            return False
+        expected_url = self.chat_url or ""
+        if not same_chat_identity(str(page.get("url") or ""), expected_url):
+            return False
+        if not self._claim_page(str(page.get("pageHandle") or "")):
+            return False
+        self._replacement_target_pending = True
+        self._bind_page(page)
+        snapshot = await self.snapshot(allow_recovering=True)
+        if (
+            not self._page_mutation_owner_is_live()
+            or not same_chat_identity(snapshot.url, expected_url)
+            or snapshot.error_present
+            or "auth-required" in snapshot.dom_signals
+            or not _unresolved_prompt_match_diagnostics(self, snapshot)[0]
+        ):
+            self._set_unresolved_recovery("replacement-target-turn-not-proven")
+            self._move(ChatState.RECOVERING)
+            return False
+        update = self.binding_sink(ProviderSessionBindingUpdate(
+            provider_session_ref=ProviderSessionRef(self.provider_session_id),
+            metadata={"chat-url": self.chat_url, "target-id": self.target_id},
+        ))
+        if asyncio.iscoroutine(update):
+            await update
+        self._replacement_target_pending = False
+        self._browser_generation_recovery = False
+        if self.active_turn_id:
+            self._move(ChatState.BUSY)
+        return True
+
+    async def _reconcile_page(self, pages: list[dict]) -> None:
         if self._physical_idle_closed:
             return
         if self.state is ChatState.CLOSED:
@@ -2940,21 +2986,21 @@ class PersistentChat:
                 page is not None
                 and self.target_id
                 and (self.unresolved_turn_pending or self._submission_proven)
-                and str(page.get("targetId") or "") != self.target_id
-            ):
-                # A matching conversation URL on a new CDP target is not proof
-                # that the unresolved Send survived. Require explicit
-                # reattachment rather than reviving the stale observer.
-                self._set_unresolved_recovery(
-                    "conversation-load-observation-deferred",
-                    provider_session_id=self.provider_session_id,
-                    chat_url=self.chat_url,
-                    defer_reason="replacement-target-requires-explicit-reattach",
-                    observed_target_id=str(page.get("targetId") or ""),
-                    expected_target_id=self.target_id,
+                and (
+                    str(page.get("targetId") or "") != self.target_id
+                    or self._replacement_target_pending
                 )
-                self._move(ChatState.RECOVERING)
-                return
+            ):
+                # A target id belongs to a browser generation, not the turn.
+                # Reobserve the exact prompt before continuing read-only
+                # observation. This path never sends a provider prompt.
+                if self.active_turn_id and self._page_mutation_owner_is_live():
+                    if not await self._adopt_recovery_page(page):
+                        return
+                else:
+                    self._set_unresolved_recovery("replacement-target-requires-owned-observer")
+                    self._move(ChatState.RECOVERING)
+                    return
             if page is not None and self._claim_page(str(page["pageHandle"])):
                 self._bind_page(page)
                 retained = await self._retained_page_snapshot()
@@ -2971,6 +3017,7 @@ class PersistentChat:
             if (
                 self._defer_page_creation_on_recovery
                 and self.provider_session_id
+                and not self._browser_generation_recovery
             ):
                 self._move(ChatState.RECOVERING)
                 raise RuntimeError('gpt-auto restart recovery deferred: exact provider conversation tab is not attached')
@@ -2987,6 +3034,11 @@ class PersistentChat:
                 self._set_unresolved_recovery("reconcile-owner-not-live")
                 return
             if self.unresolved_turn_pending or self._submission_proven:
+                reopen = getattr(self.runtime, "reopen_conversation_page", None)
+                if self.active_turn_id and callable(reopen):
+                    page = await reopen(self.chat_url, owner_is_live=self._page_mutation_owner_is_live)
+                    await self._adopt_recovery_page(page)
+                    return
                 self._set_unresolved_recovery(
                     "conversation-load-observation-deferred",
                     provider_session_id=self.provider_session_id,
