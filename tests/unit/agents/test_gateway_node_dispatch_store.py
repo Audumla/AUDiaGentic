@@ -14,7 +14,10 @@ from audiagentic.foundation.io import atomic_write_json
 
 @pytest.fixture
 def running(tmp_path):
-    record = store.build_record(execution_profile_id="profile", prompt_body="hello", session_id="ses_retained")
+    record = store.build_record(
+        execution_profile_id="profile", prompt_body="hello", session_id="ses_retained",
+        node_placement=placement(),
+    )
     store.write_record(tmp_path, record)
     claimed = store.claim_dispatch(tmp_path, record["request-id"], owner_epoch="owner", expected_revision=0)
     started = store.start_owned_attempt(
@@ -364,3 +367,62 @@ def test_missing_v9_placement_defaults_without_clearing_ownership(running):
     atomic_write_json(gateway_request_path(root, record["request-id"]), old)
     migrated = store.read_record(root, record["request-id"])
     assert migrated == {**old, "node-placement": None}
+
+
+@pytest.mark.parametrize("operation", ["bind", "authorize"])
+@pytest.mark.parametrize("invalid_placement", [
+    None, {}, {"node-id": "node"},
+    {**placement(), "principal-id": ""},
+    {**placement(), "server-project-id": "../unsealed"},
+    {**placement(), "grant-revision": True},
+    {**placement(), "extra-authority": "forbidden"},
+])
+def test_node_mutators_require_complete_sealed_placement_before_writing(
+    running, operation, invalid_placement
+):
+    root, record = running
+    if operation == "authorize":
+        record = bind(root, record)
+    record["node-placement"] = invalid_placement
+    # Model both schema-valid ordinary admission (null) and corrupted sealed
+    # facts. The canonical locked reader must reject malformed tuples.
+    path = gateway_request_path(root, record["request-id"])
+    atomic_write_json(path, record)
+    before = path.read_bytes()
+    files_before = {entry.relative_to(root) for entry in root.rglob("*") if entry.is_file()}
+    with pytest.raises(AudiaGenticError) as error:
+        if operation == "bind":
+            bind(root, record)
+        else:
+            authorize(root, record)
+    assert error.value.code == ("CON-AGND-001" if invalid_placement is None else "VAL-AGW-005")
+    assert path.read_bytes() == before
+    assert {entry.relative_to(root) for entry in root.rglob("*") if entry.is_file()} == files_before
+
+
+@pytest.mark.parametrize("field,value", [
+    ("node-id", "other-node"), ("workspace-id", "other-workspace"), ("grant-revision", 2),
+])
+def test_authorize_rechecks_exact_admission_placement_without_writing(running, field, value):
+    root, record = running
+    record = bind(root, record)
+    record["node-placement"][field] = value
+    # Corruption/replacement cannot turn existing command ownership into a
+    # fresh grant; principal/project policy still belongs to the outer owner.
+    store.write_record(root, record)
+    path = gateway_request_path(root, record["request-id"])
+    before = path.read_bytes()
+    with pytest.raises(AudiaGenticError, match="CON-AGND-001"):
+        authorize(root, record)
+    assert path.read_bytes() == before
+
+
+def test_bind_and_authorize_preserve_sealed_principal_project_facts(running):
+    root, record = running
+    admitted = deepcopy(record["node-placement"])
+    bound = bind(root, record)
+    authorized = authorize(root, bound)
+    assert admitted["principal-id"] == "principal"
+    assert admitted["server-project-id"] == "server-project"
+    assert bound["node-placement"] == authorized["node-placement"] == admitted
+    assert authorized["node-dispatch"]["authorization-state"] == "authorized"

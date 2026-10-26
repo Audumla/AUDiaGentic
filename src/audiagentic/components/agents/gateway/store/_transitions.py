@@ -2311,8 +2311,14 @@ def _node_matches_record(record: dict[str, Any], identity: dict[str, Any]) -> No
         or identity["execution-profile-id"] != record["execution-profile-id"]
     ):
         raise _node_conflict("Node command does not match the admitted request")
+    # _read_record_locked has already validated the complete strict placement
+    # tuple. Null is valid for ordinary server admission, never for node work.
+    # Principal/project facts stay sealed here for the outer grant owner;
+    # this local consistency guard does not recreate grant authorization.
     placement = record.get("node-placement")
-    if placement is not None and any(
+    if not isinstance(placement, dict):
+        raise _node_conflict("Node command requires sealed admission placement")
+    if any(
         identity[key] != placement[key] for key in ("node-id", "workspace-id", "grant-revision")
     ):
         raise _node_conflict("Node command does not match immutable admission placement")

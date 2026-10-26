@@ -196,7 +196,7 @@ class Frame:
 
 def validate_effect_authorization(
     identity: CommandIdentity, request: Frame, reply: Frame, *, connection_generation: int
-) -> None:
+) -> str:
     """Validate correlation on an already authenticated, currently live channel.
 
     This does not authenticate a peer or create an offline grant. The caller
@@ -209,7 +209,8 @@ def validate_effect_authorization(
         or request.type != "effect-authorize"
         or reply.type != "effect-authorized"
         or set(request.payload) != {"identity"}
-        or set(reply.payload) != {"identity", "authorization-request-id", "authorized"}
+        or set(reply.payload)
+        != {"identity", "authorization-request-id", "authorization-id", "authorized"}
         or request.payload["identity"] != expected
         or reply.payload["identity"] != expected
         or reply.payload["authorization-request-id"] != request.message_id
@@ -221,3 +222,4 @@ def validate_effect_authorization(
         )
     ):
         raise conflict(1, "Effect authorization does not match the live command and request")
+    return _identifier(reply.payload["authorization-id"])

@@ -58,6 +58,7 @@ def authorization(command=None):
         {
             "identity": command.to_mapping(),
             "authorization-request-id": "auth-1",
+            "authorization-id": "grant-1",
             "authorized": True,
         },
         message_id="reply-1",
@@ -293,3 +294,24 @@ def test_effect_denial_is_valid_wire_but_never_authorizes_intent():
     assert Frame.from_bytes(denied.to_bytes()) == denied
     with pytest.raises(AudiaGenticError, match="CON-AGND-001"):
         validate_effect_authorization(command, request, denied, connection_generation=1)
+
+
+@pytest.mark.parametrize(
+    "value", [None, "", "../grant", "grant with space", True, 1, [], {}, "x" * 201]
+)
+def test_effect_authorization_requires_valid_exact_authorization_id(value):
+    command = identity()
+    request, reply = authorization(command)
+    malformed = replace(reply, payload=dict(reply.payload) | {"authorization-id": value})
+    with pytest.raises(AudiaGenticError, match="VAL-AGND-001"):
+        validate_effect_authorization(command, request, malformed, connection_generation=1)
+
+
+def test_missing_authorization_id_is_not_a_legacy_authorization():
+    request, reply = authorization()
+    payload = dict(reply.payload)
+    del payload["authorization-id"]
+    with pytest.raises(AudiaGenticError, match="CON-AGND-001"):
+        validate_effect_authorization(
+            identity(), request, replace(reply, payload=payload), connection_generation=1
+        )

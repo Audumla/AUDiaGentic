@@ -5,6 +5,9 @@ under one Foundation AdvisoryLock. Never hold that lock over network/native I/O.
 Only a newly committed effect-intent returns True; a duplicate never grants a
 second native call. A crash/commit error after intent is uncertain, never unsent.
 Old epochs are evidence-only. Epoch rotation is an explicit owner CAS operation.
+Schema v2 records the exact central authorization ID with effect intent. Earlier
+prototype schemas are rejected without migration: missing authorization identity
+cannot be inferred or backfilled safely. Preserve those stores for offline review.
 
 Deploy on a protected local filesystem with working SQLite locks/fsync; network
 filesystems and cloud-sync folders are unsupported. POSIX directories are private;
@@ -85,13 +88,20 @@ class NodeReceiptStore:
                 raise invalid(1, "Node receipt files must not be symlinks")
             with self._transaction() as db:
                 version = db.execute("PRAGMA user_version").fetchone()[0]
-                if version not in (0, 1):
+                if version not in (0, 2):
                     raise conflict(1, "Unsupported node receipt schema version")
+                if (
+                    version == 0
+                    and db.execute(
+                        "SELECT 1 FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' LIMIT 1"
+                    ).fetchone()
+                ):
+                    raise conflict(1, "Unversioned existing node receipt store is unsupported")
                 db.execute(
                     "CREATE TABLE IF NOT EXISTS owner (singleton INTEGER PRIMARY KEY CHECK(singleton=1), node TEXT NOT NULL, epoch TEXT NOT NULL, gateway TEXT NOT NULL)"
                 )
                 db.execute(
-                    "CREATE TABLE IF NOT EXISTS commands (command TEXT PRIMARY KEY, identity TEXT NOT NULL, payload BLOB NOT NULL, state TEXT NOT NULL CHECK(state IN ('prepared','effect-intent','native-accepted','terminal')), native_ref TEXT, output_digest TEXT, sequence INTEGER NOT NULL)"
+                    "CREATE TABLE IF NOT EXISTS commands (command TEXT PRIMARY KEY, identity TEXT NOT NULL, payload BLOB NOT NULL, state TEXT NOT NULL CHECK(state IN ('prepared','effect-intent','native-accepted','terminal')), native_ref TEXT, output_digest TEXT, sequence INTEGER NOT NULL, authorization_id TEXT)"
                 )
                 db.execute(
                     "CREATE TABLE IF NOT EXISTS outbox (sequence INTEGER PRIMARY KEY AUTOINCREMENT, command TEXT NOT NULL REFERENCES commands(command), state TEXT NOT NULL, output_digest TEXT)"
@@ -105,7 +115,11 @@ class NodeReceiptStore:
                 db.execute("INSERT OR IGNORE INTO owner VALUES (1,?,?,?)", self._scope)
                 if db.execute("SELECT node FROM owner WHERE singleton=1").fetchone()[0] != node_id:
                     raise conflict(1, "Receipt store belongs to another node")
-                db.execute("PRAGMA user_version=1")
+                if "authorization_id" not in {
+                    row[1] for row in db.execute("PRAGMA table_info(commands)")
+                }:
+                    raise conflict(1, "Node receipt schema lacks authorization identity")
+                db.execute("PRAGMA user_version=2")
         except OSError:
             raise io_error(1, "Cannot initialize private node receipt storage") from None
 
@@ -164,7 +178,7 @@ class NodeReceiptStore:
     @staticmethod
     def _row(db, identity):
         row = db.execute(
-            "SELECT identity,state,sequence,output_digest,native_ref FROM commands WHERE command=?",
+            "SELECT identity,state,sequence,output_digest,native_ref,authorization_id FROM commands WHERE command=?",
             (identity.command_id,),
         ).fetchone()
         if row is None:
@@ -219,14 +233,22 @@ class NodeReceiptStore:
         self, identity: CommandIdentity, request: Frame, reply: Frame, *, connection_generation: int
     ) -> bool:
         """True once only, after durable intent. Never invokes native/provider code."""
-        validate_effect_authorization(
+        authorization_id = validate_effect_authorization(
             identity, request, reply, connection_generation=connection_generation
         )
         with self._transaction() as db:
             self._require_current(db, identity)
             row = self._row(db, identity)
             if row[1] != "prepared":
+                if row[5] != authorization_id:
+                    raise conflict(1, "Command authorization identity changed")
                 return False
+            if row[5] is not None and row[5] != authorization_id:
+                raise conflict(1, "Command authorization identity changed")
+            db.execute(
+                "UPDATE commands SET authorization_id=? WHERE command=?",
+                (authorization_id, identity.command_id),
+            )
             self._append(db, identity, "effect-intent")
             return True
 
@@ -319,6 +341,14 @@ class NodeReceiptStore:
         """
         with self._transaction() as db:
             return self._row(db, identity)[4]
+
+    def authorization_id(self, identity: CommandIdentity) -> str | None:
+        """Private local reconciliation evidence; omitted from routine receipts.
+
+        Historical epochs may read this fact but cannot authorize another effect.
+        """
+        with self._transaction() as db:
+            return self._row(db, identity)[5]
 
     def receipts_after(self, sequence: int = 0, *, limit: int = 100) -> tuple[Receipt, ...]:
         """Bounded append-only replay; acknowledgement/retention belongs to owner."""

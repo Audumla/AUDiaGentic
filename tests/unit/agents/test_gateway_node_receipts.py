@@ -209,9 +209,11 @@ def pause():
 s.prepare(i,b'payload')
 if stage=='prepared': pause()
 if stage=='uncommitted-intent':
-    with s._transaction() as db:
-        s._append(db,i,'effect-intent')
+    original=s._append
+    def uncommitted(db,identity,state,output_digest=None):
+        original(db,identity,state,output_digest)
         pause()
+    s._append=uncommitted
 if s.effect_intent(i,q,r,connection_generation=1):
     # A fake external native effect, deliberately outside the SQLite lock.
     with (root/'native-calls').open('ab') as f:
@@ -285,6 +287,7 @@ def test_hard_kill_reopen_preserves_barriers_without_repeating_native_call(
             child.communicate(timeout=5)
     store = store_at(root)
     assert store.get(command).state == expected
+    assert store.authorization_id(command) == (None if expected == "prepared" else "grant-1")
     assert len(store.receipts_after()) == count
     with sqlite3.connect(store.path) as db:
         assert db.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
@@ -358,6 +361,7 @@ def test_receipt_and_outbox_mutations_rollback_together_on_persistence_error(tmp
     with pytest.raises(AudiaGenticError, match="IO-AGND-001"):
         store.effect_intent(command, request, reply, connection_generation=1)
     assert store.get(command).state == "prepared"
+    assert store.authorization_id(command) is None
     assert [r.state for r in store.receipts_after()] == ["prepared"]
     with store._transaction() as db:
         assert db.execute("PRAGMA synchronous").fetchone()[0] == 2
@@ -382,6 +386,118 @@ def test_wrong_node_and_future_store_version_fail_closed(tmp_path):
     with pytest.raises(AudiaGenticError, match="CON-AGND-001"):
         store_at(root, node_id="other-node")
     with sqlite3.connect(store.path) as db:
-        db.execute("PRAGMA user_version=2")
+        db.execute("PRAGMA user_version=3")
     with pytest.raises(AudiaGenticError, match="CON-AGND-001"):
         store_at(root)
+
+
+@pytest.mark.parametrize("stage", ["effect-intent", "native-accepted", "terminal"])
+def test_exact_authorization_persists_on_reopen_and_never_authorizes_second_effect(tmp_path, stage):
+    root = tmp_path / "node"
+    store = store_at(root)
+    command = advance(store)
+    if stage in {"native-accepted", "terminal"}:
+        store.native_accepted(command, native_ref="private")
+    if stage == "terminal":
+        store.terminal(command, text="answer")
+    reopened = store_at(root)
+    assert reopened.authorization_id(command) == "grant-1"
+    request, reply = authorization(command)
+    before = reopened.receipts_after()
+    assert not reopened.effect_intent(command, request, reply, connection_generation=1)
+    # A fresh authorization-request ID using the same grant still cannot Send twice.
+    fresh_request = replace(request, message_id="auth-2")
+    fresh_reply = replace(
+        reply, payload=dict(reply.payload) | {"authorization-request-id": "auth-2"}
+    )
+    assert not reopened.effect_intent(command, fresh_request, fresh_reply, connection_generation=1)
+    changed = replace(reply, payload=dict(reply.payload) | {"authorization-id": "grant-2"})
+    with pytest.raises(AudiaGenticError, match="CON-AGND-001"):
+        reopened.effect_intent(command, request, changed, connection_generation=1)
+    assert reopened.authorization_id(command) == "grant-1"
+    assert reopened.receipts_after() == before
+    assert "grant-1" not in json.dumps([r.public_payload() for r in before])
+    with sqlite3.connect(reopened.path) as db:
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 2
+        assert db.execute("SELECT state,authorization_id FROM commands").fetchone() == (
+            stage,
+            "grant-1",
+        )
+    reopened.advance_epoch(node_epoch="boot-2", gateway_owner_epoch="gateway-2")
+    historical = store_at(root, node_epoch="boot-2", gateway_owner_epoch="gateway-2")
+    assert historical.authorization_id(command) == "grant-1"
+    with pytest.raises(AudiaGenticError, match="CON-AGND-001"):
+        historical.effect_intent(command, request, reply, connection_generation=1)
+
+
+@pytest.mark.parametrize("mutation", ["missing", "malformed", "connection", "request", "denied"])
+def test_invalid_authorization_never_persists_grant_or_intent(tmp_path, mutation):
+    store = store_at(tmp_path / "node")
+    command = identity()
+    store.prepare(command, b"payload")
+    request, reply = authorization(command)
+    payload = dict(reply.payload)
+    generation = 1
+    if mutation == "missing":
+        del payload["authorization-id"]
+    elif mutation == "malformed":
+        payload["authorization-id"] = "../grant"
+    elif mutation == "connection":
+        generation = 2
+    elif mutation == "request":
+        payload["authorization-request-id"] = "other-request"
+    else:
+        payload["authorized"] = False
+    with pytest.raises(AudiaGenticError):
+        store.effect_intent(
+            command, request, replace(reply, payload=payload), connection_generation=generation
+        )
+    assert store.authorization_id(command) is None
+    assert store.get(command).state == "prepared"
+    assert len(store.receipts_after()) == 1
+
+
+@pytest.mark.parametrize("version", [0, 1])
+def test_pre_authorization_schema_is_rejected_without_backfill_or_migration(tmp_path, version):
+    root = tmp_path / "node"
+    root.mkdir(mode=0o700)
+    path = root / "receipts.sqlite3"
+    with sqlite3.connect(path) as db:
+        db.execute("CREATE TABLE commands (command TEXT PRIMARY KEY, state TEXT)")
+        db.execute("INSERT INTO commands VALUES ('legacy-command','effect-intent')")
+        db.execute(f"PRAGMA user_version={version}")
+    with pytest.raises(AudiaGenticError, match="CON-AGND-001"):
+        store_at(root)
+    with sqlite3.connect(path) as db:
+        assert db.execute("PRAGMA user_version").fetchone()[0] == version
+        assert db.execute("SELECT * FROM commands").fetchall() == [
+            ("legacy-command", "effect-intent")
+        ]
+        assert "authorization_id" not in {r[1] for r in db.execute("PRAGMA table_info(commands)")}
+
+
+def test_concurrent_distinct_grants_pin_only_winning_authorization(tmp_path):
+    root = tmp_path / "node"
+    stores = [store_at(root), store_at(root)]
+    command = identity()
+    stores[0].prepare(command, b"payload")
+    request, reply = authorization(command)
+
+    def contend(index):
+        grant = f"grant-{index + 1}"
+        changed = replace(reply, payload=dict(reply.payload) | {"authorization-id": grant})
+        try:
+            return grant, stores[index].effect_intent(
+                command, request, changed, connection_generation=1
+            )
+        except AudiaGenticError as error:
+            assert error.code == "CON-AGND-001"
+            return grant, False
+
+    with ThreadPoolExecutor(max_workers=2) as workers:
+        results = list(workers.map(contend, range(2)))
+    winners = [grant for grant, won in results if won]
+    assert len(winners) == 1
+    reopened = store_at(root)
+    assert reopened.authorization_id(command) == winners[0]
+    assert [r.state for r in reopened.receipts_after()] == ["prepared", "effect-intent"]
