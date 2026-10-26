@@ -11,6 +11,7 @@ fingerprint drift.
 """
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -273,8 +274,10 @@ class TestResumeSuccess:
         assert prepared_hints[0]["chat-url"].endswith("/source-provider-ref-1")
         assert resumed["provider"]["metadata"]["target-id"] == "target-rebound"
         assert resumed["binding"]["provider-session-ref"] == "source-provider-ref-1"
+    @pytest.mark.parametrize("pending", [False, True])
+    @pytest.mark.parametrize("write_failure", [False, True])
     def test_resume_rehydrates_canonical_active_provider_owner_before_persistence(
-        self, tmp_path: Path
+        self, tmp_path: Path, monkeypatch, pending, write_failure,
     ):
         source = _write_terminal_source_session(tmp_path)
         active = session_store.build_session_record(
@@ -285,7 +288,12 @@ class TestResumeSuccess:
             surface_id=_SURFACE_ID,
             idle_timeout_seconds=900,
             max_lifetime_seconds=14_400,
-            provider_metadata={"chat-url": "https://chatgpt.com/g/g-p-project/c/source-provider-ref-1"},
+            provider_metadata={
+                "chat-url": "https://chatgpt.com/g/g-p-project/c/source-provider-ref-1",
+                "unresolved-turn-pending": pending,
+                "prompt-message-id": "current-prompt",
+                "submission-proven": pending,
+            },
         )
         active["binding"] = binding_store.resume_binding(
             session_id=active["session-id"],
@@ -304,8 +312,43 @@ class TestResumeSuccess:
         session_store.write_session_record(tmp_path, active)
         binding_store.register_open_binding(tmp_path, active)
 
-        runtime = _make_runtime()
+        transports = []
+        hints = []
+
+        class ReattachedTransport(FakeAgentSessionTransport):
+            async def open(self):
+                result = await super().open()
+                return replace(result, metadata={
+                    "target-id": "rebound-target",
+                    "unresolved-turn-pending": False,
+                    "prompt-message-id": "stale-source-prompt",
+                    "submission-proven": False,
+                })
+
+        def prepare(_root, **kwargs):
+            hints.append(kwargs["resume_provider_metadata"])
+            transport = ReattachedTransport()
+            transport.ag_session_id = kwargs["ag_session_id"]
+            transport.provider_session_ref = kwargs["resume_provider_ref"]
+            transports.append(transport)
+            return _build_fake_prepared(transport)
+
+        runtime = _make_runtime(resume_prepare=prepare)
+        if write_failure:
+            def fail_update(*_args, **_kwargs):
+                raise OSError("metadata write failed")
+            monkeypatch.setattr(session_store, "update_provider_metadata", fail_update)
         try:
+            if write_failure:
+                with pytest.raises(AudiaGenticError) as raised:
+                    runtime.resume_session(
+                        tmp_path, source["session-id"], control_id="ctrl-refresh-failure",
+                        execution_context_fingerprint=_EXECUTION_FP,
+                    )
+                assert raised.value.code == "IO-AGW-119"
+                assert transports[0].closed
+                assert session_store.read_session_record(tmp_path, active["session-id"])["state"] == "active"
+                return
             resumed = runtime.resume_session(
                 tmp_path,
                 source["session-id"],
@@ -322,6 +365,11 @@ class TestResumeSuccess:
         assert resumed["state"] == "active"
         assert resumed["binding"]["binding-id"] == active["binding"]["binding-id"]
         assert persisted["state"] == "active"
+        assert persisted["provider"]["metadata"]["unresolved-turn-pending"] is pending
+        assert persisted["provider"]["metadata"]["prompt-message-id"] == "current-prompt"
+        assert persisted["provider"]["metadata"]["submission-proven"] is pending
+        assert persisted["provider"]["metadata"]["target-id"] == "rebound-target"
+        assert hints[0]["prompt-message-id"] == "current-prompt"
     def test_idempotent_replay_returns_same_new_session(self, tmp_path: Path):
         source = _write_terminal_source_session(tmp_path)
         call_count = 0
