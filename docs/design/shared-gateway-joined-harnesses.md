@@ -1,5 +1,10 @@
 # Shared gateway and joined harnesses: scenario map
 
+The authoritative decisions and source/standards contract are in
+[Shared gateway execution contract](shared-gateway-execution-contract.md).
+The questions below are qualification prompts, not unresolved permission to
+invent fallback behavior. No runtime join is enabled by this document.
+
 Planning only: SH35 and SH36. The baseline release is v0.6.0; it does not
 implement remote execution nodes or joining arbitrary running harnesses.
 
@@ -15,9 +20,9 @@ flowchart LR
   C[Other authorized clients] -->|durable routing handle| G
 ```
 
-The node may be a shared local service or an explicitly scoped host. Its command
-loop must remain runnable while an MCP call waits. A session ID grants routing,
-not authorization or ownership of the underlying process.
+The initial node is an independently supervised local service; MCP-scoped hosts
+are deferred. Its command loop remains runnable while an MCP call waits. The
+canonical gateway session ID grants neither authorization nor process ownership.
 
 ## Existing contracts and evidence
 
@@ -42,8 +47,10 @@ SDK, ACP or a provider-owned bridge must each be assessed on its own evidence.
 | OpenCode | Verify native attach/session API and human/controller coexistence | Native ACP launch proves attachment to an already-running UI |
 
 Advertised, implemented and validated capabilities must remain distinct. A
-registration can be non-routable when control is unproven; it cannot report a
-successful prompt delivery based only on observation or a heartbeat.
+candidate may be shown as unsupported in inventory, but admission must reject
+it before creating a canonical joined session/binding. Only a previously qualified
+binding may become temporarily unroutable after evidence loss. Observation or a
+heartbeat never proves successful delivery.
 
 ## Scenario matrix
 
@@ -73,7 +80,7 @@ successful prompt delivery based only on observation or a heartbeat.
 | Local artifact is returned | Explicit transfer or local availability contract | How can another machine retrieve it without a fake server path? |
 | Model, profile or workspace changes | Validate/rebind under explicit identity rules | Can in-flight work continue against its frozen context? |
 
-## Decisions reserved for round-table review
+## Research and qualification checklist
 
 ### Primary upstream documentation leads
 
@@ -93,17 +100,17 @@ These are research leads, not installed-version attachment qualification:
   the TUI and session-specific APIs. Starting a new `opencode serve` is not joining
   the running TUI's server; registration must bind the actual endpoint/session.
 
-### Contract decisions
+### Contract verification
 
-1. Local node lifetime and how a current stdio MCP discovers or starts it.
-2. Trusted self-registration proof for each of the four harnesses.
-3. Durable routing handle versus Context/Work/session/native ref and generations.
-4. How node-local execution manifests are admitted without server path fabrication.
-5. Exact native attachment and prompt-push capabilities, including unsupported cases.
-6. Queue/steer configuration, visible fallback/rejection and later client overrides.
-7. Human/remote concurrency, cancellation scope and response attribution.
-8. Recovery receipts, stale-epoch fencing, permissions and revocation.
-9. Minimal approved API/MCP/CLI additions and complete metadata/documentation updates.
+1. Supervised node lifetime and explicit configured connector binding.
+2. Passive trusted self-registration proof for each eligible surface.
+3. Canonical session ID, immutable generation and node-private native locator.
+4. Node-authoritative execution facts without server path fabrication.
+5. Existing native attachment/injection; reject absent or unproven capability.
+6. Queue default; no steer without qualification and honest response attribution.
+7. Native human admission, cancellation isolation and self-dependency refusal.
+8. Pre-send receipts, stale-epoch fencing, exact evidence recovery and grants.
+9. Thin owner APIs and complete metadata/help/schema/documentation parity.
 
 Review sequence: source/capability inventory and scenarios, then candidate
 contracts and adversarial state walkthroughs, then version-pinned capability
