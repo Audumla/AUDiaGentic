@@ -7,6 +7,8 @@ second native call. A crash/commit error after intent is uncertain, never unsent
 Old epochs are evidence-only. Epoch rotation is an explicit owner CAS operation.
 Schema v3 adds one durable log incarnation and server-bound cumulative ACK cursor.
 A guarded v2 migration adds only that metadata, preserving command/outbox facts.
+Schema v4 adds nullable private artifact_kind, with no historical backfill. New
+worker envelopes and native plaintext are durably distinguished; no JSON guessing.
 Earlier prototypes remain rejected: authorization identity cannot be inferred.
 ACK is receipt custody, never native success, work completion or permission to
 delete evidence. Current channel/server facts must come from the trusted owner.
@@ -125,7 +127,7 @@ class NodeReceiptStore:
                 raise invalid(1, "Node receipt files must not be symlinks")
             with self._transaction() as db:
                 version = db.execute("PRAGMA user_version").fetchone()[0]
-                if version not in (0, 2, 3):
+                if version not in (0, 2, 3, 4):
                     raise conflict(1, "Unsupported node receipt schema version")
                 if version == 0:
                     if db.execute(
@@ -151,8 +153,10 @@ class NodeReceiptStore:
                         (str(uuid.uuid4()),),
                     )
                     self._create_checkpoint(db)
-                    db.execute("PRAGMA user_version=3")
-                # A v3 store missing its log identity is corruption, never a new log.
+                if version in (0, 2, 3):
+                    db.execute("ALTER TABLE commands ADD COLUMN artifact_kind TEXT")
+                    db.execute("PRAGMA user_version=4")
+                # A v3/v4 store missing its log identity is corruption, never a new log.
                 self._checkpoint(db)
         except OSError:
             raise io_error(1, "Cannot initialize private node receipt storage") from None
@@ -191,8 +195,10 @@ class NodeReceiptStore:
             },
             "outbox": {"sequence", "command", "state", "output_digest"},
         }
-        if version == 3:
+        if version in (3, 4):
             expected["owner"].add("log_incarnation_id")
+        if version == 4:
+            expected["commands"].add("artifact_kind")
         for table, columns in expected.items():
             if {row[1] for row in db.execute(f"PRAGMA table_info({table})")} != columns:
                 raise conflict(1, "Unsupported node receipt schema shape")
@@ -312,7 +318,7 @@ class NodeReceiptStore:
     @staticmethod
     def _row(db, identity):
         row = db.execute(
-            "SELECT identity,state,sequence,output_digest,native_ref,authorization_id FROM commands WHERE command=?",
+            "SELECT identity,state,sequence,output_digest,native_ref,authorization_id,artifact_kind FROM commands WHERE command=?",
             (identity.command_id,),
         ).fetchone()
         if row is None:
@@ -418,27 +424,106 @@ class NodeReceiptStore:
             self._require_current(db, identity)
             row = self._row(db, identity)
             if row[1] == "terminal":
+                if row[6] == "worker-terminal-result":
+                    raise conflict(1, "Worker terminal cannot be consumed as native plaintext")
                 if row[3] != digest:
                     raise conflict(1, "Terminal output changed")
                 self._read_output(digest)
                 return self._receipt(identity, row)
             if row[1] != "native-accepted":
                 raise conflict(1, "Terminal observation requires native acceptance evidence")
-            self.outputs.mkdir(mode=0o700, exist_ok=True)
-            if self.outputs.is_symlink():
-                raise conflict(1, "Private output directory changed")
-            output = self.outputs / (digest + ".txt")
-            if output.exists():
-                self._read_output(digest)
-            else:
-                atomic_write_bytes(output, raw)
-            if os.name == "posix":
-                fd = os.open(self.outputs, os.O_RDONLY)
-                try:
-                    os.fsync(fd)
-                finally:
-                    os.close(fd)
+            self._persist_output(raw, digest)
+            db.execute(
+                "UPDATE commands SET artifact_kind='native-plaintext' WHERE command=?",
+                (identity.command_id,),
+            )
             return self._append(db, identity, "terminal", digest)
+
+    def terminal_from_worker_result(
+        self, identity: CommandIdentity, *, preparation, proof
+    ) -> Receipt:
+        """Commit locally verified worker success directly from authorized intent.
+
+        No native-accepted receipt or native reference is invented. WorkerError,
+        invalid/missing proof and cleanup exceptions cannot clear delivery uncertainty.
+        Schema v4 stores a private artifact-kind discriminator; historical v3
+        rows remain unknown. Public receipt and historical output digests do not
+        change. The proof alone does not establish readiness. This adds the
+        durable terminal barrier; the producer owner must also fence old writers
+        and admit only qualifying one-shot adapters. Universal descendant absence
+        is not asserted or required here, and cleanup_proven=False stays honest.
+        """
+        from .terminal_output import build_worker_terminal_output, parse_worker_terminal_output
+
+        with self._transaction() as db:
+            self._require_current(db, identity)
+            row = self._row(db, identity)
+            if row[1] not in {"effect-intent", "terminal"} or not row[5] or row[4] is not None:
+                raise conflict(
+                    1,
+                    "Worker terminal requires original authorized effect intent without native acceptance",
+                )
+            if (row[1] == "terminal" and row[6] != "worker-terminal-result") or (
+                row[1] == "effect-intent" and row[6] is not None
+            ):
+                raise conflict(1, "Worker terminal artifact kind is absent or conflicts")
+            stored_payload = db.execute(
+                "SELECT payload FROM commands WHERE command=?", (identity.command_id,)
+            ).fetchone()[0]
+            envelope = build_worker_terminal_output(
+                identity, preparation=preparation, proof=proof, stored_payload=stored_payload
+            )
+            raw, digest = envelope.to_bytes(), envelope.digest
+            if row[1] == "terminal":
+                # A plaintext historical terminal is never upgraded into worker proof.
+                existing = self._read_output(row[3]).encode("utf-8")
+                parse_worker_terminal_output(
+                    existing, expected_identity=identity, expected_sha256=row[3]
+                )
+                if row[3] != digest or existing != raw:
+                    raise conflict(1, "Verified worker terminal output changed")
+                return self._receipt(identity, row)
+            self._persist_output(raw, digest)
+            db.execute(
+                "UPDATE commands SET artifact_kind='worker-terminal-result' WHERE command=?",
+                (identity.command_id,),
+            )
+            return self._append(db, identity, "terminal", digest)
+
+    def artifact_kind(self, identity: CommandIdentity) -> str | None:
+        """Private artifact descriptor. Null historical kinds are never inferred."""
+        with self._transaction() as db:
+            return self._row(db, identity)[6]
+
+    def worker_terminal_output(self, identity: CommandIdentity):
+        """Read only a durably worker-typed artifact; publish its text, not wrapper."""
+        from .terminal_output import parse_worker_terminal_output
+
+        with self._transaction() as db:
+            row = self._row(db, identity)
+            if row[1] != "terminal" or row[6] != "worker-terminal-result":
+                raise conflict(1, "Terminal artifact is not explicitly worker-typed")
+            return parse_worker_terminal_output(
+                self._read_output(row[3]).encode("utf-8"),
+                expected_identity=identity,
+                expected_sha256=row[3],
+            )
+
+    def _persist_output(self, raw: bytes, digest: str) -> None:
+        self.outputs.mkdir(mode=0o700, exist_ok=True)
+        if self.outputs.is_symlink():
+            raise conflict(1, "Private output directory changed")
+        output = self.outputs / (digest + ".txt")
+        if output.exists():
+            self._read_output(digest)
+        else:
+            atomic_write_bytes(output, raw)
+        if os.name == "posix":
+            fd = os.open(self.outputs, os.O_RDONLY)
+            try:
+                os.fsync(fd)
+            finally:
+                os.close(fd)
 
     def _read_output(self, digest):
         if (

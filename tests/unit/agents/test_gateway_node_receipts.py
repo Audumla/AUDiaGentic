@@ -397,7 +397,7 @@ def test_wrong_node_and_future_store_version_fail_closed(tmp_path):
     with pytest.raises(AudiaGenticError, match="CON-AGND-001"):
         store_at(root, node_id="other-node")
     with sqlite3.connect(store.path) as db:
-        db.execute("PRAGMA user_version=4")
+        db.execute("PRAGMA user_version=5")
     with pytest.raises(AudiaGenticError, match="CON-AGND-001"):
         store_at(root)
 
@@ -429,7 +429,7 @@ def test_exact_authorization_persists_on_reopen_and_never_authorizes_second_effe
     assert reopened.receipts_after() == before
     assert "grant-1" not in json.dumps([r.public_payload() for r in before])
     with sqlite3.connect(reopened.path) as db:
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 3
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 4
         assert db.execute("SELECT state,authorization_id FROM commands").fetchone() == (
             stage,
             "grant-1",
@@ -574,6 +574,7 @@ def v2_fixture(root):
     store.prepare(identity(command_id="other-command", request_id="other-request"), b"payload")
     with sqlite3.connect(store.path) as db:
         db.execute("DROP TABLE receipt_checkpoint")
+        db.execute("ALTER TABLE commands DROP COLUMN artifact_kind")
         db.execute("ALTER TABLE owner RENAME TO owner_v3")
         db.execute(
             "CREATE TABLE owner (singleton INTEGER PRIMARY KEY CHECK(singleton=1), node TEXT NOT NULL, epoch TEXT NOT NULL, gateway TEXT NOT NULL)"
@@ -587,7 +588,9 @@ def v2_fixture(root):
 def durable_facts(path):
     with sqlite3.connect(path) as db:
         return (
-            db.execute("SELECT * FROM commands ORDER BY command").fetchall(),
+            db.execute(
+                "SELECT command,identity,payload,state,native_ref,output_digest,sequence,authorization_id FROM commands ORDER BY command"
+            ).fetchall(),
             db.execute("SELECT * FROM outbox ORDER BY sequence").fetchall(),
             db.execute("SELECT * FROM sqlite_sequence ORDER BY name").fetchall(),
         )
@@ -612,7 +615,7 @@ def test_v2_guarded_migration_preserves_every_receipt_and_authorization_fact(tmp
     next_receipt = migrated.prepare(identity(command_id="after-migration"), b"payload")
     assert next_receipt.sequence == 6
     with sqlite3.connect(path) as db:
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 3
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 4
 
 
 def test_migration_failure_rolls_back_schema_uuid_and_cursor(tmp_path, monkeypatch):
@@ -983,7 +986,7 @@ def test_v3_missing_or_corrupt_checkpoint_never_resets_itself(tmp_path, damage):
     with pytest.raises(AudiaGenticError):
         store_at(root)
     with sqlite3.connect(store.path) as db:
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 3
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 4
         if damage == "missing-row":
             assert not db.execute("SELECT 1 FROM receipt_checkpoint").fetchone()
 
