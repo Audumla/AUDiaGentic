@@ -11,6 +11,8 @@ from audiagentic.components.providers.adapters.gpt_auto.chat import PersistentCh
 @pytest.mark.asyncio
 async def test_load_failure_reuses_healthy_exact_url_duplicate_before_creating_tab() -> None:
     chat = object.__new__(PersistentChat)
+    chat.active_turn_id = None
+    chat.unresolved_turn_pending = False
     chat.page_handle = "failed-tab"
     chat.chat_url = "https://chatgpt.com/g/g-p-project/c/provider-session"
     chat.provider_session_id = None
@@ -46,6 +48,8 @@ async def test_load_failure_reuses_healthy_exact_url_duplicate_before_creating_t
 @pytest.mark.asyncio
 async def test_load_failure_retries_retained_tab_before_replacement() -> None:
     chat = object.__new__(PersistentChat)
+    chat.active_turn_id = None
+    chat._reset_load_recovery_budget_after_positive_snapshot = AsyncMock()
     chat.page_handle = "failed-tab"
     chat.chat_url = "https://chatgpt.com/g/g-p-project/c/provider-session"
     chat.config = SimpleNamespace(
@@ -90,6 +94,9 @@ async def test_load_failure_retries_retained_tab_before_replacement() -> None:
 @pytest.mark.asyncio
 async def test_unproven_duplicate_restores_failed_page_before_retry() -> None:
     chat = object.__new__(PersistentChat)
+    chat.active_turn_id = None
+    chat.unresolved_turn_pending = False
+    chat._persist_load_recovery_budget = AsyncMock(return_value=(0, 0))
     chat.page_handle = "failed-tab"
     chat.chat_url = "https://chatgpt.com/g/g-p-project/c/provider-session"
     chat.provider_session_id = None

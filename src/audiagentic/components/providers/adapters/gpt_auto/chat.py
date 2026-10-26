@@ -1413,7 +1413,8 @@ class PersistentChat:
         # submission boundary. Once a turn is submitted or ambiguous, even an
         # exact-URL alternate can be a stale renderer and must not displace
         # the provider conversation being observed.
-        if remaining > 0 and not self._load_failure_requires_retained_observation():
+        browser_network_error = "browser-network-error" in snapshot.dom_signals
+        if remaining > 0 and not browser_network_error and not self._load_failure_requires_retained_observation():
             try:
                 async with asyncio.timeout(remaining):
                     await self._prefer_active_conversation_page()
@@ -1529,6 +1530,14 @@ class PersistentChat:
                 dom_signals=sorted(snapshot.dom_signals),
             )
             return True
+        if browser_network_error:
+            # A network outage is not repaired by multiplying tabs. Keep the
+            # exact retained conversation; admission owns the outer deadline.
+            self._set_unresolved_recovery(
+                "conversation-load-retry-deadline", attempts=retry_attempts,
+                dom_signals=sorted(snapshot.dom_signals),
+            )
+            return False
         if not self._page_mutation_owner_is_live():
             self._set_unresolved_recovery(
                 "conversation-load-owner-not-live",
@@ -1721,7 +1730,7 @@ class PersistentChat:
             return bool(await retry(page))
 
     async def retry_conversation_load(self) -> bool:
-        """Click the same-conversation load Retry control; never resubmit."""
+        """Retry a load error or reload a native network page; never Send."""
         lock = getattr(self, "_page_mutation_lock", None)
         if lock is None:
             lock = self._page_mutation_lock = asyncio.Lock()
