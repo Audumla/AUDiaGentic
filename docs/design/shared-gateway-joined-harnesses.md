@@ -18,6 +18,8 @@ flowchart LR
   N[Local execution node] <-->|node-initiated control and evidence channel| G
   N <-->|verified native control surface| H
   C[Other authorized clients] -->|durable routing handle| G
+  A[A2A client] -->|context and task projection| P[Thin Agents protocol adapter]
+  P -->|canonical Context and Work| G
 ```
 
 The initial node is an independently supervised local service; MCP-scoped hosts
@@ -79,6 +81,9 @@ heartbeat never proves successful delivery.
 | Two sessions edit one worktree | Apply explicit local concurrency policy | Which resource/ownership rule prevents conflicting mutations? |
 | Local artifact is returned | Explicit transfer or local availability contract | How can another machine retrieve it without a fake server path? |
 | Model, profile or workspace changes | Validate/rebind under explicit identity rules | Can in-flight work continue against its frozen context? |
+| A2A or external ACP targets a joined session | Authorized canonical Context freezes qualified gateway target | Does Work retain exact session/generation instead of launching a substitute? |
+| Two identical-text protocol messages | Distinct message identities create distinct Work | Does replay deduplicate delivery identity rather than prompt content? |
+| External protocol sees asynchronous Work | End only on correlated terminal evidence | Can status/response/cancel remain truthful across restart and late output? |
 
 ## Research and qualification checklist
 

@@ -1,8 +1,10 @@
 # Shared gateway execution and joined-session contract
 
-Status: design awaiting final GPT compliance review. SH35/SH36 own planning;
-pending delivery items own implementation and native qualification. No runtime
-capability is enabled here. The prior release prerequisite is met by v0.6.0.
+Status: base design approved by terminal source-level GPT compliance review at
+`b760024580c53f03fc5cb0c7c3aa92aff6047e73`; final review records are RV1213 and
+RV1214. The clarified A2A addition awaits a focused final audit. SH35/SH36 own
+planning; SH37-SH43 remain pending delivery/qualification.
+No runtime capability is enabled here. Prior release prerequisite: v0.6.0.
 
 ## Scope and decisions
 
@@ -174,10 +176,74 @@ contracts for qualified owned execution and persisted resume. ACP support never
 implies attaching to a human TUI or steering. A qualified native existing-session
 adapter implements the same neutral contract; gateway does not know native RPCs.
 
-No canonical ASA protocol contract was identified in inspected source/reference
-material. Do not invent a wire format or presume all four support one. Final GPT
-review must resolve that term against actual code/primary references; a distinct
-justified standard needs its own owning qualification before use.
+The user confirmed ASA meant A2A. Use the two standards at different boundaries:
+
+| Boundary | Protocol and owning implementation | Identity/lifecycle |
+|---|---|---|
+| Harness calls gateway tools | Existing stdio MCP, thin Agents adapter | Canonical Context/Work/session, same grants |
+| External agent calls published gateway agent | A2A projection in `components/agents/protocols/a2a/` | A2A context -> Agent Context, task -> Work |
+| Gateway controls a qualified ACP agent | Existing neutral foundation ACP transport + Provider launch/control | Provider-owned native session bound to gateway session |
+| Gateway controls existing human session without usable ACP attach | Qualified Provider native surface | Same neutral binding/delivery/ownership contracts |
+| Node exchanges commands/evidence with gateway | Internal authenticated versioned channel | Node epoch/generation/command receipts, not another A2A task engine |
+
+A2A is an external agent interoperability projection, not a requirement that all
+four harnesses expose a native A2A server. ACP likewise does not make their human
+TUIs attachable. Prefer an already-qualified native standard surface; do not wrap
+every native API in a second ACP process or use A2A to bypass join admission.
+Sources: [A2A specification](https://a2a-protocol.org/latest/specification/) and
+[ACP v1 overview](https://agentclientprotocol.com/protocol/v1/overview). Pin actual
+implemented/negotiated versions and capabilities; ACP v2 is draft, not an implied
+migration requirement. The existing A2A module's 1.0 label and ACP adapter's SDK
+version label are not end-to-end conformance or deployment evidence.
+
+### A2A and external ACP implementation contract
+
+Reuse `protocols/a2a/{server,agent_card,mapping}.py`,
+`protocols/acp/{agent,server,mapping}.py`, and injected `GatewayClient`/application
+ports. AS65/AS66 are superseded historical plans, not current qualification.
+Do not add an A2A task store, session registry, native adapter lookup or unaudited
+outbound endpoint discovery. Publish only explicitly configured Agent Definitions
+and granted targets. Agent Cards expose only implemented capabilities; streaming,
+push notifications, rich content and steer stay unsupported unless separately
+qualified. Do not advertise live native session IDs/locators in public cards.
+
+Add an explicit owner-validated optional joined execution target to canonical
+Context creation/binding, using the existing gateway session ID, immutable
+generation and evidence digest. The authorized management/join path resolves it
+before an A2A or external ACP call; subsequent standard context/session IDs route
+through that frozen Context. No untyped metadata/native ID routing parameter or
+adapter-owned target registry. Replacement target requires a new validated
+Context/binding, never silent retarget. Expose the authorized Context correlation
+alongside the joined session through existing status/management projections.
+
+`gateway/application.py:submit_agent_work()` must propagate that authorized
+target through explicit canonical admission fields, not its current owned/new
+execution default or reserved `idempotency_key` metadata. A2A and external ACP
+read/cancel/output use the same Work owner and external no-kill controls. A2A
+task IDs are Work IDs, not native turn IDs or gateway session IDs. Server-hosted
+and node-local scopes use SH37/SH38 authority, not untrusted protocol cwd paths.
+
+Source hazards assigned to SH43: both current external adapters derive message
+identity from text, incorrectly collapsing two intentional identical prompts;
+A2A `taskId` branch returns prior Work rather than validating new-message
+continuation; ACP `prompt()` reads output immediately and returns end_turn
+without a proved terminal Work; initialization echoes requested version. Require
+protocol-envelope message/delivery identity and canonical owner idempotency:
+same key/same content is replay, same key/different content conflicts, distinct
+messages with identical text remain distinct. If a peer protocol has no stable
+replay key, allocate a distinct command identity and preserve uncertainty rather
+than deduplicating content. End a turn only on correlated terminal evidence.
+
+Validate principal/project/Agent Definition/Context/Work/session ownership before
+every operation, including existing-context sends, task reads/cancel and card
+discovery. Normalize public errors through registered owner errors and protocol
+mapping. Thin adapters never read native transports/stores or poll ad hoc. Inject
+an owner wait/event subscription for asynchronous Work; closure/cancellation is
+capability-scoped, never broad cancellation of other clients' work. Add negotiated
+version mismatch, duplicate/distinct text, concurrent clients, cross-agent and
+cross-principal denial, restart, late completion, repeated multi-turn context and
+owned-versus-joined tests. Real external clients and wire schemas must validate
+conformance; fake port tests prove only the semantic seam.
 
 | Harness | Research lead | AUDiaGentic joined status |
 |---|---|---|
