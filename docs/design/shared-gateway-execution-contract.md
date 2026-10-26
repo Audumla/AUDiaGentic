@@ -67,6 +67,38 @@ client endpoint validation are loopback-only; `_call()` carries a local project
 root. Dashboard reads rely on loopback assumptions. Current gateway startup loads
 too much interactive application state. None constitutes remote authority.
 
+### Concrete reuse map and compliance evidence
+
+Paths below are relative to `src/audiagentic/`. Extend the owning seam only when
+the delivered stage needs missing behavior; do not build a parallel abstraction.
+
+| Need | Existing seam | Ownership / disposition |
+|---|---|---|
+| Service lifetime | `foundation/system/managed_service.py:ManagedServiceStore`, `managed_service_lifecycle.py:ManagedServiceLifecycle`, `managed_service_owner.py:ManagedServiceOwner`; Agents `service/host.py`, `bootstrap.py` | Reuse lifecycle, owner epochs and shutdown; Agents owns gateway policy |
+| Process launch and locks | `foundation/system/managed_process.py:DetachedLaunch`, `process.py:StartupLock`, `advisory_lock.py:AdvisoryLock` | Reuse appropriate existing primitives; service leases and native writer ownership are distinct invariants |
+| Atomic persistence | `foundation/io.py:atomic_write_json`, `atomic_write_text` | Reuse mechanics; component owns failure policy. Atomic replacement alone is not multi-record or power-loss durability proof |
+| Config, paths, schemas, errors | `foundation/config/{layers,merge,refs}.py`, `paths/`, `contracts/{schema_registry,errors}.py`; owning Agents configuration | Reuse readers/validation; keep gateway schemas, grants and server-root mappings Agents-owned |
+| Session/surface/binding values | `foundation/transports/{agent_session,session_surface,session_binding}.py` | Reuse neutral ownership/ref/result contracts; do not move GPT/node policy into Foundation |
+| Client, requests and scheduling | Agents `gateway/remote_client.py:StandaloneGatewayClient`, `api.py`, `session/`, `queue/` | Extend existing owners; no second client framework, request store or scheduler |
+| Provider capabilities/execution | `components/providers/providers_api.py`, existing Provider declarations/resolution/inventory/adapters | Agents uses approved public operations only; actual native implementation remains Provider-owned |
+| Observability | `foundation/observability/timeline.py:record_timeline_event`, `operational_records.py:append_operational_record` | Reuse through owning helpers; observational batching cannot replace effect durability |
+| Composition and adapters | `runtime/bootstrap/composition.py`, `launcher.py`, Agents `service/bootstrap.py`, declared MCP/implementation factories | Separate process roots are valid; configure known contributions, not per-request containers or runtime service locators |
+
+Audit at planning revision `81a126e95`: 32 focused composition/boundary tests
+passed locally. A resolved static-import scan of 167 Foundation files found no
+prohibited component/runtime imports; 89 gateway files contained 15 prohibited
+Provider imports across seven files. These are pre-existing debt, not introduced
+by this plan. Tests did not cover all those edges. Dynamic registrations and the
+new implementation remain unqualified; this is not a full compliance claim.
+
+Concrete debt includes `gateway/service/host.py` importing GPT config internals,
+and `gateway/api.py` importing private GPT turn/correlation helpers. Route these
+through appropriately owned Provider operations, not wholesale helper exports
+or relocating Provider-specific types into Foundation. The best-effort
+`known_projects._atomic_write` cache writer also duplicates Foundation I/O
+mechanics; preserve its nonfatal Agents policy if refactored. Its discovery cache
+must not become remote filesystem or authorization authority.
+
 ## CLI and configuration
 
 Proposed canonical keyword grammar, not shipped commands:
