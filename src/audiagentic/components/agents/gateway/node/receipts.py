@@ -1,0 +1,340 @@
+"""Private node effect receipts, not canonical gateway Work or a native executor.
+
+WAL + synchronous=FULL commits receipt state and its append-only outbox together,
+under one Foundation AdvisoryLock. Never hold that lock over network/native I/O.
+Only a newly committed effect-intent returns True; a duplicate never grants a
+second native call. A crash/commit error after intent is uncertain, never unsent.
+Old epochs are evidence-only. Epoch rotation is an explicit owner CAS operation.
+
+Deploy on a protected local filesystem with working SQLite locks/fsync; network
+filesystems and cloud-sync folders are unsupported. POSIX directories are private;
+Windows ACLs are the deployment owner's responsibility. FULL relies on the OS,
+filesystem and drive honoring sync. Process-kill tests are not power-loss proof.
+Foundation atomic output fsyncs file content before rename; POSIX additionally
+syncs the output directory here. Windows directory-entry power-loss durability
+requires deployment qualification. Missing/corrupt artifacts fail closed on read.
+No distributed exactly-once or portable hardware power-loss guarantee is claimed.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import sqlite3
+from contextlib import contextmanager
+from dataclasses import dataclass
+from pathlib import Path
+
+from audiagentic.foundation.contracts.errors import make_error_factory
+from audiagentic.foundation.io import atomic_write_bytes
+from audiagentic.foundation.paths.home import global_service_runtime
+from audiagentic.foundation.system.advisory_lock import AdvisoryLock
+
+from .contracts import (
+    MAX_FRAME_BYTES,
+    CommandIdentity,
+    Frame,
+    _identifier,
+    _integer,
+    canonical_json,
+    conflict,
+    invalid,
+    validate_effect_authorization,
+)
+
+io_error = make_error_factory("IO", "AGND", "agents-node")
+
+
+@dataclass(frozen=True)
+class Receipt:
+    identity: CommandIdentity
+    state: str
+    sequence: int
+    output_sha256: str | None = None
+
+    def public_payload(self) -> dict:
+        """No native references, local paths, payload bytes or transcript text."""
+        return {
+            "identity": self.identity.to_mapping(),
+            "state": self.state,
+            "receipt-sequence": self.sequence,
+            "output-sha256": self.output_sha256,
+        }
+
+
+class NodeReceiptStore:
+    def __init__(
+        self, *, node_id: str, node_epoch: str, gateway_owner_epoch: str, root: Path | None = None
+    ):
+        self.node_id = _identifier(node_id)
+        self.node_epoch = _identifier(node_epoch)
+        self.gateway_owner_epoch = _identifier(gateway_owner_epoch)
+        root = root if root is not None else global_service_runtime() / "execution-nodes" / node_id
+        if not isinstance(root, Path) or not root.is_absolute():
+            raise invalid(1, "Node receipt root must be an absolute owner-local path")
+        self.root = root
+        try:
+            self.root.mkdir(parents=True, exist_ok=True, mode=0o700)
+            if os.name == "posix" and self.root.stat().st_mode & 0o077:
+                raise invalid(1, "Node receipt root must exclude group and other access")
+            self.path = self.root / "receipts.sqlite3"
+            self.lock_path = self.root / "receipts.lock"
+            self.outputs = self.root / "outputs"
+            if self.path.is_symlink() or self.lock_path.is_symlink() or self.outputs.is_symlink():
+                raise invalid(1, "Node receipt files must not be symlinks")
+            with self._transaction() as db:
+                version = db.execute("PRAGMA user_version").fetchone()[0]
+                if version not in (0, 1):
+                    raise conflict(1, "Unsupported node receipt schema version")
+                db.execute(
+                    "CREATE TABLE IF NOT EXISTS owner (singleton INTEGER PRIMARY KEY CHECK(singleton=1), node TEXT NOT NULL, epoch TEXT NOT NULL, gateway TEXT NOT NULL)"
+                )
+                db.execute(
+                    "CREATE TABLE IF NOT EXISTS commands (command TEXT PRIMARY KEY, identity TEXT NOT NULL, payload BLOB NOT NULL, state TEXT NOT NULL CHECK(state IN ('prepared','effect-intent','native-accepted','terminal')), native_ref TEXT, output_digest TEXT, sequence INTEGER NOT NULL)"
+                )
+                db.execute(
+                    "CREATE TABLE IF NOT EXISTS outbox (sequence INTEGER PRIMARY KEY AUTOINCREMENT, command TEXT NOT NULL REFERENCES commands(command), state TEXT NOT NULL, output_digest TEXT)"
+                )
+                db.execute(
+                    "CREATE TRIGGER IF NOT EXISTS outbox_no_update BEFORE UPDATE ON outbox BEGIN SELECT RAISE(ABORT, 'append-only outbox'); END"
+                )
+                db.execute(
+                    "CREATE TRIGGER IF NOT EXISTS outbox_no_delete BEFORE DELETE ON outbox BEGIN SELECT RAISE(ABORT, 'append-only outbox'); END"
+                )
+                db.execute("INSERT OR IGNORE INTO owner VALUES (1,?,?,?)", self._scope)
+                if db.execute("SELECT node FROM owner WHERE singleton=1").fetchone()[0] != node_id:
+                    raise conflict(1, "Receipt store belongs to another node")
+                db.execute("PRAGMA user_version=1")
+        except OSError:
+            raise io_error(1, "Cannot initialize private node receipt storage") from None
+
+    @property
+    def _scope(self):
+        return self.node_id, self.node_epoch, self.gateway_owner_epoch
+
+    @contextmanager
+    def _transaction(self):
+        try:
+            with AdvisoryLock(self.lock_path):
+                db = sqlite3.connect(self.path, timeout=5, isolation_level=None)
+                try:
+                    if db.execute("PRAGMA journal_mode=WAL").fetchone()[0] != "wal":
+                        raise io_error(1, "Node receipt storage requires WAL support")
+                    db.execute("PRAGMA synchronous=FULL")
+                    db.execute("PRAGMA foreign_keys=ON")
+                    if db.execute("PRAGMA synchronous").fetchone()[0] != 2:
+                        raise io_error(1, "Node receipt storage requires synchronous FULL")
+                    db.execute("BEGIN IMMEDIATE")
+                    try:
+                        yield db
+                        db.execute("COMMIT")
+                    except BaseException:
+                        if db.in_transaction:
+                            db.execute("ROLLBACK")
+                        raise
+                finally:
+                    db.close()
+        except (sqlite3.Error, OSError, ValueError, UnicodeError):
+            raise io_error(
+                1, "Node receipt persistence failed; effect outcome must be reconciled"
+            ) from None
+
+    def _require_current(self, db, identity: CommandIdentity | None = None):
+        scope = db.execute("SELECT node,epoch,gateway FROM owner WHERE singleton=1").fetchone()
+        if scope != self._scope or (
+            identity is not None
+            and (identity.node_id, identity.node_epoch, identity.gateway_owner_epoch) != self._scope
+        ):
+            raise conflict(1, "Stale node or gateway epoch is evidence-only")
+
+    def advance_epoch(self, *, node_epoch: str, gateway_owner_epoch: str) -> None:
+        """Owner-only epoch handoff; stale store instances cannot mutate afterward."""
+        _identifier(node_epoch)
+        _identifier(gateway_owner_epoch)
+        with self._transaction() as db:
+            self._require_current(db)
+            if node_epoch == self.node_epoch and gateway_owner_epoch == self.gateway_owner_epoch:
+                raise conflict(1, "Epoch handoff must change an epoch")
+            db.execute(
+                "UPDATE owner SET epoch=?, gateway=? WHERE singleton=1",
+                (node_epoch, gateway_owner_epoch),
+            )
+
+    @staticmethod
+    def _row(db, identity):
+        row = db.execute(
+            "SELECT identity,state,sequence,output_digest,native_ref FROM commands WHERE command=?",
+            (identity.command_id,),
+        ).fetchone()
+        if row is None:
+            raise conflict(1, "Command has not been prepared")
+        if row[0] != canonical_json(identity.to_mapping()).decode():
+            raise conflict(1, "Command identity or payload digest changed")
+        return row
+
+    @staticmethod
+    def _append(db, identity, state, output_digest=None):
+        cursor = db.execute(
+            "INSERT INTO outbox(command,state,output_digest) VALUES (?,?,?)",
+            (identity.command_id, state, output_digest),
+        )
+        sequence = cursor.lastrowid
+        db.execute(
+            "UPDATE commands SET state=?,sequence=?,output_digest=? WHERE command=?",
+            (state, sequence, output_digest, identity.command_id),
+        )
+        return Receipt(identity, state, sequence, output_digest)
+
+    def _receipt(self, identity, row):
+        if row[1] == "terminal":
+            self._read_output(row[3])
+        return Receipt(identity, row[1], row[2], row[3])
+
+    def prepare(self, identity: CommandIdentity, payload: bytes) -> Receipt:
+        if not isinstance(payload, bytes) or len(payload) > MAX_FRAME_BYTES:
+            raise invalid(1, "Command payload must be bounded bytes")
+        if hashlib.sha256(payload).hexdigest() != identity.payload_sha256:
+            raise conflict(1, "Command payload does not match its authorized digest")
+        with self._transaction() as db:
+            self._require_current(db, identity)
+            existing = db.execute(
+                "SELECT 1 FROM commands WHERE command=?", (identity.command_id,)
+            ).fetchone()
+            if existing:
+                row = self._row(db, identity)
+                stored = db.execute(
+                    "SELECT payload FROM commands WHERE command=?", (identity.command_id,)
+                ).fetchone()[0]
+                if stored != payload:
+                    raise conflict(1, "Command payload changed")
+                return self._receipt(identity, row)
+            db.execute(
+                "INSERT INTO commands(command,identity,payload,state,sequence) VALUES (?,?,?,'prepared',0)",
+                (identity.command_id, canonical_json(identity.to_mapping()).decode(), payload),
+            )
+            return self._append(db, identity, "prepared")
+
+    def effect_intent(
+        self, identity: CommandIdentity, request: Frame, reply: Frame, *, connection_generation: int
+    ) -> bool:
+        """True once only, after durable intent. Never invokes native/provider code."""
+        validate_effect_authorization(
+            identity, request, reply, connection_generation=connection_generation
+        )
+        with self._transaction() as db:
+            self._require_current(db, identity)
+            row = self._row(db, identity)
+            if row[1] != "prepared":
+                return False
+            self._append(db, identity, "effect-intent")
+            return True
+
+    def native_accepted(self, identity: CommandIdentity, *, native_ref: str) -> Receipt:
+        if not isinstance(native_ref, str) or not native_ref or len(native_ref) > 4096:
+            raise invalid(1, "Native acceptance requires a bounded private reference")
+        try:
+            native_ref.encode("utf-8")
+        except UnicodeError:
+            raise invalid(1, "Native reference must be valid UTF-8") from None
+        with self._transaction() as db:
+            self._require_current(db, identity)
+            row = self._row(db, identity)
+            if row[1] in {"native-accepted", "terminal"}:
+                if row[4] != native_ref:
+                    raise conflict(1, "Native receipt changed")
+                return self._receipt(identity, row)
+            if row[1] != "effect-intent":
+                raise conflict(1, "Native acceptance requires committed effect intent")
+            db.execute(
+                "UPDATE commands SET native_ref=? WHERE command=?",
+                (native_ref, identity.command_id),
+            )
+            return self._append(db, identity, "native-accepted")
+
+    def terminal(self, identity: CommandIdentity, *, text: str) -> Receipt:
+        try:
+            raw = text.encode("utf-8")
+        except (AttributeError, UnicodeError):
+            raise invalid(1, "Terminal output must be UTF-8 text") from None
+        digest = hashlib.sha256(raw).hexdigest()
+        with self._transaction() as db:
+            self._require_current(db, identity)
+            row = self._row(db, identity)
+            if row[1] == "terminal":
+                if row[3] != digest:
+                    raise conflict(1, "Terminal output changed")
+                self._read_output(digest)
+                return self._receipt(identity, row)
+            if row[1] != "native-accepted":
+                raise conflict(1, "Terminal observation requires native acceptance evidence")
+            self.outputs.mkdir(mode=0o700, exist_ok=True)
+            if self.outputs.is_symlink():
+                raise conflict(1, "Private output directory changed")
+            output = self.outputs / (digest + ".txt")
+            if output.exists():
+                self._read_output(digest)
+            else:
+                atomic_write_bytes(output, raw)
+            if os.name == "posix":
+                fd = os.open(self.outputs, os.O_RDONLY)
+                try:
+                    os.fsync(fd)
+                finally:
+                    os.close(fd)
+            return self._append(db, identity, "terminal", digest)
+
+    def _read_output(self, digest):
+        if (
+            not isinstance(digest, str)
+            or len(digest) != 64
+            or any(c not in "0123456789abcdef" for c in digest)
+        ):
+            raise conflict(1, "Invalid private output digest")
+        path = self.outputs / (digest + ".txt")
+        if self.outputs.is_symlink() or path.is_symlink():
+            raise conflict(1, "Private output path changed")
+        raw = path.read_bytes()
+        if hashlib.sha256(raw).hexdigest() != digest:
+            raise conflict(1, "Private terminal output digest mismatch")
+        return raw.decode("utf-8")
+
+    def output(self, identity: CommandIdentity) -> str:
+        """Local owner read, including old epoch evidence; never a public route."""
+        with self._transaction() as db:
+            row = self._row(db, identity)
+            if row[1] != "terminal":
+                raise conflict(1, "Command has no verified terminal output")
+            return self._read_output(row[3])
+
+    def get(self, identity: CommandIdentity) -> Receipt:
+        with self._transaction() as db:
+            row = self._row(db, identity)
+            return self._receipt(identity, row)
+
+    def native_reference(self, identity: CommandIdentity) -> str | None:
+        """Private owner reconciliation evidence, including historical epochs.
+
+        Never place this value in a Frame or central/public receipt.
+        """
+        with self._transaction() as db:
+            return self._row(db, identity)[4]
+
+    def receipts_after(self, sequence: int = 0, *, limit: int = 100) -> tuple[Receipt, ...]:
+        """Bounded append-only replay; acknowledgement/retention belongs to owner."""
+        _integer(sequence, 0)
+        _integer(limit)
+        if limit > 1000:
+            raise invalid(1, "Receipt replay limit exceeds 1000")
+        with self._transaction() as db:
+            rows = db.execute(
+                "SELECT c.identity,o.state,o.sequence,o.output_digest FROM outbox o JOIN commands c ON c.command=o.command WHERE o.sequence>? ORDER BY o.sequence LIMIT ?",
+                (sequence, limit),
+            ).fetchall()
+            for row in rows:
+                if row[1] == "terminal":
+                    self._read_output(row[3])
+            return tuple(
+                Receipt(CommandIdentity.from_mapping(json.loads(r[0])), r[1], r[2], r[3])
+                for r in rows
+            )

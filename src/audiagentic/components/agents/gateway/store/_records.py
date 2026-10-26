@@ -398,6 +398,7 @@ def build_record(
     source: str | None = None,
     metadata: dict[str, Any] | None = None,
     client_default_session: dict[str, Any] | None = None,
+    node_placement: dict[str, Any] | None = None,
     warnings: list[dict[str, Any]] | None = None,
     template_context: dict[str, Any] | None = None,
     session_id: str | None = None,
@@ -509,6 +510,8 @@ def build_record(
     timestamp = now_iso_z()
     payload: dict[str, Any] = {
         "contract-version": _shared._CONTRACT_VERSION,
+        "node-dispatch": None,
+        "node-placement": dict(node_placement) if isinstance(node_placement, dict) else node_placement,
         "request-id": request_id or generate_request_id(),
         "agent-id": agent_id,
         "execution-profile-id": execution_profile_id,
@@ -691,6 +694,16 @@ def _migrate_v1_payload(payload: dict[str, Any]) -> dict[str, Any]:
     treatment of an already-dispatched record with no durable binding.
     """
     migrated = dict(payload)
+    if payload.get("contract-version") == "v8":
+        # Modern ownership/recovery/session facts are authoritative. Upgrade
+        # only the envelope; never run v8 through historical fence clearing.
+        migrated["contract-version"] = _shared._CONTRACT_VERSION
+        migrated.setdefault("node-dispatch", None)
+        migrated.setdefault("node-placement", None)
+        return _validate(migrated, code="VAL-AGW-005")
+    if payload.get("contract-version") == _shared._CONTRACT_VERSION:
+        migrated.setdefault("node-dispatch", None)
+        migrated.setdefault("node-placement", None)
     for retired_key in ("gateway-execution-lane-key", "resolved-queue-limits", "admission-policy-digest"):
         migrated.pop(retired_key, None)
     migrated.setdefault("cancel-acknowledged-at", None)
@@ -704,7 +717,7 @@ def _migrate_v1_payload(payload: dict[str, Any]) -> dict[str, Any]:
     # A briefly deployed v4 writer could have persisted the version before
     # adding all activity fields. Treat that shape as migratable too; never
     # strand a durable request merely because a process restarted mid-cutover.
-    if contract_version not in {"v1", "v2", "v3", "v4", "v5", "v6", "v7", _shared._CONTRACT_VERSION}:
+    if contract_version not in {"v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8", _shared._CONTRACT_VERSION}:
         return _validate(migrated, code="VAL-AGW-005")
     # v7 is the first record contract with nested provider/owner activity.
     # Keep the historical v5 migration target for pre-v6 records, while
@@ -713,19 +726,22 @@ def _migrate_v1_payload(payload: dict[str, Any]) -> dict[str, Any]:
     # v8 introduces durable request sessions.  Existing v7 records remain
     # readable as v7: a historic sessionless record cannot honestly be
     # re-labelled v8 without first creating its companion session record.
-    # New admissions are always v8; dispatch never relies on this migration
+    # New admissions are always v9; dispatch never relies on this migration
     # to invent a session for an in-flight legacy request.
     migrated["contract-version"] = (
         _shared._CONTRACT_VERSION
-        if contract_version in {"v6", _shared._CONTRACT_VERSION}
+        if contract_version in {"v6", "v8", _shared._CONTRACT_VERSION}
         else ("v7" if contract_version == "v7" else "v5")
     )
+    if migrated["contract-version"] == _shared._CONTRACT_VERSION:
+        migrated.setdefault("node-dispatch", None)
+        migrated.setdefault("node-placement", None)
     migrated.setdefault(
         "provider-transport-kind",
         "provider-session" if migrated.get("session-id") else "worker",
     )
     migrated.setdefault("continuation-session-id", migrated.get("session-id"))
-    if contract_version != _shared._CONTRACT_VERSION:
+    if contract_version not in {"v8", _shared._CONTRACT_VERSION}:
         migrated.update({
             "dispatch-owner-epoch": None,
             "dispatch-claimed-at": None,
@@ -816,6 +832,8 @@ def read_record(
     payload = _read_record_payload(project_root, request_id)
     if (
         payload.get("contract-version") == _shared._CONTRACT_VERSION
+        and "node-dispatch" in payload
+        and "node-placement" in payload
         and "cancel-acknowledged-at" in payload
         and "cancel-acknowledged-by" in payload
         and "resolved-source-id" in payload

@@ -2271,3 +2271,207 @@ def _check_expected_identity(
             details={"expected": expected_attempt_epoch, "actual": record["attempt-epoch"]},
         )
 
+
+# Node dispatch writes are local CAS operations, never channel/grant authority.
+# The caller serializes them with current service authorization/revocation.
+def _node_identity(value: Any) -> dict[str, Any]:
+    from audiagentic.components.agents.gateway.node.contracts import CommandIdentity
+
+    return (value if isinstance(value, CommandIdentity)
+            else CommandIdentity.from_mapping(value)).to_mapping()
+
+
+def _node_conflict(message: str) -> AudiaGenticError:
+    from audiagentic.components.agents.gateway.node.contracts import conflict
+
+    return conflict(1, message)
+
+
+def _node_owned_record(
+    project_root: Path, request_id: str, *, owner_epoch: str, worker_id: str,
+    attempt_epoch: int, expected_revision: int,
+) -> dict[str, Any]:
+    if (
+        not owner_epoch or not worker_id or type(attempt_epoch) is not int
+        or attempt_epoch < 1 or type(expected_revision) is not int or expected_revision < 0
+    ):
+        raise _node_conflict("Node mutation requires complete owned attempt fences")
+    record = _read_record_locked(project_root, request_id)
+    _check_expected_identity(
+        record, expected_revision=expected_revision,
+        expected_dispatch_owner_epoch=owner_epoch,
+        expected_worker_id=worker_id, expected_attempt_epoch=attempt_epoch,
+    )
+    return record
+
+
+def _node_matches_record(record: dict[str, Any], identity: dict[str, Any]) -> None:
+    if (
+        identity["request-id"] != record["request-id"]
+        or identity["execution-profile-id"] != record["execution-profile-id"]
+    ):
+        raise _node_conflict("Node command does not match the admitted request")
+    placement = record.get("node-placement")
+    if placement is not None and any(
+        identity[key] != placement[key] for key in ("node-id", "workspace-id", "grant-revision")
+    ):
+        raise _node_conflict("Node command does not match immutable admission placement")
+
+
+def _node_fresh_effect(record: dict[str, Any], identity: dict[str, Any], owner_epoch: str) -> None:
+    _node_matches_record(record, identity)
+    if (
+        record["state"] != "running" or record.get("cancel-requested")
+        or record.get("recovery-required")
+        or identity["gateway-owner-epoch"] != owner_epoch
+    ):
+        raise _node_conflict("Node command is not eligible for fresh effect authorization")
+
+
+def _write_node_dispatch(project_root: Path, record: dict[str, Any], dispatch: dict[str, Any]) -> dict[str, Any]:
+    updated = dict(record)
+    updated.update({
+        "node-dispatch": dispatch, "revision": record["revision"] + 1,
+        "updated-at": now_iso_z(),
+    })
+    write_record(project_root, updated)
+    return updated
+
+
+def bind_owned_node_dispatch(
+    project_root: Path, request_id: str, *, identity: Any,
+    owner_epoch: str, worker_id: str, attempt_epoch: int, expected_revision: int,
+) -> dict[str, Any]:
+    """Persist one immutable command identity; return the full owned record.
+
+    This is not a grant check or permission to invoke a native effect. A
+    different identity always conflicts, including after an owner reconnect.
+    Recovery/rebinding requires a separate evidence policy, never this setter.
+    """
+    command = _node_identity(identity)
+    with _request_lock(project_root, request_id):
+        record = _node_owned_record(
+            project_root, request_id, owner_epoch=owner_epoch, worker_id=worker_id,
+            attempt_epoch=attempt_epoch, expected_revision=expected_revision,
+        )
+        _node_fresh_effect(record, command, owner_epoch)
+        prior = record.get("node-dispatch")
+        if prior is not None:
+            if prior["identity"] != command:
+                raise _node_conflict("Node dispatch identity collision")
+            return record
+        return _write_node_dispatch(project_root, record, {
+            "identity": command, "authorization-id": None,
+            "authorization-state": "not-authorized",
+            "receipt-sequence": 0, "receipt-sha256": None,
+            "receipt-stage": None, "output-sha256": None,
+        })
+
+
+def authorize_owned_node_effect(
+    project_root: Path, request_id: str, *, identity: Any, authorization_id: str,
+    current_node_epoch: str, current_connection_generation: int,
+    owner_epoch: str, worker_id: str, attempt_epoch: int, expected_revision: int,
+) -> dict[str, Any]:
+    """Durably record caller-validated live authorization; return full record.
+
+    Invoke under the outer service auth lock with the currently validated
+    epoch/generation. Idempotent replay is only a persisted authorization
+    result, never permission for another native call. Uncertain/observed/
+    terminal commands cannot receive fresh authorization here.
+    """
+    from audiagentic.components.agents.gateway.node.contracts import _identifier
+
+    command = _node_identity(identity)
+    _identifier(authorization_id)
+    if (
+        type(current_connection_generation) is not int
+        or command["connection-generation"] != current_connection_generation
+        or command["node-epoch"] != current_node_epoch
+    ):
+        raise _node_conflict("Cannot authorize a stale node connection")
+    with _request_lock(project_root, request_id):
+        record = _node_owned_record(
+            project_root, request_id, owner_epoch=owner_epoch, worker_id=worker_id,
+            attempt_epoch=attempt_epoch, expected_revision=expected_revision,
+        )
+        _node_fresh_effect(record, command, owner_epoch)
+        prior = record.get("node-dispatch")
+        if prior is None or prior["identity"] != command:
+            raise _node_conflict("Node authorization identity collision")
+        if prior["authorization-state"] == "authorized":
+            if prior["authorization-id"] != authorization_id:
+                raise _node_conflict("Node authorization identity changed")
+            return record
+        if prior["authorization-state"] != "not-authorized" or prior["authorization-id"] is not None:
+            raise _node_conflict("Prior node effect requires evidence reconciliation")
+        return _write_node_dispatch(project_root, record, {
+            **prior, "authorization-id": authorization_id, "authorization-state": "authorized",
+        })
+
+
+def apply_owned_node_receipt(
+    project_root: Path, request_id: str, *, receipt: Mapping[str, Any],
+    owner_epoch: str, worker_id: str, attempt_epoch: int, expected_revision: int,
+) -> dict[str, Any]:
+    """Checkpoint a public Receipt.public_payload mapping; return full record.
+
+    Exact latest replay does not write. Older sequences and changed replays
+    conflict. Gaps are valid: the receipt outbox sequence is node-wide, not
+    command-local. A later stage may therefore also arrive as a snapshot.
+    Historical node epochs are evidence for the ORIGINAL bound command only;
+    this never rebinds or authorizes effects or changes request lifecycle.
+    """
+    import hashlib
+    import re
+    from audiagentic.components.agents.gateway.node.contracts import canonical_json
+
+    if not isinstance(receipt, Mapping) or set(receipt) != {
+        "identity", "state", "receipt-sequence", "output-sha256",
+    }:
+        raise _node_conflict("Invalid public node receipt fields")
+    command = _node_identity(receipt["identity"])
+    sequence = receipt["receipt-sequence"]
+    stage = receipt["state"]
+    stages = {"prepared": 0, "effect-intent": 1, "native-accepted": 2, "terminal": 3}
+    output = receipt["output-sha256"]
+    if (
+        type(sequence) is not int or not 1 <= sequence <= 2**63 - 1
+        or not isinstance(stage, str) or stage not in stages
+        or (stage == "terminal" and (not isinstance(output, str) or re.fullmatch(r"[0-9a-f]{64}", output) is None))
+        or (stage != "terminal" and output is not None)
+    ):
+        raise _node_conflict("Invalid node receipt sequence, stage or output digest")
+    # Freeze caller-owned input before locking; persist no native ref/text.
+    receipt_digest = hashlib.sha256(canonical_json({
+        "identity": command, "state": stage, "receipt-sequence": sequence, "output-sha256": output,
+    })).hexdigest()
+    with _request_lock(project_root, request_id):
+        record = _node_owned_record(
+            project_root, request_id, owner_epoch=owner_epoch, worker_id=worker_id,
+            attempt_epoch=attempt_epoch, expected_revision=expected_revision,
+        )
+        _node_matches_record(record, command)
+        prior = record.get("node-dispatch")
+        if prior is None or prior["identity"] != command:
+            raise _node_conflict("Node receipt identity collision")
+        if sequence == prior["receipt-sequence"]:
+            if receipt_digest != prior["receipt-sha256"]:
+                raise _node_conflict("Node receipt replay changed")
+            return record
+        if sequence < prior["receipt-sequence"]:
+            raise _node_conflict("Node receipt sequence regressed")
+        previous_stage = prior["receipt-stage"]
+        if previous_stage is not None and (
+            stages[stage] < stages[previous_stage] or previous_stage == "terminal"
+        ):
+            raise _node_conflict("Node receipt stage regressed or terminal evidence changed")
+        if stage != "prepared" and prior["authorization-id"] is None:
+            raise _node_conflict("Node effect receipt has no durable authorization")
+        state = {
+            "effect-intent": "uncertain", "native-accepted": "effect-observed", "terminal": "terminal",
+        }.get(stage, prior["authorization-state"])
+        return _write_node_dispatch(project_root, record, {
+            **prior, "authorization-state": state, "receipt-sequence": sequence,
+            "receipt-sha256": receipt_digest, "receipt-stage": stage, "output-sha256": output,
+        })

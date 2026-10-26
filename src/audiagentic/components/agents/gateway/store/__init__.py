@@ -49,6 +49,9 @@ from audiagentic.components.agents.gateway.store._shared import (
 )
 from audiagentic.components.agents.gateway.store._transitions import (
     CANCEL_ACK_ACTORS,
+    bind_owned_node_dispatch,
+    authorize_owned_node_effect,
+    apply_owned_node_receipt,
     acknowledge_cancel,
     append_attempt,
     append_owned_attempt,
@@ -105,6 +108,9 @@ __all__ = [
     "write_record",
     # _transitions
     "CANCEL_ACK_ACTORS",
+    "bind_owned_node_dispatch",
+    "authorize_owned_node_effect",
+    "apply_owned_node_receipt",
     "acknowledge_cancel",
     "append_attempt",
     "append_owned_attempt",
