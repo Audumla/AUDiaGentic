@@ -2,8 +2,9 @@
 
 Status: base design approved by terminal source-level GPT compliance review at
 `b760024580c53f03fc5cb0c7c3aa92aff6047e73`; final review records are RV1213 and
-RV1214. The clarified A2A addition awaits a focused final audit. SH35/SH36 own
-planning; SH37-SH43 remain pending delivery/qualification.
+RV1214. The A2A/ACP addendum was approved at
+`a7918fb506fcd4bfb56ebb8d224a9d5408d54d41`, with final clarifications recorded in
+RV1216. SH35/SH36 own planning; SH37-SH43 remain pending delivery/qualification.
 No runtime capability is enabled here. Prior release prerequisite: v0.6.0.
 
 ## Scope and decisions
@@ -234,6 +235,25 @@ messages with identical text remain distinct. If a peer protocol has no stable
 replay key, allocate a distinct command identity and preserve uncertainty rather
 than deduplicating content. End a turn only on correlated terminal evidence.
 
+A2A `messageId` identifies a client message, `contextId` the canonical Context,
+and `taskId` an existing Work. Input addressed to an existing task goes through
+an owning Work continuation operation: retain its task identity, validate current
+lifecycle and atomically record/admit the message once. Neither create another
+Work silently nor merely return prior Work. Unsupported continuation for that
+state returns the negotiated protocol error. A new message with only contextId
+creates distinct Work. Deduplication is scoped by authenticated sender, message
+identity and target, with payload conflicts rejected. Existing `work/inputs.py`
+append is not a complete continuation API: owner authorization, lifecycle,
+dispatch/receipt fencing and atomicity must be provided behind the public port.
+
+ACP `session/prompt` is an outstanding correlated turn, not an admission receipt.
+Keep that turn identity until the owner wait/event port reports terminal Work;
+emit only authorized, correlated updates. Map verified outcome to the negotiated
+stop reason or error; interruption, cancellation, timeout and uncertain delivery
+cannot become successful end_turn. session/cancel targets only the authorized
+active turn while preserving external human/shared no-interrupt policy. Observe
+the negotiated prompt/cancel completion ordering, including late native output.
+
 Validate principal/project/Agent Definition/Context/Work/session ownership before
 every operation, including existing-context sends, task reads/cancel and card
 discovery. Normalize public errors through registered owner errors and protocol
@@ -390,3 +410,10 @@ only, not working joined-session functionality. Missing integrations, adoption,
 MCP-scoped nodes, per-request steering, acknowledgement-only steer, cross-node
 failover, other providers, MP02 slim packages and SH25/SH28 broker changes remain
 outside this delivery scope.
+
+Design evidence: RV1213/RV1214 cover standalone/node/capability/ownership/delivery
+and standards at the base reviewed revision. RV1216 covers clarified A2A/ACP,
+canonical Context/Work target routing and the two refinements above. Their
+findings are incorporated; implementation items SH37-SH43 retain all required
+runtime proof gates. This approval does not claim standards wire conformance or
+native attachment already works in the shipped runtime.
