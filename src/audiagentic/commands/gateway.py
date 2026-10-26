@@ -316,41 +316,24 @@ def _dispatch_node_keyword(tokens: list[str]) -> int:
 
     from audiagentic.components.agents.gateway.operations import (
         GatewayOperationsApplication,
-        ManagementCommand,
         ManagementOperationKind,
-        ManagementOperationStore,
-    )
-    from audiagentic.components.agents.gateway.operations.contracts import (
-        validate_node_revoke_scope,
     )
     from audiagentic.components.agents.gateway.service.shared_config import (
         load_shared_server_config,
     )
     from audiagentic.foundation.contracts.errors import AudiaGenticError
 
-    scope = None
-    if revoke:
-        scope = validate_node_revoke_scope({
-            "node-id": tokens[4], "expected-grant-revision": int(tokens[6]),
-        })
     config = load_shared_server_config(Path(tokens[3] if status else tokens[2]).resolve())
-    # Use the serving owner's canonical key and Foundation root resolution;
-    # never create a second queue directly beneath the config's base directory.
-    from audiagentic.components.agents.gateway.service.host import GATEWAY_SERVICE_KEY
-    from audiagentic.foundation.system.managed_service import ManagedServiceStore
-
-    service = ManagedServiceStore(GATEWAY_SERVICE_KEY, root=config.service_root)
-    store = ManagementOperationStore(service.root)
+    application = GatewayOperationsApplication.for_local_server(config)
     if revoke:
-        command = ManagementCommand(
-            operation_id=f"op_{uuid.uuid4().hex}", kind=ManagementOperationKind.NODE_REVOKE,
-            scope=scope,
+        record = application.create_local_node_revoke(
+            operation_id=f"op_{uuid.uuid4().hex}", node_id=tokens[4],
+            expected_grant_revision=int(tokens[6]),
         )
-        record = store.create(command, local_only=True)
         operation_id = record["operation-id"]
     else:
         operation_id = tokens[5]
-    result = GatewayOperationsApplication(store).get_operation(operation_id)
+    result = application.get_operation(operation_id)
     if result["kind"] != ManagementOperationKind.NODE_REVOKE.value:
         raise AudiaGenticError("VAL-AGM-004", "agents", "operation is not a node-revoke operation", {})
     _json_out(result)

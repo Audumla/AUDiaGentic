@@ -145,6 +145,100 @@ def test_node_revoke_requires_explicit_local_creation_not_generic_service_api(tm
     assert not operation_store.root.exists()
 
 
+def test_local_application_factory_queues_redacted_intent_only_existing_pump_executes(
+    tmp_path, monkeypatch
+):
+    from audiagentic.components.agents.gateway.node.authority import NodeGrantAuthority
+    from audiagentic.components.agents.gateway.service import bootstrap
+    from audiagentic.components.agents.gateway.service.contract import GATEWAY_SERVICE_KEY
+    from audiagentic.components.agents.gateway.service.host import GatewayServiceHost
+    from audiagentic.components.agents.gateway.service.shared_config import (
+        load_shared_server_config,
+    )
+    from audiagentic.foundation.system.managed_service import ManagedServiceStore
+
+    config_path, _ = _revoke_server_files(tmp_path)
+    config = load_shared_server_config(config_path)
+    forbidden = Mock(
+        side_effect=AssertionError("local operation must not start or contact service")
+    )
+    monkeypatch.setattr(bootstrap, "start_or_attach_gateway", forbidden)
+    monkeypatch.setattr(GatewayServiceHost, "create", forbidden)
+    owner = GatewayOperationsApplication.for_local_server(config)
+    service = ManagedServiceStore(GATEWAY_SERVICE_KEY, root=config.service_root)
+    operation_store = ManagementOperationStore(service.root)
+    assert not service.record_path.exists() and not operation_store.root.exists()
+    created = owner.create_local_node_revoke(
+        operation_id="op-local", node_id="node-1", expected_grant_revision=7
+    )
+    assert created["kind"] == "node-revoke" and created["state"] == "accepted"
+    assert owner.get_operation("op-local") == created
+    persisted = operation_store.read("op-local")
+    assert persisted["scope"] == {"node-id": "node-1", "expected-grant-revision": 7}
+    assert load_shared_server_config(config_path).nodes[0].enabled
+    for hidden in (
+        "scope",
+        "intent-digest",
+        "owner-epoch",
+        str(service.root),
+        "private-node.token",
+    ):
+        assert hidden not in json.dumps(created)
+    # A local factory does not widen generic creation, even on the same object.
+    with pytest.raises(AudiaGenticError, match="UNS-AGM-001"):
+        owner.create_operation(command("op-remote"))
+    assert not (operation_store.root / "op-remote").exists()
+    authority = NodeGrantAuthority(config)
+    effects, application = executor(authority)
+    pump = ManagementOperationPump(operation_store, effects)
+    assert pump.run_once(owner_epoch="operator")[0]["state"] == "completed"
+    assert not load_shared_server_config(config_path).nodes[0].enabled
+    assert owner.get_operation("op-local")["result"] == {"node-id": "node-1", "revoked": True}
+    assert pump.run_once(owner_epoch="operator") == []
+    assert application.mock_calls == []
+    assert not service.record_path.exists()
+    forbidden.assert_not_called()
+
+
+def test_local_application_factory_preserves_default_foundation_root(tmp_path, monkeypatch):
+    from dataclasses import replace
+
+    from audiagentic.components.agents.gateway.service.contract import GATEWAY_SERVICE_KEY
+    from audiagentic.components.agents.gateway.service.shared_config import (
+        load_shared_server_config,
+    )
+    from audiagentic.foundation.system import managed_service
+
+    config_path, _ = _revoke_server_files(tmp_path)
+    config = replace(load_shared_server_config(config_path), service_root=None)
+    monkeypatch.setattr(
+        managed_service, "global_service_runtime", lambda: tmp_path / "default-runtime"
+    )
+    owner = GatewayOperationsApplication.for_local_server(config)
+    owner.create_local_node_revoke(
+        operation_id="op-default", node_id="node-1", expected_grant_revision=7
+    )
+    service = managed_service.ManagedServiceStore(GATEWAY_SERVICE_KEY)
+    assert ManagementOperationStore(service.root).read("op-default")["state"] == "accepted"
+    assert not (tmp_path / "gateway-operations").exists()
+    assert not service.record_path.exists()
+
+
+@pytest.mark.parametrize(
+    "node,revision", [("../node", 7), ("node-1", True), ("node-1", 0), ("node-1", "7")]
+)
+def test_local_application_validates_fixed_scope_before_persistence(tmp_path, node, revision):
+    operation_store = ManagementOperationStore(tmp_path)
+    notifier = Mock()
+    owner = GatewayOperationsApplication(operation_store, notifier=notifier)
+    with pytest.raises(AudiaGenticError, match="VAL-AGM-004"):
+        owner.create_local_node_revoke(
+            operation_id="op-invalid", node_id=node, expected_grant_revision=revision
+        )
+    assert not operation_store.root.exists()
+    notifier.notify.assert_not_called()
+
+
 def test_persisted_revoke_scope_is_validated_on_replay(tmp_path):
     operation_store = ManagementOperationStore(tmp_path)
     created = operation_store.create(command(), local_only=True)
