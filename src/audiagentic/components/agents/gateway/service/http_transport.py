@@ -240,6 +240,25 @@ class GatewayHTTPRequestHandler(BaseHTTPRequestHandler):
                 protocol_version=_string(body, "protocol-version"),
                 owner_epoch=epoch, lease_id=lease_id,
             )
+            # Compact only the shared wire boundary. Local HTTP and the Python
+            # application retain their existing contracts; explicit reads of
+            # diagnostics, evidence and response content are not projected here.
+            from audiagentic.components.agents.gateway.evidence_projection import (
+                project_public_gateway_request,
+                project_public_gateway_session,
+            )
+
+            if operation in {
+                "submit_execution_request", "cancel_execution_request",
+                "recover_execution_request", "complete_execution_from_provider",
+            }:
+                result = project_public_gateway_request(result)
+            elif operation in {"close_execution_session", "resume_execution_session"}:
+                result = project_public_gateway_session(result)
+            elif operation == "list_execution_sessions":
+                result = [project_public_gateway_session(item) for item in result]
+            # list_execution_requests already uses the canonical V4 status
+            # projection in the API; preserve its lifecycle/activity fields.
         elif method == "POST" and self.path == "/shared/v1/client-leases/acquire":
             body = self._read_body()
             if body.keys() - {"client-instance-id", "ttl-seconds", "protocol-version", "correlation-id"}:
