@@ -1085,8 +1085,9 @@ def _has_reopenable_provider_conversation(
 # means this particular closed session can't be transparently upgraded, so
 # the caller falls back to today's RES-AGW-003 behavior. CON-AGW-116
 # (idempotent replay of a previously-failed control id) is included: a
-# prior auto-resume attempt for this exact source already failed, so
-# retrying it again would only reproduce the same refusal. Anything NOT in
+# prior auto-resume attempt for this exact source already failed. Cached
+# EXT-AGW-118 failures are handled separately as pre-effect reopen failures.
+# Anything NOT in
 # this set (a store failure, a lost ownership fence, a genuine internal
 # defect) must never be silently swallowed into an innocuous "session
 # isn't active" -- it has to surface as itself.
@@ -1116,6 +1117,7 @@ def _auto_resume_reopenable_closed_session(
     request_runtime_root: Path,
     project_name: str | None = None,
     allow_failed: bool = False,
+    new_prompt: bool = False,
 ) -> tuple[str, dict[str, Any], dict[str, Any]]:
     """Transparently resume a session closed by a resumable gateway policy.
 
@@ -1129,8 +1131,11 @@ def _auto_resume_reopenable_closed_session(
     are resource-lifetime policies, not evidence that the provider
     conversation is invalid. A later turn may therefore resume the durable
     provider binding. A failed source is accepted only for the
-    observation-only restart-recovery path (``allow_failed=True``); ordinary
-    continuation still requires an explicit session_resume.
+    observation-only restart-recovery path (``allow_failed=True``) or for
+    a new prompt after the safe terminal-continuation gate succeeds.
+    Deliberately closed/expired sources use that same gate for new prompts.
+    Only ``new_prompt=True`` permits walking deliberately closed cached
+    successors; promptless recovery must respect those local closes.
 
     Reuses AS49's existing resume_session() machinery.  The runtime now
     serializes the complete source-to-successor decision per source session;
@@ -1154,11 +1159,14 @@ def _auto_resume_reopenable_closed_session(
         recovery_attempt = 0
 
     def _resume_control_id(resume_source: str) -> str:
-        # A failed observation-only control must not permanently poison all
-        # later attempts for the same source. Each durable recovery attempt
-        # gets its own idempotency key; ordinary explicit/resource-policy
-        # resumes retain the stable source-scoped key.
-        suffix = f":observation:{recovery_attempt}" if allow_failed else ""
+        # Use the queue's durable, bounded attempt identity without replacing
+        # failed controls. Attempt zero retains the original ordinary key.
+        # The runtime source lock and provider ownership lookup converge
+        # callers with different attempts; manual replay remains untouched.
+        suffix = (
+            f":observation:{recovery_attempt}" if allow_failed
+            else f":recovery:{recovery_attempt}" if recovery_attempt else ""
+        )
         return f"auto-resume:{resume_source}{suffix}"
 
     if allow_failed:
@@ -1201,12 +1209,18 @@ def _auto_resume_reopenable_closed_session(
                 new_session_record.get("state") in {"closed", "expired"}
                 and new_session_record.get("close-reason") in _AUTO_RESUMABLE_CLOSE_REASONS
             )
-            safely_failed = (
-                new_session_record.get("state") == "failed"
+            safely_terminal = (
+                (
+                    new_session_record.get("state") == "failed"
+                    or (
+                        new_prompt
+                        and new_session_record.get("state") in {"closed", "expired"}
+                    )
+                )
                 and not allow_failed
-                and _failed_session_has_safe_provider_continuation(project_root, new_session_record)
+                and _terminal_session_has_safe_provider_continuation(project_root, new_session_record)
             )
-            if not (resource_closed or safely_failed):
+            if not (resource_closed or safely_terminal):
                 break
             resume_source_id = str(new_session_record["session-id"])
             new_session_record = runtime.resume_session(
@@ -1219,6 +1233,31 @@ def _auto_resume_reopenable_closed_session(
                 resume_existing=allow_failed,
             )
     except AudiaGenticError as exc:
+        if (
+            not allow_failed
+            and exc.code == "CON-AGW-116"
+            and isinstance(exc.details, dict)
+            and exc.details.get("prior-error-code") == "EXT-AGW-118"
+        ):
+            from audiagentic.components.agents.gateway.session import resume as resume_lib
+
+            prior = resume_lib.lookup_resume_attempt(
+                project_root, resume_source_id, _resume_control_id(resume_source_id)
+            )
+            if (
+                isinstance(prior, dict)
+                and prior.get("outcome") == "failed"
+                and prior.get("error-code") == "EXT-AGW-118"
+            ):
+                # Only persisted failure evidence permits queue recovery.
+                # Use the current source when walking cached successors, and
+                # preserve the failed control rather than overwriting it.
+                raise AudiaGenticError(
+                    code="EXT-AGW-118",
+                    kind="agents",
+                    message="prior automatic provider conversation reopen failed",
+                    details={**exc.details, "auto-resume-control-replay": True},
+                ) from exc
         if exc.code in _AUTO_RESUME_EXPECTED_REFUSAL_CODES:
             raise AudiaGenticError(
                 code="RES-AGW-003",
@@ -1293,12 +1332,12 @@ def _terminal_session_needs_fresh_chat(session: dict[str, Any], request_id: str)
     )
 
 
-def _failed_session_has_safe_provider_continuation(
+def _terminal_session_has_safe_provider_continuation(
     project_root: Path, session_record: dict[str, Any]
 ) -> bool:
-    """Return whether a failed session can safely resume a new turn.
+    """Return whether a terminal session can safely resume a new turn.
 
-    A failed gateway session is not proof that its provider conversation is
+    A terminal gateway session is not proof that its provider conversation is
     gone. GPT-auto can retain the exact ChatGPT conversation and tab while a
     turn-level failure tears down the local handle. Resuming is safe for a
     later prompt only when the durable provider binding exists and no prior
@@ -1949,21 +1988,21 @@ def _dispatch_session_request(
                 if (
                     (not resume_existing or not dispatch_prompt.strip())
                     and session_record.get("state") in {"closed", "expired"}
-                    and session_record.get("close-reason") in _AUTO_RESUMABLE_CLOSE_REASONS
+                    and (
+                        session_record.get("close-reason") in _AUTO_RESUMABLE_CLOSE_REASONS
+                        or (
+                            not resume_existing
+                            and bool(dispatch_prompt.strip())
+                            and _terminal_session_has_safe_provider_continuation(
+                                project_root, session_record
+                            )
+                        )
+                    )
                 ):
-                    # A gateway resource-policy close (shutdown/idle-timeout)
-                    # retains the durable provider binding. Resume creates one
-                    # linked successor with a live transport, so no
-                    # active-state rehydrate is needed here. Intentional close
-                    # (client-request) and failure reasons are deliberately
-                    # excluded from this automatic path. Observation-only
-                    # restart recovery (resume_existing=True) uses the SAME
-                    # reopen gate: the successor is reattached and the
-                    # unresolved turn is observed prompt-free instead of
-                    # looping on RES-AGW-003 until the bounded CON-AGW-084
-                    # interruption. A source without a durable binding is
-                    # refused by AS49 eligibility validation (RES-AGW-111) and
-                    # falls back to RES-AGW-003 — it is never reopened.
+                    # Resource-policy closes retain the existing restart path.
+                    # An explicit new prompt can also reopen a deliberate local
+                    # close, but only with a durable binding and a cleared prior
+                    # checkpoint. Promptless observation must not undo it.
                     session_id, session_record, record = _auto_resume_reopenable_closed_session(
                         project_root,
                         runtime,
@@ -1972,12 +2011,13 @@ def _dispatch_session_request(
                         context_fingerprint=context_fingerprint,
                         request_runtime_root=request_runtime_root,
                         project_name=project_name,
+                        new_prompt=not resume_existing and bool(dispatch_prompt.strip()),
                     )
                 elif (
                     session_record.get("state") == "failed"
                     and (
                         resume_existing
-                        or _failed_session_has_safe_provider_continuation(
+                        or _terminal_session_has_safe_provider_continuation(
                             project_root, session_record
                         )
                     )
@@ -1990,6 +2030,7 @@ def _dispatch_session_request(
                         context_fingerprint=context_fingerprint,
                         request_runtime_root=request_runtime_root,
                         project_name=project_name,
+                        new_prompt=not resume_existing and bool(dispatch_prompt.strip()),
                         allow_failed=resume_existing,
                     )
                 elif session_record.get("state") != "active":
@@ -2316,9 +2357,17 @@ def _dispatch_session_request(
         if (
             not cancelled
             and isinstance(exc.details, dict)
-            and exc.details.get("failure-stage") == "submission"
-            and exc.details.get("submission-state") == "not_started"
-            and exc.details.get("submission-ambiguous") is False
+            and (
+                (
+                    exc.details.get("failure-stage") == "submission"
+                    and exc.details.get("submission-state") == "not_started"
+                    and exc.details.get("submission-ambiguous") is False
+                )
+                or (
+                    exc.details.get("failure-stage") == "readiness"
+                    and client_defaults.proven_same_session_presubmit_retryable_failure(exc)
+                )
+            )
         ):
             # A browser admission failure proved that Send was never reached.
             # Keep the request queued for bounded provider recovery instead of

@@ -2845,6 +2845,35 @@ class PersistentChat:
         """
         if not _recoverable_turn_failure(error) or self.state is ChatState.CLOSED:
             return False
+        details = error.details if isinstance(error, AudiaGenticError) else {}
+        if (
+            self.state is ChatState.RECOVERING
+            and isinstance(error, AudiaGenticError)
+            and error.code == "EXT-GPTAUTO-004"
+            and isinstance(details, dict)
+            and details.get("failure-stage") == "readiness"
+            and details.get("submission-state") == "not_started"
+            and details.get("submission-attempted") is False
+            and details.get("submission-proven") is False
+            and details.get("submission-ambiguous") is False
+            and details.get("previous-turn-unresolved") is False
+            and not self._turn_requires_recovery_proof()
+            and url_matches_provider_session(self.chat_url or "", self.provider_session_id)
+            and self._page_mutation_owner_is_live()
+            and details.get("cause-type") != "ProviderBindingIntegrityError"
+            and self._unresolved_recovery_reason not in {
+                "provider-binding-invalid", "provider-conversation-not-found",
+            }
+            and not (
+                self._last_snapshot is not None
+                and "auth-required" in self._last_snapshot.dom_signals
+            )
+        ):
+            # A missing/unready renderer does not invalidate its saved GPT
+            # conversation. Keep admission closed in RECOVERING and let the
+            # existing queue retry readiness under its outer deadline. This
+            # path neither promotes READY nor replays a possibly sent turn.
+            return True
         try:
             if self.state is not ChatState.RECOVERING:
                 self._move(ChatState.RECOVERING)
