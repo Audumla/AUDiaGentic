@@ -520,9 +520,30 @@ class PersistentChat:
         # Terminal checkpoint clearing deliberately retains submission/message
         # evidence. That history must not require an active response observer
         # merely to reopen an idle conversation for its next admission.
-        return self.unresolved_turn_pending or bool(
-            self.active_turn_id and self._submission_proven
-        )
+        return self.unresolved_turn_pending or self.active_turn_id is not None
+
+    async def _recovery_page_is_current(self, page: dict) -> bool:
+        """Check exact conversation and live physical identity before admission."""
+        url = str(page.get("url") or "")
+        expected_project = parse_project_id(self.project_url or "")
+        observed_project = parse_project_id(url)
+        if (
+            not self._page_mutation_owner_is_live()
+            or not url_matches_provider_session(url, self.provider_session_id)
+            or (self.chat_url and not same_chat_identity(url, self.chat_url))
+            or (not self.chat_url and expected_project and observed_project and expected_project != observed_project)
+        ):
+            return False
+        lookup = getattr(self.runtime, "page_record", None)
+        if callable(lookup):
+            current = await lookup(str(page.get("pageHandle") or ""))
+            if (
+                current is None
+                or current.get("targetId") != page.get("targetId")
+                or not same_chat_identity(str(current.get("url") or ""), url)
+            ):
+                return False
+        return self._page_mutation_owner_is_live()
 
     async def _reopen_idle_conversation(self) -> dict | None:
         """Lazily reopen the exact saved conversation without foreground work."""
@@ -535,9 +556,12 @@ class PersistentChat:
             or not self._page_mutation_owner_is_live()
         ):
             return None
-        return await reopen(
+        page = await reopen(
             self.chat_url, owner_is_live=self._page_mutation_owner_is_live
         )
+        if not await self._recovery_page_is_current(page):
+            raise ProviderBindingIntegrityError("idle conversation changed during reopening")
+        return page
 
     async def open(self) -> None:
         """Open transactionally; release every resource on partial failure."""
@@ -635,7 +659,11 @@ class PersistentChat:
                 )
             if page is None:
                 page = await self._reopen_idle_conversation()
+                if page is None and self._conversation_load_recovery_exhausted():
+                    raise self._conversation_load_failure_error()
             if page is not None:
+                if not await self._recovery_page_is_current(page):
+                    raise ProviderBindingIntegrityError("retained conversation changed before binding")
                 if not self._claim_page(str(page["pageHandle"])):
                     raise RuntimeError("gpt-auto retained conversation page is already owned")
                 self._bind_page(page)
@@ -647,9 +675,7 @@ class PersistentChat:
                         # the turn failed; the request observer retains the
                         # exact conversation until its outer timeout.
                         if (
-                            self.unresolved_turn_pending
-                            or self._submission_proven
-                            or self.active_turn_id is not None
+                            self._turn_requires_recovery_proof()
                         ):
                             self._set_unresolved_recovery(
                                 "conversation-load-observation-deferred",
@@ -674,7 +700,7 @@ class PersistentChat:
         if (
             self.page_handle is None
             and self.provider_session_id
-            and (self.unresolved_turn_pending or self._submission_proven)
+            and self._turn_requires_recovery_proof()
         ):
             # The durable unresolved-turn fence is authoritative across a
             # gateway restart.  A reconstructed chat may not have the
@@ -692,7 +718,11 @@ class PersistentChat:
                 "gpt-auto unresolved provider conversation is detached; "
                 "recovery requires explicit exact-tab reattachment"
             )
-        if self.page_handle is None and self.provider_session_id and self._defer_page_creation_on_recovery:
+        if (
+            self.page_handle is None and self.provider_session_id
+            and self._defer_page_creation_on_recovery
+            and self._turn_requires_recovery_proof()
+        ):
             self._move(ChatState.RECOVERING)
             raise RuntimeError("gpt-auto restart recovery deferred because the exact provider conversation tab is not attached")
         if (
@@ -771,6 +801,8 @@ class PersistentChat:
         # a signal nothing in this flow ever sets, before eventually failing
         # anyway -- a needless hang on the way to the same outcome.
         snap = await self.snapshot(allow_recovering=True)
+        if self.provider_session_id and page is not None and not await self._recovery_page_is_current(page):
+            raise ProviderBindingIntegrityError("retained conversation changed during readiness")
         if self.provider_session_id and not url_matches_provider_session(
             snap.url, self.provider_session_id
         ):
@@ -852,9 +884,7 @@ class PersistentChat:
                     raise self._conversation_load_failure_error(exc.snapshot) from exc
                 if not replaced:
                     if (
-                        self.unresolved_turn_pending
-                        or self._submission_proven
-                        or self.active_turn_id is not None
+                        self._turn_requires_recovery_proof()
                     ):
                         self._set_unresolved_recovery(
                             "conversation-load-observation-deferred",
@@ -1281,9 +1311,7 @@ class PersistentChat:
     def _load_failure_requires_retained_observation(self) -> bool:
         """Return whether load recovery must stay on the exact conversation."""
         return bool(
-            getattr(self, "unresolved_turn_pending", False)
-            or getattr(self, "_submission_proven", False)
-            or getattr(self, "active_turn_id", None) is not None
+            self._turn_requires_recovery_proof()
         )
 
     def _conversation_load_failure_error(
@@ -1493,7 +1521,7 @@ class PersistentChat:
         # Replacement is unsafe once a turn was submitted or is ambiguous:
         # the provider may still own the original work. Keep this exact tab
         # bound and let the request observer retry its visible control.
-        if self.unresolved_turn_pending or self._submission_proven:
+        if self._turn_requires_recovery_proof():
             self._set_unresolved_recovery(
                 "conversation-load-observation-deferred",
                 attempts=retry_attempts,
@@ -2770,7 +2798,7 @@ class PersistentChat:
         self._page_generation += 1
         self.runtime.release_page(self, handle)
         self._lost_during_turn = self.active_turn_id is not None
-        if self.unresolved_turn_pending or self._submission_proven:
+        if self._turn_requires_recovery_proof():
             # A provider load-error tab that an operator closes is not an
             # invitation to open another exact-URL tab.  Preserve the
             # unresolved fence so the next recovery/open attempt pauses until
@@ -3104,6 +3132,10 @@ class PersistentChat:
             if page is None:
                 page = await self._reopen_idle_conversation()
             if page is not None and self._claim_page(str(page["pageHandle"])):
+                if not await self._recovery_page_is_current(page):
+                    self.runtime.release_page(self, str(page["pageHandle"]))
+                    self._move(ChatState.RECOVERING)
+                    return
                 self._bind_page(page)
                 retained = await self._retained_page_snapshot()
                 if not await self._replace_load_failed_page(retained):
@@ -3114,11 +3146,15 @@ class PersistentChat:
                     if self.unresolved_turn_pending and not await self._reconcile_unresolved_turn():
                         return
                     await self.wait_quiescent(allow_recovering=True)
+                    if not await self._recovery_page_is_current(page):
+                        self._move(ChatState.RECOVERING)
+                        return
                     self._move(ChatState.READY)
                 return
             if (
                 self._defer_page_creation_on_recovery
                 and self.provider_session_id
+                and self._turn_requires_recovery_proof()
                 and not self._browser_generation_recovery
             ):
                 self._move(ChatState.RECOVERING)

@@ -1766,7 +1766,7 @@ async def test_reconcile_proves_quiescence_before_ready(monkeypatch) -> None:
     page = {
         "pageHandle": "retained",
         "targetId": "target-retained",
-        "url": "https://chatgpt.com/c/provider-session",
+        "url": "https://chatgpt.com/g/g-p-project/c/provider-session",
     }
 
     class _Bridge:
