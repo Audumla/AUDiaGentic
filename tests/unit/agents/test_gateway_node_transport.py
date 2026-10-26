@@ -888,13 +888,14 @@ async def test_credential_is_checked_before_any_drain_scan_and_rotation_denies_o
 
 
 @pytest.mark.asyncio
-async def test_canonical_custody_allows_drain_but_node_claims_do_not(channel):
+async def test_cursor_only_cannot_qualify_but_original_authorized_command_can(channel):
     from uuid import uuid4
 
     from audiagentic.components.agents.gateway.node.checkpoints import NodeReceiptCheckpoints
     from audiagentic.components.agents.gateway.service.host import GATEWAY_SERVICE_KEY
     from audiagentic.foundation.io import atomic_write_json
     from audiagentic.foundation.system.managed_service import ManagedServiceStore
+    from tests.unit.agents.test_gateway_node_drain import bound_request
 
     enable_drain_evidence(channel)
     channel.authority.revoke("node", expected_grant_revision=1)
@@ -919,6 +920,9 @@ async def test_canonical_custody_allows_drain_but_node_claims_do_not(channel):
             "gateway-owner-epoch": "historical-owner",
         },
     )
+    with pytest.raises(InvalidStatus):
+        await raw_connect(channel.client)
+    bound_request(channel.server.config.projects["project"])
     client = await NodeTransportClient(channel.client, node_epoch="boot-2").connect()
     try:
         assert client.capability == "drain"

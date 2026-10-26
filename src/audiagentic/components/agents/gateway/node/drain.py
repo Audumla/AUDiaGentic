@@ -9,8 +9,8 @@ from audiagentic.components.agents.gateway.service.shared_config import (
 )
 from audiagentic.foundation.system.managed_service import ManagedServiceStore
 
-from .checkpoints import NodeReceiptCheckpoints
 from .contracts import CommandIdentity, conflict
+from .receipts import Receipt
 
 
 class NodeDrainEligibility:
@@ -45,16 +45,10 @@ class NodeDrainEligibility:
             != self.projects
         ):
             raise conflict(1, "Drain configured server/project scope changed")
-        # This cursor was committed only AFTER canonical application by the
-        # existing custody owner. It is historical server/node proof, not a
-        # claimed log or an authorization to read any client's output.
-        if (
-            NodeReceiptCheckpoints(
-                self.service_store, server_id=self.server_id, node_id=grant.node_id
-            ).peek()
-            is not None
-        ):
-            return True
+        # A cumulative cursor has no original-command placement, and cannot
+        # independently establish eligibility. Retained authorized commands do,
+        # including terminals: canonical application may precede cursor commit,
+        # or a committed ACK may never reach the node. No ACK-of-ACK is assumed.
         for workspace, project in grant.workspaces.items():
             root = self.projects.get(project)
             if root is None:
@@ -80,5 +74,20 @@ class NodeDrainEligibility:
                     and identity.grant_revision == placement["grant-revision"]
                     and identity.grant_revision <= grant.revision
                 ):
-                    return True
+                    state = dispatch.get("authorization-state")
+                    if not dispatch.get("authorization-id"):
+                        continue
+                    if state in {"authorized", "uncertain", "effect-observed"}:
+                        return True
+                    if (
+                        state == "terminal" and dispatch.get("receipt-stage") == "terminal"
+                        and type(dispatch.get("receipt-sequence")) is int
+                        and dispatch["receipt-sequence"] > 0
+                        and dispatch.get("output-sha256")
+                        and Receipt(
+                            identity, "terminal", dispatch["receipt-sequence"],
+                            dispatch["output-sha256"],
+                        ).digest == dispatch.get("receipt-sha256")
+                    ):
+                        return True
         return False

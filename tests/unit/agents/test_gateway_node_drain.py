@@ -17,6 +17,7 @@ from audiagentic.components.agents.gateway.node.preparation import (
     build_final_command_payload,
     prepare_node_command,
 )
+from audiagentic.components.agents.gateway.node.receipts import Receipt
 from audiagentic.components.agents.gateway.service.contract import GATEWAY_SERVICE_KEY
 from audiagentic.components.agents.gateway.service.shared_config import load_shared_server_config
 from audiagentic.foundation.contracts.errors import AudiaGenticError
@@ -25,7 +26,8 @@ from audiagentic.foundation.system.managed_service import ManagedServiceStore
 
 
 def bound_request(
-    root, *, node="node", workspace="workspace", project="project", principal="alice"
+    root, *, node="node", workspace="workspace", project="project", principal="alice",
+    authorized=True,
 ):
     record = store.build_record(
         execution_profile_id="profile",
@@ -100,7 +102,7 @@ def bound_request(
         hashlib.sha256(canonical_json(payload)).hexdigest(),
         "profile",
     )
-    return store.bind_owned_node_dispatch(
+    record = store.bind_owned_node_dispatch(
         root,
         record["request-id"],
         identity=identity,
@@ -110,6 +112,14 @@ def bound_request(
         worker_id="worker",
         attempt_epoch=1,
         expected_revision=record["revision"],
+    )
+    if not authorized:
+        return record
+    return store.authorize_owned_node_effect(
+        root, record["request-id"], identity=identity, authorization_id="authorization",
+        accepted_attestation=prepared.attestation, current_node_epoch="boot",
+        current_connection_generation=1, owner_epoch="owner", worker_id="worker",
+        attempt_epoch=1, expected_revision=record["revision"],
     )
 
 
@@ -160,6 +170,59 @@ def test_canonical_bound_command_is_eligible_without_mutation(configured):
     assert store.read_record(root, before["request-id"]) == before
 
 
+def test_prepared_only_tail_is_retained_but_cannot_establish_drain(configured):
+    config, _, owner = configured
+    root = config.projects["project"]
+    before = bound_request(root, authorized=False)
+    assert not owner.eligible(config, config.nodes[0])
+    assert store.read_record(root, before["request-id"]) == before
+
+
+@pytest.mark.parametrize("checkpoint_state", ["absent", "lagging", "committed"])
+def test_terminal_custody_replay_survives_cursor_crash_and_lost_ack(configured, checkpoint_state):
+    config, service, owner = configured
+    root = config.projects["project"]
+    record = bound_request(root)
+    identity = CommandIdentity.from_mapping(record["node-dispatch"]["identity"])
+    receipt = Receipt(identity, "terminal", 3, "a" * 64)
+    record = store.apply_owned_node_receipt(
+        root, record["request-id"], receipt=receipt.public_payload(), owner_epoch="owner",
+        worker_id="worker", attempt_epoch=1, expected_revision=record["revision"],
+    )
+    if checkpoint_state != "absent":
+        cursor = NodeReceiptCheckpoints(service, server_id="server", node_id="node")
+        atomic_write_json(cursor.path, {
+            "version": 1, "server-id": "server", "node-id": "node",
+            "log-incarnation-id": str(uuid4()),
+            "sequence": 3 if checkpoint_state == "committed" else 2,
+            "receipt-sha256": receipt.digest if checkpoint_state == "committed" else "b" * 64,
+            "gateway-owner-epoch": "old-owner",
+        })
+    # The server cannot know if the ACK was delivered. A retained exact terminal
+    # command allows idempotent custody replay, not a new effect or client read.
+    assert owner.eligible(config, config.nodes[0])
+    assert store.read_record(root, record["request-id"]) == record
+
+
+def test_invalid_terminal_digest_and_expired_canonical_record_do_not_qualify(configured):
+    from audiagentic.components.agents.agents_paths import gateway_request_path
+
+    config, _, owner = configured
+    root = config.projects["project"]
+    record = bound_request(root)
+    identity = CommandIdentity.from_mapping(record["node-dispatch"]["identity"])
+    receipt = Receipt(identity, "terminal", 1, "a" * 64)
+    record = store.apply_owned_node_receipt(
+        root, record["request-id"], receipt=receipt.public_payload(), owner_epoch="owner",
+        worker_id="worker", attempt_epoch=1, expected_revision=record["revision"],
+    )
+    record["node-dispatch"]["receipt-sha256"] = "b" * 64
+    store.write_record(root, record)
+    assert not owner.eligible(config, config.nodes[0])
+    gateway_request_path(root, record["request-id"]).unlink()
+    assert not owner.eligible(config, config.nodes[0])
+
+
 @pytest.mark.parametrize(
     "change",
     [{"node": "other"}, {"workspace": "other"}, {"project": "other"}, {"principal": "other"}],
@@ -180,7 +243,7 @@ def test_unbound_admission_and_foreign_root_do_not_count(configured, tmp_path):
     assert not owner.eligible(config, config.nodes[0])
 
 
-def test_valid_prior_custody_is_historical_proof_without_owner_lock(configured, monkeypatch):
+def test_cursor_without_original_command_is_not_eligibility(configured, monkeypatch):
     config, service, owner = configured
     checkpoint = NodeReceiptCheckpoints(service, server_id="server", node_id="node")
     atomic_write_json(
@@ -201,9 +264,7 @@ def test_valid_prior_custody_is_historical_proof_without_owner_lock(configured, 
 
     monkeypatch.setattr(service, "_lock", forbidden)
     monkeypatch.setattr(service, "owner_guard", forbidden)
-    snapshot = checkpoint.peek()
-    assert snapshot.sequence == 1 and snapshot.gateway_owner_epoch == "old-owner"
-    assert owner.eligible(config, config.nodes[0])
+    assert not owner.eligible(config, config.nodes[0])
 
 
 @pytest.mark.parametrize("mutation", ["server-id", "node-id", "receipt-sha256", "sequence"])
@@ -221,8 +282,7 @@ def test_corrupt_or_foreign_custody_fails_closed(configured, mutation):
     }
     value[mutation] = 0 if mutation == "sequence" else "wrong"
     atomic_write_json(checkpoint.path, value)
-    with pytest.raises(AudiaGenticError):
-        owner.eligible(config, config.nodes[0])
+    assert not owner.eligible(config, config.nodes[0])
 
 
 def test_eligibility_rejects_other_service_or_changed_server(configured, tmp_path):
