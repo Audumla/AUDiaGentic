@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.2](https://github.com/Audumla/AUDiaGentic/compare/v0.6.1...v0.6.2) (2026-10-26)
+
+
+### Bug Fixes
+
+* **gpt-auto:** recover native browser network errors in background ([b539f70](https://github.com/Audumla/AUDiaGentic/commit/b539f70b8129008dc65fa6965bc7257edb090f22))
+* **gpt-auto:** recover native browser network errors in background ([1735cbf](https://github.com/Audumla/AUDiaGentic/commit/1735cbffaba07cc42e1c7c986f9c5218e461156e))
+
 ## [0.6.1](https://github.com/Audumla/AUDiaGentic/compare/v0.6.0...v0.6.1) (2026-10-26)
 
 
