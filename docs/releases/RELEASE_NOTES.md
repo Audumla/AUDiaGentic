@@ -1,10 +1,9 @@
 # Release Notes
 
-## v0.6.1
-
-### Documentation
-- Validate and complete silent GPT conversation restoration after browser tab changes, with deployed same-session live tests.
+## v0.6.2
 
 ### Fixes
-- Resume idle GPT conversations after browser restart without failing on expired physical tab IDs or replaying earlier prompts.
-- Harden silent GPT conversation restoration against stale browser targets and recovery races.
+- Recover temporarily unavailable ChatGPT tabs in the background without focus switching or duplicate prompt submission.
+
+### Testing
+- Keep background network recovery small and strengthen its targeted identity and timeout checks.
