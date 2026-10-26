@@ -3059,7 +3059,9 @@ class SessionRuntime:
             # session's own (per-turn-refreshed) provider-metadata alongside
             # it as an opaque supplementary hint -- generic here, only
             # meaningful to whichever provider builder chooses to read it.
-            "resume_provider_metadata": session_store.session_provider_metadata(source_record),
+            "resume_provider_metadata": session_store.session_provider_metadata(
+                existing_successor if existing_successor is not None else source_record
+            ),
             "project_name": project_name,
         }
         if request_runtime_root is not None:
@@ -3155,11 +3157,7 @@ class SessionRuntime:
         }
         rehydrating_successor = existing_successor is not None
         if rehydrating_successor:
-            record = session_store.update_provider_metadata(
-                project_root,
-                successor_session_id,
-                provider_metadata,
-            )
+            record = existing_successor
             session_id = successor_session_id
         else:
             record = session_store.build_session_record(
@@ -3192,7 +3190,16 @@ class SessionRuntime:
                 execution_context_fingerprint=source_binding.get("execution-context-fingerprint"),
             )
         try:
-            if not rehydrating_successor:
+            if rehydrating_successor:
+                # Reattachment proves binding metadata, not authority over an
+                # existing request's checkpoint. Keep its durable turn state;
+                # only the request-fenced checkpoint writer may change it.
+                record = session_store.update_provider_metadata(
+                    project_root, session_id,
+                    {key: value for key, value in provider_metadata.items()
+                     if key not in session_store._RECOVERY_CHECKPOINT_KEYS},
+                )
+            else:
                 session_store.write_session_record(project_root, record)
                 binding_store.register_open_binding(project_root, record)
         except Exception as exc:
