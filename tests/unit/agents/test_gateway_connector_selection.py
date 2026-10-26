@@ -150,7 +150,8 @@ def test_shared_root_resolvers_skip_all_local_discovery(tmp_path, connector, mon
     monkeypatch.setattr(client, "get_gateway_client", forbidden)
     monkeypatch.setattr(bootstrap, "start_or_attach_gateway", forbidden)
     monkeypatch.setattr(shared_config, "load_shared_connector_config", forbidden)
-    assert client.resolve_request_project_root(tmp_path, "req_example_012345abcdef") is tmp_path
+    request_id = "req_remote_" + "0" * 12
+    assert client.resolve_request_project_root(tmp_path, request_id) is tmp_path
     assert client.resolve_session_project_root(tmp_path, "ses_remote") is tmp_path
     forbidden.assert_not_called()
 
@@ -171,7 +172,8 @@ def test_nonshared_root_resolvers_keep_local_routing(tmp_path, connector, monkey
     monkeypatch.setattr(store, "read_record", request)
     monkeypatch.setattr(sessions_store, "read_session_record", session)
     assert not client._uses_shared_connector(tmp_path)
-    assert client.resolve_request_project_root(tmp_path, "req_example_012345abcdef") == tmp_path
+    request_id = "req_local_" + "0" * 12
+    assert client.resolve_request_project_root(tmp_path, request_id) == tmp_path
     assert client.resolve_session_project_root(tmp_path, "ses_local") == tmp_path
-    request.assert_called_once_with(tmp_path, "req_example_012345abcdef")
+    request.assert_called_once_with(tmp_path, request_id)
     session.assert_called_once_with(tmp_path.resolve(), "ses_local")
