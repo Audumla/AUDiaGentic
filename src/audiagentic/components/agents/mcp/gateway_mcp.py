@@ -15,7 +15,9 @@ from __future__ import annotations
 from typing import Any
 
 from audiagentic.components.agents.gateway.client import (
-    call_gateway_method, resolve_request_project_root, resolve_session_project_root,
+    call_gateway_method,
+    resolve_request_project_root,
+    resolve_session_project_root,
 )
 from audiagentic.foundation.mcp.component_server import (
     mcp_server,
@@ -124,33 +126,11 @@ def _sparse(value: Any) -> Any:
     return value
 
 
-def _agent_card(definition: dict[str, Any]) -> dict[str, Any]:
-    """Client-facing summary of one Agent Definition (A2A AgentCard-style
-    projection — see protocols/a2a/agent_card.py's build_agent_card for the
-    sibling used on the A2A-publication path). Deliberately excludes
-    implementation/harness details a calling agent has no use for and must
-    not couple to: execution_profile_id, role_ids, prompt_id. What backs an
-    agent is free to change without being part of its public contract."""
-    return {
-        "agent_id": definition["agent_id"],
-        "name": definition.get("name"),
-        "description": definition.get("description"),
-        "skills": [
-            {"id": skill, "name": skill} for skill in definition.get("advertised_skills") or []
-        ],
-    }
-
-
 @mcp.tool()
 @tool_boundary
 def agent_task_list_definitions() -> list[dict[str, Any]]:
     """List valid agent_id values with concise names, descriptions, and skills."""
-    from audiagentic.components.agents.configuration.management import (
-        list_agent_definitions,
-    )
-
-    definitions = list_agent_definitions(project_root_from_env())
-    return _sparse([_agent_card(definition) for definition in definitions])
+    return call_gateway_method("list_agent_definition_cards", project_root_from_env())
 
 
 @mcp.tool()
@@ -257,7 +237,9 @@ def agent_task_evidence(
             request_id,
             **params,
         )
-    from audiagentic.components.agents.gateway.evidence_projection import project_public_gateway_evidence
+    from audiagentic.components.agents.gateway.evidence_projection import (
+        project_public_gateway_evidence,
+    )
     return _sparse(project_public_gateway_evidence(raw))
 
 @mcp.tool()
@@ -309,11 +291,14 @@ def agent_task_response(request_id: str) -> dict[str, Any]:
         "media-type": payload["media_type"],
     }
     state = payload.get("state")
-    if isinstance(state, str) and state: result["state"] = state
+    if isinstance(state, str) and state:
+        result["state"] = state
     error_code = payload.get("error_code")
-    if isinstance(error_code, str) and error_code: result["error-code"] = error_code
+    if isinstance(error_code, str) and error_code:
+        result["error-code"] = error_code
     error_reason = payload.get("error_reason")
-    if isinstance(error_reason, str) and error_reason: result["error-reason"] = error_reason
+    if isinstance(error_reason, str) and error_reason:
+        result["error-reason"] = error_reason
     return result
 
 @mcp.tool()

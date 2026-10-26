@@ -165,6 +165,8 @@ _MODE_ALIASES = {"in-process": "embedded"}
 class GatewayClient(Protocol):
     """Requester-facing gateway operations, independent of inbound transport."""
 
+    def list_agent_definition_cards(self, project_root: Path) -> list[dict[str, Any]]: ...
+
     def submit_execution_request(self, project_root: Path, **kwargs: Any) -> dict[str, Any]: ...
     def get_execution_request(self, project_root: Path, request_id: str, *, include_response: bool = False) -> dict[str, Any]: ...
     def get_execution_diagnostics(self, project_root: Path, request_id: str, *, limit: int = 25) -> dict[str, Any]: ...
@@ -235,6 +237,11 @@ class EmbeddedGatewayClient:
     ) -> None:
         self._application = application or get_gateway_application()
         self._logical_client_id = logical_client_id
+
+    def list_agent_definition_cards(self, project_root: Path) -> list[dict[str, Any]]:
+        from audiagentic.components.agents.configuration.management import list_agent_definition_cards
+
+        return list_agent_definition_cards(project_root)
 
     def submit_execution_request(self, project_root: Path, **kwargs: Any) -> dict[str, Any]:
         if self._logical_client_id is not None:
@@ -585,6 +592,7 @@ def reset_gateway_client() -> None:
 # control, close, cancel) are deliberately excluded -- reconnecting the
 # client is always safe, but replaying a mutation blindly is not.
 _READ_ONLY_GATEWAY_METHODS = frozenset({
+    "list_agent_definition_cards",
     "get_execution_request",
     "get_execution_diagnostics",
     "get_execution_observations",

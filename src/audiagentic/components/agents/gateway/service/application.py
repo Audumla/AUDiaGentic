@@ -333,6 +333,11 @@ class GatewayServiceApplication:
             )
         if operation in _WORK_PRODUCING_OPERATIONS:
             self._record_project_encounter(root)
+        if operation == "list_agent_definition_cards":
+            _reject_unknown(arguments, set())
+            from audiagentic.components.agents.configuration.management import list_agent_definition_cards
+
+            return list_agent_definition_cards(root)
         if operation == "submit_execution_request":
             submitted = _validated_submission_arguments(root, arguments)
             from .client_icons import assign_client_icon

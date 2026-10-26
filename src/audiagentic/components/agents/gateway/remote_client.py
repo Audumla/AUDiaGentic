@@ -197,6 +197,9 @@ class StandaloneGatewayClient:
                 raise client_validation_error(5, "shared gateway project is not authorized")
         return health
 
+    def list_agent_definition_cards(self, project_root: Path) -> list[dict[str, Any]]:
+        return cast(list[dict[str, Any]], self._call("list_agent_definition_cards", project_root, {}))
+
     def submit_execution_request(self, project_root: Path, **kwargs: Any) -> dict[str, Any]:
         if not self._shared:
             if "component_profile" not in kwargs:

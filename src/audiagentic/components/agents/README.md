@@ -49,6 +49,16 @@ and status/cancel/session management to provider CLIs during job execution.
 
 ## Agent Execution Gateway
 
+Shared standalone deployment uses the existing service host and client. See
+[the stage-1 deployment guide](../../../../docs/guides/shared-gateway.md) for
+`audiagentic gateway serve config FILE`, HTTPS connector configuration and
+`audiagentic gateway connect config FILE project PATH non-interactive`.
+The configured server project owns execution files and agent definitions;
+local client directories store only the selected connector reference. Remote
+project/action grants are collaborative. Shared ingress excludes local
+dashboard/operator controls and does not enable execution nodes, joined
+harnesses or external A2A/ACP transports.
+
 A queued, concurrency-limited dispatch layer that resolves an execution profile
 to a provider/model and executes provider work through
 `providers.services.execution.execute_provider`, with retry and
