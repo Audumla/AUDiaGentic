@@ -29,7 +29,8 @@ from audiagentic.foundation.io import atomic_write_bytes, load_yaml_file
 from audiagentic.foundation.system.managed_service import ManagedServiceStore
 from audiagentic.foundation.system.process import StartupLock
 
-from .contracts import CommandIdentity, conflict, invalid
+from .contracts import CommandIdentity, _identifier, conflict, invalid
+from .placement import NodeAdmissionPlacement
 
 T = TypeVar("T")
 
@@ -133,6 +134,41 @@ class NodeGrantAuthority:
                 raise conflict(1, "Unsupported external server config edit")
         self._config, self._raw, self._digest = config, raw, digest
         return config
+
+    def authorize_admission(
+        self, *, principal_id: str, server_project_id: str,
+        node_id: str, workspace_id: str,
+        callback: Callable[[NodeAdmissionPlacement], T],
+    ) -> T:
+        """Seal current configured placement, then mutate under the grant lock.
+
+        principal_id must come from the authenticated calling owner, never an
+        untrusted request field. IDs select configured grants; they do not grant
+        authority themselves. No live connection/effect permission is implied.
+
+        The callback receives only this owner's constructed placement. Its
+        return value is opaque operation output, never placement authority.
+        Canonical local mutations only: no queue drain, network/native I/O or
+        recursive authority calls. Callback exceptions propagate without retry.
+        """
+        with self._lock():
+            server_id = self._config.server_id
+            config = self._reload(None)
+            for value in (principal_id, server_project_id, node_id, workspace_id):
+                _identifier(value)
+            principal = next((p for p in config.principals if p.principal_id == principal_id), None)
+            grant = next((n for n in config.nodes if n.node_id == node_id), None)
+            if (config.server_id != server_id or server_project_id not in config.projects
+                    or principal is None or server_project_id not in principal.projects
+                    or "submit" not in principal.actions or grant is None or not grant.enabled
+                    or principal_id not in grant.principals
+                    or grant.workspaces.get(workspace_id) != server_project_id):
+                raise conflict(1, "Node admission placement is not authorized by current configuration")
+            placement = NodeAdmissionPlacement(
+                config.server_id, grant.node_id, workspace_id, principal.principal_id,
+                server_project_id, grant.revision,
+            )
+            return callback(placement)
 
     def authorize_effect(
         self, placement: SealedNodePlacement, *,
