@@ -68,7 +68,7 @@ class NodeGrantAuthority:
         if config.config_path is None:
             raise invalid(1, "Node authority requires the owning server config path")
         self.path = config.config_path.resolve(strict=True)
-        from audiagentic.components.agents.gateway.service.host import GATEWAY_SERVICE_KEY
+        from audiagentic.components.agents.gateway.service.contract import GATEWAY_SERVICE_KEY
 
         expected_root = ManagedServiceStore(GATEWAY_SERVICE_KEY, root=config.service_root).root.resolve()
         if service_root is not None and service_root.resolve() != expected_root:

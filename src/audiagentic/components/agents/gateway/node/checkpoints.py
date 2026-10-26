@@ -101,6 +101,23 @@ class NodeReceiptCheckpoints:
         # gateway-owner-epoch is historical audit data, not current authority.
         return value
 
+    def peek(self) -> ReceiptAcknowledgement | None:
+        """Read one validated atomic custody snapshot without an owner lock.
+
+        Historical evidence only, not current service authority or permission to
+        accept work. Safe under outer auth serialization: never acquires the
+        managed-service lock (future mutation order is owner -> auth -> request).
+        """
+        if self._poisoned:
+            raise conflict(1, "Receipt custody is uncertain; restart the stream owner")
+        value = self._read()
+        if value is None:
+            return None
+        return ReceiptAcknowledgement(
+            self.server_id, self.node_id, value["log-incarnation-id"],
+            value["sequence"], value["receipt-sha256"], value["gateway-owner-epoch"],
+        )
+
     def accept(
         self, receipt: Receipt, *, log_incarnation_id: str, expected_epoch: str,
         resolve_target: Callable[[CommandIdentity], CanonicalReceiptTarget],

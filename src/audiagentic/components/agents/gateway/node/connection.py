@@ -61,7 +61,7 @@ def validate_hello(frame: Frame, *, node_id: str, server_id: str) -> None:
 
 def validate_welcome(
     frame: Frame, *, node_id: str, node_epoch: str, server_id: str, challenge: str
-) -> tuple[NodeConnectionIdentity, int]:
+) -> tuple[NodeConnectionIdentity, int, str]:
     _keys(
         frame.payload,
         {
@@ -71,6 +71,7 @@ def validate_welcome(
             "connection-generation",
             "grant-revision",
             "reconcile-required",
+            "capability",
         },
     )
     if (
@@ -84,13 +85,16 @@ def validate_welcome(
         or type(frame.payload["protocol-version"]) is not int
         or frame.payload["protocol-version"] != 1
         or frame.payload["reconcile-required"] is not True
+        or frame.payload["capability"] not in ("active", "drain")
     ):
         raise conflict(1, "Node welcome does not match the current handshake")
     generation = _integer(frame.payload["connection-generation"])
     revision = _integer(frame.payload["grant-revision"])
-    return NodeConnectionIdentity(
-        node_id, node_epoch, frame.gateway_owner_epoch, generation
-    ), revision
+    return (
+        NodeConnectionIdentity(node_id, node_epoch, frame.gateway_owner_epoch, generation),
+        revision,
+        frame.payload["capability"],
+    )
 
 
 @dataclass(frozen=True)
@@ -98,6 +102,7 @@ class ControlEvent:
     type: str
     code: str | None = None
     grant_revision: int | None = None
+    capability: str | None = None
 
 
 class NodeConnection:
@@ -114,15 +119,19 @@ class NodeConnection:
         *,
         role: str,
         grant_revision: int,
+        capability: str,
         current: Callable[[], Awaitable[bool]] | None = None,
         on_close: Callable[[], Awaitable[None]] | None = None,
     ):
         if role not in {"gateway", "node"}:
             raise invalid(1, "Invalid node connection role")
+        if capability not in ("active", "drain"):
+            raise invalid(1, "Invalid node connection capability")
         self.websocket = websocket
         self.identity = identity
         self.role = role
         self.grant_revision = _integer(grant_revision)
+        self.capability = capability
         self.last_liveness_at = time.monotonic()
         self.events: asyncio.Queue[ControlEvent] = asyncio.Queue(maxsize=8)
         self.failure: str | None = None
@@ -151,11 +160,11 @@ class NodeConnection:
             _keys(frame.payload, {"connection-generation"})
             result = None
         elif frame.type == "revoke" and self.role == "node":
-            _keys(frame.payload, {"connection-generation", "grant-revision"})
+            _keys(frame.payload, {"connection-generation", "grant-revision", "capability"})
             revision = _integer(frame.payload["grant-revision"])
-            if revision <= self.grant_revision:
+            if revision <= self.grant_revision or frame.payload["capability"] != "drain":
                 raise conflict(1, "Node revoke revision is stale")
-            result = ControlEvent("revoke", grant_revision=revision)
+            result = ControlEvent("revoke", grant_revision=revision, capability="drain")
         elif frame.type == "error":
             _keys(frame.payload, {"connection-generation", "code"})
             code = _identifier(frame.payload["code"])
@@ -185,8 +194,8 @@ class NodeConnection:
                     except asyncio.QueueFull:
                         raise conflict(1, "Node control inbox is full") from None
                     if event.type == "revoke":
-                        await close_socket(self.websocket, code=1008, reason="Node grant revoked")
-                        return
+                        self.grant_revision = event.grant_revision
+                        self.capability = "drain"
         except ConnectionClosed:
             pass
         except asyncio.CancelledError:
@@ -233,10 +242,12 @@ class NodeConnection:
     async def heartbeat(self):
         await self._send("heartbeat")
 
-    async def revoke(self, revision: int):
+    async def notify_drain(self, revision: int):
         if self.role != "gateway" or _integer(revision) <= self.grant_revision:
             raise conflict(1, "Only gateway may notify a newer grant revocation")
-        await self._send("revoke", **{"grant-revision": revision})
+        await self._send("revoke", **{"grant-revision": revision, "capability": "drain"})
+        self.grant_revision = revision
+        self.capability = "drain"
 
     async def wait_closed(self):
         await self._closed.wait()

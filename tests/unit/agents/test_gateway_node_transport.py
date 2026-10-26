@@ -509,7 +509,18 @@ def test_client_validates_exact_supported_wss_endpoint(endpoint, tmp_path):
 
 
 @pytest.mark.parametrize(
-    "mutation", ["challenge", "server", "epoch", "generation", "revision", "extra", "not-reconcile"]
+    "mutation",
+    [
+        "challenge",
+        "server",
+        "epoch",
+        "generation",
+        "revision",
+        "extra",
+        "not-reconcile",
+        "capability",
+        "missing-capability",
+    ],
 )
 def test_welcome_schema_and_challenge_are_strict(mutation):
     frame = Frame(
@@ -527,6 +538,7 @@ def test_welcome_schema_and_challenge_are_strict(mutation):
             "connection-generation": 1,
             "grant-revision": 1,
             "reconcile-required": True,
+            "capability": "active",
         },
     )
     changes = {
@@ -536,12 +548,18 @@ def test_welcome_schema_and_challenge_are_strict(mutation):
         "revision": {"grant-revision": 0},
         "extra": {"authorization-id": "forged"},
         "not-reconcile": {"reconcile-required": False},
+        "capability": {"capability": "unknown"},
+        "missing-capability": {},
     }
     frame = (
         replace(frame, gateway_owner_epoch=UNBOUND)
         if mutation == "epoch"
         else replace(frame, payload=dict(frame.payload) | changes[mutation])
     )
+    if mutation == "missing-capability":
+        frame = replace(
+            frame, payload={k: v for k, v in frame.payload.items() if k != "capability"}
+        )
     with pytest.raises(AudiaGenticError):
         validate_welcome(
             frame, node_id="node", node_epoch="boot-1", server_id="server", challenge="challenge-1"
@@ -588,14 +606,20 @@ async def test_gateway_revoke_control_is_delivered_without_executing_or_resuming
             "boot-1",
             "owner-1",
             2,
-            {"connection-generation": client.identity.connection_generation, "grant-revision": 2},
+            {
+                "connection-generation": client.identity.connection_generation,
+                "grant-revision": 2,
+                "capability": "drain",
+            },
         )
         before = client.last_liveness_at
         await slot.websocket.send(frame.to_bytes())
         event = await asyncio.wait_for(client.events.get(), 2)
         assert event.type == "revoke" and event.grant_revision == 2
-        await asyncio.wait_for(client.wait_closed(), 2)
+        assert client.capability == "drain" and client.grant_revision == 2
+        assert not client._closed.is_set()
         assert client.last_liveness_at == before
+        await client.heartbeat()
     finally:
         await client.close()
 
@@ -620,6 +644,7 @@ async def test_real_tls_client_rejects_mismatched_welcome(channel, tls, mutation
                 "connection-generation": 1,
                 "grant-revision": 1,
                 "reconcile-required": True,
+                "capability": "active",
             },
         )
         if mutation == "epoch":
@@ -750,3 +775,263 @@ async def test_close_timeout_aborts_wedged_socket(monkeypatch):
     monkeypatch.setattr(module, "CLOSE_TIMEOUT_SECONDS", 0.01)
     await asyncio.wait_for(module.close_socket(websocket), 1)
     assert aborted == [True]
+
+
+def enable_drain_evidence(channel):
+    from audiagentic.components.agents.gateway.node.drain import NodeDrainEligibility
+    from audiagentic.components.agents.gateway.service.host import GATEWAY_SERVICE_KEY
+    from audiagentic.foundation.system.managed_service import ManagedServiceStore
+
+    config = channel.server.config
+    channel.server.owner.drain_eligibility = NodeDrainEligibility(
+        config, ManagedServiceStore(GATEWAY_SERVICE_KEY, root=config.service_root)
+    )
+
+
+@pytest.mark.asyncio
+async def test_real_tls_revoke_accepted_work_drains_and_reconnects_without_work_mutation(
+    channel, monkeypatch
+):
+    from tests.unit.agents.test_gateway_node_drain import bound_request
+
+    from audiagentic.components.agents.gateway import store
+
+    enable_drain_evidence(channel)
+    root = channel.server.config.projects["project"]
+    original = bound_request(root)
+    first = await NodeTransportClient(channel.client, node_epoch="boot-1").connect()
+    second = None
+    try:
+        assert first.capability == "active"
+        slot = channel.authority.serialize(lambda: channel.server.owner._active["node"])
+        await wait_until(lambda: slot.connection is not None)
+        original_notify = slot.connection.notify_drain
+
+        async def notify_outside_auth(revision):
+            assert await asyncio.wait_for(
+                asyncio.to_thread(channel.authority.serialize, lambda: True), 1
+            )
+            await original_notify(revision)
+
+        monkeypatch.setattr(slot.connection, "notify_drain", notify_outside_auth)
+
+        def forbidden(*args, **kwargs):
+            pytest.fail("capability change interrupted, admitted or advanced canonical work")
+
+        for name in (
+            "authorize_owned_node_effect",
+            "apply_owned_node_receipt",
+            "bind_owned_node_dispatch",
+            "transition_owned_terminal",
+            "record_owned_activity",
+        ):
+            monkeypatch.setattr(store, name, forbidden)
+        before = first.last_liveness_at
+        channel.authority.revoke("node", expected_grant_revision=1)
+        assert await channel.server.refresh_capability("node") == "drain"
+        event = await asyncio.wait_for(first.events.get(), 2)
+        assert event.capability == first.capability == slot.capability == "drain"
+        assert event.grant_revision == first.grant_revision == 2
+        assert first.last_liveness_at == before
+        assert not first._closed.is_set()
+        await first.heartbeat()
+        await wait_until(lambda: slot.connection._received_sequence == 2)
+        assert store.read_record(root, original["request-id"]) == original
+        second = await NodeTransportClient(channel.client, node_epoch="boot-1").connect()
+        assert second.capability == "drain" and second.grant_revision == 2
+        await asyncio.wait_for(first.wait_closed(), 2)
+        assert not await asyncio.to_thread(channel.server.owner.remove, slot)
+        assert (
+            channel.authority.serialize(lambda: channel.server.owner.current_identity("node"))
+            == second.identity
+        )
+        await second.heartbeat()
+    finally:
+        if second is not None:
+            await second.close()
+        await first.close()
+
+
+@pytest.mark.asyncio
+async def test_real_tls_disabled_without_work_closes_and_cannot_reconnect(channel):
+    enable_drain_evidence(channel)
+    first = await NodeTransportClient(channel.client, node_epoch="boot-1").connect()
+    try:
+        channel.authority.revoke("node", expected_grant_revision=1)
+        assert await channel.server.refresh_capability("node") is None
+        await asyncio.wait_for(first.wait_closed(), 2)
+        with pytest.raises(InvalidStatus) as caught:
+            await NodeTransportClient(channel.client, node_epoch="boot-2").connect()
+        assert caught.value.response.status_code == 401
+    finally:
+        await first.close()
+
+
+@pytest.mark.asyncio
+async def test_credential_is_checked_before_any_drain_scan_and_rotation_denies_old_token(
+    channel, monkeypatch
+):
+    from tests.unit.agents.test_gateway_node_drain import bound_request
+
+    enable_drain_evidence(channel)
+    bound_request(channel.server.config.projects["project"])
+    channel.authority.revoke("node", expected_grant_revision=1)
+    channel.client.token_file.write_text("rotated-node-token")
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("looked up historical work before credential authentication")
+
+    monkeypatch.setattr(channel.server.owner.drain_eligibility, "eligible", forbidden)
+    with pytest.raises(InvalidStatus) as caught:
+        await raw_connect(channel.client, additional_headers={"Authorization": "Bearer token-node"})
+    assert caught.value.response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_canonical_custody_allows_drain_but_node_claims_do_not(channel):
+    from uuid import uuid4
+
+    from audiagentic.components.agents.gateway.node.checkpoints import NodeReceiptCheckpoints
+    from audiagentic.components.agents.gateway.service.host import GATEWAY_SERVICE_KEY
+    from audiagentic.foundation.io import atomic_write_json
+    from audiagentic.foundation.system.managed_service import ManagedServiceStore
+
+    enable_drain_evidence(channel)
+    channel.authority.revoke("node", expected_grant_revision=1)
+    # A hello (and any claimed cursor) cannot even reach admission without
+    # server-local evidence. Authentication precedes websocket message parsing.
+    with pytest.raises(InvalidStatus):
+        await raw_connect(channel.client)
+    checkpoints = NodeReceiptCheckpoints(
+        ManagedServiceStore(GATEWAY_SERVICE_KEY, root=channel.server.config.service_root),
+        server_id="server",
+        node_id="node",
+    )
+    atomic_write_json(
+        checkpoints.path,
+        {
+            "version": 1,
+            "server-id": "server",
+            "node-id": "node",
+            "log-incarnation-id": str(uuid4()),
+            "sequence": 1,
+            "receipt-sha256": "a" * 64,
+            "gateway-owner-epoch": "historical-owner",
+        },
+    )
+    client = await NodeTransportClient(channel.client, node_epoch="boot-2").connect()
+    try:
+        assert client.capability == "drain"
+        await client.heartbeat()
+    finally:
+        await client.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["command", "effect-authorize", "receipt", "reconcile"])
+async def test_drain_does_not_enable_work_message_routing(channel, kind):
+    from tests.unit.agents.test_gateway_node_drain import bound_request
+
+    enable_drain_evidence(channel)
+    bound_request(channel.server.config.projects["project"])
+    channel.authority.revoke("node", expected_grant_revision=1)
+    websocket, welcome = await raw_handshake(channel.client)
+    try:
+        assert welcome.payload["capability"] == "drain"
+        await websocket.send(
+            Frame(
+                1,
+                kind,
+                "forbidden",
+                "node",
+                "boot-1",
+                "owner-1",
+                2,
+                {"connection-generation": welcome.payload["connection-generation"]},
+            ).to_bytes()
+        )
+        with pytest.raises(ConnectionClosed):
+            await asyncio.wait_for(websocket.recv(), 2)
+    finally:
+        await websocket.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("scope", [{"node": "other"}, {"workspace": "other"}, {"project": "other"}])
+async def test_disabled_wrong_scope_canonical_work_cannot_authenticate_drain(channel, scope):
+    from tests.unit.agents.test_gateway_node_drain import bound_request
+
+    enable_drain_evidence(channel)
+    bound_request(channel.server.config.projects["project"], **scope)
+    channel.authority.revoke("node", expected_grant_revision=1)
+    with pytest.raises(InvalidStatus) as caught:
+        await NodeTransportClient(channel.client, node_epoch="boot-1").connect()
+    assert caught.value.response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_rotated_token_closes_live_socket_and_rejects_old_credential(channel):
+    client = await NodeTransportClient(channel.client, node_epoch="boot-1").connect()
+    try:
+        channel.client.token_file.write_text("new-node-credential")
+        assert await channel.server.refresh_capability("node") is None
+        await asyncio.wait_for(client.wait_closed(), 2)
+        with pytest.raises(InvalidStatus) as caught:
+            await raw_connect(
+                channel.client, additional_headers={"Authorization": "Bearer token-node"}
+            )
+        assert caught.value.response.status_code == 401
+        replacement = await NodeTransportClient(channel.client, node_epoch="boot-2").connect()
+        assert replacement.capability == "active"
+        await replacement.close()
+    finally:
+        await client.close()
+
+
+@pytest.mark.asyncio
+async def test_removed_enrollment_denies_even_with_historical_work(channel):
+    from tests.unit.agents.test_gateway_node_drain import bound_request
+
+    enable_drain_evidence(channel)
+    bound_request(channel.server.config.projects["project"])
+    # Unsupported live configuration replacement poisons authority until
+    # restart; historical work cannot bypass removal or that fail-closed fence.
+    del channel.raw["nodes"]
+    channel.path.write_text(yaml.safe_dump(channel.raw))
+    with pytest.raises(InvalidStatus) as caught:
+        await NodeTransportClient(channel.client, node_epoch="boot-1").connect()
+    assert caught.value.response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_removed_enrollment_refresh_closes_existing_control(channel):
+    client = await NodeTransportClient(channel.client, node_epoch="boot-1").connect()
+    try:
+        del channel.raw["nodes"]
+        channel.path.write_text(yaml.safe_dump(channel.raw))
+        assert await channel.server.refresh_capability("node") is None
+        await asyncio.wait_for(client.wait_closed(), 2)
+    finally:
+        await client.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "claim",
+    [{"request-id": "claimed"}, {"log-incarnation-id": "claimed"}, {"reconnect-checkpoint": 9}],
+)
+async def test_node_claims_never_replace_canonical_eligibility_or_handshake_schema(channel, claim):
+    from tests.unit.agents.test_gateway_node_drain import bound_request
+
+    enable_drain_evidence(channel)
+    bound_request(channel.server.config.projects["project"])
+    channel.authority.revoke("node", expected_grant_revision=1)
+    websocket = await raw_connect(channel.client)
+    try:
+        frame = hello()
+        await websocket.send(replace(frame, payload=dict(frame.payload) | claim).to_bytes())
+        with pytest.raises(ConnectionClosed):
+            await asyncio.wait_for(websocket.recv(), 2)
+        assert not channel.server.owner._active
+    finally:
+        await websocket.close()

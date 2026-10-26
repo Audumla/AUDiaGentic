@@ -17,17 +17,19 @@ from audiagentic.components.agents.gateway.remote_client import load_auth_token
 from audiagentic.components.agents.gateway.service.application import (
     GatewayServiceApplication,
 )
-from audiagentic.components.agents.gateway.service.contract import PROTOCOL_VERSION
+from audiagentic.components.agents.gateway.service.contract import (
+    GATEWAY_SERVICE_KEY,
+    PROTOCOL_VERSION,
+)
 from audiagentic.components.agents.gateway.service.http_transport import GatewayHTTPServer
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.system.managed_process import current_process_evidence
 from audiagentic.foundation.system.managed_service import ManagedServiceStore
-from audiagentic.foundation.system.managed_service_contracts import EndpointInfo, ServiceKey
+from audiagentic.foundation.system.managed_service_contracts import EndpointInfo
 from audiagentic.foundation.system.managed_service_owner import ManagedServiceOwner
 from audiagentic.foundation.time import now_iso_z
 
 logger = logging.getLogger(__name__)
-GATEWAY_SERVICE_KEY = ServiceKey("agent-execution-gateway", "default")
 
 
 class GatewayServiceHost:

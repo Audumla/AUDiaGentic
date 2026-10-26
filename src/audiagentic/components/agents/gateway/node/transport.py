@@ -8,6 +8,7 @@ TLS may terminate at the configured front door; this listener binds loopback onl
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import hmac
 import ssl
 import uuid
@@ -36,6 +37,7 @@ from .connection import (
     validate_welcome,
 )
 from .contracts import MAX_FRAME_BYTES, Frame, _identifier, conflict, invalid
+from .drain import NodeDrainEligibility
 
 _LIMITS = dict(
     compression=None,
@@ -65,13 +67,17 @@ class DirectNodeConnect(connect):
 
 class _NodeSocket(ServerConnection):
     authenticated_node_id: str | None = None
+    authenticated_credential_sha256: str | None = None
 
 
-@dataclass(frozen=True)
+@dataclass
 class ConnectionSlot:
     identity: NodeConnectionIdentity
     websocket: ServerConnection
     grant_revision: int
+    capability: str
+    credential_sha256: str
+    connection: NodeConnection | None = None
 
 
 class NodeConnectionOwner:
@@ -82,30 +88,43 @@ class NodeConnectionOwner:
     authority's authorize_effect callback, avoiding recursive authority locks.
     """
 
-    def __init__(self, authority: NodeGrantAuthority, gateway_owner_epoch: str):
+    def __init__(
+        self,
+        authority: NodeGrantAuthority,
+        gateway_owner_epoch: str,
+        drain_eligibility: NodeDrainEligibility | None = None,
+    ):
         self.authority = authority
         self.gateway_owner_epoch = _identifier(gateway_owner_epoch)
         if gateway_owner_epoch == UNBOUND:
             raise invalid(1, "Gateway owner epoch cannot be unbound")
         self._active: dict[str, ConnectionSlot] = {}
         self._generations: dict[str, int] = {}
+        self.drain_eligibility = drain_eligibility
 
     def _config(self):
         return load_shared_server_config(self.authority.path)
 
+    def _capability(self, config, grant) -> str:
+        if grant.enabled:
+            return "active"
+        if self.drain_eligibility is not None and self.drain_eligibility.eligible(config, grant):
+            return "drain"
+        raise conflict(1, "Disabled node has no canonical historical work")
+
     def authenticate(self, authorization: str) -> str:
         def check():
+            config = self._config()
             matched = None
-            for grant in self._config().nodes:
+            for grant in config.nodes:
                 token = load_auth_token(grant.token_file)
-                if (
-                    hmac.compare_digest(authorization.encode(), f"Bearer {token}".encode())
-                    and grant.enabled
-                ):
-                    matched = grant.node_id
+                if hmac.compare_digest(authorization.encode(), f"Bearer {token}".encode()):
+                    matched = grant
             if matched is None:
-                raise conflict(1, "Node credential is not enrolled and enabled")
-            return matched
+                raise conflict(1, "Node credential is not enrolled")
+            # No canonical lookup until the current credential is authenticated.
+            self._capability(config, matched)
+            return matched.node_id
 
         return self.authority.serialize(check)
 
@@ -113,22 +132,68 @@ class NodeConnectionOwner:
         self, node_id: str, node_epoch: str, websocket
     ) -> tuple[ConnectionSlot, ConnectionSlot | None]:
         def change():
-            grant = next(
-                (g for g in self._config().nodes if g.node_id == node_id and g.enabled), None
-            )
+            config = self._config()
+            grant = next((g for g in config.nodes if g.node_id == node_id), None)
             if grant is None:
-                raise conflict(1, "Node grant is no longer enabled")
+                raise conflict(1, "Node is no longer enrolled")
+            credential = hashlib.sha256(
+                f"Bearer {load_auth_token(grant.token_file)}".encode()
+            ).hexdigest()
+            if not hmac.compare_digest(credential, websocket.authenticated_credential_sha256 or ""):
+                raise conflict(1, "Node credential changed after authentication")
+            capability = self._capability(config, grant)
             generation = self._generations.get(node_id, 0) + 1
             identity = NodeConnectionIdentity(
                 node_id, node_epoch, self.gateway_owner_epoch, generation
             )
-            slot = ConnectionSlot(identity, websocket, grant.revision)
+            slot = ConnectionSlot(identity, websocket, grant.revision, capability, credential)
             old = self._active.get(node_id)
             self._generations[node_id] = generation
             self._active[node_id] = slot
             return slot, old
 
         return self.authority.serialize(change)
+
+    def refresh_capability(self, node_id: str):
+        """Derive live capability under auth; return notification work for caller.
+
+        No service owner lock is acquired here. Future mutations retain the
+        owner-guard -> auth -> canonical request order, never the reverse.
+        """
+
+        def change():
+            slot = self._active.get(node_id)
+            if slot is None:
+                return None
+            config = self._config()
+            grant = next((g for g in config.nodes if g.node_id == node_id), None)
+            try:
+                if grant is None:
+                    raise conflict(1, "Node enrollment removed")
+                credential = hashlib.sha256(
+                    f"Bearer {load_auth_token(grant.token_file)}".encode()
+                ).hexdigest()
+                if not hmac.compare_digest(credential, slot.credential_sha256):
+                    raise conflict(1, "Node credential rotated")
+                capability = self._capability(config, grant)
+                if slot.capability == "drain" and capability != "drain":
+                    raise conflict(1, "Drain connection cannot regain effect capability")
+            except Exception:
+                del self._active[node_id]
+                return slot, None, None
+            old = slot.capability, slot.grant_revision
+            slot.capability, slot.grant_revision = capability, grant.revision
+            return slot, capability, old
+
+        return self.authority.serialize(change)
+
+    def attach(self, slot: ConnectionSlot, connection: NodeConnection):
+        def change():
+            if self._active.get(slot.identity.node_id) is not slot:
+                raise conflict(1, "Node connection replaced before attachment")
+            slot.connection = connection
+
+        self.authority.serialize(change)
 
     def remove(self, slot: ConnectionSlot) -> bool:
         def change():
@@ -155,13 +220,14 @@ class NodeTransportServer:
         authority: NodeGrantAuthority,
         *,
         gateway_owner_epoch: str,
+        drain_eligibility: NodeDrainEligibility | None = None,
     ):
         if config.node_listen is None or config.node_listen.host != "127.0.0.1":
             raise invalid(1, "Node transport requires configured IPv4 loopback listener")
         if config.config_path is None or config.config_path.resolve() != authority.path:
             raise conflict(1, "Node listener config does not match grant authority")
         self.config = config
-        self.owner = NodeConnectionOwner(authority, gateway_owner_epoch)
+        self.owner = NodeConnectionOwner(authority, gateway_owner_epoch, drain_eligibility)
         self._server = None
 
     async def _authenticate_upgrade(self, connection: _NodeSocket, request):
@@ -177,6 +243,9 @@ class NodeTransportServer:
             connection.authenticated_node_id = await asyncio.to_thread(
                 self.owner.authenticate, authorizations[0]
             )
+            connection.authenticated_credential_sha256 = hashlib.sha256(
+                authorizations[0].encode()
+            ).hexdigest()
         except Exception:
             return connection.respond(HTTPStatus.UNAUTHORIZED, "Node authentication failed\n")
         return None
@@ -223,6 +292,7 @@ class NodeTransportServer:
                     "connection-generation": slot.identity.connection_generation,
                     "grant-revision": slot.grant_revision,
                     "reconcile-required": True,
+                    "capability": slot.capability,
                 },
             )
             await asyncio.wait_for(websocket.send(welcome.to_bytes()), timeout=10)
@@ -235,9 +305,11 @@ class NodeTransportServer:
                 slot.identity,
                 role="gateway",
                 grant_revision=slot.grant_revision,
+                capability=slot.capability,
                 current=current,
             )
             connection.start()
+            await asyncio.to_thread(self.owner.attach, slot, connection)
             await connection.wait_closed()
         except asyncio.CancelledError:
             raise
@@ -256,6 +328,34 @@ class NodeTransportServer:
                 finally:
                     if slot is not None:
                         await asyncio.to_thread(self.owner.remove, slot)
+
+    async def refresh_capability(self, node_id: str):
+        """Controlled refresh hook; durable revoke alone never does network I/O."""
+        # Snapshot is for closing only, never authorization. A poisoned/removed
+        # enrollment may make the serialized reload fail before returning a
+        # decision; the previously observed socket must still be closed.
+        prior = self.owner._active.get(node_id)
+        try:
+            result = await asyncio.to_thread(self.owner.refresh_capability, node_id)
+        except Exception:
+            if prior is not None:
+                await close_socket(prior.websocket, code=1008, reason="Node authority unavailable")
+            return None
+        if result is None:
+            return None
+        slot, capability, old = result
+        if capability is None or slot.connection is None:
+            await close_socket(slot.websocket, code=1008, reason="Node capability unavailable")
+            return None
+        if capability == "drain" and old != (capability, slot.grant_revision):
+            try:
+                await slot.connection.notify_drain(slot.grant_revision)
+            except Exception:
+                await close_socket(
+                    slot.websocket, code=1008, reason="Node capability notification failed"
+                )
+                raise
+        return capability
 
     async def start(self, *, ssl_context: ssl.SSLContext | None = None):
         if self._server is not None:
@@ -353,14 +453,16 @@ class NodeTransportClient:
             raw = await asyncio.wait_for(websocket.recv(), timeout=5)
             if not isinstance(raw, bytes):
                 raise invalid(1, "Node welcome must be binary JSON")
-            identity, revision = validate_welcome(
+            identity, revision, capability = validate_welcome(
                 Frame.from_bytes(raw),
                 node_id=self.config.node_id,
                 node_epoch=self.node_epoch,
                 server_id=self.config.server_id,
                 challenge=challenge,
             )
-            connection = NodeConnection(websocket, identity, role="node", grant_revision=revision)
+            connection = NodeConnection(
+                websocket, identity, role="node", grant_revision=revision, capability=capability
+            )
             connection.start()
             return connection
         except BaseException:
