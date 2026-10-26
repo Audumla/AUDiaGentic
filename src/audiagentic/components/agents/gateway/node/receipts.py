@@ -105,7 +105,68 @@ class ReceiptCheckpoint:
     through_receipt_sha256: str | None
 
 
+@dataclass(frozen=True)
+class ReceiptOwnerScope:
+    node_id: str
+    node_epoch: str
+    gateway_owner_epoch: str
+
+    def __post_init__(self):
+        for value in (self.node_id, self.node_epoch, self.gateway_owner_epoch):
+            _identifier(value)
+
+
 class NodeReceiptStore:
+    @classmethod
+    def read_owner_scope(cls, root: Path, *, expected_node_id: str) -> ReceiptOwnerScope | None:
+        """Read actual persisted ownership for restart, without creating/migrating.
+
+        Caller must already hold exclusive node lifecycle ownership and serialize
+        receipt writers. None means no database exists. Invalid/unsupported evidence is
+        never interpreted as a fresh store. Lifecycle exclusivity belongs to the
+        caller's managed node process, not this short receipt-file read fence.
+        """
+        _identifier(expected_node_id)
+        if not isinstance(root, Path) or not root.is_absolute():
+            raise invalid(1, "Node receipt root must be an absolute owner-local path")
+        path, lock = root / "receipts.sqlite3", root / "receipts.lock"
+        wal, shm = root / "receipts.sqlite3-wal", root / "receipts.sqlite3-shm"
+        if any(
+            part.is_symlink() or getattr(part, "is_junction", lambda: False)()
+            for part in (root, *root.parents, path, lock, wal, shm)
+        ):
+            raise invalid(1, "Node receipt paths must not be symlinks or junctions")
+        if not path.exists():
+            return None
+        try:
+            # SQLite owns the read snapshot; no lifecycle claim, lock-file creation,
+            # initialization, journal-mode mutation or migration on this path.
+            # Without a WAL, immutable avoids SQLite recreating WAL/SHM on a
+            # checkpointed WAL-mode database. This requires caller exclusivity.
+            # With live WAL evidence, never ignore it or create a missing index.
+            if wal.exists() and not shm.exists():
+                raise conflict(1, "Receipt WAL requires its existing shared-memory index")
+            uri = path.as_uri() + ("?mode=ro" if wal.exists() else "?mode=ro&immutable=1")
+            db = sqlite3.connect(uri, uri=True, isolation_level=None)
+            try:
+                db.execute("BEGIN")
+                version = db.execute("PRAGMA user_version").fetchone()[0]
+                if version not in (2, 3, 4):
+                    raise conflict(1, "Unsupported persisted node receipt schema")
+                cls._validate_core_schema(db, version)
+                if db.execute("PRAGMA quick_check").fetchall() != [("ok",)]:
+                    raise conflict(1, "Persisted node receipt integrity check failed")
+                if version in (3, 4):
+                    cls._checkpoint(db)
+                rows = db.execute("SELECT singleton,node,epoch,gateway FROM owner").fetchall()
+                if len(rows) != 1 or rows[0][0:2] != (1, expected_node_id):
+                    raise conflict(1, "Persisted receipt owner is missing or belongs to another node")
+                return ReceiptOwnerScope(*rows[0][1:])
+            finally:
+                db.close()
+        except (sqlite3.Error, OSError):
+            raise io_error(1, "Cannot read persisted node receipt owner scope") from None
+
     def __init__(
         self, *, node_id: str, node_epoch: str, gateway_owner_epoch: str, root: Path | None = None
     ):
