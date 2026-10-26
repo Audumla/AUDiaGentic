@@ -156,14 +156,8 @@ def test_persisted_revoke_scope_is_validated_on_replay(tmp_path):
         operation_store.read(created["operation-id"])
 
 
-def test_real_authority_pump_recovers_after_config_commit_before_finish(tmp_path, monkeypatch):
+def _revoke_server_files(tmp_path):
     import yaml
-
-    from audiagentic.components.agents.gateway.node import authority as authority_module
-    from audiagentic.components.agents.gateway.node.authority import NodeGrantAuthority
-    from audiagentic.components.agents.gateway.service.shared_config import (
-        load_shared_server_config,
-    )
 
     project = tmp_path / "project"
     project.mkdir()
@@ -186,6 +180,17 @@ def test_real_authority_pump_recovers_after_config_commit_before_finish(tmp_path
             "principals": ["principal"], "revision": 7, "enabled": True,
         }},
     }), encoding="utf-8")
+    return config_path, service_root
+
+
+def test_real_authority_pump_recovers_after_config_commit_before_finish(tmp_path, monkeypatch):
+    from audiagentic.components.agents.gateway.node import authority as authority_module
+    from audiagentic.components.agents.gateway.node.authority import NodeGrantAuthority
+    from audiagentic.components.agents.gateway.service.shared_config import (
+        load_shared_server_config,
+    )
+
+    config_path, service_root = _revoke_server_files(tmp_path)
     operation_store = ManagementOperationStore(service_root)
     created = operation_store.create(command(), local_only=True)
     first_authority = NodeGrantAuthority(load_shared_server_config(config_path))
@@ -233,3 +238,109 @@ def test_real_authority_pump_recovers_after_config_commit_before_finish(tmp_path
     unexpected_write.assert_not_called()
     assert restarted_application.mock_calls == []
     assert ManagementOperationPump(restarted_store, restarted_effects).run_once(owner_epoch="after-crash") == []
+
+
+def test_real_authority_pump_recovers_after_child_hard_kill(tmp_path, monkeypatch):
+    """Hard process termination after YAML commit, before operation finish."""
+    import os
+    import subprocess
+    import sys
+    import time
+    from pathlib import Path
+
+    from audiagentic.components.agents.gateway.node import authority as authority_module
+    from audiagentic.components.agents.gateway.node.authority import NodeGrantAuthority
+    from audiagentic.components.agents.gateway.service.shared_config import (
+        load_shared_server_config,
+    )
+
+    config_path, service_root = _revoke_server_files(tmp_path)
+    operation_store = ManagementOperationStore(service_root)
+    created = operation_store.create(command(), local_only=True)
+    ready_path = tmp_path / "grant-committed.ready"
+    script = r"""
+import sys
+import threading
+from pathlib import Path
+
+from audiagentic.components.agents.gateway.node.authority import NodeGrantAuthority
+from audiagentic.components.agents.gateway.operations import (
+    GatewayOperationExecutor, ManagementOperationPump, ManagementOperationStore,
+)
+from audiagentic.components.agents.gateway.service.shared_config import load_shared_server_config
+
+config_path, service_root, ready_path = map(Path, sys.argv[1:])
+authority = NodeGrantAuthority(load_shared_server_config(config_path))
+operation_store = ManagementOperationStore(service_root)
+
+def pause_before_finish(*args, **kwargs):
+    # Executor returned only after the real authority replaced and reloaded
+    # the YAML. The operation is still claimed; finish has not written.
+    grant = load_shared_server_config(config_path).nodes[0]
+    assert grant.enabled is False and grant.revision == 8
+    assert operation_store.read(args[0])["state"] == "running"
+    ready_path.write_text("grant-committed-before-finish", encoding="utf-8")
+    threading.Event().wait(60)
+    raise AssertionError("parent did not hard-kill its child")
+
+operation_store.finish = pause_before_finish
+executor = GatewayOperationExecutor(object(), node_authority=authority)
+ManagementOperationPump(operation_store, executor).run_once(owner_epoch="killed-child-owner")
+raise AssertionError("child unexpectedly finished the operation")
+"""
+    environment = dict(os.environ)
+    # Use exactly the package under test, whether source or an installed wheel.
+    import_root = str(Path(authority_module.__file__).resolve().parents[5])
+    environment["PYTHONPATH"] = os.pathsep.join(filter(None, (
+        import_root, environment.get("PYTHONPATH"),
+    )))
+    child = subprocess.Popen(
+        [sys.executable, "-c", script, str(config_path), str(service_root), str(ready_path)],
+        cwd=tmp_path, env=environment,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+    )
+    try:
+        deadline = time.monotonic() + 30
+        while not ready_path.exists():
+            if child.poll() is not None:
+                stdout, stderr = child.communicate(timeout=5)
+                pytest.fail(f"child exited before confirmed grant commit: {child.returncode}; {stdout}; {stderr}")
+            if time.monotonic() >= deadline:
+                pytest.fail("child did not reach confirmed grant commit before timeout")
+            time.sleep(0.02)
+        assert child.poll() is None
+        committed = config_path.read_bytes()
+        grant = load_shared_server_config(config_path).nodes[0]
+        assert grant.enabled is False and grant.revision == 8
+        interrupted = operation_store.read(created["operation-id"])
+        assert interrupted["state"] == "running"
+        assert interrupted["owner-epoch"] == "killed-child-owner"
+        assert interrupted["result"] is None
+
+        # Popen.kill uses TerminateProcess on Windows and SIGKILL on POSIX.
+        # Only this owned child is targeted; no graceful cleanup is invoked.
+        child.kill()
+        child.communicate(timeout=10)
+        assert child.returncode != 0
+    finally:
+        if child.poll() is None:
+            child.kill()
+            child.communicate(timeout=10)
+
+    restarted_store = ManagementOperationStore(service_root)
+    restarted_authority = NodeGrantAuthority(load_shared_server_config(config_path))
+    restarted_effects, application = executor(restarted_authority)
+    unexpected_write = Mock(side_effect=AssertionError("hard-kill replay must not rewrite grant config"))
+    monkeypatch.setattr(authority_module, "atomic_write_bytes", unexpected_write)
+    completed = ManagementOperationPump(restarted_store, restarted_effects).run_once(owner_epoch="restarted-owner")
+    assert len(completed) == 1
+    assert completed[0]["state"] == "completed", completed[0]
+    assert completed[0]["owner-epoch"] == "restarted-owner"
+    assert completed[0]["result"] == {"node-id": "node-1", "revoked": True}
+    assert completed[0]["revision"] == interrupted["revision"] + 3
+    assert config_path.read_bytes() == committed
+    grant = load_shared_server_config(config_path).nodes[0]
+    assert grant.enabled is False and grant.revision == 8
+    unexpected_write.assert_not_called()
+    assert application.mock_calls == []
+    assert ManagementOperationPump(restarted_store, restarted_effects).run_once(owner_epoch="restarted-owner") == []
