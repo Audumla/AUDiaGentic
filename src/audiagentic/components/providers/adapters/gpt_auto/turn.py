@@ -1988,6 +1988,22 @@ class GptAutoTurn:
             *,
             allow_legacy_error: bool = False,
         ) -> tuple[ChatSnapshot | None, ChatMessageRef | None]:
+            if (
+                self.chat.provider_session_id
+                and self.chat.chat_url
+                and canonical_chat_url(raw.url) == canonical_chat_url(self.chat.chat_url)
+                and parse_project_id(raw.url) == parse_project_id(self.chat.chat_url)
+                and url_matches_provider_session(raw.url, self.chat.provider_session_id)
+                and _empty_owned_response_identity_transient(
+                    baseline, raw, prompt_message_id=prompt_message_id or "",
+                    prompt_text=self.request.body or self._recovery_correlation_text,
+                    bound_assistant_id=self._response_message_id,
+                )
+            ):
+                # Retain the pin; an empty renderer candidate is neither a new
+                # response nor progress. The outer observation policy still
+                # owns cancellation and deadlines.
+                return None, None
             try:
                 return _scope_response_snapshot(
                     baseline,
@@ -3811,6 +3827,48 @@ def _terminal_owned_response_span(snapshot: ChatSnapshot, prompt_message_id: str
             and tail[0].sequence < tail[1].sequence):
         return None
     return tail[-1]
+
+
+def _empty_owned_response_identity_transient(
+    baseline: ChatSnapshot, snapshot: ChatSnapshot, *,
+    prompt_message_id: str, prompt_text: str, bound_assistant_id: str | None,
+) -> bool:
+    """Defer an empty prompt-correlated candidate without authorizing rebind."""
+    if (
+        not bound_assistant_id or not prompt_text
+        or snapshot.error_present or snapshot.latest_assistant_text
+        or not snapshot.latest_assistant_id
+        or snapshot.latest_assistant_id == bound_assistant_id
+        or snapshot.latest_assistant_id == baseline.latest_assistant_id
+        or snapshot.latest_assistant_id in baseline.assistant_message_ids
+        or any(ref.role == "assistant" and ref.message_id == snapshot.latest_assistant_id
+               for ref in baseline.message_refs)
+        or snapshot.latest_user_id != prompt_message_id
+        or not same_chat_identity(baseline.url, snapshot.url)
+        or not _fallback_prompt_anchor_is_stable(
+            baseline, snapshot, prompt_message_id, prompt_text=prompt_text,
+        )
+    ):
+        return False
+    prompts = [i for i, ref in enumerate(snapshot.message_refs)
+               if ref.role == "user" and ref.message_id == prompt_message_id]
+    if len(prompts) != 1:
+        return False
+    prompt = snapshot.message_refs[prompts[0]]
+    if not PromptFingerprint.from_text(prompt_text).matches_text(
+        prompt.correlation_text or prompt.text or ""
+    ):
+        return False
+    tail = snapshot.message_refs[prompts[0] + 1:]
+    candidates = [ref for ref in tail
+                  if ref.role == "assistant" and ref.message_id == snapshot.latest_assistant_id]
+    return bool(
+        len(candidates) == 1
+        and not any(ref.role == "user" for ref in tail)
+        and not candidates[0].text and not candidates[0].markdown
+        and not (prompt.renderer_turn_id and candidates[0].renderer_turn_id
+                 and prompt.renderer_turn_id != candidates[0].renderer_turn_id)
+    )
 
 
 def _assistant_identity_is_pending(

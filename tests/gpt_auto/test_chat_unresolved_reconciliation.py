@@ -614,6 +614,61 @@ async def test_readiness_failure_is_typed_as_not_started_and_retryable(
 
 
 @pytest.mark.asyncio
+async def test_missing_idle_renderer_retains_durable_chat_for_queued_readiness_retry():
+    chat = _chat(unresolved=False)
+    chat.state = ChatState.RECOVERING
+    chat.page_handle = None
+    chat.provider_session_id = "conversation-1"
+    chat.chat_url = "https://chatgpt.com/g/g-p-project/c/conversation-1"
+
+    async def still_recovering():
+        raise RuntimeError("gpt-auto chat is not ready (state=recovering)")
+
+    chat.ensure_ready = still_recovering
+    transport = GptAutoSessionTransport(chat)
+    with pytest.raises(AudiaGenticError) as raised:
+        await transport.prompt(SessionPrompt(turn_id="req-next", body="new request"), lambda _item: None)
+
+    assert chat.state is ChatState.RECOVERING  # retained, never falsely READY
+    assert transport.turn_failure_disposition() is SessionFailureDisposition.RETAIN
+    assert raised.value.details["retryable-same-session"] is True
+    assert raised.value.details["submission-attempted"] is False
+    assert transport._active_turn is None  # no composer/Send path was reached
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("blocked", ["active", "unresolved", "unknown-proof", "wrong-ref", "owner-expired", "binding-error", "auth"])
+async def test_readiness_retention_requires_unsent_matching_conversation_and_live_owner(blocked):
+    chat = _chat(unresolved=False)
+    chat.state = ChatState.RECOVERING
+    chat.page_handle = None
+    chat.provider_session_id = "conversation-1"
+    chat.chat_url = "https://chatgpt.com/g/g-p-project/c/conversation-1"
+    details = {
+        "failure-stage": "readiness", "submission-state": "not_started",
+        "submission-attempted": False, "submission-proven": False,
+        "submission-ambiguous": False, "previous-turn-unresolved": False,
+    }
+    if blocked == "active":
+        chat.active_turn_id = "req-old"
+    elif blocked == "unresolved":
+        chat.unresolved_turn_pending = True
+    elif blocked == "unknown-proof":
+        details.pop("submission-attempted")
+    elif blocked == "wrong-ref":
+        chat.chat_url += "-other"
+    elif blocked == "owner-expired":
+        chat.set_page_mutation_owner_probe(lambda: False)
+    elif blocked == "binding-error":
+        details["cause-type"] = "ProviderBindingIntegrityError"
+    elif blocked == "auth":
+        chat._last_snapshot = _terminal_snapshot(dom_signals=frozenset({"auth-required"}))
+    assert not await chat.retain_after_turn_failure(AudiaGenticError(
+        code="EXT-GPTAUTO-004", kind="providers", message="readiness lost", details=details,
+    ))
+
+
+@pytest.mark.asyncio
 async def test_load_error_readiness_preserves_safe_fresh_session_recovery_evidence() -> None:
     chat = _chat(unresolved=False)
     transport = GptAutoSessionTransport(chat)
