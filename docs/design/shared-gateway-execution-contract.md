@@ -7,6 +7,13 @@ RV1214. The A2A/ACP addendum was approved at
 RV1216. SH35/SH36 own planning; SH37-SH43 remain pending delivery/qualification.
 No runtime capability is enabled here. Prior release prerequisite: v0.6.0.
 
+The subsequent industry/agent standards audit identified implementation-entry
+gaps despite these design-only approvals. The current proposed decisions and
+verified specification references are in
+[Admission and recovery decisions](shared-gateway-admission-recovery.md).
+Implementation readiness remains conditional until its transaction, grants,
+durability and independent dependency/wire audit gates are satisfied.
+
 ## Scope and decisions
 
 Support a shared standalone gateway, server-hosted execution, caller-local
