@@ -5,8 +5,6 @@ records. Imports _shared for constants — one-way edges only.
 """
 from __future__ import annotations
 
-from audiagentic.foundation.observability.journal_segments import has_segments, head_read_lock
-
 import base64
 import json
 import logging
@@ -17,11 +15,18 @@ from typing import Any
 from audiagentic.components.agents.agents_paths import (
     gateway_request_path,
     gateway_root,
-    gateway_timeline_path,
     gateway_timeline_index_path,
+    gateway_timeline_path,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError, redact_details
-from audiagentic.foundation.io import atomic_write_json, iter_ndjson, last_ndjson, read_text_with_retry, tail_ndjson
+from audiagentic.foundation.io import (
+    atomic_write_json,
+    iter_ndjson,
+    last_ndjson,
+    read_text_with_retry,
+    tail_ndjson,
+)
+from audiagentic.foundation.observability.journal_segments import has_segments, head_read_lock
 from audiagentic.foundation.time import now_iso_z
 
 from . import _shared
@@ -682,7 +687,6 @@ def _read_record_payload(project_root: Path, request_id: str) -> dict[str, Any]:
     return payload
 
 
-import json  # noqa: E402
 
 
 def _migrate_v1_payload(payload: dict[str, Any]) -> dict[str, Any]:
@@ -694,12 +698,17 @@ def _migrate_v1_payload(payload: dict[str, Any]) -> dict[str, Any]:
     treatment of an already-dispatched record with no durable binding.
     """
     migrated = dict(payload)
-    if payload.get("contract-version") == "v8":
+    if payload.get("contract-version") in {"v8", "v9"}:
         # Modern ownership/recovery/session facts are authoritative. Upgrade
         # only the envelope; never run v8 through historical fence clearing.
         migrated["contract-version"] = _shared._CONTRACT_VERSION
         migrated.setdefault("node-dispatch", None)
         migrated.setdefault("node-placement", None)
+        dispatch = migrated.get("node-dispatch")
+        if isinstance(dispatch, dict):
+            # Pre-attestation command identity is historical evidence only.
+            # Do not infer an accepted attestation from old payload/receipts.
+            migrated["node-dispatch"] = {**dispatch, "attestation-sha256": None}
         return _validate(migrated, code="VAL-AGW-005")
     if payload.get("contract-version") == _shared._CONTRACT_VERSION:
         migrated.setdefault("node-dispatch", None)
@@ -717,7 +726,7 @@ def _migrate_v1_payload(payload: dict[str, Any]) -> dict[str, Any]:
     # A briefly deployed v4 writer could have persisted the version before
     # adding all activity fields. Treat that shape as migratable too; never
     # strand a durable request merely because a process restarted mid-cutover.
-    if contract_version not in {"v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8", _shared._CONTRACT_VERSION}:
+    if contract_version not in {"v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8", "v9", _shared._CONTRACT_VERSION}:
         return _validate(migrated, code="VAL-AGW-005")
     # v7 is the first record contract with nested provider/owner activity.
     # Keep the historical v5 migration target for pre-v6 records, while
@@ -726,11 +735,11 @@ def _migrate_v1_payload(payload: dict[str, Any]) -> dict[str, Any]:
     # v8 introduces durable request sessions.  Existing v7 records remain
     # readable as v7: a historic sessionless record cannot honestly be
     # re-labelled v8 without first creating its companion session record.
-    # New admissions are always v9; dispatch never relies on this migration
+    # New admissions are always v10; dispatch never relies on this migration
     # to invent a session for an in-flight legacy request.
     migrated["contract-version"] = (
         _shared._CONTRACT_VERSION
-        if contract_version in {"v6", "v8", _shared._CONTRACT_VERSION}
+        if contract_version in {"v6", "v8", "v9", _shared._CONTRACT_VERSION}
         else ("v7" if contract_version == "v7" else "v5")
     )
     if migrated["contract-version"] == _shared._CONTRACT_VERSION:
@@ -741,7 +750,7 @@ def _migrate_v1_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "provider-session" if migrated.get("session-id") else "worker",
     )
     migrated.setdefault("continuation-session-id", migrated.get("session-id"))
-    if contract_version not in {"v8", _shared._CONTRACT_VERSION}:
+    if contract_version not in {"v8", "v9", _shared._CONTRACT_VERSION}:
         migrated.update({
             "dispatch-owner-epoch": None,
             "dispatch-claimed-at": None,

@@ -30,8 +30,11 @@
     ,"activity-lease-expires-at"
   ],
   "allOf": [{
-    "if": {"properties": {"contract-version": {"const": "v9"}}, "required": ["contract-version"]},
+    "if": {"properties": {"contract-version": {"enum": ["v9", "v10"]}}, "required": ["contract-version"]},
     "then": {"required": ["node-dispatch", "node-placement"]}
+  }, {
+    "if": {"properties": {"contract-version": {"const": "v10"}}, "required": ["contract-version"]},
+    "then": {"properties": {"node-dispatch": {"required": ["attestation-sha256"]}}}
   }],
   "additionalProperties": false,
   "properties": {
@@ -66,6 +69,12 @@
         "output-sha256"
       ],
       "properties": {
+        "attestation-sha256": {
+          "type": ["string", "null"],
+          "pattern": "^[0-9a-f]{64}$",
+          "default": null,
+          "description": "Digest of the accepted preparation attestation; null is historical evidence only."
+        },
         "identity": {
           "type": "object",
           "additionalProperties": false,
@@ -208,7 +217,7 @@
       }, "required": ["code", "message"], "additionalProperties": false
     }},
     "contract-version": {
-      "enum": ["v5", "v6", "v7", "v8", "v9"]
+      "enum": ["v5", "v6", "v7", "v8", "v9", "v10"]
     },
     "request-id": {
       "type": "string"

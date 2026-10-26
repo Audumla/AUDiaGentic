@@ -27,14 +27,45 @@ def running(tmp_path):
     return tmp_path, started
 
 
-def identity(record, **changes):
+def prepared_command(record):
+    import hashlib
+
+    from audiagentic.components.agents.gateway.node.contracts import canonical_json
+    from audiagentic.components.agents.gateway.node.preparation import (
+        PreparationBinding,
+        PromptSemanticIdentity,
+        build_final_command_payload,
+        prepare_node_command,
+    )
+
+    raw = "hello"
+    semantic = PromptSemanticIdentity(
+        "a" * 64, "b" * 64, "selected-prompt", "profile", 1,
+        hashlib.sha256(b"expanded").hexdigest(), hashlib.sha256(raw.encode()).hexdigest(),
+    )
+    binding = PreparationBinding(
+        "cmd-1", record["request-id"], "node", "node-epoch", "owner", 1,
+        "workspace", 1, 1, "challenge", "preparation-request",
+    )
+    preparation = prepare_node_command(
+        binding=binding, semantic=semantic, raw_prompt=raw, rendered_prompt="PRIVATE rendered",
+        manifest_id="manifest", context_fingerprint="c" * 64, runtime_digest="d" * 64,
+        provider_manifest=b"PRIVATE manifest",
+        worker_id=record["worker-id"], attempt_epoch=record["attempt-epoch"],
+        provider_id="node-provider", model_id="node-model", model_alias=None,
+    )
+    payload = build_final_command_payload(preparation, raw)
     command = CommandIdentity(
         command_id="cmd-1", request_id=record["request-id"], node_id="node",
         node_epoch="node-epoch", gateway_owner_epoch="owner", connection_generation=1,
         workspace_id="workspace", grant_revision=1, binding_generation=1,
-        payload_sha256="a" * 64, execution_profile_id="profile",
+        payload_sha256=hashlib.sha256(canonical_json(payload)).hexdigest(), execution_profile_id="profile",
     )
-    return replace(command, **changes)
+    return command, payload, preparation.attestation
+
+
+def identity(record, **changes):
+    return replace(prepared_command(record)[0], **changes)
 
 
 def fences(record, **changes):
@@ -47,7 +78,9 @@ def fences(record, **changes):
 
 def bind(root, record, command=None, **changes):
     return store.bind_owned_node_dispatch(
-        root, record["request-id"], identity=command or identity(record), **fences(record, **changes),
+        root, record["request-id"], identity=command or identity(record),
+        command_payload=prepared_command(record)[1], accepted_attestation=prepared_command(record)[2],
+        **fences(record, **changes),
     )
 
 
@@ -55,6 +88,7 @@ def authorize(root, record, command=None, **changes):
     command = command or identity(record)
     return store.authorize_owned_node_effect(
         root, record["request-id"], identity=command, authorization_id="auth-1",
+        accepted_attestation=prepared_command(record)[2],
         current_node_epoch=command.node_epoch,
         current_connection_generation=command.connection_generation, **fences(record, **changes),
     )
@@ -71,9 +105,9 @@ def apply(root, record, value, **changes):
     )
 
 
-def test_new_record_v9_defaults_and_strict_schema(running):
+def test_new_record_v10_defaults_and_strict_schema(running):
     root, record = running
-    assert record["contract-version"] == "v9"
+    assert record["contract-version"] == "v10"
     assert record["node-dispatch"] is None
     missing = dict(record)
     missing.pop("node-dispatch")
@@ -104,7 +138,7 @@ def test_v8_migration_preserves_entire_modern_record(running):
     })
     atomic_write_json(gateway_request_path(root, record["request-id"]), legacy)
     migrated = store.read_record(root, record["request-id"])
-    assert migrated == {**legacy, "contract-version": "v9", "node-dispatch": None, "node-placement": None}
+    assert migrated == {**legacy, "contract-version": "v10", "node-dispatch": None, "node-placement": None}
     assert store.read_record(root, record["request-id"]) == migrated
 
 
@@ -176,6 +210,7 @@ def test_bind_and_authorize_exact_replay_are_no_write(running):
     with pytest.raises(AudiaGenticError, match="CON-AGND-001"):
         store.authorize_owned_node_effect(
             root, record["request-id"], identity=identity(record), authorization_id="different",
+            accepted_attestation=prepared_command(record)[2],
             current_node_epoch="node-epoch", current_connection_generation=1, **fences(record),
         )
 
@@ -187,6 +222,7 @@ def test_stale_live_connection_cannot_authorize(running, epoch, generation):
     with pytest.raises(AudiaGenticError, match="CON-AGND-001"):
         store.authorize_owned_node_effect(
             root, record["request-id"], identity=identity(record), authorization_id="auth-1",
+            accepted_attestation=prepared_command(record)[2],
             current_node_epoch=epoch, current_connection_generation=generation, **fences(record),
         )
     assert store.read_record(root, record["request-id"]) == record
@@ -292,6 +328,7 @@ def test_receipt_does_not_reauthorize_on_new_connection(running):
     with pytest.raises(AudiaGenticError, match="CON-AGND-001"):
         store.authorize_owned_node_effect(
             root, record["request-id"], identity=command, authorization_id="auth-1",
+            accepted_attestation=prepared_command(record)[2],
             current_node_epoch="node-epoch", current_connection_generation=2, **fences(record),
         )
     assert store.read_record(root, record["request-id"]) == record
@@ -360,7 +397,7 @@ def test_placement_schema_rejects_incomplete_or_extra_authority(invalid):
         store.build_record(execution_profile_id="profile", prompt_body="hello", node_placement=invalid)
 
 
-def test_missing_v9_placement_defaults_without_clearing_ownership(running):
+def test_missing_v10_placement_defaults_without_clearing_ownership(running):
     root, record = running
     old = deepcopy(record)
     old.pop("node-placement")
@@ -426,3 +463,233 @@ def test_bind_and_authorize_preserve_sealed_principal_project_facts(running):
     assert admitted["server-project-id"] == "server-project"
     assert bound["node-placement"] == authorized["node-placement"] == admitted
     assert authorized["node-dispatch"]["authorization-state"] == "authorized"
+
+
+def test_bound_command_persists_only_canonical_attestation_digest(running):
+    root, record = running
+    command, payload, accepted = prepared_command(record)
+    bound = store.bind_owned_node_dispatch(
+        root, record["request-id"], identity=command, command_payload=payload,
+        accepted_attestation=accepted, **fences(record),
+    )
+    assert bound["node-dispatch"]["attestation-sha256"] == accepted.digest
+    assert bound["node-dispatch"]["identity"]["payload-sha256"] == command.payload_sha256
+    assert bound["node-dispatch"]["authorization-state"] == "not-authorized"
+    persisted = gateway_request_path(root, record["request-id"]).read_bytes()
+    assert b"PRIVATE" not in persisted
+    assert b"raw-prompt" not in persisted
+    assert b"hello" not in persisted
+    authorized = authorize(root, bound)
+    assert authorized["node-dispatch"]["attestation-sha256"] == accepted.digest
+
+
+@pytest.mark.parametrize("substitution", [
+    "raw-prompt", "semantic", "attestation", "challenge", "exchange",
+    "arbitrary-prepared-bytes", "missing-attestation", "wrong-payload-digest",
+])
+def test_bind_rejects_substituted_final_payload_without_artifacts(running, substitution):
+    import hashlib
+    import json
+
+    from audiagentic.components.agents.gateway.node.contracts import canonical_json
+
+    root, record = running
+    command, frozen, accepted = prepared_command(record)
+    payload = json.loads(canonical_json(frozen))
+    if substitution == "raw-prompt":
+        payload["raw-prompt"] = "different instructions"
+    elif substitution == "semantic":
+        payload["semantic"]["composition-fingerprint"] = "e" * 64
+        payload["attestation"]["semantic"]["composition-fingerprint"] = "e" * 64
+    elif substitution == "attestation":
+        payload["attestation"]["rendered-prompt-sha256"] = "e" * 64
+    elif substitution == "challenge":
+        payload["preparation-challenge"] = "different-challenge"
+    elif substitution == "exchange":
+        payload["preparation-request-id"] = "different-exchange"
+    elif substitution == "arbitrary-prepared-bytes":
+        payload = b"some prepared bytes are not an accepted command"
+    elif substitution == "missing-attestation":
+        payload.pop("attestation")
+    if substitution == "wrong-payload-digest":
+        command = replace(command, payload_sha256="f" * 64)
+    elif isinstance(payload, dict):
+        # A matching replacement payload digest must NOT bless altered
+        # semantics, raw text, or an unaccepted attestation.
+        command = replace(command, payload_sha256=hashlib.sha256(canonical_json(payload)).hexdigest())
+    path = gateway_request_path(root, record["request-id"])
+    before = path.read_bytes()
+    files_before = {p.relative_to(root) for p in root.rglob("*") if p.is_file()}
+    with pytest.raises(AudiaGenticError):
+        store.bind_owned_node_dispatch(
+            root, record["request-id"], identity=command, command_payload=payload,
+            accepted_attestation=accepted, **fences(record),
+        )
+    assert path.read_bytes() == before
+    assert {p.relative_to(root) for p in root.rglob("*") if p.is_file()} == files_before
+
+
+@pytest.mark.parametrize("wrong", ["other-attestation", "plain-digest", "arbitrary-bytes", "null"])
+def test_authorization_requires_exact_typed_accepted_attestation(running, wrong):
+    root, record = running
+    record = bind(root, record)
+    command, _, accepted = prepared_command(record)
+    value = {
+        "other-attestation": replace(accepted, runtime_digest="e" * 64),
+        "plain-digest": accepted.digest,
+        "arbitrary-bytes": b"prepared bytes",
+        "null": None,
+    }[wrong]
+    path = gateway_request_path(root, record["request-id"])
+    before = path.read_bytes()
+    files_before = {p.relative_to(root) for p in root.rglob("*") if p.is_file()}
+    with pytest.raises(AudiaGenticError, match="CON-AGND-001"):
+        store.authorize_owned_node_effect(
+            root, record["request-id"], identity=command, authorization_id="auth-1",
+            accepted_attestation=value, current_node_epoch=command.node_epoch,
+            current_connection_generation=command.connection_generation, **fences(record),
+        )
+    assert path.read_bytes() == before
+    assert {p.relative_to(root) for p in root.rglob("*") if p.is_file()} == files_before
+
+
+@pytest.mark.parametrize("authorized", [False, True])
+def test_v9_bound_unknown_attestation_remains_evidence_only(running, authorized):
+    root, record = running
+    record = bind(root, record)
+    if authorized:
+        record = authorize(root, record)
+    legacy = deepcopy(record)
+    legacy["contract-version"] = "v9"
+    legacy["node-dispatch"].pop("attestation-sha256")
+    path = gateway_request_path(root, record["request-id"])
+    atomic_write_json(path, legacy)
+    migrated = store.read_record(root, record["request-id"])
+    expected = {
+        **legacy, "contract-version": "v10",
+        "node-dispatch": {**legacy["node-dispatch"], "attestation-sha256": None},
+    }
+    assert migrated == expected
+    before = path.read_bytes()
+    # Neither a valid newly supplied payload nor a repeated old authorization
+    # can invent missing acceptance evidence or upgrade the old command.
+    for attempt in (lambda: bind(root, migrated), lambda: authorize(root, migrated)):
+        with pytest.raises(AudiaGenticError, match="CON-AGND-001"):
+            attempt()
+        assert path.read_bytes() == before
+    evidence = apply(root, migrated, receipt(identity(migrated), 3, "prepared"))
+    assert evidence["node-dispatch"]["attestation-sha256"] is None
+    assert evidence["node-dispatch"]["authorization-id"] == migrated["node-dispatch"]["authorization-id"]
+
+
+def test_v9_to_v10_preserves_every_owner_recovery_session_and_receipt_fact(running):
+    root, record = running
+    record = authorize(root, bind(root, record))
+    record = apply(root, record, receipt(identity(record), 10, "native-accepted"))
+    legacy = deepcopy(record)
+    legacy["contract-version"] = "v9"
+    legacy["node-dispatch"].pop("attestation-sha256")
+    legacy.update({
+        "recovery": {"reason": "owner-loss", "outcome": "in-place", "attempt": 2},
+        "recovery-required": True, "replay-required": True, "replay-reason": "owner-loss",
+        "resumed-from-request-id": "req_previous", "replayed-by-request-id": "req_next",
+        "provider-metadata": {"chat-url": "https://chatgpt.com/c/retained"},
+        "resolved-source-id": "source-1", "resolved-capacity-generation": "capacity-1",
+    })
+    atomic_write_json(gateway_request_path(root, record["request-id"]), legacy)
+    expected = {
+        **legacy, "contract-version": "v10",
+        "node-dispatch": {**legacy["node-dispatch"], "attestation-sha256": None},
+    }
+    assert store.read_record(root, record["request-id"]) == expected
+    assert store.read_record(root, record["request-id"]) == expected
+
+
+def test_v10_bound_dispatch_requires_nullable_attestation_checkpoint(running):
+    root, record = running
+    record = bind(root, record)
+    missing = deepcopy(record)
+    missing["node-dispatch"].pop("attestation-sha256")
+    with pytest.raises(AudiaGenticError):
+        store.write_record(root, missing)
+    unknown = deepcopy(record)
+    unknown["node-dispatch"]["attestation-sha256"] = None
+    store.write_record(root, unknown)
+    with pytest.raises(AudiaGenticError, match="CON-AGND-001"):
+        authorize(root, unknown)
+
+
+@pytest.mark.parametrize("field,value", [("worker_id", "other-worker"), ("attempt_epoch", 2)])
+def test_bind_rejects_attestation_for_another_worker_attempt_before_write(running, field, value):
+    import hashlib
+    import json
+
+    from audiagentic.components.agents.gateway.node.contracts import canonical_json
+
+    root, record = running
+    command, frozen, accepted = prepared_command(record)
+    wrong = replace(accepted, **{field: value})
+    payload = json.loads(canonical_json(frozen))
+    payload["attestation"] = wrong.to_mapping()
+    command = replace(command, payload_sha256=hashlib.sha256(canonical_json(payload)).hexdigest())
+    path = gateway_request_path(root, record["request-id"])
+    before = path.read_bytes()
+    files_before = {p.relative_to(root) for p in root.rglob("*") if p.is_file()}
+    with pytest.raises(AudiaGenticError, match="CON-AGND-001") as error:
+        store.bind_owned_node_dispatch(
+            root, record["request-id"], identity=command,
+            command_payload=payload, accepted_attestation=wrong, **fences(record),
+        )
+    assert "owned worker attempt" in error.value.message
+    assert path.read_bytes() == before
+    assert {p.relative_to(root) for p in root.rglob("*") if p.is_file()} == files_before
+
+
+@pytest.mark.parametrize("field,value", [("worker-id", "next-worker"), ("attempt-epoch", 2)])
+@pytest.mark.parametrize("already_authorized", [False, True])
+@pytest.mark.parametrize("operation", ["bind", "authorize"])
+def test_old_attestation_cannot_follow_changed_canonical_attempt(
+    running, field, value, already_authorized, operation
+):
+    root, record = running
+    command, payload, accepted = prepared_command(record)
+    record = bind(root, record)
+    if already_authorized:
+        record = authorize(root, record)
+    # Same immutable command and attestation digest, but a newly validated
+    # canonical worker/attempt fence. Comparing only digests would accept it.
+    record[field] = value
+    record["revision"] += 1
+    store.write_record(root, record)
+    path = gateway_request_path(root, record["request-id"])
+    before = path.read_bytes()
+    files_before = {p.relative_to(root) for p in root.rglob("*") if p.is_file()}
+    with pytest.raises(AudiaGenticError, match="CON-AGND-001") as error:
+        if operation == "bind":
+            store.bind_owned_node_dispatch(
+                root, record["request-id"], identity=command,
+                command_payload=payload, accepted_attestation=accepted, **fences(record),
+            )
+        else:
+            store.authorize_owned_node_effect(
+                root, record["request-id"], identity=command, authorization_id="auth-1",
+                accepted_attestation=accepted, current_node_epoch=command.node_epoch,
+                current_connection_generation=command.connection_generation, **fences(record),
+            )
+    assert "owned worker attempt" in error.value.message
+    assert path.read_bytes() == before
+    assert {p.relative_to(root) for p in root.rglob("*") if p.is_file()} == files_before
+
+
+def test_attested_node_provider_model_do_not_require_unset_central_facts(running):
+    root, record = running
+    assert record.get("provider-id") is None
+    assert record.get("model-id") is None
+    _, _, accepted = prepared_command(record)
+    assert accepted.worker_id == record["worker-id"]
+    assert accepted.attempt_epoch == record["attempt-epoch"]
+    assert accepted.provider_id == "node-provider"
+    assert accepted.model_id == "node-model"
+    assert accepted.model_alias is None
+    record = authorize(root, bind(root, record))
+    assert record["node-dispatch"]["authorization-state"] == "authorized"

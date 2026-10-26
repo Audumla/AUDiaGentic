@@ -11,8 +11,8 @@ from __future__ import annotations
 import logging
 import os
 import time
-from contextlib import nullcontext
 from collections.abc import Mapping
+from contextlib import nullcontext
 from pathlib import Path
 from typing import Any
 
@@ -1944,11 +1944,11 @@ def transition_operator_terminal(
         # renewal and result writers use this same request mutation.lock, so
         # journal identity cannot change between this check and write_record.
         if recovery_attempt_id is not None:
+            from audiagentic.components.agents.agents_paths import gateway_recovery_action_path
             from audiagentic.components.agents.gateway.replay import (
                 RecoveryClaimLostError,
                 recovery_claim_state,
             )
-            from audiagentic.components.agents.agents_paths import gateway_recovery_action_path
             from audiagentic.foundation.io import iter_ndjson
 
             claim = recovery_claim_state(
@@ -2018,7 +2018,9 @@ def transition_operator_terminal(
                 and checkpoint.get("unresolved-turn-id") == request_id
                 and checkpoint.get("unresolved-turn-pending") is True
             ):
-                from audiagentic.components.agents.gateway.session.sessions_store import _RECOVERY_CHECKPOINT_KEYS
+                from audiagentic.components.agents.gateway.session.sessions_store import (
+                    _RECOVERY_CHECKPOINT_KEYS,
+                )
                 finalization["pre-clear-checkpoint"] = {
                     key: value for key, value in checkpoint.items()
                     if key in _RECOVERY_CHECKPOINT_KEYS
@@ -2324,6 +2326,18 @@ def _node_matches_record(record: dict[str, Any], identity: dict[str, Any]) -> No
         raise _node_conflict("Node command does not match immutable admission placement")
 
 
+def _node_attestation_matches_attempt(record: dict[str, Any], attestation: Any) -> None:
+    # These are canonical execution-owner facts. Provider/model identity is
+    # node-local preparation evidence and must not be inferred from unrelated
+    # or not-yet-populated central provider/model fields.
+    if (
+        attestation.worker_id != record["worker-id"]
+        or type(attestation.attempt_epoch) is not int
+        or attestation.attempt_epoch != record["attempt-epoch"]
+    ):
+        raise _node_conflict("Accepted node attestation does not match the owned worker attempt")
+
+
 def _node_fresh_effect(record: dict[str, Any], identity: dict[str, Any], owner_epoch: str) -> None:
     _node_matches_record(record, identity)
     if (
@@ -2346,28 +2360,44 @@ def _write_node_dispatch(project_root: Path, record: dict[str, Any], dispatch: d
 
 def bind_owned_node_dispatch(
     project_root: Path, request_id: str, *, identity: Any,
+    command_payload: Mapping[str, Any], accepted_attestation: Any,
     owner_epoch: str, worker_id: str, attempt_epoch: int, expected_revision: int,
 ) -> dict[str, Any]:
-    """Persist one immutable command identity; return the full owned record.
+    """Persist one immutable attested command identity; return the full record.
 
     This is not a grant check or permission to invoke a native effect. A
     different identity always conflicts, including after an owner reconnect.
     Recovery/rebinding requires a separate evidence policy, never this setter.
+    command_payload is the protected final semantic/raw-prompt/attestation
+    mapping; only its validated identity and accepted attestation digest persist.
+    Supply accepted_attestation from the trusted preparation exchange, never
+    copied from the command. Unknown legacy attestations cannot be rebound.
     """
+    from audiagentic.components.agents.gateway.node.contracts import CommandIdentity
+    from audiagentic.components.agents.gateway.node.preparation import (
+        validate_final_command_payload,
+    )
+
     command = _node_identity(identity)
+    attestation = validate_final_command_payload(
+        command_payload, CommandIdentity.from_mapping(command),
+        accepted_attestation=accepted_attestation,
+    )
+    attestation_digest = attestation.digest
     with _request_lock(project_root, request_id):
         record = _node_owned_record(
             project_root, request_id, owner_epoch=owner_epoch, worker_id=worker_id,
             attempt_epoch=attempt_epoch, expected_revision=expected_revision,
         )
+        _node_attestation_matches_attempt(record, accepted_attestation)
         _node_fresh_effect(record, command, owner_epoch)
         prior = record.get("node-dispatch")
         if prior is not None:
-            if prior["identity"] != command:
+            if prior["identity"] != command or prior.get("attestation-sha256") != attestation_digest:
                 raise _node_conflict("Node dispatch identity collision")
             return record
         return _write_node_dispatch(project_root, record, {
-            "identity": command, "authorization-id": None,
+            "identity": command, "attestation-sha256": attestation_digest, "authorization-id": None,
             "authorization-state": "not-authorized",
             "receipt-sequence": 0, "receipt-sha256": None,
             "receipt-stage": None, "output-sha256": None,
@@ -2376,6 +2406,7 @@ def bind_owned_node_dispatch(
 
 def authorize_owned_node_effect(
     project_root: Path, request_id: str, *, identity: Any, authorization_id: str,
+    accepted_attestation: Any,
     current_node_epoch: str, current_connection_generation: int,
     owner_epoch: str, worker_id: str, attempt_epoch: int, expected_revision: int,
 ) -> dict[str, Any]:
@@ -2387,7 +2418,11 @@ def authorize_owned_node_effect(
     terminal commands cannot receive fresh authorization here.
     """
     from audiagentic.components.agents.gateway.node.contracts import _identifier
+    from audiagentic.components.agents.gateway.node.preparation import PreparationAttestation
 
+    if type(accepted_attestation) is not PreparationAttestation:
+        raise _node_conflict("Node authorization requires a typed accepted preparation attestation")
+    attestation_digest = accepted_attestation.digest
     command = _node_identity(identity)
     _identifier(authorization_id)
     if (
@@ -2401,10 +2436,13 @@ def authorize_owned_node_effect(
             project_root, request_id, owner_epoch=owner_epoch, worker_id=worker_id,
             attempt_epoch=attempt_epoch, expected_revision=expected_revision,
         )
+        _node_attestation_matches_attempt(record, accepted_attestation)
         _node_fresh_effect(record, command, owner_epoch)
         prior = record.get("node-dispatch")
         if prior is None or prior["identity"] != command:
             raise _node_conflict("Node authorization identity collision")
+        if prior.get("attestation-sha256") is None or prior["attestation-sha256"] != attestation_digest:
+            raise _node_conflict("Node authorization does not match the bound accepted attestation")
         if prior["authorization-state"] == "authorized":
             if prior["authorization-id"] != authorization_id:
                 raise _node_conflict("Node authorization identity changed")
@@ -2430,6 +2468,7 @@ def apply_owned_node_receipt(
     """
     import hashlib
     import re
+
     from audiagentic.components.agents.gateway.node.contracts import canonical_json
 
     if not isinstance(receipt, Mapping) or set(receipt) != {
