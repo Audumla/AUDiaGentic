@@ -10,7 +10,7 @@ from audiagentic.components.agents.gateway.application import GatewayApplication
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 from .archive import GatewayArchiveExecutor, GatewayPurgeExecutor
-from .contracts import ManagementOperationKind
+from .contracts import ManagementOperationKind, NodeRevocationAuthority, validate_node_revoke_scope
 from .reconcile import GatewayReconcileExecutor
 
 
@@ -22,7 +22,10 @@ class GatewayOperationExecutor:
     each effect remains in its domain-specific executor.
     """
 
-    def __init__(self, application: GatewayApplication) -> None:
+    def __init__(
+        self, application: GatewayApplication, *, node_authority: NodeRevocationAuthority | None = None,
+    ) -> None:
+        self._node_authority = node_authority
         self._reconcile = GatewayReconcileExecutor(application, terminalizer=_RequestTerminalizer())
         self._archive = GatewayArchiveExecutor(application)
         self._purge = GatewayPurgeExecutor(application)
@@ -34,6 +37,17 @@ class GatewayOperationExecutor:
             raise AudiaGenticError(
                 "VAL-AGM-009", "agents", "gateway operation kind is invalid", {}
             ) from exc
+        if kind is ManagementOperationKind.NODE_REVOKE:
+            scope = validate_node_revoke_scope(operation.get("scope"))
+            if self._node_authority is None:
+                raise AudiaGenticError(
+                    "UNS-AGM-001", "agents", "node-revoke has no enabled local node authority", {},
+                )
+            self._node_authority.revoke(
+                scope["node-id"], expected_grant_revision=scope["expected-grant-revision"],
+            )
+            # Never serialize the authority's private grant/connection result.
+            return {"node-id": scope["node-id"], "revoked": True}
         if kind is ManagementOperationKind.RECONCILE:
             return self._reconcile.execute(operation)
         if kind is ManagementOperationKind.ARCHIVE:

@@ -1,10 +1,11 @@
 # Shared gateway stage 1 deployment
 
-This guide describes the stage 1 configuration and intended deployment boundary.
-It is not installed-service, live TLS, multi-client or recovery qualification
-evidence. Check the implementation and deployment acceptance results before
-exposing a service. Node transport and joined harness sessions are outside this
-slice.
+This guide describes the stage 1 configuration and deployment boundary.
+Reproducible installed-wheel, native execution, independent-client TLS and restart
+qualification is documented in `tests/e2e/shared_gateway/README.md`. That proof is
+for the tested Windows topology; it does not qualify cross-machine execution
+nodes or joined harness sessions. Those capabilities remain disabled pending
+their separate implementation and qualification gates.
 
 ## Server configuration
 
@@ -86,6 +87,53 @@ client identity and designated administrators. Never place token values in
 YAML, command arguments, logs or examples. Rotation requires coordinated owner
 restart/reload according to the service's implemented lifecycle; this parser
 does not watch files.
+
+## Execution-node grant administration (SH38 foundation)
+
+Node execution is not enabled by these administrative primitives. The server
+parser accepts optional `node-listen` and `nodes` entries for the later transport:
+
+```yaml
+node-listen:
+  host: 127.0.0.1
+  port: 8766
+nodes:
+  build-node:
+    token-file: ./secrets/build-node.token
+    workspaces: {checkout: sample}
+    principals: [developer-a]
+    revision: 1
+    enabled: true
+```
+
+Workspace IDs map to existing server project IDs; node-local paths belong only
+in the node configuration. Node and user credentials must have distinct values
+and files. Protect the server config and management state with local operator
+filesystem permissions. Write access to the operation store grants local
+operator authority; shared HTTP and MCP cannot enqueue node revocations.
+
+Queue a revision-fenced revoke and inspect its returned operation ID:
+
+```text
+audiagentic gateway node revoke config server.yaml node build-node revision 1
+audiagentic gateway node revoke status config server.yaml operation OPERATION_ID output json
+audiagentic gateway node revoke help
+```
+
+An accepted operation is queued, not completed. The existing gateway operation
+pump persists `enabled: false` and increments the revision before completing its
+receipt. The same authority lock orders effect authorization and revocation;
+network and provider calls happen outside it. An already authorized attempt may
+proceed, but revocation prevents later authorization. Recovery of an interrupted
+revoke recognizes the exact disabled successor revision without another write.
+The CLI never starts the service or executes the revoke itself.
+
+Use the supported writer while the service runs. Other config changes require
+an owner restart; unexpected edits fail closed. An uncertain write retains
+denial until durable config is reconciled. Atomic replacement inherits the
+underlying filesystem durability limits; these tests do not prove hardware
+power-loss persistence. Transport, node-local materialization and two-machine
+qualification remain separate gates.
 
 ## Connector configuration
 

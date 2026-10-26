@@ -130,13 +130,45 @@ _KEYWORD_HELP = {
   audiagentic gateway serve config FILE
   audiagentic gateway status config FILE [output json]
   audiagentic gateway connect config FILE project PATH [dry-run|non-interactive]
+  audiagentic gateway node revoke config FILE node ID revision N
+  audiagentic gateway node revoke status config FILE operation OP_ID output json
 
+node revoke queues local operator intent; its status reads the local queue.
 serve runs an independent foreground service using a server configuration.
 status reads remote health only; it never starts or controls a local service.
 connect validates a connector and checks remote health before binding a project.
 Use COMMAND help for configuration and credential details.
 Retired lifecycle commands drain/resume/stop/recover are not public CLI routes.
 Options beginning with -- are not accepted; use the keywords shown above.""",
+    "node": """Local node operator commands (keyword syntax):
+  audiagentic gateway node revoke config FILE node ID revision N
+  audiagentic gateway node revoke status config FILE operation OP_ID output json
+
+FILE is the shared SERVER configuration, not a connector or node config.
+The existing loader validates it and resolves service-root relative to FILE.
+If service-root is omitted, use the canonical managed-service default root.
+Both commands use the existing local management-operation store only: no HTTP,
+MCP, browser, provider, service startup or direct node-authority execution.
+
+revoke queues NODE_REVOKE with node-id and expected-grant-revision. N is a
+positive decimal integer (1 through 9223372036854775807). The existing service
+pump applies the revision fence; accepted means queued, not yet revoked.
+The command prints a redacted JSON receipt containing operation-id and state.
+Use that operation-id with revoke status to inspect completion or failure.
+Status is read-only with respect to operation intent; it never retries or pumps
+work. Outputs omit configuration paths, credentials, selectors and owner facts.
+Each revoke invocation creates a new operation ID; inspect an existing receipt
+before submitting again. A missing operation or wrong kind fails explicitly.
+Only keywords are supported; no -- flags or remote fallback.
+
+Examples:
+  audiagentic gateway node revoke config server.yaml node build-node revision 7
+  audiagentic gateway node revoke status config server.yaml operation op_0123456789abcdef output json
+
+Help:
+  audiagentic gateway node help
+  audiagentic gateway node revoke help
+  audiagentic gateway node revoke status help""",
     "serve": """Usage: audiagentic gateway serve config FILE
 
 Run the shared gateway in the foreground. FILE is the Agents server config:
@@ -191,6 +223,8 @@ def dispatch_keyword(tokens: list[str]) -> int:
         print(_KEYWORD_HELP["gateway"])
         return 0
     command = tokens[0]
+    if command == "node":
+        return _dispatch_node_keyword(tokens[1:])
     if command in _KEYWORD_HELP and tokens[1:] == ["help"]:
         print(_KEYWORD_HELP[command])
         return 0
@@ -253,4 +287,71 @@ def dispatch_keyword(tokens: list[str]) -> int:
     gateway_connect_config(root, config_path)
     reset_gateway_client()
     print("Gateway connector selected for project.")
+    return 0
+
+
+
+def _dispatch_node_keyword(tokens: list[str]) -> int:
+    """Local operator adapter: queue intent and read status through owners."""
+    import re
+    import uuid
+
+    from audiagentic.foundation.cli_io import print_error
+
+    if tokens in ([], ["help"], ["revoke", "help"], ["revoke", "status", "help"]):
+        print(_KEYWORD_HELP["node"])
+        return 0
+    status = (
+        len(tokens) == 8 and tokens[:3] == ["revoke", "status", "config"]
+        and tokens[4] == "operation" and tokens[6:] == ["output", "json"]
+    )
+    revoke = (
+        len(tokens) == 7 and tokens[:2] == ["revoke", "config"]
+        and tokens[3] == "node" and tokens[5] == "revision"
+        and re.fullmatch(r"[0-9]{1,19}", tokens[6]) is not None
+    )
+    if (not status and not revoke) or any(token.startswith("--") for token in tokens):
+        print_error("Invalid node operator syntax. Run: audiagentic gateway node help")
+        return 2
+
+    from audiagentic.components.agents.gateway.operations import (
+        GatewayOperationsApplication,
+        ManagementCommand,
+        ManagementOperationKind,
+        ManagementOperationStore,
+    )
+    from audiagentic.components.agents.gateway.operations.contracts import (
+        validate_node_revoke_scope,
+    )
+    from audiagentic.components.agents.gateway.service.shared_config import (
+        load_shared_server_config,
+    )
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+    scope = None
+    if revoke:
+        scope = validate_node_revoke_scope({
+            "node-id": tokens[4], "expected-grant-revision": int(tokens[6]),
+        })
+    config = load_shared_server_config(Path(tokens[3] if status else tokens[2]).resolve())
+    # Use the serving owner's canonical key and Foundation root resolution;
+    # never create a second queue directly beneath the config's base directory.
+    from audiagentic.components.agents.gateway.service.host import GATEWAY_SERVICE_KEY
+    from audiagentic.foundation.system.managed_service import ManagedServiceStore
+
+    service = ManagedServiceStore(GATEWAY_SERVICE_KEY, root=config.service_root)
+    store = ManagementOperationStore(service.root)
+    if revoke:
+        command = ManagementCommand(
+            operation_id=f"op_{uuid.uuid4().hex}", kind=ManagementOperationKind.NODE_REVOKE,
+            scope=scope,
+        )
+        record = store.create(command, local_only=True)
+        operation_id = record["operation-id"]
+    else:
+        operation_id = tokens[5]
+    result = GatewayOperationsApplication(store).get_operation(operation_id)
+    if result["kind"] != ManagementOperationKind.NODE_REVOKE.value:
+        raise AudiaGenticError("VAL-AGM-004", "agents", "operation is not a node-revoke operation", {})
+    _json_out(result)
     return 0

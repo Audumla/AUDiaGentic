@@ -46,6 +46,7 @@ class GatewayServiceHost:
         lifecycle: object | None = None,
         service_root: Path | None = None,
         composition_graph: object | None = None,
+        node_authority: object | None = None,
     ) -> None:
         self.server = server
         self.service_store = service_store
@@ -65,6 +66,7 @@ class GatewayServiceHost:
         # AS60 step 7 / RV888: this process's own composition root. Shutdown
         # uninstalls the shared-gateway execution-profile registry.
         self._composition_graph = composition_graph
+        self._node_authority = node_authority
 
     @property
     def endpoint(self) -> str:
@@ -109,6 +111,11 @@ class GatewayServiceHost:
             store = ManagedServiceStore(GATEWAY_SERVICE_KEY, root=service_root)
             resolved_token_path = token_path or store.root / "auth.token"
             token = load_or_create_auth_token(resolved_token_path)
+            node_authority = None
+            if shared_config is not None and shared_config.nodes:
+                from audiagentic.components.agents.gateway.node.authority import NodeGrantAuthority
+
+                node_authority = NodeGrantAuthority(shared_config, service_root=store.root)
             domain_application = application or build_gateway_application()
             configured_recent_seconds = recent_window_seconds()
             service_application = GatewayServiceApplication(
@@ -194,6 +201,7 @@ class GatewayServiceHost:
             lifecycle=lifecycle,
             service_root=service_root,
             composition_graph=composition_graph,
+            node_authority=node_authority,
         )
 
     def serve_forever(self) -> None:
@@ -229,10 +237,11 @@ class GatewayServiceHost:
             ]
             # New admissions have a durable ordinal. Timestamp fallback is
             # compatibility only for legacy records from before this field.
-            ordering = lambda entry: (
-                entry[1].get("enqueue-ordinal") or 0,
-                entry[1].get("created-at") or "", entry[1]["request-id"],
-            )
+            def ordering(entry):
+                return (
+                    entry[1].get("enqueue-ordinal") or 0,
+                    entry[1].get("created-at") or "", entry[1]["request-id"],
+                )
             for project_root, record in sorted(running, key=ordering):
                 runtime = record.get("gateway-profile-runtime") or {}
                 queue_manager.enqueue_recovered_running(
@@ -323,9 +332,14 @@ class GatewayServiceHost:
             ManagementOperationStore,
         )
 
+        authority = getattr(self, "_node_authority", None)
+        executor = (
+            GatewayOperationExecutor(self._application, node_authority=authority)
+            if authority is not None else GatewayOperationExecutor(self._application)
+        )
         pump = ManagementOperationPump(
             ManagementOperationStore(self.service_store.root),
-            GatewayOperationExecutor(self._application),
+            executor,
         )
 
         def _poll() -> None:
@@ -364,8 +378,8 @@ class GatewayServiceHost:
 
     def schedule_journal_maintenance(self) -> None:
         """Queue hourly/startup sweeps even when no new request finishes."""
-        from .known_projects import load_known_projects
         from ..retention import schedule_request_retention
+        from .known_projects import load_known_projects
 
         registry = load_known_projects(self.service_store.root / "known-projects.json")
         for project in registry.projects:

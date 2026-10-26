@@ -14,6 +14,7 @@ class ManagementOperationKind(StrEnum):
     RECONCILE = "reconcile"
     ARCHIVE = "archive"
     PURGE = "purge"
+    NODE_REVOKE = "node-revoke"
 
 
 class WorkEvidence(StrEnum):
@@ -47,6 +48,33 @@ class ManagementCommand:
     correlation_id: str | None = None
 
 
+class NodeRevocationAuthority(Protocol):
+    """Injected local authority; owns grant CAS, revocation and replay policy."""
+
+    def revoke(self, node_id: str, *, expected_grant_revision: int) -> Any: ...
+
+
+def validate_node_revoke_scope(scope: Mapping[str, Any]) -> dict[str, Any]:
+    """Closed local intent: a node identifier plus its expected grant revision."""
+    import re
+
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+    if (
+        not isinstance(scope, Mapping)
+        or set(scope) != {"node-id", "expected-grant-revision"}
+        or not isinstance(scope.get("node-id"), str)
+        or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,199}", scope["node-id"]) is None
+        or type(scope.get("expected-grant-revision")) is not int
+        or not 1 <= scope["expected-grant-revision"] <= 2**63 - 1
+    ):
+        raise AudiaGenticError(
+            "VAL-AGM-004", "agents",
+            "node-revoke scope requires only node-id and a positive expected-grant-revision", {},
+        )
+    return dict(scope)
+
+
 class ManagementWorkNotifier(Protocol):
     """Best-effort wake-up transport, not an authoritative work queue."""
 
@@ -67,6 +95,8 @@ __all__ = [
     "ManagementOperationExecutor",
     "ManagementOperationKind",
     "ManagementWorkNotifier",
+    "NodeRevocationAuthority",
+    "validate_node_revoke_scope",
     "TargetDisposition",
     "WorkEvidence",
 ]

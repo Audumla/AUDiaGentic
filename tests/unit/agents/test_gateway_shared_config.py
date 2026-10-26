@@ -194,15 +194,19 @@ def test_deployment_guide_yaml_examples_match_parser(tmp_path):
     guide = Path(__file__).resolve().parents[3] / "docs/guides/shared-gateway.md"
     examples = [section.split("```", 1)[0] for section in guide.read_text(
         encoding="utf-8").split("```yaml\n")[1:]]
-    assert len(examples) == 2
+    assert len(examples) == 3
     for directory in ("state", "projects/sample", "secrets", "trust"):
         (tmp_path / directory).mkdir(parents=True, exist_ok=True)
-    for name in ("developer-a", "observer"):
+    for name in ("developer-a", "observer", "build-node"):
         token = tmp_path / f"secrets/{name}.token"
         token.write_text(f"test-{name}", encoding="utf-8")
         token.chmod(0o600)
     (tmp_path / "trust/team-ca.pem").write_text("test fixture", encoding="utf-8")
+    server = yaml.safe_load(examples[0])
+    server.update(yaml.safe_load(examples[1]))
+    examples = [examples[0], yaml.safe_dump(server), examples[2]]
     for raw, loader in zip(examples, [config.load_shared_server_config,
+                                      config.load_shared_server_config,
                                       config.load_shared_connector_config], strict=True):
         path = tmp_path / "config.yaml"
         path.write_text(raw, encoding="utf-8")
