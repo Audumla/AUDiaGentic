@@ -30,14 +30,147 @@
     ,"activity-lease-expires-at"
   ],
   "allOf": [{
-    "if": {"properties": {"contract-version": {"enum": ["v9", "v10"]}}, "required": ["contract-version"]},
+    "if": {"properties": {"contract-version": {"enum": ["v9", "v10", "v11"]}}, "required": ["contract-version"]},
     "then": {"required": ["node-dispatch", "node-placement"]}
   }, {
-    "if": {"properties": {"contract-version": {"const": "v10"}}, "required": ["contract-version"]},
+    "if": {"properties": {"contract-version": {"enum": ["v10", "v11"]}}, "required": ["contract-version"]},
     "then": {"properties": {"node-dispatch": {"required": ["attestation-sha256"]}}}
+  }, {
+    "if": {"properties": {"contract-version": {"const": "v11"}}, "required": ["contract-version"]},
+    "then": {"required": ["node-admission"]}
   }],
   "additionalProperties": false,
   "properties": {
+    "node-admission": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "version",
+        "server-id",
+        "semantic",
+        "policy",
+        "snapshot-sha256"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "version": {
+          "type": "integer",
+          "const": 1
+        },
+        "server-id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,199}$",
+          "maxLength": 200
+        },
+        "semantic": {
+          "type": "object",
+          "required": [
+            "composition-fingerprint",
+            "prompt-definition-fingerprint",
+            "prompt-id",
+            "execution-profile-id",
+            "expanded-prompt-version",
+            "expanded-prompt-sha256",
+            "raw-prompt-sha256"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "composition-fingerprint": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$",
+              "maxLength": 64
+            },
+            "prompt-definition-fingerprint": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$",
+              "maxLength": 64
+            },
+            "prompt-id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,199}$",
+              "maxLength": 200
+            },
+            "execution-profile-id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,199}$",
+              "maxLength": 200
+            },
+            "expanded-prompt-version": {
+              "type": "integer",
+              "const": 1
+            },
+            "expanded-prompt-sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$",
+              "maxLength": 64
+            },
+            "raw-prompt-sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$",
+              "maxLength": 64
+            }
+          }
+        },
+        "policy": {
+          "type": "object",
+          "required": [
+            "profile-id",
+            "generation",
+            "config-digest",
+            "pending-capacity",
+            "global-capacity",
+            "project-capacity"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "profile-id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,199}$",
+              "maxLength": 200
+            },
+            "generation": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,199}$",
+              "maxLength": 200
+            },
+            "config-digest": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,199}$",
+              "maxLength": 200
+            },
+            "pending-capacity": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "global-capacity": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "project-capacity": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 1,
+              "maximum": 2147483647
+            }
+          }
+        },
+        "snapshot-sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "maxLength": 64
+        }
+      },
+      "default": null
+    },
     "node-placement": {
       "description": "Immutable admission placement supplied only by the trusted shared service owner; not effect authorization.",
       "default": null,
@@ -217,7 +350,7 @@
       }, "required": ["code", "message"], "additionalProperties": false
     }},
     "contract-version": {
-      "enum": ["v5", "v6", "v7", "v8", "v9", "v10"]
+      "enum": ["v5", "v6", "v7", "v8", "v9", "v10", "v11"]
     },
     "request-id": {
       "type": "string"

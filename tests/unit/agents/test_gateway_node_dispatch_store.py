@@ -105,9 +105,10 @@ def apply(root, record, value, **changes):
     )
 
 
-def test_new_record_v10_defaults_and_strict_schema(running):
+def test_new_record_v11_defaults_and_strict_schema(running):
     root, record = running
-    assert record["contract-version"] == "v10"
+    assert record["contract-version"] == "v11"
+    assert record["node-admission"] is None
     assert record["node-dispatch"] is None
     missing = dict(record)
     missing.pop("node-dispatch")
@@ -138,7 +139,7 @@ def test_v8_migration_preserves_entire_modern_record(running):
     })
     atomic_write_json(gateway_request_path(root, record["request-id"]), legacy)
     migrated = store.read_record(root, record["request-id"])
-    assert migrated == {**legacy, "contract-version": "v10", "node-dispatch": None, "node-placement": None}
+    assert migrated == {**legacy, "contract-version": "v11", "node-dispatch": None, "node-placement": None}
     assert store.read_record(root, record["request-id"]) == migrated
 
 
@@ -566,7 +567,7 @@ def test_v9_bound_unknown_attestation_remains_evidence_only(running, authorized)
     atomic_write_json(path, legacy)
     migrated = store.read_record(root, record["request-id"])
     expected = {
-        **legacy, "contract-version": "v10",
+        **legacy, "contract-version": "v11",
         "node-dispatch": {**legacy["node-dispatch"], "attestation-sha256": None},
     }
     assert migrated == expected
@@ -582,7 +583,7 @@ def test_v9_bound_unknown_attestation_remains_evidence_only(running, authorized)
     assert evidence["node-dispatch"]["authorization-id"] == migrated["node-dispatch"]["authorization-id"]
 
 
-def test_v9_to_v10_preserves_every_owner_recovery_session_and_receipt_fact(running):
+def test_v9_to_v11_preserves_every_owner_recovery_session_and_receipt_fact(running):
     root, record = running
     record = authorize(root, bind(root, record))
     record = apply(root, record, receipt(identity(record), 10, "native-accepted"))
@@ -598,7 +599,7 @@ def test_v9_to_v10_preserves_every_owner_recovery_session_and_receipt_fact(runni
     })
     atomic_write_json(gateway_request_path(root, record["request-id"]), legacy)
     expected = {
-        **legacy, "contract-version": "v10",
+        **legacy, "contract-version": "v11",
         "node-dispatch": {**legacy["node-dispatch"], "attestation-sha256": None},
     }
     assert store.read_record(root, record["request-id"]) == expected

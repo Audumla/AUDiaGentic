@@ -404,6 +404,7 @@ def build_record(
     metadata: dict[str, Any] | None = None,
     client_default_session: dict[str, Any] | None = None,
     node_placement: dict[str, Any] | None = None,
+    node_admission: Mapping[str, Any] | None = None,
     warnings: list[dict[str, Any]] | None = None,
     template_context: dict[str, Any] | None = None,
     session_id: str | None = None,
@@ -517,6 +518,7 @@ def build_record(
         "contract-version": _shared._CONTRACT_VERSION,
         "node-dispatch": None,
         "node-placement": dict(node_placement) if isinstance(node_placement, dict) else node_placement,
+        "node-admission": node_admission,
         "request-id": request_id or generate_request_id(),
         "agent-id": agent_id,
         "execution-profile-id": execution_profile_id,
@@ -613,6 +615,13 @@ def generate_request_id() -> str:
 
 
 def _validate(payload: dict[str, Any], *, code: str) -> dict[str, Any]:
+    if payload.get("node-admission") is not None:
+        from ..node.admission_contract import NodeAdmissionDescriptor
+
+        descriptor = NodeAdmissionDescriptor.from_mapping(payload["node-admission"])
+        if descriptor.policy.profile_id != payload.get("execution-profile-id") or payload.get("node-placement") is None:
+            raise AudiaGenticError(code=code, kind="agents", message="Node admission requires matching placement and profile")
+        payload = {**payload, "node-admission": descriptor.to_mapping()}
     issues = _shared.validate_with_schema_fn(payload)
     if issues:
         raise AudiaGenticError(
@@ -648,8 +657,13 @@ def write_record(project_root: Path, payload: dict[str, Any]) -> Path:
             message="gateway request record missing request-id",
             details={},
         )
-    _validate(payload, code="VAL-AGW-004")
+    payload = _validate(payload, code="VAL-AGW-004")
     target = gateway_request_path(project_root, request_id)
+    if target.exists():
+        previous = _read_record_payload(project_root, request_id)
+        if previous.get("node-admission") != payload.get("node-admission"):
+            raise AudiaGenticError(code="VAL-AGW-098", kind="agents",
+                                  message="Node admission descriptor is immutable after record creation")
     # Redact raw prompt-body before public persistence; dispatch gets the
     # in-memory value or the admission-owned snapshot during recovery.
     redacted = _redact_for_persistence(payload)
@@ -698,6 +712,11 @@ def _migrate_v1_payload(payload: dict[str, Any]) -> dict[str, Any]:
     treatment of an already-dispatched record with no durable binding.
     """
     migrated = dict(payload)
+    migrated.setdefault("node-admission", None)
+    if payload.get("contract-version") == "v10":
+        # Preserve every modern ownership/session/recovery/receipt fact exactly.
+        migrated["contract-version"] = _shared._CONTRACT_VERSION
+        return _validate(migrated, code="VAL-AGW-005")
     if payload.get("contract-version") in {"v8", "v9"}:
         # Modern ownership/recovery/session facts are authoritative. Upgrade
         # only the envelope; never run v8 through historical fence clearing.
@@ -735,7 +754,7 @@ def _migrate_v1_payload(payload: dict[str, Any]) -> dict[str, Any]:
     # v8 introduces durable request sessions.  Existing v7 records remain
     # readable as v7: a historic sessionless record cannot honestly be
     # re-labelled v8 without first creating its companion session record.
-    # New admissions are always v10; dispatch never relies on this migration
+    # New admissions are always v11; dispatch never relies on this migration
     # to invent a session for an in-flight legacy request.
     migrated["contract-version"] = (
         _shared._CONTRACT_VERSION
@@ -843,6 +862,7 @@ def read_record(
         payload.get("contract-version") == _shared._CONTRACT_VERSION
         and "node-dispatch" in payload
         and "node-placement" in payload
+        and "node-admission" in payload
         and "cancel-acknowledged-at" in payload
         and "cancel-acknowledged-by" in payload
         and "resolved-source-id" in payload
