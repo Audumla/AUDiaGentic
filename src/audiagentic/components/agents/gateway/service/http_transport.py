@@ -42,10 +42,16 @@ class GatewayHTTPServer(ThreadingHTTPServer):
         *,
         dashboard_path: str = "/dashboard",
         dashboard_recent_seconds: int | None = None,
+        shared_config: Any = None,
     ) -> None:
         if address[0] != "127.0.0.1":
             raise transport_error(3, "gateway service must bind to IPv4 loopback")
         self.application = application
+        self.shared_ingress = None
+        if shared_config is not None:
+            from .shared_ingress import SharedGatewayIngress
+
+            self.shared_ingress = SharedGatewayIngress(shared_config)
         self.auth_token = auth_token
         self.dashboard_path = _dashboard_path(dashboard_path)
         self.dashboard_snapshot_path = f"{self.dashboard_path}/snapshot"
@@ -70,6 +76,9 @@ class GatewayHTTPRequestHandler(BaseHTTPRequestHandler):
 
     def _dispatch(self, method: str) -> None:
         try:
+            if self.server.shared_ingress is not None:
+                self._dispatch_shared(method)
+                return
             # The dashboard is a redacted, loopback-only operator surface.
             # It must remain usable by an ordinary browser, which cannot know
             # the service bearer token.  Every mutable/control route remains
@@ -214,6 +223,57 @@ class GatewayHTTPRequestHandler(BaseHTTPRequestHandler):
         supplied = self.headers.get("Authorization", "")
         if not hmac.compare_digest(supplied, expected):
             raise transport_error(5, "gateway service authentication failed")
+
+    def _dispatch_shared(self, method: str) -> None:
+        ingress = self.server.shared_ingress
+        assert ingress is not None
+        principal = ingress.authenticate(self.headers.get("Authorization", ""))
+        if method == "GET" and self.path == "/shared/v1/health":
+            result = ingress.health(self.server.application, principal)
+        elif method == "POST" and self.path == "/shared/v1/call":
+            body = self._read_body()
+            lease_id, epoch = _string(body, "lease-id"), _string(body, "owner-epoch")
+            client_id = self.server.application.require_client_principal(lease_id, epoch, principal.principal_id)
+            operation, root, params = ingress.prepare_call(principal, body, client_instance_id=client_id)
+            result = self.server.application.invoke(
+                operation, root, params,
+                protocol_version=_string(body, "protocol-version"),
+                owner_epoch=epoch, lease_id=lease_id,
+            )
+        elif method == "POST" and self.path == "/shared/v1/client-leases/acquire":
+            body = self._read_body()
+            if body.keys() - {"client-instance-id", "ttl-seconds", "protocol-version", "correlation-id"}:
+                raise transport_error(22, "Shared lease request contains invalid fields")
+            # Client aliases cannot impersonate another authenticated principal.
+            import hashlib
+
+            client_id = hashlib.sha256(
+                f"{principal.principal_id}:{_string(body, 'client-instance-id')}".encode()
+            ).hexdigest()[:32]
+            result = self.server.application.acquire_client(
+                f"shared_{client_id}", ttl_seconds=_number(body, "ttl-seconds"),
+                protocol_version=_string(body, "protocol-version"),
+                correlation_id=_optional_string(body, "correlation-id"),
+                facts={"shared-principal-id": principal.principal_id},
+            )
+        elif method == "POST" and self.path in {
+            "/shared/v1/client-leases/renew", "/shared/v1/client-leases/release",
+        }:
+            body = self._read_body()
+            renew = self.path.endswith("/renew")
+            expected = {"lease-id", "owner-epoch", "protocol-version"} | ({"ttl-seconds"} if renew else set())
+            if set(body) != expected:
+                raise transport_error(22, "Shared lease request contains invalid fields")
+            lease_id, epoch = _string(body, "lease-id"), _string(body, "owner-epoch")
+            self.server.application.require_client_principal(lease_id, epoch, principal.principal_id)
+            keywords = {"owner_epoch": epoch, "protocol_version": _string(body, "protocol-version")}
+            if renew:
+                result = self.server.application.renew_client(lease_id, ttl_seconds=_number(body, "ttl-seconds"), **keywords)
+            else:
+                result = self.server.application.release_client(lease_id, **keywords)
+        else:
+            raise transport_error(4, "Unknown shared gateway route")
+        self._write_json(200, {"contract-version": "v1", "ok": True, "result": result})
 
     def _authenticate_dashboard_action(self) -> None:
         supplied = self.headers.get("X-AudiaGentic-Dashboard-Token", "")

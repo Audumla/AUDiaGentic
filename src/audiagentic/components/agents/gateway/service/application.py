@@ -247,6 +247,7 @@ class GatewayServiceApplication:
         ttl_seconds: float,
         protocol_version: str,
         correlation_id: str | None = None,
+        facts: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         _require_protocol(protocol_version)
         _require_ttl(ttl_seconds)
@@ -256,6 +257,7 @@ class GatewayServiceApplication:
             ttl_seconds=ttl_seconds,
             expected_epoch=record.owner_epoch,
             correlation_id=correlation_id,
+            facts=facts,
         )
         from .client_icons import assign_client_icon
 
@@ -266,6 +268,13 @@ class GatewayServiceApplication:
             "expires-at": lease.expires_at,
             "service-revision": updated.revision,
         }
+
+    def require_client_principal(self, lease_id: str, owner_epoch: str, principal_id: str) -> str:
+        """Fence shared ingress with the existing durable lease authority."""
+        lease = self._service_store.require_active_lease(lease_id, expected_epoch=owner_epoch)
+        if (lease.facts or {}).get("shared-principal-id") != principal_id:
+            raise service_validation_error(5, "gateway client lease principal does not match")
+        return lease.client_instance_id
 
     def renew_client(
         self,

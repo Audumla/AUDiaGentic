@@ -203,6 +203,8 @@ def gateway_set_config(
     options = dict(impl_state.options)
     options.update(updates)
 
+    if implementation_id == "standalone":
+        validate_standalone_config(options)
     new_state = ImplementationState(enabled=impl_state.enabled, options=options)
     set_implementation_state(project_root, _COMPONENT_ID, implementation_id, new_state)
 
@@ -211,6 +213,58 @@ def gateway_set_config(
         "config": options,
         "updated_keys": list(updates.keys()),
     }
+
+
+
+def validate_standalone_config(options: dict[str, Any]) -> None:
+    """Validate the mutually exclusive local and shared connection forms."""
+    connector = options.get("connector-config")
+    if connector is not None:
+        if (
+            not isinstance(connector, str) or not connector.strip()
+            or not Path(connector).is_absolute()
+            or "endpoint" in options or "token-file" in options
+        ):
+            raise AudiaGenticError("VAL-AGSV-029", "validation",
+                                  "connector-config requires an absolute reference and excludes endpoint/token-file")
+        from .service.shared_config import load_shared_connector_config
+
+        load_shared_connector_config(Path(connector))
+    elif not all(isinstance(options.get(key), str) and options[key].strip()
+                 for key in ("endpoint", "token-file")):
+        raise AudiaGenticError("VAL-AGSV-029", "validation",
+                              "standalone requires connector-config or endpoint and token-file")
+
+
+def gateway_connect_config(project_root: Path, config_path: Path) -> dict[str, Any]:
+    """Select a validated connector through the existing Agents state owner.
+
+    Callers must complete the TLS identity handshake before requesting this
+    write. Selection and the reference are committed in one Foundation shard
+    replacement; unrelated implementation options/features are preserved.
+    """
+    from copy import deepcopy
+    from audiagentic.foundation.features.state import (
+        get_component_state, set_component_state, shard_path,
+    )
+    from audiagentic.foundation.system.process import StartupLock
+
+    reference = str(config_path.resolve(strict=True))
+    validate_standalone_config({"connector-config": reference})
+    path = shard_path(project_root, _COMPONENT_ID)
+    with StartupLock(path.with_suffix(".lock")):
+        component = deepcopy(get_component_state(project_root, _COMPONENT_ID, persist_migration=False))
+        implementations = component.setdefault("implementations", {})
+        for entry in implementations.values():
+            entry["enabled"] = False
+        standalone = implementations.setdefault("standalone", {})
+        options = standalone.setdefault("options", {})
+        options.pop("endpoint", None)
+        options.pop("token-file", None)
+        options["connector-config"] = reference
+        standalone["enabled"] = True
+        set_component_state(project_root, _COMPONENT_ID, component)
+    return {"implementation": "standalone", "connector-config": reference, "enabled": True}
 
 
 def gateway_create_operation(

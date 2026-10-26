@@ -81,7 +81,10 @@ class GatewayServiceHost:
         token_path: Path | None = None,
         application: GatewayApplication | None = None,
         service_root: Path | None = None,
+        shared_config: Any = None,
     ) -> GatewayServiceHost:
+        if shared_config is not None:
+            host, port, service_root = shared_config.host, shared_config.port, shared_config.service_root
         if host != "127.0.0.1" or isinstance(port, bool) or not 0 <= port <= 65535:
             from audiagentic.components.agents.gateway.service.http_transport import transport_error
 
@@ -119,6 +122,7 @@ class GatewayServiceHost:
                 token,
                 dashboard_path=os.environ.get("AUDIAGENTIC_GATEWAY_DASHBOARD_PATH", "/dashboard"),
                 dashboard_recent_seconds=configured_recent_seconds,
+                shared_config=shared_config,
             )
             owner = ManagedServiceOwner(store)
             address = f"{server.server_address[0]}:{server.server_address[1]}"
@@ -256,15 +260,12 @@ class GatewayServiceHost:
         from audiagentic.components.agents.gateway.service.known_projects import (
             scan_known_gpt_auto_projects,
         )
-        from audiagentic.components.providers.adapters.gpt_auto.config import (
-            validate_machine_gpt_auto_config,
-            validate_project_gpt_auto_config,
-        )
+        from audiagentic.components.providers.providers_api import validate_gpt_auto_configuration
 
-        validate_machine_gpt_auto_config()
+        validate_gpt_auto_configuration()
         scan_known_gpt_auto_projects(
             self.service_store.root / "known-projects.json",
-            check_project=validate_project_gpt_auto_config,
+            check_project=validate_gpt_auto_configuration,
         )
         if not self._externally_managed:
             self.service_store.heartbeat({"ready": True}, expected_epoch=self.owner_epoch)
