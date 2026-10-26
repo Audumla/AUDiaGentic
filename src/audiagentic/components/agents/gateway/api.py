@@ -18,9 +18,10 @@ import logging
 import os
 import threading
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit
 
 from audiagentic.components.agents.gateway import store as store
@@ -30,6 +31,10 @@ from audiagentic.components.agents.gateway.queue import dispatch as dispatch
 from audiagentic.components.agents.gateway.queue import queue as queue_mod
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.time import now_iso_z
+
+if TYPE_CHECKING:
+    from audiagentic.components.agents.configuration.repository import AgentsConfigSnapshot
+    from audiagentic.components.agents.configuration.resolution import ResolvedAgentComposition
 
 logger = logging.getLogger(__name__)
 
@@ -424,6 +429,57 @@ def _enrich_terminal_result(
     return result
 
 
+@dataclass(frozen=True, slots=True)
+class AgentSemantics:
+    """Global declarative identity; not expanded content or execution-local facts."""
+
+    catalog: AgentsConfigSnapshot
+    composition: ResolvedAgentComposition
+    config_root: Path
+
+    @property
+    def execution_profile_id(self) -> str:
+        return self.composition.execution_profile.profile_id
+
+    @property
+    def prompt_profile_id(self) -> str:
+        return self.composition.prompt.prompt_id
+
+    @property
+    def composition_fingerprint(self) -> str:
+        return self.composition.identity.fingerprint
+
+    @property
+    def prompt_definition_fingerprint(self) -> str:
+        return self.composition.identity.prompt_definition_fingerprint
+
+
+def _resolve_agent_semantics(agent_id: str) -> AgentSemantics:
+    """Resolve from one machine catalog snapshot without inspecting an execution root.
+
+    Include IDs and file paths retain their existing declarative fingerprints;
+    this does not expand prompt dependencies or commit to their file contents.
+    """
+    from audiagentic.components.agents.agents_paths import global_agents_config_path
+    from audiagentic.components.agents.configuration.global_catalog import read_global_agents_config
+    from audiagentic.components.agents.configuration.resolution import resolve_agent_composition
+
+    catalog = read_global_agents_config()
+    config_root = global_agents_config_path().parent
+    try:
+        # The resolver's path parameter is API-shape context only: the supplied
+        # snapshot is the sole catalog authority, never a project-local lookup.
+        composition = resolve_agent_composition(config_root, agent_id, snapshot=catalog)
+    except KeyError as exc:
+        raise AudiaGenticError(
+            code="RES-AGD-001",
+            kind="agents",
+            message=f"agent definition not found: {agent_id!r}",
+            details={"agent-id": agent_id},
+        ) from exc
+    return AgentSemantics(catalog=catalog, composition=composition, config_root=config_root)
+
+
 def submit_execution_request(
     project_root: Path,
     *,
@@ -592,11 +648,6 @@ def submit_execution_request(
     prompt_definition_fingerprint: str | None = None
     composition_fingerprint: str | None = None
     if agent_id is not None:
-        from audiagentic.components.agents.agents_paths import global_agents_config_path
-        from audiagentic.components.agents.configuration.global_catalog import (
-            read_global_agents_config,
-        )
-        from audiagentic.components.agents.configuration.resolution import resolve_agent_composition
         from audiagentic.components.agents.gateway.admission.context import (
             baseline_agent_template_context,
         )
@@ -622,29 +673,20 @@ def submit_execution_request(
                 **template_context["project"],
                 "name": baseline_context["project"]["name"],
             }
-        catalog = read_global_agents_config(project_root)
-        try:
-            composition = resolve_agent_composition(project_root, agent_id, snapshot=catalog)
-        except KeyError as exc:
-            raise AudiaGenticError(
-                code="RES-AGD-001",
-                kind="agents",
-                message=f"agent definition not found: {agent_id!r}",
-                details={"agent-id": agent_id},
-            ) from exc
-        execution_profile_id = composition.execution_profile.profile_id
-        composition_fingerprint = composition.identity.fingerprint
-        prompt_definition_fingerprint = composition.identity.prompt_definition_fingerprint
+        semantics = _resolve_agent_semantics(agent_id)
+        execution_profile_id = semantics.execution_profile_id
+        composition_fingerprint = semantics.composition_fingerprint
+        prompt_definition_fingerprint = semantics.prompt_definition_fingerprint
         # Prompt definitions are the sole public prompt authority.  The old
         # provider prompt-profile collection was a second, mutable authority;
         # retain only the canonical prompt identity in the durable provenance
         # slot while the provider receives the admitted materialized text.
-        prompt_profile_id = composition.prompt.prompt_id
+        prompt_profile_id = semantics.prompt_profile_id
         render_context = {**template_context, "prompt-body": prompt_body}
         dispatch_prompt = materialize_agent_prompt(
-            composition.prompt,
-            prompts=catalog.document.prompts,
-            config_root=global_agents_config_path().parent,
+            semantics.composition.prompt,
+            prompts=semantics.catalog.document.prompts,
+            config_root=semantics.config_root,
             template_context=render_context,
         )
 
