@@ -1534,7 +1534,7 @@ class PersistentChat:
             # A network outage is not repaired by multiplying tabs. Keep the
             # exact retained conversation; admission owns the outer deadline.
             self._set_unresolved_recovery(
-                "browser-network-recovery-deadline", attempts=retry_attempts,
+                "conversation-load-retry-deadline", attempts=retry_attempts,
                 dom_signals=sorted(snapshot.dom_signals),
             )
             return False
