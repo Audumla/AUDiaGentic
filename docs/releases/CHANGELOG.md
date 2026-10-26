@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.6.1](https://github.com/Audumla/AUDiaGentic/compare/v0.6.0...v0.6.1) (2026-10-26)
+
+
+### Bug Fixes
+
+* **gpt-auto:** fence restored conversation admission and recovery races ([43a14bc](https://github.com/Audumla/AUDiaGentic/commit/43a14bca721cff3f47b6263dbbba4d1b2a8980a0))
+* **gpt-auto:** reattach idle conversations after browser target changes ([e4cdce5](https://github.com/Audumla/AUDiaGentic/commit/e4cdce5f9874004678da5295396ea6cfe129f07b))
+* **gpt-auto:** reattach idle conversations after browser target changes ([be71370](https://github.com/Audumla/AUDiaGentic/commit/be71370e256e60f00ae2154b2a6def87902e3cde))
+
+
+### Documentation
+
+* **gateway:** record deployed restored-tab recovery qualification ([bf7aef1](https://github.com/Audumla/AUDiaGentic/commit/bf7aef1fc4a8c93ea7897305bf0653beaf92a7cc))
+
 ## [0.6.0](https://github.com/Audumla/AUDiaGentic/compare/v0.5.3...v0.6.0) (2026-10-25)
 
 
