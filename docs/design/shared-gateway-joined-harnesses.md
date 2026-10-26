@@ -107,17 +107,12 @@ These are research leads, not installed-version attachment qualification:
 
 ### Contract verification
 
-1. Supervised node lifetime and explicit configured connector binding.
-2. Passive trusted self-registration proof for each eligible surface.
-3. Canonical session ID, immutable generation and node-private native locator.
-4. Node-authoritative execution facts without server path fabrication.
-5. Existing native attachment/injection; reject absent or unproven capability.
-6. Queue default; no steer without qualification and honest response attribution.
-7. Native human admission, cancellation isolation and self-dependency refusal.
-8. Pre-send receipts, stale-epoch fencing, exact evidence recovery and grants.
-9. Thin owner APIs and complete metadata/help/schema/documentation parity.
+This scenario matrix qualifies stage 3 joins (and stage 2 node behavior where
+applicable), not stage 1 server-only execution. Apply the execution contract's
+capability, ownership and concurrency rules and the admission/recovery addendum's
+durability rules. This scenario index adds no independent contract or release gate.
 
-Review sequence: source/capability inventory and scenarios, then candidate
-contracts and adversarial state walkthroughs, then version-pinned capability
-probes and a code-level implementation plan. No runtime capability is enabled by
-this document or by a design endorsement alone.
+Qualification research may proceed independently. Implementation review and
+native probes gate only the applicable advertised slice; design endorsement never
+enables runtime capability. External A2A/ACP interoperability is eventual SH43
+work, not a prerequisite for native attachment qualification.

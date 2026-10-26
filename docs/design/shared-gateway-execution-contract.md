@@ -7,12 +7,27 @@ RV1214. The A2A/ACP addendum was approved at
 RV1216. SH35/SH36 own planning; SH37-SH43 remain pending delivery/qualification.
 No runtime capability is enabled here. Prior release prerequisite: v0.6.0.
 
-The subsequent industry/agent standards audit identified implementation-entry
-gaps despite these design-only approvals. The current proposed decisions and
-verified specification references are in
-[Admission and recovery decisions](shared-gateway-admission-recovery.md).
-Implementation readiness remains conditional until its transaction, grants,
-durability and independent dependency/wire audit gates are satisfied.
+The admission/recovery addendum owns message-acceptance and native-delivery
+invariants. Validate the seams applicable to the feature being implemented;
+external protocol conformance and native qualification gate only their advertised
+features. Earlier design approval does not constitute runtime qualification.
+
+## Separately releasable stages
+
+| Stage | Scope | Required evidence |
+|---|---|---|
+| 1: SH37 and scoped SH42 | Standalone CLI, authenticated shared ingress, server-hosted execution | Installed service, two scoped clients, server-local files, terminal output and restart recovery |
+| 2: SH38 and scoped SH42 | Independently supervised caller-local nodes | Node-local files, authorized dispatch, disconnect/reboot and uncertain-effect recovery |
+| 3: SH39/SH40, per-surface SH41 and scoped SH42 | Existing human-owned harness joins | Exact native capability and output attribution, writer fencing, external detach/no-kill |
+| 4: SH43 and scoped SH42 | External A2A/ACP interoperability | Authorized Context/Work routing, atomic continuation and actual protocol clients |
+
+Later stages do not block earlier ones. SH41 research can proceed independently;
+each harness/version/platform is enabled only after its own qualification. Stages
+may ship without unsupported capabilities, with those limitations stated clearly.
+Stage 1 uses one configured service profile and existing owned execution. It adds
+no node protocol, joined-session binding, new Work continuation API or distributed
+receipt store. Extend existing owner project scope using configured server project
+IDs mapped to server-local roots; do not introduce a separate registry.
 
 ## Scope and decisions
 
@@ -22,7 +37,8 @@ Codex, Pi and OpenCode sessions. Only integrations already present and qualified
 in the actual running session are eligible. Missing integrations are later work.
 
 Use one canonical gateway session ID, an independently supervised node and one
-remote control writer per native instance/session/generation. Queue is default.
+active remote writer per exact native instance/session, fenced by generation and
+epoch. Queue is default.
 Steer is separately gated; reject it until independent result attribution is
 qualified. No per-request override or acknowledgement-only successful answer.
 External ownership always means detach, never process termination.
@@ -204,73 +220,17 @@ implemented/negotiated versions and capabilities; ACP v2 is draft, not an implie
 migration requirement. The existing A2A module's 1.0 label and ACP adapter's SDK
 version label are not end-to-end conformance or deployment evidence.
 
-### A2A and external ACP implementation contract
+### A2A and external ACP implementation contract (stage 4)
 
-Reuse `protocols/a2a/{server,agent_card,mapping}.py`,
-`protocols/acp/{agent,server,mapping}.py`, and injected `GatewayClient`/application
-ports. AS65/AS66 are superseded historical plans, not current qualification.
-Do not add an A2A task store, session registry, native adapter lookup or unaudited
-outbound endpoint discovery. Publish only explicitly configured Agent Definitions
-and granted targets. Agent Cards expose only implemented capabilities; streaming,
-push notifications, rich content and steer stay unsupported unless separately
-qualified. Do not advertise live native session IDs/locators in public cards.
-
-Add an explicit owner-validated optional joined execution target to canonical
-Context creation/binding, using the existing gateway session ID, immutable
-generation and evidence digest. The authorized management/join path resolves it
-before an A2A or external ACP call; subsequent standard context/session IDs route
-through that frozen Context. No untyped metadata/native ID routing parameter or
-adapter-owned target registry. Replacement target requires a new validated
-Context/binding, never silent retarget. Expose the authorized Context correlation
-alongside the joined session through existing status/management projections.
-
-`gateway/application.py:submit_agent_work()` must propagate that authorized
-target through explicit canonical admission fields, not its current owned/new
-execution default or reserved `idempotency_key` metadata. A2A and external ACP
-read/cancel/output use the same Work owner and external no-kill controls. A2A
-task IDs are Work IDs, not native turn IDs or gateway session IDs. Server-hosted
-and node-local scopes use SH37/SH38 authority, not untrusted protocol cwd paths.
-
-Source hazards assigned to SH43: both current external adapters derive message
-identity from text, incorrectly collapsing two intentional identical prompts;
-A2A `taskId` branch returns prior Work rather than validating new-message
-continuation; ACP `prompt()` reads output immediately and returns end_turn
-without a proved terminal Work; initialization echoes requested version. Require
-protocol-envelope message/delivery identity and canonical owner idempotency:
-same key/same content is replay, same key/different content conflicts, distinct
-messages with identical text remain distinct. If a peer protocol has no stable
-replay key, allocate a distinct command identity and preserve uncertainty rather
-than deduplicating content. End a turn only on correlated terminal evidence.
-
-A2A `messageId` identifies a client message, `contextId` the canonical Context,
-and `taskId` an existing Work. Input addressed to an existing task goes through
-an owning Work continuation operation: retain its task identity, validate current
-lifecycle and atomically record/admit the message once. Neither create another
-Work silently nor merely return prior Work. Unsupported continuation for that
-state returns the negotiated protocol error. A new message with only contextId
-creates distinct Work. Deduplication is scoped by authenticated sender, message
-identity and target, with payload conflicts rejected. Existing `work/inputs.py`
-append is not a complete continuation API: owner authorization, lifecycle,
-dispatch/receipt fencing and atomicity must be provided behind the public port.
-
-ACP `session/prompt` is an outstanding correlated turn, not an admission receipt.
-Keep that turn identity until the owner wait/event port reports terminal Work;
-emit only authorized, correlated updates. Map verified outcome to the negotiated
-stop reason or error; interruption, cancellation, timeout and uncertain delivery
-cannot become successful end_turn. session/cancel targets only the authorized
-active turn while preserving external human/shared no-interrupt policy. Observe
-the negotiated prompt/cancel completion ordering, including late native output.
-
-Validate principal/project/Agent Definition/Context/Work/session ownership before
-every operation, including existing-context sends, task reads/cancel and card
-discovery. Normalize public errors through registered owner errors and protocol
-mapping. Thin adapters never read native transports/stores or poll ad hoc. Inject
-an owner wait/event subscription for asynchronous Work; closure/cancellation is
-capability-scoped, never broad cancellation of other clients' work. Add negotiated
-version mismatch, duplicate/distinct text, concurrent clients, cross-agent and
-cross-principal denial, restart, late completion, repeated multi-turn context and
-owned-versus-joined tests. Real external clients and wire schemas must validate
-conformance; fake port tests prove only the semantic seam.
+A2A and external ACP remain required eventual projections over existing canonical
+Context/Work and authorized execution targets. SH43 owns implementation, exact
+target propagation, identity/continuation/cancellation semantics and external
+client qualification. The [admission/recovery addendum](shared-gateway-admission-recovery.md)
+owns acceptance and replay invariants. Adapters stay thin and introduce no second
+task/session authority or native routing registry. Publish only configured and
+granted capabilities; do not expose native locators in public cards. Joined
+target capability and EXTERNAL no-kill rules still apply. Stage 4 does not gate
+standalone serving, node execution or qualified native joining.
 
 | Harness | Research lead | AUDiaGentic joined status |
 |---|---|---|
@@ -317,24 +277,11 @@ admission/serialization must close the busy-snapshot/send race. Unknown native
 ordering or acceptance correlation means unproven. Native approvals remain human
 owned; joining never grants approval bypass.
 
-| Fact | Persistence/recovery rule |
-|---|---|
-| admitted/queued | Canonical request/principal/FIFO; atomic own cancel |
-| dispatch-intent | Command/request/generation/attempt and payload digest/reference durable before effect |
-| sent-uncertain | Reconcile exact evidence; never blind replay |
-| native-accepted | Stable native receipt, not completion |
-| native-started | Correlated work evidence, distinct from heartbeat |
-| native-settled | Exact terminal evidence; still verify result ownership |
-| verified-response | Request-specific output proof, then complete |
-| needs-reconciliation | Fence generation, release compute reservation honestly; retain unresolved receipt |
-
-These facts map onto existing lifecycle, not a second scheduler/state authority.
-Do not copy `controls.execute_once()` dispatch-before-save ordering. Node WAL is
-transactional delivery evidence, not another session store. Without native
-idempotency/queryable turn evidence there is no exactly-once guarantee. Definitive
-exact-command evidence can resolve automatically after renewed authorization;
-otherwise bounded reconciliation ends delivery-uncertain and needs operator
-clearance. Time elapsed never authorizes replay or clears a generation fence.
+Gateway owns request/FIFO and command identity; node owns durable native-effect
+evidence. The [admission/recovery addendum](shared-gateway-admission-recovery.md)
+is the authoritative durability/recovery table for stages 2/3. Map those facts onto
+existing lifecycle state; do not create another scheduler or session store. No
+exactly-once claim or blind replay is justified by an uncertain native effect.
 
 Cancellation after native acceptance records intent separately from physical
 execution. One caller cannot automatically interrupt a human/shared turn. Steers
@@ -344,9 +291,9 @@ and wait cycles, including async self-submit followed by polling. Source labels
 from model arguments are not identity proof.
 
 Configured observation/reconciliation deadlines are separate from native work
-progress, queue wait and client keepalive. At most one bounded retry of an
-idempotent transient boundary operation; no auth/config/contract retry or prompt
-resend loop. Synthetic heartbeat never masks unsent/stalled work. Reconnect is
+progress, queue wait and client keepalive. Retry demonstrably idempotent boundary
+operations only under existing bounded owner policy; never retry an uncertain
+native prompt or use an auth/config/contract resend loop. Synthetic heartbeat never masks unsent/stalled work. Reconnect is
 bounded supervised lifecycle, not retry of the native side effect.
 
 ## Data, observability and tools

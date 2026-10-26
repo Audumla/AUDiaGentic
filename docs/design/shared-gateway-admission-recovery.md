@@ -28,40 +28,19 @@ Keep a version-to-tests table in SH42 evidence with exact specification URL,
 schema revision, SDK/client versions and supported operations. A newer stable
 specification triggers review, not an automatic migration or support claim.
 
-## One canonical message acceptance operation
+## Protocol message acceptance (stage 4: SH43)
 
-Extend the owning Agents application and injected GatewayClient ports, not
-protocol adapters or a new task facade. Proposed operation shape:
+The existing owner must atomically accept authorized message identity, payload
+reference/digest, immutable target and dispatch intent before any native effect.
+Replay returns the original acceptance; changed payload conflicts. Secondary
+input/queue projections recover from that acceptance. Select the public API and
+crash-safe persistence mechanism during SH43 implementation using existing owner
+ports and writers, not a second authority. Multiple filesystem renames are not
+one atomic transaction. A committed acceptance must reference durable input.
 
-```python
-receipt = owner.accept_protocol_message(
-    authenticated_principal=principal,  # transport-verified, never model text
-    agent_id=agent_id,
-    context_id=context_id,
-    existing_work_id=task_id,           # optional; continuation retains Work
-    message_identity=message_identity,
-    payload_reference=protected_input,
-    expected_target_generation=generation,
-)
-```
-
-The owner normalizes these fields before mutation. In one owner acceptance
-transaction it verifies grants, Agent Definition, Context/Work relationship,
-current lifecycle, immutable execution target and message identity/fingerprint.
-The primary committed acceptance contains the canonical Work/message identity,
-payload digest/reference, target generation, stable command identity and dispatch
-intent. Its commit is the acceptance linearization point. No native action can
-precede it. Input indexes and queue projections are recoverable from that owner
-record, not independent acceptance authorities.
-
-Implement under the existing WorkStore lock/revision mechanism, with one atomic
-authoritative acceptance record. Current append_work_input plus a separate Work
-write is insufficient. Do not pretend multiple filesystem renames are one atomic
-transaction. Resolve the precise record/schema migration and crash-safe writer
-inside SH43 before coding; reuse the existing owner rather than adding a registry.
-Protected content staging before acceptance may leave an unreferenced artifact,
-which owner retention may reclaim. A committed acceptance must never reference
-an artifact that was not durably made available first.
+These protocol continuation requirements do not gate stage 1's existing gateway
+request API. Stage 1 still preserves its durable request admission, terminal proof
+and no-blind-replay requirements.
 
 Replay key is authenticated issuer/subject plus Context/target and protocol
 message identity. Same key and fingerprint returns the original receipt; changed
@@ -98,9 +77,10 @@ otherwise reject delegation. Gateway operator, observer, submitter and
 cancel-own-request privileges are distinct. A task/context/session ID is not an
 authorization token. Grants must be checked on reads/cards/output as well as Send.
 
-Choose a validated external identity-provider access-token profile for remote
-client ingress: configured issuer, exact resource audience, explicit algorithms,
-signature keys/rotation and expiry, with no accept-any JWT mode. Node enrollment
+Use a concrete configured authentication profile for remote ingress, not a new
+general identity/delegation framework. When using externally issued access
+tokens, validate configured issuer, exact resource audience, algorithms,
+signature keys/rotation and expiry; never accept arbitrary JWTs. Node enrollment
 uses its own service identity/credential and workspace grants; never forward a
 user's provider credential to a node or treat a proxy header as identity unless
 the configured front door overwrites it and backend access is restricted.
@@ -112,24 +92,20 @@ Disconnected or stale nodes cannot obtain new sends. Revocation blocks new
 central admissions and dispatch permissions immediately. Already accepted native
 work continues to be observed with output restricted; no silent shared interrupt.
 
-Initial node mode requires online per-command grant confirmation immediately
-before native admission. Bind the confirmation to command, authenticated node
-connection epoch, target generation, payload digest and grant revision. It grants
-one admission, not permission to issue later prompts. Do not add offline grant
-leases, cross-machine expiry clocks or distributed consensus in the MVP.
-Connection loss invalidates an unused confirmation; reconnect requires a new
-decision and exact command evidence before effect. Already accepted native work
-continues offline under existing observation/recovery semantics.
+For stages 2/3, native effects require command-scoped authorization bound to the
+authenticated node epoch, target generation, payload digest and grant revision.
+Reuse authorized dispatch if it provides the required revocation ordering; add a
+separate confirmation exchange only if a demonstrated requirement needs it. No
+offline grant leases, cross-machine clock protocol or consensus is introduced.
+Disconnected nodes receive no new dispatch authority. Reconnect requires current
+authorization and exact command evidence before another effect.
 
-Grant confirmation is the authorization linearization point for that command.
-Revocation blocks later confirmations, but cannot promise to undo an already
-confirmed/native-accepted operation in the gap before the next remote observation.
-Node checks received cancellation/revocation and owner/generation fences before
-effect. Record this ordering honestly rather than promise instantaneous global
-revocation during a partition. Measure the additional confirmation round trip;
-introduce a bounded lease only through a later justified plan if it is necessary.
+Record the authorization linearization point and revocation race honestly:
+revocation blocks later authorization, but cannot undo already authorized or
+native-accepted work during a partition. Observe accepted work without silently
+interrupting shared human work. Node-specific contracts do not gate stage 1.
 
-## Gateway and node durability boundaries
+## Gateway and node durability boundaries (stages 2/3)
 
 Gateway owns canonical Work/request/FIFO and command identity. Node owns native
 effect WAL/receipt evidence. Their records are not a distributed atomic database.
@@ -142,6 +118,10 @@ effect WAL/receipt evidence. Their records are not a distributed atomic database
 | Node effect intent | Durable write before native admission; a crash after this boundary is potentially ambiguous |
 | Native accepted | Persist exact native receipt/turn correlation before reporting acceptance centrally |
 | Observed terminal | Verify request-specific output, persist evidence/artifact, then central completion |
+
+These rows are durable facts and ordering constraints, not mandatory separate
+transactions, acknowledgements or public lifecycle states. Combine records when
+there is no intervening effect and the same crash-safety guarantees hold.
 
 Document/test persistence barriers, not just atomic rename: critical pre-effect
 intent and receipts need the selected platform's durable-write guarantee.
@@ -167,27 +147,24 @@ central acknowledgement and resolution, compact receipts under the owner policy.
 
 ## Architecture and efficiency evidence gates
 
-The full dependency audit remains required. Trace static imports, configured
-adapter registrations and composition wiring from a clean exact checkout. Check
-that inbound CLI/MCP/A2A/ACP/service adapters depend on owner ports, Providers
-remain requester-blind, and foundation contains only neutral reusable contracts.
-No second task/session store, scheduler, callback bus or general gateway facade.
+Audit changed imports, configured registrations and composition paths for owner
+boundary compliance at the shipped stage. CLI/MCP/A2A/ACP/service adapters use
+owner ports; Providers stay requester-blind; foundation holds neutral contracts.
+No second store, scheduler, callback bus or generic gateway facade is justified.
+Use an exact checkout; no particular reviewer host is a release prerequisite.
 
-Performance hypotheses are unmeasured until qualification. SH37/SH42 collect
-cold/warm startup wall time, imports/RSS and initializer counts; admission and
-queue-to-send p50/p95/p99; payload bytes; command/receipt latency; reconnect/replay
-cost; native probe counts; lock hold/wait time and WAL durability overhead.
-Compare identical local baseline and shared topology under declared OS/resources,
-same-machine/two-machine placement and concurrent client counts. Non-model
-transport load tests must be labelled separately from paid/native generation.
-Freeze regression tolerances from those baselines before optimizing sensitive
-paths; do not invent benchmark results or call a proposed target compliance.
+Measure startup/resource use and admission/dispatch overhead against a stated
+baseline for the topology being shipped. Broader percentile, replay, probe, lock
+and WAL benchmarking is follow-up unless a measured regression or explicit
+release target requires it. Do not add a benchmark framework or speculative
+optimization as a universal delivery gate.
 
 Structural gates are already concrete: pure help starts no application/browser;
 no lock spans a native effect or human approval; buffers/frames/replay windows are
 bounded; default status omits transcripts/diagnostics/history; native payloads
-are not duplicated as central transcripts. Cache Provider-owned static facts by
-binary/adapter/platform/config/evidence identity and invalidate on change. Live
+are not duplicated as central transcripts. Cache Provider-owned static facts only
+if measured cost warrants it, keyed by binary/adapter/platform/config/evidence
+identity and invalidated on change, using the owning cache seam. Live
 authorization, generation and effect readiness still revalidate at boundaries.
 Do not add a global cache component or cache security decisions indefinitely.
 
@@ -202,7 +179,7 @@ Do not add a global cache component or cache security decisions indefinitely.
 | SH38/SH40 | Node channel security advisory or receipt/fencing defect | Update bounded channel/WAL compatibility and crash matrix |
 | SH41 | Actual native harness binary/schema/integration change | Invalidate stale proof and requalify before admission |
 
-This addendum does not remove qualification gates or authorize runtime work.
-The next independent review must verify the exact isolated checkout, primary
-specifications and transaction/grant/recovery contracts, rather than infer
-implementation readiness from earlier design-only approvals.
+This addendum scopes qualification to the advertised feature and does not
+authorize runtime implementation. Implementation review validates applicable
+transaction, authorization and recovery invariants. Wire qualification and native
+attachment evidence remain scoped to the corresponding release stage.
