@@ -5,9 +5,11 @@ under one Foundation AdvisoryLock. Never hold that lock over network/native I/O.
 Only a newly committed effect-intent returns True; a duplicate never grants a
 second native call. A crash/commit error after intent is uncertain, never unsent.
 Old epochs are evidence-only. Epoch rotation is an explicit owner CAS operation.
-Schema v2 records the exact central authorization ID with effect intent. Earlier
-prototype schemas are rejected without migration: missing authorization identity
-cannot be inferred or backfilled safely. Preserve those stores for offline review.
+Schema v3 adds one durable log incarnation and server-bound cumulative ACK cursor.
+A guarded v2 migration adds only that metadata, preserving command/outbox facts.
+Earlier prototypes remain rejected: authorization identity cannot be inferred.
+ACK is receipt custody, never native success, work completion or permission to
+delete evidence. Current channel/server facts must come from the trusted owner.
 
 Deploy on a protected local filesystem with working SQLite locks/fsync; network
 filesystems and cloud-sync folders are unsupported. POSIX directories are private;
@@ -25,6 +27,7 @@ import hashlib
 import json
 import os
 import sqlite3
+import uuid
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -56,6 +59,10 @@ class Receipt:
     sequence: int
     output_sha256: str | None = None
 
+    @property
+    def digest(self) -> str:
+        return hashlib.sha256(canonical_json(self.public_payload())).hexdigest()
+
     def public_payload(self) -> dict:
         """No native references, local paths, payload bytes or transcript text."""
         return {
@@ -64,6 +71,36 @@ class Receipt:
             "receipt-sequence": self.sequence,
             "output-sha256": self.output_sha256,
         }
+
+
+def _log_id(value):
+    if not isinstance(value, str):
+        raise invalid(1, "Receipt log identity must be a canonical UUID")
+    try:
+        parsed = uuid.UUID(value)
+    except ValueError:
+        raise invalid(1, "Receipt log identity must be a canonical UUID") from None
+    if str(parsed) != value or parsed.version != 4:
+        raise invalid(1, "Receipt log identity must be a canonical UUID v4")
+    return value
+
+
+def _digest(value):
+    if (
+        not isinstance(value, str)
+        or len(value) != 64
+        or any(c not in "0123456789abcdef" for c in value)
+    ):
+        raise invalid(1, "Receipt digest must be a lowercase SHA256")
+    return value
+
+
+@dataclass(frozen=True)
+class ReceiptCheckpoint:
+    log_incarnation_id: str
+    server_id: str | None
+    through_sequence: int
+    through_receipt_sha256: str | None
 
 
 class NodeReceiptStore:
@@ -88,40 +125,137 @@ class NodeReceiptStore:
                 raise invalid(1, "Node receipt files must not be symlinks")
             with self._transaction() as db:
                 version = db.execute("PRAGMA user_version").fetchone()[0]
-                if version not in (0, 2):
+                if version not in (0, 2, 3):
                     raise conflict(1, "Unsupported node receipt schema version")
-                if (
-                    version == 0
-                    and db.execute(
+                if version == 0:
+                    if db.execute(
                         "SELECT 1 FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' LIMIT 1"
-                    ).fetchone()
-                ):
-                    raise conflict(1, "Unversioned existing node receipt store is unsupported")
-                db.execute(
-                    "CREATE TABLE IF NOT EXISTS owner (singleton INTEGER PRIMARY KEY CHECK(singleton=1), node TEXT NOT NULL, epoch TEXT NOT NULL, gateway TEXT NOT NULL)"
-                )
-                db.execute(
-                    "CREATE TABLE IF NOT EXISTS commands (command TEXT PRIMARY KEY, identity TEXT NOT NULL, payload BLOB NOT NULL, state TEXT NOT NULL CHECK(state IN ('prepared','effect-intent','native-accepted','terminal')), native_ref TEXT, output_digest TEXT, sequence INTEGER NOT NULL, authorization_id TEXT)"
-                )
-                db.execute(
-                    "CREATE TABLE IF NOT EXISTS outbox (sequence INTEGER PRIMARY KEY AUTOINCREMENT, command TEXT NOT NULL REFERENCES commands(command), state TEXT NOT NULL, output_digest TEXT)"
-                )
-                db.execute(
-                    "CREATE TRIGGER IF NOT EXISTS outbox_no_update BEFORE UPDATE ON outbox BEGIN SELECT RAISE(ABORT, 'append-only outbox'); END"
-                )
-                db.execute(
-                    "CREATE TRIGGER IF NOT EXISTS outbox_no_delete BEFORE DELETE ON outbox BEGIN SELECT RAISE(ABORT, 'append-only outbox'); END"
-                )
-                db.execute("INSERT OR IGNORE INTO owner VALUES (1,?,?,?)", self._scope)
-                if db.execute("SELECT node FROM owner WHERE singleton=1").fetchone()[0] != node_id:
+                    ).fetchone():
+                        raise conflict(1, "Unversioned existing node receipt store is unsupported")
+                    self._create_core(db)
+                    db.execute("INSERT INTO owner VALUES (1,?,?,?)", self._scope)
+                else:
+                    self._validate_core_schema(db, version)
+                if db.execute("SELECT node FROM owner WHERE singleton=1").fetchone() != (node_id,):
                     raise conflict(1, "Receipt store belongs to another node")
-                if "authorization_id" not in {
-                    row[1] for row in db.execute("PRAGMA table_info(commands)")
-                }:
-                    raise conflict(1, "Node receipt schema lacks authorization identity")
-                db.execute("PRAGMA user_version=2")
+                if version in (0, 2):
+                    if db.execute(
+                        "SELECT 1 FROM sqlite_master WHERE name='receipt_checkpoint'"
+                    ).fetchone():
+                        raise conflict(
+                            1, "Unexpected checkpoint metadata in earlier receipt schema"
+                        )
+                    db.execute("ALTER TABLE owner ADD COLUMN log_incarnation_id TEXT")
+                    db.execute(
+                        "UPDATE owner SET log_incarnation_id=? WHERE singleton=1",
+                        (str(uuid.uuid4()),),
+                    )
+                    self._create_checkpoint(db)
+                    db.execute("PRAGMA user_version=3")
+                # A v3 store missing its log identity is corruption, never a new log.
+                self._checkpoint(db)
         except OSError:
             raise io_error(1, "Cannot initialize private node receipt storage") from None
+
+    @staticmethod
+    def _create_core(db):
+        db.execute(
+            "CREATE TABLE owner (singleton INTEGER PRIMARY KEY CHECK(singleton=1), node TEXT NOT NULL, epoch TEXT NOT NULL, gateway TEXT NOT NULL)"
+        )
+        db.execute(
+            "CREATE TABLE commands (command TEXT PRIMARY KEY, identity TEXT NOT NULL, payload BLOB NOT NULL, state TEXT NOT NULL CHECK(state IN ('prepared','effect-intent','native-accepted','terminal')), native_ref TEXT, output_digest TEXT, sequence INTEGER NOT NULL, authorization_id TEXT)"
+        )
+        db.execute(
+            "CREATE TABLE outbox (sequence INTEGER PRIMARY KEY AUTOINCREMENT, command TEXT NOT NULL REFERENCES commands(command), state TEXT NOT NULL, output_digest TEXT)"
+        )
+        db.execute(
+            "CREATE TRIGGER outbox_no_update BEFORE UPDATE ON outbox BEGIN SELECT RAISE(ABORT, 'append-only outbox'); END"
+        )
+        db.execute(
+            "CREATE TRIGGER outbox_no_delete BEFORE DELETE ON outbox BEGIN SELECT RAISE(ABORT, 'append-only outbox'); END"
+        )
+
+    @staticmethod
+    def _validate_core_schema(db, version):
+        expected = {
+            "owner": {"singleton", "node", "epoch", "gateway"},
+            "commands": {
+                "command",
+                "identity",
+                "payload",
+                "state",
+                "native_ref",
+                "output_digest",
+                "sequence",
+                "authorization_id",
+            },
+            "outbox": {"sequence", "command", "state", "output_digest"},
+        }
+        if version == 3:
+            expected["owner"].add("log_incarnation_id")
+        for table, columns in expected.items():
+            if {row[1] for row in db.execute(f"PRAGMA table_info({table})")} != columns:
+                raise conflict(1, "Unsupported node receipt schema shape")
+        triggers = {
+            row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='trigger'")
+        }
+        if not {"outbox_no_update", "outbox_no_delete"} <= triggers:
+            raise conflict(1, "Node receipt append-only guards are missing")
+        if version == 2 and (
+            db.execute("PRAGMA quick_check").fetchall() != [("ok",)]
+            or db.execute("PRAGMA foreign_key_check").fetchone()
+        ):
+            raise conflict(1, "Node receipt store failed integrity checks")
+
+    @staticmethod
+    def _create_checkpoint(db):
+        db.execute(
+            "CREATE TABLE receipt_checkpoint (singleton INTEGER PRIMARY KEY CHECK(singleton=1), server_id TEXT, through_sequence INTEGER NOT NULL, through_digest TEXT)"
+        )
+        db.execute("INSERT INTO receipt_checkpoint VALUES (1,NULL,0,NULL)")
+
+    @staticmethod
+    def _checkpoint(db):
+        if {row[1] for row in db.execute("PRAGMA table_info(receipt_checkpoint)")} != {
+            "singleton",
+            "server_id",
+            "through_sequence",
+            "through_digest",
+        }:
+            raise conflict(1, "Node receipt checkpoint schema is missing or invalid")
+        incarnations = db.execute(
+            "SELECT log_incarnation_id FROM owner WHERE singleton=1"
+        ).fetchall()
+        if len(incarnations) != 1:
+            raise conflict(1, "Node receipt log incarnation is missing")
+        log_id = _log_id(incarnations[0][0])
+        rows = db.execute(
+            "SELECT server_id,through_sequence,through_digest FROM receipt_checkpoint"
+        ).fetchall()
+        if len(rows) != 1:
+            raise conflict(1, "Node receipt log identity is missing or ambiguous")
+        server_id, sequence, digest = rows[0]
+        _integer(sequence, 0)
+        if (sequence == 0 and (digest is not None or server_id is not None)) or (
+            sequence > 0 and (server_id is None or digest is None)
+        ):
+            raise conflict(1, "Invalid node receipt checkpoint state")
+        if server_id is not None:
+            _identifier(server_id)
+            _digest(digest)
+            if NodeReceiptStore._outbox_receipt(db, sequence).digest != digest:
+                raise conflict(1, "Stored ACK checkpoint does not match local receipt evidence")
+        return ReceiptCheckpoint(log_id, server_id, sequence, digest)
+
+    @staticmethod
+    def _outbox_receipt(db, sequence):
+        row = db.execute(
+            "SELECT c.identity,o.state,o.sequence,o.output_digest FROM outbox o JOIN commands c ON c.command=o.command WHERE o.sequence=?",
+            (sequence,),
+        ).fetchone()
+        if row is None:
+            raise conflict(1, "Receipt ACK references an absent local outbox row")
+        return Receipt(CommandIdentity.from_mapping(json.loads(row[0])), row[1], row[2], row[3])
 
     @property
     def _scope(self):
@@ -368,3 +502,95 @@ class NodeReceiptStore:
                 Receipt(CommandIdentity.from_mapping(json.loads(r[0])), r[1], r[2], r[3])
                 for r in rows
             )
+
+    @property
+    def log_incarnation_id(self) -> str:
+        return self.ack_checkpoint().log_incarnation_id
+
+    def ack_checkpoint(self) -> ReceiptCheckpoint:
+        """Local durable custody checkpoint, readable across historical epochs."""
+        with self._transaction() as db:
+            return self._checkpoint(db)
+
+    @staticmethod
+    def _write_ack(db, server_id, sequence, digest):
+        db.execute(
+            "UPDATE receipt_checkpoint SET server_id=?,through_sequence=?,through_digest=? WHERE singleton=1",
+            (server_id, sequence, digest),
+        )
+
+    def acknowledge(
+        self, frame: Frame, *, expected_server_id: str, current_connection
+    ) -> ReceiptCheckpoint:
+        """Commit only a validated cumulative receipt-custody ACK.
+
+        expected_server_id comes from local config. current_connection is the
+        trusted live channel snapshot, sampled under its owner serialization;
+        never construct either argument from the ACK payload. The channel owner
+        still authenticates the peer and checks frame direction/message sequence.
+        A successful send is NOT an ACK. No receipt, command or artifact is deleted.
+        """
+        from .authority import NodeConnectionIdentity
+
+        _identifier(expected_server_id)
+        if type(current_connection) is not NodeConnectionIdentity:
+            raise invalid(1, "ACK requires trusted typed current connection facts")
+        for value in (
+            current_connection.node_id,
+            current_connection.node_epoch,
+            current_connection.gateway_owner_epoch,
+        ):
+            _identifier(value)
+        _integer(current_connection.connection_generation)
+        if not isinstance(frame, Frame) or frame.type != "reconcile-result":
+            raise invalid(1, "Receipt ACK requires a reconcile-result frame")
+        payload = frame.payload
+        if (
+            set(payload)
+            != {
+                "kind",
+                "server-id",
+                "log-incarnation-id",
+                "connection-generation",
+                "through-sequence",
+                "through-receipt-sha256",
+            }
+            or payload["kind"] != "receipt-ack"
+        ):
+            raise invalid(1, "Invalid receipt ACK payload variant")
+        log_id = _log_id(payload["log-incarnation-id"])
+        sequence = _integer(payload["through-sequence"])
+        digest = _digest(payload["through-receipt-sha256"])
+        _integer(payload["connection-generation"])
+        live_scope = (
+            current_connection.node_id,
+            current_connection.node_epoch,
+            current_connection.gateway_owner_epoch,
+        )
+        if (
+            live_scope != self._scope
+            or (frame.node_id, frame.node_epoch, frame.gateway_owner_epoch) != live_scope
+            or "unbound" in (current_connection.node_epoch, current_connection.gateway_owner_epoch)
+            or payload["connection-generation"] != current_connection.connection_generation
+            or payload["server-id"] != expected_server_id
+        ):
+            raise conflict(1, "Receipt ACK does not match trusted server and live connection")
+        with self._transaction() as db:
+            self._require_current(db)
+            checkpoint = self._checkpoint(db)
+            if log_id != checkpoint.log_incarnation_id or checkpoint.server_id not in (
+                None,
+                expected_server_id,
+            ):
+                raise conflict(1, "Receipt ACK targets another log or bound server")
+            if sequence < checkpoint.through_sequence:
+                raise conflict(1, "Receipt ACK cursor regressed")
+            receipt = self._outbox_receipt(db, sequence)
+            if receipt.digest != digest:
+                raise conflict(1, "Receipt ACK digest does not match exact local receipt")
+            if sequence == checkpoint.through_sequence:
+                if digest != checkpoint.through_receipt_sha256:
+                    raise conflict(1, "Duplicate receipt ACK digest changed")
+                return checkpoint
+            self._write_ack(db, expected_server_id, sequence, digest)
+            return self._checkpoint(db)

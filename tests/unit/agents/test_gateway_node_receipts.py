@@ -19,6 +19,16 @@ from audiagentic.foundation.contracts.errors import AudiaGenticError
 from .test_gateway_node_contracts import authorization, identity
 
 
+def child_environment():
+    # Match the package under test, not a stale wheel installed in this venv.
+    package_root = Path(sys.modules[NodeReceiptStore.__module__].__file__).parents[5]
+    environment = os.environ.copy()
+    environment["PYTHONPATH"] = str(package_root) + (
+        os.pathsep + environment["PYTHONPATH"] if environment.get("PYTHONPATH") else ""
+    )
+    return environment
+
+
 def store_at(root, **changes):
     return NodeReceiptStore(
         **(
@@ -255,6 +265,7 @@ def test_hard_kill_reopen_preserves_barriers_without_repeating_native_call(
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
+        env=child_environment(),
     )
     try:
         child.stdin.write(
@@ -386,7 +397,7 @@ def test_wrong_node_and_future_store_version_fail_closed(tmp_path):
     with pytest.raises(AudiaGenticError, match="CON-AGND-001"):
         store_at(root, node_id="other-node")
     with sqlite3.connect(store.path) as db:
-        db.execute("PRAGMA user_version=3")
+        db.execute("PRAGMA user_version=4")
     with pytest.raises(AudiaGenticError, match="CON-AGND-001"):
         store_at(root)
 
@@ -418,7 +429,7 @@ def test_exact_authorization_persists_on_reopen_and_never_authorizes_second_effe
     assert reopened.receipts_after() == before
     assert "grant-1" not in json.dumps([r.public_payload() for r in before])
     with sqlite3.connect(reopened.path) as db:
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 2
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 3
         assert db.execute("SELECT state,authorization_id FROM commands").fetchone() == (
             stage,
             "grant-1",
@@ -501,3 +512,486 @@ def test_concurrent_distinct_grants_pin_only_winning_authorization(tmp_path):
     reopened = store_at(root)
     assert reopened.authorization_id(command) == winners[0]
     assert [r.state for r in reopened.receipts_after()] == ["prepared", "effect-intent"]
+
+
+# Local ACK API tests. Authentication/current-channel facts are injected by the
+# trusted owner, never reconstructed from incoming ACK fields.
+def live_connection(**changes):
+    from audiagentic.components.agents.gateway.node.authority import NodeConnectionIdentity
+
+    return NodeConnectionIdentity(
+        **(
+            dict(
+                node_id="node-1",
+                node_epoch="boot-1",
+                gateway_owner_epoch="gateway-1",
+                connection_generation=1,
+            )
+            | changes
+        )
+    )
+
+
+def ack_frame(store, receipt, **payload_changes):
+    from audiagentic.components.agents.gateway.node.contracts import Frame
+
+    return Frame(
+        1,
+        "reconcile-result",
+        "ack-1",
+        "node-1",
+        "boot-1",
+        "gateway-1",
+        1,
+        {
+            "kind": "receipt-ack",
+            "server-id": "server-1",
+            "log-incarnation-id": store.log_incarnation_id,
+            "connection-generation": 1,
+            "through-sequence": receipt.sequence,
+            "through-receipt-sha256": receipt.digest,
+            **payload_changes,
+        },
+    )
+
+
+def accept_ack(store, frame, **trusted_changes):
+    return store.acknowledge(
+        frame,
+        **(
+            dict(expected_server_id="server-1", current_connection=live_connection())
+            | trusted_changes
+        ),
+    )
+
+
+def v2_fixture(root):
+    """Create the exact old v2 shape with real command/outbox evidence."""
+    store = store_at(root)
+    command = advance(store)
+    store.native_accepted(command, native_ref="private-native-ref")
+    store.terminal(command, text="private-output")
+    store.prepare(identity(command_id="other-command", request_id="other-request"), b"payload")
+    with sqlite3.connect(store.path) as db:
+        db.execute("DROP TABLE receipt_checkpoint")
+        db.execute("ALTER TABLE owner RENAME TO owner_v3")
+        db.execute(
+            "CREATE TABLE owner (singleton INTEGER PRIMARY KEY CHECK(singleton=1), node TEXT NOT NULL, epoch TEXT NOT NULL, gateway TEXT NOT NULL)"
+        )
+        db.execute("INSERT INTO owner SELECT singleton,node,epoch,gateway FROM owner_v3")
+        db.execute("DROP TABLE owner_v3")
+        db.execute("PRAGMA user_version=2")
+    return store.path
+
+
+def durable_facts(path):
+    with sqlite3.connect(path) as db:
+        return (
+            db.execute("SELECT * FROM commands ORDER BY command").fetchall(),
+            db.execute("SELECT * FROM outbox ORDER BY sequence").fetchall(),
+            db.execute("SELECT * FROM sqlite_sequence ORDER BY name").fetchall(),
+        )
+
+
+def test_v2_guarded_migration_preserves_every_receipt_and_authorization_fact(tmp_path):
+    root = tmp_path / "node"
+    path = v2_fixture(root)
+    before = durable_facts(path)
+    migrated = store_at(root)
+    assert durable_facts(path) == before
+    assert migrated.authorization_id(identity()) == "grant-1"
+    assert migrated.native_reference(identity()) == "private-native-ref"
+    assert migrated.output(identity()) == "private-output"
+    checkpoint = migrated.ack_checkpoint()
+    assert checkpoint.server_id is None and checkpoint.through_sequence == 0
+    assert checkpoint.through_receipt_sha256 is None
+    import uuid
+
+    assert uuid.UUID(checkpoint.log_incarnation_id).version == 4
+    assert store_at(root).log_incarnation_id == checkpoint.log_incarnation_id
+    next_receipt = migrated.prepare(identity(command_id="after-migration"), b"payload")
+    assert next_receipt.sequence == 6
+    with sqlite3.connect(path) as db:
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 3
+
+
+def test_migration_failure_rolls_back_schema_uuid_and_cursor(tmp_path, monkeypatch):
+    root = tmp_path / "node"
+    path = v2_fixture(root)
+    before = durable_facts(path)
+    original = NodeReceiptStore._create_checkpoint
+
+    def fail_after_create(db):
+        original(db)
+        raise sqlite3.OperationalError("failed migration commit")
+
+    monkeypatch.setattr(NodeReceiptStore, "_create_checkpoint", staticmethod(fail_after_create))
+    with pytest.raises(AudiaGenticError, match="IO-AGND-001"):
+        store_at(root)
+    assert durable_facts(path) == before
+    with sqlite3.connect(path) as db:
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 2
+        assert "log_incarnation_id" not in {r[1] for r in db.execute("PRAGMA table_info(owner)")}
+        assert not db.execute(
+            "SELECT 1 FROM sqlite_master WHERE name='receipt_checkpoint'"
+        ).fetchone()
+
+
+@pytest.mark.parametrize(
+    "damage", ["missing-authorization", "missing-trigger", "unexpected-checkpoint"]
+)
+def test_migration_rejects_incomplete_or_ambiguous_v2(tmp_path, damage):
+    root = tmp_path / "node"
+    path = v2_fixture(root)
+    with sqlite3.connect(path) as db:
+        if damage == "missing-authorization":
+            db.execute("ALTER TABLE commands RENAME COLUMN authorization_id TO unknown_id")
+        elif damage == "missing-trigger":
+            db.execute("DROP TRIGGER outbox_no_delete")
+        else:
+            db.execute("CREATE TABLE receipt_checkpoint (unknown TEXT)")
+    with pytest.raises(AudiaGenticError, match="CON-AGND-001"):
+        store_at(root)
+    with sqlite3.connect(path) as db:
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 2
+
+
+def test_log_uuid_and_ack_survive_reopen_and_epoch_rotation_not_database_recreation(tmp_path):
+    root = tmp_path / "node"
+    store = store_at(root)
+    receipt = store.prepare(identity(), b"payload")
+    log_id = store.log_incarnation_id
+    accepted = accept_ack(store, ack_frame(store, receipt))
+    assert store_at(root).ack_checkpoint() == accepted
+    store.advance_epoch(node_epoch="boot-2", gateway_owner_epoch="gateway-2")
+    current = store_at(root, node_epoch="boot-2", gateway_owner_epoch="gateway-2")
+    assert current.log_incarnation_id == log_id
+    assert current.ack_checkpoint() == accepted
+    # Recreate only the named database; no recursive deletion or artifact purge.
+    store.path.unlink()
+    recreated = store_at(root)
+    assert recreated.log_incarnation_id != log_id
+    assert recreated.ack_checkpoint().through_sequence == 0
+    assert recreated.ack_checkpoint().server_id is None
+    with pytest.raises(AudiaGenticError):
+        accept_ack(recreated, ack_frame(store_at(root), receipt, **{"log-incarnation-id": log_id}))
+
+
+def test_cumulative_ack_duplicate_noop_regression_and_changed_digest_conflict(
+    tmp_path, monkeypatch
+):
+    store = store_at(tmp_path / "node")
+    command = advance(store)
+    receipts = store.receipts_after()
+    # A valid cumulative ACK may cover already emitted intermediate receipts.
+    accepted = accept_ack(store, ack_frame(store, receipts[-1]))
+    assert accepted.through_sequence == 2 and accepted.server_id == "server-1"
+
+    def no_write(*args):
+        pytest.fail("Duplicate ACK mutated the checkpoint")
+
+    monkeypatch.setattr(store, "_write_ack", no_write)
+    assert accept_ack(store, ack_frame(store, receipts[-1])) == accepted
+    with pytest.raises(AudiaGenticError, match="CON-AGND-001"):
+        accept_ack(store, ack_frame(store, receipts[0]))
+    with pytest.raises(AudiaGenticError, match="CON-AGND-001"):
+        accept_ack(store, ack_frame(store, receipts[-1], **{"through-receipt-sha256": "0" * 64}))
+    assert store.ack_checkpoint() == accepted
+    assert store.get(command).state == "effect-intent"  # ACK isn't successful work.
+    assert store.authorization_id(command) == "grant-1"
+    assert store.receipts_after() == receipts  # ACK isn't permission to delete.
+
+
+@pytest.mark.parametrize(
+    "key,value",
+    [
+        ("kind", "other"),
+        ("server-id", "server-2"),
+        ("log-incarnation-id", "00000000-0000-4000-8000-000000000000"),
+        ("log-incarnation-id", "invalid"),
+        ("connection-generation", 2),
+        ("connection-generation", True),
+        ("through-sequence", True),
+        ("through-sequence", 0),
+        ("through-sequence", 2),
+        ("through-sequence", -1),
+        ("through-sequence", 1.0),
+        ("through-sequence", 2**63),
+        ("through-receipt-sha256", "0" * 64),
+        ("through-receipt-sha256", "A" * 64),
+        ("through-receipt-sha256", True),
+        ("unexpected", "value"),
+    ],
+)
+def test_bad_ack_never_establishes_server_binding_or_cursor(tmp_path, key, value):
+    store = store_at(tmp_path / "node")
+    receipt = store.prepare(identity(), b"payload")
+    before = store.ack_checkpoint()
+    with pytest.raises(AudiaGenticError):
+        accept_ack(store, ack_frame(store, receipt, **{key: value}))
+    assert store.ack_checkpoint() == before
+    assert store.receipts_after() == (receipt,)
+
+
+@pytest.mark.parametrize(
+    "key",
+    [
+        "kind",
+        "server-id",
+        "log-incarnation-id",
+        "connection-generation",
+        "through-sequence",
+        "through-receipt-sha256",
+    ],
+)
+def test_ack_missing_field_is_rejected(tmp_path, key):
+    store = store_at(tmp_path / "node")
+    receipt = store.prepare(identity(), b"payload")
+    frame = ack_frame(store, receipt)
+    payload = dict(frame.payload)
+    del payload[key]
+    with pytest.raises(AudiaGenticError, match="VAL-AGND-001"):
+        accept_ack(store, replace(frame, payload=payload))
+    assert store.ack_checkpoint().server_id is None
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("node_id", "foreign"),
+        ("node_epoch", "old"),
+        ("gateway_owner_epoch", "old"),
+        ("connection_generation", True),
+    ],
+)
+def test_ack_rejects_untrusted_or_stale_connection_facts(tmp_path, field, value):
+    store = store_at(tmp_path / "node")
+    receipt = store.prepare(identity(), b"payload")
+    with pytest.raises(AudiaGenticError):
+        accept_ack(
+            store, ack_frame(store, receipt), current_connection=live_connection(**{field: value})
+        )
+    assert store.ack_checkpoint().through_sequence == 0
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("node_id", "foreign"),
+        ("node_epoch", "old"),
+        ("gateway_owner_epoch", "unbound"),
+        ("type", "receipt"),
+    ],
+)
+def test_ack_frame_scope_cannot_override_trusted_context(tmp_path, field, value):
+    store = store_at(tmp_path / "node")
+    receipt = store.prepare(identity(), b"payload")
+    with pytest.raises(AudiaGenticError):
+        accept_ack(store, replace(ack_frame(store, receipt), **{field: value}))
+    assert store.ack_checkpoint().server_id is None
+
+
+def test_ack_singleton_server_binding_blocks_retarget_even_with_new_trusted_argument(tmp_path):
+    store = store_at(tmp_path / "node")
+    receipt = store.prepare(identity(), b"payload")
+    accepted = accept_ack(store, ack_frame(store, receipt))
+    with pytest.raises(AudiaGenticError, match="CON-AGND-001"):
+        accept_ack(
+            store,
+            ack_frame(store, receipt, **{"server-id": "server-2"}),
+            expected_server_id="server-2",
+        )
+    assert store_at(store.root).ack_checkpoint() == accepted
+
+
+def test_current_epoch_ack_can_cover_historical_receipt_without_reauthorizing_it(tmp_path):
+    store = store_at(tmp_path / "node")
+    receipt = store.prepare(identity(), b"payload")
+    old_frame = ack_frame(store, receipt)
+    store.advance_epoch(node_epoch="boot-2", gateway_owner_epoch="gateway-2")
+    with pytest.raises(AudiaGenticError, match="CON-AGND-001"):
+        accept_ack(store, old_frame)
+    current = store_at(store.root, node_epoch="boot-2", gateway_owner_epoch="gateway-2")
+    frame = replace(
+        ack_frame(current, receipt, **{"connection-generation": 3}),
+        node_epoch="boot-2",
+        gateway_owner_epoch="gateway-2",
+    )
+    accepted = accept_ack(
+        current,
+        frame,
+        current_connection=live_connection(
+            node_epoch="boot-2", gateway_owner_epoch="gateway-2", connection_generation=3
+        ),
+    )
+    assert accepted.through_sequence == receipt.sequence
+    with pytest.raises(AudiaGenticError):
+        current.prepare(identity(), b"payload")
+
+
+def test_ack_transaction_failure_preserves_unbound_cursor(tmp_path, monkeypatch):
+    store = store_at(tmp_path / "node")
+    receipt = store.prepare(identity(), b"payload")
+    original = store._write_ack
+
+    def fail_after_update(*args):
+        original(*args)
+        raise sqlite3.OperationalError("simulated ACK failure")
+
+    monkeypatch.setattr(store, "_write_ack", fail_after_update)
+    with pytest.raises(AudiaGenticError, match="IO-AGND-001"):
+        accept_ack(store, ack_frame(store, receipt))
+    assert store.ack_checkpoint().server_id is None
+    assert store.ack_checkpoint().through_sequence == 0
+
+
+def test_public_receipt_digest_remains_stable_without_log_or_private_fields(tmp_path):
+    from audiagentic.components.agents.gateway.node.contracts import canonical_json
+
+    store = store_at(tmp_path / "node")
+    receipt = store.prepare(identity(), b"payload")
+    original = receipt.public_payload()
+    assert receipt.digest == hashlib.sha256(canonical_json(original)).hexdigest()
+    accept_ack(store, ack_frame(store, receipt))
+    assert store.receipts_after()[0].public_payload() == original
+    assert "log-incarnation-id" not in original and "server-id" not in original
+
+
+_ACK_CHILD = r"""
+import json,sys,time
+from pathlib import Path
+from audiagentic.components.agents.gateway.node.receipts import NodeReceiptStore
+from audiagentic.components.agents.gateway.node.contracts import Frame
+from audiagentic.components.agents.gateway.node.authority import NodeConnectionIdentity
+settings=json.loads(sys.stdin.readline())
+root=Path(settings['root'])
+def pause():
+    (root/'ack-ready').write_text('ready')
+    while True: time.sleep(1)
+if settings['stage']=='migration':
+    original=NodeReceiptStore._create_checkpoint
+    def held(db):
+        original(db)
+        pause()
+    NodeReceiptStore._create_checkpoint=staticmethod(held)
+s=NodeReceiptStore(root=root,node_id='node-1',node_epoch='boot-1',gateway_owner_epoch='gateway-1')
+if settings['stage']=='ack-before-commit':
+    original=s._write_ack
+    def held(*args):
+        original(*args)
+        pause()
+    s._write_ack=held
+s.acknowledge(Frame.from_bytes(settings['ack'].encode()),expected_server_id='server-1',
+    current_connection=NodeConnectionIdentity('node-1','boot-1','gateway-1',1))
+pause()
+"""
+
+
+def kill_at_ack_barrier(root, stage, frame=None):
+    child = subprocess.Popen(
+        [sys.executable, "-c", _ACK_CHILD],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env=child_environment(),
+    )
+    try:
+        child.stdin.write(
+            json.dumps(
+                {
+                    "root": str(root),
+                    "stage": stage,
+                    "ack": frame.to_bytes().decode() if frame is not None else "",
+                }
+            )
+            + "\n"
+        )
+        child.stdin.flush()
+        deadline = time.monotonic() + 10
+        while (
+            not (root / "ack-ready").exists()
+            and child.poll() is None
+            and time.monotonic() < deadline
+        ):
+            time.sleep(0.01)
+        if not (root / "ack-ready").exists():
+            child.kill()
+            _, error = child.communicate(timeout=5)
+            pytest.fail("ACK child missed persistence barrier: " + error)
+        child.kill()
+        child.communicate(timeout=5)
+    finally:
+        if child.poll() is None:
+            child.kill()
+            child.communicate(timeout=5)
+
+
+@pytest.mark.parametrize("stage,sequence", [("ack-before-commit", 0), ("ack-after-commit", 1)])
+def test_hard_kill_ack_reopen_is_atomic_and_does_not_delete_receipts(tmp_path, stage, sequence):
+    root = tmp_path / "node"
+    store = store_at(root)
+    receipt = store.prepare(identity(), b"payload")
+    log_id = store.log_incarnation_id
+    before = durable_facts(store.path)
+    frame = ack_frame(store, receipt)
+    kill_at_ack_barrier(root, stage, frame)
+    reopened = store_at(root)
+    checkpoint = reopened.ack_checkpoint()
+    assert checkpoint.log_incarnation_id == log_id
+    assert checkpoint.through_sequence == sequence
+    assert checkpoint.server_id == ("server-1" if sequence else None)
+    assert durable_facts(reopened.path) == before
+    accepted = accept_ack(reopened, frame)
+    assert accepted.through_sequence == 1
+    assert reopened.receipts_after() == (receipt,)
+
+
+def test_hard_kill_v2_migration_leaves_complete_old_schema_then_retries_safely(tmp_path):
+    root = tmp_path / "node"
+    path = v2_fixture(root)
+    before = durable_facts(path)
+    kill_at_ack_barrier(root, "migration")
+    with sqlite3.connect(path) as db:
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 2
+        assert "log_incarnation_id" not in {r[1] for r in db.execute("PRAGMA table_info(owner)")}
+        assert not db.execute(
+            "SELECT 1 FROM sqlite_master WHERE name='receipt_checkpoint'"
+        ).fetchone()
+    assert durable_facts(path) == before
+    reopened = store_at(root)
+    assert reopened.ack_checkpoint().through_sequence == 0
+    assert durable_facts(path) == before
+    assert store_at(root).log_incarnation_id == reopened.log_incarnation_id
+
+
+@pytest.mark.parametrize("damage", ["missing-row", "missing-log", "unknown-row", "changed-digest"])
+def test_v3_missing_or_corrupt_checkpoint_never_resets_itself(tmp_path, damage):
+    root = tmp_path / "node"
+    store = store_at(root)
+    receipt = store.prepare(identity(), b"payload")
+    accept_ack(store, ack_frame(store, receipt))
+    with sqlite3.connect(store.path) as db:
+        if damage == "missing-row":
+            db.execute("DELETE FROM receipt_checkpoint")
+        elif damage == "missing-log":
+            db.execute("UPDATE owner SET log_incarnation_id=NULL")
+        elif damage == "unknown-row":
+            db.execute("UPDATE receipt_checkpoint SET through_sequence=99")
+        else:
+            db.execute("UPDATE receipt_checkpoint SET through_digest=?", ("0" * 64,))
+    with pytest.raises(AudiaGenticError):
+        store_at(root)
+    with sqlite3.connect(store.path) as db:
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 3
+        if damage == "missing-row":
+            assert not db.execute("SELECT 1 FROM receipt_checkpoint").fetchone()
+
+
+def test_ack_cannot_take_connection_facts_from_payload(tmp_path):
+    store = store_at(tmp_path / "node")
+    receipt = store.prepare(identity(), b"payload")
+    frame = ack_frame(store, receipt)
+    with pytest.raises(AudiaGenticError, match="VAL-AGND-001"):
+        accept_ack(store, frame, current_connection=dict(frame.payload))
+    assert store.ack_checkpoint().server_id is None
