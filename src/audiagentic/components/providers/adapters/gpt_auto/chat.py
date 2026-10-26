@@ -853,6 +853,13 @@ class PersistentChat:
             # Only a new admission can reopen an intentionally reaped tab.
             self._physical_idle_closed = False
             self._idle_closed_turn_id = None
+        # Idle disconnect recovery deliberately leaves the runtime offline.
+        # A retained chat must drive the same lazy reconnect as open() before
+        # touching bridge-local handles. This only restores transport; existing
+        # conversation/turn reconciliation still owns any page recovery.
+        ensure_available = getattr(self.runtime, "ensure_available", None)
+        if callable(ensure_available):
+            await ensure_available()
         # Bridge page handles are local to one CDP connection and can be
         # invalidated without the runtime seeing a Target event (for example,
         # an operator closes a tab through a second CDP client).  A handle can
