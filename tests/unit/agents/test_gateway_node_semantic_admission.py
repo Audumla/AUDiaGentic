@@ -12,6 +12,8 @@ from audiagentic.components.agents.agents_paths import global_agents_config_path
 from audiagentic.components.agents.configuration import resolution
 from audiagentic.components.agents.configuration.repository import AgentsConfigRepository
 from audiagentic.components.agents.gateway import api
+from audiagentic.components.agents.gateway.admission import local_dispatch
+from audiagentic.components.agents.gateway.admission import semantics as semantics_owner
 from audiagentic.components.agents.gateway.admission.instructions import materialize_agent_prompt
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
@@ -88,7 +90,7 @@ def test_actual_semantic_resolution_never_reads_execution_local_facts(catalog, m
         monkeypatch.setattr(module, name, forbidden)
     # A missing referenced file must not prevent declarative resolution.
     (catalog[0].parent / "instructions.txt").unlink()
-    semantics = api._resolve_agent_semantics("reader")
+    semantics = semantics_owner.resolve_agent_semantics("reader")
     assert semantics.execution_profile_id == "native"
     assert semantics.prompt_profile_id == "main"
     assert semantics.composition.identity.agent_id == "reader"
@@ -120,7 +122,7 @@ def test_catalog_snapshot_is_retained_through_composition_and_rendering(catalog,
 
     monkeypatch.setattr(AgentsConfigRepository, "read", read)
     monkeypatch.setattr(resolution, "resolve_agent_composition", resolve)
-    semantics = api._resolve_agent_semantics("reader")
+    semantics = semantics_owner.resolve_agent_semantics("reader")
     assert len(reads) == 1 and len(snapshots) == 1
     assert semantics.catalog is reads[0] is snapshots[0]
     assert semantics.composition.identity.config_digest == semantics.catalog.digest
@@ -128,10 +130,10 @@ def test_catalog_snapshot_is_retained_through_composition_and_rendering(catalog,
 
 
 def test_file_bytes_change_rendered_digest_but_not_declarative_identity(catalog):
-    first = api._resolve_agent_semantics("reader")
+    first = semantics_owner.resolve_agent_semantics("reader")
     admitted = render(first)
     (catalog[0].parent / "instructions.txt").write_text("New file bytes", encoding="utf-8")
-    second = api._resolve_agent_semantics("reader")
+    second = semantics_owner.resolve_agent_semantics("reader")
     assert first.catalog.digest == second.catalog.digest
     assert first.composition.identity == second.composition.identity
     assert (
@@ -143,10 +145,10 @@ def test_file_bytes_change_rendered_digest_but_not_declarative_identity(catalog)
 
 def test_include_content_changes_catalog_and_rendering_not_parent_identity(catalog):
     path, data = catalog
-    first = api._resolve_agent_semantics("reader")
+    first = semantics_owner.resolve_agent_semantics("reader")
     data["prompts"]["included"]["content"][0]["text"] = "Changed include"
     path.write_text(yaml.safe_dump(data), encoding="utf-8")
-    second = api._resolve_agent_semantics("reader")
+    second = semantics_owner.resolve_agent_semantics("reader")
     assert first.catalog.digest != second.catalog.digest
     assert first.composition_fingerprint == second.composition_fingerprint
     assert first.prompt_definition_fingerprint == second.prompt_definition_fingerprint
@@ -156,17 +158,17 @@ def test_include_content_changes_catalog_and_rendering_not_parent_identity(catal
 
 def test_file_path_is_part_of_declarative_identity(catalog):
     path, data = catalog
-    first = api._resolve_agent_semantics("reader")
+    first = semantics_owner.resolve_agent_semantics("reader")
     data["prompts"]["main"]["content"][1]["path"] = "other.txt"
     path.write_text(yaml.safe_dump(data), encoding="utf-8")
-    second = api._resolve_agent_semantics("reader")
+    second = semantics_owner.resolve_agent_semantics("reader")
     assert first.composition_fingerprint != second.composition_fingerprint
     assert first.prompt_definition_fingerprint != second.prompt_definition_fingerprint
 
 
 def test_missing_agent_keeps_registered_error(catalog):
     with pytest.raises(AudiaGenticError) as caught:
-        api._resolve_agent_semantics("absent")
+        semantics_owner.resolve_agent_semantics("absent")
     assert caught.value.code == "RES-AGD-001"
     assert caught.value.details == {"agent-id": "absent"}
 
@@ -178,7 +180,7 @@ def test_ordinary_context_failure_still_precedes_semantic_resolution(tmp_path, m
     def unavailable_context(root: Path):
         raise RuntimeError("context unavailable")
 
-    monkeypatch.setattr(api, "_resolve_agent_semantics", forbidden)
+    monkeypatch.setattr(semantics_owner, "resolve_agent_semantics", forbidden)
     with pytest.raises(RuntimeError, match="context unavailable"):
         api.submit_execution_request(
             tmp_path,
@@ -191,7 +193,7 @@ def test_ordinary_context_failure_still_precedes_semantic_resolution(tmp_path, m
 def test_ordinary_materialization_keeps_bytes_context_precedence_and_profile(
     catalog, tmp_path, monkeypatch
 ):
-    from audiagentic.components.agents.gateway.admission import context, instructions
+    from audiagentic.components.agents.gateway.admission import context
 
     path, data = catalog
     data["prompts"]["main"]["content"].append(
@@ -199,8 +201,8 @@ def test_ordinary_materialization_keeps_bytes_context_precedence_and_profile(
     )
     path.write_text(yaml.safe_dump(data), encoding="utf-8")
     events = []
-    original_resolve = api._resolve_agent_semantics
-    original_materialize = instructions.materialize_agent_prompt
+    original_resolve = semantics_owner.resolve_agent_semantics
+    original_materialize = local_dispatch.materialize_local_prompt
 
     def component_reader(root):
         assert root == tmp_path
@@ -219,18 +221,18 @@ def test_ordinary_materialization_keeps_bytes_context_precedence_and_profile(
     def materialize(*args, **kwargs):
         events.append("render")
         rendered = original_materialize(*args, **kwargs)
-        assert rendered == "Original\nFile BODY\nTask: BODY\ncanonical name: component fact / main"
+        assert rendered.text == "Original\nFile BODY\nTask: BODY\ncanonical name: component fact / main"
         return rendered
 
-    def stop_before_local_profile(root, profile_id):
+    def stop_before_local_profile(root, profile_id, *, allow_test_fallback, profile_resolver):
         assert root == tmp_path and profile_id == "native"
         events.append("local-profile")
         raise RuntimeError("stop before provider facts")
 
     monkeypatch.setattr(context, "baseline_agent_template_context", baseline)
-    monkeypatch.setattr(api, "_resolve_agent_semantics", resolve)
-    monkeypatch.setattr(instructions, "materialize_agent_prompt", materialize)
-    monkeypatch.setattr(api, "_resolve_profile_for_submit", stop_before_local_profile)
+    monkeypatch.setattr(semantics_owner, "resolve_agent_semantics", resolve)
+    monkeypatch.setattr(local_dispatch, "materialize_local_prompt", materialize)
+    monkeypatch.setattr(local_dispatch, "resolve_local_profile", stop_before_local_profile)
     with pytest.raises(RuntimeError, match="stop before provider facts"):
         api.submit_execution_request(
             tmp_path,

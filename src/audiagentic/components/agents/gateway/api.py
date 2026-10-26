@@ -13,15 +13,13 @@ never persisted (only its digest); it is threaded to dispatch via functools.part
 from __future__ import annotations
 
 import functools
-import hashlib
 import logging
 import os
 import threading
 import uuid
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 from urllib.parse import urlsplit
 
 from audiagentic.components.agents.gateway import store as store
@@ -31,10 +29,6 @@ from audiagentic.components.agents.gateway.queue import dispatch as dispatch
 from audiagentic.components.agents.gateway.queue import queue as queue_mod
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.time import now_iso_z
-
-if TYPE_CHECKING:
-    from audiagentic.components.agents.configuration.repository import AgentsConfigSnapshot
-    from audiagentic.components.agents.configuration.resolution import ResolvedAgentComposition
 
 logger = logging.getLogger(__name__)
 
@@ -429,57 +423,6 @@ def _enrich_terminal_result(
     return result
 
 
-@dataclass(frozen=True, slots=True)
-class AgentSemantics:
-    """Global declarative identity; not expanded content or execution-local facts."""
-
-    catalog: AgentsConfigSnapshot
-    composition: ResolvedAgentComposition
-    config_root: Path
-
-    @property
-    def execution_profile_id(self) -> str:
-        return self.composition.execution_profile.profile_id
-
-    @property
-    def prompt_profile_id(self) -> str:
-        return self.composition.prompt.prompt_id
-
-    @property
-    def composition_fingerprint(self) -> str:
-        return self.composition.identity.fingerprint
-
-    @property
-    def prompt_definition_fingerprint(self) -> str:
-        return self.composition.identity.prompt_definition_fingerprint
-
-
-def _resolve_agent_semantics(agent_id: str) -> AgentSemantics:
-    """Resolve from one machine catalog snapshot without inspecting an execution root.
-
-    Include IDs and file paths retain their existing declarative fingerprints;
-    this does not expand prompt dependencies or commit to their file contents.
-    """
-    from audiagentic.components.agents.agents_paths import global_agents_config_path
-    from audiagentic.components.agents.configuration.global_catalog import read_global_agents_config
-    from audiagentic.components.agents.configuration.resolution import resolve_agent_composition
-
-    catalog = read_global_agents_config()
-    config_root = global_agents_config_path().parent
-    try:
-        # The resolver's path parameter is API-shape context only: the supplied
-        # snapshot is the sole catalog authority, never a project-local lookup.
-        composition = resolve_agent_composition(config_root, agent_id, snapshot=catalog)
-    except KeyError as exc:
-        raise AudiaGenticError(
-            code="RES-AGD-001",
-            kind="agents",
-            message=f"agent definition not found: {agent_id!r}",
-            details={"agent-id": agent_id},
-        ) from exc
-    return AgentSemantics(catalog=catalog, composition=composition, config_root=config_root)
-
-
 def submit_execution_request(
     project_root: Path,
     *,
@@ -531,7 +474,6 @@ def submit_execution_request(
     from audiagentic.components.agents.contracts.execution_context import (
         SubmissionEnvelope,
         build_manifest,
-        compute_agent_runtime_digest,
         derive_idempotency_key,
         sanitize_submission_metadata,
     )
@@ -638,83 +580,38 @@ def submit_execution_request(
         )
 
         component_context_reader = empty_component_context
-    template_context = component_context_reader(Path(canonical_root.display))
-    dispatch_prompt = prompt_body
+    from audiagentic.components.agents.gateway.admission import local_dispatch
+    from audiagentic.components.agents.gateway.admission import semantics as semantics_owner
+    from audiagentic.components.agents.gateway.admission.context import build_agent_template_context
 
-    # Resolve the machine-global agent definition at gateway admission. MCP
-    # transports pass only agent_id so execution and prompt identity come from
-    # one authoritative catalog snapshot.
-    prompt_profile_id = "default"
-    prompt_definition_fingerprint: str | None = None
-    composition_fingerprint: str | None = None
-    if agent_id is not None:
-        from audiagentic.components.agents.gateway.admission.context import (
-            baseline_agent_template_context,
-        )
-        from audiagentic.components.agents.gateway.admission.instructions import (
-            materialize_agent_prompt,
-        )
-
-        # Global agents must be usable from an unmanaged repository as well
-        # as a fully installed AUDiaGentic project.  Component context is an
-        # optional enrichment layer, never a prerequisite for these baseline
-        # project/source-control template namespaces.
-        baseline_context = baseline_agent_template_context(
-            Path(canonical_root.display), workspace_name=workspace_name
-        )
-        template_context = {**baseline_context, **template_context}
-        # The project component owns the canonical name precedence. Preserve
-        # richer component-provided project facts, but never let an older
-        # reader overwrite that canonical value.
-        if isinstance(baseline_context.get("project"), dict) and isinstance(
-            template_context.get("project"), dict
-        ):
-            template_context["project"] = {
-                **template_context["project"],
-                "name": baseline_context["project"]["name"],
-            }
-        semantics = _resolve_agent_semantics(agent_id)
+    template_context = build_agent_template_context(
+        Path(canonical_root.display), component_reader=component_context_reader,
+        workspace_name=workspace_name, agent_id=agent_id,
+    )
+    semantics = semantics_owner.resolve_agent_semantics(agent_id) if agent_id is not None else None
+    if semantics is not None:
         execution_profile_id = semantics.execution_profile_id
-        composition_fingerprint = semantics.composition_fingerprint
-        prompt_definition_fingerprint = semantics.prompt_definition_fingerprint
-        # Prompt definitions are the sole public prompt authority.  The old
-        # provider prompt-profile collection was a second, mutable authority;
-        # retain only the canonical prompt identity in the durable provenance
-        # slot while the provider receives the admitted materialized text.
-        prompt_profile_id = semantics.prompt_profile_id
-        render_context = {**template_context, "prompt-body": prompt_body}
-        dispatch_prompt = materialize_agent_prompt(
-            semantics.composition.prompt,
-            prompts=semantics.catalog.document.prompts,
-            config_root=semantics.config_root,
-            template_context=render_context,
-        )
+    prompt = local_dispatch.materialize_local_prompt(
+        raw_prompt=prompt_body, semantics=semantics, template_context=template_context,
+    )
+    dispatch_prompt = prompt.text
+    prompt_profile_id = prompt.prompt_profile_id
+    prompt_definition_fingerprint = prompt.prompt_definition_fingerprint
+    composition_fingerprint = prompt.composition_fingerprint
+    prompt_template_name = prompt.template_name
+    prompt_template_digest = prompt.template_sha256
 
-    prompt_template_name = f"prompt-definition:{prompt_profile_id}"
-    prompt_template_digest = hashlib.sha256(dispatch_prompt.encode("utf-8")).hexdigest()
-
-    # --- 2. Resolve profile ------------------------------------------------
-    # `profile` is resolved from the machine-global Agents catalog.  It keeps
-    # fields such as model_alias that are not part of the gateway snapshot and
-    # feeds the runtime digest below.
-    profile = _resolve_profile_for_submit(project_root, execution_profile_id)
-    resolved_profile_id = profile["profile_id"]
-
-    # AS60 step 2: one schema-validated resolver contract.  The global
-    # catalog is authoritative in both hosted and explicit test composition;
-    # the resolved snapshot is persisted so the queue can validate staleness
-    # without re-deriving from mutable project inputs.
+    # Keep the two historical global profile reads in the profile owner path.
     from audiagentic.components.agents.gateway import profiles as profiles_mod
 
-    # Hosted composition installs the shared registry before this API is
-    # reachable.  Direct in-process callers (including isolated unit seams)
-    # have no composed registry and may use the explicit global-catalog
-    # projection; they never consult project-local authority.
-    resolved = profiles_mod.resolve_for_admission(
-        project_root,
-        execution_profile_id,
+    selection = local_dispatch.resolve_local_profile(
+        project_root, execution_profile_id,
         allow_test_fallback=profiles_mod.get_gateway_registry() is None,
+        profile_resolver=_resolve_profile_for_submit,
     )
+    profile = selection.profile
+    resolved_profile_id = profile["profile_id"]
+    resolved = selection.snapshot
     resolved_provider_id = resolved.provider_id
     resolved_instance_ids = list(resolved.instances)
     params = dict(resolved.execution_params)
@@ -726,49 +623,17 @@ def submit_execution_request(
         # GPT identity/default binding outlives its live browser handle. Never
         # close on turn completion: the idle reaper waits for quiescent work.
         session_keep_alive = True
-    gateway_snapshot = resolved if profiles_mod.get_gateway_registry() is not None else None
+    gateway_snapshot = selection.gateway_snapshot
 
-    # AS105/AS101: free-instance dispatch binds a concrete model only at
-    # dispatch time, never at admission. A single-instance profile (the
-    # common case, matching today's one-profile-one-model behavior) is
-    # unambiguous and can be resolved now; a genuinely multi-instance
-    # profile leaves this None until the queue binds an instance.
-    resolved_model_id: str | None = None
-    if len(resolved_instance_ids) == 1:
-        from audiagentic.components.agents.gateway.instances import resolve_instance_facts
-
-        facts = resolve_instance_facts(project_root, tuple(resolved_instance_ids))
-        resolved_model_id = facts[0].model_id
-
-    # --- 3. Resolve provider isolation tier and runtime digest --------------
-    isolation_tier = _resolve_provider_isolation_tier(resolved_provider_id)
-
-    # Agent runtime digest: hash of resolved profile + provider config + component overlay
-    from audiagentic.components.providers.providers_api import (
-        get_provider_runtime_config_state,
+    # Model/provider facts stay after the API-owned GPT idle-grace policy.
+    facts = local_dispatch.resolve_local_execution_facts(
+        project_root=project_root, selection=selection, component_profile=component_profile,
+        prompt=prompt, provider_chat_url=normalized_provider_chat_url,
+        isolation_resolver=_resolve_provider_isolation_tier,
     )
-
-    provider_cfg = get_provider_runtime_config_state(
-        project_root,
-        resolved_provider_id,
-    )
-    if normalized_provider_chat_url is not None and not resolved_provider_id.startswith("gpt-auto"):
-        raise AudiaGenticError(
-            code="VAL-AGW-151",
-            kind="agents",
-            message="provider_chat_url is supported only by gpt-auto execution profiles",
-            details={"provider-id": resolved_provider_id},
-        )
-    agent_runtime_digest = compute_agent_runtime_digest(
-        resolved_profile=profile,
-        provider_config_state=provider_cfg,
-        component_overlay={
-            "component-profile": component_profile or "",
-            "prompt-profile-id": prompt_profile_id,
-            "prompt-template-name": prompt_template_name,
-            "prompt-template-digest": prompt_template_digest,
-        },
-    )
+    resolved_model_id = facts.model_id
+    isolation_tier = facts.isolation_tier
+    agent_runtime_digest = facts.runtime_digest
 
     from audiagentic.components.agents.gateway.session.client_defaults import (
         select as select_default_session,
