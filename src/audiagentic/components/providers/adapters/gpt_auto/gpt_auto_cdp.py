@@ -1201,6 +1201,13 @@ _SNAPSHOT_FN = r"""
     if (kind) toolActivityCounts[kind] = (toolActivityCounts[kind] || 0) + 1;
   }
   const domSignals = {};
+  // Chrome can retain its net-error document until the background tab is
+  // navigated again. Do not confuse quoted error codes in a chat with it.
+  const networkError = document.querySelector('#main-frame-error .error-code');
+  const browserNetworkError = !!networkError
+    && /^(?:DNS_PROBE_|ERR_)[A-Z0-9_]+$/.test(networkError.textContent.trim())
+    && !document.querySelector('[data-message-author-role], [contenteditable="true"], textarea');
+  if (browserNetworkError) domSignals['browser-network-error'] = true;
   // The labelled renderer places its response action bar next to the
   // block-list, not inside the assistant block. Admit only a direct sibling
   // toolbar whose bounded wrapper ends with this exact latest assistant.
@@ -1289,6 +1296,8 @@ _SNAPSHOT_FN = r"""
           })
         );
   }
+  // Reuse bounded same-conversation observation recovery for native errors.
+  if (browserNetworkError) domSignals['conversation-load-failed'] = true;
   // Bind structural completion evidence to the assistant turn whose action
   // bar was inspected. A later unrelated turn must not complete an earlier
   // request merely because its controls are document-global.
@@ -1610,7 +1619,7 @@ _SNAPSHOT_FN = r"""
     domActivityDigest,
     domActivityOwnerPromptMessageId,
     errorAlertOccurrences,
-    errorPresent: !!document.querySelector('.error-page, [data-testid*="error"]')
+    errorPresent: browserNetworkError || !!document.querySelector('.error-page, [data-testid*="error"]')
   };
 }
 """
@@ -1665,6 +1674,22 @@ _RETRY_CONVERSATION_LOAD_FN = r"""(input = {}) => {
   const currentPath = normalize(new URL(location.href).pathname).replace(/\/$/, '');
   // Revalidate the durable conversation in the same CDP evaluation as the
   // click. A page handle can be reused after navigation between snapshots.
+  const networkError = document.querySelector('#main-frame-error .error-code');
+  const targetUrl = input.browserTargetUrl ? new URL(input.browserTargetUrl) : null;
+  const nativeErrorDocument = location.href.startsWith('chrome-error://');
+  const exactNetworkRoute = location.origin === 'https://chatgpt.com' && currentPath === expectedPath;
+  const exactFailedTarget = nativeErrorDocument && targetUrl
+    && targetUrl.origin === 'https://chatgpt.com'
+    && normalize(targetUrl.pathname).replace(/\/$/, '') === expectedPath;
+  if (expectedPath && (exactNetworkRoute || exactFailedTarget) && networkError
+      && /^(?:DNS_PROBE_|ERR_)[A-Z0-9_]+$/.test(networkError.textContent.trim())
+      && !document.querySelector('[data-message-author-role], [contenteditable="true"], textarea')) {
+    // Same exact conversation, same tab, no activation and no Send. The
+    // caller owns deadline/backoff and durable mutation-owner validation.
+    if (exactFailedTarget) location.replace(targetUrl.href);
+    else location.reload();
+    return true;
+  }
   if (expectedPath && currentPath !== expectedPath) return false;
   const loadText = 'could not load this chatgpt conversation';
   const bodyText = normalize(document.body && (document.body.innerText || document.body.textContent));
@@ -1795,11 +1820,17 @@ class GptAutoCdpBrowserController(CdpBrowserController):
     async def retry_conversation_load(
         self, page: CdpPageRef, *, expected_path: str | None = None
     ) -> bool:
-        """Click the provider conversation-load Retry control only."""
+        """Retry the exact conversation, including Chrome's net-error page."""
+        # A net-error document reports chrome-error:// internally, whereas
+        # Target.getTargetInfo retains the failed destination. Resolve that
+        # exact target again rather than trusting a cached route.
+        current = await self.page_by_handle(page.handle)
+        if current.target_id != page.target_id:
+            return False
         result = await self.evaluate(
-            page,
+            current,
             _RETRY_CONVERSATION_LOAD_FN,
-            {"expectedPath": expected_path or ""},
+            {"expectedPath": expected_path or "", "browserTargetUrl": current.url},
         )
         return bool(result)
 
