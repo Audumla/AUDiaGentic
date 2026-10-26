@@ -46,6 +46,7 @@ from audiagentic.foundation.transports.session_surface import (
     ContentChannelCapability,
     ContentStreamCapabilities,
     ControlSupport,
+    JoinedSessionCapabilities,
     LifecycleInstallation,
     LifecycleObservationCapabilities,
     LifecycleSource,
@@ -357,6 +358,7 @@ def _build_resolved_surface(
     content_channels: tuple[ContentChannelCapability, ...],
     evidence: ValidationEvidence,
     platforms: tuple[PlatformEvidence, ...],
+    joined_capabilities: JoinedSessionCapabilities,
 ) -> ResolvedSessionSurface:
     """Construct a successful ResolvedSessionSurface from declaration fields.
 
@@ -377,6 +379,7 @@ def _build_resolved_surface(
             mapping_facts=mapping_facts,
         ),
         controls=controls,
+        joined_capabilities=joined_capabilities,
         lifecycle=LifecycleObservationCapabilities(
             source=lifecycle_source,
             installation=lifecycle_installation,
@@ -595,6 +598,7 @@ def resolve_session_surface(
         content_channels=declaration.content_channels,
         evidence=eff_evidence,
         platforms=declaration.platforms,
+        joined_capabilities=declaration.joined_capabilities,
     )
 
 
