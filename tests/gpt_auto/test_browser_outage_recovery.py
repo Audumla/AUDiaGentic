@@ -40,6 +40,112 @@ def recovery_runtime():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("retained", [True, False])
+@pytest.mark.parametrize("operation", ["ready", "open"])
+async def test_idle_completed_conversation_recovers_new_browser_target(monkeypatch, retained, operation):
+    """Historical submission evidence must not demand an active turn observer."""
+    from audiagentic.components.providers.adapters.gpt_auto.chat import ChatState
+    from audiagentic.components.providers.adapters.gpt_auto.snapshot import ChatSnapshot
+
+    runtime, _, _ = recovery_runtime()
+    chat = _chat(unresolved=False)
+    chat.runtime = runtime
+    chat.state = ChatState.RECOVERING
+    chat.provider_session_id = "conversation"
+    chat.chat_url = "https://chatgpt.com/g/g-p-original/c/conversation"
+    chat.page_handle = None
+    chat.target_id = "expired-target"
+    chat._submission_proven = True  # Historical evidence after durable terminal clear.
+    chat._browser_generation_recovery = True
+    updates = []
+    chat.binding_sink = updates.append
+    page = {"pageHandle": "restored", "targetId": "restored-target", "url": chat.chat_url}
+    pages = [page] if retained else []
+    actions = []
+
+    async def find(*args, **kwargs):
+        return pages[0] if pages else None
+
+    async def create(*, background_only=False):
+        assert background_only, "Recovery must not activate a browser window"
+        actions.append("create-background")
+        return "restored"
+
+    async def call(method, params=None, **kwargs):
+        if method == "list_pages":
+            return list(pages)
+        if method == "navigate":
+            assert params["url"] == chat.chat_url
+            actions.append("navigate-exact")
+            pages.append(page)
+            return {}
+        raise AssertionError(f"Unexpected browser side effect: {method}")
+
+    snapshot = ChatSnapshot(
+        url=chat.chat_url, composer_present=True, composer_editable=True,
+        latest_user_id="completed-user", latest_assistant_id="completed-answer",
+        latest_user_text="a previous prompt", latest_assistant_text="completed earlier",
+        user_count=1, assistant_count=1, generating=False,
+        dom_signals=frozenset(), error_present=False,
+    )
+
+    async def quiescent(**kwargs):
+        return snapshot
+
+    async def retained_snapshot():
+        return None
+
+    runtime._bridge = SimpleNamespace(call=call)
+    async def page_ref(handle):
+        return SimpleNamespace(handle=handle, target_id="restored-target", url=chat.chat_url)
+
+    async def snapshot_dict(*args, **kwargs):
+        return {
+            "url": chat.chat_url, "composerPresent": True, "composerEditable": True,
+            "userCount": 1, "assistantCount": 1, "domSignals": {},
+            "errorPresent": False,
+        }
+
+    runtime._gpt_browser = SimpleNamespace(page_by_handle=page_ref, snapshot=snapshot_dict)
+    runtime._chats = {chat.ag_session_id: chat}
+    monkeypatch.setattr(runtime, "find_conversation_page", find)
+    monkeypatch.setattr(runtime, "create_chat_page", create)
+    monkeypatch.setattr(chat, "wait_quiescent", quiescent)
+    monkeypatch.setattr(chat, "_retained_page_snapshot", retained_snapshot)
+    if operation == "open":
+        from audiagentic.components.providers.adapters.gpt_auto.session_transport import GptAutoSessionTransport
+
+        opened = await asyncio.wait_for(GptAutoSessionTransport(chat).open(), 1)
+        assert opened.metadata["target-id"] == "restored-target"
+        assert updates[-1].metadata["target-id"] == "restored-target"
+    else:
+        await asyncio.wait_for(chat.ensure_ready(), 1)
+    assert chat.state is ChatState.READY
+    assert chat.target_id == "restored-target"
+    assert not chat.unresolved_turn_pending
+    assert actions == ([] if retained else ["create-background", "navigate-exact"])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("pending,active,live", [(True, False, True), (False, True, True), (False, False, False)])
+async def test_idle_reopen_never_bypasses_unresolved_active_or_expired_owner(pending, active, live):
+    from audiagentic.components.providers.adapters.gpt_auto.chat import ChatState
+
+    chat = _chat(unresolved=pending)
+    chat.state = ChatState.RECOVERING
+    chat.chat_url = "https://chatgpt.com/g/g-p-original/c/conversation"
+    chat._submission_proven = True
+    chat.active_turn_id = "owned-turn" if active else None
+    chat.set_page_mutation_owner_probe(lambda: live)
+
+    async def forbidden(*args, **kwargs):
+        raise AssertionError("Unresolved/active/expired owner cannot use idle reopening")
+
+    chat.runtime = SimpleNamespace(reopen_conversation_page=forbidden)
+    assert await chat._reopen_idle_conversation() is None
+
+
+@pytest.mark.asyncio
 async def test_outage_retries_attempts_and_coalesces_waiters(monkeypatch):
     runtime, chat, calls = recovery_runtime()
     attempts = 0

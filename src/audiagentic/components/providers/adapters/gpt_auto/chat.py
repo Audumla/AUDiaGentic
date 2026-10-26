@@ -515,6 +515,30 @@ class PersistentChat:
         except Exception:
             return False
 
+    def _turn_requires_recovery_proof(self) -> bool:
+        """Distinguish an unfinished send from retained terminal provenance."""
+        # Terminal checkpoint clearing deliberately retains submission/message
+        # evidence. That history must not require an active response observer
+        # merely to reopen an idle conversation for its next admission.
+        return self.unresolved_turn_pending or bool(
+            self.active_turn_id and self._submission_proven
+        )
+
+    async def _reopen_idle_conversation(self) -> dict | None:
+        """Lazily reopen the exact saved conversation without foreground work."""
+        reopen = getattr(self.runtime, "reopen_conversation_page", None)
+        if (
+            self._turn_requires_recovery_proof()
+            or not self.chat_url
+            or not callable(reopen)
+            or self._conversation_load_recovery_exhausted()
+            or not self._page_mutation_owner_is_live()
+        ):
+            return None
+        return await reopen(
+            self.chat_url, owner_is_live=self._page_mutation_owner_is_live
+        )
+
     async def open(self) -> None:
         """Open transactionally; release every resource on partial failure."""
         try:
@@ -595,7 +619,7 @@ class PersistentChat:
             if (
                 page is not None
                 and self.target_id
-                and (self.unresolved_turn_pending or self._submission_proven)
+                and self._turn_requires_recovery_proof()
                 and str(page.get("targetId") or "") != self.target_id
             ):
                 self._set_unresolved_recovery(
@@ -609,6 +633,8 @@ class PersistentChat:
                 raise RuntimeError(
                     "gpt-auto unresolved provider conversation is attached to a replacement target"
                 )
+            if page is None:
+                page = await self._reopen_idle_conversation()
             if page is not None:
                 if not self._claim_page(str(page["pageHandle"])):
                     raise RuntimeError("gpt-auto retained conversation page is already owned")
@@ -3045,7 +3071,7 @@ class PersistentChat:
             )
             if (
                 page is not None
-                and (self.unresolved_turn_pending or self._submission_proven)
+                and self._turn_requires_recovery_proof()
                 and (
                     (bool(self.target_id) and str(page.get("targetId") or "") != self.target_id)
                     or self._replacement_target_pending
@@ -3075,6 +3101,8 @@ class PersistentChat:
                     self._set_unresolved_recovery("replacement-target-requires-owned-observer")
                     self._move(ChatState.RECOVERING)
                     return
+            if page is None:
+                page = await self._reopen_idle_conversation()
             if page is not None and self._claim_page(str(page["pageHandle"])):
                 self._bind_page(page)
                 retained = await self._retained_page_snapshot()
@@ -3107,7 +3135,7 @@ class PersistentChat:
             if not self._page_mutation_owner_is_live():
                 self._set_unresolved_recovery("reconcile-owner-not-live")
                 return
-            if self.unresolved_turn_pending or self._submission_proven:
+            if self._turn_requires_recovery_proof():
                 reopen = getattr(self.runtime, "reopen_conversation_page", None)
                 if (self.active_turn_id or getattr(self, "_restart_recovery_pending", False)) and callable(reopen):
                     page = await reopen(self.chat_url, owner_is_live=self._page_mutation_owner_is_live)
