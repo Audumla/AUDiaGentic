@@ -7,6 +7,10 @@ it. Process lifetime caveat: if the host process exits, queued/running records
 remain in the store but no worker will resume them (see AG13 for a startup
 reconciliation follow-up — out of scope for this slice, same call the plan
 item makes for durability).
+
+Inactive node scheduling additionally consults canonical unresolved occupancy
+across configured server roots. It does not resume remote work or authorize
+native effects; a future NodeRunner must enforce the owner/auth/occupancy gate.
 """
 
 from __future__ import annotations
@@ -38,6 +42,12 @@ from audiagentic.components.agents.gateway.event_topics import (
     EXECUTION_STARTED_TOPIC,
 )
 from audiagentic.components.agents.gateway.instances import InstanceFacts
+from audiagentic.components.agents.gateway.node.occupancy import (
+    NodeOccupancy,
+    NodeOccupancySnapshot,
+    record_holds_node,
+)
+from audiagentic.components.agents.gateway.node.placement import NodeAdmissionPlacement
 from audiagentic.components.agents.gateway.queue.capacity import (
     CapacityReservation,
     OverlayReservation,
@@ -368,7 +378,7 @@ reload the private request-owned snapshot."""
 
 @dataclass(frozen=True)
 class _QueueReservation:
-    """Physical reservation plus optional gateway scope overlays."""
+    """Source (physical or logical node) reservation and optional scope overlays."""
 
     source: CapacityReservation
     overlay: OverlayReservation | None
@@ -415,6 +425,50 @@ class QueuedDispatch:
     # the durable session was opened.  New sessions leave this unset until
     # their first dispatch publishes the binding.
     session_source_id: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class NodeQueuePolicy:
+    """Admission-approved scheduling identity/limits, never execution facts."""
+
+    profile_id: str
+    generation: str
+    config_digest: str
+    pending_capacity: int
+    global_capacity: int | None = None
+    project_capacity: int | None = None
+
+    def __post_init__(self) -> None:
+        if any(not isinstance(value, str) or not value for value in (
+            self.profile_id, self.generation, self.config_digest,
+        )):
+            raise ValueError("node queue policy requires authoritative scheduling identity")
+        for value in (self.pending_capacity, self.global_capacity, self.project_capacity):
+            if value is not None and (type(value) is not int or value < 1):
+                raise ValueError("node queue limits must be positive integers")
+        if self.pending_capacity is None:
+            raise ValueError("node pending capacity must be bounded")
+
+
+@dataclass(frozen=True, slots=True)
+class NodeQueuedDispatch:
+    request_id: str
+    project_root: Path  # Central storage only; never the execution workspace.
+    execution_profile_id: str
+    project_key: str
+    placement: NodeAdmissionPlacement
+    policy: NodeQueuePolicy
+    runner: RequestRunner  # Same two-argument stub; no native executor enabled here.
+    owner_epoch: str
+    service_root: Path
+
+
+QueuedEntry = QueuedDispatch | NodeQueuedDispatch
+
+
+def _entry_profile_identity(entry: QueuedEntry) -> ProfileGenerationIdentity:
+    policy = entry.policy if isinstance(entry, NodeQueuedDispatch) else entry.snapshot
+    return ProfileGenerationIdentity(policy.profile_id, policy.generation, policy.config_digest)
 
 
 # AS105/AS101 drain-before-swap: once a request for a different source
@@ -464,7 +518,9 @@ class GatewayQueueManager:
     across processes — see the module docstring's durability caveat.
     """
 
-    def __init__(self) -> None:
+    def __init__(
+        self, *, node_project_roots: tuple[Path, ...] = (), node_server_id: str | None = None,
+    ) -> None:
         self._runtime: dict[ProfileGenerationIdentity, _RuntimeState] = {}
         self._manager_lock = threading.Lock()
         # AS105/AS101: shared machine-wide capacity per model-sources.yaml
@@ -476,7 +532,11 @@ class GatewayQueueManager:
         self._scoped_capacity = ScopedCapacityAuthority()
         # AS101: one canonical pending authority. Lanes retain only running
         # session/compatibility state; they no longer own pending work.
-        self._pending_authority: PendingAuthority[QueuedDispatch] = PendingAuthority()
+        self._pending_authority: PendingAuthority[QueuedEntry] = PendingAuthority()
+        self._node_occupancy = NodeOccupancy(node_project_roots, server_id=node_server_id)
+        # Capacity tokens only, not an occupancy authority. Canonical records
+        # reconstruct the fence even when these disappear on restart.
+        self._retained_node_reservations: dict[str, tuple[NodeQueuedDispatch, _QueueReservation]] = {}
         self._active_requests: dict[str, tuple[Path, str]] = {}
         self._recovery_timers: dict[str, threading.Timer] = {}
         self._recovery_pending: dict[str, Path] = {}
@@ -527,6 +587,72 @@ class GatewayQueueManager:
                 pq = _RuntimeState(virtual_capacity, pending_capacity)
                 self._runtime[profile_identity] = pq
             return pq
+
+    def _entry_runtime_state(self, entry: QueuedEntry) -> _RuntimeState:
+        if isinstance(entry, QueuedDispatch):
+            return self._runtime_state(entry.snapshot)
+        with self._manager_lock:
+            identity = _entry_profile_identity(entry)
+            pq = self._runtime.get(identity)
+            if pq is None:
+                pq = _RuntimeState(entry.policy.global_capacity, entry.policy.pending_capacity)
+                self._runtime[identity] = pq
+            elif (pq.virtual_capacity, pq.pending_capacity) != (
+                entry.policy.global_capacity, entry.policy.pending_capacity,
+            ):
+                raise ValueError("node scheduling policy changed without a new identity")
+            return pq
+
+    def enqueue_node(
+        self, project_root: Path, record: dict[str, Any], *,
+        placement: NodeAdmissionPlacement, policy: NodeQueuePolicy, runner: RequestRunner,
+        dispatch_owner_epoch: str, dispatch_service_root: Path,
+    ) -> dict[str, Any]:
+        """Queue already-admitted node work; no admission, authorization or I/O to a node.
+
+        Only the server owner can supply placement/policy and the complete trusted
+        project-root set. The two-argument runner remains an injected stub until a
+        separately reviewed NodeRunner enforces the occupancy module's lock order.
+        """
+        root = project_root.resolve()
+        if root not in self._node_occupancy.project_roots:
+            raise ValueError("node queue project is outside configured server roots")
+        if not isinstance(dispatch_service_root, Path) or not dispatch_service_root.is_absolute():
+            raise ValueError("node queue requires the owner-local service root")
+        if type(placement) is not NodeAdmissionPlacement or type(policy) is not NodeQueuePolicy:
+            raise ValueError("node queue requires admission placement and scheduling policy")
+        current = store.read_record(root, record["request-id"], include_output=False)
+        if (
+            current["state"] != "queued" or current.get("node-dispatch") is not None
+            or placement.server_id != self._node_occupancy.server_id
+            or current.get("node-placement") != placement.to_record_mapping()
+            or current.get("provider-transport-kind") != "worker"
+            or current["execution-profile-id"] != policy.profile_id
+            or not dispatch_owner_epoch
+        ):
+            raise ValueError("node queue entry does not match canonical admission")
+        entry = NodeQueuedDispatch(
+            current["request-id"], root, policy.profile_id, str(root), placement,
+            policy, runner, dispatch_owner_epoch, dispatch_service_root,
+        )
+        pq = self._entry_runtime_state(entry)
+        with pq.lock:
+            queue_full = self._pending_authority.count(
+                lambda request: _entry_profile_identity(request.value) == _entry_profile_identity(entry)
+            ) >= pq.pending_capacity
+            if not queue_full:
+                self._pending_authority.enqueue(
+                    request_id=entry.request_id, project_key=entry.project_key, value=entry,
+                )
+        if queue_full:
+            rejected = store.transition_record(root, entry.request_id, "rejected", updates={
+                "error": {"code": "VAL-AGW-025", "kind": "agents", "message": "node profile queue full"},
+            })
+            _publish_lifecycle_event("rejected", rejected)
+            return rejected
+        _publish_lifecycle_event("queued", current)
+        self._drain_all()
+        return store.read_record(root, entry.request_id)
 
     def enqueue(
         self,
@@ -688,9 +814,7 @@ class GatewayQueueManager:
         with pq.lock:
             queue_full = self._pending_authority.count(
                 lambda request: (
-                    request.value.snapshot.profile_id == snapshot.profile_id
-                    and request.value.snapshot.generation == snapshot.generation
-                    and request.value.snapshot.config_digest == snapshot.config_digest
+                    _entry_profile_identity(request.value) == _entry_profile_identity(entry)
                 )
             ) >= pq.pending_capacity
             if not queue_full:
@@ -703,9 +827,7 @@ class GatewayQueueManager:
                 )
                 pending_count = self._pending_authority.count(
                     lambda request: (
-                        request.value.snapshot.profile_id == snapshot.profile_id
-                        and request.value.snapshot.generation == snapshot.generation
-                        and request.value.snapshot.config_digest == snapshot.config_digest
+                        _entry_profile_identity(request.value) == _entry_profile_identity(entry)
                     )
                 )
 
@@ -776,13 +898,21 @@ class GatewayQueueManager:
         unavailable project head cannot starve another project with capacity.
         """
         while not self._shutdown_event.is_set():
+            # Canonical reads occur outside manager/pending/runtime locks. No
+            # grant authority calls here (auth -> enqueue is a supported order).
+            occupancy = self._node_occupancy.snapshot()
+            self._release_resolved_node_reservations(occupancy)
             started = False
             for candidate in self._pending_authority.candidates():
                 entry = candidate.value
-                pq = self._runtime_state(entry.snapshot)
+                pq = self._entry_runtime_state(entry)
                 reservation: _QueueReservation | None = None
                 with pq.lock:
-                    reservation = self._try_reserve_source(entry, pq)
+                    reservation = (
+                        self._try_reserve_node(entry, occupancy)
+                        if isinstance(entry, NodeQueuedDispatch)
+                        else self._try_reserve_source(entry, pq)
+                    )
                     if reservation is None:
                         continue
                     claimed = self._pending_authority.claim(entry.request_id)
@@ -974,6 +1104,57 @@ class GatewayQueueManager:
             )
         self._drain_all()
 
+    def _try_reserve_node(
+        self, entry: NodeQueuedDispatch, occupancy: NodeOccupancySnapshot,
+    ) -> _QueueReservation | None:
+        # Fresh entries reject every bound command at enqueue_node. Do not
+        # exclude their identity here to turn bound work into a new attempt;
+        # future bound recovery needs a distinct reconcile-only entry point.
+        if occupancy.occupied(entry.placement.server_id, entry.placement.node_id):
+            return None
+        _, keys = self._scope_keys(entry)
+        overlay = self._scoped_capacity.try_reserve(tuple(keys))
+        if overlay is None:
+            return None
+        logical_key = f"node:{entry.placement.server_id}:{entry.placement.node_id}"
+        source = self._capacity.try_reserve(
+            source_id=logical_key, resource_id=logical_key, concurrency=1,
+            capacity_source_id=logical_key, model_id=None,
+        )
+        if source is None:
+            self._scoped_capacity.release(overlay)
+            return None
+        return _QueueReservation(source, overlay)
+
+    def _release_resolved_node_reservations(self, occupancy: NodeOccupancySnapshot) -> None:
+        with self._manager_lock:
+            released = [
+                self._retained_node_reservations.pop(request)
+                for request, (entry, _) in tuple(self._retained_node_reservations.items())
+                if not occupancy.unproven
+                and (entry.project_root, request) in occupancy.released_requests
+            ]
+        for _, reservation in released:
+            self._release_reservation(reservation)
+
+    def _finish_node_reservation(self, entry: NodeQueuedDispatch, bound: _QueueReservation) -> None:
+        # Read this request AFTER its runner exits. A null command is positive
+        # proof of no native authorization, even if its outer state is running.
+        # Do not use an earlier scheduling snapshot to make this decision.
+        try:
+            current = store.read_record(entry.project_root, entry.request_id, include_output=False)
+            holds = (
+                current.get("node-placement") != entry.placement.to_record_mapping()
+                or record_holds_node(current)
+            )
+        except (OSError, ValueError, TypeError, AudiaGenticError):
+            holds = True
+        if holds:
+            with self._manager_lock:
+                self._retained_node_reservations[entry.request_id] = (entry, bound)
+        else:
+            self._release_reservation(bound)
+
     def _try_reserve_source(
         self, entry: QueuedDispatch, pq: _RuntimeState,
     ) -> _QueueReservation | None:
@@ -1033,8 +1214,13 @@ class GatewayQueueManager:
         return value.strip() if isinstance(value, str) and value.strip() else None
 
     @staticmethod
-    def _scope_keys(entry: QueuedDispatch) -> tuple[dict[str, int | None | bool], list[tuple[str, int]]]:
-        limits = resolve_capacity_limits(dict(entry.snapshot.execution_params))
+    def _scope_keys(entry: QueuedEntry) -> tuple[dict[str, int | None | bool], list[tuple[str, int]]]:
+        limits = (
+            {"global": entry.policy.global_capacity, "global-explicit": True,
+             "project": entry.policy.project_capacity}
+            if isinstance(entry, NodeQueuedDispatch)
+            else resolve_capacity_limits(dict(entry.snapshot.execution_params))
+        )
         keys: list[tuple[str, int]] = []
         # An explicitly configured global overlay applies to declared
         # physical sources as well as virtual sources. The legacy implicit
@@ -1329,7 +1515,7 @@ class GatewayQueueManager:
     def _run_one(
         self,
         pq: _RuntimeState,
-        entry: QueuedDispatch,
+        entry: QueuedEntry,
         bound: _QueueReservation | None,
     ) -> None:
         project_root = entry.project_root
@@ -1338,7 +1524,9 @@ class GatewayQueueManager:
         owner_epoch = entry.owner_epoch
         runner = entry.runner
         service_root = entry.service_root
-        lane_label = f"{entry.snapshot.profile_id}/{entry.snapshot.generation}"
+        is_node = isinstance(entry, NodeQueuedDispatch)
+        profile_identity = _entry_profile_identity(entry)
+        lane_label = f"{profile_identity.profile_id}/{profile_identity.generation}"
 
         is_session = False
         retry_plan: tuple[float, str, int] | None = None
@@ -1395,8 +1583,8 @@ class GatewayQueueManager:
             # Queued work must not silently drain under old profile limits;
             # if the gateway profile changed while this request was pending,
             # reject it terminally with CON-AGW-101 resubmit-required.
-            validator = profiles_mod.get_snapshot_validator()
-            if not recovered_running and not validator.validate_snapshot_current(entry.snapshot):
+            validator = profiles_mod.get_snapshot_validator() if not is_node else None
+            if not is_node and not recovered_running and not validator.validate_snapshot_current(entry.snapshot):
                 logger.info(
                     "gateway request rejected before dispatch: stale profile snapshot",
                     extra={"request-id": request_id, "profile": lane_label},
@@ -1469,6 +1657,14 @@ class GatewayQueueManager:
             is_session = claimed.get("provider-transport-kind") == "provider-session"
             if recovered:
                 record = claimed
+            elif is_node:
+                # The node slot is logical scheduling capacity, NEVER a physical
+                # source/model binding. Actual execution facts come later from
+                # node-local preparation, not from a fabricated central profile.
+                record = store.start_owned_attempt(
+                    project_root, request_id, owner_epoch=owner_epoch,
+                    worker_id=worker_id, expected_revision=claimed["revision"],
+                )
             elif is_session:
                 record = store.prepare_owned_session_attempt(
                     project_root,
@@ -1667,6 +1863,10 @@ class GatewayQueueManager:
                     terminal_record = store.read_record(project_root, request_id)
                     _publish_lifecycle_event(terminal_record["state"], terminal_record)
             except RecoveryDeferred as deferred:
+                if is_node:
+                    # No local provider retry/replay for remote ambiguous work.
+                    # Its canonical command/receipt must be reconciled later.
+                    return
                 # Rehydration/open failure after a possible provider-side
                 # Send is non-terminal.  Keep the same request and session
                 # in durable recovery and retry only the observation path.
@@ -2056,7 +2256,10 @@ class GatewayQueueManager:
             else:
                 watchdog_registry().unregister(project_root, request_id)
             if bound is not None:
-                self._release_reservation(bound)
+                if is_node:
+                    self._finish_node_reservation(entry, bound)
+                else:
+                    self._release_reservation(bound)
             with pq.lock:
                 pq.running.discard(request_id)
                 pq.idle.discard(request_id)
@@ -2064,11 +2267,12 @@ class GatewayQueueManager:
             self._active_requests.pop(request_id, None)
             # Preparation may fail before registering a session waiter. Do
             # not retain that request's pre-registration cancel signal forever.
-            from audiagentic.components.agents.gateway.session.sessions import peek_session_runtime
+            if not is_node:
+                from audiagentic.components.agents.gateway.session.sessions import peek_session_runtime
 
-            runtime = peek_session_runtime()
-            if runtime is not None:
-                runtime.forget_request_cancel(request_id)
+                runtime = peek_session_runtime()
+                if runtime is not None:
+                    runtime.forget_request_cancel(request_id)
             _TURNCB.clear(request_id)
             if retry_plan is None:
                 self._session_dispatch_order.complete(request_id)
@@ -2156,7 +2360,7 @@ class GatewayQueueManager:
                 logger.info(
                     "gateway request cancelled before running", extra={"request-id": request_id}
                 )
-            elif is_running:
+            elif is_running and updated.get("node-placement") is None:
                 # Persisted so the intent is observable (get/wait) and so the
                 # dispatch retry/fallback loop can see it across process/module
                 # boundaries — the in-memory cancel_requested set alone is not
