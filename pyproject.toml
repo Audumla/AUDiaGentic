@@ -71,7 +71,7 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "audiagentic" = [
-  "components/project/contracts/*.json",
+  "components/*/contracts/*.json",
   "components/agents/gateway/service/client_icons/*.png",
   # Component descriptors and embedded markdown assets
   "config/components/**/*.yaml",
@@ -85,12 +85,11 @@ where = ["src"]
   "config/provisioning/harness/*.yaml",
   "config/provisioning/rig/*.yaml",
   "config/provisioning/foundation/*.yaml",
-  "components/providers/contracts/*.json",
+  "components/providers/contracts/*.yaml",
   # Toolchain action table (read at import time by descriptors)
   "foundation/toolchains/*.yaml",
   # JSON Schemas used for runtime payload validation (ledger, providers, planning)
   "foundation/contracts/schemas/**/*.json",
-  "components/providers/contracts/*.json",
   # Knowledge component runtime data
   "components/optional/knowledge/runtime_data/*.yml",
   # Provider instruction / prompt-tag templates materialized onto surfaces

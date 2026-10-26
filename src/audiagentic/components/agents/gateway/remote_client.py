@@ -494,9 +494,25 @@ class StandaloneGatewayClient:
                     timeout=transport_timeout,
                 )
             except AudiaGenticError as exc:
-                if self._shared or attempt > 0 or exc.code != "CON-AGSV-018":
+                if exc.code != "CON-AGSV-018":
                     raise
-                self._clear_lease(lease_id)
+                if self._shared:
+                    # An explicit stale-lease rejection invalidates the cached
+                    # lease even when this operation must never be replayed.
+                    self._clear_lease(lease_id)
+                    from audiagentic.components.agents.gateway.client import (
+                        _READ_ONLY_GATEWAY_METHODS,
+                    )
+
+                    if attempt > 0 or operation not in _READ_ONLY_GATEWAY_METHODS:
+                        raise
+                else:
+                    if attempt > 0:
+                        raise
+                    self._clear_lease(lease_id)
+                # Reattach validates TLS, server identity and project grants
+                # again. Only the reviewed read-only set may retry in shared
+                # mode; mutations and ambiguous transport failures propagate.
                 self.connect()
         raise AssertionError("bounded gateway reattach loop exhausted")
 
