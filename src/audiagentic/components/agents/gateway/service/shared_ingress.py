@@ -21,6 +21,7 @@ _error = make_error_factory("VAL", "AGSV", "gateway-service")
 # Explicitly exclude operator controls, focus, purge and future node/protocol APIs.
 _ACTIONS = {
     **dict.fromkeys((
+        "list_agent_definition_cards",
         "get_execution_request", "get_execution_diagnostics", "get_execution_response",
         "get_execution_response_payload", "get_execution_failure_response",
         "wait_execution_request", "list_execution_requests", "list_execution_sessions",

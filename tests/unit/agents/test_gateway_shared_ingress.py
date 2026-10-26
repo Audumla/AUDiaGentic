@@ -159,3 +159,70 @@ def test_shared_idempotency_and_default_identity_are_stable_and_principal_scoped
 ])
 def test_shared_rejects_client_authority_and_operator_mutation(shared, overrides):
     assert shared("/shared/v1/call", call(acquire(shared), **overrides))[0] in {400, 401}
+
+
+def test_mcp_definition_discovery_uses_server_catalog_not_client_catalog(shared, tmp_path, monkeypatch):
+    from audiagentic.components.agents.configuration import management
+    from audiagentic.components.agents.gateway import client as client_module
+    from audiagentic.components.agents.gateway.remote_client import StandaloneGatewayClient
+    from audiagentic.components.agents.mcp import gateway_mcp
+
+    local_root = tmp_path / "client-machine"
+    local_definitions = [{"agent_id": "local-only", "execution_profile_id": "local-secret"}]
+    server_definitions = [{
+        "agent_id": "server-reviewer", "name": "Server Reviewer",
+        "description": "Server discovery", "advertised_skills": ["review"],
+        "execution_profile_id": "server-private", "prompt_id": "secret-prompt",
+        "role_ids": ["private-role"], "internal": True,
+    }]
+    reads = []
+    def catalog(root):
+        reads.append(root)
+        if root == local_root:
+            raise AssertionError(f"client catalog must not be read: {local_definitions}")
+        assert root == tmp_path / "one"
+        return server_definitions
+
+    monkeypatch.setattr(management, "list_agent_definitions", catalog)
+    remote = StandaloneGatewayClient(
+        "https://server.example", "token-alice",
+        shared_server_id="test", shared_project_id="one",
+    )
+    calls = []
+    def transport(path, body, **kwargs):
+        calls.append((path, body))
+        status, payload = shared("/shared" + path, body)
+        assert status == 200, payload
+        return payload["result"]
+
+    monkeypatch.setattr(remote, "_request", transport)
+    monkeypatch.setattr(client_module, "get_gateway_client", lambda root: remote)
+    monkeypatch.setattr(gateway_mcp, "project_root_from_env", lambda: local_root)
+    result = gateway_mcp.agent_task_list_definitions()
+    assert result == [{
+        "agent_id": "server-reviewer", "name": "Server Reviewer",
+        "description": "Server discovery", "skills": [{"id": "review", "name": "review"}],
+    }]
+    assert reads == [tmp_path / "one"]
+    operation = [body for path, body in calls if path == "/v1/call"][0]
+    assert operation["operation"] == "list_agent_definition_cards"
+    assert operation["params"] == {}
+    assert operation["project-id"] == "one"
+    assert "project-root" not in operation
+    assert "server-private" not in json.dumps(result)
+    assert "secret-prompt" not in json.dumps(result)
+    remote.close()
+
+
+def test_definition_discovery_requires_project_read_grant_and_no_parameters(shared, monkeypatch):
+    from audiagentic.components.agents.configuration import management
+    monkeypatch.setattr(management, "list_agent_definitions", lambda root: [{"agent_id": "server-only"}])
+    observer = acquire(shared, "token-observer")
+    body = call(observer, operation="list_agent_definition_cards")
+    status, payload = shared("/shared/v1/call", body, "token-observer")
+    assert status == 200
+    assert payload["result"] == [{"agent_id": "server-only"}]
+    assert shared("/shared/v1/call", call(observer, operation="list_agent_definition_cards",
+        **{"project-id": "two"}), "token-observer")[0] == 401
+    assert shared("/shared/v1/call", call(observer, operation="list_agent_definition_cards",
+        params={"include_config": True}), "token-observer")[0] == 400
