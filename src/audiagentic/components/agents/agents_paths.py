@@ -87,6 +87,21 @@ def gateway_admitted_prompt_path(project_root: Path, request_id: str) -> Path:
     return gateway_request_dir(project_root, request_id) / "runtime" / "admitted-prompt.txt"
 
 
+def gateway_node_prepared_evidence_path(project_root: Path, identity: object) -> Path:
+    """Private immutable evidence keyed by the complete canonical command SHA.
+
+    A retired, proven-never-authorized command may be replaced on the same
+    request. Its evidence stays separate; no raw command name enters a path.
+    """
+    from audiagentic.components.agents.gateway.node.contracts import CommandIdentity
+
+    if type(identity) is not CommandIdentity:
+        raise ValueError("prepared evidence requires a typed command identity")
+    # Reuse the existing request path-selector validation, including Windows ADS.
+    gateway_request_maintenance_lock_path(project_root, identity.request_id)
+    return gateway_request_dir(project_root, identity.request_id) / "runtime" / f"node-prepared-{identity.digest}.json"
+
+
 def gateway_final_response_path(project_root: Path, request_id: str) -> Path:
     """Return the gateway-owned immutable terminal response artifact path."""
     return gateway_request_dir(project_root, request_id) / "output" / "final-response.txt"
