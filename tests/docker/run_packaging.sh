@@ -150,6 +150,7 @@ required = [
     ("audiagentic.components.agents", "workflows.yaml"),
     ("audiagentic.components.planning", "workflows.yaml"),
     ("audiagentic.components.agent_jobs", "workflows.yaml"),
+    ("audiagentic.components.providers.adapters.gpt_auto", "gpt-auto-defaults.yaml"),
 ]
 for pkg, name in required:
     try:

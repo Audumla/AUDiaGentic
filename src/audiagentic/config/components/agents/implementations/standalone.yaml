@@ -4,16 +4,21 @@ parent: agents
 id: standalone
 display-name: Standalone
 description: >-
-  Explicit endpoint+token connection to an already-running gateway service.
-  Never auto-starts a service; requires the endpoint and token file to be
-  configured, or the equivalent env override during the migration window.
+  Explicit connection to an already-running gateway service. Configure
+  either a shared connector-config reference or a local endpoint and token-file.
+  Never discovers or starts a service. Local environment overrides require
+  both endpoint and token file.
 default: false
 options-schema:
   endpoint:
     type: string
-    required: true
+    required: false
     description: "HTTP endpoint of the already-running standalone gateway service."
   token-file:
     type: string
-    required: true
+    required: false
     description: "Path to the private file holding the gateway's auth token."
+  connector-config:
+    type: string
+    required: false
+    description: "Absolute path to a validated shared connector YAML; alternative to endpoint/token-file."

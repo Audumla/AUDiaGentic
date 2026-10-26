@@ -1,8 +1,10 @@
-"""Framework-neutral GatewayClient implementation over authenticated loopback HTTP."""
+"""Framework-neutral GatewayClient implementation over authenticated local HTTP or shared HTTPS."""
 
 from __future__ import annotations
 
 import json
+import re
+import ssl
 import threading
 import time
 import uuid
@@ -10,7 +12,7 @@ from pathlib import Path
 from typing import Any, cast
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_opener, urlopen
 
 from audiagentic.components.agents.gateway.service.contract import (
     CALL_ROUTE,
@@ -33,6 +35,13 @@ _DEFAULT_TRANSPORT_TIMEOUT = object()
 _RECOVERY_TRANSPORT_TIMEOUT_SECONDS = 90.0
 
 
+class _RejectRedirects(HTTPRedirectHandler):
+    """Never forward shared gateway credentials or replay a request elsewhere."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
 class StandaloneGatewayClient:
     """Explicit opt-in client; it never auto-discovers or falls back in-process."""
 
@@ -45,8 +54,27 @@ class StandaloneGatewayClient:
         lease_ttl_seconds: float = 120.0,
         client_instance_id: str | None = None,
         logical_client_id: str | None = None,
+        shared_server_id: str | None = None,
+        shared_project_id: str | None = None,
+        ssl_context: ssl.SSLContext | None = None,
     ) -> None:
-        self._endpoint = _validate_endpoint(endpoint)
+        self._shared = shared_server_id is not None or shared_project_id is not None
+        self._shared_server_id = shared_server_id
+        self._shared_project_id = shared_project_id
+        self._shared_opener = None
+        if self._shared:
+            if not all(
+                isinstance(value, str) and re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,63}", value)
+                for value in (shared_server_id, shared_project_id)
+            ):
+                raise client_validation_error(16, "shared gateway requires safe server and project IDs")
+            self._endpoint = _validate_shared_endpoint(endpoint)
+            context = ssl_context if ssl_context is not None else ssl.create_default_context()
+            if context.verify_mode != ssl.CERT_REQUIRED or not context.check_hostname:
+                raise client_validation_error(16, "shared gateway requires certificate and hostname verification")
+            self._shared_opener = build_opener(HTTPSHandler(context=context), _RejectRedirects())
+        else:
+            self._endpoint = _validate_endpoint(endpoint)
         if not auth_token or any(character.isspace() for character in auth_token):
             raise client_validation_error(11, "gateway service auth token is invalid")
         if request_timeout <= 0 or lease_ttl_seconds <= 0:
@@ -151,15 +179,30 @@ class StandaloneGatewayClient:
         self.close()
 
     def health(self) -> dict[str, Any]:
-        return _response_mapping(
+        health = _response_mapping(
             self._request(HEALTH_ROUTE, None, method="GET", retry_network=True)
         )
+        if self._shared:
+            if health.get("protocol-version") != PROTOCOL_VERSION:
+                raise client_validation_error(13, "gateway service protocol version is incompatible")
+            if health.get("server-id") != self._shared_server_id:
+                raise client_validation_error(14, "shared gateway server identity does not match")
+            _response_string(health, "owner-epoch")
+            projects = health.get("projects")
+            if (
+                not isinstance(projects, list)
+                or not all(isinstance(project, str) for project in projects)
+                or self._shared_project_id not in projects
+            ):
+                raise client_validation_error(5, "shared gateway project is not authorized")
+        return health
 
     def submit_execution_request(self, project_root: Path, **kwargs: Any) -> dict[str, Any]:
-        if "component_profile" not in kwargs:
-            from audiagentic.foundation.paths.names import get_active_profile
+        if not self._shared:
+            if "component_profile" not in kwargs:
+                from audiagentic.foundation.paths.names import get_active_profile
 
-            kwargs["component_profile"] = get_active_profile()
+                kwargs["component_profile"] = get_active_profile()
         kwargs.setdefault("logical_client_id", self._logical_client_id)
         return cast(dict[str, Any], self._call("submit_execution_request", project_root, kwargs))
 
@@ -252,7 +295,7 @@ class StandaloneGatewayClient:
         )
 
     def run_execution_request(self, project_root: Path, **kwargs: Any) -> dict[str, Any]:
-        if "component_profile" not in kwargs:
+        if not self._shared and "component_profile" not in kwargs:
             from audiagentic.foundation.paths.names import get_active_profile
 
             kwargs["component_profile"] = get_active_profile()
@@ -421,7 +464,13 @@ class StandaloneGatewayClient:
         *,
         transport_timeout: float | None | object = _DEFAULT_TRANSPORT_TIMEOUT,
     ) -> Any:
-        root = project_root.expanduser().resolve(strict=False)
+        if self._shared and operation == "submit_execution_request":
+            params = _shared_submission_params(params)
+        scope = (
+            {"project-id": self._shared_project_id}
+            if self._shared
+            else {"project-root": str(project_root.expanduser().resolve(strict=False))}
+        )
         self._ensure_lease()
         for attempt in range(2):
             with self._state_lock:
@@ -436,13 +485,13 @@ class StandaloneGatewayClient:
                         "owner-epoch": owner_epoch,
                         "lease-id": lease_id,
                         "operation": operation,
-                        "project-root": str(root),
+                        **scope,
                         "params": params,
                     },
                     timeout=transport_timeout,
                 )
             except AudiaGenticError as exc:
-                if attempt > 0 or exc.code != "CON-AGSV-018":
+                if self._shared or attempt > 0 or exc.code != "CON-AGSV-018":
                     raise
                 self._clear_lease(lease_id)
                 self.connect()
@@ -500,6 +549,8 @@ class StandaloneGatewayClient:
         timeout: float | None | object = _DEFAULT_TRANSPORT_TIMEOUT,
         retry_network: bool = False,
     ) -> Any:
+        if self._shared:
+            path = "/shared" + path
         encoded = None if body is None else json.dumps(body).encode("utf-8")
         request = Request(
             f"{self._endpoint}{path}",
@@ -519,9 +570,13 @@ class StandaloneGatewayClient:
                     if timeout is _DEFAULT_TRANSPORT_TIMEOUT
                     else cast(float | None, timeout)
                 )
-                with urlopen(request, timeout=request_timeout) as response:
+                open_request = self._shared_opener.open if self._shared_opener is not None else urlopen
+                with open_request(request, timeout=request_timeout) as response:
                     raw_payload = response.read()
             except HTTPError as exc:
+                if self._shared and 300 <= exc.code < 400:
+                    exc.close()
+                    raise client_network_error(3, "shared gateway redirects are forbidden") from None
                 try:
                     payload = json.loads(exc.read().decode("utf-8"))
                 except (UnicodeDecodeError, json.JSONDecodeError) as decode_error:
@@ -557,6 +612,49 @@ def load_auth_token(path: Path) -> str:
     if not token or len(token) > 1024 or any(character.isspace() for character in token):
         raise client_validation_error(11, "gateway service auth token is invalid")
     return token
+
+
+def _shared_submission_params(params: dict[str, Any]) -> dict[str, Any]:
+    """Validate caller intent; never infer a client machine execution context."""
+    allowed = {
+        "agent_id", "execution_profile_id", "prompt_body", "mode", "source", "metadata",
+        "session_id", "session_keep_alive", "new_session", "title", "logical_client_id",
+    }
+    if params.keys() - allowed:
+        raise client_validation_error(22, "shared submission contains unsupported parameters",
+                                      fields=sorted(params.keys() - allowed))
+    metadata = params.get("metadata")
+    if metadata is not None and (
+        not isinstance(metadata, dict)
+        or metadata.keys() - {"schema_version", "idempotency_key", "correlation_id"}
+    ):
+        raise client_validation_error(22, "shared submission metadata contains unsupported parameters")
+    # The server namespaces this alias by authenticated principal. Keep the
+    # client identity stable across lease changes without merging all clients.
+    return dict(params)
+
+
+def _validate_shared_endpoint(endpoint: str) -> str:
+    try:
+        parsed = urlparse(endpoint)
+        port = parsed.port
+        valid = (
+            parsed.scheme == "https"
+            and bool(parsed.hostname)
+            and (port is None or 1 <= port <= 65535)
+            and parsed.username is None
+            and parsed.password is None
+            and parsed.path in ("", "/")
+            and not parsed.query
+            and not parsed.fragment
+            and not any(character.isspace() or ord(character) < 32 for character in endpoint)
+            and not any(character in endpoint for character in ("\\", "?", "#"))
+        )
+    except ValueError:
+        valid = False
+    if not valid:
+        raise client_validation_error(16, "shared gateway endpoint must be an HTTPS origin")
+    return endpoint.rstrip("/")
 
 
 def _validate_endpoint(endpoint: str) -> str:

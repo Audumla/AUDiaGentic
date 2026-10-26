@@ -23,8 +23,34 @@ from audiagentic.components.agents.gateway.application import (
 logger = logging.getLogger(__name__)
 
 
+def _uses_shared_connector(root: Path) -> bool:
+    """Inspect selection only; never construct or discover a gateway client."""
+    if (
+        os.environ.get("AUDIAGENTIC_GATEWAY_ENDPOINT")
+        and os.environ.get("AUDIAGENTIC_GATEWAY_TOKEN_FILE")
+    ):
+        return False
+    from audiagentic.foundation.features.registry import resolve_active_implementation
+    from audiagentic.foundation.features.state import get_component_state
+
+    override = os.environ.get("AUDIAGENTIC_GATEWAY_MODE")
+    if override and override.strip().lower() != "standalone":
+        return False
+    component = get_component_state(root, _COMPONENT_ID, persist_migration=False)
+    mode = "standalone" if override else resolve_active_implementation(
+        root, _COMPONENT_ID, component_state=component,
+        implementation_descriptors={}, fallback="embedded",
+    )
+    if mode != "standalone":
+        return False
+    standalone = (component.get("implementations") or {}).get("standalone") or {}
+    return bool((standalone.get("options") or {}).get("connector-config"))
+
+
 def resolve_request_project_root(root: Path, request_id: str) -> Path:
     """Route a project-scoped request using the public client boundary."""
+    if _uses_shared_connector(root):
+        return root
     from . import store as gateway_store
     from .api import _resolve_workspace_project_root
     from audiagentic.foundation.contracts.errors import AudiaGenticError
@@ -85,6 +111,8 @@ def resolve_session_project_root(root: Path, session_id: str) -> Path:
     process CWD.  Multiple matches fail closed rather than selecting a
     session from the wrong project.
     """
+    if _uses_shared_connector(root):
+        return root
     from .session import sessions_store
     from audiagentic.foundation.contracts.errors import AudiaGenticError
 
@@ -337,7 +365,7 @@ class EmbeddedGatewayClient:
 
 _CLIENT_LOCK = threading.Lock()
 _CLIENT: GatewayClient | None = None
-_CLIENT_CONFIG: tuple[str | None, str, str | None, str | None] | None = None
+_CLIENT_CONFIG: tuple[Any, ...] | None = None
 
 
 def _has_live_provable_shared_owner() -> bool:
@@ -440,7 +468,30 @@ def get_gateway_client(project_root: Path | None = None) -> GatewayClient:
     mode, _source = _resolve_implementation_id(project_root)
     endpoint = os.environ.get("AUDIAGENTIC_GATEWAY_ENDPOINT")
     token_file = os.environ.get("AUDIAGENTIC_GATEWAY_TOKEN_FILE")
-    config = (str(project_root) if project_root is not None else None, mode, endpoint, token_file)
+    connector = None
+    connector_path = None
+    if mode == "standalone" and project_root is not None:
+        from .management_api import gateway_get_config, validate_standalone_config
+
+        options = gateway_get_config(project_root, "standalone")["config"]
+        # An explicit local override is a complete pair, never a partial mix
+        # with a shared connector's identity or credentials.
+        if endpoint is not None or token_file is not None:
+            if not endpoint or not token_file:
+                raise config_error(1, "standalone gateway requires explicit endpoint and token file")
+        else:
+            validate_standalone_config(options)
+            connector_path = options.get("connector-config")
+            if connector_path:
+                from .service.shared_config import load_shared_connector_config
+
+                connector = load_shared_connector_config(Path(connector_path))
+            else:
+                endpoint, token_file = options["endpoint"], options["token-file"]
+    config = (
+        str(project_root) if project_root is not None else None,
+        mode, endpoint, token_file, connector_path, connector,
+    )
     global _CLIENT, _CLIENT_CONFIG
     with _CLIENT_LOCK:
         if _CLIENT is not None and _CLIENT_CONFIG == config:
@@ -470,7 +521,7 @@ def get_gateway_client(project_root: Path | None = None) -> GatewayClient:
                     )
             client: GatewayClient = EmbeddedGatewayClient()
         elif mode == "standalone":
-            if not endpoint or not token_file:
+            if connector is None and (not endpoint or not token_file):
                 raise config_error(
                     1,
                     "standalone gateway requires explicit endpoint and token file",
@@ -480,7 +531,19 @@ def get_gateway_client(project_root: Path | None = None) -> GatewayClient:
                 load_auth_token,
             )
 
-            client = StandaloneGatewayClient(endpoint, load_auth_token(Path(token_file)))
+            if connector is not None:
+                import ssl
+
+                client = StandaloneGatewayClient(
+                    connector.endpoint, load_auth_token(connector.token_file),
+                    shared_server_id=connector.server_id,
+                    shared_project_id=connector.project_id,
+                    ssl_context=ssl.create_default_context(
+                        cafile=str(connector.ca_file) if connector.ca_file else None
+                    ),
+                )
+            else:
+                client = StandaloneGatewayClient(endpoint, load_auth_token(Path(token_file)))
         elif mode == "automatic":
             from audiagentic.components.agents.gateway.service.bootstrap import (
                 start_or_attach_gateway,

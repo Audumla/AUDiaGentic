@@ -10,11 +10,10 @@ Usage
   audiagentic component enable ID [--project PATH]
   audiagentic component disable ID [--project PATH]
   audiagentic component status ID [--project PATH]
-  audiagentic gateway status                       Query gateway service state (SH10)
-  audiagentic gateway drain                        Begin graceful drain (SH10)
-  audiagentic gateway resume                       Cancel draining; resume running (SH10)
-  audiagentic gateway stop [--force]               Request operator stop (SH10)
-  audiagentic gateway recover [--confirm] [--reason TEXT]  Recover dead owner, record-only (SH10)
+  audiagentic gateway help                         Shared gateway keyword CLI
+  audiagentic gateway serve config FILE            Serve a configured shared gateway
+  audiagentic gateway status config FILE [output json]
+  audiagentic gateway connect config FILE project PATH [dry-run|non-interactive]
   audiagentic [ARGS...]                            Launch agent from current project directory
   audiagentic --project PATH [ARGS]                Launch with explicit project root
 """
@@ -28,24 +27,6 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
-from audiagentic.commands.bootstrap import cmd_bootstrap, cmd_cleanup, cmd_config_sync
-from audiagentic.commands.component import _cmd_component
-from audiagentic.commands.gateway import (
-    cmd_gateway,
-    cmd_gateway_drain,
-    cmd_gateway_recover,
-    cmd_gateway_resume,
-    cmd_gateway_status,
-    cmd_gateway_stop,
-)
-from audiagentic.commands.internal import cmd_mcp
-from audiagentic.commands.launch import _cmd_launch
-from audiagentic.commands.update import cmd_update
-from audiagentic.commands.workflow import (
-    cmd_release_bootstrap,
-    cmd_session_input,
-    cmd_work_control,
-)
 from audiagentic.foundation.cli_io import print_error
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
@@ -65,30 +46,36 @@ class _ArgumentParser(argparse.ArgumentParser):
         super().error(message)
 
 
-# SH10 lifecycle command aliases — keyed by gateway sub-command name.
-_GATEWAY_LIFECYCLE_HANDLERS: dict[str, Callable] = {
-    "status": cmd_gateway_status,
-    "drain": cmd_gateway_drain,
-    "resume": cmd_gateway_resume,
-    "stop": cmd_gateway_stop,
-    "recover": cmd_gateway_recover,
-}
-
-_COMMAND_HANDLERS: dict[str, Callable] = {
-    "bootstrap": cmd_bootstrap,
-    "cleanup": cmd_cleanup,
-    "component": _cmd_component,
-    "gateway": cmd_gateway,  # legacy: only 'serve' (argparse dispatch)
-    "update": cmd_update,
-    "config": cmd_config_sync,
-    "session-input": cmd_session_input,
-    "work-control": cmd_work_control,
-    "release-bootstrap": cmd_release_bootstrap,
-    "mcp": cmd_mcp,
-}
-
-
 def _main(argv: list[str] | None = None) -> int:
+    tokens = list(sys.argv[1:] if argv is None else argv)
+    if tokens and tokens[0] == "gateway":
+        from audiagentic.commands.gateway import dispatch_keyword
+
+        return dispatch_keyword(tokens[1:])
+
+    from audiagentic.commands.bootstrap import cmd_bootstrap, cmd_cleanup, cmd_config_sync
+    from audiagentic.commands.component import _cmd_component
+    from audiagentic.commands.internal import cmd_mcp
+    from audiagentic.commands.launch import _cmd_launch
+    from audiagentic.commands.update import cmd_update
+    from audiagentic.commands.workflow import (
+        cmd_release_bootstrap,
+        cmd_session_input,
+        cmd_work_control,
+    )
+
+    _COMMAND_HANDLERS: dict[str, Callable] = {
+        "bootstrap": cmd_bootstrap,
+        "cleanup": cmd_cleanup,
+        "component": _cmd_component,
+        "update": cmd_update,
+        "config": cmd_config_sync,
+        "session-input": cmd_session_input,
+        "work-control": cmd_work_control,
+        "release-bootstrap": cmd_release_bootstrap,
+        "mcp": cmd_mcp,
+    }
+
     parser = _ArgumentParser(
         prog="audiagentic",
         description="AUDiaGentic",
@@ -163,29 +150,6 @@ def _main(argv: list[str] | None = None) -> int:
                 action="store_true",
                 help="Also delete create-if-missing config files",
             )
-
-    gateway_parser = subparsers.add_parser("gateway", help="Manage the local agent gateway")
-    gateway_sub = gateway_parser.add_subparsers(dest="gateway_cmd", required=True)
-    gateway_serve = gateway_sub.add_parser("serve", help="Run the standalone local gateway")
-    gateway_serve.add_argument("--host", default="127.0.0.1", choices=["127.0.0.1"])
-    gateway_serve.add_argument("--port", type=int, default=0)
-    gateway_serve.add_argument("--token-file", metavar="PATH")
-
-    # SH10 lifecycle sub-commands (no extra flags except where noted)
-    gateway_sub.add_parser("status", help="Query gateway service state")
-    gateway_sub.add_parser("drain", help="Begin graceful drain")
-    gateway_sub.add_parser("resume", help="Cancel draining; resume running")
-    gw_stop = gateway_sub.add_parser("stop", help="Request operator stop")
-    gw_stop.add_argument(
-        "--force", action="store_true", default=False, help="Force stop even if busy"
-    )
-    gw_recover = gateway_sub.add_parser(
-        "recover", help="Recover dead/unprovable owner (record-only)"
-    )
-    gw_recover.add_argument(
-        "--confirm", action="store_true", default=False, help="Confirm mutation of durable record"
-    )
-    gw_recover.add_argument("--reason", metavar="TEXT", default=None, help="Reason for recovery")
 
     subparsers.add_parser("update", help="Check for a new audiagentic version and update")
 
@@ -329,12 +293,6 @@ def _main(argv: list[str] | None = None) -> int:
         command=args.command,
         harness_status_functions=_harness_status_functions,
     )
-
-    # Dispatch to command handler via registry
-    # SH10: gateway lifecycle sub-commands dispatch through a separate
-    # registry keyed by the gateway_cmd value (avoids argparse collision).
-    if args.command == "gateway" and args.gateway_cmd in _GATEWAY_LIFECYCLE_HANDLERS:
-        return _GATEWAY_LIFECYCLE_HANDLERS[args.gateway_cmd](args, project_root)
 
     # Dispatch to command handler via registry
     command_name = args.command or ""

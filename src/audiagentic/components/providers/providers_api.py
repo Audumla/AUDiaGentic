@@ -2098,7 +2098,25 @@ def _build_transport_lease(binding_id: str) -> StatusObserverLease:
     return lease
 
 
+def validate_gpt_auto_configuration(project_root: Path | None = None) -> None:
+    """Validate machine startup or one project's GPT-auto configuration.
+
+    Validation has no browser side effects and exposes no adapter config types.
+    Machine failures are fatal to the host; the caller owns per-project policy.
+    """
+    from audiagentic.components.providers.adapters.gpt_auto.config import (
+        validate_machine_gpt_auto_config,
+        validate_project_gpt_auto_config,
+    )
+
+    if project_root is None:
+        validate_machine_gpt_auto_config()
+    else:
+        validate_project_gpt_auto_config(project_root)
+
+
 __all__ = [
+    "validate_gpt_auto_configuration",
     "PROVIDER_STATE_CHANGED",
     "list_harness_mcp_targets",
     "preflight_managed_mcp",

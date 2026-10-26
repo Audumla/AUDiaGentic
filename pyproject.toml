@@ -95,6 +95,7 @@ where = ["src"]
   "components/optional/knowledge/runtime_data/*.yml",
   # Provider instruction / prompt-tag templates materialized onto surfaces
   "components/providers/adapters/**/*.md",
+  "components/providers/adapters/gpt_auto/gpt-auto-defaults.yaml",
   "components/providers/services/execution/templates/agents/*.md",
   "components/providers/surfaces/templates/*.md",
   # Misc runtime data
