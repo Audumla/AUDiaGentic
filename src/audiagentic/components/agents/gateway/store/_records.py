@@ -1088,16 +1088,22 @@ def list_records(
     if limit is not None and (isinstance(limit, bool) or not isinstance(limit, int) or limit < 1):
         raise ValueError("request list limit must be a positive integer")
     records = []
-    entries = [
-        entry for entry in root.iterdir()
-        if entry.is_dir() and entry.name not in {"idempotency", "sessions"}
-    ]
-    for entry in entries:
-        if not entry.is_dir() or entry.name in {"idempotency", "sessions"}:
+    for entry in root.iterdir():
+        # Explicit request IDs are not constrained to the generated req_
+        # prefix. Preserve discovery parity and the existing reserved dirs.
+        if entry.name in {"idempotency", "sessions"} or not entry.is_dir():
+            continue
+        record_path = entry / "record.json"
+        # Preparation may reserve a request directory before admission writes
+        # its canonical record. Listing must leave that private work alone.
+        if not record_path.is_file():
             continue
         try:
             records.append(read_record(project_root, entry.name, include_output=include_output))
-        except AudiaGenticError:
+        except AudiaGenticError as exc:
+            if exc.code == "RES-AGW-001" and not record_path.exists():
+                # Retention/purge may remove a record after discovery.
+                continue
             logger.warning("skipping unreadable gateway request", extra={"request-id": entry.name}, exc_info=True)
     records.sort(key=lambda record: str(record.get("created-at") or ""), reverse=True)
     if limit is not None:
