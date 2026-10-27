@@ -40,6 +40,7 @@ from audiagentic.components.agents.gateway.event_topics import (
     EXECUTION_STARTED_TOPIC,
 )
 from audiagentic.components.agents.gateway.instances import InstanceFacts
+from audiagentic.components.agents.gateway.node.contracts import canonical_json, conflict
 from audiagentic.components.agents.gateway.node.occupancy import (
     NodeOccupancy,
     NodeOccupancySnapshot,
@@ -461,6 +462,7 @@ class NodeQueuedDispatch:
     owner_epoch: str
     service_root: Path
     reconcile_only: bool = False
+    recovery_fence: tuple[str, str | None, int, bytes] | None = None
 
 
 QueuedEntry = QueuedDispatch | NodeQueuedDispatch
@@ -679,7 +681,8 @@ class GatewayQueueManager:
             current["state"] not in {"queued", "running"}
             or current.get("dispatch-owner-epoch") != dispatch_owner_epoch
             or not dispatch_owner_epoch
-            or current.get("recovery-required") is not True
+            or (current["state"] == "running" and current.get("recovery-required") is not True)
+            or (current["state"] == "queued" and not isinstance(current.get("recovery"), dict))
             or current.get("node-placement") != placement.to_record_mapping()
             or placement.server_id != self._node_occupancy.server_id
             or current.get("provider-transport-kind") != "worker"
@@ -699,6 +702,8 @@ class GatewayQueueManager:
             current["request-id"], root, policy.profile_id, project_key, placement,
             policy, runner, dispatch_owner_epoch, dispatch_service_root,
             reconcile_only=reconcile_only,
+            recovery_fence=(current["state"], current.get("worker-id"), current["attempt-epoch"],
+                            canonical_json((current.get("node-dispatch") or {}).get("identity"))),
         )
         pq = self._entry_runtime_state(entry)
         with pq.lock:
@@ -1579,6 +1584,27 @@ class GatewayQueueManager:
                 return reservation
             time.sleep(0.1)
 
+    def _defer_node(self, entry: NodeQueuedDispatch, original: dict, error: Exception, *, phase="node-runner-error"):
+        """Preserve remote uncertainty; never serialize arbitrary exception text."""
+        current = store.read_record(entry.project_root, entry.request_id)
+        if (current["state"] not in {"queued", "running"}
+                or current.get("dispatch-owner-epoch") != entry.owner_epoch
+                or current.get("node-placement") != entry.placement.to_record_mapping()
+                or any(current.get(key) != original.get(key) for key in ("worker-id", "attempt-epoch"))):
+            return current
+        dispatch = current.get("node-dispatch")
+        side_effect = (
+            "not-started" if dispatch is None else
+            "terminal-evidence-seen" if dispatch.get("receipt-stage") == "terminal" else "may-have-started"
+        )
+        safe = (AudiaGenticError(error.code, "agents", "Node work requires reconciliation", {})
+                if isinstance(error, AudiaGenticError) else conflict(1, "Node work requires reconciliation"))
+        defer = store.defer_owned_queued_recovery if current["state"] == "queued" else store.defer_owned_recovery
+        return defer(entry.project_root, entry.request_id, owner_epoch=entry.owner_epoch,
+            worker_id=current.get("worker-id"), attempt_epoch=current["attempt-epoch"],
+            expected_revision=current["revision"], error=safe, phase=phase,
+            side_effect_state=side_effect, retry_delay_seconds=None)
+
     def _run_one(
         self,
         pq: _RuntimeState,
@@ -1684,6 +1710,15 @@ class GatewayQueueManager:
                 return
 
             current = store.read_record(project_root, request_id)
+            if is_node and entry.recovery_fence is not None:
+                fence = (current["state"], current.get("worker-id"), current["attempt-epoch"],
+                         canonical_json((current.get("node-dispatch") or {}).get("identity")))
+                if (fence != entry.recovery_fence
+                        or (current["state"] == "running" and current.get("recovery-required") is not True)
+                        or (current["state"] == "queued" and not isinstance(current.get("recovery"), dict))
+                        or current.get("dispatch-owner-epoch") != owner_epoch
+                        or current.get("node-placement") != entry.placement.to_record_mapping()):
+                    return
             try:
                 claimed = store.claim_dispatch(
                     project_root,
@@ -1938,14 +1973,7 @@ class GatewayQueueManager:
                     # A missing transport is not progress or failure. Preserve
                     # the original attempt and expose the unscheduled recovery
                     # state until the node readiness owner re-enqueues it.
-                    current = store.read_record(project_root, request_id)
-                    store.defer_owned_recovery(
-                        project_root, request_id, owner_epoch=owner_epoch,
-                        worker_id=record["worker-id"], attempt_epoch=record["attempt-epoch"],
-                        expected_revision=current["revision"], error=deferred.error,
-                        phase=deferred.phase, side_effect_state=deferred.side_effect_state,
-                        retry_delay_seconds=None, continuation=deferred.continuation,
-                    )
+                    self._defer_node(entry, record, deferred.error, phase=deferred.phase)
                     return
                 # Rehydration/open failure after a possible provider-side
                 # Send is non-terminal.  Keep the same request and session
@@ -2260,6 +2288,9 @@ class GatewayQueueManager:
                     )
                     retry_plan = (delay, record["worker-id"], record["attempt-epoch"])
             except AudiaGenticError as exc:
+                if is_node:
+                    self._defer_node(entry, record, exc)
+                    return
                 logger.error(
                     "gateway request runner raised", extra={"request-id": request_id}, exc_info=True
                 )
@@ -2296,6 +2327,9 @@ class GatewayQueueManager:
                     )
                     _publish_lifecycle_event("failed", failed)
             except Exception as exc:  # noqa: BLE001
+                if is_node:
+                    self._defer_node(entry, record, exc)
+                    return
                 logger.error(
                     "gateway request runner raised unexpectedly",
                     extra={"request-id": request_id},

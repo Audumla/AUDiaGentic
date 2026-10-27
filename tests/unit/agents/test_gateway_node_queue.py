@@ -264,7 +264,7 @@ def test_incomplete_or_stale_snapshot_cannot_release_a_retained_slot(tmp_path):
         authorize(root, bind(root, record))
         raise ConnectionError("lost transport after authorization")
     enqueue(manager, tmp_path, pair, disconnected)
-    assert manager.wait(tmp_path, pair[0]["request-id"], 3)["state"] == "failed"
+    assert manager.wait(tmp_path, pair[0]["request-id"], 1)["state"] == "running"
     manager._release_resolved_node_reservations(NodeOccupancySnapshot())
     assert manager.source_capacity_status()["node:server:node"]["in-flight"]["node:server:node"] == 1
 
@@ -458,3 +458,87 @@ def test_observers_share_one_bounded_slot_across_projects_and_duplicate_notifica
         hold.set()
     assert next_started.wait(3)
     assert len(calls) == 1
+
+
+@pytest.mark.parametrize("domain", [False, True])
+@pytest.mark.parametrize("terminal", [False, True])
+def test_node_observer_errors_preserve_effect_and_canonical_terminal_winner(tmp_path, domain, terminal):
+    from audiagentic.components.agents.gateway.node.contracts import conflict
+
+    before = recoverable(tmp_path, cancel=True)
+    manager = queue_mod.GatewayQueueManager(node_project_roots=(tmp_path,), node_server_id="server")
+    def runner(root, record, **kwargs):
+        if terminal:
+            settled = apply(root, record, receipt(identity(record), 1, "terminal", "a" * 64))
+            finish(root, settled)
+        raise conflict(1, "PRIVATE exception content") if domain else RuntimeError("PRIVATE exception content")
+    recover_enqueue(manager, tmp_path, before, runner)
+    manager.wait(tmp_path, before["request-id"], 1)
+    after = store.read_record(tmp_path, before["request-id"])
+    assert after["state"] == ("completed" if terminal else "running")
+    assert after["worker-id"] == before["worker-id"] and after["attempt-epoch"] == before["attempt-epoch"]
+    assert after["node-dispatch"]["identity"] == before["node-dispatch"]["identity"]
+    assert after["cancel-requested"]
+    if not terminal:
+        assert after["recovery"]["phase"] == "node-runner-error"
+        assert after["recovery"]["next-retry-at"] is None
+        assert "PRIVATE" not in str(after["recovery"])
+
+
+@pytest.mark.parametrize("change", ["terminal", "owner", "placement", "recovery", "command"])
+def test_pending_observer_discards_changed_canonical_identity(tmp_path, monkeypatch, change):
+    current = recoverable(tmp_path)
+    manager = queue_mod.GatewayQueueManager(node_project_roots=(tmp_path,), node_server_id="server")
+    drain = manager._drain_all
+    monkeypatch.setattr(manager, "_drain_all", lambda: None)
+    recover_enqueue(manager, tmp_path, current, lambda *_ , **kw: pytest.fail("stale observer ran"))
+    if change == "terminal":
+        settled = apply(tmp_path, current, receipt(identity(current), 1, "terminal", "a" * 64))
+        finish(tmp_path, settled)
+    else:
+        current = dict(current)
+        if change == "owner":
+            current["dispatch-owner-epoch"] = "other"
+        elif change == "placement":
+            current["node-placement"] = {**current["node-placement"], "workspace-id": "other"}
+        elif change == "recovery":
+            current["recovery-required"] = False
+        else:
+            current["node-dispatch"] = None
+        store.write_record(tmp_path, current)
+    monkeypatch.setattr(manager, "_drain_all", drain)
+    drain()
+    manager.wait(tmp_path, current["request-id"], 1)
+    assert store.read_record(tmp_path, current["request-id"])["attempt-epoch"] == current["attempt-epoch"]
+
+
+def test_node_recovery_claim_checks_revision_before_running_shortcut(tmp_path):
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+    current = recoverable(tmp_path)
+    with pytest.raises(AudiaGenticError, match="revision changed"):
+        store.claim_dispatch(tmp_path, current["request-id"], owner_epoch="owner",
+                             expected_revision=current["revision"] - 1)
+
+
+def test_unclaimed_node_deferral_keeps_null_attempt_and_can_reenqueue(tmp_path, monkeypatch):
+    from audiagentic.components.agents.gateway.node.contracts import conflict
+
+    pair = node_record(tmp_path)
+    current = store.claim_dispatch(tmp_path, pair[0]["request-id"], owner_epoch="owner", expected_revision=0)
+    current = store.defer_owned_queued_recovery(tmp_path, current["request-id"], owner_epoch="owner",
+        worker_id=None, attempt_epoch=0, expected_revision=current["revision"],
+        error=conflict(1, "Node unavailable"), phase="node-runtime-unavailable",
+        side_effect_state="not-started", retry_delay_seconds=None)
+    manager = queue_mod.GatewayQueueManager(node_project_roots=(tmp_path,), node_server_id="server")
+    drain = manager._drain_all
+    monkeypatch.setattr(manager, "_drain_all", lambda: None)
+    recover_enqueue(manager, tmp_path, current, finish)
+    entry = manager._pending_authority.get(current["request-id"]).value
+    after = manager._defer_node(entry, current, conflict(1, "PRIVATE content"), phase="node-disconnected")
+    assert after["state"] == "queued" and after["worker-id"] is None and after["attempt-epoch"] == 0
+    assert after["recovery"]["next-retry-at"] is None
+    assert "PRIVATE" not in str(after["recovery"])
+    recover_enqueue(manager, tmp_path, after, finish)
+    monkeypatch.setattr(manager, "_drain_all", drain)
+    drain()
+    assert manager.wait(tmp_path, current["request-id"], 3)["state"] == "completed"

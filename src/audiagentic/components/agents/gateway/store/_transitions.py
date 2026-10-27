@@ -1081,6 +1081,11 @@ def claim_dispatch(
         raise AudiaGenticError("VAL-AGW-083", "agents", "dispatch owner epoch is required", {})
     with _request_lock(project_root, request_id):
         record = _read_record_locked(project_root, request_id)
+        if record.get("node-placement") is not None and record["revision"] != expected_revision:
+            # Node recovery validates the complete immutable dispatch before
+            # this CAS. A concurrent change must not bypass that validation
+            # through the generic already-running recovery shortcut.
+            raise AudiaGenticError("CON-AGW-071", "agents", "gateway request revision changed", {})
         if (
             record["state"] == "running"
             and record.get("recovery-required") is True
