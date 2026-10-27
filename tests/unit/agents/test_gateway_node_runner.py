@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import pytest
 import pytest_asyncio
 from websockets.exceptions import ConnectionClosedOK
+from websockets.protocol import State
 
 from audiagentic.components.agents.agents_paths import gateway_node_admission_path
 from audiagentic.components.agents.gateway import store
@@ -21,7 +22,8 @@ from audiagentic.components.agents.gateway.node.preparation import (
     build_final_command_payload,
     prepare_node_command,
 )
-from audiagentic.components.agents.gateway.node.receipts import Receipt
+from audiagentic.components.agents.gateway.node.receipt_runtime import NodeReceiptRuntime
+from audiagentic.components.agents.gateway.node.receipts import NodeReceiptStore, Receipt
 from audiagentic.components.agents.gateway.node.runner import NodeRunner
 from audiagentic.components.agents.gateway.node.transport import NodeConnectionOwner
 from audiagentic.components.agents.gateway.node.work_protocol import (
@@ -30,6 +32,9 @@ from audiagentic.components.agents.gateway.node.work_protocol import (
     EffectAuthorized,
     EffectDenied,
     PrepareWork,
+    ReceiptReady,
+    ReceiptResume,
+    ReceiptResumeReply,
 )
 from audiagentic.components.agents.gateway.queue.recovery_control import RecoveryDeferred
 from audiagentic.components.agents.gateway.service.shared_config import load_shared_server_config
@@ -40,6 +45,10 @@ from .test_gateway_node_admission_owner import submit
 
 
 class PairedSocket:
+    @property
+    def state(self):
+        return State.CLOSED if self.closed else State.OPEN
+
     def __init__(self):
         self.incoming = asyncio.Queue()
         self.peer = None
@@ -98,10 +107,18 @@ async def case(admission):
         effect_done=threading.Event())
     runner = NodeRunner(config, admission.service, admission.authority, connections, asyncio.get_running_loop(), timeout=0.5)
     value.runner = runner
+    value.receipt_runtime = NodeReceiptRuntime(config, admission.service, connections)
+    value.node_receipts = await asyncio.to_thread(NodeReceiptStore, node_id="node", node_epoch="boot",
+        gateway_owner_epoch="owner", root=admission.root.parent / "fixture-node-receipts")
+    value.ready_received = asyncio.Event()
 
     async def central(frame, work):
         if type(work) is EffectAuthorize:
             await runner.handle_effect_authorize(gateway, frame, work)
+        elif type(work) is ReceiptReady or (type(work) is ReceiptResume and value.central_work_handler is None):
+            await value.receipt_runtime.handle_work(gateway, frame, work)
+            if type(work) is ReceiptReady:
+                value.ready_received.set()
         else:
             assert value.central_work_handler is not None
             await value.central_work_handler(gateway, frame, work)
@@ -145,10 +162,25 @@ async def case(admission):
     gateway.start()
     node.start()
     try:
+        await announce_ready(value)
         yield value
     finally:
         await gateway.close()
         await node.close()
+
+
+async def announce_ready(case):
+    """Real zero-row resume/readiness ingress; no native execution is implied."""
+    checkpoint = await asyncio.to_thread(case.node_receipts.ack_checkpoint)
+    assert checkpoint.through_sequence == 0 and checkpoint.through_receipt_sha256 is None
+    case.ready_received.clear()
+    await case.node.request_work("reconcile", {"kind": "receipt-resume",
+        "log-incarnation-id": checkpoint.log_incarnation_id, "through-sequence": 0,
+        "through-receipt-sha256": None}, reply_types=(ReceiptResumeReply,), timeout=2)
+    await case.node.send_work("reconcile", {"kind": "receipt-ready",
+        "log-incarnation-id": checkpoint.log_incarnation_id, "through-sequence": 0,
+        "through-receipt-sha256": None})
+    await asyncio.wait_for(case.ready_received.wait(), 2)
 
 
 async def invoke(case, **kwargs):
@@ -164,6 +196,8 @@ async def effects(case):
 
 @pytest.mark.asyncio
 async def test_fresh_flow_binds_and_authorizes_exact_queue_attempt_without_claiming_completion(case):
+    assert await asyncio.to_thread(case.admission.authority.serialize,
+        lambda: case.connections.is_ready(case.gateway, grant_revision=1))
     deferred = await invoke(case)
     current = await effects(case)
     assert deferred.side_effect_state == "may-have-started"
@@ -173,6 +207,8 @@ async def test_fresh_flow_binds_and_authorizes_exact_queue_attempt_without_claim
     assert current["node-dispatch"]["authorization-id"] == case.effects[0].authorization_id
     assert current["worker-id"] == "queue-worker" and current["attempt-epoch"] == 1
     assert current["state"] == "running"
+    assert not await asyncio.to_thread(case.admission.authority.serialize,
+        lambda: case.connections.is_ready(case.gateway, grant_revision=1))
     assert case.preparation.attestation.binding == case.prepares[0].binding
     assert assemble_final_command_payload(case.preparation.attestation, case.prepares[0].raw_prompt) == build_final_command_payload(case.preparation, case.prepares[0].raw_prompt)
     # Canonical binding is never an invitation to resend, even with omitted keyword.
@@ -734,3 +770,164 @@ async def test_runner_error_retains_stage_after_shared_queue_projection_and_cano
         side_effect_state=deferred.side_effect_state, retry_delay_seconds=None)
     assert updated["recovery"]["last-error-details"]["stage"] == "retain-prepared"
     assert updated["recovery"]["last-error-details"]["reason-code"] == "prepared-evidence-unavailable"
+
+
+@pytest.mark.asyncio
+async def test_fresh_prepare_requires_readiness_without_consuming_canonical_attempt(case):
+    assert await asyncio.to_thread(case.admission.authority.serialize,
+        lambda: case.connections.consume_ready(case.gateway, grant_revision=1))
+    deferred = await invoke(case)
+    assert deferred.error.details["reason-code"] == "ready-channel-invalid"
+    assert deferred.error.details["stage"] == "prepare"
+    assert deferred.side_effect_state == "not-started"
+    assert not case.prepares and not case.commands and not case.effects
+    current = store.read_record(case.admission.root, case.record["request-id"])
+    assert current["revision"] == case.record["revision"] and current["node-dispatch"] is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("fault", ["cancel", "revision", "worker", "attempt", "owner", "placement"])
+async def test_last_prepare_admission_rechecks_canonical_fences_before_consume(case, monkeypatch, fault):
+    original = case.runner._admit_prepare
+    consumed = []
+    consume = case.connections.consume_ready
+    def tracked(*args, **kwargs):
+        consumed.append(True)
+        return consume(*args, **kwargs)
+    monkeypatch.setattr(case.connections, "consume_ready", tracked)
+    def raced(root, record, slot, snapshot):
+        current = store.read_record(root, record["request-id"])
+        if fault == "cancel":
+            store.mark_cancel_requested(root, record["request-id"])
+        elif fault == "owner":
+            store.takeover_nonterminal_owner(root, record["request-id"],
+                expected_owner_epoch="owner", new_owner_epoch="replacement-owner")
+        else:
+            if fault == "revision":
+                current["revision"] += 1
+            elif fault == "worker":
+                current["worker-id"] = "replacement-worker"
+            elif fault == "attempt":
+                current["attempt-epoch"] += 1
+            else:
+                current["node-placement"] = {**current["node-placement"], "principal-id": "different-principal"}
+            store.write_record(root, current)
+        return original(root, record, slot, snapshot)
+    monkeypatch.setattr(case.runner, "_admit_prepare", raced)
+    deferred = await invoke(case)
+    assert deferred.side_effect_state == "not-started"
+    assert not consumed and not case.prepares and not case.commands
+    assert deferred.error.details["reason-code"] == (
+        "owner-fence-changed" if fault in {"worker", "attempt", "owner"} else "attempt-not-dispatchable")
+    assert await asyncio.to_thread(case.admission.authority.serialize,
+        lambda: case.connections.is_ready(case.gateway, grant_revision=1))
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("fault", ["occupancy", "replacement", "revoke", "snapshot"])
+async def test_last_prepare_admission_rechecks_source_grant_slot_and_occupancy(case, monkeypatch, fault):
+    from .test_gateway_node_dispatch_store import bind
+
+    original = case.runner._admit_prepare
+    def raced(root, record, slot, snapshot):
+        if fault == "occupancy":
+            other = store.build_record(execution_profile_id="profile", prompt_body="other",
+                node_placement=record["node-placement"])
+            store.write_record(root, other)
+            other = store.claim_dispatch(root, other["request-id"], owner_epoch="owner", expected_revision=0)
+            other = store.start_owned_attempt(root, other["request-id"], owner_epoch="owner",
+                worker_id="other-worker", expected_revision=other["revision"])
+            bind(root, other)
+        elif fault == "replacement":
+            case.connections.replace("node", "replacement-boot", case.gateway.websocket)
+        elif fault == "revoke":
+            case.admission.authority.revoke("node", expected_grant_revision=1)
+        else:
+            path = gateway_node_admission_path(root, record["request-id"])
+            path.write_bytes(path.read_bytes() + b" ")
+        return original(root, record, slot, snapshot)
+    monkeypatch.setattr(case.runner, "_admit_prepare", raced)
+    deferred = await invoke(case)
+    assert deferred.side_effect_state == "not-started"
+    assert not case.prepares and not case.commands
+    if fault == "snapshot":
+        assert deferred.error.details["reason-code"] == "admission-snapshot-invalid"
+    if fault in {"occupancy", "snapshot"}:
+        assert await asyncio.to_thread(case.admission.authority.serialize,
+            lambda: case.connections.is_ready(case.gateway, grant_revision=1))
+
+
+@pytest.mark.asyncio
+async def test_late_canonical_bind_prevents_second_prepare_without_consuming_ready(case, monkeypatch):
+    from .test_gateway_node_dispatch_store import bind
+
+    original = case.runner._admit_prepare
+    def raced(root, record, slot, snapshot):
+        bind(root, record)
+        return original(root, record, slot, snapshot)
+    monkeypatch.setattr(case.runner, "_admit_prepare", raced)
+    deferred = await invoke(case)
+    assert deferred.side_effect_state == "may-have-started"
+    assert store.read_record(case.admission.root, case.record["request-id"])["node-dispatch"] is not None
+    assert not case.prepares and not case.commands
+    assert await asyncio.to_thread(case.admission.authority.serialize,
+        lambda: case.connections.is_ready(case.gateway, grant_revision=1))
+
+
+@pytest.mark.asyncio
+async def test_rejected_prepare_requires_a_new_quiescent_cycle(case):
+    case.reject_code = "VAL-AGND-001"
+    await invoke(case)
+    assert len(case.prepares) == 1 and not case.commands
+    case.reject_code = None
+    deferred = await invoke(case)
+    assert deferred.error.details["reason-code"] == "ready-channel-invalid"
+    assert len(case.prepares) == 1 and not case.commands
+    await announce_ready(case)
+    await invoke(case)
+    await effects(case)
+    assert len(case.prepares) == 2 and len(case.commands) == 1
+    assert type(case.effects[0]) is EffectAuthorized
+
+
+@pytest.mark.asyncio
+async def test_bound_observation_and_effect_authorization_do_not_require_or_consume_ready(case, monkeypatch):
+    await invoke(case)
+    await effects(case)
+    assert not await asyncio.to_thread(case.admission.authority.serialize,
+        lambda: case.connections.is_ready(case.gateway, grant_revision=1))
+    def forbidden(*args, **kwargs):
+        pytest.fail("bound effects/observation must never consume readiness")
+    monkeypatch.setattr(case.connections, "consume_ready", forbidden)
+    await invoke(case)
+    await invoke(case, reconcile_only=True)
+    sent, _, reply = await case.node.request_work("effect-authorize",
+        {"identity": case.commands[0].identity.to_mapping()},
+        reply_types=(EffectAuthorized, EffectDenied), timeout=2)
+    assert type(reply) is EffectAuthorized and reply.authorization_request_id == sent.message_id
+    assert len(case.prepares) == len(case.commands) == 1
+
+
+@pytest.mark.asyncio
+async def test_admit_prepare_private_snapshot_reads_stay_outside_authority_lock(case, monkeypatch):
+    from audiagentic.components.agents.gateway.node import runner as module
+
+    state = threading.local()
+    serialize = case.admission.authority.serialize
+    read = module.read_node_admission_snapshot
+    def serialized(callback):
+        def guarded():
+            state.held = True
+            try:
+                return callback()
+            finally:
+                state.held = False
+        return serialize(guarded)
+    def private_read(*args, **kwargs):
+        assert not getattr(state, "held", False)
+        return read(*args, **kwargs)
+    monkeypatch.setattr(case.admission.authority, "serialize", serialized)
+    monkeypatch.setattr(module, "read_node_admission_snapshot", private_read)
+    await invoke(case)
+    await effects(case)
+    assert type(case.effects[0]) is EffectAuthorized

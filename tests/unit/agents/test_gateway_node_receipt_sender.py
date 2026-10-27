@@ -19,7 +19,11 @@ from tests.unit.agents.test_gateway_node_transport import wait_until
 
 from audiagentic.components.agents.gateway.node.execution_owner import NodeExecutionOwner
 from audiagentic.components.agents.gateway.node.receipt_sender import NodeReceiptSender
-from audiagentic.components.agents.gateway.node.work_protocol import ReceiptResume, ReceiptWork
+from audiagentic.components.agents.gateway.node.work_protocol import (
+    ReceiptReady,
+    ReceiptResume,
+    ReceiptWork,
+)
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 
@@ -34,7 +38,7 @@ class Central:
         self.acknowledge = acknowledge
         self.resume_changes = resume_changes or {}
         self.ack_sequence = ack_sequence
-        self.resumes, self.receipts = [], []
+        self.resumes, self.receipts, self.ready = [], [], []
         self.received = asyncio.Event()
         self.intended = asyncio.Event()
         self.terminal = asyncio.Event()
@@ -49,7 +53,9 @@ class Central:
         previous = gateway._on_work
 
         async def handle(frame, work):
-            if type(work) is ReceiptResume:
+            if type(work) is ReceiptReady:
+                self.ready.append(work)
+            elif type(work) is ReceiptResume:
                 self.resumes.append(work)
                 payload = {
                     "kind": "receipt-resume",
@@ -620,4 +626,365 @@ async def test_event_without_durable_ack_never_becomes_progress(env, monkeypatch
         assert (await asyncio.to_thread(owner.receipt_checkpoint)).through_sequence == 0
         assert len(central.receipts) == 1 and not node._task.done()
     finally:
+        await close(node, gateway)
+
+
+@pytest.mark.asyncio
+async def test_first_boot_ready_zero_cursor_and_duplicate_state_hints_do_not_poll_or_repeat(env, monkeypatch):
+    owner, runtime, _ = setup(env, monkeypatch)
+    node, gateway, _ = await pair(runtime)
+    central = Central(owner)
+    central.attach(gateway)
+    sender = NodeReceiptSender(runtime)
+    idle = asyncio.Queue()
+    original = sender._wait
+
+    async def waiting(closed, events, timeout=None):
+        assert timeout is None
+        idle.put_nowait(True)
+        return await original(closed, events, timeout)
+
+    monkeypatch.setattr(sender, "_wait", waiting)
+    task = asyncio.create_task(sender.run(node))
+    try:
+        await asyncio.wait_for(idle.get(), 2)
+        await wait_until(lambda: len(central.ready) == 1)
+        ready = central.ready[0]
+        checkpoint = await asyncio.to_thread(owner.receipt_checkpoint)
+        assert ready.log_incarnation_id == checkpoint.log_incarnation_id
+        assert ready.through_sequence == 0 and ready.through_receipt_sha256 is None
+        assert not central.receipts and len(central.resumes) == 1
+        for _ in range(3):
+            runtime.state_changed_event.set()  # Notification is not a new cycle.
+            await asyncio.wait_for(idle.get(), 2)
+        assert len(central.ready) == 1
+    finally:
+        await stop_sender(task)
+        await close(node, gateway)
+
+
+@pytest.mark.asyncio
+async def test_two_commands_same_connection_ready_only_after_terminal_ack_and_producer_finally(env, monkeypatch):
+    import threading
+
+    from tests.unit.agents.test_gateway_node_execution_owner import second_case
+    from tests.unit.agents.test_gateway_node_worker_terminal import mint_proof
+
+    owner, runtime, _ = setup(env, monkeypatch)
+    node, gateway, _ = await pair(runtime)
+    central = Central(owner)
+    central.attach(gateway)
+    sender = NodeReceiptSender(runtime, poll_interval_seconds=0.005)
+    task = asyncio.create_task(sender.run(node))
+    original = NodeExecutionOwner.run_one
+    terminal_written = asyncio.Event()
+    release = threading.Event()
+    loop = asyncio.get_running_loop()
+    executions = []
+
+    def held_finally(self, *args, **kwargs):
+        result = original(self, *args, **kwargs)
+        executions.append(result)
+        loop.call_soon_threadsafe(terminal_written.set)
+        assert release.wait(5)
+        return result
+
+    monkeypatch.setattr(NodeExecutionOwner, "run_one", held_finally)
+    try:
+        await wait_until(lambda: len(central.ready) == 1)
+        for cycle in range(2):
+            if cycle:
+                env.case = second_case(env.case)
+            mint_proof(monkeypatch, env.case)  # Fake child envelopes, not native E2E.
+            release.clear()
+            terminal_written.clear()
+            await prepare(gateway, env.case)
+            await command(gateway, env.case)
+            await asyncio.wait_for(terminal_written.wait(), 2)
+            terminal = executions[-1]
+            await wait_cursor(owner, terminal.sequence, task)
+            assert runtime.producer_pending
+            assert len(central.ready) == cycle + 1  # Durable terminal is not producer-finally.
+            release.set()
+            assert (await runtime.wait_producer()).state == "terminal"
+            await wait_until(lambda: len(central.ready) == cycle + 2)
+            assert central.ready[-1].through_sequence == terminal.sequence
+            assert central.ready[-1].through_receipt_sha256 == terminal.digest
+        assert len(executions) == 2 and len(central.resumes) == 1
+        assert [r.state for r in central.receipts] == ["prepared", "effect-intent", "terminal"] * 2
+    finally:
+        release.set()
+        if runtime.producer_pending:
+            await runtime.wait_producer()
+        await stop_sender(task)
+        await close(node, gateway)
+
+
+@pytest.mark.asyncio
+async def test_pending_preparation_then_rejection_starts_new_ready_cycle_without_effect(env, monkeypatch):
+    import threading
+
+    from audiagentic.components.agents.gateway.node.contracts import invalid
+    from audiagentic.components.agents.gateway.node.local_preparation import NodeLocalPreparer
+    from audiagentic.components.agents.gateway.node.work_protocol import PreparationRejected
+
+    owner, runtime, _ = setup(env, monkeypatch)
+    node, gateway, _ = await pair(runtime)
+    central = Central(owner)
+    central.attach(gateway)
+    sender = NodeReceiptSender(runtime)
+    task = asyncio.create_task(sender.run(node))
+    entered = asyncio.Event()
+    release = threading.Event()
+    loop = asyncio.get_running_loop()
+
+    def reject(self, **kwargs):
+        loop.call_soon_threadsafe(entered.set)
+        assert release.wait(5)
+        raise invalid(1, "Preparation rejected")
+
+    monkeypatch.setattr(NodeLocalPreparer, "prepare", reject)
+    pending = None
+    try:
+        await wait_until(lambda: len(central.ready) == 1)
+        pending = asyncio.create_task(prepare(gateway, env.case))
+        await asyncio.wait_for(entered.wait(), 2)
+        assert not await runtime.emit_receipt_ready(node, await asyncio.to_thread(owner.receipt_checkpoint))
+        assert len(central.ready) == 1
+        release.set()
+        _, _, reply = await pending
+        assert type(reply) is PreparationRejected
+        await wait_until(lambda: len(central.ready) == 2)
+        assert central.ready[-1].through_sequence == 0 and not central.receipts
+        assert not runtime.producer_pending
+    finally:
+        release.set()
+        if pending is not None:
+            await asyncio.gather(pending, return_exceptions=True)
+        await stop_sender(task)
+        await close(node, gateway)
+
+
+@pytest.mark.asyncio
+async def test_replacement_drain_and_sender_cancellation_do_not_advertise_or_replay_effect(env, monkeypatch):
+    owner, runtime, _ = setup(env, monkeypatch)
+    node, gateway, _ = await pair(runtime)
+    central = Central(owner)
+    central.attach(gateway)
+    first = asyncio.create_task(NodeReceiptSender(runtime).run(node))
+    newer = new_gateway = None
+    second = None
+    try:
+        await wait_until(lambda: len(central.ready) == 1)
+        newer, new_gateway, _ = await pair(runtime, generation=2, capability="drain")
+        drain = Central(owner)
+        drain.attach(new_gateway)
+        second = asyncio.create_task(NodeReceiptSender(runtime).run(newer))
+        await wait_until(lambda: len(drain.resumes) == 1)
+        checkpoint = await asyncio.to_thread(owner.receipt_checkpoint)
+        assert not await runtime.emit_receipt_ready(node, checkpoint)
+        assert not await runtime.emit_receipt_ready(newer, checkpoint)
+        await asyncio.wait_for(first, 2)
+        await stop_sender(second)
+        assert not newer._task.done() and not runtime.producer_pending
+        assert not drain.ready and not drain.receipts
+        assert len(central.ready) == 1
+    finally:
+        await stop_sender(first)
+        if second is not None:
+            await stop_sender(second)
+        await close(node, gateway)
+        if newer is not None:
+            await close(newer, new_gateway)
+
+
+@pytest.mark.asyncio
+async def test_ready_snapshot_offloop_rechecks_prepare_acceptance_and_connection_replacement(env, monkeypatch):
+    import threading
+
+    owner, runtime, _ = setup(env, monkeypatch)
+    node, gateway, _ = await pair(runtime)
+    central = Central(owner)
+    central.attach(gateway)
+    checkpoint = await asyncio.to_thread(owner.receipt_checkpoint)
+    entered, release = asyncio.Event(), threading.Event()
+    loop = asyncio.get_running_loop()
+    loop_thread = threading.get_ident()
+    original = NodeExecutionOwner.snapshot
+    first = True
+
+    def snapshot(self):
+        nonlocal first
+        assert threading.get_ident() != loop_thread
+        if first:
+            first = False
+            loop.call_soon_threadsafe(entered.set)
+            assert release.wait(5)
+        return original(self)
+
+    monkeypatch.setattr(NodeExecutionOwner, "snapshot", snapshot)
+    ready = asyncio.create_task(runtime.emit_receipt_ready(node, checkpoint))
+    newer = new_gateway = None
+    try:
+        await asyncio.wait_for(entered.wait(), 2)
+        await prepare(gateway, env.case)  # Admission progresses while snapshot I/O is blocked.
+        newer, new_gateway, _ = await pair(runtime, generation=2)
+        release.set()
+        assert not await ready
+        assert not central.ready
+        current = Central(owner)
+        current.attach(new_gateway)
+        assert await runtime.emit_receipt_ready(newer, checkpoint)
+        await wait_until(lambda: len(current.ready) == 1)
+        assert not await runtime.emit_receipt_ready(node, checkpoint)
+        assert not await runtime.emit_receipt_ready(newer, checkpoint)
+    finally:
+        release.set()
+        await asyncio.gather(ready, return_exceptions=True)
+        await close(node, gateway)
+        if newer is not None:
+            await close(newer, new_gateway)
+
+
+@pytest.mark.asyncio
+async def test_ready_bounded_send_serializes_prepare_but_holds_no_owner_io_lock(env, monkeypatch):
+    owner, runtime, calls = setup(env, monkeypatch)
+    node, gateway, _ = await pair(runtime)
+    central = Central(owner)
+    central.attach(gateway)
+    entered, release = asyncio.Event(), asyncio.Event()
+    original = node.send_work
+
+    async def held(kind, payload, **kwargs):
+        if payload.get("kind") == "receipt-ready":
+            entered.set()
+            await release.wait()
+        return await original(kind, payload, **kwargs)
+
+    monkeypatch.setattr(node, "send_work", held)
+    checkpoint = await asyncio.to_thread(owner.receipt_checkpoint)
+    ready = asyncio.create_task(runtime.emit_receipt_ready(node, checkpoint))
+    pending = None
+    try:
+        await asyncio.wait_for(entered.wait(), 2)
+        pending = asyncio.create_task(prepare(gateway, env.case))
+        before = node._received_sequence
+        await gateway.heartbeat()
+        await wait_until(lambda: node._received_sequence > before)
+        snapshot = await asyncio.wait_for(asyncio.to_thread(owner.snapshot), 2)
+        assert not snapshot.capacity_blocked and not calls
+        release.set()
+        assert await ready
+        await pending
+        await wait_until(lambda: len(central.ready) == 1)
+        assert len(calls) == 1
+        assert not await runtime.emit_receipt_ready(node, checkpoint)  # Accepted preparation owns the slot.
+    finally:
+        release.set()
+        await asyncio.gather(ready, return_exceptions=True)
+        if pending is not None:
+            await asyncio.gather(pending, return_exceptions=True)
+        await close(node, gateway)
+
+
+@pytest.mark.asyncio
+async def test_worker_error_acknowledged_intent_does_not_advertise_readiness(env, monkeypatch):
+    owner, runtime, _ = setup(env, monkeypatch)
+    entered, release, native_calls = worker_io(env, monkeypatch, fail=True)
+    node, gateway, _ = await pair(runtime)
+    central = Central(owner)
+    central.attach(gateway)
+    task = asyncio.create_task(NodeReceiptSender(runtime, poll_interval_seconds=0.005).run(node))
+    try:
+        await wait_until(lambda: len(central.ready) == 1)
+        await prepare(gateway, env.case)
+        await command(gateway, env.case)
+        await asyncio.wait_for(entered.wait(), 2)
+        assert await runtime.wait_producer() is None
+        await wait_cursor(owner, 2, task)
+        checkpoint = await asyncio.to_thread(owner.receipt_checkpoint)
+        assert not await runtime.emit_receipt_ready(node, checkpoint)
+        assert len(central.ready) == 1 and len(native_calls) == 1
+        assert (await asyncio.to_thread(owner.snapshot)).capacity_blocked
+        assert not central.terminal.is_set()
+    finally:
+        release.set()
+        if runtime.producer_pending:
+            await runtime.wait_producer()
+        await stop_sender(task)
+        await close(node, gateway)
+
+
+@pytest.mark.asyncio
+async def test_effect_authorization_wait_is_outside_admission_gate_and_suppresses_ready(env, monkeypatch):
+    owner, runtime, _ = setup(env, monkeypatch)
+    entered, release = asyncio.Event(), asyncio.Event()
+
+    async def authorize(gateway, frame, message):
+        entered.set()
+        await release.wait()
+        await gateway.send_work("effect-authorized", {
+            "identity": message.identity.to_mapping(),
+            "authorization-request-id": frame.message_id,
+            "authorization-id": "grant", "authorized": True,
+        })
+
+    worker_entered, worker_release, calls = worker_io(env, monkeypatch)
+    node, gateway, _ = await pair(runtime, authorize=authorize)
+    central = Central(owner)
+    central.attach(gateway)
+    sender = asyncio.create_task(NodeReceiptSender(runtime, poll_interval_seconds=0.005).run(node))
+    try:
+        await wait_until(lambda: len(central.ready) == 1)
+        await prepare(gateway, env.case)
+        await command(gateway, env.case)
+        await asyncio.wait_for(entered.wait(), 2)
+        checkpoint = await asyncio.to_thread(owner.receipt_checkpoint)
+        assert not runtime._admission_gate.locked()
+        assert not await asyncio.wait_for(runtime.emit_receipt_ready(node, checkpoint), 2)
+        assert not calls and len(central.ready) == 1
+        before = node._received_sequence
+        await gateway.heartbeat()
+        await wait_until(lambda: node._received_sequence > before)
+        release.set()
+        await asyncio.wait_for(worker_entered.wait(), 2)
+        terminal = await runtime.wait_producer()
+        await wait_cursor(owner, terminal.sequence, sender)
+        await wait_until(lambda: len(central.ready) == 2)
+        assert len(calls) == 1
+    finally:
+        release.set()
+        worker_release.set()
+        if runtime.producer_pending:
+            await runtime.wait_producer()
+        await stop_sender(sender)
+        await close(node, gateway)
+
+
+@pytest.mark.asyncio
+async def test_cancel_during_ready_send_does_not_repeat_hint_or_cancel_receiver(env, monkeypatch):
+    owner, runtime, _ = setup(env, monkeypatch)
+    node, gateway, _ = await pair(runtime)
+    entered = asyncio.Event()
+    attempts = []
+
+    async def held(kind, payload, **kwargs):
+        assert payload["kind"] == "receipt-ready"
+        attempts.append(payload)
+        entered.set()
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr(node, "send_work", held)
+    checkpoint = await asyncio.to_thread(owner.receipt_checkpoint)
+    task = asyncio.create_task(runtime.emit_receipt_ready(node, checkpoint))
+    try:
+        await asyncio.wait_for(entered.wait(), 2)
+        await stop_sender(task)
+        assert not runtime._admission_gate.locked()
+        runtime.state_changed_event.set()
+        assert not await runtime.emit_receipt_ready(node, checkpoint)
+        assert len(attempts) == 1 and not runtime.producer_pending
+        assert not node._task.done()
+    finally:
+        await stop_sender(task)
         await close(node, gateway)

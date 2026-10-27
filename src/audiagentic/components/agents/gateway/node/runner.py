@@ -66,7 +66,7 @@ class NodeRunner:
         if (original.get("dispatch-owner-epoch") != self.owner_epoch
                 or current.get("dispatch-owner-epoch") != self.owner_epoch
                 or any(current.get(k) != original.get(k) for k in ("worker-id", "attempt-epoch"))):
-            raise conflict(1, "Node runner does not own the queue-assigned attempt")
+            raise conflict(1, "Node runner does not own the queue-assigned attempt", reason_code="owner-fence-changed")
         if not isinstance(current.get("node-placement"), dict):
             raise conflict(1, "Node runner requires canonical node placement")
         return current
@@ -130,10 +130,45 @@ class NodeRunner:
 
         return self.authority.authorize_effect(sealed, connection=live, callback=commit)
 
-    async def _prepare(self, slot, payload):
-        if not await asyncio.to_thread(self.authority.serialize,
-                lambda: self.connections.current_slot(slot.identity.node_id) == slot):
-            raise conflict(1, "Node connection changed before preparation", reason_code="connection-replaced-or-closed")
+    def _admit_prepare(self, root, record, slot, snapshot):
+        """Consume one quiescent cycle under owner -> auth, before fresh I/O.
+
+        Private snapshot I/O is outside auth. Canonical fences and occupancy
+        are rechecked inside it, just as at bind; no request state is mutated.
+        Failure never restores readiness or proves an existing command unsent.
+        """
+        with self.service.owner_guard(self.owner_epoch):
+            latest = self._read(root, record)
+            try:
+                retained = read_node_admission_snapshot(root, latest)
+            except AudiaGenticError as error:
+                raise sanitize_node_error(error, "prepare", "admission-snapshot-invalid") from error
+            if retained.descriptor != snapshot.descriptor:
+                raise conflict(1, "Node admission changed before preparation", reason_code="admission-snapshot-invalid")
+
+            def admit():
+                live = self._slot(slot.identity.node_id)
+                if (live.connection is not slot.connection or live.identity != slot.identity
+                        or live.grant_revision != slot.grant_revision):
+                    raise conflict(1, "Node connection changed before preparation", reason_code="connection-replaced-or-closed")
+                if self.occupancy.snapshot().occupied(self.config.server_id, slot.identity.node_id,
+                        exclude_request=(root, record["request-id"])):
+                    raise conflict(1, "Node capacity is occupied before preparation", reason_code="capacity-occupied")
+                current = self._read(root, record)
+                if (current["revision"] != record["revision"] or current["state"] != "running"
+                        or current.get("provider-transport-kind") != "worker"
+                        or current.get("cancel-requested") or current.get("node-dispatch") is not None
+                        or current.get("node-placement") != record.get("node-placement")
+                        or current.get("node-admission") != record.get("node-admission")
+                        or current["node-placement"]["grant-revision"] != live.grant_revision):
+                    raise conflict(1, "Node attempt changed before preparation", reason_code="attempt-not-dispatchable")
+                if not self.connections.consume_ready(live.connection, grant_revision=live.grant_revision):
+                    raise conflict(1, "Node has no current quiescent readiness", reason_code="ready-channel-invalid")
+
+            self.authority.serialize(admit)
+
+    async def _prepare(self, root, record, slot, snapshot, payload):
+        await asyncio.to_thread(self._admit_prepare, root, record, slot, snapshot)
         return await slot.connection.request_work("reconcile", payload,
             reply_types=(PreparedReply, PreparationRejected), timeout=self.timeout)
 
@@ -192,7 +227,7 @@ class NodeRunner:
             emit_node_stage(root, current, "connection-qualified", started_ns=started_ns, connection=slot.identity)
             stage = "prepare"
             emit_node_stage(root, current, "prepare-requested", started_ns=started_ns, connection=slot.identity)
-            sent, reply_frame, reply = self._bridge(self._prepare(slot, {
+            sent, reply_frame, reply = self._bridge(self._prepare(root, current, slot, snapshot, {
                 "kind": "prepare", "binding": binding.to_mapping(), "semantic": snapshot.descriptor.semantic.to_mapping(),
                 "agent-id": snapshot.agent_id, "worker-id": current["worker-id"], "attempt-epoch": current["attempt-epoch"],
                 "raw-prompt": snapshot.raw_prompt, "source-workspace": snapshot.source_workspace.to_mapping(),

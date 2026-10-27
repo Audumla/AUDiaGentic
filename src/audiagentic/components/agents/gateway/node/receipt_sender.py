@@ -186,7 +186,7 @@ class NodeReceiptSender:
         deferred_handoff = False
         while self._current(connection) and not closed.done():
             self.runtime.acknowledgement_event.clear()
-            self.runtime.producer_changed_event.clear()
+            self.runtime.state_changed_event.clear()
             current = await self._checkpoint(connection, checkpoint)
             if current.through_sequence >= receipt.sequence:
                 return "advanced", current
@@ -208,7 +208,7 @@ class NodeReceiptSender:
                     and (pending_before or self.runtime.producer_pending)
                 ):
                     if not await self._wait(
-                        closed, [self.runtime.producer_changed_event], self.poll_interval
+                        closed, [self.runtime.state_changed_event], self.poll_interval
                     ):
                         break
                     continue
@@ -219,7 +219,7 @@ class NodeReceiptSender:
                 )
             if not await self._wait(
                 closed,
-                [self.runtime.acknowledgement_event, self.runtime.producer_changed_event],
+                [self.runtime.acknowledgement_event, self.runtime.state_changed_event],
                 remaining,
             ):
                 break
@@ -233,10 +233,10 @@ class NodeReceiptSender:
             checkpoint = None
             resumed = False
             while self._current(connection) and not closed.done():
-                self.runtime.producer_changed_event.clear()
+                self.runtime.state_changed_event.clear()
                 checkpoint = await self._checkpoint(connection, checkpoint)
                 if checkpoint is None:
-                    if not await self._wait(closed, [self.runtime.producer_changed_event]):
+                    if not await self._wait(closed, [self.runtime.state_changed_event]):
                         return
                     continue
                 if not resumed:
@@ -249,8 +249,10 @@ class NodeReceiptSender:
                     limit=1,
                 )
                 if not rows:
+                    if self._current(connection) and not closed.done():
+                        await self.runtime.emit_receipt_ready(connection, checkpoint)
                     timeout = self.poll_interval if self.runtime.producer_pending else None
-                    if not await self._wait(closed, [self.runtime.producer_changed_event], timeout):
+                    if not await self._wait(closed, [self.runtime.state_changed_event], timeout):
                         return
                     continue
                 receipt = rows[0]

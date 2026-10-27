@@ -75,6 +75,9 @@ class NodeRecipientRuntime:
         self._authorization_timeout = authorization_timeout_seconds
         self._default_timeout = default_timeout_seconds
         self._configure_lock = asyncio.Lock()
+        self._admission_gate = asyncio.Lock()
+        self._state_revision = 0
+        self._ready_emitted = None
         self._connection = None
         self._accepted = None
         self._preparing = None
@@ -83,7 +86,9 @@ class NodeRecipientRuntime:
         # Notification only: clear before rereading the owner's durable cursor.
         # Valid duplicate ACKs may wake a waiter; deferred ACKs never signal.
         self.acknowledgement_event = asyncio.Event()
-        self.producer_changed_event = asyncio.Event()
+        # One process-local notification for admission, cleanup and producer
+        # transitions. A set event alone is neither a new cycle nor ACK proof.
+        self.state_changed_event = asyncio.Event()
         self.failure: RecipientFailure | None = None
 
     @property
@@ -99,6 +104,65 @@ class NodeRecipientRuntime:
     @property
     def producer_pending(self) -> bool:
         return self._producer is not None and not self._producer.done()
+
+    def _state_changed(self):
+        self._state_revision += 1
+        self.state_changed_event.set()
+
+    def _locally_quiescent(self, connection):
+        return (
+            self._connection is connection
+            and connection.close_reason is None
+            and connection.failure is None
+            and connection.capability == "active"
+            and self._accepted is None
+            and self._preparing is None
+            and not self._authorizing
+            and not self.producer_pending
+        )
+
+    async def emit_receipt_ready(self, connection, checkpoint):
+        """One hint per quiescent cycle, serialized with local work admission.
+
+        The sender has resumed and drained through this durable ACK. Snapshot
+        I/O is outside the local gate; the revision recheck fences intervening
+        admission. Neither the hint nor cursor progress proves native completion.
+        """
+        async with self._admission_gate:
+            if not self._locally_quiescent(connection):
+                return False
+            revision = self._state_revision
+            if self._ready_emitted == (connection, revision):
+                return False
+        snapshot = await asyncio.to_thread(self._owner.snapshot)
+        current_checkpoint = await asyncio.to_thread(self._owner.receipt_checkpoint)
+        scope = snapshot.owner_scope
+        c = connection.identity
+        if (
+            current_checkpoint != checkpoint
+            or snapshot.control != c or snapshot.capability != "active"
+            or snapshot.capacity_blocked or snapshot.producer_running or snapshot.handoff_pending
+            or scope is None
+            or (scope.node_id, scope.node_epoch, scope.gateway_owner_epoch)
+            != (c.node_id, c.node_epoch, c.gateway_owner_epoch)
+        ):
+            return False
+        async with self._admission_gate:
+            if (not self._locally_quiescent(connection) or self._state_revision != revision
+                    or self._ready_emitted == (connection, revision)):
+                return False
+            # send_work has its own bounded send deadline; no service, grant,
+            # thread or native-execution lock is held here.
+            # Reserve the attempt before awaiting transport: cancellation or
+            # an uncertain send cannot manufacture more hints in this cycle.
+            self._ready_emitted = (connection, revision)
+            await connection.send_work("reconcile", {
+                "kind": "receipt-ready",
+                "log-incarnation-id": checkpoint.log_incarnation_id,
+                "through-sequence": checkpoint.through_sequence,
+                "through-receipt-sha256": checkpoint.through_receipt_sha256,
+            })
+            return True
 
     @staticmethod
     def _safe_code(error):
@@ -138,10 +202,12 @@ class NodeRecipientRuntime:
                 self._remember(connection.failure_summary, "channel-failed")
             # Stale close callbacks cannot erase a newer connection. No producer
             # cancellation, native kill or inference about effects occurs here.
-            if self._connection is connection:
-                self._connection = None
-                if not self.producer_pending:
-                    self._accepted = None
+            async with self._admission_gate:
+                if self._connection is connection:
+                    self._connection = None
+                    if not self.producer_pending:
+                        self._accepted = None
+                    self._state_changed()
             try:
                 await asyncio.to_thread(self._owner.connection_lost, connection.identity)
             except Exception as error:
@@ -157,9 +223,11 @@ class NodeRecipientRuntime:
             )
             # Associate before any await so partial-configuration close cleanup
             # finds the exact connection; stale callbacks never erase a successor.
-            self._connection = connection
-            if not self.producer_pending:
-                self._accepted = None
+            async with self._admission_gate:
+                self._connection = connection
+                if not self.producer_pending:
+                    self._accepted = None
+                self._state_changed()
 
             def observe():
                 self._owner.observe_connection(
@@ -250,86 +318,101 @@ class NodeRecipientRuntime:
             raise conflict(1, "Recipient work rejected", reason_code=reason) from None
 
     async def _prepare(self, connection, work):
-        if (
-            self.producer_pending
-            or self._authorizing
-            or (self._preparing is not None and not self._preparing.done())
-            or self._accepted is not None
-        ):
-            raise conflict(1, "Recipient preparation slot is occupied")
         c, b = connection.identity, work.binding
-        if (
-            (b.node_id, b.node_epoch, b.gateway_owner_epoch, b.connection_generation)
-            != (c.node_id, c.node_epoch, c.gateway_owner_epoch, c.connection_generation)
-            or b.grant_revision != connection.grant_revision
-            or b.workspace_id != work.source_workspace.workspace_id
-        ):
-            raise conflict(1, "Preparation binding differs from current channel")
 
         def materialize():
+            if (
+                (b.node_id, b.node_epoch, b.gateway_owner_epoch, b.connection_generation)
+                != (c.node_id, c.node_epoch, c.gateway_owner_epoch, c.connection_generation)
+                or b.grant_revision != connection.grant_revision
+                or b.workspace_id != work.source_workspace.workspace_id
+            ):
+                raise conflict(1, "Preparation binding differs from current channel")
             if self._owner.snapshot().capacity_blocked:
                 raise conflict(1, "Recipient producer capacity is occupied")
-            # Must precede ANY catalog/materialization/provider-preflight read.
             validate_recipient_workspace(
                 self._config, work.source_workspace, caller_root=work.caller_root
             )
             return self._preparer.prepare(
-                binding=b,
-                semantic=work.semantic,
-                agent_id=work.agent_id,
-                raw_prompt=work.raw_prompt,
-                worker_id=work.worker_id,
-                attempt_epoch=work.attempt_epoch,
-                source=work.source,
-                metadata=work.metadata,
-                timeout_seconds=work.timeout_seconds,
+                binding=b, semantic=work.semantic, agent_id=work.agent_id,
+                raw_prompt=work.raw_prompt, worker_id=work.worker_id,
+                attempt_epoch=work.attempt_epoch, source=work.source,
+                metadata=work.metadata, timeout_seconds=work.timeout_seconds,
             )
 
-        task = asyncio.create_task(asyncio.to_thread(materialize))
-        self._preparing = task
+        async with self._admission_gate:
+            if not self._locally_quiescent(connection):
+                raise conflict(1, "Recipient preparation slot is occupied")
+            task = asyncio.create_task(asyncio.to_thread(materialize))
+            self._preparing = task
+            self._state_changed()
         task.add_done_callback(self._consume_preparation)
-        preparation = await asyncio.shield(task)
-        await self._live(connection)
-        if (
-            type(preparation) is not RetainedNodePreparation
-            or preparation.attestation.binding != b
-            or preparation.attestation.semantic != work.semantic
-            or preparation.attestation.worker_id != work.worker_id
-            or preparation.attestation.attempt_epoch != work.attempt_epoch
-            or connection.grant_revision != b.grant_revision
-        ):
-            raise conflict(1, "Local preparation differs from accepted work")
-        await asyncio.to_thread(
-            validate_recipient_workspace,
-            self._config,
-            work.source_workspace,
-            caller_root=work.caller_root,
-        )
-        await self._live(connection)
-        self._accepted = _Accepted(work, preparation, connection)
-        await connection.send_work(
-            "reconcile-result",
-            {
-                "kind": "prepared",
-                "in-reply-to": work.message_id,
+        try:
+            preparation = await asyncio.shield(task)
+            await self._live(connection)
+            if (
+                type(preparation) is not RetainedNodePreparation
+                or preparation.attestation.binding != b
+                or preparation.attestation.semantic != work.semantic
+                or preparation.attestation.worker_id != work.worker_id
+                or preparation.attestation.attempt_epoch != work.attempt_epoch
+                or connection.grant_revision != b.grant_revision
+            ):
+                raise conflict(1, "Local preparation differs from accepted work")
+            await asyncio.to_thread(
+                validate_recipient_workspace, self._config, work.source_workspace,
+                caller_root=work.caller_root,
+            )
+            await self._live(connection)
+            async with self._admission_gate:
+                if self._connection is not connection or connection.close_reason is not None:
+                    raise conflict(1, "Preparation channel changed before acceptance")
+                self._accepted = _Accepted(work, preparation, connection)
+                self._state_changed()
+            await connection.send_work("reconcile-result", {
+                "kind": "prepared", "in-reply-to": work.message_id,
                 "attestation": preparation.attestation.to_mapping(),
-            },
-        )
+            })
+        except Exception as error:
+            self._remember(error, "preparation-rejected")
+            async with self._admission_gate:
+                if self._accepted is not None and self._accepted.work is work:
+                    self._accepted = None
+            await connection.send_work("reconcile-result", {
+                "kind": "prepare-rejected", "in-reply-to": work.message_id,
+                "code": self._safe_code(error),
+            })
+        finally:
+            if task.done():
+                await self._release_preparation(task)
+            else:
+                # A disconnected dispatcher cannot cancel thread materialization
+                # or advertise a free slot until that retained work actually ends.
+                task.add_done_callback(lambda done: asyncio.create_task(self._release_preparation(done)))
+
+    async def _release_preparation(self, task):
+        async with self._admission_gate:
+            if self._preparing is task:
+                self._preparing = None
+                self._state_changed()
 
     def _consume_preparation(self, task):
         if not task.cancelled() and task.exception() is not None:
             self._remember(task.exception(), "preparation-rejected")
 
     async def _command(self, connection, work):
-        accepted = self._accepted
-        if (
-            accepted is None
-            or accepted.connection is not connection
-            or self.producer_pending
-            or self._authorizing
-        ):
-            raise conflict(1, "Command has no available retained preparation")
-        self._authorizing = True
+        async with self._admission_gate:
+            accepted = self._accepted
+            if (
+                accepted is None or accepted.connection is not connection
+                or self.producer_pending or self._authorizing
+                or self._connection is not connection or connection.close_reason is not None
+                or connection.capability != "active"
+            ):
+                raise conflict(1, "Command has no available retained preparation")
+            self._authorizing = True
+            self._state_changed()
+        started = False
         try:
             snapshot = await asyncio.to_thread(self._owner.snapshot)
             await self._live(connection)
@@ -364,14 +447,23 @@ class NodeRecipientRuntime:
                 connection_generation=connection.identity.connection_generation,
             )
             # Exact immutable channel Frames go to the sole durable producer.
-            task = asyncio.create_task(self._produce(accepted, work, sent, reply))
-            self._producer = task
-            self.producer_changed_event.set()
+            async with self._admission_gate:
+                if (self._connection is not connection or connection.close_reason is not None
+                        or connection.capability != "active" or self._accepted is not accepted):
+                    raise conflict(1, "Command channel changed before producer startup")
+                task = asyncio.create_task(self._produce(accepted, work, sent, reply))
+                self._producer = task
+                started = True
+                self._state_changed()
             # The process retains this task; the one channel dispatcher must
             # remain free for receipt ACKs and artifact requests. Shutdown uses
             # wait_producer(), never cancellation of this independently owned work.
         finally:
-            self._authorizing = False
+            async with self._admission_gate:
+                self._authorizing = False
+                if not started and self._accepted is accepted:
+                    self._accepted = None
+                self._state_changed()
 
     async def _produce(self, accepted, work, sent, reply):
         try:
@@ -394,14 +486,16 @@ class NodeRecipientRuntime:
             self._remember(error, "producer-failed")
             return None  # Receipt state remains authoritative; never infer unsent.
         finally:
-            if self._accepted is accepted:
-                self._accepted = None
+            async with self._admission_gate:
+                if self._accepted is accepted:
+                    self._accepted = None
             try:
                 await asyncio.to_thread(self._owner.handoff_if_quiescent)
             except Exception as error:
                 self._remember(error, "owner-fenced")
             finally:
-                self.producer_changed_event.set()
+                async with self._admission_gate:
+                    self._state_changed()
 
     async def wait_producer(self):
         """Process shutdown/reconnect owner may await; caller cancellation is shielded."""

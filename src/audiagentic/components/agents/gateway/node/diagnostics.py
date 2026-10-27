@@ -23,6 +23,8 @@ _STAGE_FACTS = {
     "bind": (ObservationPhase.SUBMIT_INTENT, "grant-or-connection-changed"),
     "command": (ObservationPhase.SUBMIT_INTENT, "command-delivery-uncertain"),
     "observe": (ObservationPhase.RECONCILIATION, "node-reconciliation-required"),
+    "ready": (ObservationPhase.RECONCILIATION, "ready-channel-invalid"),
+    "notification": (ObservationPhase.RECONCILIATION, "node-notification-failed"),
     "receipt": (ObservationPhase.RECONCILIATION, "receipt-custody-unavailable"),
     "artifact": (ObservationPhase.RECONCILIATION, "artifact-transfer-unavailable"),
     "publication": (ObservationPhase.FINALIZATION, "artifact-publication-unavailable"),

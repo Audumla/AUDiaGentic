@@ -29,6 +29,7 @@ async def ingress(case):
     await invoke(case)
     current = await effects(case)
     runtime = NodeReceiptRuntime(case.config, case.admission.service, case.connections)
+    case.receipt_runtime = runtime
     acknowledgements, arrived = [], asyncio.Event()
     async def receive(frame, work):
         assert type(work) is ReceiptAckWork
@@ -266,3 +267,325 @@ async def test_new_connection_reconciles_committed_old_command_without_rebinding
     finally:
         await gateway.close()
         await node.close()
+
+# Readiness remains a scheduling hint. These are real owner/cursor/channel
+# validations with fake node execution; no native readiness proof is claimed.
+async def ready(runtime, connection, log, sequence=0, digest=None, *, frame_changes=None, work_override=None):
+    from audiagentic.components.agents.gateway.node.contracts import Frame
+    from audiagentic.components.agents.gateway.node.work_protocol import parse_work_frame
+    values = dict(version=1, type="reconcile", message_id="ready-message",
+        node_id=connection.identity.node_id, node_epoch=connection.identity.node_epoch,
+        gateway_owner_epoch=connection.identity.gateway_owner_epoch, sequence=1,
+        payload={"kind": "receipt-ready", "connection-generation": connection.identity.connection_generation,
+                 "log-incarnation-id": log, "through-sequence": sequence, "through-receipt-sha256": digest})
+    values.update(frame_changes or {})
+    frame = Frame(**values)
+    work = parse_work_frame(frame, role="gateway", current_connection=connection.identity,
+                            capability=connection.capability, max_artifact_bytes=1024*1024)
+    return await runtime.handle_work(connection, frame, work if work_override is None else work_override)
+
+
+def open_socket(case):
+    from websockets.protocol import State
+    assert case.gateway.websocket.state is State.OPEN
+    # The shared runner fixture now performs a real startup ready handshake.
+    # Consume its hint so each readiness test starts at its own transition.
+    case.admission.authority.serialize(lambda: case.connections.consume_ready(case.gateway, grant_revision=1))
+
+
+def is_ready(case):
+    return case.admission.authority.serialize(lambda: case.connections.is_ready(case.gateway, grant_revision=1))
+
+
+@pytest.mark.asyncio
+async def test_zero_custody_ready_is_idempotent_no_cursor_no_reply_and_offloop_notification(case):
+    open_socket(case)
+    calls = []
+    def notified(node):
+        with pytest.raises(RuntimeError):
+            asyncio.get_running_loop()
+        # These acquisitions prove notification is outside both owner locks.
+        with case.admission.service.owner_guard("owner"):
+            assert case.admission.authority.serialize(lambda: is_current_unlocked())
+        calls.append(node)
+    def is_current_unlocked():
+        return case.connections.current_slot("node").connection is case.gateway
+    runtime = NodeReceiptRuntime(case.config, case.admission.service, case.connections, on_node_changed=notified)
+    log = str(uuid4())
+    before = case.node.websocket.incoming.qsize()
+    assert await ready(runtime, case.gateway, log) is None
+    assert await asyncio.to_thread(is_ready, case)
+    assert calls == ["node"] and runtime.custody_changed.is_set()
+    runtime.custody_changed.clear()
+    assert await ready(runtime, case.gateway, log) is None
+    assert calls == ["node"] and not runtime.custody_changed.is_set()
+    assert case.node.websocket.incoming.qsize() == before
+    assert not runtime._streams["node"][1].path.exists()
+
+
+@pytest.mark.asyncio
+async def test_ready_actual_envelope_after_terminal_custody(ingress):
+    case, runtime, _, log, _, _ = ingress
+    open_socket(case)
+    receipt = await send(ingress, "terminal", 1, digest="a"*64)
+    await ack(ingress)
+    calls = []
+    runtime.on_node_changed = calls.append
+    runtime.custody_changed.clear()
+    before = checkpoint(ingress).path.read_bytes()
+    case.central_work_handler = runtime.handle_work
+    await case.node.send_work("reconcile", {"kind": "receipt-ready", "log-incarnation-id": log,
+        "through-sequence": 1, "through-receipt-sha256": receipt.digest})
+    await asyncio.wait_for(runtime.custody_changed.wait(), 3)
+    # Callback runs after the transition; wait on the owner, not arbitrary sleeps.
+    for _ in range(100):
+        if calls:
+            break
+        await asyncio.sleep(.01)
+    assert calls == ["node"] and await asyncio.to_thread(is_ready, case)
+    assert checkpoint(ingress).path.read_bytes() == before
+    assert case.gateway.failure is None and len(case.commands) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("fault", ["occupied", "cursor-mismatch", "missing", "unreadable", "different-log"])
+async def test_ready_refuses_occupied_or_unproven_custody(ingress, fault):
+    case, runtime, _, log, _, _ = ingress
+    open_socket(case)
+    receipt = await send(ingress)
+    await ack(ingress)
+    cursor = checkpoint(ingress)
+    before = cursor.path.read_bytes()
+    sequence, digest = 1, receipt.digest
+    reason = "capacity-occupied"
+    if fault == "cursor-mismatch":
+        digest, reason = "b"*64, "receipt-cursor-mismatch"
+    elif fault == "missing":
+        cursor.path.unlink()
+        reason = "receipt-cursor-mismatch"
+    elif fault == "unreadable":
+        cursor.path.write_text("{invalid", encoding="utf-8")
+        reason = "receipt-cursor-unreadable"
+    elif fault == "different-log":
+        log, reason = str(uuid4()), "receipt-log-changed"
+    unchanged = cursor.path.read_bytes() if cursor.path.exists() else None
+    with pytest.raises(AudiaGenticError) as error:
+        await ready(runtime, case.gateway, log, sequence, digest)
+    assert error.value.details["reason-code"] == reason
+    assert not await asyncio.to_thread(is_ready, case)
+    assert (cursor.path.read_bytes() if cursor.path.exists() else None) == unchanged
+    if fault == "occupied":
+        assert unchanged == before
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("race", ["replacement", "grant", "owner", "occupancy"])
+async def test_ready_final_publication_revalidates_after_cursor_without_nested_guard(case, monkeypatch, race):
+    open_socket(case)
+    runtime = NodeReceiptRuntime(case.config, case.admission.service, case.connections)
+    original = NodeReceiptCheckpoints.resume_cursor
+    def racing(*args, **kwargs):
+        result = original(*args, **kwargs)
+        # Original resume has released its service guard. These operations
+        # acquire the existing locks rather than simulating a returned bool.
+        if race == "replacement":
+            case.connections.replace("node", "replacement", case.gateway.websocket)
+        elif race == "grant":
+            case.admission.authority.revoke("node", expected_grant_revision=1)
+        elif race == "owner":
+            from .test_gateway_node_checkpoints import _restart
+            _restart(case.admission.service, "new-owner")
+        else:
+            from audiagentic.components.agents.gateway.node.occupancy import NodeOccupancySnapshot
+            monkeypatch.setattr(runtime.occupancy, "snapshot", lambda: NodeOccupancySnapshot(unproven=True))
+        return result
+    monkeypatch.setattr(NodeReceiptCheckpoints, "resume_cursor", racing)
+    with pytest.raises(AudiaGenticError) as error:
+        await ready(runtime, case.gateway, str(uuid4()))
+    assert error.value.details["reason-code"] == {
+        "replacement": "receipt-channel-replaced", "grant": "ready-channel-invalid",
+        "owner": "owner-fence-changed", "occupancy": "capacity-occupied",
+    }[race]
+    assert not await asyncio.to_thread(is_ready, case)
+    assert not runtime._streams["node"][1].path.exists()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("fault", ["drain", "grant-revision", "closed", "stale-generation", "forged-work"])
+async def test_ready_requires_actual_current_active_channel(case, fault):
+    open_socket(case)
+    runtime = NodeReceiptRuntime(case.config, case.admission.service, case.connections)
+    log = str(uuid4())
+    options = {}
+    if fault == "drain":
+        case.gateway.capability = "drain"
+    elif fault == "grant-revision":
+        case.gateway.grant_revision = 2
+    elif fault == "closed":
+        await case.gateway.close()
+    elif fault == "stale-generation":
+        options["frame_changes"] = {"payload": {"kind": "receipt-ready", "connection-generation": 99,
+            "log-incarnation-id": log, "through-sequence": 0, "through-receipt-sha256": None}}
+    else:
+        from audiagentic.components.agents.gateway.node.work_protocol import ReceiptReady
+        options["work_override"] = ReceiptReady(message_id="different", sequence=1,
+            log_incarnation_id=log, through_sequence=0, through_receipt_sha256=None)
+    with pytest.raises(AudiaGenticError):
+        await ready(runtime, case.gateway, log, **options)
+    assert not await asyncio.to_thread(is_ready, case)
+
+
+@pytest.mark.asyncio
+async def test_notification_fault_does_not_undo_ack_custody_or_ready(ingress):
+    from audiagentic.foundation.io import iter_ndjson
+    case, runtime, _, log, _, _ = ingress
+    open_socket(case)
+    calls = []
+    def failed(node):
+        calls.append(node)
+        raise OSError("PRIVATE callback credential")
+    runtime.on_node_changed = failed
+    terminal = await send(ingress, "terminal", 1, digest="a"*64)
+    assert (await ack(ingress)).through_receipt_sha256 == terminal.digest
+    await ready(runtime, case.gateway, log, 1, terminal.digest)
+    assert await asyncio.to_thread(is_ready, case)
+    assert calls == ["node", "node"]
+    events = [e for e in iter_ndjson(case.admission.service.timeline_path)
+              if e["event"] == "node.receipt-ingress-deferred"]
+    assert len([e for e in events if e["attributes"]["reason-code"] == "node-notification-failed"]) == 2
+    assert "PRIVATE" not in case.admission.service.timeline_path.read_text(encoding="utf-8")
+
+
+@pytest.mark.asyncio
+async def test_notification_only_on_new_custody_not_duplicate_or_resume(ingress):
+    case, runtime, _, log, _, _ = ingress
+    calls = []
+    runtime.on_node_changed = calls.append
+    await send(ingress)
+    await ack(ingress)
+    await send(ingress)
+    await ack(ingress)
+    await case.node.request_work("reconcile", {"kind": "receipt-resume", "log-incarnation-id": log,
+        "through-sequence": 0, "through-receipt-sha256": None}, reply_types=(ReceiptResumeReply,), timeout=3)
+    assert calls == ["node"]
+
+
+@pytest.mark.asyncio
+async def test_ready_notification_secondary_trace_fault_is_best_effort(case, monkeypatch):
+    open_socket(case)
+    def fail(*args):
+        raise OSError("PRIVATE sink fault")
+    runtime = NodeReceiptRuntime(case.config, case.admission.service, case.connections, on_node_changed=fail)
+    monkeypatch.setattr(runtime, "_trace_failure", fail)
+    assert await ready(runtime, case.gateway, str(uuid4())) is None
+    assert await asyncio.to_thread(is_ready, case)
+
+
+@pytest.mark.asyncio
+async def test_committed_custody_notifies_even_if_replacement_suppresses_ack(ingress, monkeypatch):
+    case, runtime, _, _, acknowledgements, _ = ingress
+    calls = []
+    runtime.on_node_changed = calls.append
+    original = runtime._accept
+    def replace_after_commit(*args):
+        result = original(*args)
+        case.connections.replace("node", "new-boot", case.gateway.websocket)
+        return result
+    monkeypatch.setattr(runtime, "_accept", replace_after_commit)
+    await send(ingress)
+    await asyncio.wait_for(case.gateway.wait_closed(), 3)
+    assert calls == ["node"] and not acknowledgements
+    assert checkpoint(ingress).path.exists()
+
+
+@pytest.mark.asyncio
+async def test_ready_occupancy_scan_is_owner_fenced_outside_grant(case, monkeypatch):
+    import threading
+    from contextlib import contextmanager
+    open_socket(case)
+    runtime = NodeReceiptRuntime(case.config, case.admission.service, case.connections)
+    held, scans = threading.local(), []
+    serialize, guard, snapshot = runtime.authority.serialize, runtime.service.owner_guard, runtime.occupancy.snapshot
+    def serialized(callback):
+        held.grant = True
+        try:
+            return serialize(callback)
+        finally:
+            held.grant = False
+    @contextmanager
+    def guarded(epoch):
+        with guard(epoch) as record:
+            held.owner = True
+            try:
+                yield record
+            finally:
+                held.owner = False
+    def scan():
+        assert held.owner and not held.grant
+        with pytest.raises(RuntimeError):
+            asyncio.get_running_loop()
+        scans.append(True)
+        return snapshot()
+    monkeypatch.setattr(runtime.authority, "serialize", serialized)
+    monkeypatch.setattr(runtime.service, "owner_guard", guarded)
+    monkeypatch.setattr(runtime.occupancy, "snapshot", scan)
+    await ready(runtime, case.gateway, str(uuid4()))
+    assert scans == [True] and await asyncio.to_thread(is_ready, case)
+
+
+@pytest.mark.asyncio
+async def test_notification_dispatch_failure_preserves_ready(case, monkeypatch):
+    from audiagentic.components.agents.gateway.node import receipt_runtime as module
+    open_socket(case)
+    runtime = NodeReceiptRuntime(case.config, case.admission.service, case.connections)
+    original, attempts = asyncio.to_thread, []
+    async def dispatch(function, *args, **kwargs):
+        if function == runtime._notify:
+            attempts.append(True)
+            raise RuntimeError("PRIVATE executor submission failure")
+        return await original(function, *args, **kwargs)
+    monkeypatch.setattr(module.asyncio, "to_thread", dispatch)
+    assert await ready(runtime, case.gateway, str(uuid4())) is None
+    assert attempts == [True] and await original(is_ready, case)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("primary_failure", [False, True])
+async def test_notification_dispatch_failure_preserves_ack_or_primary_error(ingress, monkeypatch, primary_failure):
+    from audiagentic.components.agents.gateway.node import receipt_runtime as module
+    from audiagentic.components.agents.gateway.node.contracts import Frame, conflict
+    from audiagentic.components.agents.gateway.node.work_protocol import parse_work_frame
+    case, runtime, _, log, _, _ = ingress
+    original, attempts = asyncio.to_thread, []
+    async def dispatch(function, *args, **kwargs):
+        if function == runtime._notify:
+            attempts.append(True)
+            raise RuntimeError("PRIVATE executor submission failure")
+        return await original(function, *args, **kwargs)
+    monkeypatch.setattr(module.asyncio, "to_thread", dispatch)
+    if primary_failure:
+        def replaced(*args):
+            raise conflict(1, "Primary channel failure", reason_code="receipt-channel-replaced")
+        # Fail only the post-custody channel check, not receipt admission.
+        current = runtime._current
+        def check(connection, *, stream=False):
+            if not stream:
+                return replaced()
+            return current(connection, stream=stream)
+        monkeypatch.setattr(runtime, "_current", check)
+    receipt = Receipt(case.commands[0].identity, "prepared", 1)
+    frame = Frame(1, "receipt", "receipt-message", case.gateway.identity.node_id,
+        case.gateway.identity.node_epoch, case.gateway.identity.gateway_owner_epoch, 1,
+        {"connection-generation": case.gateway.identity.connection_generation,
+         "log-incarnation-id": log, "receipt": receipt.public_payload()})
+    work = parse_work_frame(frame, role="gateway", current_connection=case.gateway.identity,
+                            capability="active", max_artifact_bytes=1024*1024)
+    if primary_failure:
+        with pytest.raises(AudiaGenticError) as error:
+            await runtime.handle_work(case.gateway, frame, work)
+        assert error.value.code == "CON-AGND-001"
+        assert error.value.details["reason-code"] == "receipt-channel-replaced"
+    else:
+        assert await runtime.handle_work(case.gateway, frame, work) is not None
+        assert (await ack(ingress)).through_receipt_sha256 == receipt.digest
+    assert attempts == [True] and checkpoint(ingress).path.exists()
