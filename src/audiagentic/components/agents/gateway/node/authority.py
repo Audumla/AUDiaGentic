@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import hmac
 import os
 import tempfile
 from collections.abc import Callable
@@ -29,6 +30,7 @@ from audiagentic.foundation.io import atomic_write_bytes, load_yaml_file
 from audiagentic.foundation.system.managed_service import ManagedServiceStore
 from audiagentic.foundation.system.process import StartupLock
 
+from .admission_contract import SourceWorkspaceIdentity
 from .contracts import CommandIdentity, _identifier, conflict, invalid
 from .placement import NodeAdmissionPlacement
 
@@ -138,13 +140,15 @@ class NodeGrantAuthority:
     def authorize_admission(
         self, *, principal_id: str, server_project_id: str,
         node_id: str, workspace_id: str,
+        source_workspace: SourceWorkspaceIdentity, source_node_token: str,
         callback: Callable[[NodeAdmissionPlacement], T],
     ) -> T:
         """Seal current configured placement, then mutate under the grant lock.
 
         principal_id must come from the authenticated calling owner, never an
-        untrusted request field. IDs select configured grants; they do not grant
-        authority themselves. No live connection/effect permission is implied.
+        untrusted request field. The additional enrolled node credential is
+        authenticated on the same TLS request; a declared source ID alone is
+        not machine identity. No live connection/effect permission is implied.
 
         The callback receives only this owner's constructed placement. Its
         return value is opaque operation output, never placement authority.
@@ -156,6 +160,24 @@ class NodeGrantAuthority:
             config = self._reload(None)
             for value in (principal_id, server_project_id, node_id, workspace_id):
                 _identifier(value)
+            if (type(source_workspace) is not SourceWorkspaceIdentity
+                    or not isinstance(source_node_token, str) or not source_node_token):
+                raise invalid(1, "Node admission requires caller workspace and source credential")
+            # Credentials can rotate without changing their configured file
+            # paths. Recheck uniqueness before accepting source authentication.
+            tokens: set[str] = set()
+            authenticated_source = None
+            for entries, node_credential in ((config.principals, False), (config.nodes, True)):
+                for enrolled in entries:
+                    token = load_auth_token(enrolled.token_file)
+                    if token in tokens:
+                        raise conflict(1, "Shared identities have ambiguous current credentials")
+                    tokens.add(token)
+                    if node_credential and hmac.compare_digest(token.encode(), source_node_token.encode()):
+                        authenticated_source = enrolled
+            if (authenticated_source is None or not authenticated_source.enabled
+                    or source_workspace.source_node_id != authenticated_source.node_id):
+                raise conflict(1, "Source node credential does not authenticate caller workspace")
             principal = next((p for p in config.principals if p.principal_id == principal_id), None)
             grant = next((n for n in config.nodes if n.node_id == node_id), None)
             if (config.server_id != server_id or server_project_id not in config.projects
@@ -164,6 +186,10 @@ class NodeGrantAuthority:
                     or principal_id not in grant.principals
                     or grant.workspaces.get(workspace_id) != server_project_id):
                 raise conflict(1, "Node admission placement is not authorized by current configuration")
+            if (authenticated_source.node_id != node_id
+                    or source_workspace.workspace_id != workspace_id
+                    or source_workspace.access_mode != "read-write"):
+                raise conflict(1, "Cross-node or read-only workspace execution is not implemented")
             placement = NodeAdmissionPlacement(
                 config.server_id, grant.node_id, workspace_id, principal.principal_id,
                 server_project_id, grant.revision,

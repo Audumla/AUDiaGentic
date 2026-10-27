@@ -12,6 +12,7 @@ import pytest
 import yaml
 
 from audiagentic.components.agents.gateway.node import authority as module
+from audiagentic.components.agents.gateway.node.admission_contract import SourceWorkspaceIdentity
 from audiagentic.components.agents.gateway.node.authority import NodeGrantAuthority
 from audiagentic.components.agents.gateway.node.placement import NodeAdmissionPlacement
 from audiagentic.components.agents.gateway.service.contract import GATEWAY_SERVICE_KEY
@@ -53,8 +54,51 @@ def authority(path):
 def admit(owner, callback, **overrides):
     return owner.authorize_admission(**{
         "principal_id": "alice", "server_project_id": "one", "node_id": "node",
-        "workspace_id": "workspace", "callback": callback, **overrides,
+        "workspace_id": "workspace", "callback": callback,
+        "source_workspace": SourceWorkspaceIdentity(1, "node", overrides.get("workspace_id", "workspace"), "read-write", "a" * 64),
+        "source_node_token": "credential-node", **overrides,
     })
+
+
+@pytest.mark.parametrize("token", ["credential-alice", "wrong-node-token", ""])
+def test_principal_token_or_declared_node_id_is_not_source_authentication(configured, token):
+    callback = Mock()
+    with pytest.raises(AudiaGenticError):
+        admit(authority(configured[0]), callback, source_node_token=token)
+    callback.assert_not_called()
+
+
+@pytest.mark.parametrize("change", ["node", "workspace", "read-only"])
+def test_source_scope_cannot_be_replaced_by_recipient_defaults(configured, change):
+    from dataclasses import replace
+
+    source = SourceWorkspaceIdentity(1, "node", "workspace", "read-write", "a" * 64)
+    if change == "node":
+        source = replace(source, source_node_id="foreign")
+    elif change == "workspace":
+        source = replace(source, workspace_id="other-workspace")
+    else:
+        source = replace(source, access_mode="read-only")
+    callback = Mock()
+    with pytest.raises(AudiaGenticError):
+        admit(authority(configured[0]), callback, source_workspace=source)
+    callback.assert_not_called()
+
+
+def test_runtime_credential_rotation_and_duplicates_are_not_cached(configured):
+    path, _ = configured
+    owner = authority(path)
+    token_path = path.parent / "node.token"
+    token_path.write_text("new-node-credential", encoding="utf-8")
+    callback = Mock()
+    with pytest.raises(AudiaGenticError):
+        admit(owner, callback)
+    admit(owner, callback, source_node_token="new-node-credential")
+    assert callback.call_count == 1
+    token_path.write_text("credential-alice", encoding="utf-8")
+    with pytest.raises(AudiaGenticError, match="ambiguous"):
+        admit(owner, callback, source_node_token="credential-alice")
+    assert callback.call_count == 1
 
 
 def test_constructs_current_configured_placement_and_returns_callback_result(configured, tmp_path):
