@@ -3,12 +3,14 @@ import asyncio
 import base64
 import hashlib
 from dataclasses import replace
+from unittest.mock import Mock
 
 import pytest
 from tests.unit.agents.test_gateway_node_transport import channel as channel
 from tests.unit.agents.test_gateway_node_transport import tls as tls
 from tests.unit.agents.test_gateway_node_transport import wait_until
 
+from audiagentic.components.agents.gateway.node import connection as connection_module
 from audiagentic.components.agents.gateway.node.contracts import CommandIdentity
 from audiagentic.components.agents.gateway.node.transport import NodeTransportClient
 from audiagentic.components.agents.gateway.node.work_protocol import ArtifactChunk, EffectAuthorized
@@ -120,6 +122,10 @@ async def test_mismatched_pending_reply_closes_without_consuming_as_success(chan
             await node.request_work("effect-authorize", {"identity": command(node).to_mapping()},
                 reply_types=(EffectAuthorized,), timeout=2)
         assert node.failure == "CON-AGND-001"
+        assert node.failure_summary.reason_code == (
+            "reply-command-mismatch" if mismatch == "identity" else "reply-unexpected")
+        assert node.failure_summary.stage == "work-validation"
+        assert node.failure_summary.frame_type == "effect-authorized"
     finally:
         await node.close()
 
@@ -197,3 +203,85 @@ async def test_invalid_outbound_work_does_not_consume_sequence(channel):
         await wait_until(lambda: gateway._received_sequence == sequence + 1)
     finally:
         await node.close()
+
+
+@pytest.mark.asyncio
+async def test_first_failure_survives_cleanup_without_private_exception_text(channel, caplog):
+    secret = "PRIVATE-CONTENT credential and caller locator must not be logged"
+    async def fail(*args):
+        raise RuntimeError(secret)
+    node, gateway = await pair(channel, fail)
+    observed = []
+    async def closed():
+        observed.append(gateway.failure_summary)
+    gateway._on_close = closed
+    try:
+        await node.send_work("effect-authorize", {"identity": command(node).to_mapping()})
+        await asyncio.wait_for(gateway.wait_closed(), 2)
+        first = gateway.failure_summary
+        assert first is not None
+        assert (first.code, first.stage, first.reason_code) == (
+            "IO-AGND-001", "dispatch", "work-handler-failed")
+        assert observed == [first]
+        gateway._remember_failure(RuntimeError("later failure"), stage="cleanup", reason="cleanup-failed")
+        assert gateway.failure_summary is first
+        assert secret not in caplog.text
+        assert secret not in repr(first)
+        assert first.connection_generation == gateway.identity.connection_generation
+    finally:
+        await node.close()
+
+
+@pytest.mark.asyncio
+async def test_broken_logging_sink_does_not_mask_channel_error_or_close_owner(channel, monkeypatch):
+    async def fail(*args):
+        raise RuntimeError("primary PRIVATE error")
+    node, gateway = await pair(channel, fail)
+    completed = asyncio.Event()
+    async def closed():
+        completed.set()
+    gateway._on_close = closed
+    logger = Mock()
+    logger.warning.side_effect = OSError("logging disk full")
+    monkeypatch.setattr(connection_module, "logger", logger)
+    try:
+        await node.send_work("effect-authorize", {"identity": command(node).to_mapping()})
+        await asyncio.wait_for(gateway.wait_closed(), 2)
+        assert completed.is_set()
+        assert gateway.failure_summary.reason_code == "work-handler-failed"
+        assert gateway.diagnostic_failure_count == 1
+    finally:
+        await node.close()
+
+
+@pytest.mark.asyncio
+async def test_send_failure_records_first_cause_without_exception_payload(channel, monkeypatch, caplog):
+    node, _ = await pair(channel)
+    async def fail(*args):
+        raise OSError("PRIVATE send body and credential")
+    monkeypatch.setattr(node.websocket, "send", fail)
+    try:
+        with pytest.raises(OSError):
+            await node.heartbeat()
+        await asyncio.wait_for(node.wait_closed(), 2)
+        assert node.failure_summary.stage == "send"
+        assert node.failure_summary.reason_code == "transport-send-failed"
+        assert node.failure_summary.frame_type == "heartbeat"
+        assert "PRIVATE" not in caplog.text
+    finally:
+        await node.close()
+
+
+@pytest.mark.asyncio
+async def test_owner_replacement_is_distinguished_from_protocol_failure(channel):
+    node, gateway = await pair(channel)
+    replacement = None
+    try:
+        replacement = await NodeTransportClient(channel.client, node_epoch="replacement-boot").connect()
+        await asyncio.wait_for(gateway.wait_closed(), 2)
+        assert gateway.close_reason == "replacement"
+        assert gateway.failure_summary is None
+    finally:
+        await node.close()
+        if replacement is not None:
+            await replacement.close()

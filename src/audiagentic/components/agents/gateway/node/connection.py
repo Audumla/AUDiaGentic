@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import math
 import time
 import uuid
@@ -16,7 +17,9 @@ from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from websockets.exceptions import ConnectionClosed
+from websockets.exceptions import ConnectionClosed, ConnectionClosedOK
+
+from audiagentic.foundation.time import now_iso_z
 
 from .authority import NodeConnectionIdentity
 from .contracts import Frame, _identifier, _integer, canonical_json, conflict, invalid
@@ -26,6 +29,12 @@ UNBOUND = "unbound"
 SUBPROTOCOL = "audiagentic-node-v1"
 NODE_PATH = "/shared/v1/nodes/connect"
 CLOSE_TIMEOUT_SECONDS = 5
+logger = logging.getLogger(__name__)
+_CHANNEL_REASONS = frozenset({
+    "work-disabled", "sequence-mismatch", "reply-unexpected", "reply-command-mismatch",
+    "reply-preparation-mismatch", "reply-scope-mismatch", "work-inbox-full", "control-inbox-full",
+    "connection-replaced-or-closed", "control-scope-mismatch", "generation-mismatch", "revocation-stale",
+})
 
 
 async def close_socket(websocket, *, code: int = 1000, reason: str = "Node connection closing"):
@@ -110,6 +119,22 @@ class ControlEvent:
     capability: str | None = None
 
 
+@dataclass(frozen=True)
+class NodeChannelFailure:
+    """Bounded first-cause diagnostic facts, never command or effect authority."""
+
+    code: str
+    reason_code: str
+    stage: str
+    frame_type: str | None
+    sequence: int | None
+    connection_generation: int
+    last_received_sequence: int
+    pending_replies: int
+    queued_work: int
+    occurred_at: str
+
+
 class NodeConnection:
     """One receiver, serialized bounded writes, and an eight-event control inbox.
 
@@ -139,7 +164,9 @@ class NodeConnection:
         self.capability = capability
         self.last_liveness_at = time.monotonic()
         self.events: asyncio.Queue[ControlEvent] = asyncio.Queue(maxsize=8)
-        self.failure: str | None = None
+        self.failure_summary: NodeChannelFailure | None = None
+        self.diagnostic_failure_count = 0
+        self.close_reason: str | None = None
         self._current = current
         self._on_close = on_close
         self._send_lock = asyncio.Lock()
@@ -152,6 +179,46 @@ class NodeConnection:
         self._work_inbox: asyncio.Queue[tuple[Frame, WorkFrame]] = asyncio.Queue(maxsize=8)
         self._pending: dict[str, tuple[tuple[type, ...], asyncio.Future, Mapping]] = {}
         self._max_artifact_bytes = 1024 * 1024
+
+    @property
+    def failure(self) -> str | None:
+        """Compact code projection of the single retained causal failure."""
+        return self.failure_summary.code if self.failure_summary is not None else None
+
+    def begin_close(self, reason: str):
+        """Record an owner-requested close without claiming native cancellation."""
+        if reason not in {"shutdown", "replacement", "revocation"}:
+            raise invalid(1, "Unsupported connection close reason")
+        if self.close_reason is None:
+            self.close_reason = reason
+
+    def _remember_failure(self, error, *, stage: str, reason: str, frame: Frame | None = None):
+        if self.failure_summary is not None:
+            return
+        code = None if isinstance(error, ConnectionClosed) else getattr(error, "code", None)
+        if code not in {"VAL-AGND-001", "CON-AGND-001", "IO-AGND-001"}:
+            code = "IO-AGND-001"
+        details = getattr(error, "details", None)
+        classified = details.get("reason_code") if isinstance(details, Mapping) else None
+        if isinstance(classified, str) and classified in _CHANNEL_REASONS:
+            reason = classified
+        self.failure_summary = NodeChannelFailure(code, reason, stage,
+            frame.type if frame is not None else None, frame.sequence if frame is not None else None,
+            self.identity.connection_generation, self._received_sequence,
+            len(self._pending), self._work_inbox.qsize(), now_iso_z())
+        # No exception text/traceback or payload is passed to any log handler.
+        # Runtime close owners persist request-associated facts through existing
+        # journals. A broken diagnostic sink must not replace the primary error.
+        try:
+            logger.warning("Node channel failure", extra={
+                "error_code": code, "reason_code": reason, "stage": stage,
+                "node_id": self.identity.node_id,
+                "connection_generation": self.identity.connection_generation,
+                "frame_type": self.failure_summary.frame_type,
+                "sequence": self.failure_summary.sequence,
+            })
+        except Exception:  # noqa: BLE001 - logging cannot control transport/effect state
+            self.diagnostic_failure_count += 1
 
     def enable_work(self, handler, *, max_artifact_bytes: int, on_close=None):
         """Install the runtime consumer before starting this connection.
@@ -169,38 +236,41 @@ class NodeConnection:
             self._on_close = on_close
 
     def _receive_work(self, frame: Frame):
-        if self._on_work is None or frame.sequence != self._received_sequence + 1:
-            raise conflict(1, "Work is disabled or its sequence is not contiguous")
+        if self._on_work is None:
+            raise conflict(1, "Work is disabled", reason_code="work-disabled")
+        if frame.sequence != self._received_sequence + 1:
+            raise conflict(1, "Work sequence is not contiguous", reason_code="sequence-mismatch")
         message = parse_work_frame(frame, role=self.role, current_connection=self.identity,
             capability=self.capability, max_artifact_bytes=self._max_artifact_bytes)
         reply_to = getattr(message, "in_reply_to", None) or getattr(message, "authorization_request_id", None)
         if reply_to is not None:
             pending = self._pending.get(reply_to)
             if pending is None or type(message) not in pending[0] or pending[1].done():
-                raise conflict(1, "Work reply is unsolicited, duplicated or has the wrong operation")
+                raise conflict(1, "Work reply is unsolicited, duplicated or has the wrong operation", reason_code="reply-unexpected")
             original = pending[2]
             if "identity" in original and (
                 not hasattr(message, "identity") or message.identity.to_mapping() != original["identity"]
             ):
-                raise conflict(1, "Work reply command identity differs from its pending request")
+                raise conflict(1, "Work reply command identity differs from its pending request", reason_code="reply-command-mismatch")
             if hasattr(message, "attestation") and (
                 message.attestation.binding.to_mapping() != original.get("binding")
                 or message.attestation.semantic.to_mapping() != original.get("semantic")
             ):
-                raise conflict(1, "Prepared reply differs from its pending binding or semantic identity")
+                raise conflict(1, "Prepared reply differs from its pending binding or semantic identity", reason_code="reply-preparation-mismatch")
             for field in ("artifact_sha256", "offset", "log_incarnation_id"):
                 key = field.replace("_", "-")
                 if hasattr(message, field) and key in original and getattr(message, field) != original[key]:
-                    raise conflict(1, "Work reply differs from its pending artifact or receipt scope")
+                    raise conflict(1, "Work reply differs from its pending artifact or receipt scope", reason_code="reply-scope-mismatch")
             pending[1].set_result((frame, message))
         else:
             try:
                 self._work_inbox.put_nowait((frame, message))
             except asyncio.QueueFull:
-                raise conflict(1, "Node work inbox is full") from None
+                raise conflict(1, "Node work inbox is full", reason_code="work-inbox-full") from None
         self._received_sequence = frame.sequence
 
     async def _dispatch_work(self):
+        frame = None
         try:
             while True:
                 frame, message = await self._work_inbox.get()
@@ -208,12 +278,12 @@ class NodeConnection:
         except asyncio.CancelledError:
             raise
         except Exception as error:
-            self.failure = getattr(error, "code", "IO-AGND-001")
+            self._remember_failure(error, stage="dispatch", reason="work-handler-failed", frame=frame)
             await close_socket(self.websocket, code=1008, reason="Node work dispatcher rejected message")
 
     async def _require_current(self):
         if self._closed.is_set() or (self._current is not None and not await self._current()):
-            raise conflict(1, "Node connection has been replaced or closed")
+            raise conflict(1, "Node connection has been replaced or closed", reason_code="connection-replaced-or-closed")
 
     def _validate_control(self, frame: Frame) -> ControlEvent | None:
         identity = self.identity
@@ -223,7 +293,7 @@ class NodeConnection:
             or frame.gateway_owner_epoch == UNBOUND
             or frame.sequence != self._received_sequence + 1
         ):
-            raise conflict(1, "Node frame scope or sequence does not match live connection")
+            raise conflict(1, "Node frame scope or sequence does not match live connection", reason_code="control-scope-mismatch")
         if frame.type == "heartbeat":
             _keys(frame.payload, {"connection-generation"})
             result = None
@@ -231,7 +301,7 @@ class NodeConnection:
             _keys(frame.payload, {"connection-generation", "grant-revision", "capability"})
             revision = _integer(frame.payload["grant-revision"])
             if revision <= self.grant_revision or frame.payload["capability"] != "drain":
-                raise conflict(1, "Node revoke revision is stale")
+                raise conflict(1, "Node revoke revision is stale", reason_code="revocation-stale")
             result = ControlEvent("revoke", grant_revision=revision, capability="drain")
         elif frame.type == "error":
             _keys(frame.payload, {"connection-generation", "code"})
@@ -242,21 +312,27 @@ class NodeConnection:
         else:
             raise conflict(1, "Node message is not enabled in this transport state or direction")
         if _integer(frame.payload["connection-generation"]) != identity.connection_generation:
-            raise conflict(1, "Node frame connection generation is stale")
+            raise conflict(1, "Node frame connection generation is stale", reason_code="generation-mismatch")
         self._received_sequence = frame.sequence
         return result
 
     async def run(self):
+        stage, frame = "receive", None
         try:
             while True:
+                stage, frame = "receive", None
                 raw = await self.websocket.recv()
+                stage = "decode"
                 if not isinstance(raw, bytes):
                     raise invalid(1, "Node transport requires binary JSON messages")
-                await self._require_current()
                 frame = Frame.from_bytes(raw)
+                stage = "scope"
+                await self._require_current()
                 if frame.type not in {"heartbeat", "revoke", "error"}:
+                    stage = "work-validation"
                     self._receive_work(frame)
                     continue
+                stage = "control-validation"
                 event = self._validate_control(frame)
                 if event is None:
                     self.last_liveness_at = time.monotonic()
@@ -264,19 +340,22 @@ class NodeConnection:
                     try:
                         self.events.put_nowait(event)
                     except asyncio.QueueFull:
-                        raise conflict(1, "Node control inbox is full") from None
+                        raise conflict(1, "Node control inbox is full", reason_code="control-inbox-full") from None
                     if event.type == "revoke":
                         self.grant_revision = event.grant_revision
                         self.capability = "drain"
-        except ConnectionClosed:
-            pass
+        except ConnectionClosed as error:
+            if self.close_reason is None and not isinstance(error, ConnectionClosedOK):
+                self._remember_failure(error, stage="receive", reason="transport-disconnected")
         except asyncio.CancelledError:
             raise
         except Exception as error:
-            self.failure = getattr(error, "code", "IO-AGND-001")
+            self._remember_failure(error, stage=stage, reason=f"{stage}-failed", frame=frame)
             await close_socket(self.websocket, code=1008, reason="Node transport rejected message")
         finally:
             self._closed.set()
+            if self.close_reason is None:
+                self.close_reason = "failed" if self.failure_summary is not None else "peer-closed"
             for _, future, _ in self._pending.values():
                 if not future.done():
                     future.set_exception(conflict(1, "Node connection closed while awaiting work reply"))
@@ -319,9 +398,10 @@ class NodeConnection:
             self._sent_sequence += 1
             try:
                 await self.websocket.send(frame.to_bytes())
-            except BaseException:
+            except BaseException as error:
                 # A failed/partial send cannot be followed by another sequence.
                 self._closed.set()
+                self._remember_failure(error, stage="send", reason="transport-send-failed", frame=frame)
                 self.websocket.transport.abort()
                 raise
             return frame
@@ -373,7 +453,8 @@ class NodeConnection:
         if self._task is not None and self._task is not asyncio.current_task():
             await self._task
 
-    async def close(self):
+    async def close(self, *, reason="shutdown"):
+        self.begin_close(reason)
         await close_socket(self.websocket)
         if self._task is not None and self._task is not asyncio.current_task():
             try:

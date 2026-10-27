@@ -280,6 +280,8 @@ class NodeTransportServer:
                 slot, old = await publication
                 raise
             if old is not None:
+                if old.connection is not None:
+                    old.connection.begin_close("replacement")
                 await close_socket(old.websocket, code=1008, reason="Node connection replaced")
                 old = None
             welcome = Frame(
@@ -325,6 +327,8 @@ class NodeTransportServer:
         finally:
             try:
                 if old is not None:
+                    if old.connection is not None:
+                        old.connection.begin_close("replacement")
                     await close_socket(old.websocket, code=1008, reason="Node connection replaced")
             finally:
                 try:
