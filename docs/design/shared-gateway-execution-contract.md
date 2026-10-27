@@ -31,6 +31,48 @@ IDs mapped to server-local roots; do not introduce a separate registry.
 
 ## Scope and decisions
 
+### RV1237 delivery and caller-workspace clarification
+
+The independent target-state review found the architecture valid, with concrete
+delivery gates still required. Stage 1 has its own installed-service evidence;
+node infrastructure tests do not establish Stage 2. The immediate Stage 2 gate is
+one actual local MCP -> shared gateway -> caller-local node -> caller files ->
+owned harness -> canonical response workflow, including connector exit,
+disconnect/restart and uncertain-effect recovery. Generic infrastructure alone
+does not complete this gate.
+
+The caller's local stdio connector derives source workspace identity from its
+trusted launch/configuration and enrollment. Source workspace and recipient
+placement remain separate concepts. Initial routing requires the same enrolled
+node/workspace with read-write access; the gateway must authenticate both the
+principal and current source-node credential and revalidate grants. A private
+caller locator is not resolved on the gateway. The recipient validates it against
+its own configured roots before preparation and effect. A JSON identity alone
+never grants access. Gateway location does not determine execution placement.
+
+Dirty caller workspaces are permitted: preserve unrelated edits, allow one remote
+writer, and do not claim isolation from human/editor modifications. Cross-machine
+read-only access requires actual accessible files and enforceable restrictions;
+until qualified it is unsupported. No clone, sync, mount or environment
+provisioning is implied. Canonical output is response text with explicitly bounded
+artifact transfer, not inaccessible recipient-local paths presented as URLs.
+
+For Stage 3, a native atomic queue is sufficient but not the only acceptable
+concurrency guarantee. A qualified atomic conditional idle acceptance/rejection
+or provably exclusive session may be safe. A busy snapshot followed by an
+unconditional send is unsafe. Default to queueing remote work while human work is
+busy; steering and interruption need independent proof and cannot preempt
+unrelated human work. All readiness and operation guarantees remain in the same
+Provider authority, rather than additional registries.
+
+Perform bounded disposable qualification of an actual human-serving Codex
+endpoint early. At least one genuine existing session must prove attributable
+prompt/result delivery, human UI survival, concurrency safety, reconnect and
+no-kill before claiming useful joining. Zero qualified surfaces is an honest
+unsupported inventory, not completion. Additional harnesses qualify individually
+and do not block the owned workflow. Stage 4 retains actual A2A/ACP peer testing;
+specification versions must be verified against negotiated, tested revisions.
+
 Support a shared standalone gateway, server-hosted execution, caller-local
 execution nodes and qualified registration of existing human-owned Claude Code,
 Codex, Pi and OpenCode sessions. Only integrations already present and qualified
