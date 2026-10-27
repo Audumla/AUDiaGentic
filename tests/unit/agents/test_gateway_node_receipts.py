@@ -998,3 +998,234 @@ def test_ack_cannot_take_connection_facts_from_payload(tmp_path):
     with pytest.raises(AudiaGenticError, match="VAL-AGND-001"):
         accept_ack(store, frame, current_connection=dict(frame.payload))
     assert store.ack_checkpoint().server_id is None
+
+
+
+def terminal_artifact(root):
+    store = store_at(root)
+    command = advance(store)
+    store.native_accepted(command, native_ref='PRIVATE-local-reference')
+    text = 'retained answer\r\nλ'
+    receipt = store.terminal(command, text=text)
+    return store, command, receipt, text.encode('utf-8')
+
+
+def artifact_read(store, command, receipt, max_bytes=1024):
+    return store.artifact_bytes(command, expected_sha256=receipt.output_sha256, max_bytes=max_bytes)
+
+
+def symlink_or_skip(link, target, *, directory=False):
+    try:
+        link.symlink_to(target, target_is_directory=directory)
+    except OSError:
+        pytest.skip('OS does not permit test symlinks')
+
+
+@pytest.mark.parametrize('redirect', ['file', 'parent'])
+def test_artifact_redirects_rejected_without_touching_link_target(tmp_path, redirect):
+    store, command, receipt, raw = terminal_artifact(tmp_path / 'node')
+    path = store.outputs / (receipt.output_sha256 + '.txt')
+    outside = tmp_path / 'outside'
+    outside.mkdir()
+    target = outside / path.name
+    target.write_bytes(raw)
+    if redirect == 'file':
+        path.unlink()
+        symlink_or_skip(path, target)
+    else:
+        store.outputs.rename(store.root / 'original-outputs')
+        symlink_or_skip(store.outputs, outside, directory=True)
+    before = {p.name: p.read_bytes() for p in outside.iterdir()}
+    with pytest.raises(AudiaGenticError):
+        artifact_read(store, command, receipt)
+    assert {p.name: p.read_bytes() for p in outside.iterdir()} == before
+
+
+@pytest.mark.skipif(os.name != 'nt', reason='Windows junction qualification')
+def test_artifact_parent_junction_rejected_without_modifying_target(tmp_path):
+    store, command, receipt, raw = terminal_artifact(tmp_path / 'node')
+    outside = tmp_path / 'junction-target'
+    outside.mkdir()
+    target = outside / (receipt.output_sha256 + '.txt')
+    target.write_bytes(raw)
+    store.outputs.rename(store.root / 'original-outputs')
+    made = subprocess.run(['cmd', '/c', 'mklink', '/J', str(store.outputs), str(outside)],
+        capture_output=True, text=True)
+    if made.returncode:
+        pytest.skip('OS did not permit test junction')
+    try:
+        assert store.outputs.is_junction()
+        with pytest.raises(AudiaGenticError):
+            artifact_read(store, command, receipt)
+        assert target.read_bytes() == raw and list(outside.iterdir()) == [target]
+    finally:
+        assert store.outputs.is_junction()
+        store.outputs.rmdir()  # Verified junction only; never recursively touch its target.
+
+
+def test_nonregular_artifact_rejected_before_reader(tmp_path, monkeypatch):
+    store, command, receipt, raw = terminal_artifact(tmp_path / 'node')
+    path = store.outputs / (receipt.output_sha256 + '.txt')
+    path.unlink()
+    path.mkdir()
+    monkeypatch.setattr(os, 'fdopen', lambda *args, **kwargs: pytest.fail('read nonregular artifact'))
+    with pytest.raises(AudiaGenticError):
+        artifact_read(store, command, receipt)
+
+
+@pytest.mark.parametrize('replacement', ['regular', 'symlink', 'directory', 'fifo'])
+def test_precheck_open_replacement_is_rejected_and_descriptor_closed(tmp_path, monkeypatch, replacement):
+    if replacement == 'fifo' and not hasattr(os, 'mkfifo'):
+        pytest.skip('POSIX FIFO qualification')
+    store, command, receipt, raw = terminal_artifact(tmp_path / 'node')
+    path = store.outputs / (receipt.output_sha256 + '.txt')
+    target = tmp_path / 'outside.txt'
+    target.write_bytes(raw)
+    if replacement == 'symlink':
+        probe = tmp_path / 'symlink-probe'
+        symlink_or_skip(probe, target)
+        probe.unlink()
+    original_open = os.open
+    descriptors, flags_seen = [], []
+    def replace_then_open(candidate, flags, *args, **kwargs):
+        if Path(candidate) == path:
+            path.rename(store.outputs / 'original.txt')
+            if replacement == 'regular':
+                path.write_bytes(raw)
+            elif replacement == 'symlink':
+                path.symlink_to(target)
+            elif replacement == 'directory':
+                path.mkdir()
+            else:
+                os.mkfifo(path, 0o600)
+                assert flags & os.O_NONBLOCK, 'raced FIFO must never block the test or owner'
+            flags_seen.append(flags)
+        fd = original_open(candidate, flags, *args, **kwargs)
+        if Path(candidate) == path:
+            descriptors.append(fd)
+        return fd
+    monkeypatch.setattr(os, 'open', replace_then_open)
+    with pytest.raises(AudiaGenticError):
+        artifact_read(store, command, receipt)
+    assert flags_seen and target.read_bytes() == raw
+    for fd in descriptors:
+        with pytest.raises(OSError):
+            os.fstat(fd)
+
+
+@pytest.mark.parametrize('failure', ['oversize', 'fdopen', 'read', 'digest', 'success'])
+def test_artifact_descriptor_cleanup_and_bounded_read(tmp_path, monkeypatch, failure):
+    store, command, receipt, raw = terminal_artifact(tmp_path / 'node')
+    path = store.outputs / (receipt.output_sha256 + '.txt')
+    if failure == 'digest':
+        path.write_bytes(b'x' * len(raw))
+    original_open, original_fdopen = os.open, os.fdopen
+    descriptors, requested = [], []
+    def opened(candidate, flags, *args, **kwargs):
+        fd = original_open(candidate, flags, *args, **kwargs)
+        if Path(candidate) == path:
+            descriptors.append(fd)
+        return fd
+    class Reader:
+        def __init__(self, handle):
+            self.handle = handle
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            self.handle.close()
+        def fileno(self):
+            return self.handle.fileno()
+        def read(self, size):
+            requested.append(size)
+            assert size == len(raw) + 1
+            if failure == 'read':
+                raise OSError('PRIVATE test read failure')
+            return self.handle.read(size)
+    def reader(fd, *args, **kwargs):
+        if failure == 'fdopen':
+            raise OSError('PRIVATE test fdopen failure')
+        return Reader(original_fdopen(fd, *args, **kwargs))
+    monkeypatch.setattr(os, 'open', opened)
+    monkeypatch.setattr(os, 'fdopen', reader)
+    if failure == 'success':
+        assert artifact_read(store, command, receipt, len(raw)) == ('native-plaintext', raw)
+    else:
+        with pytest.raises(AudiaGenticError) as error:
+            artifact_read(store, command, receipt, len(raw) - 1 if failure == 'oversize' else len(raw))
+        assert str(path) not in str(error.value) and 'PRIVATE test' not in str(error.value)
+    assert len(descriptors) == 1
+    for fd in descriptors:
+        with pytest.raises(OSError):
+            os.fstat(fd)
+    assert requested == ([] if failure in ('oversize', 'fdopen') else [len(raw) + 1])
+
+
+def test_post_read_replacement_same_bytes_rejected(tmp_path, monkeypatch):
+    if os.name == 'nt':
+        pytest.skip('POSIX open-file replacement; Windows sharing prevents this test mutation')
+    store, command, receipt, raw = terminal_artifact(tmp_path / 'node')
+    path = store.outputs / (receipt.output_sha256 + '.txt')
+    original_fdopen = os.fdopen
+    descriptors = []
+    class Reader:
+        def __init__(self, handle):
+            self.handle = handle
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            self.handle.close()
+        def fileno(self):
+            return self.handle.fileno()
+        def read(self, size):
+            data = self.handle.read(size)
+            path.rename(store.outputs / 'retained-original.txt')
+            path.write_bytes(data)
+            return data
+    def reader(fd, *args, **kwargs):
+        descriptors.append(fd)
+        return Reader(original_fdopen(fd, *args, **kwargs))
+    monkeypatch.setattr(os, 'fdopen', reader)
+    with pytest.raises(AudiaGenticError, match='changed during read'):
+        artifact_read(store, command, receipt)
+    with pytest.raises(OSError):
+        os.fstat(descriptors[0])
+
+
+def test_historical_artifact_exact_bytes_and_utf8_behavior_unchanged(tmp_path):
+    store, command, receipt, raw = terminal_artifact(tmp_path / 'node')
+    store.advance_epoch(node_epoch='boot-2', gateway_owner_epoch='gateway-2')
+    current = store_at(store.root, node_epoch='boot-2', gateway_owner_epoch='gateway-2')
+    assert artifact_read(current, command, receipt, len(raw)) == ('native-plaintext', raw)
+    assert current.output(command) == raw.decode('utf-8')
+    assert current.get(command).output_sha256 == hashlib.sha256(raw).hexdigest()
+
+
+
+@pytest.mark.parametrize('bad_metadata', ['nonregular', 'reparse'])
+def test_open_descriptor_metadata_rejected_without_read_and_closed(tmp_path, monkeypatch, bad_metadata):
+    import stat
+    from types import SimpleNamespace
+    store, command, receipt, raw = terminal_artifact(tmp_path / 'node')
+    path = store.outputs / (receipt.output_sha256 + '.txt')
+    original_open, original_fstat = os.open, os.fstat
+    descriptors = []
+    def opened(candidate, flags, *args, **kwargs):
+        fd = original_open(candidate, flags, *args, **kwargs)
+        if Path(candidate) == path:
+            descriptors.append(fd)
+        return fd
+    def metadata(fd):
+        info = original_fstat(fd)
+        if fd not in descriptors:
+            return info
+        return SimpleNamespace(st_mode=stat.S_IFCHR if bad_metadata == 'nonregular' else info.st_mode,
+            st_dev=info.st_dev, st_ino=info.st_ino, st_size=info.st_size,
+            st_file_attributes=0x400 if bad_metadata == 'reparse' else 0)
+    monkeypatch.setattr(os, 'open', opened)
+    monkeypatch.setattr(os, 'fstat', metadata)
+    monkeypatch.setattr(os, 'fdopen', lambda *args, **kwargs: pytest.fail('unsafe descriptor read'))
+    with pytest.raises(AudiaGenticError, match='descriptor changed or is not regular'):
+        artifact_read(store, command, receipt)
+    assert len(descriptors) == 1
+    with pytest.raises(OSError):
+        original_fstat(descriptors[0])

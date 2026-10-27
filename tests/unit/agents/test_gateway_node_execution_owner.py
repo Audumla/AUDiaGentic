@@ -1063,30 +1063,17 @@ def test_new_read_apis_preserve_process_owner_fence(env, monkeypatch):
 
 
 def test_artifact_allocation_is_bounded_before_reading_oversized_file(env, monkeypatch):
-    from pathlib import Path
+    import os
 
     owner, _, receipt, raw = worker_artifact(env, monkeypatch)
-    path = env.config.state_root / "outputs" / (receipt.output_sha256 + ".txt")
-    original_open = Path.open
+    original_fdopen = os.fdopen
     requested = []
 
-    class Reader:
-        def __enter__(self):
-            self.handle = original_open(path, "rb")
-            return self
+    def monitored_fdopen(*args, **kwargs):
+        requested.append(args[0])
+        return original_fdopen(*args, **kwargs)
 
-        def read(self, size=-1):
-            requested.append(size)
-            assert size == 9, "remote artifact read must not allocate the full file"
-            return self.handle.read(size)
-
-        def __exit__(self, *args):
-            self.handle.close()
-
-    def bounded_open(candidate, *args, **kwargs):
-        return Reader() if candidate == path else original_open(candidate, *args, **kwargs)
-
-    monkeypatch.setattr(Path, "open", bounded_open)
+    monkeypatch.setattr(os, "fdopen", monitored_fdopen)
     with pytest.raises(AudiaGenticError, match="byte bound"):
         owner.read_artifact_chunk(env.case.identity, receipt.output_sha256, 0, 8, 8)
-    assert requested == [9]
+    assert not requested, "oversized descriptor must be rejected before opening a reader"

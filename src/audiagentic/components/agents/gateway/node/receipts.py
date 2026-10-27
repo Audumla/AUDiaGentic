@@ -20,6 +20,9 @@ filesystem and drive honoring sync. Process-kill tests are not power-loss proof.
 Foundation atomic output fsyncs file content before rename; POSIX additionally
 syncs the output directory here. Windows directory-entry power-loss durability
 requires deployment qualification. Missing/corrupt artifacts fail closed on read.
+Artifact descriptors use leaf no-follow/nonblocking flags where available and
+pre/post redirect checks. Protected owner storage remains required: these checks
+are not a universal descriptor-relative filesystem sandbox, particularly on Windows.
 No distributed exactly-once or portable hardware power-loss guarantee is claimed.
 """
 
@@ -29,6 +32,7 @@ import hashlib
 import json
 import os
 import sqlite3
+import stat
 import uuid
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -50,6 +54,7 @@ from .contracts import (
     invalid,
     validate_effect_authorization,
 )
+from .prepared_evidence import check_private_evidence_path
 
 io_error = make_error_factory("IO", "AGND", "agents-node")
 
@@ -594,12 +599,44 @@ class NodeReceiptStore:
         ):
             raise conflict(1, "Invalid private output digest")
         path = self.outputs / (digest + ".txt")
-        if self.outputs.is_symlink() or path.is_symlink():
-            raise conflict(1, "Private output path changed")
+        check_private_evidence_path(path)
+        before = path.lstat()
         if max_bytes is not None:
             _integer(max_bytes)
-        with path.open("rb") as handle:
-            raw = handle.read() if max_bytes is None else handle.read(max_bytes + 1)
+        # NOFOLLOW protects the leaf on supporting platforms; NONBLOCK prevents
+        # a raced-in FIFO from blocking before fstat can reject its file type.
+        # Parent/reparse checks still require protected owner storage, especially
+        # on Windows: this is not a universal descriptor-relative sandbox.
+        flags = os.O_RDONLY
+        for flag in ("O_BINARY", "O_NOFOLLOW", "O_NONBLOCK", "O_CLOEXEC"):
+            flags |= getattr(os, flag, 0)
+        descriptor = os.open(path, flags)
+        try:
+            info = os.fstat(descriptor)
+            if (not stat.S_ISREG(info.st_mode)
+                    or getattr(info, "st_file_attributes", 0)
+                    & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+                    or (info.st_dev, info.st_ino) != (before.st_dev, before.st_ino)):
+                raise conflict(1, "Private output descriptor changed or is not regular")
+            if max_bytes is not None and info.st_size > max_bytes:
+                raise invalid(1, "Private terminal artifact exceeds trusted byte bound")
+            check_private_evidence_path(path)
+            named = path.lstat()
+            if (named.st_dev, named.st_ino) != (info.st_dev, info.st_ino):
+                raise conflict(1, "Private output path changed during open")
+            handle = os.fdopen(descriptor, "rb")
+            descriptor = None  # The file object now owns exactly this descriptor.
+            with handle:
+                raw = handle.read(info.st_size + 1)
+                after = os.fstat(handle.fileno())
+                check_private_evidence_path(path)
+                named = path.lstat()
+                if ((named.st_dev, named.st_ino) != (info.st_dev, info.st_ino)
+                        or after.st_size != info.st_size or len(raw) != info.st_size):
+                    raise conflict(1, "Private output changed during read")
+        finally:
+            if descriptor is not None:
+                os.close(descriptor)
         if max_bytes is not None and len(raw) > max_bytes:
             raise invalid(1, "Private terminal artifact exceeds trusted byte bound")
         if hashlib.sha256(raw).hexdigest() != digest:
