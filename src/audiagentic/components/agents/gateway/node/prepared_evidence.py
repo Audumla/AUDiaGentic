@@ -82,11 +82,16 @@ def _checked_path(root: Path, identity: CommandIdentity) -> Path:
         path = gateway_node_prepared_evidence_path(root, identity)
     except ValueError:
         raise invalid(1, "Prepared evidence request identity is invalid") from None
-    _check_path(path)
+    check_private_evidence_path(path)
     return path
 
 
-def _check_path(path: Path) -> None:
+def check_private_evidence_path(path: Path) -> None:
+    """Reject known redirect components for node-owned private evidence I/O.
+
+    Reused by preparation and admission. Deployment protects the owner storage;
+    these checks are not a sandbox against hostile concurrent path replacement.
+    """
     # Check parents first: do not knowingly traverse an existing redirected
     # parent just to inspect its child. Also catches dangling links via lstat.
     for part in reversed((path, *path.parents)):
@@ -114,12 +119,12 @@ def _encode(evidence: RetainedPreparedEvidence) -> bytes:
 
 
 def _read(path: Path, identity: CommandIdentity) -> RetainedPreparedEvidence:
-    _check_path(path)
+    check_private_evidence_path(path)
     info = path.stat()
     if info.st_size > _MAX_PREPARED_BYTES or (os.name == "posix" and info.st_mode & 0o077):
         raise conflict(1, "Prepared evidence is oversized or not private")
     raw = read_bytes_with_retry(path)
-    _check_path(path)
+    check_private_evidence_path(path)
     if len(raw) > _MAX_PREPARED_BYTES:
         raise conflict(1, "Prepared evidence exceeds the supported private size")
     try:
@@ -160,12 +165,12 @@ def persist_prepared_once(
         path = _checked_path(root, identity)
         lock = gateway_request_maintenance_lock_path(root, identity.request_id)
         guard = lock.with_name(lock.name + ".guard")
-        _check_path(lock)
-        _check_path(guard)
+        check_private_evidence_path(lock)
+        check_private_evidence_path(guard)
         with StartupLock(lock):
-            _check_path(lock)
-            _check_path(guard)
-            _check_path(path)
+            check_private_evidence_path(lock)
+            check_private_evidence_path(guard)
+            check_private_evidence_path(path)
             if path.exists():
                 existing = _read(path, identity)
                 if _encode(existing) != raw:

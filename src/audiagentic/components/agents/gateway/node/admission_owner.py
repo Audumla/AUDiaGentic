@@ -8,6 +8,8 @@ the managed owner, grant and canonical admission locks have been released.
 from __future__ import annotations
 
 import hashlib
+import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -30,23 +32,74 @@ from audiagentic.components.agents.gateway.session import sessions_store
 from audiagentic.components.agents.models.execution_profile import execution_profile_to_dict
 from audiagentic.foundation.io import atomic_write_bytes
 
-from .admission_contract import NodeAdmissionDescriptor, NodeAdmissionPolicy, NodeSubmissionContext
+from .admission_contract import (
+    NodeAdmissionDescriptor,
+    NodeAdmissionPolicy,
+    NodeSubmissionContext,
+    SourceWorkspaceIdentity,
+)
 from .contracts import canonical_json, conflict, invalid
 from .preparation import PromptSemanticIdentity
+from .prepared_evidence import check_private_evidence_path
+
+_MAX_SNAPSHOT_BYTES = 2 * 1024 * 1024
+_SNAPSHOT_FIELDS = {"contract-version", "agent-id", "raw-prompt", "expanded-prompt", "semantic",
+                    "source-workspace", "caller-root", "source", "metadata", "logical-client-id", "profile"}
 
 _FIELDS = {"agent_id", "execution_profile_id", "prompt_body", "mode", "source", "metadata",
            "session_id", "session_keep_alive", "new_session", "title", "logical_client_id"}
 
 
-def _read_snapshot(root: Path, record: dict[str, Any]) -> bytes:
+def _read_private(path: Path) -> bytes:
+    check_private_evidence_path(path)
+    info = path.stat()
+    if info.st_size > _MAX_SNAPSHOT_BYTES or (os.name == "posix" and info.st_mode & 0o077):
+        raise conflict(1, "Node admission snapshot is oversized or not private")
+    raw = path.read_bytes()
+    check_private_evidence_path(path)
+    if len(raw) > _MAX_SNAPSHOT_BYTES:
+        raise conflict(1, "Node admission snapshot is oversized")
+    return raw
+
+
+def _read_snapshot(root: Path, record: dict[str, Any], context: NodeSubmissionContext) -> bytes:
     """Read against canonical authority, including on an idempotent replay."""
     descriptor = NodeAdmissionDescriptor.from_mapping(record["node-admission"])
     try:
-        raw = gateway_node_admission_path(root, record["request-id"]).read_bytes()
+        raw = _read_private(gateway_node_admission_path(root, record["request-id"]))
     except OSError:
         raise conflict(1, "Node admission snapshot is unavailable; reconcile without resubmitting") from None
     if hashlib.sha256(raw).hexdigest() != descriptor.snapshot_sha256:
         raise conflict(1, "Node admission snapshot does not match canonical authority")
+    try:
+        value = json.loads(raw.decode("utf-8"))
+        if (not isinstance(value, dict) or set(value) != _SNAPSHOT_FIELDS
+                or value["contract-version"] != "node-unrendered-v1"
+                or canonical_json(value) != raw
+                or not isinstance(value["raw-prompt"], str)
+                or not isinstance(value["expanded-prompt"], str)
+                or not isinstance(value["metadata"], dict)
+                or not isinstance(value["profile"], dict)
+                or (value["source"] is not None and not isinstance(value["source"], str))
+                or (value["logical-client-id"] is not None and not isinstance(value["logical-client-id"], str))
+                or value["agent-id"] != record["agent-id"]
+                or PromptSemanticIdentity.from_mapping(value["semantic"]) != descriptor.semantic
+                or compute_prompt_digest(value["raw-prompt"]) != descriptor.semantic.raw_prompt_sha256
+                or compute_prompt_digest(value["expanded-prompt"]) != descriptor.semantic.expanded_prompt_sha256
+                or SourceWorkspaceIdentity.from_mapping(value["source-workspace"]) != descriptor.source_workspace):
+            raise conflict(1, "Retained node admission snapshot is invalid")
+        retained_profile = profiles.ResolvedExecutionProfile(**{
+            key.replace("-", "_"): item for key, item in value["profile"].items()
+        })
+        if (retained_profile.to_mapping() != value["profile"]
+                or (retained_profile.profile_id, retained_profile.generation, retained_profile.config_digest)
+                != (descriptor.policy.profile_id, descriptor.policy.generation, descriptor.policy.config_digest)):
+            raise conflict(1, "Retained node admission profile differs from canonical policy")
+    except (ValueError, TypeError, UnicodeError, RecursionError, KeyError):
+        raise conflict(1, "Retained node admission snapshot is invalid") from None
+    if (value["caller-root"] != context.caller_root
+            or value["source-workspace"] != context.source_workspace.to_mapping()):
+        raise conflict(1, "Node replay caller locator or source identity differs")
     return raw
 
 
@@ -140,6 +193,8 @@ class NodeAdmissionOwner:
             "caller-root": context.caller_root, "source": envelope.source, "metadata": safe_metadata,
             "logical-client-id": arguments.get("logical_client_id"), "profile": snapshot.to_mapping(),
         })
+        if len(private) > _MAX_SNAPSHOT_BYTES:
+            raise invalid(1, "Node admission snapshot exceeds the supported private size")
         descriptor = NodeAdmissionDescriptor(1, context.server_id, semantic, policy,
             hashlib.sha256(private).hexdigest(), context.source_workspace)
         request_id = store.generate_request_id(project_root)
@@ -161,12 +216,13 @@ class NodeAdmissionOwner:
 
             def before_write():
                 path = gateway_node_admission_path(project_root, request_id)
+                check_private_evidence_path(path)
                 if path.exists():
-                    if path.read_bytes() != private:
+                    if _read_private(path) != private:
                         raise conflict(1, "Existing private node admission snapshot differs")
                 else:
                     atomic_write_bytes(path, private)
-                if path.read_bytes() != private:
+                if _read_private(path) != private:
                     raise conflict(1, "Private node admission snapshot readback failed")
                 sessions_store.write_session_record(project_root, session)
 
@@ -175,7 +231,7 @@ class NodeAdmissionOwner:
                     context_fingerprint=semantic.composition_fingerprint,
                     prompt_digest=semantic.raw_prompt_sha256, session_id=None),
                 service_root=self._service_store.root, before_write=before_write)
-            _read_snapshot(project_root, record)
+            _read_snapshot(project_root, record, context)
             return record, created, placement
 
         with self._service_store.owner_guard(owner_epoch):

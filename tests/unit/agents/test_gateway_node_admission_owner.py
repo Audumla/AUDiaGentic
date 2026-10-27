@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import subprocess
 from dataclasses import replace
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -166,6 +168,96 @@ def test_replay_missing_snapshot_requires_reconciliation(admission):
     with pytest.raises(AudiaGenticError, match="snapshot is unavailable"):
         submit(admission)
     admission.queue.enqueue_node.assert_called_once()
+
+
+def test_replay_rejects_changed_private_locator_without_rewriting(admission):
+    first = submit(admission)
+    path = gateway_node_admission_path(admission.root, first["request-id"])
+    original = path.read_bytes()
+    admission.context = replace(admission.context, caller_root="/other/foreign-workspace")
+    with pytest.raises(AudiaGenticError, match="caller locator"):
+        submit(admission)
+    assert path.read_bytes() == original
+    admission.queue.enqueue_node.assert_called_once()
+
+
+def test_replay_allows_audit_metadata_changes(admission):
+    first = submit(admission)
+    replay = submit(admission, source="another-audit-source", title="Different audit title")
+    assert first["request-id"] == replay["request-id"]
+    admission.queue.enqueue_node.assert_called_once()
+
+
+def test_replay_corrupt_snapshot_cannot_rewrite_or_redispatch(admission):
+    first = submit(admission)
+    path = gateway_node_admission_path(admission.root, first["request-id"])
+    path.write_bytes(b"corrupt")
+    with pytest.raises(AudiaGenticError, match="canonical authority"):
+        submit(admission)
+    assert path.read_bytes() == b"corrupt"
+    admission.queue.enqueue_node.assert_called_once()
+
+
+def test_hash_matched_but_invalid_private_schema_is_rejected(admission):
+    first = submit(admission)
+    path = gateway_node_admission_path(admission.root, first["request-id"])
+    # Model a storage fault where hash integrity alone is insufficient.
+    raw = b"{}"
+    path.write_bytes(raw)
+    record = dict(first)
+    descriptor = dict(first["node-admission"])
+    descriptor["snapshot-sha256"] = hashlib.sha256(raw).hexdigest()
+    record["node-admission"] = descriptor
+    with pytest.raises(AudiaGenticError, match="snapshot is invalid"):
+        module._read_snapshot(admission.root, record, admission.context)
+
+
+@pytest.mark.parametrize("redirect", ["file", "parent"])
+def test_replay_rejects_redirected_private_evidence(admission, tmp_path, redirect):
+    first = submit(admission)
+    path = gateway_node_admission_path(admission.root, first["request-id"])
+    original = path.read_bytes()
+    target = tmp_path / "redirected"
+    if redirect == "file":
+        target.write_bytes(original)
+        path.unlink()
+        link = path
+    else:
+        target.mkdir()
+        (target / path.name).write_bytes(original)
+        path.unlink()
+        path.parent.rmdir()
+        link = path.parent
+    try:
+        link.symlink_to(target, target_is_directory=redirect == "parent")
+    except OSError as error:
+        pytest.skip(f"Platform does not permit test symlinks: {error.winerror if hasattr(error, 'winerror') else error.errno}")
+    with pytest.raises(AudiaGenticError, match="links or reparse"):
+        submit(admission)
+    admission.queue.enqueue_node.assert_called_once()
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows junction qualification")
+def test_initial_snapshot_rejects_junction_parent_before_any_write(admission, tmp_path, monkeypatch):
+    request_id = "req_test_admission"
+    monkeypatch.setattr(store, "generate_request_id", lambda root: request_id)
+    path = gateway_node_admission_path(admission.root, request_id)
+    outside = tmp_path / "junction-target"
+    outside.mkdir()
+    path.parent.parent.mkdir(parents=True)
+    linked = subprocess.run(["cmd", "/c", "mklink", "/J", str(path.parent), str(outside)],
+        capture_output=True, text=True, timeout=10)
+    assert linked.returncode == 0, linked.stderr
+    try:
+        assert path.parent.is_junction()
+        with pytest.raises(AudiaGenticError, match="links or reparse"):
+            submit(admission)
+        assert list(outside.iterdir()) == []
+        assert store.list_records(admission.root) == []
+        admission.queue.enqueue_node.assert_not_called()
+    finally:
+        if path.parent.is_junction():
+            path.parent.rmdir()  # Remove only this verified test junction.
 
 
 def test_registry_change_before_commit_prevents_canonical_mutation(admission):
