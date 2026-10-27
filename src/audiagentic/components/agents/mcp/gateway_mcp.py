@@ -18,6 +18,7 @@ from audiagentic.components.agents.gateway.client import (
     call_gateway_method,
     resolve_request_project_root,
     resolve_session_project_root,
+    validate_node_selectors,
 )
 from audiagentic.components.agents.gateway.evidence_projection import (
     project_public_gateway_request,
@@ -423,8 +424,19 @@ def agent_task_submit(
     title: str | None = None,
     execution_context_fingerprint: str | None = None,
     provider_chat_url: str | None = None,
+    node_id: str | None = None,
+    workspace_id: str | None = None,
 ) -> dict[str, Any]:
-    """Submit async work for agent_id. Return request-id, then poll status; fetch terminal text with agent_task_response. Set new_session for isolation."""
+    """Submit async work for agent_id. Return request-id, then poll status; fetch terminal text with agent_task_response. Set new_session for isolation.
+
+    node_id/workspace_id are paired recipient IDs, not paths. Node submission
+    requires configured caller enrollment and server support; source workspace
+    is derived locally, never supplied as a tool parameter. Initial routing
+    requires the same enrolled node/workspace. Unsupported targets are rejected
+    without falling back to server execution.
+    """
+    if node_id is not None or workspace_id is not None:
+        validate_node_selectors(node_id, workspace_id)
     project_root = project_root_from_env()
     submit_kwargs: dict[str, Any] = {
         "agent_id": agent_id,
@@ -444,6 +456,8 @@ def agent_task_submit(
         submit_kwargs["execution_context_fingerprint"] = execution_context_fingerprint
     if provider_chat_url is not None:
         submit_kwargs["provider_chat_url"] = provider_chat_url
+    if node_id is not None or workspace_id is not None:
+        submit_kwargs.update(node_id=node_id, workspace_id=workspace_id)
     status = call_gateway_method("submit_execution_request", project_root, **submit_kwargs)
     return project_public_gateway_request(status)
 

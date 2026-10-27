@@ -88,6 +88,7 @@ class SharedGatewayConnectorConfig:
     project_id: str
     token_file: Path
     ca_file: Path | None = None
+    source_node_config_file: Path | None = field(default=None, repr=False)
 
 
 def _mapping(value: Any, required: set[str], optional: set[str] | None = None) -> dict:
@@ -237,7 +238,8 @@ def load_shared_server_config(path: Path) -> SharedGatewayServerConfig:
 def load_shared_connector_config(path: Path) -> SharedGatewayConnectorConfig:
     """Load an HTTPS origin with no path, userinfo, query or fragment."""
     base, data = _load(path)
-    _mapping(data, {"schema-version", "endpoint", "server-id", "project-id", "token-file"}, {"ca-file"})
+    _mapping(data, {"schema-version", "endpoint", "server-id", "project-id", "token-file"},
+             {"ca-file", "source-node-config"})
     endpoint = _text(data["endpoint"])
     try:
         parsed = urlsplit(endpoint)
@@ -254,6 +256,7 @@ def load_shared_connector_config(path: Path) -> SharedGatewayConnectorConfig:
         project_id=_identifier(data["project-id"]),
         token_file=_path(base, data["token-file"], credential=True),
         ca_file=_path(base, data["ca-file"]) if "ca-file" in data else None,
+        source_node_config_file=_path(base, data["source-node-config"]) if "source-node-config" in data else None,
     )
 
 
