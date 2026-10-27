@@ -792,3 +792,218 @@ def test_callback_errors_are_redacted_and_logging_cannot_escape(tmp_path, monkey
         manager.notify_node_changed("node")
     assert manager.wait(tmp_path, pair[0]["request-id"], 3)["state"] == "completed"
     assert not manager._node_waking
+
+
+def test_failed_notification_retained_until_maintenance_retry_enqueues_recovery(tmp_path):
+    current = recoverable(tmp_path)
+    calls, observed = [], threading.Event()
+    def recover(node):
+        with manager._manager_lock:
+            calls.append(node)
+        if len(calls) == 1:
+            raise OSError("PRIVATE callback failed once")
+        latest = store.read_record(tmp_path, current["request-id"])
+        def runner(root, record, *, reconcile_only):
+            assert reconcile_only
+            observed.set()
+            return finish(root, record)
+        recover_enqueue(manager, tmp_path, latest, runner)
+    manager = ready_manager(node_project_roots=(tmp_path,), node_server_id="server", node_recovery_wakeup=recover)
+    before = store.read_record(tmp_path, current["request-id"])
+    manager.notify_node_changed("node")
+    assert calls == ["node"] and manager._node_wake_dirty == {"node"}
+    assert not manager._node_waking and not observed.is_set()
+    assert store.read_record(tmp_path, current["request-id"]) == before
+    generation = dict(manager._node_generations)
+    manager.retry_node_notifications()
+    assert observed.wait(3)
+    assert manager.wait(tmp_path, current["request-id"], 3)["state"] == "completed"
+    assert calls == ["node", "node"] and not manager._node_wake_dirty
+    assert manager._node_generations == generation
+    manager.retry_node_notifications()
+    assert len(calls) == 2
+
+
+def test_repeated_notification_failure_one_attempt_per_maintenance_trigger(tmp_path, monkeypatch):
+    calls, drains = [], []
+    def fail(node):
+        with manager._manager_lock:
+            calls.append(node)
+        raise RuntimeError("PRIVATE repeated failure")
+    manager = ready_manager(node_recovery_wakeup=fail)
+    monkeypatch.setattr(manager, "_drain_all", lambda: drains.append(True))
+    manager.notify_node_changed("node")
+    for count in range(2, 6):
+        manager.retry_node_notifications()
+        assert calls == ["node"] * count
+        assert manager._node_wake_dirty == {"node"} and not manager._node_waking
+    assert manager._node_generations["node"] == 1
+    manager.notify_node_changed("unknown")
+    assert len(calls) == 5 and manager._node_wake_dirty == {"node"}
+    manager.shutdown()
+    manager.retry_node_notifications()
+    manager.notify_node_changed("node")
+    assert len(calls) == 5 and manager._node_generations["node"] == 1
+
+
+@pytest.mark.parametrize("fails_during_retry", [False, True])
+def test_notify_racing_maintenance_retry_is_coalesced_without_lost_dirty(tmp_path, fails_during_retry):
+    entered, release = threading.Event(), threading.Event()
+    calls = []
+    def callback(node):
+        with manager._manager_lock:
+            calls.append(node)
+        if len(calls) == 1:
+            raise OSError("first failure")
+        if len(calls) == 2:
+            entered.set()
+            assert release.wait(3)
+            if fails_during_retry:
+                raise OSError("retry failure")
+    manager = ready_manager(node_recovery_wakeup=callback)
+    manager.notify_node_changed("node")
+    generation = manager._node_generations["node"]
+    thread = threading.Thread(target=manager.retry_node_notifications)
+    thread.start()
+    try:
+        assert entered.wait(3)
+        for _ in range(5):
+            manager.notify_node_changed("node")
+        manager.retry_node_notifications()  # Cannot overlap an active callback.
+        assert calls == ["node", "node"]
+    finally:
+        release.set()
+        thread.join(3)
+    assert not thread.is_alive() and not manager._node_waking
+    assert manager._node_generations["node"] == generation + 5
+    # Success and failure both retain the concurrent notification for a later
+    # maintenance trigger, rather than making a second attempt in this one.
+    assert calls == ["node", "node"] and manager._node_wake_dirty == {"node"}
+    manager.retry_node_notifications()
+    assert calls == ["node", "node", "node"] and not manager._node_wake_dirty
+
+
+def test_shutdown_during_retry_preserves_dirty_without_starting_followup(tmp_path):
+    entered, release = threading.Event(), threading.Event()
+    calls = []
+    def callback(node):
+        calls.append(node)
+        if len(calls) == 1:
+            raise OSError("first failure")
+        entered.set()
+        assert release.wait(3)
+    manager = ready_manager(node_recovery_wakeup=callback)
+    manager.notify_node_changed("node")
+    thread = threading.Thread(target=manager.retry_node_notifications)
+    thread.start()
+    try:
+        assert entered.wait(3)
+        manager.notify_node_changed("node")
+        manager.shutdown()
+    finally:
+        release.set()
+        thread.join(3)
+    assert not thread.is_alive() and calls == ["node", "node"]
+    assert manager._node_wake_dirty == {"node"} and not manager._node_waking
+    manager.retry_node_notifications()
+    assert calls == ["node", "node"]
+
+
+def test_concurrent_maintenance_triggers_share_one_callback(tmp_path):
+    entered, release = threading.Event(), threading.Event()
+    calls = []
+    def callback(node):
+        calls.append(node)
+        if len(calls) == 1:
+            raise OSError("first failure")
+        entered.set()
+        assert release.wait(3)
+    manager = ready_manager(node_recovery_wakeup=callback)
+    manager.notify_node_changed("node")
+    thread = threading.Thread(target=manager.retry_node_notifications)
+    thread.start()
+    try:
+        assert entered.wait(3)
+        manager.retry_node_notifications()
+        assert calls == ["node", "node"]
+    finally:
+        release.set()
+        thread.join(3)
+    assert not thread.is_alive() and not manager._node_waking and not manager._node_wake_dirty
+    assert manager._node_generations["node"] == 1
+
+
+def test_stale_maintenance_snapshot_does_not_rewake_successfully_notified_node(tmp_path, monkeypatch):
+    snapshot_taken, release = threading.Event(), threading.Event()
+    calls = []
+    def callback(node):
+        calls.append(node)
+        if len(calls) == 1:
+            raise OSError("first failure")
+    manager = ready_manager(node_recovery_wakeup=callback)
+    manager.notify_node_changed("node")
+    original = manager._wake_node
+    def delayed(node, *, retry_only=False):
+        if retry_only:
+            snapshot_taken.set()
+            assert release.wait(3)
+        return original(node, retry_only=retry_only)
+    monkeypatch.setattr(manager, "_wake_node", delayed)
+    thread = threading.Thread(target=manager.retry_node_notifications)
+    thread.start()
+    try:
+        assert snapshot_taken.wait(3)
+        manager.notify_node_changed("node")
+        assert calls == ["node", "node"] and not manager._node_wake_dirty
+    finally:
+        release.set()
+        thread.join(3)
+    assert not thread.is_alive() and calls == ["node", "node"]
+    assert manager._node_generations["node"] == 2 and not manager._node_waking
+
+
+@pytest.mark.parametrize("notify_again", [False, True])
+def test_maintenance_callback_reentrancy_does_not_spin_or_erase_notification(tmp_path, notify_again):
+    calls = []
+    def callback(node):
+        with manager._manager_lock:
+            calls.append(node)
+        if len(calls) == 1:
+            raise OSError("initial failure")
+        if len(calls) == 2:
+            manager.retry_node_notifications()  # Current node is already waking.
+            manager.notify_node_changed("unknown")
+            if notify_again:
+                manager.notify_node_changed(node)
+    manager = ready_manager(node_recovery_wakeup=callback)
+    manager.notify_node_changed("node")
+    manager.retry_node_notifications()
+    assert calls == ["node", "node"] and not manager._node_waking
+    assert manager._node_generations["node"] == (2 if notify_again else 1)
+    assert manager._node_wake_dirty == ({"node"} if notify_again else set())
+    manager.retry_node_notifications()
+    assert calls == ["node"] * (3 if notify_again else 2)
+    assert not manager._node_wake_dirty
+
+
+def test_maintenance_snapshot_attempts_each_configured_dirty_node_once(tmp_path):
+    calls, ready = [], False
+    def callback(node):
+        calls.append(node)
+        if not ready:
+            raise OSError("initial failure")
+        manager.notify_node_changed(node)
+    manager = ready_manager(node_recovery_wakeup=callback)
+    manager.notify_node_changed("node")
+    manager.notify_node_changed("other")
+    ready = True
+    manager.retry_node_notifications()
+    assert calls.count("node") == calls.count("other") == 2
+    assert manager._node_wake_dirty == {"node", "other"} and not manager._node_waking
+    assert manager._node_generations["node"] == manager._node_generations["other"] == 2
+    manager.retry_node_notifications()
+    assert calls.count("node") == calls.count("other") == 3
+    assert manager._node_wake_dirty == {"node", "other"}
+    manager.shutdown()
+    manager.retry_node_notifications()
+    assert len(calls) == 6

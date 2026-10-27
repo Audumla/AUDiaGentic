@@ -581,14 +581,35 @@ class GatewayQueueManager:
         its starting generation changed. No receipt/record I/O belongs here.
         """
         with self._manager_lock:
-            if node_id not in self._node_generations:
+            if self._shutdown_event.is_set() or node_id not in self._node_generations:
                 return
             self._node_generations[node_id] += 1
         self._wake_node(node_id)
         self._drain_all()
 
-    def _wake_node(self, node_id: str) -> None:
+    def retry_node_notifications(self) -> None:
+        """Existing host maintenance may retry retained configured notifications.
+
+        Snapshot only the bounded dirty set, never scan nodes/records or create
+        another timer. Retries do not invent notification generations. In-flight
+        wakes coalesce, and each failed callback exits until a later trigger.
+        """
         with self._manager_lock:
+            if self._shutdown_event.is_set():
+                return
+            pending = tuple(node for node in self._node_wake_dirty
+                            if node in self._node_generations and node not in self._node_waking)
+        for node_id in pending:
+            self._wake_node(node_id, retry_only=True)
+        if pending and not self._shutdown_event.is_set():
+            self._drain_all()
+
+    def _wake_node(self, node_id: str, *, retry_only: bool = False) -> None:
+        with self._manager_lock:
+            if self._shutdown_event.is_set() or node_id not in self._node_generations:
+                return
+            if retry_only and node_id not in self._node_wake_dirty:
+                return  # Another notification/retry already completed this snapshot.
             self._node_wake_dirty.add(node_id)
             if node_id in self._node_waking:
                 return
@@ -596,18 +617,29 @@ class GatewayQueueManager:
         try:
             while True:
                 with self._manager_lock:
+                    if self._shutdown_event.is_set():
+                        self._node_waking.discard(node_id)
+                        return
                     self._node_wake_dirty.discard(node_id)
-                if self._node_recovery_wakeup is not None and not self._shutdown_event.is_set():
+                if self._node_recovery_wakeup is not None:
                     try:
                         self._node_recovery_wakeup(node_id)
                     except Exception as error:
+                        with self._manager_lock:
+                            self._node_wake_dirty.add(node_id)
+                            self._node_waking.discard(node_id)
                         self._warn_node_callback(error, stage="observe")
+                        return  # Retain dirty; never busy-retry a failed callback.
                 with self._manager_lock:
-                    if node_id not in self._node_wake_dirty:
+                    if retry_only or node_id not in self._node_wake_dirty:
+                        # A maintenance snapshot attempts each node once. A real
+                        # notification arriving during success remains dirty for
+                        # the next trigger; never erase its changed generation.
                         self._node_waking.remove(node_id)
                         return
         except BaseException:
             with self._manager_lock:
+                self._node_wake_dirty.add(node_id)
                 self._node_waking.discard(node_id)
             raise
 
