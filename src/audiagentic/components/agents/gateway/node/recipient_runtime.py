@@ -5,12 +5,13 @@ loop alive until wait_producer completes. Cancellation of a socket dispatcher
 never cancels the retained producer, implies unsent, or authorizes another run.
 Preparation and execution use asyncio's existing thread offload, no owned pool.
 Grant authentication/revocation remain the channel/central owner's authority.
-Receipt/artifact pumping is deliberately not installed here.
+Historical ACK/artifact handlers are installed; receipt sending is not.
 """
 
 from __future__ import annotations
 
 import asyncio
+import base64
 import math
 from dataclasses import dataclass, field
 
@@ -22,10 +23,12 @@ from .local_preparation import NodeLocalPreparer
 from .preparation import RetainedNodePreparation, validate_final_command_preparation
 from .source_workspace import validate_recipient_workspace
 from .work_protocol import (
+    ArtifactGet,
     CommandWork,
     EffectAuthorized,
     EffectDenied,
     PrepareWork,
+    ReceiptAckWork,
     parse_work_frame,
 )
 
@@ -77,6 +80,9 @@ class NodeRecipientRuntime:
         self._preparing = None
         self._authorizing = False
         self._producer = None
+        # Notification only: clear before rereading the owner's durable cursor.
+        # Valid duplicate ACKs may wake a waiter; deferred ACKs never signal.
+        self.acknowledgement_event = asyncio.Event()
         self.failure: RecipientFailure | None = None
 
     @property
@@ -172,7 +178,6 @@ class NodeRecipientRuntime:
     async def _handle(self, connection, frame, work):
         reason = "command-correlation"
         try:
-            await self._live(connection)
             # Consume actual wire facts even when invoked by a custom dispatcher.
             parsed = parse_work_frame(
                 frame,
@@ -183,7 +188,39 @@ class NodeRecipientRuntime:
             )
             if parsed != work:
                 raise conflict(1, "Recipient work differs from its received frame")
-            if type(work) is PrepareWork:
+            historical = type(parsed) in (ReceiptAckWork, ArtifactGet)
+            await self._live(connection, active=not historical)
+            if type(work) is ReceiptAckWork:
+                reason = "receipt-ack"
+                checkpoint = await asyncio.to_thread(self._owner.acknowledge, frame)
+                if checkpoint is not None:
+                    self.acknowledgement_event.set()
+            elif type(work) is ArtifactGet:
+                reason = "artifact-read"
+                chunk = await asyncio.to_thread(
+                    self._owner.read_artifact_chunk,
+                    work.identity,
+                    work.artifact_sha256,
+                    work.offset,
+                    work.limit,
+                    max_total_bytes=self._max_artifact_bytes,
+                )
+                await self._live(connection, active=False)
+                await connection.send_work(
+                    "reconcile-result",
+                    {
+                        "kind": "artifact-chunk",
+                        "in-reply-to": frame.message_id,
+                        "identity": work.identity.to_mapping(),
+                        "artifact-sha256": chunk.artifact_sha256,
+                        "artifact-kind": chunk.artifact_kind,
+                        "offset": chunk.offset,
+                        "total-bytes": chunk.total_bytes,
+                        "data": base64.b64encode(chunk.data).decode("ascii"),
+                        "eof": chunk.eof,
+                    },
+                )
+            elif type(work) is PrepareWork:
                 reason = "preparation-rejected"
                 await self._prepare(connection, work)
             elif type(work) is CommandWork:

@@ -9,7 +9,7 @@ from types import SimpleNamespace
 
 import pytest
 from tests.unit.agents.test_gateway_node_execution_owner import env as env
-from tests.unit.agents.test_gateway_node_execution_owner import open_owner
+from tests.unit.agents.test_gateway_node_execution_owner import open_owner, second_case
 from tests.unit.agents.test_gateway_node_worker_terminal import mint_proof
 from websockets.exceptions import ConnectionClosedOK
 
@@ -21,9 +21,11 @@ from audiagentic.components.agents.gateway.node.local_preparation import NodeLoc
 from audiagentic.components.agents.gateway.node.receipts import NodeReceiptStore
 from audiagentic.components.agents.gateway.node.recipient_runtime import NodeRecipientRuntime
 from audiagentic.components.agents.gateway.node.work_protocol import (
+    ArtifactChunk,
     EffectAuthorize,
     PreparationRejected,
     PreparedReply,
+    ReceiptAckWork,
 )
 from audiagentic.components.agents.gateway.queue import worker
 from audiagentic.foundation.contracts.errors import AudiaGenticError
@@ -57,12 +59,14 @@ class Socket:
         self.abort()
 
 
-async def pair(runtime, *, generation=1, authorize=None):
+async def pair(
+    runtime, *, generation=1, authorize=None, gateway_epoch="gateway", capability="active"
+):
     a, b = Socket(), Socket()
     a.peer, b.peer = b, a
-    identity = NodeConnectionIdentity("node", "boot", "gateway", generation)
-    node = NodeConnection(a, identity, role="node", grant_revision=1, capability="active")
-    gateway = NodeConnection(b, identity, role="gateway", grant_revision=1, capability="active")
+    identity = NodeConnectionIdentity("node", "boot", gateway_epoch, generation)
+    node = NodeConnection(a, identity, role="node", grant_revision=1, capability=capability)
+    gateway = NodeConnection(b, identity, role="gateway", grant_revision=1, capability=capability)
     exchanges = []
 
     async def handle(frame, message):
@@ -308,7 +312,9 @@ async def test_root_drift_after_preparation_does_not_commit_intent(env, monkeypa
 
 
 @pytest.mark.asyncio
-async def test_disconnect_retains_process_owned_producer_and_cancelled_waiter_cannot_stop_it(env, monkeypatch):
+async def test_disconnect_retains_process_owned_producer_and_cancelled_waiter_cannot_stop_it(
+    env, monkeypatch
+):
     owner, runtime, preparer_calls = setup(env, monkeypatch)
     entered, release, worker_calls = worker_io(env, monkeypatch, block=True)
     node, gateway, _ = await pair(runtime)
@@ -567,5 +573,310 @@ async def test_nonmatching_or_denied_authorization_never_reaches_producer(env, m
         await asyncio.wait_for(node.wait_closed(), 3)
         assert not runtime.producer_pending and not owner.receipts_after()
         assert runtime.failure is not None
+    finally:
+        await close(node, gateway)
+
+
+def retained_historical_artifact(env, monkeypatch):
+    """Real typed local worker artifact; child/process I/O remains fake."""
+    case = second_case(env.case)
+    store = NodeReceiptStore(
+        root=env.config.state_root, node_id="node", node_epoch="boot", gateway_owner_epoch="gateway"
+    )
+    store.prepare(case.identity, canonical_json(case.payload))
+    store.effect_intent(case.identity, case.auth_request, case.auth_reply, connection_generation=1)
+    proof = mint_proof(monkeypatch, case)
+    receipt = store.terminal_from_worker_result(
+        case.identity, preparation=case.preparation, proof=proof
+    )
+    return case, receipt, store.output(case.identity).encode("utf-8")
+
+
+async def artifact_request(gateway, case, receipt, *, offset=0, limit=256 * 1024, digest=None):
+    return await gateway.request_work(
+        "reconcile",
+        {
+            "kind": "artifact-get",
+            "identity": case.identity.to_mapping(),
+            "artifact-sha256": digest or receipt.output_sha256,
+            "offset": offset,
+            "limit": limit,
+        },
+        reply_types=(ArtifactChunk,),
+        timeout=3,
+    )
+
+
+async def send_ack(gateway, checkpoint, receipt):
+    return await gateway.send_work(
+        "reconcile-result",
+        {
+            "kind": "receipt-ack",
+            "server-id": "server",
+            "log-incarnation-id": checkpoint.log_incarnation_id,
+            "through-sequence": receipt.sequence,
+            "through-receipt-sha256": receipt.digest,
+        },
+    )
+
+
+@pytest.mark.asyncio
+async def test_ack_and_artifact_handlers_respond_while_producer_is_blocked_off_loop(
+    env, monkeypatch
+):
+    historical, terminal, raw = retained_historical_artifact(env, monkeypatch)
+    owner, runtime, calls = setup(env, monkeypatch)
+    entered, release, worker_calls = worker_io(env, monkeypatch, block=True)
+    loop_thread = threading.get_ident()
+    seen_frames, owner_frames, reads = [], [], []
+    original_handle, original_ack = runtime._handle, NodeExecutionOwner.acknowledge
+    original_read = NodeExecutionOwner.read_artifact_chunk
+
+    async def handle(connection, frame, work):
+        if type(work) is ReceiptAckWork:
+            seen_frames.append(frame)
+        return await original_handle(connection, frame, work)
+
+    def acknowledge(self, frame):
+        assert threading.get_ident() != loop_thread
+        owner_frames.append(frame)
+        return original_ack(self, frame)
+
+    def read(self, *args, **kwargs):
+        assert threading.get_ident() != loop_thread
+        reads.append((args, kwargs))
+        return original_read(self, *args, **kwargs)
+
+    monkeypatch.setattr(runtime, "_handle", handle)
+    monkeypatch.setattr(NodeExecutionOwner, "acknowledge", acknowledge)
+    monkeypatch.setattr(NodeExecutionOwner, "read_artifact_chunk", read)
+    node, gateway, _ = await pair(runtime)
+    try:
+        await prepare(gateway, env.case)
+        await command(gateway, env.case)
+        await asyncio.wait_for(entered.wait(), 3)
+        checkpoint = await asyncio.to_thread(owner.receipt_checkpoint)
+        sent = await send_ack(gateway, checkpoint, terminal)
+        await asyncio.wait_for(runtime.acknowledgement_event.wait(), 3)
+        assert owner_frames[0] is seen_frames[0] and owner_frames[0] == sent
+        assert (
+            await asyncio.to_thread(owner.receipt_checkpoint)
+        ).through_sequence == terminal.sequence
+        request, reply, chunk = await artifact_request(gateway, historical, terminal, limit=7)
+        assert chunk.in_reply_to == request.message_id
+        assert (
+            chunk.identity == historical.identity
+            and chunk.artifact_kind == "worker-terminal-result"
+        )
+        assert chunk.data == raw[:7] and chunk.total_bytes == len(raw) and not chunk.eof
+        assert reads[0][1] == {"max_total_bytes": 1024 * 1024}
+        assert reads[0][0] == (historical.identity, terminal.output_sha256, 0, 7)
+        assert runtime.producer_pending and len(worker_calls) == 1 and not release.is_set()
+        release.set()
+        assert (await asyncio.wait_for(runtime.wait_producer(), 3)).state == "terminal"
+        assert len(worker_calls) == 1
+    finally:
+        release.set()
+        if runtime.producer_pending:
+            await asyncio.wait_for(runtime.wait_producer(), 3)
+        await close(node, gateway)
+
+
+@pytest.mark.asyncio
+async def test_drain_historical_artifact_keeps_original_identity_and_current_envelope(
+    env, monkeypatch
+):
+    historical, terminal, raw = retained_historical_artifact(env, monkeypatch)
+    owner, runtime, calls = setup(env, monkeypatch)
+    node, gateway, _ = await pair(
+        runtime, generation=2, gateway_epoch="gateway2", capability="drain"
+    )
+    try:
+        request, reply, chunk = await artifact_request(gateway, historical, terminal)
+        assert reply.gateway_owner_epoch == "gateway2" and reply.node_epoch == "boot"
+        assert reply.payload["connection-generation"] == 2
+        assert chunk.identity.gateway_owner_epoch == "gateway"
+        assert chunk.identity.connection_generation == 1
+        assert chunk.in_reply_to == request.message_id
+        assert chunk.data == raw and chunk.eof and chunk.artifact_kind == "worker-terminal-result"
+        checkpoint = await asyncio.to_thread(owner.receipt_checkpoint)
+        await send_ack(gateway, checkpoint, terminal)
+        await asyncio.wait_for(runtime.acknowledgement_event.wait(), 3)
+        durable = await asyncio.to_thread(owner.receipt_checkpoint)
+        assert durable.through_sequence == terminal.sequence and durable.server_id == "server"
+        assert not calls and not runtime.producer_pending
+    finally:
+        await close(node, gateway)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["prepare", "command"])
+async def test_drain_still_rejects_fresh_work_on_real_receiver(env, monkeypatch, kind):
+    owner, runtime, calls = setup(env, monkeypatch)
+    node, gateway, _ = await pair(runtime, capability="drain")
+    try:
+        # Bypass the sender's own guard to exercise an authenticated bad peer.
+        if kind == "prepare":
+            await gateway._send_locked("reconcile", prepare_payload(env.case))
+        else:
+            await gateway._send(
+                "command", identity=env.case.identity.to_mapping(), payload=env.case.payload
+            )
+        await asyncio.wait_for(node.wait_closed(), 3)
+        assert not calls and not runtime.producer_pending
+        assert await asyncio.to_thread(owner.receipts_after) == ()
+    finally:
+        await close(node, gateway)
+
+
+@pytest.mark.asyncio
+async def test_deferred_ack_does_not_signal_or_fabricate_progress_then_replay_applies(
+    env, monkeypatch
+):
+    historical, terminal, raw = retained_historical_artifact(env, monkeypatch)
+    owner, runtime, calls = setup(env, monkeypatch)
+    entered, release, worker_calls = worker_io(env, monkeypatch, block=True)
+    node, gateway, _ = await pair(runtime)
+    newer = None
+    handled = asyncio.Event()
+    original_handle = runtime._handle
+
+    async def handle(connection, frame, work):
+        try:
+            return await original_handle(connection, frame, work)
+        finally:
+            if type(work) is ReceiptAckWork:
+                handled.set()
+
+    monkeypatch.setattr(runtime, "_handle", handle)
+    try:
+        await prepare(gateway, env.case)
+        await command(gateway, env.case)
+        await asyncio.wait_for(entered.wait(), 3)
+        newer, new_gateway, _ = await pair(runtime, generation=2)
+        checkpoint = await asyncio.to_thread(owner.receipt_checkpoint)
+        await send_ack(new_gateway, checkpoint, terminal)
+        await asyncio.wait_for(handled.wait(), 3)
+        assert not runtime.acknowledgement_event.is_set()
+        assert (await asyncio.to_thread(owner.receipt_checkpoint)).through_sequence == 0
+        assert runtime.producer_pending
+        release.set()
+        assert (await asyncio.wait_for(runtime.wait_producer(), 3)).state == "terminal"
+        await send_ack(
+            new_gateway, checkpoint, terminal
+        )  # Real current-channel replay, not a synthesized frame.
+        await asyncio.wait_for(runtime.acknowledgement_event.wait(), 3)
+        assert (
+            await asyncio.to_thread(owner.receipt_checkpoint)
+        ).through_sequence == terminal.sequence
+        assert len(worker_calls) == 1
+    finally:
+        release.set()
+        if runtime.producer_pending:
+            await asyncio.wait_for(runtime.wait_producer(), 3)
+        await close(node, gateway)
+        if newer is not None:
+            await close(newer, new_gateway)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("bad", ["digest", "identity", "offset", "limit", "total-cap"])
+async def test_artifact_request_mismatch_or_bounds_never_returns_bytes(env, monkeypatch, bad):
+    historical, terminal, raw = retained_historical_artifact(env, monkeypatch)
+    owner, runtime, calls = setup(env, monkeypatch)
+    if bad == "total-cap":
+        runtime = NodeRecipientRuntime(env.config, owner, max_artifact_bytes=8)
+    node, gateway, _ = await pair(runtime)
+    args = {}
+    if bad == "digest":
+        args["digest"] = "f" * 64
+    elif bad == "identity":
+        historical = SimpleNamespace(identity=replace(historical.identity, request_id="foreign"))
+    elif bad == "offset":
+        args["offset"] = len(raw)
+    elif bad == "limit":
+        args["limit"] = 256 * 1024 + 1
+    try:
+        with pytest.raises(AudiaGenticError):
+            await artifact_request(gateway, historical, terminal, **args)
+        assert not runtime.producer_pending
+        assert "Verified answer" not in repr(runtime.failure)
+    finally:
+        await close(node, gateway)
+
+
+@pytest.mark.asyncio
+async def test_handler_rejects_work_frame_mismatch_before_owner_io(env, monkeypatch):
+    from audiagentic.components.agents.gateway.node.contracts import Frame
+    from audiagentic.components.agents.gateway.node.work_protocol import parse_work_frame
+
+    historical, terminal, raw = retained_historical_artifact(env, monkeypatch)
+    owner, runtime, calls = setup(env, monkeypatch)
+    node, gateway, _ = await pair(runtime)
+    frame = Frame(
+        1,
+        "reconcile",
+        "artifact-get",
+        "node",
+        "boot",
+        "gateway",
+        2,
+        {
+            "kind": "artifact-get",
+            "identity": historical.identity.to_mapping(),
+            "artifact-sha256": terminal.output_sha256,
+            "offset": 0,
+            "limit": 8,
+            "connection-generation": 1,
+        },
+    )
+    work = parse_work_frame(
+        frame,
+        role="node",
+        current_connection=node.identity,
+        capability="active",
+        max_artifact_bytes=1024 * 1024,
+    )
+    monkeypatch.setattr(
+        NodeExecutionOwner,
+        "observe_connection",
+        lambda *args, **kwargs: pytest.fail("unmatched work reached owner observation"),
+    )
+    try:
+        with pytest.raises(AudiaGenticError):
+            await runtime._handle(node, frame, replace(work, limit=9))
+        assert not runtime.acknowledgement_event.is_set()
+    finally:
+        await close(node, gateway)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("bad", ["digest", "server", "log"])
+async def test_invalid_ack_never_notifies_or_advances_durable_checkpoint(env, monkeypatch, bad):
+    from uuid import uuid4
+
+    historical, terminal, raw = retained_historical_artifact(env, monkeypatch)
+    owner, runtime, calls = setup(env, monkeypatch)
+    node, gateway, _ = await pair(runtime)
+    checkpoint = await asyncio.to_thread(owner.receipt_checkpoint)
+    payload = {
+        "kind": "receipt-ack",
+        "server-id": "server",
+        "log-incarnation-id": checkpoint.log_incarnation_id,
+        "through-sequence": terminal.sequence,
+        "through-receipt-sha256": terminal.digest,
+    }
+    if bad == "digest":
+        payload["through-receipt-sha256"] = "f" * 64
+    elif bad == "server":
+        payload["server-id"] = "foreign"
+    else:
+        payload["log-incarnation-id"] = str(uuid4())
+    try:
+        await gateway.send_work("reconcile-result", payload)
+        await asyncio.wait_for(node.wait_closed(), 3)
+        assert not runtime.acknowledgement_event.is_set()
+        assert await asyncio.to_thread(owner.receipt_checkpoint) == checkpoint
+        assert not runtime.producer_pending and not calls
     finally:
         await close(node, gateway)
