@@ -202,6 +202,7 @@ def transition_record(
     expected_dispatch_owner_epoch: str | None = None,
     expected_worker_id: str | None = None,
     expected_attempt_epoch: int | None = None,
+    _request_lock_held: bool = False,
 ) -> dict[str, Any]:
     """Transition a request record to a new state and persist it.
 
@@ -211,6 +212,10 @@ def transition_record(
     profile ID, idempotency key, owner/worker/attempt fencing — is immutable
     through this path (SH review C12); ownership mutation goes through its
     dedicated typed operations. ``error`` is redacted before persisting.
+
+    Internal publication coordinators may pass ``_request_lock_held=True``
+    while holding this exact request lock. They must perform worker-session
+    finalization only after releasing their outer lock.
     """
     illegal = {key.replace("_", "-") for key in (updates or {})} - _shared._MUTABLE_RESULT_FIELDS
     if illegal:
@@ -220,7 +225,7 @@ def transition_record(
             message="request transition may not modify immutable admission/ownership fields",
             details={"request-id": request_id, "rejected-fields": sorted(illegal)},
         )
-    with _request_lock(project_root, request_id):
+    with nullcontext() if _request_lock_held else _request_lock(project_root, request_id):
         record = _read_record_locked(project_root, request_id)
         _check_expected_identity(
             record,
@@ -273,7 +278,8 @@ def transition_record(
                 "updated-keys": sorted((updates or {}).keys()),
             },
         )
-    _finalize_worker_session_if_terminal(project_root, updated)
+    if not _request_lock_held:
+        _finalize_worker_session_if_terminal(project_root, updated)
     return updated
 
 
@@ -1872,8 +1878,13 @@ def transition_owned_terminal(
     updates: dict[str, Any] | None = None,
     expected_revision: int | None = None,
     service_root: Path | None = None,
+    _request_lock_held: bool = False,
 ) -> dict[str, Any]:
-    """Write a terminal result only with dispatch and optional revision fences."""
+    """Write a terminal result only with dispatch and optional revision fences.
+
+    The private lock-held mode reuses the canonical transition implementation;
+    its coordinator owns subsequent session finalization outside the lock.
+    """
     if new_state not in _shared.TERMINAL_STATES:
         raise AudiaGenticError("VAL-AGW-084", "agents", "owned transition must be terminal", {})
     _require_owned_identity(owner_epoch, worker_id, attempt_epoch)
@@ -1899,6 +1910,7 @@ def transition_owned_terminal(
         expected_dispatch_owner_epoch=owner_epoch,
         expected_worker_id=worker_id,
         expected_attempt_epoch=attempt_epoch,
+        _request_lock_held=_request_lock_held,
     )
     service_root_for_cleanup = service_root
     if service_root_for_cleanup is None:
