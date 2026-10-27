@@ -101,6 +101,24 @@ class NodeReceiptCheckpoints:
         # gateway-owner-epoch is historical audit data, not current authority.
         return value
 
+    def resume_cursor(self, *, log_incarnation_id: str, expected_epoch: str) -> tuple[int, str | None]:
+        """Read durable custody for authenticated reconnect without advancing it.
+
+        The runtime owns channel authentication. Neither a peer-advertised ACK
+        nor a new log may reset this owner's cursor. Zero/null means no custody
+        exists; this read grants no effect and sends no acknowledgement.
+        """
+        _log_id(log_incarnation_id)
+        with self.service_store.owner_guard(expected_epoch):
+            if self._poisoned:
+                raise conflict(1, "Receipt custody is uncertain; restart the stream owner")
+            cursor = self._read()
+            if cursor is None:
+                return 0, None
+            if cursor["log-incarnation-id"] != log_incarnation_id:
+                raise conflict(1, "Unknown receipt log incarnation; custody cannot reset")
+            return cursor["sequence"], cursor["receipt-sha256"]
+
     def accept(
         self, receipt: Receipt, *, log_incarnation_id: str, expected_epoch: str,
         resolve_target: Callable[[CommandIdentity], CanonicalReceiptTarget],

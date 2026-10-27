@@ -130,6 +130,42 @@ def _restart(service, epoch):
         )
 
 
+def test_resume_empty_is_read_only_and_does_not_claim_node_custody(system):
+    _, _, local, central, _ = system
+    assert central.resume_cursor(log_incarnation_id=local.log_incarnation_id, expected_epoch="owner") == (0, None)
+    assert not central.path.exists()
+    assert local.ack_checkpoint().through_sequence == 0
+
+
+def test_resume_returns_current_durable_cursor_after_restart_without_writes(system, monkeypatch):
+    _, service, local, central, receipt = system
+    _accept(system)
+    original = central.path.read_bytes()
+    _restart(service, "replacement")
+    resumed = NodeReceiptCheckpoints(service, server_id="server", node_id="node")
+    monkeypatch.setattr(module, "atomic_write_json", Mock(side_effect=AssertionError("resume must not write")))
+    assert resumed.resume_cursor(log_incarnation_id=local.log_incarnation_id,
+        expected_epoch="replacement") == (receipt.sequence, receipt.digest)
+    assert central.path.read_bytes() == original
+    assert local.ack_checkpoint().through_sequence == 0
+    with pytest.raises(AudiaGenticError):
+        resumed.resume_cursor(log_incarnation_id=local.log_incarnation_id, expected_epoch="owner")
+
+
+def test_resume_rejects_unknown_log_corruption_and_poisoned_owner(system):
+    _, _, local, central, _ = system
+    _accept(system)
+    with pytest.raises(AudiaGenticError, match="incarnation"):
+        central.resume_cursor(log_incarnation_id=str(uuid4()), expected_epoch="owner")
+    central._poisoned = True
+    with pytest.raises(AudiaGenticError, match="custody is uncertain"):
+        central.resume_cursor(log_incarnation_id=local.log_incarnation_id, expected_epoch="owner")
+    central._poisoned = False
+    central.path.write_text("corrupt", encoding="utf-8")
+    with pytest.raises(AudiaGenticError, match="unreadable"):
+        central.resume_cursor(log_incarnation_id=local.log_incarnation_id, expected_epoch="owner")
+
+
 def test_canonical_then_cursor_then_real_node_ack_outside_guards(system):
     root, service, local, central, receipt = system
     ack = _accept(system)
