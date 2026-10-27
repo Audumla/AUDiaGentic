@@ -323,7 +323,9 @@ class NodeRecipientRuntime:
             # Exact immutable channel Frames go to the sole durable producer.
             task = asyncio.create_task(self._produce(accepted, work, sent, reply))
             self._producer = task
-            await asyncio.shield(task)
+            # The process retains this task; the one channel dispatcher must
+            # remain free for receipt ACKs and artifact requests. Shutdown uses
+            # wait_producer(), never cancellation of this independently owned work.
         finally:
             self._authorizing = False
 

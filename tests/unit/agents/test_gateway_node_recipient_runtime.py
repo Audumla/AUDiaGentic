@@ -308,7 +308,7 @@ async def test_root_drift_after_preparation_does_not_commit_intent(env, monkeypa
 
 
 @pytest.mark.asyncio
-async def test_disconnect_cancels_dispatcher_but_retains_blocked_producer(env, monkeypatch):
+async def test_disconnect_retains_process_owned_producer_and_cancelled_waiter_cannot_stop_it(env, monkeypatch):
     owner, runtime, preparer_calls = setup(env, monkeypatch)
     entered, release, worker_calls = worker_io(env, monkeypatch, block=True)
     node, gateway, _ = await pair(runtime)
@@ -358,6 +358,32 @@ async def test_disconnect_cancels_dispatcher_but_retains_blocked_producer(env, m
         await close(node, gateway)
         if newer is not None:
             await close(newer, new_gateway)
+
+
+@pytest.mark.asyncio
+async def test_dispatcher_responds_to_work_while_owned_producer_is_blocked(env, monkeypatch):
+    owner, runtime, preparer_calls = setup(env, monkeypatch)
+    entered, release, worker_calls = worker_io(env, monkeypatch, block=True)
+    node, gateway, _ = await pair(runtime)
+    try:
+        await prepare(gateway, env.case)
+        await command(gateway, env.case)
+        await asyncio.wait_for(entered.wait(), 3)
+        assert runtime.producer_pending
+        # A work reply must arrive before releasing the original producer.
+        # An awaited producer in the sole dispatcher would time out here.
+        _, _, rejected = await asyncio.wait_for(prepare(gateway, env.case), 1)
+        assert type(rejected) is PreparationRejected
+        assert runtime.producer_pending and len(worker_calls) == 1 and len(preparer_calls) == 1
+        release.set()
+        result = await asyncio.wait_for(runtime.wait_producer(), 3)
+        assert result.state == "terminal" and len(worker_calls) == 1
+        assert owner.receipts_after()[-1].state == "terminal"
+    finally:
+        release.set()
+        if runtime.producer_pending:
+            await asyncio.wait_for(runtime.wait_producer(), 3)
+        await close(node, gateway)
 
 
 @pytest.mark.asyncio
