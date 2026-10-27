@@ -10,13 +10,29 @@ from pathlib import Path
 from typing import Any
 
 from audiagentic.foundation.logging.context import get_correlation_id
+from audiagentic.foundation.observability.journal_segments import (
+    compact_indexed_ndjson,
+    journal_lock,
+    prepare_append,
+)
 from audiagentic.foundation.time import now_iso_z
-from audiagentic.foundation.observability.journal_segments import journal_lock, prepare_append, compact_indexed_ndjson
 
 logger = logging.getLogger(__name__)
 
 _timeline_locks: dict[Path, threading.Lock] = {}
 _timeline_locks_guard = threading.Lock()
+_timeline_failure_count = 0
+_timeline_failure_count_guard = threading.Lock()
+
+
+def timeline_failure_count() -> int:
+    """Process-local failed timeline operations, not definitely dropped records.
+
+    An append may already have succeeded before an index/retention failure.
+    Includes failures whose once-only diagnostic warning could not be delivered.
+    """
+    with _timeline_failure_count_guard:
+        return _timeline_failure_count
 
 
 def _lock_for(path: Path) -> threading.Lock:
@@ -44,8 +60,11 @@ def record_timeline_event(
 ) -> dict[str, Any]:
     """Append one durable JSONL timeline event.
 
-    Best-effort by design: observability must not break primary mutations.
+    Best-effort for valid event arguments: observability must not break primary
+    mutations. Return the constructed record even if append/index/retention fails.
+    A partial write is never retried; the failure count does not imply row loss.
     """
+    global _timeline_failure_count
     attrs = attributes or {}
     resolved_correlation_id = (
         correlation_id
@@ -64,6 +83,7 @@ def record_timeline_event(
         "state": state,
         "attributes": attrs,
     }
+    warn = False
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         with _lock_for(path), (journal_lock(path) if segment_max_bytes is not None else nullcontext()):
@@ -86,16 +106,16 @@ def record_timeline_event(
                 # foundation no longer imports a gateway retention policy.
                 compact_indexed_ndjson(path, index_path, max_bytes=1024 * 1024,
                     preserve=lambda row: row.get("state") in {"completed", "failed", "cancelled", "rejected", "interrupted", "timed-out", "expired", "abandoned"})
-    except Exception:  # noqa: BLE001
-        logger.warning(
-            "failed to record timeline event",
-            extra={
-                "component": component,
-                "resource_kind": resource_kind,
-                "resource_id": resource_id,
-                "event": event,
-                "path": str(path),
-            },
-            exc_info=True,
-        )
+    except Exception:  # noqa: BLE001 - observability cannot break primary mutations
+        with _timeline_failure_count_guard:
+            _timeline_failure_count += 1
+            warn = _timeline_failure_count == 1
+    # Invoke arbitrary sinks after releasing locks and leaving the caught I/O
+    # exception context. The once-only warning was reserved before delivery.
+    # No caller fields, exception text, traceback or path may enter this log.
+    if warn:
+        try:
+            logger.warning("Timeline recording failed; inspect timeline_failure_count")
+        except Exception:  # noqa: BLE001 - no recursive fallback logging
+            pass
     return record
