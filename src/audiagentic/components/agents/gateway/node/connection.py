@@ -275,15 +275,18 @@ class NodeConnection:
         try:
             while True:
                 frame, message = await self._work_inbox.get()
+                if self.close_reason is not None:
+                    return  # A retired channel cannot dispatch queued work.
                 await self._on_work(frame, message)
         except asyncio.CancelledError:
             raise
         except Exception as error:
-            self._remember_failure(error, stage="dispatch", reason="work-handler-failed", frame=frame)
-            await close_socket(self.websocket, code=1008, reason="Node work dispatcher rejected message")
+            if self.close_reason is None:
+                self._remember_failure(error, stage="dispatch", reason="work-handler-failed", frame=frame)
+                await close_socket(self.websocket, code=1008, reason="Node work dispatcher rejected message")
 
     async def _require_current(self):
-        if self._closed.is_set() or (self._current is not None and not await self._current()):
+        if self.close_reason is not None or self._closed.is_set() or (self._current is not None and not await self._current()):
             raise conflict(1, "Node connection has been replaced or closed", reason_code="connection-replaced-or-closed")
 
     def _validate_control(self, frame: Frame) -> ControlEvent | None:
@@ -323,12 +326,16 @@ class NodeConnection:
             while True:
                 stage, frame = "receive", None
                 raw = await self.websocket.recv()
+                if self.close_reason is not None:
+                    return  # Owner retirement wins over a queued late reply.
                 stage = "decode"
                 if not isinstance(raw, bytes):
                     raise invalid(1, "Node transport requires binary JSON messages")
                 frame = Frame.from_bytes(raw)
                 stage = "scope"
                 await self._require_current()
+                if self.close_reason is not None:
+                    return
                 if frame.type not in {"heartbeat", "revoke", "error"}:
                     stage = "work-validation"
                     self._receive_work(frame)
@@ -351,8 +358,9 @@ class NodeConnection:
         except asyncio.CancelledError:
             raise
         except Exception as error:
-            self._remember_failure(error, stage=stage, reason=f"{stage}-failed", frame=frame)
-            await close_socket(self.websocket, code=1008, reason="Node transport rejected message")
+            if self.close_reason is None:
+                self._remember_failure(error, stage=stage, reason=f"{stage}-failed", frame=frame)
+                await close_socket(self.websocket, code=1008, reason="Node transport rejected message")
         finally:
             self._closed.set()
             if self.close_reason is None:
@@ -425,6 +433,8 @@ class NodeConnection:
 
         Reply completion happens in the receiver, independently of the work
         dispatcher, so a handler may await a reply without blocking its arrival.
+        Timeout or caller cancellation retires this channel before forgetting
+        correlation: a possibly sent request cannot safely leave it reusable.
         """
         if (len(self._pending) >= 4 or not reply_types or type(timeout) not in (int, float)
                 or not math.isfinite(timeout) or timeout <= 0):
@@ -435,8 +445,25 @@ class NodeConnection:
         self._pending[message_id] = (reply_types, future, retained)
         try:
             sent = await self.send_work(kind, retained, message_id=message_id)
-            reply_frame, message = await asyncio.wait_for(future, timeout)
+            reply_frame, message = await asyncio.wait_for(asyncio.shield(future), timeout)
             return sent, reply_frame, message
+        except (TimeoutError, asyncio.CancelledError):
+            # No await between retirement and pending cleanup. Shielding above
+            # also keeps a reply arriving before this handler valid. Abort is
+            # synchronous: no receiver/dispatcher join or cancellation shielding
+            # is introduced here, and the caller retains its original exception.
+            self.begin_close("shutdown")
+            try:
+                self.websocket.transport.abort()
+            except Exception:
+                # Logical retirement already prevents work. If the immediate
+                # abort fails, use the existing bounded socket-close owner;
+                # do not leave an idle receiver waiting for another frame.
+                try:
+                    await close_socket(self.websocket)
+                except Exception:
+                    pass  # Preserve the original timeout/cancellation.
+            raise
         finally:
             self._pending.pop(message_id, None)
             if not future.done():

@@ -105,7 +105,8 @@ class NodeRunner:
 
     def _slot(self, node_id):
         slot = self.connections.current_slot(node_id)
-        if slot is None or slot.capability != "active":
+        if (slot is None or slot.capability != "active"
+                or slot.connection.close_reason is not None or slot.connection.failure is not None):
             raise conflict(1, "Node has no active authenticated connection slot", reason_code="transport-unavailable")
         return slot
 

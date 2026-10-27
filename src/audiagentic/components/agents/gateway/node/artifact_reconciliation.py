@@ -15,8 +15,12 @@ from pathlib import Path
 from audiagentic.components.agents.gateway import store
 from audiagentic.components.agents.gateway.queue.recovery_control import RecoveryDeferred
 from audiagentic.components.agents.gateway.service.contract import GATEWAY_SERVICE_KEY
+from audiagentic.components.agents.gateway.store._transitions import (
+    _finalize_worker_session_if_terminal,
+)
 
 from .admission_contract import NodeAdmissionDescriptor
+from .connection import CLOSE_TIMEOUT_SECONDS
 from .contracts import CommandIdentity, _integer, conflict, invalid
 from .diagnostics import sanitize_node_error
 from .observability import emit_node_stage
@@ -84,6 +88,20 @@ class NodeTerminalReconciler:
             return self.connections.authority.serialize(check)
 
     async def _fetch(self, connection, identity, digest):
+        try:
+            return await self._fetch_bytes(connection, identity, digest)
+        except (TimeoutError, asyncio.CancelledError):
+            # request_work retires before relinquishing reply correlation. Join
+            # its bounded close here; also retire a transfer whose total deadline
+            # expired between chunks. Never close a replacement from the registry.
+            try:
+                await connection.close(reason="shutdown")
+            except Exception:
+                # Preserve the transfer's first cause; close() aborts on failure.
+                pass
+            raise
+
+    async def _fetch_bytes(self, connection, identity, digest):
         data, total, charged = bytearray(), None, 0
         deadline = time.monotonic() + self.timeout
         while True:
@@ -133,8 +151,14 @@ class NodeTerminalReconciler:
         try:
             with self.service.owner_guard(self.owner_epoch):
                 current, identity = self._read(root, original)
-            if current["state"] in store.TERMINAL_STATES:
-                return current  # Preserve an existing lifecycle winner, never resurrect it.
+                if current["state"] in store.TERMINAL_STATES:
+                    if current["state"] == "completed":
+                        stage = "publication"
+                        # Same idempotent session owner used by publication,
+                        # without refetching artifacts or rewriting the request.
+                        # Only the service fence is held, never a request lock.
+                        _finalize_worker_session_if_terminal(root, current)
+                    return current  # Preserve every existing lifecycle winner.
             dispatch = current["node-dispatch"]
             if dispatch["receipt-stage"] != "terminal" or dispatch["authorization-state"] != "terminal":
                 raise conflict(1, "Original terminal receipt is not ready", reason_code="artifact-receipt-pending")
@@ -146,7 +170,9 @@ class NodeTerminalReconciler:
                 raise conflict(1, "Artifact transport loop is unavailable")
             future = asyncio.run_coroutine_threadsafe(self._fetch(connection, identity, receipt.output_sha256), self.loop)
             try:
-                raw = future.result(timeout=self.timeout + 1)
+                # Allow the existing bounded close sequence after the RPC
+                # deadline, rather than cancelling its retirement midway.
+                raw = future.result(timeout=self.timeout + 3 * CLOSE_TIMEOUT_SECONDS + 1)
             except BaseException:
                 future.cancel()
                 raise

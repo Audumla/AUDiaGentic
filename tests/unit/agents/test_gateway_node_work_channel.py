@@ -154,15 +154,69 @@ async def test_work_overflow_closes_instead_of_unbounded_tasks(channel):
 
 
 @pytest.mark.asyncio
-async def test_reply_timeout_releases_fixed_pending_slot(channel):
-    node, _ = await pair(channel)
+async def test_reply_timeout_retires_channel_and_releases_pending_slot(channel):
+    entered = asyncio.Event()
+    requests = []
+
+    async def delayed_reply(connection, frame, message):
+        requests.append(frame.message_id)
+        entered.set()
+        await asyncio.sleep(0.2)
+        await connection.send_work("effect-authorized", {"identity": message.identity.to_mapping(),
+            "authorization-request-id": frame.message_id, "authorization-id": "authorization", "authorized": True})
+
+    node, gateway = await pair(channel, delayed_reply)
     try:
         with pytest.raises(TimeoutError):
             await node.request_work("effect-authorize", {"identity": command(node).to_mapping()},
-                reply_types=(EffectAuthorized,), timeout=0.02)
+                reply_types=(EffectAuthorized,), timeout=0.05)
+        assert entered.is_set()
+        assert node.close_reason == "shutdown"
         assert node._pending == {}
-        await node.heartbeat()
+        await asyncio.wait_for(node.wait_closed(), 2)
+        await asyncio.wait_for(gateway.wait_closed(), 2)
+        await asyncio.sleep(0.25)  # Past the peer's original reply deadline.
+        assert node.failure is None
+        assert not node._task.cancelled()
+        assert len(requests) == 1
+        with pytest.raises(AudiaGenticError, match="closed"):
+            await node.heartbeat()
     finally:
+        await node.close()
+
+
+@pytest.mark.asyncio
+async def test_cancelled_outstanding_request_retires_channel_without_cancelling_receiver(channel):
+    entered = asyncio.Event()
+    requests = []
+
+    async def pending_reply(connection, frame, message):
+        requests.append(frame.message_id)
+        entered.set()
+        await asyncio.Event().wait()
+
+    node, gateway = await pair(channel, pending_reply)
+    task = asyncio.create_task(node.request_work("effect-authorize",
+        {"identity": command(node).to_mapping()}, reply_types=(EffectAuthorized,), timeout=10))
+    try:
+        await asyncio.wait_for(entered.wait(), 2)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert node.close_reason == "shutdown"
+        assert node._pending == {}
+        await asyncio.wait_for(node.wait_closed(), 2)
+        await asyncio.wait_for(gateway.wait_closed(), 2)
+        assert node.failure is None
+        assert not node._task.cancelled()
+        assert len(requests) == 1
+        with pytest.raises(AudiaGenticError, match="closed"):
+            await node.request_work("effect-authorize", {"identity": command(node).to_mapping()},
+                reply_types=(EffectAuthorized,), timeout=1)
+        assert node._pending == {}
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
         await node.close()
 
 
@@ -333,3 +387,59 @@ async def test_failed_async_setup_notifies_partial_owner_once_before_receiver_st
     assert len(notifications) == 1
     with pytest.raises(AudiaGenticError, match="closed"):
         node.start()
+
+
+@pytest.mark.asyncio
+async def test_retirement_discards_already_queued_work(channel):
+    entered, release = asyncio.Event(), asyncio.Event()
+    seen = []
+
+    async def blocked(connection, frame, work):
+        seen.append(frame.message_id)
+        entered.set()
+        await release.wait()
+
+    node, gateway = await pair(channel, blocked)
+    try:
+        payload = {"identity": command(node).to_mapping()}
+        first = await node.send_work("effect-authorize", payload)
+        await asyncio.wait_for(entered.wait(), 2)
+        await node.send_work("effect-authorize", payload)
+        await wait_until(lambda: gateway._work_inbox.qsize() == 1)
+        gateway.begin_close("shutdown")
+        release.set()
+        await asyncio.wait_for(asyncio.shield(gateway._work_task), 2)
+        assert seen == [first.message_id]
+        assert gateway.failure_summary is None
+    finally:
+        release.set()
+        await gateway.close()
+        await node.close()
+
+
+@pytest.mark.asyncio
+async def test_request_timeout_closes_real_socket_when_immediate_abort_fails(channel, monkeypatch):
+    node, gateway = await pair(channel)
+    original_abort = node.websocket.transport.abort
+
+    def fail_first_abort():
+        if abort.call_count == 1:
+            raise OSError("abort unavailable")
+        return original_abort()
+
+    abort = Mock(side_effect=fail_first_abort)
+    monkeypatch.setattr(node.websocket.transport, "abort", abort)
+    try:
+        with pytest.raises(TimeoutError):
+            await node.request_work("effect-authorize", {"identity": command(node).to_mapping()},
+                reply_types=(EffectAuthorized,), timeout=0.02)
+        await asyncio.wait_for(node.wait_closed(), 2)
+        assert node.close_reason == "shutdown"
+        assert node.failure_summary is None
+        assert not node._pending
+        assert node.websocket.close_code is not None
+        assert abort.call_count >= 1
+    finally:
+        monkeypatch.setattr(node.websocket.transport, "abort", original_abort)
+        await node.close()
+        await gateway.close()

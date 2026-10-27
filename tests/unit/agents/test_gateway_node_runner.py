@@ -452,6 +452,39 @@ async def test_effect_request_requires_original_command_identity(case, field, va
 
 
 @pytest.mark.asyncio
+async def test_dispatched_effect_handler_cannot_authorize_after_channel_retirement(case, monkeypatch):
+    entered, release, finished = threading.Event(), threading.Event(), threading.Event()
+    reply = case.runner._effect_reply
+    results = []
+
+    def paused(*args):
+        entered.set()
+        assert release.wait(3)
+        try:
+            result = reply(*args)
+            results.append(result[0])
+            return result
+        finally:
+            finished.set()
+
+    monkeypatch.setattr(case.runner, "_effect_reply", paused)
+    try:
+        await invoke(case)
+        assert await asyncio.to_thread(entered.wait, 3)
+        case.gateway.begin_close("shutdown")
+        release.set()
+        assert await asyncio.to_thread(finished.wait, 3)
+        await asyncio.wait_for(asyncio.shield(case.gateway._work_task), 2)
+        current = store.read_record(case.admission.root, case.record["request-id"])
+        assert results == ["effect-denied"]
+        assert current["node-dispatch"]["authorization-id"] is None
+        assert current["node-dispatch"]["authorization-state"] == "not-authorized"
+        assert case.gateway.failure_summary is None
+    finally:
+        release.set()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("code,expected", [("IO-AGND-001", "IO-AGND-001"), ("VAL-AGND-001", "VAL-AGND-001"),
                                          ("EXT-NOTREGISTERED-999", "VAL-AGND-001")])
 async def test_remote_preparation_rejection_preserves_only_registered_code(case, code, expected):

@@ -14,7 +14,7 @@ from audiagentic.components.agents.gateway.node.artifact_reconciliation import (
 )
 from audiagentic.components.agents.gateway.node.receipts import Receipt
 from audiagentic.components.agents.gateway.node.terminal_output import WorkerTerminalOutput
-from audiagentic.components.agents.gateway.node.work_protocol import ArtifactGet
+from audiagentic.components.agents.gateway.node.work_protocol import ArtifactChunk, ArtifactGet
 from audiagentic.components.agents.gateway.queue.recovery_control import RecoveryDeferred
 
 from .test_gateway_node_admission_owner import admission as admission
@@ -245,11 +245,14 @@ async def test_multichunk_transfer_uses_decreasing_remaining_deadline(transfer, 
     result = await asyncio.to_thread(transfer.reconcile, transfer.case.admission.root, transfer.record)
     assert result["state"] == "completed"
     assert len(budgets) > 1
-    assert all(0 < later < earlier for earlier, later in zip(budgets, budgets[1:]))
+    # Windows monotonic ticks can cover several fast chunks; never reset the
+    # budget, but do not require finer clock resolution than the platform has.
+    assert all(0 < later <= earlier for earlier, later in zip(budgets, budgets[1:]))
+    assert budgets[-1] < budgets[0] <= transfer.reconcile.timeout
 
 
 @pytest.mark.asyncio
-async def test_transfer_deadline_defers_without_closing_receiver_or_replaying(transfer, monkeypatch):
+async def test_transfer_deadline_retires_receiver_without_replaying(transfer, monkeypatch):
     connection = transfer.case.gateway
     request = connection.request_work
     transfer.reconcile.timeout = 0.02
@@ -263,6 +266,188 @@ async def test_transfer_deadline_defers_without_closing_receiver_or_replaying(tr
         await asyncio.to_thread(transfer.reconcile, transfer.case.admission.root, transfer.record)
     assert failure.value.error.details["reason-code"] == "transport-timeout"
     assert failure.value.side_effect_state == "terminal-evidence-seen"
-    assert connection.close_reason is None and connection.failure is None
+    assert connection.close_reason == "shutdown" and connection.failure is None
     assert store.read_record(transfer.case.admission.root, transfer.record["request-id"])["state"] == "running"
     assert len(transfer.case.commands) == len(transfer.case.prepares) == 1
+
+
+@pytest.mark.asyncio
+async def test_actual_peer_reply_delayed_past_deadline_retires_channel(transfer):
+    import time
+
+    case = transfer.case
+    respond = case.node_work_handler
+    entered = asyncio.Event()
+
+    async def delayed_peer(frame, work):
+        entered.set()
+        await asyncio.sleep(0.2)
+        await respond(frame, work)
+
+    case.node_work_handler = delayed_peer
+    transfer.reconcile.timeout = 0.04
+    started = time.monotonic()
+    with pytest.raises(RecoveryDeferred) as failure:
+        await asyncio.to_thread(transfer.reconcile, case.admission.root, transfer.record)
+    assert entered.is_set()  # The RPC reached the peer, not a delayed local mock.
+    assert time.monotonic() - started < 1
+    assert failure.value.error.details["reason-code"] == "transport-timeout"
+    await asyncio.wait_for(case.gateway.wait_closed(), 1)
+    await asyncio.sleep(0.25)
+    assert case.gateway.close_reason == "shutdown"
+    assert case.gateway.failure is None  # No late reply-unexpected protocol fault.
+    assert store.read_record(case.admission.root, transfer.record["request-id"])["state"] == "running"
+    with pytest.raises(RecoveryDeferred):
+        await asyncio.to_thread(transfer.reconcile, case.admission.root, transfer.record)
+    assert len(case.commands) == len(case.prepares) == 1
+
+
+@pytest.mark.asyncio
+async def test_completed_crash_repairs_session_without_artifact_refetch(transfer, monkeypatch):
+    from audiagentic.components.agents.agents_paths import gateway_request_path
+    from audiagentic.components.agents.gateway.node import publication
+    from audiagentic.components.agents.gateway.session import sessions_store
+
+    case = transfer.case
+    session = sessions_store.build_session_record(execution_profile_id="profile",
+        provider_transport_kind="worker", created_by_request_id=transfer.record["request-id"])
+    sessions_store.write_session_record(case.admission.root, session)
+    transfer.record["session-id"] = session["session-id"]
+    store.write_record(case.admission.root, transfer.record)
+
+    def crash(*args, **kwargs):
+        raise RuntimeError("session finalization interrupted")
+
+    monkeypatch.setattr(publication, "_finalize_worker_session_if_terminal", crash)
+    with pytest.raises(RecoveryDeferred):
+        await asyncio.to_thread(transfer.reconcile, case.admission.root, transfer.record)
+    completed = store.read_record(case.admission.root, transfer.record["request-id"], include_output=False)
+    assert completed["state"] == "completed"
+    assert sessions_store.read_session_record(case.admission.root, session["session-id"])["state"] == "active"
+    paths = (gateway_request_path(case.admission.root, completed["request-id"]),
+        gateway_final_response_path(case.admission.root, completed["request-id"]))
+    before = [(path.read_bytes(), path.stat().st_mtime_ns) for path in paths]
+    calls = len(transfer.calls)
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("completed replay must not fetch or republish artifacts")
+
+    monkeypatch.setattr(case.gateway, "request_work", forbidden)
+    monkeypatch.setattr(module, "publish_owned_node_terminal", forbidden)
+    assert await asyncio.to_thread(transfer.reconcile, case.admission.root, transfer.record) == completed
+    assert sessions_store.read_session_record(case.admission.root, session["session-id"])["state"] == "closed"
+    assert [(path.read_bytes(), path.stat().st_mtime_ns) for path in paths] == before
+    assert len(transfer.calls) == calls
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("state", ["cancelled", "failed", "interrupted"])
+async def test_fastpath_preserves_noncompleted_winner(transfer, monkeypatch, state):
+    case = transfer.case
+    winner = store.transition_owned_terminal(case.admission.root, transfer.record["request-id"], state,
+        owner_epoch="owner", worker_id=transfer.record["worker-id"],
+        attempt_epoch=transfer.record["attempt-epoch"], expected_revision=transfer.record["revision"])
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("other lifecycle winners must not be repaired or refetched")
+
+    monkeypatch.setattr(module, "_finalize_worker_session_if_terminal", forbidden)
+    monkeypatch.setattr(case.gateway, "request_work", forbidden)
+    assert await asyncio.to_thread(transfer.reconcile, case.admission.root, transfer.record) == winner
+
+
+@pytest.mark.asyncio
+async def test_completed_fastpath_rejects_stale_service_owner(transfer, monkeypatch):
+    from .test_gateway_node_checkpoints import _restart
+
+    case = transfer.case
+    completed = await asyncio.to_thread(transfer.reconcile, case.admission.root, transfer.record)
+    _restart(case.admission.service, "replacement")
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("stale owner must not finalize a completed session")
+
+    monkeypatch.setattr(module, "_finalize_worker_session_if_terminal", forbidden)
+    with pytest.raises(RecoveryDeferred) as failure:
+        await asyncio.to_thread(transfer.reconcile, case.admission.root, completed)
+    assert failure.value.error.details["stage"] == "ownership"
+
+
+@pytest.mark.asyncio
+async def test_reply_between_rpc_deadline_and_timeout_handler_is_not_protocol_failure(transfer, monkeypatch):
+    case = transfer.case
+    received = asyncio.Event()
+    captured = []
+    respond = case.node_work_handler
+
+    async def hold_peer(frame, work):
+        captured.append((frame, work))
+        received.set()
+
+    case.node_work_handler = hold_peer
+    wait_for = asyncio.wait_for
+    deadline = 0.025
+    injected = []
+
+    async def timeout_window(awaitable, timeout):
+        try:
+            return await wait_for(awaitable, timeout)
+        except TimeoutError:
+            if timeout == deadline:
+                # Deterministically run the receiver in the former cancelled-
+                # future window, before request_work's exception handler runs.
+                await received.wait()
+                pending = next(iter(case.gateway._pending.values()))[1]
+                assert not pending.done()
+                await respond(*captured[0])
+                await wait_for(asyncio.shield(pending), 1)
+                assert pending.done() and not pending.cancelled()
+                injected.append(True)
+            raise
+
+    monkeypatch.setattr(asyncio, "wait_for", timeout_window)
+    identity = transfer.artifact.identity
+    with pytest.raises(TimeoutError):
+        await case.gateway.request_work("reconcile", {"kind": "artifact-get",
+            "identity": identity.to_mapping(), "artifact-sha256": transfer.artifact.digest,
+            "offset": 0, "limit": 128}, reply_types=(ArtifactChunk,), timeout=deadline)
+    assert injected == [True]
+    await asyncio.wait_for(case.gateway.wait_closed(), 1)
+    assert case.gateway.close_reason == "shutdown" and case.gateway.failure is None
+    assert not case.gateway._pending
+    assert len(case.commands) == len(case.prepares) == 1
+
+
+@pytest.mark.asyncio
+async def test_cancelled_rpc_retires_before_pending_cleanup_without_cancelling_receiver(transfer, monkeypatch):
+    case = transfer.case
+    received = asyncio.Event()
+
+    async def hold_peer(frame, work):
+        received.set()
+        await asyncio.Event().wait()
+
+    case.node_work_handler = hold_peer
+    begin_close = case.gateway.begin_close
+    closing = []
+
+    def observe_close(reason):
+        assert case.gateway._pending
+        assert all(not future.cancelled() for _, future, _ in case.gateway._pending.values())
+        closing.append(reason)
+        begin_close(reason)
+
+    monkeypatch.setattr(case.gateway, "begin_close", observe_close)
+    task = asyncio.create_task(case.gateway.request_work("reconcile", {"kind": "artifact-get",
+        "identity": transfer.artifact.identity.to_mapping(), "artifact-sha256": transfer.artifact.digest,
+        "offset": 0, "limit": 128}, reply_types=(ArtifactChunk,), timeout=2))
+    await asyncio.wait_for(received.wait(), 1)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    monkeypatch.setattr(case.gateway, "begin_close", begin_close)
+    await asyncio.wait_for(case.gateway.wait_closed(), 1)
+    assert closing == ["shutdown"]
+    assert not case.gateway._task.cancelled()
+    assert not case.gateway._pending and case.gateway.failure is None
+    assert len(case.commands) == len(case.prepares) == 1
