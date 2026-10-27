@@ -143,10 +143,11 @@ def agent_task_observations(
     since_sequence: int | None = None,
     tail: int | None = None,
 ) -> dict[str, Any]:
-    """Read a bounded page across retained daily plain/gzip observations.
+    """Read bounded DOM/activity and node-stage evidence across retained segments.
 
     Eligible raw traces expire after five days by default; protected request
-    evidence is retained longer. Request outcome and final output are separate.
+    evidence is retained longer. Node milestones are not native completion;
+    request outcome and final output are separate.
     """
     project_root = _request_project_root(request_id)
     _page_limit(limit)

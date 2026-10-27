@@ -318,8 +318,9 @@ mcp-servers:
         includes prompts, full responses, DOM, CDP handles, or credentials.
       agent_task_observations: >
         Return a bounded opaque-cursor page of redacted request-owned
-        DOM/activity facts. Raw prompts, responses, DOM, CDP handles, and
-        credentials are excluded.
+        DOM/activity and validated node-stage facts. Node milestones do not
+        prove native acceptance or request completion. Raw prompts, responses,
+        DOM, CDP handles, and credentials are excluded.
       agent_task_evidence: >
         Return compact request evidence by default; observation, transition
         history, and recovery pages are explicit opt-ins.

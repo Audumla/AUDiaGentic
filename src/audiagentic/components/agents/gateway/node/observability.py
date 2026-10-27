@@ -40,7 +40,12 @@ _AUTHORIZATION = frozenset({"not-authorized", "authorized", "uncertain", "effect
 
 
 def node_observation_failure_count() -> int:
-    """Failed validation/sink operations, never canonical work or logger faults."""
+    """Emitter-observed failures, never failed work or proof of lost rows.
+
+    Lower layers may isolate faults internally. Foundation timeline and store
+    counters remain authoritative for those failures; do not probe or retry
+    persistence here to manufacture a combined count. Logger faults are excluded.
+    """
     with _failure_lock:
         return _failures
 

@@ -135,7 +135,7 @@ def gateway_timeline_index_path(project_root: Path, request_id: str) -> Path:
 
 
 def gateway_observation_path(project_root: Path, request_id: str) -> Path:
-    """Return the append-only request-owned DOM/activity journal path."""
+    """Return the request-owned DOM/activity/node-stage observation journal path."""
     return gateway_request_dir(project_root, request_id) / "observations.ndjson"
 
 

@@ -135,6 +135,40 @@ underlying filesystem durability limits; these tests do not prove hardware
 power-loss persistence. Transport, node-local materialization and two-machine
 qualification remain separate gates.
 
+### Request diagnostics and node stage evidence
+
+Use the request's authorized project context. `agent_task_status` stays compact;
+it does not return diagnostic history or response text. For an investigation,
+request `agent_task_diagnostics(request_id=...)`, then a bounded page with
+`agent_task_observations(request_id=..., limit=25, tail=25)` or
+`agent_task_evidence(request_id=..., include_observations=True,
+include_recovery=True, limit=25)`. Follow the returned opaque cursor rather than
+loading all history. A request missing from another project is inconclusive.
+
+The server project owns
+`.audiagentic/runtime/agent-execution-gateway/<request-id>/timeline.ndjson` and
+`observations.ndjson`, with their indexes and retained segments. Use the existing
+readers/tools across plain or compressed segments; these files belong to the
+server project, not an arbitrary caller or recipient workspace.
+
+Node instrumentation uses `node-stage-observed` alongside existing DOM events.
+It records validated control milestones, original/current ownership epochs,
+command hashes, bounded failure reasons and operation-local timings. A prepared
+command or a completed local socket send does not prove native acceptance or a
+completed response. A receipt ACK proves custody, not publication or permission
+to delete evidence. Canonical request/receipt state remains authoritative;
+observation history is evidence for diagnosis, never permission to replay work.
+Node service composition and native end-to-end qualification remain separate
+from these instrumentation primitives.
+
+For instrumentation faults, `timeline_failure_count()` in Foundation reports
+failed timeline operations, while `node_observation_failure_count()` reports
+exceptions observed by the node emitter. Lower layers may isolate their own
+faults, so neither is a combined count or proof of lost rows. Both are
+process-local. Diagnostic failures cannot reverse committed work; authoritative
+custody failures must still stop ACK/effect progression. Never retry a mutation
+or blindly append again because a diagnostic counter increased.
+
 ## Connector configuration
 
 Save this as `connector.yaml` on the client. Provision its token file with the
