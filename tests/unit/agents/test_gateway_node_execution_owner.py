@@ -1077,3 +1077,137 @@ def test_artifact_allocation_is_bounded_before_reading_oversized_file(env, monke
     with pytest.raises(AudiaGenticError, match="byte bound"):
         owner.read_artifact_chunk(env.case.identity, receipt.output_sha256, 0, 8, 8)
     assert not requested, "oversized descriptor must be rejected before opening a reader"
+
+
+def startup_receipts(env):
+    """Receipt state fixtures only; no worker execution or native readiness proof."""
+    return NodeReceiptStore(root=env.config.state_root, node_id="node", node_epoch="boot", gateway_owner_epoch="gateway")
+
+
+def startup_prepare(env, store, suffix, *, node_epoch="boot", gateway="gateway"):
+    command = replace(env.case.identity, command_id="startup-" + suffix, request_id="request-" + suffix,
+                      node_epoch=node_epoch, gateway_owner_epoch=gateway)
+    store.prepare(command, canonical_json(env.case.payload))
+    return command
+
+
+def startup_intent(env, store, command):
+    scope = dict(node_id=command.node_id, node_epoch=command.node_epoch, gateway_owner_epoch=command.gateway_owner_epoch)
+    request = replace(env.case.auth_request, **scope, payload={"identity": command.to_mapping()})
+    reply = replace(env.case.auth_reply, **scope, payload={**env.case.auth_reply.payload, "identity": command.to_mapping()})
+    assert store.effect_intent(command, request, reply, connection_generation=command.connection_generation)
+
+
+def forbid_startup_artifact_reads(monkeypatch, outputs):
+    def forbidden(*args, **kwargs):
+        pytest.fail("startup attempted terminal-body/get/native I/O")
+
+    monkeypatch.setattr(NodeReceiptStore, "get", forbidden)
+    monkeypatch.setattr(NodeReceiptStore, "output", forbidden)
+    monkeypatch.setattr(NodeReceiptStore, "_read_output", forbidden)
+    monkeypatch.setattr(worker, "execute_verified_isolated_provider_turn", forbidden)
+    original_open = Path.open
+
+    def checked_open(path, *args, **kwargs):
+        if path.parent == outputs:
+            forbidden()
+        return original_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", checked_open)
+
+
+@pytest.mark.parametrize("damage", ["missing", "oversized"])
+def test_reopen_terminal_metadata_releases_occupancy_without_artifact_read_or_allocation(env, monkeypatch, damage):
+    store = startup_receipts(env)
+    command = startup_prepare(env, store, "terminal")
+    startup_intent(env, store, command)
+    store.native_accepted(command, native_ref="PRIVATE-native-fixture")
+    terminal = store.terminal(command, text="retained receipt metadata")
+    original = open_owner(env)
+    assert not original.snapshot().capacity_blocked
+    del original
+    gc.collect()
+    artifact = store.outputs / (terminal.output_sha256 + ".txt")
+    if damage == "missing":
+        artifact.unlink()
+    else:
+        # Enlarge on disk without constructing a terminal-sized Python body.
+        with artifact.open("r+b") as handle:
+            handle.truncate(16 * 1024 * 1024)
+    forbid_startup_artifact_reads(monkeypatch, store.outputs)
+    reopened = open_owner(env, node_epoch="reboot")
+    assert not reopened.snapshot().capacity_blocked
+    assert reopened._pending == set()
+    assert reopened.receipts_after()[-1] == terminal
+    # Execution availability is separate from publication availability.
+    if damage == "missing":
+        assert not artifact.exists()
+    else:
+        assert artifact.stat().st_size == 16 * 1024 * 1024
+
+
+def test_startup_reconstructs_interleaved_latest_metadata_across_bounded_pages(env, monkeypatch):
+    store = startup_receipts(env)
+    commands = [startup_prepare(env, store, str(i)) for i in range(40)]
+    for command in commands[:30]:
+        startup_intent(env, store, command)
+    for command in commands[:25]:
+        store.native_accepted(command, native_ref="PRIVATE-native-fixture")
+    for command in commands[:25]:
+        store.terminal(command, text="metadata fixture terminal")
+    # Outbox has 120 interleaved events: terminal transitions straddle page 100.
+    calls = []
+    original_replay = NodeReceiptStore.receipts_after
+
+    def replay(self, after=0, *, limit=100):
+        calls.append((after, limit))
+        return original_replay(self, after, limit=limit)
+
+    monkeypatch.setattr(NodeReceiptStore, "receipts_after", replay)
+    forbid_startup_artifact_reads(monkeypatch, store.outputs)
+    owner = open_owner(env)
+    assert calls == [(0, 100), (100, 100), (120, 100)]
+    assert owner._pending == set(commands[25:])
+    assert owner.snapshot().capacity_blocked
+    assert len(owner._pending) == 15
+
+
+def test_startup_historical_terminal_does_not_block_but_old_intent_remains_pending(env, monkeypatch):
+    old = startup_receipts(env)
+    terminal_command = startup_prepare(env, old, "old-terminal")
+    startup_intent(env, old, terminal_command)
+    old.native_accepted(terminal_command, native_ref="PRIVATE-native-fixture")
+    terminal = old.terminal(terminal_command, text="historical metadata")
+    unresolved = startup_prepare(env, old, "old-intent")
+    startup_intent(env, old, unresolved)
+    old.advance_epoch(node_epoch="new-boot", gateway_owner_epoch="new-gateway")
+    current = NodeReceiptStore(root=env.config.state_root, node_id="node", node_epoch="new-boot",
+                               gateway_owner_epoch="new-gateway")
+    prepared = startup_prepare(env, current, "current-prepared", node_epoch="new-boot", gateway="new-gateway")
+    (old.outputs / (terminal.output_sha256 + ".txt")).unlink()
+    forbid_startup_artifact_reads(monkeypatch, current.outputs)
+    owner = open_owner(env, node_epoch="reboot")
+    assert owner.snapshot().owner_scope == ReceiptOwnerScope("node", "new-boot", "new-gateway")
+    assert owner._pending == {unresolved, prepared}
+    assert terminal_command not in owner._pending and owner.snapshot().capacity_blocked
+    connect(owner, gateway="next-gateway", boot="reboot")
+    assert owner.snapshot().owner_scope == ReceiptOwnerScope("node", "reboot", "next-gateway")
+    assert owner._pending == {unresolved, prepared}
+    assert owner.snapshot().capacity_blocked
+
+
+def test_startup_malformed_replay_metadata_still_fails_and_releases_open_claim(env, monkeypatch):
+    store = startup_receipts(env)
+    command = startup_prepare(env, store, "malformed")
+    with sqlite3.connect(store.path) as db:
+        db.execute("UPDATE commands SET identity=? WHERE command=?", ('{"private":"bad"}', command.command_id))
+    forbid_startup_artifact_reads(monkeypatch, store.outputs)
+    with pytest.raises(AudiaGenticError):
+        open_owner(env)
+    # A failed recovery must not leave the process-local execution-owner claim.
+    with sqlite3.connect(store.path) as db:
+        db.execute("UPDATE commands SET identity=? WHERE command=?",
+                   (canonical_json(command.to_mapping()).decode("utf-8"), command.command_id))
+    owner = open_owner(env)
+    assert owner._pending == {command}
+    assert owner.snapshot().capacity_blocked

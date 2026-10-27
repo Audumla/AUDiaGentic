@@ -243,7 +243,10 @@ class NodeRunner:
             stage = "observe"
             return self._observe(root, bound, started_ns=started_ns)
         except RecoveryDeferred as error:
-            deferred = self._defer(root, record, error.error, stage=stage, phase=error.phase)
+            # A composed waiter can report a validated artifact/publication
+            # stage. Preserve that closed projection instead of replacing it
+            # with this runner's generic observation boundary.
+            deferred = self._defer(root, record, error.error, stage=None, phase=error.phase)
             if current is not None:
                 emit_node_stage(root, current, "reconciliation-deferred", started_ns=started_ns, error=deferred.error)
             raise deferred from deferred.error

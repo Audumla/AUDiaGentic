@@ -218,17 +218,22 @@ class NodeExecutionOwner:
                     owner._store = NodeReceiptStore(root=config.state_root, **scope.__dict__)
             # Read bounded pages under separate short owner fences. No producer
             # is exposed until recovery finishes; no SQL escapes ReceiptStore.
+            # Replay is metadata-only: artifact availability/publication cannot
+            # reopen execution occupancy for a durably terminal command.
+            pending: set[CommandIdentity] = set()
             after = 0
             while owner._store is not None:
                 with owner._guard():
                     rows = owner._store.receipts_after(after, limit=100)
                     for receipt in rows:
-                        latest = owner._store.get(receipt.identity)
-                        if latest.state != "terminal":
-                            owner._pending.add(receipt.identity)
+                        if receipt.state == "terminal":
+                            pending.discard(receipt.identity)
+                        else:
+                            pending.add(receipt.identity)
                 if not rows:
                     break
                 after = rows[-1].sequence
+            owner._pending.update(pending)
             return owner
         except BaseException:
             with _OPEN_LOCK:
