@@ -128,6 +128,12 @@ class NodeReceiptSender:
         except asyncio.CancelledError:
             request.add_done_callback(self._consume_request)
             raise
+        except TimeoutError:
+            # Only the bounded network request await owns this classification;
+            # local checkpoint/cursor I/O elsewhere must remain fail-closed.
+            raise conflict(
+                1, "Receipt resume deadline elapsed", reason_code="receipt-resume-timeout"
+            ) from None
         parsed_request = parse_work_frame(
             sent,
             role="gateway",
@@ -285,6 +291,7 @@ class NodeReceiptSender:
                 "receipt-resume-mismatch",
                 "receipt-cursor-contradiction",
                 "receipt-ack-timeout",
+                "receipt-resume-timeout",
             }:
                 reason = "receipt-sender-failed"
             raise conflict(1, "Node receipt sender deferred", reason_code=reason) from None

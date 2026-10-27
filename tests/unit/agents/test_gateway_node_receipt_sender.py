@@ -988,3 +988,60 @@ async def test_cancel_during_ready_send_does_not_repeat_hint_or_cancel_receiver(
     finally:
         await stop_sender(task)
         await close(node, gateway)
+
+@pytest.mark.asyncio
+async def test_actual_resume_request_timeout_is_explicit_transport_reason(env, monkeypatch):
+    retained_historical_artifact(env, monkeypatch)
+    owner, runtime, calls = setup(env, monkeypatch)
+    node, gateway, _ = await pair(runtime)
+    entered = asyncio.Event()
+
+    async def no_reply(frame, message):
+        assert type(message) is ReceiptResume
+        entered.set()
+        # Deliberately lose the response; request_work owns the actual deadline.
+
+    gateway._on_work = no_reply
+    try:
+        with pytest.raises(AudiaGenticError) as caught:
+            await asyncio.wait_for(
+                NodeReceiptSender(runtime, ack_timeout_seconds=0.03).run(node), 2
+            )
+        assert entered.is_set()
+        assert caught.value.code == "CON-AGND-001"
+        assert caught.value.details["reason_code"] == "receipt-resume-timeout"
+        assert node.failure is None  # Retirement itself is not timeout evidence.
+        assert not calls
+    finally:
+        await close(node, gateway)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("boundary", ["checkpoint", "cursor"])
+async def test_local_custody_timeout_never_becomes_resume_transport_timeout(
+    env, monkeypatch, boundary
+):
+    retained_historical_artifact(env, monkeypatch)
+    owner, runtime, calls = setup(env, monkeypatch)
+    node, gateway, _ = await pair(runtime)
+    sender = NodeReceiptSender(runtime)
+    if boundary == "checkpoint":
+
+        def fail(*args, **kwargs):
+            raise TimeoutError("/private/custody/token=secret")
+
+        monkeypatch.setattr(NodeExecutionOwner, "receipt_checkpoint", fail)
+    else:
+
+        async def fail(*args, **kwargs):
+            raise TimeoutError("/private/custody/token=secret")
+
+        monkeypatch.setattr(sender, "_cursor_row", fail)
+    try:
+        with pytest.raises(AudiaGenticError) as caught:
+            await sender.run(node)
+        assert caught.value.details["reason_code"] == "receipt-sender-failed"
+        assert "secret" not in str(caught.value)
+        assert not calls
+    finally:
+        await close(node, gateway)
