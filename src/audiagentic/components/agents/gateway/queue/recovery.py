@@ -80,7 +80,11 @@ def _takeover_stale_request(
 
     if record["state"] not in {"queued", "running"}:
         return None, None
-    if record.get("cancel-requested") is True:
+    # read_record has validated this immutable placement against the canonical
+    # schema. A remote node is not the server's disposable worker transport:
+    # owner loss/cancellation cannot prove its effect never started or ended.
+    node_placement = isinstance(record.get("node-placement"), dict)
+    if not node_placement and record.get("cancel-requested") is True:
         # A cancellation persisted before a gateway restart is authoritative.
         # Do not rehydrate or re-enqueue the provider session: doing so can
         # restart its recovery loop and keep driving browser tabs forever.
@@ -128,6 +132,7 @@ def _takeover_stale_request(
     if (
         record["state"] == "running"
         and record.get("provider-transport-kind") != "provider-session"
+        and not node_placement
     ):
         # An isolated worker has no attach/resume seam. Once its owning
         # gateway generation is gone, keeping the durable request in
@@ -184,7 +189,10 @@ def _takeover_stale_request(
             extra={"request-id": request_id},
         )
         return "interrupted", (project_root, request_id)
-    worker_id = f"recovery_{uuid.uuid4().hex[:16]}" if record["state"] == "running" else None
+    worker_id = (
+        f"recovery_{uuid.uuid4().hex[:16]}"
+        if record["state"] == "running" and not node_placement else None
+    )
     try:
         updated = store.takeover_nonterminal_owner(
             project_root,
@@ -356,6 +364,10 @@ def recoverable_reconcile_diagnostics(
 
 def recovery_runner(record: dict[str, Any], *, project_root: Path | None = None):
     """Rebuild the immutable runner from admission-time record facts."""
+    if record.get("node-placement") is not None:
+        from audiagentic.components.agents.gateway.node.contracts import conflict
+
+        raise conflict(1, "Node placement requires dedicated node reconciliation, never ordinary provider recovery")
     import functools
 
     from audiagentic.components.agents.gateway.api import _resolve_provider_isolation_tier

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 import time
 from collections.abc import Mapping
 from contextlib import nullcontext
@@ -52,6 +53,14 @@ from ._shared import (
 )
 
 logger = logging.getLogger(__name__)
+_recovery_trace_lock = threading.Lock()
+_recovery_trace_failures = 0
+
+
+def recovery_trace_failure_count() -> int:
+    """Process-local diagnostic drops, never request or effect state."""
+    with _recovery_trace_lock:
+        return _recovery_trace_failures
 
 # SH07 crash-matrix test-only hook: widens the terminal-write-to-index-cleanup
 # control-plane window so a real OS process kill can be observed landing
@@ -736,32 +745,49 @@ def defer_owned_recovery(
     request_id: str,
     *,
     owner_epoch: str,
-    worker_id: str,
+    worker_id: str | None,
     attempt_epoch: int,
     error: BaseException | dict[str, Any] | None,
     phase: str,
     side_effect_state: str,
-    retry_delay_seconds: float,
+    retry_delay_seconds: float | None,
     continuation: Mapping[str, Any] | None = None,
     _allow_queued: bool = False,
+    expected_revision: int | None = None,
 ) -> dict[str, Any]:
-    """Persist a fenced, non-terminal recovery retry.
+    """Persist a fenced, non-terminal recovery deferral.
 
     This mutation changes recovery metadata only.  It intentionally leaves
     the request running, its attempt identity, active-work index, and any
     unresolved provider checkpoint intact so a replacement gateway can adopt
     the same request and conversation.
+
+    A None delay is explicit unscheduled node deferral, not a zero-delay timer.
+    Unclaimed queued nodes require the current owner plus an exact revision;
+    no fictitious worker/attempt is allocated just to describe their waiting.
     """
-    _require_owned_identity(owner_epoch, worker_id, attempt_epoch)
-    if not phase or retry_delay_seconds < 0:
+    unclaimed_node = _allow_queued and worker_id is None and type(attempt_epoch) is int and attempt_epoch == 0
+    if unclaimed_node:
+        if not owner_epoch or type(expected_revision) is not int or expected_revision < 0:
+            raise AudiaGenticError("VAL-AGW-085", "agents", "Unclaimed node deferral requires owner and revision", {})
+    else:
+        _require_owned_identity(owner_epoch, worker_id, attempt_epoch)
+    if not phase or (retry_delay_seconds is not None and retry_delay_seconds < 0):
         raise AudiaGenticError(
             "VAL-AGW-087", "agents", "recovery retry metadata is invalid", {}
         )
     with _request_lock(project_root, request_id):
         record = _read_record_locked(project_root, request_id)
+        if retry_delay_seconds is None and record.get("node-placement") is None:
+            raise AudiaGenticError("VAL-AGW-085", "agents", "Unscheduled deferral requires node placement", {})
+        if unclaimed_node and (
+            record.get("node-placement") is None or record["state"] != "queued"
+            or record.get("worker-id") is not None or record.get("attempt-epoch") != 0
+        ):
+            raise AudiaGenticError("VAL-AGW-085", "agents", "Unclaimed deferral requires a queued node request", {})
         _check_expected_identity(
             record,
-            expected_revision=None,
+            expected_revision=expected_revision,
             expected_dispatch_owner_epoch=owner_epoch,
             expected_worker_id=worker_id,
             expected_attempt_epoch=attempt_epoch,
@@ -777,7 +803,7 @@ def defer_owned_recovery(
         followup_attempt = int(previous.get("followup-attempt") or 0)
         if phase == "followup-reconcile":
             followup_attempt += 1
-        retry_at = add_seconds(timestamp, retry_delay_seconds)
+        retry_at = add_seconds(timestamp, retry_delay_seconds) if retry_delay_seconds is not None else None
         error_message = getattr(error, "message", None)
         if not isinstance(error_message, str) and isinstance(error, Mapping):
             error_message = error.get("message")
@@ -803,7 +829,7 @@ def defer_owned_recovery(
             "phase": phase,
             "side-effect-state": side_effect_state,
             "next-retry-at": retry_at,
-            "retry-delay-seconds": retry_delay_seconds,
+            "retry-delay-seconds": retry_delay_seconds if retry_delay_seconds is not None else 0,
         }
         # A provider follow-up can already have been submitted when the
         # observer loses its handle.  Preserve its bounded continuation
@@ -829,29 +855,37 @@ def defer_owned_recovery(
         updated.update({
             "recovery": recovery,
             "recovery-required": not queued_recovery,
-            "watchdog-state": "not-started" if queued_recovery else "active",
+            "watchdog-state": "not-started" if queued_recovery else (
+                "intervention" if retry_delay_seconds is None else "active"),
             "watchdog-reason": (
-                "queued-recovery-retry" if queued_recovery else "recovery-retry-scheduled"
+                phase if retry_delay_seconds is None else (
+                    "queued-recovery-retry" if queued_recovery else "recovery-retry-scheduled")
             ),
             "updated-at": timestamp,
             "revision": record["revision"] + 1,
         })
         write_record(project_root, updated)
+    try:
         record_gateway_timeline(
-            project_root,
-            request_id,
-            "recovery.retry-scheduled",
-            state=updated["state"],
-            attributes={
-                "phase": phase,
-                "attempt": attempt,
-                "followup-attempt": followup_attempt,
-                "next-retry-at": retry_at,
-                "retry-delay-seconds": retry_delay_seconds,
-                "side-effect-state": side_effect_state,
-            },
-        )
-        return updated
+            project_root, request_id,
+            "recovery.deferred" if retry_delay_seconds is None else "recovery.retry-scheduled",
+            state=updated["state"], attributes={
+                "phase": phase, "attempt": attempt, "followup-attempt": followup_attempt,
+                "next-retry-at": retry_at, "retry-delay-seconds": retry_delay_seconds,
+                "side-effect-state": side_effect_state, "request-revision": updated["revision"],
+                "correlation-id": updated.get("correlation-id"),
+            })
+    except Exception:  # noqa: BLE001 - trace failure cannot reverse committed recovery
+        global _recovery_trace_failures
+        with _recovery_trace_lock:
+            _recovery_trace_failures += 1
+            first = _recovery_trace_failures == 1
+        if first:
+            try:
+                logger.warning("Recovery trace unavailable; canonical state retained")
+            except Exception:  # noqa: BLE001 - do not recurse into a failing log sink
+                pass
+    return updated
 
 
 def defer_owned_queued_recovery(
@@ -859,13 +893,14 @@ def defer_owned_queued_recovery(
     request_id: str,
     *,
     owner_epoch: str,
-    worker_id: str,
+    worker_id: str | None,
     attempt_epoch: int,
     error: BaseException | dict[str, Any] | None,
     phase: str,
     side_effect_state: str,
-    retry_delay_seconds: float,
+    retry_delay_seconds: float | None,
     continuation: Mapping[str, Any] | None = None,
+    expected_revision: int | None = None,
 ) -> dict[str, Any]:
     """Persist a recovery retry before a session turn owns the FIFO lock.
 
@@ -887,6 +922,7 @@ def defer_owned_queued_recovery(
         retry_delay_seconds=retry_delay_seconds,
         continuation=continuation,
         _allow_queued=True,
+        expected_revision=expected_revision,
     )
 
 

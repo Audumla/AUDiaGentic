@@ -245,6 +245,9 @@ class GatewayServiceHost:
                     entry[1].get("created-at") or "", entry[1]["request-id"],
                 )
             for project_root, record in sorted(running, key=ordering):
+                if record.get("node-placement") is not None:
+                    self._defer_unavailable_node(project_root, record)
+                    continue
                 runtime = record.get("gateway-profile-runtime") or {}
                 queue_manager.enqueue_recovered_running(
                     project_root,
@@ -255,6 +258,9 @@ class GatewayServiceHost:
                     dispatch_service_root=self.service_store.root,
                 )
             for project_root, record in sorted(queued, key=ordering):
+                if record.get("node-placement") is not None:
+                    self._defer_unavailable_node(project_root, record)
+                    continue
                 runtime = record.get("gateway-profile-runtime") or {}
                 queue_manager.enqueue_recovered_queued(
                     project_root,
@@ -291,6 +297,36 @@ class GatewayServiceHost:
 
     def shutdown(self) -> None:
         self.server.shutdown()
+
+    def _defer_unavailable_node(self, project_root: Path, record: dict) -> dict:
+        """Keep original node work observable while native routing is disabled.
+
+        Node runtime composition must replace the unavailable dispatch decision,
+        never substitute an ordinary local runner. This branch remains the safe
+        policy when the configured recipient/recovery owner is unavailable.
+        """
+        from audiagentic.components.agents.gateway import store
+        from audiagentic.components.agents.gateway.node.contracts import conflict
+
+        with self.service_store.owner_guard(self.owner_epoch):
+            current = store.read_record(project_root, record["request-id"])
+            if current["state"] not in {"queued", "running"}:
+                return current
+            if current.get("node-placement") is None:
+                raise conflict(1, "Node recovery requires canonical placement")
+            dispatch = current.get("node-dispatch")
+            side_effect = (
+                "not-started" if dispatch is None else
+                "terminal-evidence-seen" if dispatch.get("receipt-stage") == "terminal" else
+                "may-have-started"
+            )
+            defer = store.defer_owned_queued_recovery if current["state"] == "queued" else store.defer_owned_recovery
+            return defer(project_root, current["request-id"], owner_epoch=self.owner_epoch,
+                worker_id=current.get("worker-id"), attempt_epoch=current["attempt-epoch"],
+                expected_revision=current["revision"],
+                error=conflict(1, "Node runtime is unavailable; retain original work for reconciliation"),
+                phase="node-runtime-unavailable", side_effect_state=side_effect,
+                retry_delay_seconds=None)
 
     def _start_ingress_poller(self, interval_seconds: float = 1.0) -> None:
         """SH09: drain the durable trigger spool while the service runs."""
