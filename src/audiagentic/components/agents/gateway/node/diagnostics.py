@@ -23,11 +23,15 @@ _STAGE_FACTS = {
     "bind": (ObservationPhase.SUBMIT_INTENT, "grant-or-connection-changed"),
     "command": (ObservationPhase.SUBMIT_INTENT, "command-delivery-uncertain"),
     "observe": (ObservationPhase.RECONCILIATION, "node-reconciliation-required"),
+    "receipt": (ObservationPhase.RECONCILIATION, "receipt-custody-unavailable"),
 }
 _REASONS = frozenset(reason for _, reason in _STAGE_FACTS.values()) | {
     "transport-unavailable", "preparation-rejected", "preparation-timeout", "transport-timeout",
     "connection-replaced-or-closed", "capacity-occupied",
     "attempt-not-dispatchable", "internal-failure",
+    "receipt-channel-replaced", "receipt-target-mismatch",
+    "receipt-cursor-unreadable", "receipt-custody-uncertain", "receipt-log-changed",
+    "receipt-cursor-mismatch", "receipt-stream-gap",
 }
 
 

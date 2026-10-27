@@ -34,6 +34,7 @@ _STAGES = frozenset({
     "admission-validated", "connection-qualified", "prepare-requested", "prepare-accepted", "prepared-retained",
     "command-bound", "command-delivery-requested", "command-sent", "effect-authorized", "effect-denied",
     "reconciliation-started", "reconciliation-deferred", "reconciliation-completed", "failed",
+    "receipt-committed",
 })
 _RECEIPTS = frozenset({"prepared", "effect-intent", "native-accepted", "terminal"})
 _AUTHORIZATION = frozenset({"not-authorized", "authorized", "uncertain", "effect-observed", "terminal"})
@@ -173,7 +174,7 @@ def _facts(root, record, milestone, started_ns, connection, error):
             raise ValueError("elapsed time requires a local monotonic start")
         facts["elapsed-ms"] = min((now - started_ns) // 1_000_000, 2**63 - 1)
         facts["timing-event"] = ("effect-authorization" if milestone in {"effect-authorized", "effect-denied"}
-                                  else "runner-invocation")
+                                  else "receipt-ingress" if milestone == "receipt-committed" else "runner-invocation")
     if error is not None:
         if not isinstance(error, AudiaGenticError):
             raise ValueError("registered typed error required")

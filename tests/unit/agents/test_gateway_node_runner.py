@@ -91,6 +91,7 @@ async def case(admission):
     value = SimpleNamespace(admission=admission, record=record, config=config, connections=connections,
         slot=slot, gateway=gateway, node=node, prepares=[], commands=[], effects=[],
         effect_requests=[],
+        central_work_handler=None, node_work_handler=None,
         effect_identity=None,
         reject_code=None,
         prepared_hook=None, command_hook=None, ignore_prepare=False, preparation=None,
@@ -99,8 +100,11 @@ async def case(admission):
     value.runner = runner
 
     async def central(frame, work):
-        assert type(work) is EffectAuthorize
-        await runner.handle_effect_authorize(gateway, frame, work)
+        if type(work) is EffectAuthorize:
+            await runner.handle_effect_authorize(gateway, frame, work)
+        else:
+            assert value.central_work_handler is not None
+            await value.central_work_handler(gateway, frame, work)
 
     async def fake_recipient(frame, work):
         if type(work) is PrepareWork:
@@ -133,7 +137,8 @@ async def case(admission):
             value.effects.append(reply)
             value.effect_done.set()
         else:
-            pytest.fail("unexpected node work")
+            assert value.node_work_handler is not None
+            await value.node_work_handler(frame, work)
 
     gateway.enable_work(central, max_artifact_bytes=1024 * 1024)
     node.enable_work(fake_recipient, max_artifact_bytes=1024 * 1024)

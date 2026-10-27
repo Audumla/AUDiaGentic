@@ -83,7 +83,7 @@ class NodeReceiptCheckpoints:
         except FileNotFoundError:
             return None
         except (OSError, ValueError):
-            raise conflict(1, "Central receipt checkpoint is unreadable") from None
+            raise conflict(1, "Central receipt checkpoint is unreadable", reason_code="receipt-cursor-unreadable") from None
         required = {
             "version", "server-id", "node-id", "log-incarnation-id", "sequence",
             "receipt-sha256", "gateway-owner-epoch",
@@ -111,12 +111,12 @@ class NodeReceiptCheckpoints:
         _log_id(log_incarnation_id)
         with self.service_store.owner_guard(expected_epoch):
             if self._poisoned:
-                raise conflict(1, "Receipt custody is uncertain; restart the stream owner")
+                raise conflict(1, "Receipt custody is uncertain; restart the stream owner", reason_code="receipt-custody-uncertain")
             cursor = self._read()
             if cursor is None:
                 return 0, None
             if cursor["log-incarnation-id"] != log_incarnation_id:
-                raise conflict(1, "Unknown receipt log incarnation; custody cannot reset")
+                raise conflict(1, "Unknown receipt log incarnation; custody cannot reset", reason_code="receipt-log-changed")
             return cursor["sequence"], cursor["receipt-sha256"]
 
     def accept(
@@ -151,18 +151,18 @@ class NodeReceiptCheckpoints:
 
         with self.service_store.owner_guard(expected_epoch):
             if self._poisoned:
-                raise conflict(1, "Receipt custody is uncertain; restart the stream owner")
+                raise conflict(1, "Receipt custody is uncertain; restart the stream owner", reason_code="receipt-custody-uncertain")
             cursor = self._read()
             if cursor is not None and cursor["log-incarnation-id"] != log_incarnation_id:
-                raise conflict(1, "Unknown receipt log incarnation; custody cannot reset")
+                raise conflict(1, "Unknown receipt log incarnation; custody cannot reset", reason_code="receipt-log-changed")
             sequence = cursor["sequence"] if cursor is not None else 0
             if receipt.sequence <= sequence:
                 if receipt.sequence == sequence and digest != cursor["receipt-sha256"]:
-                    raise conflict(1, "Latest receipt replay digest changed")
+                    raise conflict(1, "Latest receipt replay digest changed", reason_code="receipt-cursor-mismatch")
                 committed = cursor
             else:
                 if receipt.sequence != sequence + 1:
-                    raise conflict(1, "Receipt stream has a gap; expected the next sequence")
+                    raise conflict(1, "Receipt stream has a gap; expected the next sequence", reason_code="receipt-stream-gap")
                 target = resolve_target(receipt.identity)
                 if type(target) is not CanonicalReceiptTarget:
                     raise invalid(1, "Receipt resolver must return trusted canonical placement and fences")
