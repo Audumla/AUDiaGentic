@@ -32,6 +32,7 @@ from audiagentic.components.agents.gateway.node.work_protocol import (
     PreparedReply,
     PrepareWork,
     ReceiptAckWork,
+    ReceiptReady,
     ReceiptResume,
     ReceiptResumeReply,
     ReceiptWork,
@@ -98,6 +99,12 @@ def messages():
     )
     # name: (frame type, receiving role, drain allowed, payload, expected DTO)
     return {
+        "ready": (
+            "reconcile", "gateway", False,
+            {"kind": "receipt-ready", "log-incarnation-id": LOG,
+             "through-sequence": 0, "through-receipt-sha256": None},
+            ReceiptReady,
+        ),
         "prepare": (
             "reconcile",
             "node",
@@ -290,6 +297,7 @@ def parse(spec, payload=None, **options):
 
 
 NAMES = [
+    "ready",
     "prepare",
     "prepared",
     "rejected",
@@ -345,6 +353,24 @@ def test_missing_fields_rejected(messages, name):
         del p[key]
         with pytest.raises(Exception, match="VAL-AGND-001"):
             parse(spec, p)
+
+
+@pytest.mark.parametrize("sequence,sha", [(False, None), (-1, None), (0, SHA), (1, None),
+                                       (1, "bad"), (1, SHA.upper())])
+def test_receipt_ready_requires_exact_cursor(messages, sequence, sha):
+    spec = messages["ready"]
+    with pytest.raises(Exception, match="VAL-AGND-001"):
+        parse(spec, {**spec[3], "through-sequence": sequence, "through-receipt-sha256": sha})
+
+
+def test_receipt_ready_accepts_durable_nonempty_cursor_not_command_identity(messages):
+    spec = messages["ready"]
+    ready = parse(spec, {**spec[3], "through-sequence": 4, "through-receipt-sha256": SHA})
+    assert (ready.log_incarnation_id, ready.through_sequence, ready.through_receipt_sha256) == (LOG, 4, SHA)
+    with pytest.raises(Exception, match="VAL-AGND-001"):
+        parse(spec, {**spec[3], "identity": {}})
+    with pytest.raises(Exception, match="VAL-AGND-001"):
+        parse(spec, {**spec[3], "log-incarnation-id": "bad"})
 
 
 def test_effect_exception_matches_existing_schema_and_real_pair(messages):

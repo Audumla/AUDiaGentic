@@ -23,6 +23,7 @@ from audiagentic.components.agents.gateway.node.connection import (
     NODE_PATH,
     SUBPROTOCOL,
     UNBOUND,
+    NodeConnection,
     validate_welcome,
 )
 from audiagentic.components.agents.gateway.node.contracts import Frame
@@ -891,11 +892,12 @@ async def test_credential_is_checked_before_any_drain_scan_and_rotation_denies_o
 async def test_cursor_only_cannot_qualify_but_original_authorized_command_can(channel):
     from uuid import uuid4
 
+    from tests.unit.agents.test_gateway_node_drain import bound_request
+
     from audiagentic.components.agents.gateway.node.checkpoints import NodeReceiptCheckpoints
     from audiagentic.components.agents.gateway.service.host import GATEWAY_SERVICE_KEY
     from audiagentic.foundation.io import atomic_write_json
     from audiagentic.foundation.system.managed_service import ManagedServiceStore
-    from tests.unit.agents.test_gateway_node_drain import bound_request
 
     enable_drain_evidence(channel)
     channel.authority.revoke("node", expected_grant_revision=1)
@@ -1039,3 +1041,125 @@ async def test_node_claims_never_replace_canonical_eligibility_or_handshake_sche
         assert not channel.server.owner._active
     finally:
         await websocket.close()
+
+
+@pytest.mark.asyncio
+async def test_readiness_starts_false_consumes_once_and_can_mark_next_cycle(channel):
+    node = await NodeTransportClient(channel.client, node_epoch="ready-boot").connect()
+    owner = channel.server.owner
+    try:
+        await wait_until(lambda: owner._active["node"].connection is not None)
+        connection = owner._active["node"].connection
+        def cycle():
+            before = owner.current_slot("node")
+            assert not owner.is_ready(connection, grant_revision=1)
+            assert not owner.consume_ready(connection, grant_revision=1)
+            assert owner.mark_ready(connection, grant_revision=1)
+            assert owner.is_ready(connection, grant_revision=1)
+            assert owner.current_slot("node") == before
+            assert owner.consume_ready(connection, grant_revision=1)
+            assert not owner.consume_ready(connection, grant_revision=1)
+            assert owner.mark_ready(connection, grant_revision=1)
+        await asyncio.to_thread(channel.authority.serialize, cycle)
+        results = await asyncio.gather(*[
+            asyncio.to_thread(channel.authority.serialize,
+                lambda: owner.consume_ready(connection, grant_revision=1)) for _ in range(2)])
+        assert sorted(results) == [False, True]
+    finally:
+        await node.close()
+
+
+@pytest.mark.asyncio
+async def test_readiness_rejects_wrong_revision_generation_and_connection_object(channel):
+    node = await NodeTransportClient(channel.client, node_epoch="ready-boot").connect()
+    owner = channel.server.owner
+    try:
+        await wait_until(lambda: owner._active["node"].connection is not None)
+        connection = owner._active["node"].connection
+        impostor = NodeConnection(connection.websocket, connection.identity, role="gateway",
+            grant_revision=1, capability="active")
+        stale = NodeConnection(connection.websocket,
+            replace(connection.identity, connection_generation=connection.identity.connection_generation + 1),
+            role="gateway", grant_revision=1, capability="active")
+        def check():
+            assert not owner.mark_ready(impostor, grant_revision=1)
+            assert not owner.mark_ready(stale, grant_revision=1)
+            assert not owner.mark_ready(connection, grant_revision=2)
+            with pytest.raises(AudiaGenticError):
+                owner.mark_ready(connection, grant_revision=True)
+            assert not owner.is_ready(connection, grant_revision=1)
+        await asyncio.to_thread(channel.authority.serialize, check)
+    finally:
+        await node.close()
+
+
+@pytest.mark.asyncio
+async def test_replacement_never_inherits_readiness(channel):
+    first = await NodeTransportClient(channel.client, node_epoch="same-boot").connect()
+    second = None
+    owner = channel.server.owner
+    try:
+        await wait_until(lambda: owner._active["node"].connection is not None)
+        old = owner._active["node"].connection
+        assert await asyncio.to_thread(channel.authority.serialize,
+            lambda: owner.mark_ready(old, grant_revision=1))
+        second = await NodeTransportClient(channel.client, node_epoch="same-boot").connect()
+        await wait_until(lambda: owner._active["node"].connection is not None)
+        current = owner._active["node"].connection
+        assert current.identity.connection_generation > old.identity.connection_generation
+        def check():
+            assert not owner.mark_ready(old, grant_revision=1)
+            assert not owner.consume_ready(old, grant_revision=1)
+            assert not owner.is_ready(current, grant_revision=1)
+        await asyncio.to_thread(channel.authority.serialize, check)
+    finally:
+        if second is not None:
+            await second.close()
+        await first.close()
+
+
+@pytest.mark.asyncio
+async def test_consume_reloads_revoke_and_preserves_historical_drain_slot(channel):
+    from tests.unit.agents.test_gateway_node_drain import bound_request
+
+    enable_drain_evidence(channel)
+    bound_request(channel.server.config.projects["project"])
+    node = await NodeTransportClient(channel.client, node_epoch="ready-boot").connect()
+    owner = channel.server.owner
+    try:
+        await wait_until(lambda: owner._active["node"].connection is not None)
+        connection = owner._active["node"].connection
+        assert await asyncio.to_thread(channel.authority.serialize,
+            lambda: owner.mark_ready(connection, grant_revision=1))
+        channel.authority.revoke("node", expected_grant_revision=1)
+        def check():
+            assert not owner.consume_ready(connection, grant_revision=1)
+            historical = owner.current_slot("node")
+            assert historical.connection is connection and historical.capability == "drain"
+            assert historical.grant_revision == 2
+            assert not owner.is_ready(connection, grant_revision=1)
+            assert not owner.mark_ready(connection, grant_revision=2)
+        await asyncio.to_thread(channel.authority.serialize, check)
+    finally:
+        await node.close()
+
+
+@pytest.mark.asyncio
+async def test_owner_close_makes_readiness_unavailable_before_slot_cleanup(channel):
+    node = await NodeTransportClient(channel.client, node_epoch="ready-boot").connect()
+    owner = channel.server.owner
+    try:
+        await wait_until(lambda: owner._active["node"].connection is not None)
+        connection = owner._active["node"].connection
+        def check():
+            assert owner.mark_ready(connection, grant_revision=1)
+            connection.begin_close("shutdown")
+            assert owner.current_slot("node").connection is connection
+            assert not owner.is_ready(connection, grant_revision=1)
+            assert not owner.consume_ready(connection, grant_revision=1)
+            assert not owner.mark_ready(connection, grant_revision=1)
+        await asyncio.to_thread(channel.authority.serialize, check)
+        await connection.close()
+        await asyncio.wait_for(connection.wait_closed(), 2)
+    finally:
+        await node.close()

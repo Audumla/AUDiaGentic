@@ -15,12 +15,13 @@ import hashlib
 import hmac
 import ssl
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from http import HTTPStatus
 from urllib.parse import urlsplit
 
 from websockets.asyncio.client import connect
 from websockets.asyncio.server import ServerConnection, serve
+from websockets.protocol import State
 
 from audiagentic.components.agents.gateway.remote_client import load_auth_token
 from audiagentic.components.agents.gateway.service.shared_config import (
@@ -39,7 +40,7 @@ from .connection import (
     validate_hello,
     validate_welcome,
 )
-from .contracts import MAX_FRAME_BYTES, Frame, _identifier, conflict, invalid
+from .contracts import MAX_FRAME_BYTES, Frame, _identifier, _integer, conflict, invalid
 from .drain import NodeDrainEligibility
 
 _LIMITS = dict(
@@ -81,6 +82,7 @@ class ConnectionSlot:
     capability: str
     credential_sha256: str
     connection: NodeConnection | None = None
+    ready_revision: int | None = field(default=None, repr=False, compare=False)
 
 
 @dataclass(frozen=True)
@@ -172,31 +174,34 @@ class NodeConnectionOwner:
         owner-guard -> auth -> canonical request order, never the reverse.
         """
 
-        def change():
-            slot = self._active.get(node_id)
-            if slot is None:
-                return None
-            config = self._config()
-            grant = next((g for g in config.nodes if g.node_id == node_id), None)
-            try:
-                if grant is None:
-                    raise conflict(1, "Node enrollment removed")
-                credential = hashlib.sha256(
-                    f"Bearer {load_auth_token(grant.token_file)}".encode()
-                ).hexdigest()
-                if not hmac.compare_digest(credential, slot.credential_sha256):
-                    raise conflict(1, "Node credential rotated")
-                capability = self._capability(config, grant)
-                if slot.capability == "drain" and capability != "drain":
-                    raise conflict(1, "Drain connection cannot regain effect capability")
-            except Exception:
-                del self._active[node_id]
-                return slot, None, None
-            old = slot.capability, slot.grant_revision
-            slot.capability, slot.grant_revision = capability, grant.revision
-            return slot, capability, old
+        return self.authority.serialize(lambda: self._refresh_capability_locked(node_id))
 
-        return self.authority.serialize(change)
+    def _refresh_capability_locked(self, node_id: str):
+        """Existing grant refresh; caller holds authority, never acquires it."""
+        slot = self._active.get(node_id)
+        if slot is None:
+            return None
+        config = self._config()
+        grant = next((g for g in config.nodes if g.node_id == node_id), None)
+        try:
+            if grant is None:
+                raise conflict(1, "Node enrollment removed")
+            credential = hashlib.sha256(
+                f"Bearer {load_auth_token(grant.token_file)}".encode()
+            ).hexdigest()
+            if not hmac.compare_digest(credential, slot.credential_sha256):
+                raise conflict(1, "Node credential rotated")
+            capability = self._capability(config, grant)
+            if slot.capability == "drain" and capability != "drain":
+                raise conflict(1, "Drain connection cannot regain effect capability")
+        except Exception:
+            del self._active[node_id]
+            return slot, None, None
+        old = slot.capability, slot.grant_revision
+        if old != (capability, grant.revision):
+            slot.ready_revision = None
+        slot.capability, slot.grant_revision = capability, grant.revision
+        return slot, capability, old
 
     def attach(self, slot: ConnectionSlot, connection: NodeConnection):
         def change():
@@ -233,6 +238,65 @@ class NodeConnectionOwner:
         if slot is None or slot.connection is None:
             return None
         return CurrentNodeSlot(slot.identity, slot.grant_revision, slot.capability, slot.connection)
+
+    def _ready_slot(self, connection: NodeConnection, grant_revision: int):
+        if not isinstance(connection, NodeConnection):
+            raise invalid(1, "Readiness requires the actual node connection")
+        _integer(grant_revision)
+        slot = self._active.get(connection.identity.node_id)
+        if (slot is None or slot.connection is not connection
+                or slot.identity != connection.identity
+                or slot.identity.gateway_owner_epoch != self.gateway_owner_epoch
+                or slot.identity.node_epoch == UNBOUND
+                or slot.capability != "active" or slot.grant_revision != grant_revision
+                or connection.capability != "active" or connection.grant_revision != grant_revision
+                or connection.close_reason is not None or connection.failure is not None
+                or connection.websocket.state is not State.OPEN):
+            return None
+        return slot
+
+    def mark_ready(self, connection: NodeConnection, *, grant_revision: int) -> bool:
+        """INSIDE authority.serialize only: qualify a caller-validated ready signal.
+
+        Reloads existing grant/credential capability, performs no network I/O,
+        and never acquires authority recursively. Caller validates receipt custody
+        first. Readiness is not effect authorization or a persistent checkpoint.
+        A later quiescent cycle may mark again after consumption; runtime proves
+        producer/preparation cleanup before each signal. This primitive supplies
+        no queue-capacity reservation or automatic readiness restoration.
+        """
+        if self._ready_slot(connection, grant_revision) is None:
+            return False
+        self._refresh_capability_locked(connection.identity.node_id)
+        slot = self._ready_slot(connection, grant_revision)
+        if slot is None:
+            return False
+        slot.ready_revision = grant_revision
+        return True
+
+    def is_ready(self, connection: NodeConnection, *, grant_revision: int) -> bool:
+        """Snapshot INSIDE authority only; no reload, lock acquisition or authority.
+
+        A true snapshot is not a lease. consume_ready requalifies the current
+        grant before a fresh preparation attempt; historical observers ignore it.
+        """
+        slot = self._ready_slot(connection, grant_revision)
+        return slot is not None and slot.ready_revision == grant_revision
+
+    def consume_ready(self, connection: NodeConnection, *, grant_revision: int) -> bool:
+        """INSIDE authority only: refresh, then atomically clear before fresh prepare.
+
+        No recursive lock, network work, or canonical/effect authorization occurs.
+        Failed preparation does not automatically restore readiness.
+        """
+        if not self.is_ready(connection, grant_revision=grant_revision):
+            return False
+        self._refresh_capability_locked(connection.identity.node_id)
+        slot = self._ready_slot(connection, grant_revision)
+        if slot is None or slot.ready_revision != grant_revision:
+            return False
+        slot.ready_revision = None
+        return True
 
 
 class NodeTransportServer:

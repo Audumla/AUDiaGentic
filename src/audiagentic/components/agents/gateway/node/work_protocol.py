@@ -97,6 +97,13 @@ class ReceiptResume(WorkMessage):
 
 
 @dataclass(frozen=True, kw_only=True)
+class ReceiptReady(WorkMessage):
+    log_incarnation_id: str
+    through_sequence: int
+    through_receipt_sha256: str | None
+
+
+@dataclass(frozen=True, kw_only=True)
 class ReceiptResumeReply(WorkMessage):
     in_reply_to: str
     log_incarnation_id: str
@@ -142,6 +149,7 @@ WorkFrame: TypeAlias = (
     | EffectDenied
     | ReceiptWork
     | ReceiptResume
+    | ReceiptReady
     | ReceiptResumeReply
     | ReceiptAckWork
     | ArtifactGet
@@ -224,6 +232,7 @@ def parse_work_frame(
         ("effect-denied", None): ("node", False),
         ("receipt", None): ("gateway", True),
         ("reconcile", "receipt-resume"): ("gateway", True),
+        ("reconcile", "receipt-ready"): ("gateway", False),
         ("reconcile-result", "receipt-resume"): ("node", True),
         ("reconcile-result", "receipt-ack"): ("node", True),
         ("reconcile", "artifact-get"): ("node", True),
@@ -354,6 +363,15 @@ def parse_work_frame(
             **common,
             log_incarnation_id=_log_id(p["log-incarnation-id"]),
             receipt=Receipt(i, r["state"], _integer(r["receipt-sequence"]), r["output-sha256"]),
+        )
+    if kind == "receipt-ready":
+        exact("kind log-incarnation-id through-sequence through-receipt-sha256")
+        _cursor(p["through-sequence"], p["through-receipt-sha256"])
+        return ReceiptReady(
+            **common,
+            log_incarnation_id=_log_id(p["log-incarnation-id"]),
+            through_sequence=p["through-sequence"],
+            through_receipt_sha256=p["through-receipt-sha256"],
         )
     if kind == "receipt-resume":
         reply = frame.type == "reconcile-result"
