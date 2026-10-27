@@ -27,8 +27,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from audiagentic.foundation.transports.agent_session import is_meaningful_activity
-
 from audiagentic.components.agents.agents_paths import gateway_request_path
 from audiagentic.components.agents.gateway import profiles as profiles_mod
 from audiagentic.components.agents.gateway import store as store
@@ -59,11 +57,12 @@ from audiagentic.components.agents.gateway.queue.capacity_policy import (
     resolve_pending_capacity,
 )
 from audiagentic.components.agents.gateway.queue.pending import PendingAuthority
-from audiagentic.components.agents.gateway.queue.session_order import SessionDispatchOrder
 from audiagentic.components.agents.gateway.queue.recovery_control import RecoveryDeferred
+from audiagentic.components.agents.gateway.queue.session_order import SessionDispatchOrder
 from audiagentic.components.agents.gateway.queue.watchdog_registry import watchdog_registry
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.time import now_iso_z
+from audiagentic.foundation.transports.agent_session import is_meaningful_activity
 
 logger = logging.getLogger(__name__)
 
@@ -458,9 +457,10 @@ class NodeQueuedDispatch:
     project_key: str
     placement: NodeAdmissionPlacement
     policy: NodeQueuePolicy
-    runner: RequestRunner  # Same two-argument stub; no native executor enabled here.
+    runner: RequestRunner
     owner_epoch: str
     service_root: Path
+    reconcile_only: bool = False
 
 
 QueuedEntry = QueuedDispatch | NodeQueuedDispatch
@@ -651,6 +651,62 @@ class GatewayQueueManager:
             _publish_lifecycle_event("rejected", rejected)
             return rejected
         _publish_lifecycle_event("queued", current)
+        self._drain_all()
+        return store.read_record(root, entry.request_id)
+
+    def enqueue_recovered_node(
+        self, project_root: Path, record: dict[str, Any], *,
+        placement: NodeAdmissionPlacement, policy: NodeQueuePolicy, runner: RequestRunner,
+        dispatch_owner_epoch: str, dispatch_service_root: Path,
+    ) -> dict[str, Any]:
+        """Schedule owned node recovery through the existing pending authority.
+
+        Bound commands receive observation capacity only. They never compete
+        with, release, or acquire permission for the original native effect.
+        Repeated readiness notifications cannot start a second observer.
+        """
+        root = project_root.resolve()
+        if (
+            root not in self._node_occupancy.project_roots
+            or not isinstance(dispatch_service_root, Path)
+            or not dispatch_service_root.is_absolute()
+            or type(placement) is not NodeAdmissionPlacement
+            or type(policy) is not NodeQueuePolicy
+        ):
+            raise ValueError("node recovery requires trusted scheduling configuration")
+        current = store.read_record(root, record["request-id"], include_output=False)
+        if (
+            current["state"] not in {"queued", "running"}
+            or current.get("dispatch-owner-epoch") != dispatch_owner_epoch
+            or not dispatch_owner_epoch
+            or current.get("recovery-required") is not True
+            or current.get("node-placement") != placement.to_record_mapping()
+            or placement.server_id != self._node_occupancy.server_id
+            or current.get("provider-transport-kind") != "worker"
+            or current["execution-profile-id"] != policy.profile_id
+            or (current["state"] == "queued" and current.get("node-dispatch") is not None)
+            or (current["state"] == "running" and (
+                not current.get("worker-id") or current.get("attempt-epoch", 0) < 1
+            ))
+        ):
+            raise ValueError("node recovery does not match canonical ownership")
+        reconcile_only = current.get("node-dispatch") is not None
+        # Observation must bypass a fresh same-project head waiting for the
+        # very command this observer needs to settle. Keep one pending
+        # authority, with an independent fair rotation key for observation.
+        project_key = f"{root}:node-reconcile" if reconcile_only else str(root)
+        entry = NodeQueuedDispatch(
+            current["request-id"], root, policy.profile_id, project_key, placement,
+            policy, runner, dispatch_owner_epoch, dispatch_service_root,
+            reconcile_only=reconcile_only,
+        )
+        pq = self._entry_runtime_state(entry)
+        with pq.lock:
+            if entry.request_id in pq.running or self._pending_authority.contains(entry.request_id):
+                return current
+            self._pending_authority.enqueue(
+                request_id=entry.request_id, project_key=entry.project_key, value=entry,
+            )
         self._drain_all()
         return store.read_record(root, entry.request_id)
 
@@ -1107,6 +1163,13 @@ class GatewayQueueManager:
     def _try_reserve_node(
         self, entry: NodeQueuedDispatch, occupancy: NodeOccupancySnapshot,
     ) -> _QueueReservation | None:
+        if entry.reconcile_only:
+            key = f"node-observer:{entry.placement.server_id}:{entry.placement.node_id}"
+            source = self._capacity.try_reserve(
+                source_id=key, resource_id=key, concurrency=1,
+                capacity_source_id=key, model_id=None,
+            )
+            return _QueueReservation(source, None) if source is not None else None
         # Fresh entries reject every bound command at enqueue_node. Do not
         # exclude their identity here to turn bound work into a new attempt;
         # future bound recovery needs a distinct reconcile-only entry point.
@@ -1467,9 +1530,13 @@ class GatewayQueueManager:
             )
 
     def _terminalize_recovered_cancel(
-        self, entry: QueuedDispatch, current: dict[str, Any]
+        self, entry: QueuedEntry, current: dict[str, Any]
     ) -> bool:
         """Finish a cancelled provider-less recovery before waiting for capacity."""
+        if isinstance(entry, NodeQueuedDispatch):
+            # Cancellation cannot settle an independently running native
+            # effect. Its receipt owner must reconcile the original command.
+            return False
         if current.get("state") != "running" or not current.get("cancel-requested"):
             return False
         if current.get("provider-transport-kind") == "provider-session":
@@ -1539,6 +1606,7 @@ class GatewayQueueManager:
             )
             if (
                 recovered_running
+                and not is_node
                 and current.get("cancel-requested")
                 and current.get("provider-transport-kind") != "provider-session"
             ):
@@ -1831,7 +1899,10 @@ class GatewayQueueManager:
                         return
                     result = runner(project_root, record, session_start=_start_session_attempt)
                 else:
-                    result = runner(project_root, record)
+                    if is_node and entry.reconcile_only:
+                        result = runner(project_root, record, reconcile_only=True)
+                    else:
+                        result = runner(project_root, record)
                 logger.info(
                     "gateway request finished",
                     extra={
@@ -1864,8 +1935,17 @@ class GatewayQueueManager:
                     _publish_lifecycle_event(terminal_record["state"], terminal_record)
             except RecoveryDeferred as deferred:
                 if is_node:
-                    # No local provider retry/replay for remote ambiguous work.
-                    # Its canonical command/receipt must be reconciled later.
+                    # A missing transport is not progress or failure. Preserve
+                    # the original attempt and expose the unscheduled recovery
+                    # state until the node readiness owner re-enqueues it.
+                    current = store.read_record(project_root, request_id)
+                    store.defer_owned_recovery(
+                        project_root, request_id, owner_epoch=owner_epoch,
+                        worker_id=record["worker-id"], attempt_epoch=record["attempt-epoch"],
+                        expected_revision=current["revision"], error=deferred.error,
+                        phase=deferred.phase, side_effect_state=deferred.side_effect_state,
+                        retry_delay_seconds=None, continuation=deferred.continuation,
+                    )
                     return
                 # Rehydration/open failure after a possible provider-side
                 # Send is non-terminal.  Keep the same request and session
@@ -2256,7 +2336,7 @@ class GatewayQueueManager:
             else:
                 watchdog_registry().unregister(project_root, request_id)
             if bound is not None:
-                if is_node:
+                if is_node and not entry.reconcile_only:
                     self._finish_node_reservation(entry, bound)
                 else:
                     self._release_reservation(bound)
@@ -2268,7 +2348,9 @@ class GatewayQueueManager:
             # Preparation may fail before registering a session waiter. Do
             # not retain that request's pre-registration cancel signal forever.
             if not is_node:
-                from audiagentic.components.agents.gateway.session.sessions import peek_session_runtime
+                from audiagentic.components.agents.gateway.session.sessions import (
+                    peek_session_runtime,
+                )
 
                 runtime = peek_session_runtime()
                 if runtime is not None:
