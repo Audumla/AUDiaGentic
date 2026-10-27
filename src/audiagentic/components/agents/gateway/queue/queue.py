@@ -524,9 +524,21 @@ class GatewayQueueManager:
 
     def __init__(
         self, *, node_project_roots: tuple[Path, ...] = (), node_server_id: str | None = None,
+        node_ids: tuple[str, ...] = (),
+        node_ready: Callable[[NodeAdmissionPlacement], bool] | None = None,
+        node_recovery_wakeup: Callable[[str], None] | None = None,
     ) -> None:
         self._runtime: dict[ProfileGenerationIdentity, _RuntimeState] = {}
         self._manager_lock = threading.Lock()
+        # Bounded by host configuration, never by notification input. Readiness
+        # is only a scheduling hint: NodeRunner consumes/rechecks readiness at
+        # fresh PREPARATION admission under the service/grant owner gate.
+        self._node_generations = dict.fromkeys(node_ids, 0)
+        self._node_ready = node_ready
+        self._node_recovery_wakeup = node_recovery_wakeup
+        self._node_waking: set[str] = set()
+        self._node_wake_dirty: set[str] = set()
+        self._active_node_generations: dict[str, tuple[str, int]] = {}
         # AS105/AS101: shared machine-wide capacity per model-sources.yaml
         # resource-id -- deliberately NOT per-lane. A resource is genuinely
         # shared across every profile/project naming a source on it.
@@ -546,6 +558,58 @@ class GatewayQueueManager:
         self._recovery_pending: dict[str, Path] = {}
         self._shutdown_event = threading.Event()
         self._session_dispatch_order = SessionDispatchOrder()
+
+    @staticmethod
+    def _warn_node_callback(error: Exception, *, stage: str) -> None:
+        """Best-effort closed diagnostic projection; never alter scheduling."""
+        try:
+            safe = sanitize_node_error(error, stage=stage)
+            logger.warning("node queue callback failed", extra={
+                "code": safe.code,
+                "stage": safe.details["stage"],
+                "reason": safe.details["reason-code"],
+            })
+        except Exception:
+            # Logging/projection failures cannot roll back custody or wakeups.
+            pass
+
+    def notify_node_changed(self, node_id: str) -> None:
+        """Wake canonical recovery and queued work after a configured node changes.
+
+        The host callback scans canonical recovery outside queue locks. An active
+        runner may not have deferred yet; retirement repeats that wake whenever
+        its starting generation changed. No receipt/record I/O belongs here.
+        """
+        with self._manager_lock:
+            if node_id not in self._node_generations:
+                return
+            self._node_generations[node_id] += 1
+        self._wake_node(node_id)
+        self._drain_all()
+
+    def _wake_node(self, node_id: str) -> None:
+        with self._manager_lock:
+            self._node_wake_dirty.add(node_id)
+            if node_id in self._node_waking:
+                return
+            self._node_waking.add(node_id)
+        try:
+            while True:
+                with self._manager_lock:
+                    self._node_wake_dirty.discard(node_id)
+                if self._node_recovery_wakeup is not None and not self._shutdown_event.is_set():
+                    try:
+                        self._node_recovery_wakeup(node_id)
+                    except Exception as error:
+                        self._warn_node_callback(error, stage="observe")
+                with self._manager_lock:
+                    if node_id not in self._node_wake_dirty:
+                        self._node_waking.remove(node_id)
+                        return
+        except BaseException:
+            with self._manager_lock:
+                self._node_waking.discard(node_id)
+            raise
 
     def shutdown(self) -> None:
         """Stop delayed recovery work owned by this queue generation."""
@@ -970,24 +1034,48 @@ class GatewayQueueManager:
                 entry = candidate.value
                 pq = self._entry_runtime_state(entry)
                 reservation: _QueueReservation | None = None
-                with pq.lock:
-                    reservation = (
-                        self._try_reserve_node(entry, occupancy)
-                        if isinstance(entry, NodeQueuedDispatch)
-                        else self._try_reserve_source(entry, pq)
-                    )
-                    if reservation is None:
+                node = entry if isinstance(entry, NodeQueuedDispatch) else None
+                generation = None
+                if node is not None:
+                    with self._manager_lock:
+                        generation = self._node_generations.get(node.placement.node_id)
+                    if not node.reconcile_only:
+                        # Never call host/grant code while holding any queue lock.
+                        try:
+                            ready = (generation is not None and self._node_ready is not None
+                                     and self._node_ready(node.placement) is True)
+                        except Exception as error:
+                            self._warn_node_callback(error, stage="transport")
+                            ready = False
+                        if not ready:
+                            continue
+                with self._manager_lock:
+                    if node is not None and not node.reconcile_only and (
+                        generation != self._node_generations.get(node.placement.node_id)
+                    ):
                         continue
-                    claimed = self._pending_authority.claim(entry.request_id)
-                    if claimed is None:
-                        if reservation is not None:
-                            self._capacity.release(reservation.source)
-                            self._scoped_capacity.release(reservation.overlay)
-                        continue
-                    pq.running.add(entry.request_id)
-                    self._active_requests[entry.request_id] = (
-                        entry.project_root, entry.execution_profile_id,
-                    )
+                    with pq.lock:
+                        reservation = (
+                            self._try_reserve_node(entry, occupancy)
+                            if isinstance(entry, NodeQueuedDispatch)
+                            else self._try_reserve_source(entry, pq)
+                        )
+                        if reservation is None:
+                            continue
+                        claimed = self._pending_authority.claim(entry.request_id)
+                        if claimed is None:
+                            if reservation is not None:
+                                self._capacity.release(reservation.source)
+                                self._scoped_capacity.release(reservation.overlay)
+                            continue
+                        pq.running.add(entry.request_id)
+                        self._active_requests[entry.request_id] = (
+                            entry.project_root, entry.execution_profile_id,
+                        )
+                    if node is not None and generation is not None:
+                        self._active_node_generations[entry.request_id] = (
+                            node.placement.node_id, generation,
+                        )
                 thread = threading.Thread(
                     target=self._run_one,
                     args=(pq, entry, reservation),
@@ -2377,11 +2465,20 @@ class GatewayQueueManager:
                     self._finish_node_reservation(entry, bound)
                 else:
                     self._release_reservation(bound)
-            with pq.lock:
-                pq.running.discard(request_id)
-                pq.idle.discard(request_id)
-                pq.cancel_requested.discard(request_id)
-            self._active_requests.pop(request_id, None)
+            wake_node = None
+            with self._manager_lock:
+                with pq.lock:
+                    pq.running.discard(request_id)
+                    pq.idle.discard(request_id)
+                    pq.cancel_requested.discard(request_id)
+                self._active_requests.pop(request_id, None)
+                active_node = self._active_node_generations.pop(request_id, None)
+                if active_node is not None:
+                    node_id, generation = active_node
+                    if self._node_generations[node_id] != generation:
+                        wake_node = node_id
+            if wake_node is not None:
+                self._wake_node(wake_node)
             # Preparation may fail before registering a session waiter. Do
             # not retain that request's pre-registration cancel signal forever.
             if not is_node:

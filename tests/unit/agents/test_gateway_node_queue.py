@@ -35,6 +35,13 @@ def finish(root, record):
     return store.transition_record(root, record["request-id"], "completed")
 
 
+def ready_manager(**kwargs):
+    return queue_mod.GatewayQueueManager(
+        node_ids=("node", "other", "a-node", "b-node"),
+        node_ready=lambda placement: True, **kwargs,
+    )
+
+
 def test_node_bypasses_local_profiles_instances_and_physical_binding(tmp_path, monkeypatch):
     def forbidden(*args, **kwargs):
         pytest.fail("node scheduling entered local provider/profile resolution or physical binding")
@@ -42,7 +49,7 @@ def test_node_bypasses_local_profiles_instances_and_physical_binding(tmp_path, m
     monkeypatch.setattr(queue_mod.profiles_mod, "get_snapshot_validator", forbidden)
     monkeypatch.setattr(store, "bind_and_start_owned_attempt", forbidden)
     monkeypatch.setattr("audiagentic.components.agents.gateway.instances.resolve_instance_facts", forbidden)
-    manager = queue_mod.GatewayQueueManager(node_project_roots=(tmp_path,), node_server_id="server")
+    manager = ready_manager(node_project_roots=(tmp_path,), node_server_id="server")
     pair = node_record(tmp_path)
     observed = []
     def runner(root, record):
@@ -61,7 +68,7 @@ def test_node_bypasses_local_profiles_instances_and_physical_binding(tmp_path, m
 
 def test_same_node_cross_profiles_and_workspaces_share_one_slot(tmp_path):
     a, b = tmp_path / "a", tmp_path / "b"
-    manager = queue_mod.GatewayQueueManager(node_project_roots=(a, b), node_server_id="server")
+    manager = ready_manager(node_project_roots=(a, b), node_server_id="server")
     hold, started, next_started = threading.Event(), threading.Event(), threading.Event()
     first = node_record(a)
     second = node_record(b, profile="other", workspace="other-workspace")
@@ -85,7 +92,7 @@ def test_same_node_cross_profiles_and_workspaces_share_one_slot(tmp_path):
 
 def test_different_nodes_can_run_and_pending_cancel_uses_shared_authority(tmp_path):
     a, b = tmp_path / "a", tmp_path / "b"
-    manager = queue_mod.GatewayQueueManager(node_project_roots=(a, b), node_server_id="server")
+    manager = ready_manager(node_project_roots=(a, b), node_server_id="server")
     hold, first_started, second_started = threading.Event(), threading.Event(), threading.Event()
     def runner(event):
         def run(root, record):
@@ -109,7 +116,7 @@ def test_different_nodes_can_run_and_pending_cancel_uses_shared_authority(tmp_pa
 
 @pytest.mark.parametrize("stage", [None, "effect-intent", "native-accepted"])
 def test_uncertain_effect_holds_after_outer_timeout_and_new_manager(tmp_path, stage):
-    manager = queue_mod.GatewayQueueManager(node_project_roots=(tmp_path,), node_server_id="server")
+    manager = ready_manager(node_project_roots=(tmp_path,), node_server_id="server")
     pair = node_record(tmp_path)
     def disconnected(root, record):
         record = authorize(root, bind(root, record))
@@ -120,7 +127,7 @@ def test_uncertain_effect_holds_after_outer_timeout_and_new_manager(tmp_path, st
     assert manager.wait(tmp_path, pair[0]["request-id"], 3)["state"] == "failed"
     assert manager.source_capacity_status()["node:server:node"]["in-flight"]["node:server:node"] == 1
     successor = node_record(tmp_path, profile="other")
-    new_manager = queue_mod.GatewayQueueManager(node_project_roots=(tmp_path,), node_server_id="server")
+    new_manager = ready_manager(node_project_roots=(tmp_path,), node_server_id="server")
     called = threading.Event()
     enqueue(new_manager, tmp_path, successor, lambda root, record: (called.set(), finish(root, record))[1])
     assert not called.is_set()
@@ -137,7 +144,7 @@ def test_uncertain_effect_holds_after_outer_timeout_and_new_manager(tmp_path, st
 
 def test_mixed_local_node_project_fifo_and_fair_rotation(tmp_path, monkeypatch):
     a, b = tmp_path / "a", tmp_path / "b"
-    manager = queue_mod.GatewayQueueManager(node_project_roots=(a, b), node_server_id="server")
+    manager = ready_manager(node_project_roots=(a, b), node_server_id="server")
     drain = manager._drain_all
     monkeypatch.setattr(manager, "_drain_all", lambda: None)
     order, started = [], {name: threading.Event() for name in ("a-local", "b-node", "a-node", "b-local")}
@@ -181,10 +188,10 @@ def test_mixed_local_node_project_fifo_and_fair_rotation(tmp_path, monkeypatch):
 ])
 def test_node_queue_refuses_unconfigured_root_or_changed_placement(tmp_path, change):
     pair = node_record(tmp_path)
-    manager = queue_mod.GatewayQueueManager()
+    manager = ready_manager()
     with pytest.raises(ValueError, match="outside configured"):
         enqueue(manager, tmp_path, pair, finish)
-    manager = queue_mod.GatewayQueueManager(node_project_roots=(tmp_path,), node_server_id="server")
+    manager = ready_manager(node_project_roots=(tmp_path,), node_server_id="server")
     with pytest.raises(ValueError, match="canonical admission"):
         enqueue(manager, tmp_path, (pair[0], replace(pair[1], **change)), finish)
 
@@ -192,7 +199,7 @@ def test_node_queue_refuses_unconfigured_root_or_changed_placement(tmp_path, cha
 @pytest.mark.parametrize("scope", ["global", "project"])
 def test_local_and_node_share_capacity_overlays(tmp_path, scope):
     a, b = tmp_path / "a", tmp_path / "b"
-    manager = queue_mod.GatewayQueueManager(node_project_roots=(a, b), node_server_id="server")
+    manager = ready_manager(node_project_roots=(a, b), node_server_id="server")
     hold, local_started, node_started = threading.Event(), threading.Event(), threading.Event()
     local = store.build_record(execution_profile_id="local-profile", prompt_body="x")
     store.write_record(a, local)
@@ -234,7 +241,7 @@ def test_pending_limit_and_running_cancel_do_not_interrupt_local_runtime(tmp_pat
     monkeypatch.setattr(
         "audiagentic.components.agents.gateway.session.sessions.peek_session_runtime", forbidden,
     )
-    manager = queue_mod.GatewayQueueManager(node_project_roots=(tmp_path,), node_server_id="server")
+    manager = ready_manager(node_project_roots=(tmp_path,), node_server_id="server")
     hold, started = threading.Event(), threading.Event()
     first, pending, rejected = (node_record(tmp_path) for _ in range(3))
     policy = queue_mod.NodeQueuePolicy("profile", "generation", "digest", 1)
@@ -258,7 +265,7 @@ def test_pending_limit_and_running_cancel_do_not_interrupt_local_runtime(tmp_pat
 def test_incomplete_or_stale_snapshot_cannot_release_a_retained_slot(tmp_path):
     from audiagentic.components.agents.gateway.node.occupancy import NodeOccupancySnapshot
 
-    manager = queue_mod.GatewayQueueManager(node_project_roots=(tmp_path,), node_server_id="server")
+    manager = ready_manager(node_project_roots=(tmp_path,), node_server_id="server")
     pair = node_record(tmp_path)
     def disconnected(root, record):
         authorize(root, bind(root, record))
@@ -276,7 +283,7 @@ def test_recovered_queued_owner_with_null_command_progresses(tmp_path):
     )
     assert claimed["state"] == "queued" and claimed["dispatch-owner-epoch"] == "owner"
     assert claimed["node-dispatch"] is None
-    manager = queue_mod.GatewayQueueManager(node_project_roots=(tmp_path,), node_server_id="server")
+    manager = ready_manager(node_project_roots=(tmp_path,), node_server_id="server")
     calls = []
     def runner(root, record):
         calls.append(record["attempt-epoch"])
@@ -293,7 +300,7 @@ def test_bound_authorized_command_rejects_fresh_attempt_and_blocks_other_request
 
     current = authorize(tmp_path, bind(tmp_path, running_record(tmp_path)))
     selected = NodeAdmissionPlacement("server", "node", "workspace", "principal", "server-project", 1)
-    manager = queue_mod.GatewayQueueManager(node_project_roots=(tmp_path,), node_server_id="server")
+    manager = ready_manager(node_project_roots=(tmp_path,), node_server_id="server")
     before = gateway_request_path(tmp_path, current["request-id"]).read_bytes()
     def forbidden(*args, **kwargs):
         pytest.fail("bound recovery cannot start a fresh attempt")
@@ -308,7 +315,7 @@ def test_bound_authorized_command_rejects_fresh_attempt_and_blocks_other_request
 
 
 def test_preparation_without_command_does_not_leak_reservation_after_runner_exit(tmp_path):
-    manager = queue_mod.GatewayQueueManager(node_project_roots=(tmp_path,), node_server_id="server")
+    manager = ready_manager(node_project_roots=(tmp_path,), node_server_id="server")
     first, second = node_record(tmp_path), node_record(tmp_path, profile="other")
     enqueue(manager, tmp_path, first, lambda root, record: record)
     enqueue(manager, tmp_path, second, finish)
@@ -345,7 +352,7 @@ def recover_enqueue(manager, root, record, runner):
 
 def test_bound_observation_bypasses_blocked_project_head_without_replay(tmp_path, monkeypatch):
     current = recoverable(tmp_path, cancel=True)
-    manager = queue_mod.GatewayQueueManager(node_project_roots=(tmp_path,), node_server_id="server")
+    manager = ready_manager(node_project_roots=(tmp_path,), node_server_id="server")
     fresh = node_record(tmp_path, profile="other")
     enqueue(manager, tmp_path, fresh, finish)
     assert manager.request_slot_status("other", fresh[0]["request-id"]) == "pending"
@@ -386,7 +393,7 @@ def test_node_deferred_recovery_persists_truth_without_synthetic_progress(tmp_pa
     from audiagentic.components.agents.gateway.queue.recovery_control import RecoveryDeferred
 
     before = recoverable(tmp_path, bound=bound)
-    manager = queue_mod.GatewayQueueManager(node_project_roots=(tmp_path,), node_server_id="server")
+    manager = ready_manager(node_project_roots=(tmp_path,), node_server_id="server")
 
     def runner(root, record, **kwargs):
         assert bool(kwargs.get("reconcile_only")) is bound
@@ -409,14 +416,14 @@ def test_recovered_node_rejects_stale_owner(tmp_path):
     current = recoverable(tmp_path)
     current = {**current, "dispatch-owner-epoch": "other"}
     store.write_record(tmp_path, current)
-    manager = queue_mod.GatewayQueueManager(node_project_roots=(tmp_path,), node_server_id="server")
+    manager = ready_manager(node_project_roots=(tmp_path,), node_server_id="server")
     with pytest.raises(ValueError, match="canonical ownership"):
         recover_enqueue(manager, tmp_path, current, lambda *_: pytest.fail("stale owner ran"))
 
 
 def test_receipt_settlement_allows_fresh_work_only_after_reconciliation(tmp_path):
     current = recoverable(tmp_path)
-    manager = queue_mod.GatewayQueueManager(node_project_roots=(tmp_path,), node_server_id="server")
+    manager = ready_manager(node_project_roots=(tmp_path,), node_server_id="server")
     fresh = node_record(tmp_path, profile="other")
     called = threading.Event()
     enqueue(manager, tmp_path, fresh, lambda root, record: (called.set(), finish(root, record))[1])
@@ -436,7 +443,7 @@ def test_receipt_settlement_allows_fresh_work_only_after_reconciliation(tmp_path
 def test_observers_share_one_bounded_slot_across_projects_and_duplicate_notifications(tmp_path):
     a, b = tmp_path / "a", tmp_path / "b"
     first, second = recoverable(a), recoverable(b)
-    manager = queue_mod.GatewayQueueManager(node_project_roots=(a, b), node_server_id="server")
+    manager = ready_manager(node_project_roots=(a, b), node_server_id="server")
     started, hold, next_started = threading.Event(), threading.Event(), threading.Event()
     calls = []
 
@@ -466,7 +473,7 @@ def test_node_observer_errors_preserve_effect_and_canonical_terminal_winner(tmp_
     from audiagentic.components.agents.gateway.node.contracts import conflict
 
     before = recoverable(tmp_path, cancel=True)
-    manager = queue_mod.GatewayQueueManager(node_project_roots=(tmp_path,), node_server_id="server")
+    manager = ready_manager(node_project_roots=(tmp_path,), node_server_id="server")
     def runner(root, record, **kwargs):
         if terminal:
             settled = apply(root, record, receipt(identity(record), 1, "terminal", "a" * 64))
@@ -488,7 +495,7 @@ def test_node_observer_errors_preserve_effect_and_canonical_terminal_winner(tmp_
 @pytest.mark.parametrize("change", ["terminal", "owner", "placement", "recovery", "command"])
 def test_pending_observer_discards_changed_canonical_identity(tmp_path, monkeypatch, change):
     current = recoverable(tmp_path)
-    manager = queue_mod.GatewayQueueManager(node_project_roots=(tmp_path,), node_server_id="server")
+    manager = ready_manager(node_project_roots=(tmp_path,), node_server_id="server")
     drain = manager._drain_all
     monkeypatch.setattr(manager, "_drain_all", lambda: None)
     recover_enqueue(manager, tmp_path, current, lambda *_ , **kw: pytest.fail("stale observer ran"))
@@ -529,7 +536,7 @@ def test_unclaimed_node_deferral_keeps_null_attempt_and_can_reenqueue(tmp_path, 
         worker_id=None, attempt_epoch=0, expected_revision=current["revision"],
         error=conflict(1, "Node unavailable"), phase="node-runtime-unavailable",
         side_effect_state="not-started", retry_delay_seconds=None)
-    manager = queue_mod.GatewayQueueManager(node_project_roots=(tmp_path,), node_server_id="server")
+    manager = ready_manager(node_project_roots=(tmp_path,), node_server_id="server")
     drain = manager._drain_all
     monkeypatch.setattr(manager, "_drain_all", lambda: None)
     recover_enqueue(manager, tmp_path, current, finish)
@@ -551,7 +558,7 @@ def test_actual_queue_preserves_validated_node_failure_stage_without_private_det
     from audiagentic.foundation.contracts.errors import AudiaGenticError
 
     before = recoverable(tmp_path)
-    manager = queue_mod.GatewayQueueManager(node_project_roots=(tmp_path,), node_server_id="server")
+    manager = ready_manager(node_project_roots=(tmp_path,), node_server_id="server")
     def runner(root, record, **kwargs):
         safe = sanitize_node_error(AudiaGenticError("IO-AGND-001", "agents-node", "PRIVATE raw error",
             {"stage": "retain-prepared", "reason-code": "prepared-evidence-unavailable", "payload": "PRIVATE"}))
@@ -572,7 +579,7 @@ def test_pending_observer_uses_latest_recovery_phase_for_same_original_command(t
     from audiagentic.components.agents.gateway.node.contracts import conflict
 
     before = recoverable(tmp_path)
-    manager = queue_mod.GatewayQueueManager(node_project_roots=(tmp_path,), node_server_id="server")
+    manager = ready_manager(node_project_roots=(tmp_path,), node_server_id="server")
     drain = manager._drain_all
     monkeypatch.setattr(manager, "_drain_all", lambda: None)
     observed = threading.Event()
@@ -592,3 +599,196 @@ def test_pending_observer_uses_latest_recovery_phase_for_same_original_command(t
     assert observed.wait(3)
     after = manager.wait(tmp_path, before["request-id"], 1)
     assert after["state"] == "running" and after["attempt-epoch"] == before["attempt-epoch"]
+
+
+@pytest.mark.parametrize("configured", [False, True])
+def test_fresh_node_defaults_unavailable_without_readiness(tmp_path, configured):
+    manager = queue_mod.GatewayQueueManager(
+        node_project_roots=(tmp_path,), node_server_id="server",
+        node_ids=("node",) if configured else (),
+    )
+    pair = node_record(tmp_path)
+    ran = threading.Event()
+    enqueue(manager, tmp_path, pair, lambda *args: ran.set())
+    manager.notify_node_changed("node")
+    assert not ran.is_set()
+    assert store.read_record(tmp_path, pair[0]["request-id"])["state"] == "queued"
+    assert not manager._active_requests
+
+
+def test_readiness_hint_is_reusable_and_notify_wakes_without_polling(tmp_path):
+    ready = False
+    checks = []
+    def hint(placement):
+        checks.append(placement.node_id)
+        return ready
+    manager = queue_mod.GatewayQueueManager(
+        node_project_roots=(tmp_path,), node_server_id="server", node_ids=("node",), node_ready=hint,
+    )
+    first, second = node_record(tmp_path), node_record(tmp_path)
+    enqueue(manager, tmp_path, first, finish)
+    enqueue(manager, tmp_path, second, finish)
+    assert checks == ["node", "node"]
+    ready = True
+    manager.notify_node_changed("node")
+    assert manager.wait(tmp_path, first[0]["request-id"], 3)["state"] == "completed"
+    assert manager.wait(tmp_path, second[0]["request-id"], 3)["state"] == "completed"
+    before = dict(manager._node_generations)
+    manager.notify_node_changed("foreign")
+    assert manager._node_generations == before
+
+
+def test_stale_readiness_generation_cannot_claim(tmp_path):
+    entered, release = threading.Event(), threading.Event()
+    calls = []
+    def hint(placement):
+        calls.append(placement)
+        if len(calls) == 1:
+            entered.set()
+            assert release.wait(3)
+            return True
+        return False
+    manager = queue_mod.GatewayQueueManager(
+        node_project_roots=(tmp_path,), node_server_id="server", node_ids=("node",), node_ready=hint,
+    )
+    pair = node_record(tmp_path)
+    ran = threading.Event()
+    worker = threading.Thread(target=enqueue, args=(manager, tmp_path, pair, lambda *args: ran.set()))
+    worker.start()
+    try:
+        assert entered.wait(3)
+        manager.notify_node_changed("node")
+    finally:
+        release.set()
+        worker.join(3)
+    assert not worker.is_alive()
+    assert not ran.is_set()
+    assert store.read_record(tmp_path, pair[0]["request-id"])["state"] == "queued"
+
+
+@pytest.mark.parametrize("bound", [False, True])
+def test_notification_before_active_defer_is_replayed_after_atomic_retirement(tmp_path, bound):
+    from audiagentic.components.agents.gateway.node.contracts import conflict
+    from audiagentic.components.agents.gateway.queue.recovery_control import RecoveryDeferred
+
+    entered, release, settled = threading.Event(), threading.Event(), threading.Event()
+    pair = node_record(tmp_path)
+    observed = []
+    def recover(node_id):
+        # This callback deliberately reads before the active runner's defer.
+        current = store.read_record(tmp_path, pair[0]["request-id"])
+        observed.append(current.get("recovery-required") is True)
+        if observed[-1]:
+            def observer(root, record, **kwargs):
+                assert bool(kwargs.get("reconcile_only")) is bound
+                finish(root, record)
+                settled.set()
+            recover_enqueue(manager, tmp_path, current, observer)
+    manager = queue_mod.GatewayQueueManager(
+        node_project_roots=(tmp_path,), node_server_id="server", node_ids=("node",),
+        node_ready=lambda placement: True, node_recovery_wakeup=recover,
+    )
+    def runner(root, record):
+        if bound:
+            record = authorize(root, bind(root, record))
+        entered.set()
+        assert release.wait(3)
+        raise RecoveryDeferred(conflict(1, "offline"), phase="node-disconnected",
+                              side_effect_state="may-have-started" if bound else "not-started")
+    enqueue(manager, tmp_path, pair, runner)
+    try:
+        assert entered.wait(3)
+        if bound:
+            current = store.read_record(tmp_path, pair[0]["request-id"])
+            apply(tmp_path, current, receipt(identity(current), 1, "terminal", "a" * 64))
+        manager.notify_node_changed("node")
+        assert observed == [False]
+    finally:
+        release.set()
+    assert settled.wait(3)
+    assert observed == [False, True]
+    assert manager.wait(tmp_path, pair[0]["request-id"], 3)["state"] == "completed"
+
+
+
+def test_bound_history_bypasses_missing_fresh_readiness(tmp_path):
+    current = recoverable(tmp_path)
+    manager = queue_mod.GatewayQueueManager(node_project_roots=(tmp_path,), node_server_id="server")
+    observed = threading.Event()
+    def runner(root, record, **kwargs):
+        assert kwargs == {"reconcile_only": True}
+        observed.set()
+        finish(root, record)
+    recover_enqueue(manager, tmp_path, current, runner)
+    assert observed.wait(3)
+    assert manager.wait(tmp_path, current["request-id"], 3)["state"] == "completed"
+
+
+def test_concurrent_node_wakes_coalesce_outside_locks(tmp_path):
+    entered, release = threading.Event(), threading.Event()
+    calls = []
+    def wake(node_id):
+        # Acquiring this non-reentrant lock proves callback runs outside it.
+        with manager._manager_lock:
+            calls.append(node_id)
+        if len(calls) == 1:
+            entered.set()
+            assert release.wait(3)
+    manager = queue_mod.GatewayQueueManager(node_ids=("node",), node_recovery_wakeup=wake)
+    worker = threading.Thread(target=manager.notify_node_changed, args=("node",))
+    worker.start()
+    try:
+        assert entered.wait(3)
+        for _ in range(5):
+            manager.notify_node_changed("node")
+        assert calls == ["node"]
+    finally:
+        release.set()
+        worker.join(3)
+    assert not worker.is_alive()
+    assert calls == ["node", "node"]
+    assert manager._node_generations == {"node": 6}
+
+
+@pytest.mark.parametrize("boundary", ["readiness", "recovery"])
+@pytest.mark.parametrize("logger_fails", [False, True])
+def test_callback_errors_are_redacted_and_logging_cannot_escape(tmp_path, monkeypatch, boundary, logger_fails):
+    warnings = []
+    private = "/private/customer/token=TOP_SECRET"
+    def warning(*args, **kwargs):
+        warnings.append((args, kwargs))
+        if logger_fails:
+            raise RuntimeError(private)
+    monkeypatch.setattr(queue_mod.logger, "warning", warning)
+    def fail(*args):
+        raise RuntimeError(private)
+    manager = queue_mod.GatewayQueueManager(
+        node_project_roots=(tmp_path,), node_server_id="server", node_ids=("node",),
+        node_ready=fail if boundary == "readiness" else lambda placement: True,
+        node_recovery_wakeup=fail if boundary == "recovery" else None,
+    )
+    pair = node_record(tmp_path)
+    # Readiness failure leaves canonical work pending; wake failure must still
+    # allow readiness/drain, without replaying or rolling back any custody.
+    if boundary == "recovery":
+        manager._node_ready = lambda placement: False
+    enqueue(manager, tmp_path, pair, finish)
+    if boundary == "recovery":
+        manager._node_ready = lambda placement: True
+    manager.notify_node_changed("node")
+    assert warnings
+    assert private not in repr(warnings)
+    for args, kwargs in warnings:
+        assert args == ("node queue callback failed",)
+        assert set(kwargs) == {"extra"}
+        assert kwargs["extra"] == {
+            "code": "IO-AGND-001",
+            "stage": "transport" if boundary == "readiness" else "observe",
+            "reason": "grant-or-connection-changed" if boundary == "readiness" else "node-reconciliation-required",
+        }
+    if boundary == "readiness":
+        assert store.read_record(tmp_path, pair[0]["request-id"])["state"] == "queued"
+        manager._node_ready = lambda placement: True
+        manager.notify_node_changed("node")
+    assert manager.wait(tmp_path, pair[0]["request-id"], 3)["state"] == "completed"
+    assert not manager._node_waking
