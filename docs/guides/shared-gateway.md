@@ -169,6 +169,27 @@ process-local. Diagnostic failures cannot reverse committed work; authoritative
 custody failures must still stop ACK/effect progression. Never retry a mutation
 or blindly append again because a diagnostic counter increased.
 
+### Recovery boundaries under node qualification
+
+These are recovery contracts for the node implementation, not a claim that
+the standalone node runtime is enabled or qualified. Connection readiness is
+a reusable scheduling hint, consumed at fresh preparation; it never replaces
+current grant, ownership, canonical occupancy or effect authorization checks.
+
+| Boundary | Required disposition |
+| --- | --- |
+| Offline or not ready | Leave fresh work queued; historical observation may continue on an authorized channel. |
+| RPC timeout or cancellation | Retire that exact channel before discarding reply correlation; reconnect to observe the original command. |
+| Receipt/cursor write uncertainty | Withhold ACK and preserve custody evidence; never reset a cursor to make progress. |
+| Corrupt or incomplete artifact | Keep terminal receipt evidence, defer publication and fetch immutable output within configured bounds. |
+| Terminal CAS followed by cleanup interruption | Repair through the existing idempotent session finalizer without fetching or rewriting the response. |
+| Diagnostic sink failure | Preserve committed work and its primary outcome; expose bounded sanitized diagnostics where the remaining sink permits. |
+
+Readiness must renew after receipt drainage and recipient quiescence for each
+command cycle. A terminal receipt can release canonical occupancy before the
+producer finishes cleanup. Host qualification therefore includes this race,
+lost recovery wakeups, failed callback retriggering and producer-safe shutdown.
+
 ## Connector configuration
 
 Save this as `connector.yaml` on the client. Provision its token file with the
