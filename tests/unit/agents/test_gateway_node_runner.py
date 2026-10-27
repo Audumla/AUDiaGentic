@@ -578,6 +578,71 @@ async def test_waiter_cannot_override_canonical_uncertainty_or_inject_phase_text
     assert len(case.commands) <= 1
 
 
+@pytest.mark.asyncio
+async def test_real_stage_journal_reports_control_milestones_without_native_completion(case):
+    from audiagentic.components.agents.gateway.observability import read_observation_page
+    await invoke(case)
+    current = await effects(case)
+    page = await asyncio.to_thread(read_observation_page, case.admission.root, current["request-id"], limit=100)
+    rows = [e for e in page["items"] if e["event"] == "node-stage-observed"]
+    facts = [e["facts"]["diagnostic-facts"] for e in rows]
+    stages = [e["node-stage"] for e in facts]
+    ordered = ["admission-validated", "connection-qualified", "prepare-requested", "prepare-accepted",
+               "prepared-retained", "command-bound", "command-delivery-requested", "command-sent",
+               "reconciliation-started", "reconciliation-deferred"]
+    assert [stage for stage in stages if stage in ordered] == ordered
+    assert "effect-authorized" in stages
+    assert "terminal-published" not in stages and "native-accepted" not in stages
+    assert current["state"] == "running"
+    elapsed = [e["elapsed-ms"] for e in facts if e["node-stage"] in ordered]
+    assert elapsed == sorted(elapsed)
+    raw = str(page)
+    assert "FAKE provider render" not in raw and "FAKE manifest" not in raw
+
+
+@pytest.mark.asyncio
+async def test_stage_emission_happens_after_service_owner_guard_is_released(case, monkeypatch):
+    from contextlib import contextmanager
+
+    from audiagentic.components.agents.gateway.node import runner as module
+    state = threading.local()
+    original_guard, original_emit = case.runner.service.owner_guard, module.emit_node_stage
+    calls = []
+    @contextmanager
+    def guarded(*args, **kwargs):
+        with original_guard(*args, **kwargs):
+            state.depth = getattr(state, "depth", 0) + 1
+            try:
+                yield
+            finally:
+                state.depth -= 1
+    def emitted(*args, **kwargs):
+        assert getattr(state, "depth", 0) == 0
+        calls.append(args[2])
+        return original_emit(*args, **kwargs)
+    monkeypatch.setattr(case.runner.service, "owner_guard", guarded)
+    monkeypatch.setattr(module, "emit_node_stage", emitted)
+    await invoke(case)
+    await effects(case)
+    assert "command-bound" in calls and "effect-authorized" in calls
+
+
+@pytest.mark.asyncio
+async def test_actual_runner_diagnostic_sink_failures_do_not_reverse_binding_or_authorization(case, monkeypatch):
+    from audiagentic.components.agents.gateway.node import observability as module
+    def failed(*args, **kwargs):
+        raise OSError("PRIVATE diagnostic sink failure")
+    monkeypatch.setattr(module.observations, "append_observation", failed)
+    monkeypatch.setattr(store, "record_gateway_timeline", failed)
+    monkeypatch.setattr(module.logger, "warning", failed)
+    before = module.node_observation_failure_count()
+    await invoke(case)
+    current = await effects(case)
+    assert current["state"] == "running" and current["node-dispatch"]["authorization-id"]
+    assert type(case.effects[0]) is EffectAuthorized and len(case.commands) == 1
+    assert module.node_observation_failure_count() > before
+
+
 def test_shared_projection_preserves_safe_stage_reason_phase_when_queue_omits_stage():
     first = sanitize_node_error(AudiaGenticError("IO-AGND-001", "agents-node", "SECRET source details"),
                                 stage="retain-prepared", reason="prepared-evidence-unavailable")

@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import math
+import time
 import uuid
 from collections.abc import Callable
 from pathlib import Path
@@ -23,6 +24,7 @@ from .admission_owner import read_node_admission_snapshot
 from .authority import SealedNodePlacement
 from .contracts import CommandIdentity, canonical_json, conflict, invalid
 from .diagnostics import sanitize_node_error
+from .observability import emit_node_stage
 from .occupancy import NodeOccupancy, record_holds_node
 from .preparation import (
     PreparationBinding,
@@ -84,16 +86,20 @@ class NodeRunner:
         safe = sanitize_node_error(error, stage, reason, phase)
         return RecoveryDeferred(safe, phase=safe.details["phase"], side_effect_state=side_effect.value)
 
-    def _observe(self, root, record):
+    def _observe(self, root, record, *, started_ns=None):
+        started_ns = time.monotonic_ns() if started_ns is None else started_ns
+        emit_node_stage(root, record, "reconciliation-started", started_ns=started_ns)
         if record.get("node-dispatch") is None:
             raise self._defer(root, record)
         if record["state"] in store.TERMINAL_STATES and not record_holds_node(record):
+            emit_node_stage(root, record, "reconciliation-completed", started_ns=started_ns)
             return record
         if self.waiter is not None:
             self.waiter(root, record)  # Existing orchestration, outside all authority locks.
             with self.service.owner_guard(self.owner_epoch):
                 settled = self._read(root, record)
             if settled["state"] in store.TERMINAL_STATES and not record_holds_node(settled):
+                emit_node_stage(root, settled, "reconciliation-completed", started_ns=started_ns)
                 return settled
         raise self._defer(root, record)
 
@@ -146,12 +152,14 @@ class NodeRunner:
         else:
             raise invalid(1, "Synchronous NodeRunner must run off the event loop")
         stage = "ownership"
+        started_ns = time.monotonic_ns()
+        current = None
         try:
             with self.service.owner_guard(self.owner_epoch):
                 current = self._read(root, record)
             if current.get("node-dispatch") is not None or reconcile_only:
                 stage = "observe"
-                return self._observe(root, current)
+                return self._observe(root, current, started_ns=started_ns)
             if (current["state"] != "running" or current.get("provider-transport-kind") != "worker"
                     or current.get("cancel-requested")):
                 raise self._defer(root, current, stage="ownership", reason="attempt-not-dispatchable")
@@ -163,6 +171,7 @@ class NodeRunner:
             placement = current["node-placement"]
             if self.config.projects.get(placement["server-project-id"]) != root:
                 raise conflict(1, "Node placement differs from canonical storage project")
+            emit_node_stage(root, current, "admission-validated", started_ns=started_ns)
             stage = "transport"
             with self.service.owner_guard(self.owner_epoch):
                 refreshed = self.connections.refresh_capability(placement["node-id"])
@@ -179,7 +188,9 @@ class NodeRunner:
                 if self.authority.serialize(lambda: self.occupancy.snapshot().occupied(
                         self.config.server_id, placement["node-id"], exclude_request=(root, current["request-id"]))):
                     raise conflict(1, "Node capacity is occupied before preparation", reason_code="capacity-occupied")
+            emit_node_stage(root, current, "connection-qualified", started_ns=started_ns, connection=slot.identity)
             stage = "prepare"
+            emit_node_stage(root, current, "prepare-requested", started_ns=started_ns, connection=slot.identity)
             sent, reply_frame, reply = self._bridge(self._prepare(slot, {
                 "kind": "prepare", "binding": binding.to_mapping(), "semantic": snapshot.descriptor.semantic.to_mapping(),
                 "agent-id": snapshot.agent_id, "worker-id": current["worker-id"], "attempt-epoch": current["attempt-epoch"],
@@ -204,6 +215,7 @@ class NodeRunner:
                     or reply.attestation.attempt_epoch != current["attempt-epoch"]
                     or reply.attestation.provider_id != snapshot.profile.provider_id):
                 raise conflict(1, "Node preparation reply differs from admitted attempt")
+            emit_node_stage(root, current, "prepare-accepted", started_ns=started_ns, connection=slot.identity)
             payload = assemble_final_command_payload(reply.attestation, snapshot.raw_prompt)
             command = CommandIdentity(binding.command_id, binding.request_id, binding.node_id, binding.node_epoch,
                 binding.gateway_owner_epoch, binding.connection_generation, binding.workspace_id, binding.grant_revision,
@@ -211,6 +223,7 @@ class NodeRunner:
             validate_final_command_payload(payload, command, accepted_attestation=reply.attestation)
             stage = "retain-prepared"
             persist_prepared_once(root, command, reply.attestation, payload)
+            emit_node_stage(root, current, "prepared-retained", started_ns=started_ns, connection=slot.identity)
             stage = "admission"
             with self.service.owner_guard(self.owner_epoch):
                 # Check retained source bytes again after remote preparation.
@@ -221,18 +234,28 @@ class NodeRunner:
                     accepted_attestation=reply.attestation, owner_epoch=self.owner_epoch,
                     worker_id=current["worker-id"], attempt_epoch=current["attempt-epoch"],
                     expected_revision=current["revision"], resume_unbound=resume_unbound))
+            current = bound
+            emit_node_stage(root, bound, "command-bound", started_ns=started_ns, connection=slot.identity)
             stage = "command"
+            emit_node_stage(root, bound, "command-delivery-requested", started_ns=started_ns, connection=slot.identity)
             self._bridge(self._send_command(slot, command, payload))
+            emit_node_stage(root, bound, "command-sent", started_ns=started_ns, connection=slot.identity)
             stage = "observe"
-            return self._observe(root, bound)
+            return self._observe(root, bound, started_ns=started_ns)
         except RecoveryDeferred as error:
             deferred = self._defer(root, record, error.error, stage=stage, phase=error.phase)
+            if current is not None:
+                emit_node_stage(root, current, "reconciliation-deferred", started_ns=started_ns, error=deferred.error)
             raise deferred from deferred.error
         except Exception as error:
             deferred = self._defer(root, record, error, stage=stage)
+            if current is not None:
+                emit_node_stage(root, current, "reconciliation-deferred", started_ns=started_ns, error=deferred.error)
             raise deferred from deferred.error
 
     def _effect_reply(self, connection, frame, work):
+        started_ns = time.monotonic_ns()
+        associated = None
         try:
             parsed = parse_work_frame(frame, role="gateway", current_connection=connection.identity,
                                       capability=connection.capability, max_artifact_bytes=1024 * 1024)
@@ -252,6 +275,7 @@ class NodeRunner:
                 if len(matches) != 1:
                     raise conflict(1, "Effect requires one original canonical request")
                 root, record = matches[0]
+                associated = (root, record)
                 if (record.get("node-dispatch") is None or record["node-dispatch"]["identity"] != command.to_mapping()
                         or record.get("dispatch-owner-epoch") != self.owner_epoch
                         or command.gateway_owner_epoch != self.owner_epoch):
@@ -266,15 +290,18 @@ class NodeRunner:
                 if slot.connection is not connection:
                     raise conflict(1, "Effect arrived on another connection")
                 authorization_id = record["node-dispatch"].get("authorization-id") or uuid.uuid4().hex
-                self._authorized(root, record, command, slot, lambda: store.authorize_owned_node_effect(
+                authorized = self._authorized(root, record, command, slot, lambda: store.authorize_owned_node_effect(
                     root, command.request_id, identity=command, authorization_id=authorization_id,
                     accepted_attestation=evidence.attestation, current_node_epoch=connection.identity.node_epoch,
                     current_connection_generation=connection.identity.connection_generation, owner_epoch=self.owner_epoch,
                     worker_id=record["worker-id"], attempt_epoch=record["attempt-epoch"], expected_revision=record["revision"]))
+            emit_node_stage(root, authorized, "effect-authorized", started_ns=started_ns, connection=connection.identity)
             return "effect-authorized", {"identity": command.to_mapping(), "authorization-request-id": frame.message_id,
                                          "authorization-id": authorization_id, "authorized": True}
         except Exception as error:
             safe = sanitize_node_error(error, "bind")
+            if associated is not None:
+                emit_node_stage(*associated, "effect-denied", started_ns=started_ns, connection=connection.identity, error=safe)
             return "effect-denied", {"identity": work.identity.to_mapping(),
                                         "authorization-request-id": frame.message_id, "code": safe.code}
 

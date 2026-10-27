@@ -42,6 +42,7 @@ from audiagentic.components.agents.gateway.event_topics import (
 from audiagentic.components.agents.gateway.instances import InstanceFacts
 from audiagentic.components.agents.gateway.node.contracts import canonical_json
 from audiagentic.components.agents.gateway.node.diagnostics import sanitize_node_error
+from audiagentic.components.agents.gateway.node.observability import emit_node_stage
 from audiagentic.components.agents.gateway.node.occupancy import (
     NodeOccupancy,
     NodeOccupancySnapshot,
@@ -1600,10 +1601,12 @@ class GatewayQueueManager:
         )
         safe = sanitize_node_error(error)
         defer = store.defer_owned_queued_recovery if current["state"] == "queued" else store.defer_owned_recovery
-        return defer(entry.project_root, entry.request_id, owner_epoch=entry.owner_epoch,
+        updated = defer(entry.project_root, entry.request_id, owner_epoch=entry.owner_epoch,
             worker_id=current.get("worker-id"), attempt_epoch=current["attempt-epoch"],
             expected_revision=current["revision"], error=safe, phase=phase,
             side_effect_state=side_effect, retry_delay_seconds=None)
+        emit_node_stage(entry.project_root, updated, "reconciliation-deferred", error=safe)
+        return updated
 
     def _run_one(
         self,
