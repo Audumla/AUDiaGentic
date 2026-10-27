@@ -122,6 +122,8 @@ def _intent_digest(record: dict[str, Any]) -> str:
             {key: descriptor[key] for key in ("version", "server-id", "semantic", "policy")}
             if descriptor is not None else None
         )
+        if descriptor is not None and "source-workspace" in descriptor:
+            intent["node-admission"]["source-workspace"] = descriptor["source-workspace"]
     encoded = json.dumps(intent, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
@@ -193,6 +195,8 @@ def admit_record(
         if candidate.get("contract-version") != _shared._CONTRACT_VERSION:
             raise AudiaGenticError(code="VAL-AGW-002", kind="agents", message="Fresh node admission requires the current record contract")
         descriptor = NodeAdmissionDescriptor.from_mapping(candidate.get("node-admission"))
+        if descriptor.source_workspace is None:
+            raise AudiaGenticError(code="VAL-AGW-002", kind="agents", message="Fresh node admission requires caller workspace identity")
         if descriptor.policy.profile_id != candidate.get("execution-profile-id"):
             raise AudiaGenticError(code="VAL-AGW-002", kind="agents", message="Node admission profile mismatch")
         candidate["node-admission"] = descriptor.to_mapping()

@@ -11,6 +11,7 @@ from audiagentic.components.agents.gateway import store
 from audiagentic.components.agents.gateway.node.admission_contract import (
     NodeAdmissionDescriptor,
     NodeAdmissionPolicy,
+    SourceWorkspaceIdentity,
 )
 from audiagentic.components.agents.gateway.node.preparation import PromptSemanticIdentity
 from audiagentic.components.agents.gateway.store._admission import _intent_digest
@@ -21,7 +22,8 @@ from audiagentic.foundation.io import atomic_write_json
 
 def descriptor():
     semantic = PromptSemanticIdentity("a" * 64, "b" * 64, "prompt", "profile", 1, "c" * 64, "d" * 64)
-    return NodeAdmissionDescriptor(1, "server", semantic, NodeAdmissionPolicy("profile", "generation", "digest", 8, 2, 1), "e" * 64)
+    return NodeAdmissionDescriptor(1, "server", semantic, NodeAdmissionPolicy("profile", "generation", "digest", 8, 2, 1), "e" * 64,
+                                   SourceWorkspaceIdentity(1, "node", "workspace", "read-write", "f" * 64))
 
 
 def node_record(**changes):
@@ -49,6 +51,54 @@ def test_descriptor_roundtrip_and_caller_mutation_isolated():
     with pytest.raises(TypeError):
         record["node-admission"]["semantic"]["prompt-id"] = "replacement"
     assert NodeAdmissionDescriptor.from_mapping(record["node-admission"]) == descriptor()
+
+
+@pytest.mark.parametrize("field,value", [
+    ("source_node_id", "other-node"), ("workspace_id", "other-workspace"),
+    ("access_mode", "read-only"), ("binding_sha256", "a" * 64),
+])
+def test_source_workspace_is_execution_intent_not_audit_provenance(tmp_path, field, value):
+    first = node_record()
+    store.admit_record(tmp_path, first, idempotency_key="same-key")
+    changed = replace(descriptor(), source_workspace=replace(descriptor().source_workspace, **{field: value}))
+    with pytest.raises(AudiaGenticError) as caught:
+        store.admit_record(tmp_path, node_record(node_admission=changed.to_mapping()), idempotency_key="same-key")
+    assert caught.value.code == "CON-AGW-081"
+
+
+def test_historical_descriptor_without_source_is_readable_but_never_fresh_admission(tmp_path):
+    old = replace(descriptor(), source_workspace=None).to_mapping()
+    assert "source-workspace" not in old
+    assert NodeAdmissionDescriptor.from_mapping(old).to_mapping() == old
+    record = node_record(node_admission=old)
+    store.write_record(tmp_path, record)
+    loaded = store.read_record(tmp_path, record["request-id"])
+    assert loaded["node-admission"] == old
+    # Ordinary updates cannot silently rewrite historical descriptor identity.
+    store.transition_record(tmp_path, record["request-id"], "running")
+    with pytest.raises(AudiaGenticError, match="caller workspace"):
+        store.admit_record(tmp_path, node_record(node_admission=old), idempotency_key="fresh")
+
+
+@pytest.mark.parametrize("field,value", [
+    ("version", True), ("source_node_id", "../node"), ("workspace_id", ""),
+    ("access_mode", "write"), ("access_mode", None), ("binding_sha256", "bad"),
+])
+def test_source_workspace_contract_rejects_malformed_identity(field, value):
+    with pytest.raises(AudiaGenticError):
+        replace(descriptor().source_workspace, **{field: value})
+
+
+def test_source_locator_and_claims_cannot_be_added_to_public_identity():
+    mapping = json.loads(json.dumps(descriptor().to_mapping()))
+    for key in ("root", "hostname", "authenticated"):
+        changed = deepcopy(mapping)
+        changed["source-workspace"][key] = "not-authority"
+        with pytest.raises(AudiaGenticError):
+            NodeAdmissionDescriptor.from_mapping(changed)
+    mapping["source-workspace"] = None
+    with pytest.raises(AudiaGenticError):
+        NodeAdmissionDescriptor.from_mapping(mapping)
 
 
 @pytest.mark.parametrize("target,field,value", [

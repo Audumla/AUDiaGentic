@@ -163,6 +163,19 @@
             }
           }
         },
+        "source-workspace": {
+          "description": "Caller execution identity; authentication and local binding proof are checked by admission. No root path is stored here.",
+          "type": "object",
+          "required": ["version", "source-node-id", "workspace-id", "access-mode", "binding-sha256"],
+          "additionalProperties": false,
+          "properties": {
+            "version": {"type": "integer", "const": 1},
+            "source-node-id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,199}$", "maxLength": 200},
+            "workspace-id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,199}$", "maxLength": 200},
+            "access-mode": {"enum": ["read-write", "read-only"]},
+            "binding-sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$", "maxLength": 64}
+          }
+        },
         "snapshot-sha256": {
           "type": "string",
           "pattern": "^[0-9a-f]{64}$",

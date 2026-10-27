@@ -74,12 +74,48 @@ class NodeAdmissionPolicy:
 
 
 @dataclass(frozen=True)
+class SourceWorkspaceIdentity:
+    """Caller workspace execution identity, not proof of host or file access.
+
+    Authentication and recipient-local binding validation belong to admission.
+    A root locator stays private; only its stable enrolled binding is retained.
+    """
+
+    version: int
+    source_node_id: str
+    workspace_id: str
+    access_mode: str
+    binding_sha256: str
+
+    def __post_init__(self):
+        if type(self.version) is not int or self.version != 1:
+            raise invalid(1, "Source workspace version must be integer 1")
+        _identifier(self.source_node_id)
+        _identifier(self.workspace_id)
+        if self.access_mode not in ("read-write", "read-only"):
+            raise invalid(1, "Source workspace access mode is unsupported")
+        if not isinstance(self.binding_sha256, str) or not re.fullmatch(r"[0-9a-f]{64}", self.binding_sha256):
+            raise invalid(1, "Source workspace binding requires lowercase SHA256")
+
+    def to_mapping(self) -> dict:
+        return {"version": self.version, "source-node-id": self.source_node_id,
+                "workspace-id": self.workspace_id, "access-mode": self.access_mode,
+                "binding-sha256": self.binding_sha256}
+
+    @classmethod
+    def from_mapping(cls, value: Mapping) -> SourceWorkspaceIdentity:
+        mapping = _exact(value, {"version", "source-node-id", "workspace-id", "access-mode", "binding-sha256"})
+        return cls(**{key.replace("-", "_"): item for key, item in mapping.items()})
+
+
+@dataclass(frozen=True)
 class NodeAdmissionDescriptor:
     version: int
     server_id: str
     semantic: PromptSemanticIdentity
     policy: NodeAdmissionPolicy
     snapshot_sha256: str
+    source_workspace: SourceWorkspaceIdentity | None = None
 
     def __post_init__(self):
         if type(self.version) is not int or self.version != 1:
@@ -91,19 +127,33 @@ class NodeAdmissionDescriptor:
             raise invalid(1, "Node semantic profile must match admission policy")
         if not isinstance(self.snapshot_sha256, str) or not re.fullmatch(r"[0-9a-f]{64}", self.snapshot_sha256):
             raise invalid(1, "Node admission snapshot digest must be lowercase SHA256")
+        if self.source_workspace is not None and type(self.source_workspace) is not SourceWorkspaceIdentity:
+            raise invalid(1, "Node admission requires typed source workspace identity")
 
     def to_mapping(self) -> FrozenAdmissionMapping:
-        return _freeze({"version": self.version, "server-id": self.server_id,
-                        "semantic": self.semantic.to_mapping(), "policy": self.policy.to_mapping(),
-                        "snapshot-sha256": self.snapshot_sha256})
+        mapping = {"version": self.version, "server-id": self.server_id,
+                   "semantic": self.semantic.to_mapping(), "policy": self.policy.to_mapping(),
+                   "snapshot-sha256": self.snapshot_sha256}
+        # Preserve historical descriptor bytes and equality; absence is evidence
+        # only, not a fresh-admission default or a guessed caller workspace.
+        if self.source_workspace is not None:
+            mapping["source-workspace"] = self.source_workspace.to_mapping()
+        return _freeze(mapping)
 
     @classmethod
     def from_mapping(cls, value: Mapping) -> NodeAdmissionDescriptor:
-        mapping = _exact(value, {"version", "server-id", "semantic", "policy", "snapshot-sha256"})
+        if not isinstance(value, Mapping):
+            raise invalid(1, "Node admission requires a mapping")
+        mapping = dict(value)
+        source = mapping.pop("source-workspace", None)
+        if "source-workspace" in value and source is None:
+            raise invalid(1, "Explicit source workspace must be typed identity, not null")
+        mapping = _exact(mapping, {"version", "server-id", "semantic", "policy", "snapshot-sha256"})
         # Bound the public envelope before canonicalization or schema diagnostics.
         semantic = PromptSemanticIdentity.from_mapping(mapping["semantic"])
         policy = NodeAdmissionPolicy.from_mapping(mapping["policy"])
-        result = cls(mapping["version"], mapping["server-id"], semantic, policy, mapping["snapshot-sha256"])
+        result = cls(mapping["version"], mapping["server-id"], semantic, policy, mapping["snapshot-sha256"],
+                     SourceWorkspaceIdentity.from_mapping(source) if source is not None else None)
         if len(canonical_json(result.to_mapping())) > 4096:
             raise invalid(1, "Node admission descriptor exceeds the supported bound")
         return result
