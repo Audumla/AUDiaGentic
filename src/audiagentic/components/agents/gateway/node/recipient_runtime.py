@@ -83,7 +83,13 @@ class NodeRecipientRuntime:
         # Notification only: clear before rereading the owner's durable cursor.
         # Valid duplicate ACKs may wake a waiter; deferred ACKs never signal.
         self.acknowledgement_event = asyncio.Event()
+        self.producer_changed_event = asyncio.Event()
         self.failure: RecipientFailure | None = None
+
+    @property
+    def execution_owner(self) -> NodeExecutionOwner:
+        """The sole process-owned receipt/effect owner; no alternate store."""
+        return self._owner
 
     @property
     def current_connection(self) -> NodeConnection | None:
@@ -360,6 +366,7 @@ class NodeRecipientRuntime:
             # Exact immutable channel Frames go to the sole durable producer.
             task = asyncio.create_task(self._produce(accepted, work, sent, reply))
             self._producer = task
+            self.producer_changed_event.set()
             # The process retains this task; the one channel dispatcher must
             # remain free for receipt ACKs and artifact requests. Shutdown uses
             # wait_producer(), never cancellation of this independently owned work.
@@ -393,6 +400,8 @@ class NodeRecipientRuntime:
                 await asyncio.to_thread(self._owner.handoff_if_quiescent)
             except Exception as error:
                 self._remember(error, "owner-fenced")
+            finally:
+                self.producer_changed_event.set()
 
     async def wait_producer(self):
         """Process shutdown/reconnect owner may await; caller cancellation is shielded."""

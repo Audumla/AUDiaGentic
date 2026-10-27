@@ -454,6 +454,10 @@ class NodeConnection:
         self.grant_revision = revision
         self.capability = "drain"
 
+    async def wait_closed_signal(self):
+        """Wait for the close signal only; never join or cancel the receiver."""
+        await self._closed.wait()
+
     async def wait_closed(self):
         await self._closed.wait()
         if self._task is not None and self._task is not asyncio.current_task():
