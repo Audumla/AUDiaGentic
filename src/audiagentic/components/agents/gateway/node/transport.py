@@ -83,6 +83,14 @@ class ConnectionSlot:
     connection: NodeConnection | None = None
 
 
+@dataclass(frozen=True)
+class CurrentNodeSlot:
+    identity: NodeConnectionIdentity
+    grant_revision: int
+    capability: str
+    connection: NodeConnection
+
+
 class NodeConnectionOwner:
     """Owner-epoch-scoped live slots. Every mutation uses authority.serialize.
 
@@ -214,6 +222,17 @@ class NodeConnectionOwner:
         """Read only while the caller already holds the shared authority lock."""
         slot = self._active.get(node_id)
         return slot.identity if slot is not None else None
+
+    def current_slot(self, node_id: str) -> CurrentNodeSlot | None:
+        """Snapshot only INSIDE the authority lock; no recursive auth acquisition.
+
+        A snapshot is not a lease. Recheck the same connection before every
+        canonical mutation and on the event loop before sending network work.
+        """
+        slot = self._active.get(node_id)
+        if slot is None or slot.connection is None:
+            return None
+        return CurrentNodeSlot(slot.identity, slot.grant_revision, slot.capability, slot.connection)
 
 
 class NodeTransportServer:

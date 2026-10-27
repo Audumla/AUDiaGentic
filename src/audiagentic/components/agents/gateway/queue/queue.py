@@ -40,7 +40,8 @@ from audiagentic.components.agents.gateway.event_topics import (
     EXECUTION_STARTED_TOPIC,
 )
 from audiagentic.components.agents.gateway.instances import InstanceFacts
-from audiagentic.components.agents.gateway.node.contracts import canonical_json, conflict
+from audiagentic.components.agents.gateway.node.contracts import canonical_json
+from audiagentic.components.agents.gateway.node.diagnostics import sanitize_node_error
 from audiagentic.components.agents.gateway.node.occupancy import (
     NodeOccupancy,
     NodeOccupancySnapshot,
@@ -1597,8 +1598,7 @@ class GatewayQueueManager:
             "not-started" if dispatch is None else
             "terminal-evidence-seen" if dispatch.get("receipt-stage") == "terminal" else "may-have-started"
         )
-        safe = (AudiaGenticError(error.code, "agents", "Node work requires reconciliation", {})
-                if isinstance(error, AudiaGenticError) else conflict(1, "Node work requires reconciliation"))
+        safe = sanitize_node_error(error)
         defer = store.defer_owned_queued_recovery if current["state"] == "queued" else store.defer_owned_recovery
         return defer(entry.project_root, entry.request_id, owner_epoch=entry.owner_epoch,
             worker_id=current.get("worker-id"), attempt_epoch=current["attempt-epoch"],

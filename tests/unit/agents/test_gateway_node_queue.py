@@ -542,3 +542,27 @@ def test_unclaimed_node_deferral_keeps_null_attempt_and_can_reenqueue(tmp_path, 
     monkeypatch.setattr(manager, "_drain_all", drain)
     drain()
     assert manager.wait(tmp_path, current["request-id"], 3)["state"] == "completed"
+
+
+def test_actual_queue_preserves_validated_node_failure_stage_without_private_details(tmp_path):
+    from audiagentic.components.agents.gateway.diagnostics import ObservationPhase
+    from audiagentic.components.agents.gateway.node.diagnostics import sanitize_node_error
+    from audiagentic.components.agents.gateway.queue.recovery_control import RecoveryDeferred
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+    before = recoverable(tmp_path)
+    manager = queue_mod.GatewayQueueManager(node_project_roots=(tmp_path,), node_server_id="server")
+    def runner(root, record, **kwargs):
+        safe = sanitize_node_error(AudiaGenticError("IO-AGND-001", "agents-node", "PRIVATE raw error",
+            {"stage": "retain-prepared", "reason-code": "prepared-evidence-unavailable", "payload": "PRIVATE"}))
+        raise RecoveryDeferred(safe, phase=ObservationPhase.PRE_SUBMIT, side_effect_state="not-started")
+    recover_enqueue(manager, tmp_path, before, runner)
+    manager.wait(tmp_path, before["request-id"], 1)
+    after = store.read_record(tmp_path, before["request-id"])
+    assert after["state"] == "running"
+    assert after["recovery"]["last-error-code"] == "IO-AGND-001"
+    assert after["recovery"]["last-error-details"] == {
+        "stage": "retain-prepared", "reason-code": "prepared-evidence-unavailable", "phase": "pre-submit",
+    }
+    assert after["recovery"]["side-effect-state"] == "may-have-started"
+    assert "PRIVATE" not in str(after["recovery"])

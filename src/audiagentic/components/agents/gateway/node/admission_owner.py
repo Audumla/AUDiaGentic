@@ -10,6 +10,8 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -38,7 +40,7 @@ from .admission_contract import (
     NodeSubmissionContext,
     SourceWorkspaceIdentity,
 )
-from .contracts import canonical_json, conflict, invalid
+from .contracts import _freeze, canonical_json, conflict, invalid
 from .preparation import PromptSemanticIdentity
 from .prepared_evidence import check_private_evidence_path
 
@@ -62,8 +64,22 @@ def _read_private(path: Path) -> bytes:
     return raw
 
 
-def _read_snapshot(root: Path, record: dict[str, Any], context: NodeSubmissionContext) -> bytes:
-    """Read against canonical authority, including on an idempotent replay."""
+@dataclass(frozen=True)
+class ValidatedNodeAdmissionSnapshot:
+    descriptor: NodeAdmissionDescriptor
+    agent_id: str
+    raw_prompt: str = field(repr=False)
+    expanded_prompt: str = field(repr=False)
+    source_workspace: SourceWorkspaceIdentity
+    caller_root: str = field(repr=False)
+    source: str | None
+    metadata: Mapping[str, Any] = field(repr=False)
+    profile: profiles.ResolvedExecutionProfile = field(repr=False)
+    _bytes: bytes = field(repr=False)
+
+
+def read_node_admission_snapshot(root: Path, record: dict[str, Any]) -> ValidatedNodeAdmissionSnapshot:
+    """Validate retained private input without source credentials or foreign root resolution."""
     descriptor = NodeAdmissionDescriptor.from_mapping(record["node-admission"])
     try:
         raw = _read_private(gateway_node_admission_path(root, record["request-id"]))
@@ -97,10 +113,25 @@ def _read_snapshot(root: Path, record: dict[str, Any], context: NodeSubmissionCo
             raise conflict(1, "Retained node admission profile differs from canonical policy")
     except (ValueError, TypeError, UnicodeError, RecursionError, KeyError):
         raise conflict(1, "Retained node admission snapshot is invalid") from None
-    if (value["caller-root"] != context.caller_root
-            or value["source-workspace"] != context.source_workspace.to_mapping()):
+    source = SourceWorkspaceIdentity.from_mapping(value["source-workspace"])
+    placement = record.get("node-placement")
+    if (not isinstance(placement, dict) or not isinstance(value["caller-root"], str)
+            or not value["caller-root"] or len(value["caller-root"]) > 32768
+            or any(ord(c) < 32 for c in value["caller-root"])
+            or source.source_node_id != placement["node-id"] or source.workspace_id != placement["workspace-id"]
+            or source.access_mode != "read-write"):
+        raise conflict(1, "Retained node source differs from canonical placement")
+    return ValidatedNodeAdmissionSnapshot(descriptor, value["agent-id"], value["raw-prompt"],
+        value["expanded-prompt"], source, value["caller-root"], value["source"],
+        _freeze(value["metadata"]), retained_profile, raw)
+
+
+def _read_snapshot(root: Path, record: dict[str, Any], context: NodeSubmissionContext) -> bytes:
+    snapshot = read_node_admission_snapshot(root, record)
+    if (snapshot.caller_root != context.caller_root
+            or snapshot.source_workspace != context.source_workspace):
         raise conflict(1, "Node replay caller locator or source identity differs")
-    return raw
+    return snapshot._bytes
 
 
 class NodeAdmissionOwner:

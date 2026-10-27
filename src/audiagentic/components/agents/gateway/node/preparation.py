@@ -203,7 +203,16 @@ def prepare_node_command(
 
 def build_final_command_payload(preparation: RetainedNodePreparation, raw_prompt: str) -> Mapping[str, Any]:
     """Return a deeply frozen protected command; no private render/manifest."""
-    attestation = preparation.attestation
+    if type(preparation) is not RetainedNodePreparation:
+        raise invalid(1, "Final command requires typed retained preparation")
+    preparation.__post_init__()
+    return assemble_final_command_payload(preparation.attestation, raw_prompt)
+
+
+def assemble_final_command_payload(attestation: PreparationAttestation, raw_prompt: str) -> Mapping[str, Any]:
+    """Single canonical assembler, usable centrally without node-private bytes."""
+    if type(attestation) is not PreparationAttestation:
+        raise invalid(1, "Final command requires a typed accepted attestation")
     if _text_digest(raw_prompt) != attestation.semantic.raw_prompt_sha256:
         raise conflict(1, "Final raw prompt differs from retained preparation")
     return _freeze({
