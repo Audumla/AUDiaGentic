@@ -199,6 +199,7 @@ class PersistentChat:
         self._unresolved_recovery_details: dict[str, object] = {}
         self._reconciliation_refresh_attempted = False
         self._reconciliation_delivery_retry_attempted = False
+        self._reconciliation_prompt_expansion_key: tuple[object, ...] | None = None
         self._defer_unresolved_reconciliation = False
         self._defer_page_creation_on_recovery = False
         # A retained exact-URL tab can survive a gateway restart while its
@@ -1768,6 +1769,82 @@ class PersistentChat:
         page = await browser.page_by_handle(self.page_handle)
         await release(page)
 
+    async def _expand_unresolved_prompt_once(self, snapshot: ChatSnapshot) -> ChatSnapshot | None:
+        """Materialize one uniquely fresh prompt, never infer submission from it."""
+        def current_key() -> tuple[object, ...]:
+            metadata = self._checkpoint_metadata
+            return (metadata.get("unresolved-turn-id"), metadata.get("submission-attempt-id"),
+                    self.unresolved_prompt_text_digest, metadata.get("unresolved-baseline-user-id"))
+
+        key = current_key()
+        if (not all(isinstance(value, str) and value for value in key)
+                or self._reconciliation_prompt_expansion_key == key
+                or _unresolved_prompt_match_diagnostics(self, snapshot)[0] is not None
+                or snapshot.generating or not snapshot.latest_assistant_text
+                or not _reconciliation_evidence_clear(snapshot)):
+            return snapshot
+
+        def sole_fresh_prompt(observed: ChatSnapshot) -> str | None:
+            # Counts can stay unchanged under virtualization. Require the
+            # retained baseline anchor and exactly one subsequent user node;
+            # missing anchors or several fresh prompts are not ownership proof.
+            users = observed.user_prompt_refs()
+            anchors = [i for i, ref in enumerate(users) if ref.message_id == key[3]]
+            if len(anchors) != 1:
+                return None
+            tail = users[anchors[0] + 1:]
+            if (len(tail) != 1 or not tail[0].message_id
+                    or tail[0].message_id == key[3]
+                    or tail[0].message_id != observed.latest_user_id
+                    or tail[0].message_id.startswith(("fallback-", "virtualized-prompt-for-"))):
+                return None
+            return tail[0].message_id
+
+        prompt_id = sole_fresh_prompt(snapshot)
+        token = self._binding_token(snapshot)
+        if (not prompt_id or not self.target_id or not self.provider_session_id
+                or not self.chat_url or canonical_chat_url(snapshot.url) != canonical_chat_url(self.chat_url)
+                or not url_matches_provider_session(snapshot.url, self.provider_session_id)):
+            return snapshot
+        browser = self._gpt_browser()
+        expand = getattr(browser, "expand_user_prompt", None)
+        if not callable(expand):
+            return snapshot
+        try:
+            async with self._page_mutation_lock:
+                if (not self._page_mutation_owner_is_live()
+                        or not await self._binding_token_is_current(token)):
+                    return snapshot
+                page = await browser.page_by_handle(self.page_handle)
+                if (page.target_id != self.target_id or canonical_chat_url(page.url) != token[-1]
+                        or self._binding_token(snapshot) != token
+                        or current_key() != key
+                        or not self._page_mutation_owner_is_live()):
+                    return snapshot
+                # Reserve before the UI call: exceptions/false ACKs cannot cause
+                # repeated clicks on subsequent recovery polls for this attempt.
+                self._reconciliation_prompt_expansion_key = key
+                if not await expand(page, prompt_id):
+                    return snapshot
+            expanded = await self.snapshot(allow_recovering=True)
+            binding_current = await self._binding_token_is_current(token)
+            if (not binding_current or self._binding_token(expanded) != token
+                    or current_key() != key
+                    or not self._page_mutation_owner_is_live()
+                    or sole_fresh_prompt(expanded) != prompt_id
+                    or expanded.latest_assistant_id != snapshot.latest_assistant_id
+                    or not _reconciliation_evidence_clear(expanded)
+                    or expanded.generating
+                    or PromptFingerprint.from_text(expanded.latest_user_correlation_text() or "").digest != key[2]):
+                self._reset_unresolved_match_candidate()
+                self._set_unresolved_recovery("prompt-expansion-correlation-not-proven")
+                return None
+            return expanded
+        except Exception:  # noqa: BLE001 - no prompt/DOM/exception text in recovery facts
+            self._reset_unresolved_match_candidate()
+            self._set_unresolved_recovery("prompt-expansion-observation-failed")
+            return None
+
     async def _reconcile_unresolved_turn(self) -> bool:
         """Prove the retained prompt reached a terminal provider outcome."""
         if not self.unresolved_turn_pending:
@@ -1800,12 +1877,15 @@ class PersistentChat:
         # unresolved even though the conversation is still recoverable. Use
         # the exact Retry control once, without resubmitting the prompt, then
         # re-read the same conversation before applying failure evidence.
-        completion_candidate = _reconciliation_completion_candidate(self, snapshot)
         # Authentication is a hard veto and must never be followed by a
         # provider-side click, even when a stale Retry control is visible.
         if "auth-required" in snapshot.dom_signals:
             self._set_unresolved_recovery("authentication-required")
             return False
+        snapshot = await self._expand_unresolved_prompt_once(snapshot)
+        if snapshot is None:
+            return False
+        completion_candidate = _reconciliation_completion_candidate(self, snapshot)
         # See turn.py's mirrored delivery_timeout_signal_now: two independent
         # detections of the same recovery opportunity, either sufficient.
         delivery_timeout_signal = (
