@@ -87,6 +87,12 @@ def gateway_admitted_prompt_path(project_root: Path, request_id: str) -> Path:
     return gateway_request_dir(project_root, request_id) / "runtime" / "admitted-prompt.txt"
 
 
+def gateway_node_admission_path(project_root: Path, request_id: str) -> Path:
+    """Private unrendered caller-node admission; never a public artifact."""
+    gateway_request_maintenance_lock_path(project_root, request_id)
+    return gateway_request_dir(project_root, request_id) / "runtime" / "node-admission.json"
+
+
 def gateway_node_prepared_evidence_path(project_root: Path, identity: object) -> Path:
     """Private immutable evidence keyed by the complete canonical command SHA.
 
