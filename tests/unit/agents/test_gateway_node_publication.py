@@ -6,13 +6,14 @@ from types import SimpleNamespace
 
 import pytest
 
-from audiagentic.components.agents.agents_paths import gateway_final_response_path
+from audiagentic.components.agents.agents_paths import gateway_final_response_path, gateway_request_path
 from audiagentic.components.agents.gateway import output, store
 from audiagentic.components.agents.gateway.node.authority import NodeConnectionIdentity
 from audiagentic.components.agents.gateway.node.preparation import PreparationAttestation
 from audiagentic.components.agents.gateway.node.publication import publish_owned_node_terminal
 from audiagentic.components.agents.gateway.node.receipts import Receipt
 from audiagentic.components.agents.gateway.node.terminal_output import WorkerTerminalOutput
+from audiagentic.components.agents.gateway.session import sessions_store
 from audiagentic.components.agents.gateway.service.contract import GATEWAY_SERVICE_KEY
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.system.managed_service import ManagedServiceStore
@@ -33,6 +34,12 @@ def published_case(tmp_path, request):
     accepted = PreparationAttestation.from_mapping(payload["attestation"])
     persist_prepared_once(root, identity, attestation=accepted, payload=payload)
     record = store.read_record(root, identity.request_id)
+    session = sessions_store.build_session_record(
+        execution_profile_id="profile", provider_transport_kind="worker",
+        created_by_request_id=identity.request_id,
+    )
+    sessions_store.write_session_record(root, session)
+    record["session-id"] = session["session-id"]
     record["dispatch-service-root"] = str(service.root)
     store.write_record(root, record)
     artifact = WorkerTerminalOutput(
@@ -85,6 +92,32 @@ def test_artifact_write_before_terminal_crash_recovers_same_bytes(published_case
     assert gateway_final_response_path(case.root, case.identity.request_id).read_bytes() == case.artifact.text.encode()
     monkeypatch.setattr(store, "transition_owned_terminal", original)
     assert publish(case)["state"] == "completed"
+
+
+def test_completed_cas_crash_replay_repairs_session_without_request_or_artifact_writes(published_case, monkeypatch):
+    from audiagentic.components.agents.gateway.node import publication
+
+    case = published_case
+    original = publication._finalize_worker_session_if_terminal
+    def crash(*args):
+        raise RuntimeError("session finalization interrupted")
+    monkeypatch.setattr(publication, "_finalize_worker_session_if_terminal", crash)
+    with pytest.raises(RuntimeError, match="finalization interrupted"):
+        publish(case)
+    record = store.read_record(case.root, case.identity.request_id, include_output=False)
+    assert record["state"] == "completed"
+    assert sessions_store.read_session_record(case.root, record["session-id"])["state"] == "active"
+    path = gateway_request_path(case.root, case.identity.request_id)
+    artifact = gateway_final_response_path(case.root, case.identity.request_id)
+    before = (path.read_bytes(), artifact.read_bytes(), path.stat().st_mtime_ns, artifact.stat().st_mtime_ns)
+    def forbidden(*args, **kwargs):
+        pytest.fail("exact completed replay must not rewrite request or artifact")
+    monkeypatch.setattr(output, "persist_final_response", forbidden)
+    monkeypatch.setattr(store, "transition_owned_terminal", forbidden)
+    monkeypatch.setattr(publication, "_finalize_worker_session_if_terminal", original)
+    assert publish(case) == record
+    assert sessions_store.read_session_record(case.root, record["session-id"])["state"] == "closed"
+    assert (path.read_bytes(), artifact.read_bytes(), path.stat().st_mtime_ns, artifact.stat().st_mtime_ns) == before
 
 
 @pytest.mark.parametrize("state", ["cancelled", "failed", "interrupted"])

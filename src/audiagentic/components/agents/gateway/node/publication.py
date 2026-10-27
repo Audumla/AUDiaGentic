@@ -104,36 +104,37 @@ def publish_owned_node_terminal(
                     or output.read_final_response(project_root, identity.request_id, final) != artifact.text
                 ):
                     raise conflict(1, "Completed node response has a different publication winner")
-                return record
-            if record["state"] != "running":
-                raise conflict(1, "Node terminal requires explicit reconciliation of the lifecycle winner")
-            if expected_revision is not None and record["revision"] != expected_revision:
-                raise conflict(1, "Node publication revision is stale")
-            existing_output = gateway_final_response_path(project_root, identity.request_id)
-            if existing_output.is_symlink() or (
-                existing_output.exists() and existing_output.read_bytes() != artifact.text.encode("utf-8")
-            ):
-                raise conflict(1, "Node response differs from an existing private publication")
-            published = output.persist_final_response(
-                project_root, identity.request_id, artifact.text,
-                media_type=media_type, lock_held=True,
-            )
-            if output.read_final_response(project_root, identity.request_id, published) != artifact.text:
-                raise conflict(1, "Node response bytes were not durably published")
-            updated = store.transition_owned_terminal(
-                project_root, identity.request_id, "completed",
-                owner_epoch=record["dispatch-owner-epoch"], worker_id=record["worker-id"],
-                attempt_epoch=record["attempt-epoch"], expected_revision=record["revision"],
-                service_root=service_store.root, _request_lock_held=True,
-                updates={
-                    "provider-id": artifact.provider_id, "model-id": artifact.model_id,
-                    "response-artifact": {key: published[key] for key in (
-                        "artifact-id", "request-id", "media-type", "bytes", "sha256",
-                    )},
-                    "output-preview": published["output-preview"],
-                    "output-truncated": published["output-truncated"], "finished-at": now_iso_z(),
-                },
-            )
+                updated = record
+            else:
+                if record["state"] != "running":
+                    raise conflict(1, "Node terminal requires explicit reconciliation of the lifecycle winner")
+                if expected_revision is not None and record["revision"] != expected_revision:
+                    raise conflict(1, "Node publication revision is stale")
+                existing_output = gateway_final_response_path(project_root, identity.request_id)
+                if existing_output.is_symlink() or (
+                    existing_output.exists() and existing_output.read_bytes() != artifact.text.encode("utf-8")
+                ):
+                    raise conflict(1, "Node response differs from an existing private publication")
+                published = output.persist_final_response(
+                    project_root, identity.request_id, artifact.text,
+                    media_type=media_type, lock_held=True,
+                )
+                if output.read_final_response(project_root, identity.request_id, published) != artifact.text:
+                    raise conflict(1, "Node response bytes were not durably published")
+                updated = store.transition_owned_terminal(
+                    project_root, identity.request_id, "completed",
+                    owner_epoch=record["dispatch-owner-epoch"], worker_id=record["worker-id"],
+                    attempt_epoch=record["attempt-epoch"], expected_revision=record["revision"],
+                    service_root=service_store.root, _request_lock_held=True,
+                    updates={
+                        "provider-id": artifact.provider_id, "model-id": artifact.model_id,
+                        "response-artifact": {key: published[key] for key in (
+                            "artifact-id", "request-id", "media-type", "bytes", "sha256",
+                        )},
+                        "output-preview": published["output-preview"],
+                        "output-truncated": published["output-truncated"], "finished-at": now_iso_z(),
+                    },
+                )
     # Session bookkeeping can acquire its own locks. Never perform it under the
     # canonical publication lock, and never give it native process ownership.
     _finalize_worker_session_if_terminal(project_root, updated)
