@@ -37,6 +37,7 @@ from audiagentic.foundation.system.managed_process import process_creation_ident
 from audiagentic.foundation.system.managed_service import ManagedServiceStore
 from audiagentic.foundation.system.managed_service_contracts import ServiceKey
 
+from .admission_contract import SourceWorkspaceIdentity
 from .authority import NodeConnectionIdentity
 from .contracts import (
     CommandIdentity,
@@ -56,6 +57,7 @@ from .preparation import (
     validate_final_command_preparation,
 )
 from .receipts import NodeReceiptStore, Receipt, ReceiptCheckpoint, ReceiptOwnerScope
+from .source_workspace import validate_recipient_workspace
 
 _OPEN_LOCK = threading.Lock()
 _OPEN = weakref.WeakValueDictionary()
@@ -347,6 +349,8 @@ class NodeExecutionOwner:
         preparation: RetainedNodePreparation,
         command_payload: Mapping[str, Any],
         current_binding: PreparationBinding,
+        source_workspace: SourceWorkspaceIdentity,
+        caller_root: str,
         authorization_request: Frame,
         authorization_reply: Frame,
         timeout_seconds: float,
@@ -361,6 +365,8 @@ class NodeExecutionOwner:
             type(identity) is not CommandIdentity
             or type(preparation) is not RetainedNodePreparation
             or type(current_binding) is not PreparationBinding
+            or type(source_workspace) is not SourceWorkspaceIdentity
+            or not isinstance(caller_root, str)
             or type(authorization_request) is not Frame
             or type(authorization_reply) is not Frame
             or isinstance(timeout_seconds, bool)
@@ -412,6 +418,18 @@ class NodeExecutionOwner:
                 authorization_reply,
                 connection_generation=live.connection_generation,
             )
+            # Revalidate the ORIGINAL private source locator under the producer
+            # fence, after any async preparation/authorization wait. It never
+            # overrides the configured execution root.
+            local = validate_recipient_workspace(
+                self._config, source_workspace, caller_root=caller_root
+            )
+            if (
+                local.identity.workspace_id != identity.workspace_id
+                or identity.execution_profile_id
+                not in self._config.workspaces[identity.workspace_id].execution_profiles
+            ):
+                raise conflict(1, "Command source differs from current local binding")
             store = self._store
             try:
                 receipt = store.prepare(identity, raw)

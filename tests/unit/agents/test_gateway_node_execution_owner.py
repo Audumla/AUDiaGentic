@@ -7,6 +7,7 @@ import json
 import sqlite3
 import threading
 from dataclasses import replace
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -17,6 +18,7 @@ from audiagentic.components.agents.gateway.node.contracts import Frame, canonica
 from audiagentic.components.agents.gateway.node.execution_owner import NodeExecutionOwner
 from audiagentic.components.agents.gateway.node.preparation import RetainedNodePreparation
 from audiagentic.components.agents.gateway.node.receipts import NodeReceiptStore, ReceiptOwnerScope
+from audiagentic.components.agents.gateway.node.source_workspace import resolve_caller_workspace
 from audiagentic.components.agents.gateway.queue import worker
 from audiagentic.components.agents.gateway.service.shared_config import (
     SharedGatewayNodeConfig,
@@ -48,6 +50,10 @@ def env(tmp_path):
         endpoint=EndpointInfo("local", "execution-node"),
         evidence_factory=lambda epoch: current_process_evidence(owner_epoch=epoch),
     )
+    case.source_workspace = resolve_caller_workspace(
+        config, Path(case.expected.project_root)
+    ).identity
+    case.caller_root = case.expected.project_root
     return SimpleNamespace(case=case, config=config, service=service, record=record)
 
 
@@ -72,6 +78,8 @@ def run(owner, case, **changes):
         preparation=case.preparation,
         command_payload=case.payload,
         current_binding=case.preparation.attestation.binding,
+        source_workspace=case.source_workspace,
+        caller_root=case.caller_root,
         authorization_request=case.auth_request,
         authorization_reply=case.auth_reply,
         timeout_seconds=1,
@@ -709,6 +717,8 @@ s.effect_intent(identity, Frame.from_bytes(canonical_json(data['request'])),
         state,
         {"workspace": SharedGatewayNodeWorkspace(project, frozenset({"profile"}))},
     )
+    c.source_workspace = resolve_caller_workspace(config, Path(c.expected.project_root)).identity
+    c.caller_root = c.expected.project_root
     owner = NodeExecutionOwner.open(
         config, service_store=service, service_owner_epoch=record.owner_epoch, node_epoch="reboot"
     )
@@ -754,3 +764,53 @@ def test_persistence_error_after_commit_never_executes_or_releases_capacity(
     monkeypatch.setattr(NodeReceiptStore, boundary, original)
     with pytest.raises(AudiaGenticError, match="occupied"):
         run(owner, second_case(env.case))
+
+
+@pytest.mark.parametrize("drift", ["root", "profiles"])
+def test_source_binding_drift_inside_guard_rejected_before_any_prepare(env, monkeypatch, drift):
+    from audiagentic.components.agents.gateway.node import execution_owner
+
+    owner = open_owner(env)
+    connect(owner)
+    original = execution_owner._worker_inputs
+    other = env.config.state_root / "other-project"
+    other.mkdir()
+
+    def inputs_then_drift(*args):
+        result = original(*args)
+        before = env.config.workspaces["workspace"]
+        env.config.workspaces["workspace"] = replace(
+            before,
+            root=other if drift == "root" else before.root,
+            execution_profiles=frozenset({"other"})
+            if drift == "profiles"
+            else before.execution_profiles,
+        )
+        return result
+
+    monkeypatch.setattr(execution_owner, "_worker_inputs", inputs_then_drift)
+    monkeypatch.setattr(
+        worker,
+        "execute_verified_isolated_provider_turn",
+        lambda **kw: pytest.fail("source drift executed"),
+    )
+    with pytest.raises(AudiaGenticError):
+        run(owner, env.case)
+    assert owner.receipts_after() == ()
+
+
+def test_original_source_locator_is_required_no_legacy_fallback(env):
+    owner = open_owner(env)
+    connect(owner)
+    c = env.case
+    with pytest.raises(TypeError):
+        owner.run_one(
+            c.identity,
+            preparation=c.preparation,
+            command_payload=c.payload,
+            current_binding=c.preparation.attestation.binding,
+            authorization_request=c.auth_request,
+            authorization_reply=c.auth_reply,
+            timeout_seconds=1,
+        )
+    assert owner.receipts_after() == ()

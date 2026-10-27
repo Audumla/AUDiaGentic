@@ -23,7 +23,7 @@ async def ignore(*args):
 
 async def pair(channel, gateway_handler=ignore, node_handler=ignore):
     def install(handler):
-        def configure(connection):
+        async def configure(connection):
             connection.enable_work(lambda frame, message: handler(connection, frame, message),
                 max_artifact_bytes=1024 * 1024)
         return configure
@@ -285,3 +285,51 @@ async def test_owner_replacement_is_distinguished_from_protocol_failure(channel)
         await node.close()
         if replacement is not None:
             await replacement.close()
+
+
+@pytest.mark.asyncio
+async def test_async_runtime_setup_is_awaited_before_receiver_start(channel):
+    entered, release = asyncio.Event(), asyncio.Event()
+    connections = []
+    async def configure(connection):
+        connection.enable_work(ignore, max_artifact_bytes=1024)
+        connections.append(connection)
+        entered.set()
+        await release.wait()
+    pending = asyncio.create_task(NodeTransportClient(channel.client, node_epoch="setup-boot",
+        configure_work=configure).connect())
+    node = None
+    try:
+        await asyncio.wait_for(entered.wait(), 2)
+        assert connections[0]._task is None
+        assert not pending.done()
+        release.set()
+        node = await asyncio.wait_for(pending, 2)
+        assert node._task is not None
+    finally:
+        release.set()
+        if node is None:
+            node = await pending
+        await node.close()
+
+
+@pytest.mark.asyncio
+async def test_failed_async_setup_notifies_partial_owner_once_before_receiver_start(channel):
+    notifications, connections = [], []
+    async def configure(connection):
+        async def closed():
+            notifications.append(connection.failure_summary)
+        connection.enable_work(ignore, max_artifact_bytes=1024, on_close=closed)
+        connections.append(connection)
+        raise RuntimeError("PRIVATE setup failure")
+    with pytest.raises(RuntimeError, match="PRIVATE setup"):
+        await NodeTransportClient(channel.client, node_epoch="setup-failed",
+            configure_work=configure).connect()
+    node, = connections
+    assert node._task is None
+    assert len(notifications) == 1
+    assert notifications[0].stage == "configuration"
+    await node.close()
+    assert len(notifications) == 1
+    with pytest.raises(AudiaGenticError, match="closed"):
+        node.start()

@@ -169,6 +169,7 @@ class NodeConnection:
         self.close_reason: str | None = None
         self._current = current
         self._on_close = on_close
+        self._close_owner_notified = False
         self._send_lock = asyncio.Lock()
         self._sent_sequence = 1  # hello/welcome already sent
         self._received_sequence = 1
@@ -362,12 +363,17 @@ class NodeConnection:
             if self._work_task is not None:
                 self._work_task.cancel()
                 await asyncio.gather(self._work_task, return_exceptions=True)
+            await self._notify_close_owner()
+
+    async def _notify_close_owner(self):
+        if not self._close_owner_notified:
+            self._close_owner_notified = True
             if self._on_close is not None:
                 await self._on_close()
 
     def start(self):
-        if self._task is not None:
-            raise conflict(1, "Node receiver is already running")
+        if self._task is not None or self._closed.is_set():
+            raise conflict(1, "Node receiver is already running or closed")
         self._task = asyncio.create_task(self.run())
         if self._on_work is not None:
             self._work_task = asyncio.create_task(self._dispatch_work())
@@ -456,6 +462,9 @@ class NodeConnection:
     async def close(self, *, reason="shutdown"):
         self.begin_close(reason)
         await close_socket(self.websocket)
+        if self._task is None:
+            self._closed.set()
+            await self._notify_close_owner()
         if self._task is not None and self._task is not asyncio.current_task():
             try:
                 await asyncio.wait_for(asyncio.shield(self._task), CLOSE_TIMEOUT_SECONDS)

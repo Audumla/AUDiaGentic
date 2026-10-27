@@ -317,7 +317,7 @@ class NodeTransportServer:
             )
             await asyncio.to_thread(self.owner.attach, slot, connection)
             if self._configure_work is not None:
-                self._configure_work(connection)
+                await self._configure_work(connection)
             connection.start()
             await connection.wait_closed()
         except asyncio.CancelledError:
@@ -442,6 +442,7 @@ class NodeTransportClient:
             subprotocols=[SUBPROTOCOL],
             **_LIMITS,
         )
+        connection = None
         try:
             if websocket.subprotocol != SUBPROTOCOL:
                 raise conflict(1, "Node subprotocol was not negotiated")
@@ -476,9 +477,13 @@ class NodeTransportClient:
                 websocket, identity, role="node", grant_revision=revision, capability=capability
             )
             if self._configure_work is not None:
-                self._configure_work(connection)
+                await self._configure_work(connection)
             connection.start()
             return connection
-        except BaseException:
-            await close_socket(websocket, code=1008, reason="Node welcome rejected")
+        except BaseException as error:
+            if connection is not None:
+                connection._remember_failure(error, stage="configuration", reason="work-configuration-failed")
+                await connection.close()
+            else:
+                await close_socket(websocket, code=1008, reason="Node welcome rejected")
             raise
