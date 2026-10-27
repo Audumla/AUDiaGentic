@@ -23,7 +23,6 @@ from .connection import NodeConnection
 from .contracts import conflict, invalid
 from .diagnostics import sanitize_node_error
 from .observability import emit_node_stage
-from .occupancy import NodeOccupancy
 from .work_protocol import ReceiptReady, ReceiptResume, ReceiptWork, parse_work_frame
 
 logger = logging.getLogger(__name__)
@@ -40,7 +39,6 @@ class NodeReceiptRuntime:
         self.config, self.service, self.connections = config, service_store, connections
         self.authority, self.owner_epoch = authority, connections.gateway_owner_epoch
         self.on_node_changed = on_node_changed
-        self.occupancy = NodeOccupancy(tuple(config.projects.values()), server_id=config.server_id)
         self._streams = {}  # Configured node IDs only; do not retain closed socket buffers.
         self.custody_changed = asyncio.Event()  # Wake hint; canonical state is authoritative.
 
@@ -148,10 +146,8 @@ class NodeReceiptRuntime:
             return not previous
 
         with self.service.owner_guard(self.owner_epoch):
-            # Canonical disk reads stay owner-fenced, outside the grant lock.
-            # This is a scheduling hint; effect admission rechecks occupancy.
-            if self.occupancy.snapshot().occupied(self.config.server_id, connection.identity.node_id):
-                raise conflict(1, "Canonical work still holds node capacity", reason_code="capacity-occupied")
+            # Retain the quiescent hint even while canonical work holds capacity.
+            # Queue/NodeRunner admission, not readiness ingress, owns occupancy.
             return self.authority.serialize(publish)
 
     def _notify(self, connection, work):

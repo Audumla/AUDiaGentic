@@ -327,10 +327,17 @@ async def test_zero_custody_ready_is_idempotent_no_cursor_no_reply_and_offloop_n
 async def test_ready_actual_envelope_after_terminal_custody(ingress):
     case, runtime, _, log, _, _ = ingress
     open_socket(case)
+    calls, notified = [], asyncio.Event()
+    loop = asyncio.get_running_loop()
+    def notify(node):
+        calls.append(node)
+        loop.call_soon_threadsafe(notified.set)
+    runtime.on_node_changed = notify
     receipt = await send(ingress, "terminal", 1, digest="a"*64)
     await ack(ingress)
-    calls = []
-    runtime.on_node_changed = calls.append
+    await asyncio.wait_for(notified.wait(), 3)
+    calls.clear()
+    notified.clear()
     runtime.custody_changed.clear()
     before = checkpoint(ingress).path.read_bytes()
     case.central_work_handler = runtime.handle_work
@@ -348,16 +355,14 @@ async def test_ready_actual_envelope_after_terminal_custody(ingress):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("fault", ["occupied", "cursor-mismatch", "missing", "unreadable", "different-log"])
-async def test_ready_refuses_occupied_or_unproven_custody(ingress, fault):
+@pytest.mark.parametrize("fault", ["cursor-mismatch", "missing", "unreadable", "different-log"])
+async def test_ready_refuses_unproven_custody(ingress, fault):
     case, runtime, _, log, _, _ = ingress
     open_socket(case)
     receipt = await send(ingress)
     await ack(ingress)
     cursor = checkpoint(ingress)
-    before = cursor.path.read_bytes()
     sequence, digest = 1, receipt.digest
-    reason = "capacity-occupied"
     if fault == "cursor-mismatch":
         digest, reason = "b"*64, "receipt-cursor-mismatch"
     elif fault == "missing":
@@ -374,12 +379,10 @@ async def test_ready_refuses_occupied_or_unproven_custody(ingress, fault):
     assert error.value.details["reason-code"] == reason
     assert not await asyncio.to_thread(is_ready, case)
     assert (cursor.path.read_bytes() if cursor.path.exists() else None) == unchanged
-    if fault == "occupied":
-        assert unchanged == before
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("race", ["replacement", "grant", "owner", "occupancy"])
+@pytest.mark.parametrize("race", ["replacement", "grant", "owner"])
 async def test_ready_final_publication_revalidates_after_cursor_without_nested_guard(case, monkeypatch, race):
     open_socket(case)
     runtime = NodeReceiptRuntime(case.config, case.admission.service, case.connections)
@@ -395,16 +398,13 @@ async def test_ready_final_publication_revalidates_after_cursor_without_nested_g
         elif race == "owner":
             from .test_gateway_node_checkpoints import _restart
             _restart(case.admission.service, "new-owner")
-        else:
-            from audiagentic.components.agents.gateway.node.occupancy import NodeOccupancySnapshot
-            monkeypatch.setattr(runtime.occupancy, "snapshot", lambda: NodeOccupancySnapshot(unproven=True))
         return result
     monkeypatch.setattr(NodeReceiptCheckpoints, "resume_cursor", racing)
     with pytest.raises(AudiaGenticError) as error:
         await ready(runtime, case.gateway, str(uuid4()))
     assert error.value.details["reason-code"] == {
         "replacement": "receipt-channel-replaced", "grant": "ready-channel-invalid",
-        "owner": "owner-fence-changed", "occupancy": "capacity-occupied",
+        "owner": "owner-fence-changed",
     }[race]
     assert not await asyncio.to_thread(is_ready, case)
     assert not runtime._streams["node"][1].path.exists()
@@ -499,41 +499,6 @@ async def test_committed_custody_notifies_even_if_replacement_suppresses_ack(ing
 
 
 @pytest.mark.asyncio
-async def test_ready_occupancy_scan_is_owner_fenced_outside_grant(case, monkeypatch):
-    import threading
-    from contextlib import contextmanager
-    open_socket(case)
-    runtime = NodeReceiptRuntime(case.config, case.admission.service, case.connections)
-    held, scans = threading.local(), []
-    serialize, guard, snapshot = runtime.authority.serialize, runtime.service.owner_guard, runtime.occupancy.snapshot
-    def serialized(callback):
-        held.grant = True
-        try:
-            return serialize(callback)
-        finally:
-            held.grant = False
-    @contextmanager
-    def guarded(epoch):
-        with guard(epoch) as record:
-            held.owner = True
-            try:
-                yield record
-            finally:
-                held.owner = False
-    def scan():
-        assert held.owner and not held.grant
-        with pytest.raises(RuntimeError):
-            asyncio.get_running_loop()
-        scans.append(True)
-        return snapshot()
-    monkeypatch.setattr(runtime.authority, "serialize", serialized)
-    monkeypatch.setattr(runtime.service, "owner_guard", guarded)
-    monkeypatch.setattr(runtime.occupancy, "snapshot", scan)
-    await ready(runtime, case.gateway, str(uuid4()))
-    assert scans == [True] and await asyncio.to_thread(is_ready, case)
-
-
-@pytest.mark.asyncio
 async def test_notification_dispatch_failure_preserves_ready(case, monkeypatch):
     from audiagentic.components.agents.gateway.node import receipt_runtime as module
     open_socket(case)
@@ -589,3 +554,41 @@ async def test_notification_dispatch_failure_preserves_ack_or_primary_error(ingr
         assert await runtime.handle_work(case.gateway, frame, work) is not None
         assert (await ack(ingress)).through_receipt_sha256 == receipt.digest
     assert attempts == [True] and checkpoint(ingress).path.exists()
+
+
+@pytest.mark.asyncio
+async def test_ready_retained_while_canonical_capacity_held_then_consumed_after_settlement(ingress):
+    from audiagentic.components.agents.gateway.node.contracts import conflict
+    from audiagentic.components.agents.gateway.node.occupancy import NodeOccupancy
+    case, runtime, original, log, _, _ = ingress
+    open_socket(case)
+    projection = NodeOccupancy(tuple(case.config.projects.values()), server_id=case.config.server_id)
+    assert projection.snapshot().occupied(case.config.server_id, "node")
+    before = store.read_record(case.admission.root, original["request-id"])
+    assert before["node-dispatch"]["authorization-state"] == "authorized"
+    assert await ready(runtime, case.gateway, log) is None
+    assert await asyncio.to_thread(is_ready, case)
+    assert not checkpoint(ingress).path.exists()
+    assert store.read_record(case.admission.root, original["request-id"]) == before
+
+    # The existing admission owners retain capacity authority. A readiness
+    # hint cannot bypass occupancy or be consumed by a blocked admission.
+    def admit():
+        with case.admission.service.owner_guard("owner"):
+            if projection.snapshot().occupied(case.config.server_id, "node"):
+                raise conflict(1, "Canonical node capacity remains held", reason_code="capacity-occupied")
+            return case.admission.authority.serialize(
+                lambda: case.connections.consume_ready(case.gateway, grant_revision=1))
+    with pytest.raises(AudiaGenticError) as error:
+        await asyncio.to_thread(admit)
+    assert error.value.details["reason_code"] == "capacity-occupied"
+    assert await asyncio.to_thread(is_ready, case)
+    terminal = await send(ingress, "terminal", 1, digest="a"*64)
+    assert (await ack(ingress)).through_receipt_sha256 == terminal.digest
+    settled = store.read_record(case.admission.root, original["request-id"])
+    assert settled["node-dispatch"]["authorization-state"] == "terminal"
+    assert not projection.snapshot().occupied(case.config.server_id, "node")
+    # No second ready frame: the original hint survives canonical settlement.
+    assert await asyncio.to_thread(is_ready, case)
+    assert await asyncio.to_thread(admit)
+    assert not await asyncio.to_thread(is_ready, case)
