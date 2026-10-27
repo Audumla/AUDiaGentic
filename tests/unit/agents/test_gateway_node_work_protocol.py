@@ -110,6 +110,9 @@ def messages():
                 "worker-id": "worker",
                 "attempt-epoch": 1,
                 "raw-prompt": SECRET,
+                "source-workspace": {"version": 1, "source-node-id": "node", "workspace-id": "workspace",
+                                     "access-mode": "read-write", "binding-sha256": SHA},
+                "caller-root": "/private/recipient-workspace",
                 "source": None,
                 "metadata": {},
                 "timeout-seconds": None,
@@ -423,6 +426,11 @@ def test_nested_exact_fields_and_integer_booleans(messages, name, key, nested):
         {"timeout-seconds": -1},
         {"source": {}},
         {"metadata": {"raw-prompt": "x"}},
+        {"metadata": {"idempotency_key": "must-not-cross-wire"}},
+        {"metadata": {"caller-title": "gateway-only-audit"}},
+        {"caller-root": ""},
+        {"caller-root": "bad\npath"},
+        {"caller-root": "x" * 32769},
         {"metadata": {"correlation_id": {"nested": 1}}},
         {"metadata": []},
         {"agent-id": "bad id"},
@@ -443,10 +451,23 @@ def test_prepare_optional_values_and_primitive_metadata(messages):
         "metadata": {
             "schema_version": 1,
             "correlation_id": "correlation",
-            "idempotency_key": "sanitized-only",
         },
     }
     assert parse(messages["prepare"], p).timeout_seconds == 1.5
+
+
+@pytest.mark.parametrize("field,value", [("source-node-id", "foreign"), ("workspace-id", "other"),
+                                       ("access-mode", "read-only"), ("binding-sha256", "invalid")])
+def test_prepare_source_scope_rejects_before_runtime(messages, field, value):
+    p = dict(messages["prepare"][3])
+    p["source-workspace"] = {**p["source-workspace"], field: value}
+    with pytest.raises(Exception, match="VAL-AGND-001"):
+        parse(messages["prepare"], p)
+
+
+def test_prepare_locator_is_not_in_repr(messages):
+    p = messages["prepare"][3]
+    assert p["caller-root"] not in repr(parse(messages["prepare"], p))
 
 
 @pytest.mark.parametrize("name,prefix", [("resume", "through"), ("resume-reply", "after")])

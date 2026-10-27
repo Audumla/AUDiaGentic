@@ -18,6 +18,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import TypeAlias
 
+from .admission_contract import SourceWorkspaceIdentity
 from .authority import NodeConnectionIdentity
 from .contracts import CommandIdentity, Frame, _identifier, _integer, canonical_json, invalid
 from .preparation import PreparationAttestation, PreparationBinding, PromptSemanticIdentity
@@ -40,6 +41,8 @@ class PrepareWork(WorkMessage):
     worker_id: str
     attempt_epoch: int
     raw_prompt: str = field(repr=False)
+    source_workspace: SourceWorkspaceIdentity
+    caller_root: str = field(repr=False)
     source: str | None
     metadata: Mapping = field(repr=False)
     timeout_seconds: int | float | None
@@ -244,12 +247,12 @@ def parse_work_frame(
 
     if variant == ("reconcile", "prepare"):
         exact(
-            "kind binding semantic agent-id worker-id attempt-epoch raw-prompt source metadata timeout-seconds"
+            "kind binding semantic agent-id worker-id attempt-epoch raw-prompt source metadata timeout-seconds source-workspace caller-root"
         )
         metadata = p["metadata"]
         if (
             not isinstance(metadata, Mapping)
-            or set(metadata) - {"schema_version", "idempotency_key", "correlation_id"}
+            or set(metadata) - {"schema_version", "correlation_id"}
             or any(
                 v is not None and type(v) not in (str, int, float, bool) for v in metadata.values()
             )
@@ -265,14 +268,26 @@ def parse_work_frame(
         source = p["source"]
         if source is not None:
             _text(source)
+        caller_root = p["caller-root"]
+        if (not isinstance(caller_root, str) or not caller_root or len(caller_root) > 32768
+                or any(ord(c) < 32 for c in caller_root)):
+            raise invalid(1, "Prepare requires a bounded private caller locator")
+        source_workspace = SourceWorkspaceIdentity.from_mapping(p["source-workspace"])
+        binding = _scope(PreparationBinding.from_mapping(p["binding"]), c)
+        if (source_workspace.source_node_id != binding.node_id
+                or source_workspace.workspace_id != binding.workspace_id
+                or source_workspace.access_mode != "read-write"):
+            raise invalid(1, "Prepare source does not match same-node writable binding")
         return PrepareWork(
             **common,
-            binding=_scope(PreparationBinding.from_mapping(p["binding"]), c),
+            binding=binding,
             semantic=PromptSemanticIdentity.from_mapping(p["semantic"]),
             agent_id=_identifier(p["agent-id"]),
             worker_id=_identifier(p["worker-id"]),
             attempt_epoch=_integer(p["attempt-epoch"]),
             raw_prompt=_text(p["raw-prompt"]),
+            source_workspace=source_workspace,
+            caller_root=caller_root,
             source=source,
             metadata=metadata,
             timeout_seconds=timeout,

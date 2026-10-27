@@ -1,4 +1,7 @@
-"""Explicit-start node WSS transport; no scheduling, effects, receipt ACK or host hooks.
+"""Explicit-start node WSS transport with optional pre-receiver runtime setup.
+
+No scheduling or effect authority lives here. Without configured work handlers,
+connections retain the control-only behavior.
 
 Requires websockets 15.x: asyncio additional_headers, explicit proxy=None and the
 verified connect.process_redirect override. The node extra pins that major API.
@@ -221,6 +224,7 @@ class NodeTransportServer:
         *,
         gateway_owner_epoch: str,
         drain_eligibility: NodeDrainEligibility | None = None,
+        configure_work=None,
     ):
         if config.node_listen is None or config.node_listen.host != "127.0.0.1":
             raise invalid(1, "Node transport requires configured IPv4 loopback listener")
@@ -229,6 +233,7 @@ class NodeTransportServer:
         self.config = config
         self.owner = NodeConnectionOwner(authority, gateway_owner_epoch, drain_eligibility)
         self._server = None
+        self._configure_work = configure_work
 
     async def _authenticate_upgrade(self, connection: _NodeSocket, request):
         if request.path != NODE_PATH:
@@ -308,8 +313,10 @@ class NodeTransportServer:
                 capability=slot.capability,
                 current=current,
             )
-            connection.start()
             await asyncio.to_thread(self.owner.attach, slot, connection)
+            if self._configure_work is not None:
+                self._configure_work(connection)
+            connection.start()
             await connection.wait_closed()
         except asyncio.CancelledError:
             raise
@@ -406,10 +413,11 @@ def _validate_endpoint(endpoint: str):
 
 
 class NodeTransportClient:
-    def __init__(self, config: SharedGatewayNodeConfig, *, node_epoch: str):
+    def __init__(self, config: SharedGatewayNodeConfig, *, node_epoch: str, configure_work=None):
         _validate_endpoint(config.endpoint)
         self.config = config
         self.node_epoch = _identifier(node_epoch)
+        self._configure_work = configure_work
         if node_epoch == UNBOUND:
             raise invalid(1, "Node boot epoch cannot be unbound")
         _identifier(config.node_id)
@@ -463,6 +471,8 @@ class NodeTransportClient:
             connection = NodeConnection(
                 websocket, identity, role="node", grant_revision=revision, capability=capability
             )
+            if self._configure_work is not None:
+                self._configure_work(connection)
             connection.start()
             return connection
         except BaseException:
