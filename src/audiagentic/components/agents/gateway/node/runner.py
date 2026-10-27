@@ -153,11 +153,9 @@ class NodeRunner:
                 stage = "observe"
                 return self._observe(root, current)
             if (current["state"] != "running" or current.get("provider-transport-kind") != "worker"
-                    or current.get("recovery-required") or current.get("cancel-requested")):
-                # Clearing recovery-required needs a dedicated canonical null-bind
-                # CAS; there is no such public mutation in this slice.
-                raise self._defer(root, current, stage="ownership", reason=(
-                    "recovery-clear-unavailable" if current.get("recovery-required") else "attempt-not-dispatchable"))
+                    or current.get("cancel-requested")):
+                raise self._defer(root, current, stage="ownership", reason="attempt-not-dispatchable")
+            resume_unbound = current.get("recovery-required") is True
             stage = "admission"
             snapshot = read_node_admission_snapshot(root, current)
             if snapshot.descriptor.server_id != self.config.server_id:
@@ -221,7 +219,8 @@ class NodeRunner:
                 bound = self._authorized(root, current, command, slot, lambda: store.bind_owned_node_dispatch(
                     root, current["request-id"], identity=command, command_payload=payload,
                     accepted_attestation=reply.attestation, owner_epoch=self.owner_epoch,
-                    worker_id=current["worker-id"], attempt_epoch=current["attempt-epoch"], expected_revision=current["revision"]))
+                    worker_id=current["worker-id"], attempt_epoch=current["attempt-epoch"],
+                    expected_revision=current["revision"], resume_unbound=resume_unbound))
             stage = "command"
             self._bridge(self._send_command(slot, command, payload))
             stage = "observe"

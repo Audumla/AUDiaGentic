@@ -305,6 +305,91 @@ def test_cancel_or_recovery_does_not_grant_fresh_authorization(running, flag):
         authorize(root, record)
 
 
+def recovering_unbound(root, record):
+    from audiagentic.components.agents.gateway.node.contracts import conflict
+    return store.defer_owned_recovery(root, record["request-id"], **{
+        key: value for key, value in fences(record).items() if key != "expected_revision"
+    }, expected_revision=record["revision"], error=conflict(1, "Node disconnected"),
+        phase="node-disconnected", side_effect_state="not-started", retry_delay_seconds=None)
+
+
+def resumed_bind(root, record, **changes):
+    command, payload, attestation = prepared_command(record)
+    return store.bind_owned_node_dispatch(root, record["request-id"], identity=command,
+        command_payload=payload, accepted_attestation=attestation, **fences(record, **changes), resume_unbound=True)
+
+
+def test_recovered_first_bind_clears_flag_in_one_write_preserving_history(running, monkeypatch):
+    from audiagentic.components.agents.gateway.store import _transitions as module
+    root, record = running
+    record = recovering_unbound(root, record)
+    with pytest.raises(AudiaGenticError):
+        bind(root, record)
+    original = module.write_record
+    writes = []
+    def written(root, current):
+        writes.append(deepcopy(current))
+        return original(root, current)
+    monkeypatch.setattr(module, "write_record", written)
+    result = resumed_bind(root, record)
+    assert len(writes) == 1 and writes[0] == result
+    assert result["revision"] == record["revision"] + 1
+    assert result["node-dispatch"] is not None and result["recovery-required"] is False
+    assert result["recovery"] == record["recovery"]
+    assert result["worker-id"] == record["worker-id"] and result["attempt-epoch"] == record["attempt-epoch"]
+    assert result["node-dispatch"]["authorization-id"] is None
+    assert authorize(root, result)["node-dispatch"]["authorization-id"] == "auth-1"
+
+
+@pytest.mark.parametrize("mutation", ["cancel", "bound", "not-recovering", "owner", "revision"])
+def test_recovered_first_bind_rejects_competing_dispositions(running, mutation):
+    root, record = running
+    if mutation == "bound":
+        record = bind(root, record)
+    record = recovering_unbound(root, record)
+    changes = {}
+    if mutation == "cancel":
+        record = store.cancel_queued_or_mark_requested(root, record["request-id"])
+    elif mutation == "not-recovering":
+        record["recovery-required"] = False
+        store.write_record(root, record)
+    elif mutation == "owner":
+        changes["owner_epoch"] = "other-owner"
+    elif mutation == "revision":
+        changes["expected_revision"] = record["revision"] - 1
+    before = gateway_request_path(root, record["request-id"]).read_bytes()
+    with pytest.raises(AudiaGenticError):
+        resumed_bind(root, record, **changes)
+    assert gateway_request_path(root, record["request-id"]).read_bytes() == before
+
+
+def test_recovered_first_bind_concurrent_writers_have_one_winner(running):
+    root, record = running
+    record = recovering_unbound(root, record)
+    def compete(_):
+        try:
+            resumed_bind(root, record)
+            return True
+        except AudiaGenticError:
+            return False
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        assert list(pool.map(compete, range(2))).count(True) == 1
+    assert store.read_record(root, record["request-id"])["attempt-epoch"] == record["attempt-epoch"]
+
+
+def test_recovered_first_bind_write_failure_does_not_clear_recovery(running, monkeypatch):
+    from audiagentic.components.agents.gateway.store import _transitions as module
+    root, record = running
+    record = recovering_unbound(root, record)
+    before = gateway_request_path(root, record["request-id"]).read_bytes()
+    def fail(*args, **kwargs):
+        raise OSError("Injected write failure")
+    monkeypatch.setattr(module, "write_record", fail)
+    with pytest.raises(OSError):
+        resumed_bind(root, record)
+    assert gateway_request_path(root, record["request-id"]).read_bytes() == before
+
+
 @pytest.mark.parametrize("sequence,stage,output", [
     (True, "prepared", None), (0, "prepared", None), (-1, "prepared", None),
     (2**63, "prepared", None), (1, "unknown", None),

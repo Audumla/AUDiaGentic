@@ -2401,12 +2401,16 @@ def _node_fresh_effect(record: dict[str, Any], identity: dict[str, Any], owner_e
         raise _node_conflict("Node command is not eligible for fresh effect authorization")
 
 
-def _write_node_dispatch(project_root: Path, record: dict[str, Any], dispatch: dict[str, Any]) -> dict[str, Any]:
+def _write_node_dispatch(project_root: Path, record: dict[str, Any], dispatch: dict[str, Any], *,
+                         clear_recovery: bool = False) -> dict[str, Any]:
     updated = dict(record)
     updated.update({
         "node-dispatch": dispatch, "revision": record["revision"] + 1,
         "updated-at": now_iso_z(),
     })
+    if clear_recovery:
+        updated.update({"recovery-required": False, "watchdog-state": "active",
+                        "watchdog-reason": "node-recovery-bound"})
     write_record(project_root, updated)
     return updated
 
@@ -2415,12 +2419,15 @@ def bind_owned_node_dispatch(
     project_root: Path, request_id: str, *, identity: Any,
     command_payload: Mapping[str, Any], accepted_attestation: Any,
     owner_epoch: str, worker_id: str, attempt_epoch: int, expected_revision: int,
+    resume_unbound: bool = False,
 ) -> dict[str, Any]:
     """Persist one immutable attested command identity; return the full record.
 
     This is not a grant check or permission to invoke a native effect. A
     different identity always conflicts, including after an owner reconnect.
-    Recovery/rebinding requires a separate evidence policy, never this setter.
+    Rebinding an existing command is prohibited. An explicitly recovered null
+    dispatch may install its first newly attested binding and clear recovery in
+    one write, under the caller's current service/grant/occupancy fences.
     command_payload is the protected final semantic/raw-prompt/attestation
     mapping; only its validated identity and accepted attestation digest persist.
     Supply accepted_attestation from the trusted preparation exchange, never
@@ -2431,6 +2438,8 @@ def bind_owned_node_dispatch(
         validate_final_command_payload,
     )
 
+    if type(resume_unbound) is not bool:
+        raise _node_conflict("Node recovered binding flag must be boolean")
     command = _node_identity(identity)
     attestation = validate_final_command_payload(
         command_payload, CommandIdentity.from_mapping(command),
@@ -2443,8 +2452,15 @@ def bind_owned_node_dispatch(
             attempt_epoch=attempt_epoch, expected_revision=expected_revision,
         )
         _node_attestation_matches_attempt(record, accepted_attestation)
-        _node_fresh_effect(record, command, owner_epoch)
         prior = record.get("node-dispatch")
+        if resume_unbound:
+            _node_matches_record(record, command)
+            if (prior is not None or record["state"] != "running"
+                    or record.get("recovery-required") is not True
+                    or record.get("cancel-requested") or command["gateway-owner-epoch"] != owner_epoch):
+                raise _node_conflict("Recovered node binding requires an owned unsent attempt")
+        else:
+            _node_fresh_effect(record, command, owner_epoch)
         if prior is not None:
             if prior["identity"] != command or prior.get("attestation-sha256") != attestation_digest:
                 raise _node_conflict("Node dispatch identity collision")
@@ -2454,7 +2470,7 @@ def bind_owned_node_dispatch(
             "authorization-state": "not-authorized",
             "receipt-sequence": 0, "receipt-sha256": None,
             "receipt-stage": None, "output-sha256": None,
-        })
+        }, clear_recovery=resume_unbound)
 
 
 def authorize_owned_node_effect(

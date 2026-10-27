@@ -204,19 +204,29 @@ async def test_reconcile_only_unbound_never_prepares(case):
 
 
 @pytest.mark.asyncio
-async def test_unbound_running_recovery_waits_for_missing_canonical_clear_operation(case):
+async def test_unbound_running_recovery_atomically_binds_original_attempt(case):
     record = await asyncio.to_thread(store.takeover_nonterminal_owner, case.admission.root, case.record["request-id"],
         expected_owner_epoch="owner", new_owner_epoch="other-owner")
     case.record = await asyncio.to_thread(store.takeover_nonterminal_owner, case.admission.root, record["request-id"],
         expected_owner_epoch="other-owner", new_owner_epoch="owner")
     deferred = await invoke(case)
-    assert deferred.error.details["reason-code"] == "recovery-clear-unavailable"
-    assert deferred.phase == ObservationPhase.OWNERSHIP
-    assert case.record["recovery-required"] and not case.prepares and not case.commands
+    current = await effects(case)
+    assert deferred.side_effect_state == "may-have-started"
+    assert case.record["recovery-required"] and not current["recovery-required"]
+    assert current["worker-id"] == case.record["worker-id"]
+    assert current["attempt-epoch"] == case.record["attempt-epoch"]
+    assert len(case.prepares) == len(case.commands) == 1
+    assert type(case.effects[0]) is EffectAuthorized
 
 
 @pytest.mark.asyncio
-async def test_preparation_timeout_is_null_bind_not_uncertain_native_work(case):
+@pytest.mark.parametrize("recovering", [False, True])
+async def test_preparation_timeout_is_null_bind_not_uncertain_native_work(case, recovering):
+    if recovering:
+        case.record = await asyncio.to_thread(store.defer_owned_recovery, case.admission.root, case.record["request-id"],
+            owner_epoch="owner", worker_id=case.record["worker-id"], attempt_epoch=case.record["attempt-epoch"],
+            expected_revision=case.record["revision"], error=AudiaGenticError("CON-AGND-001", "agents-node", "Disconnected", {}),
+            phase="node-disconnected", side_effect_state="not-started", retry_delay_seconds=None)
     case.ignore_prepare = True
     case.runner.timeout = 0.05
     deferred = await invoke(case)
@@ -224,6 +234,32 @@ async def test_preparation_timeout_is_null_bind_not_uncertain_native_work(case):
     assert deferred.phase == ObservationPhase.PRE_SUBMIT
     assert deferred.error.details["reason-code"] == "preparation-timeout"
     assert len(case.prepares) == 1 and not case.commands
+    current = store.read_record(case.admission.root, case.record["request-id"])
+    assert current["node-dispatch"] is None and current["recovery-required"] is recovering
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", ["occupied", "grant-revoked", "evidence-write"])
+async def test_recovered_preparation_failure_never_clears_flag_or_sends_command(case, monkeypatch, failure):
+    from audiagentic.components.agents.gateway.node import runner as module
+    case.record = await asyncio.to_thread(store.defer_owned_recovery, case.admission.root, case.record["request-id"],
+        owner_epoch="owner", worker_id=case.record["worker-id"], attempt_epoch=case.record["attempt-epoch"],
+        expected_revision=case.record["revision"], error=AudiaGenticError("CON-AGND-001", "agents-node", "Disconnected", {}),
+        phase="node-disconnected", side_effect_state="not-started", retry_delay_seconds=None)
+    if failure == "occupied":
+        case.reject_code = "CON-AGND-001"
+    elif failure == "grant-revoked":
+        case.prepared_hook = lambda: case.admission.authority.revoke("node", expected_grant_revision=1)
+    else:
+        def failed(*args, **kwargs):
+            raise OSError("PRIVATE injected evidence write failure")
+        monkeypatch.setattr(module, "persist_prepared_once", failed)
+    deferred = await invoke(case)
+    assert deferred.side_effect_state == "not-started"
+    current = store.read_record(case.admission.root, case.record["request-id"])
+    assert current["node-dispatch"] is None and current["recovery-required"]
+    assert current["worker-id"] == case.record["worker-id"] and current["attempt-epoch"] == case.record["attempt-epoch"]
+    assert len(case.prepares) == 1 and not case.commands and not case.effects
 
 
 @pytest.mark.asyncio

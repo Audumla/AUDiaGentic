@@ -26,7 +26,7 @@ _STAGE_FACTS = {
 }
 _REASONS = frozenset(reason for _, reason in _STAGE_FACTS.values()) | {
     "transport-unavailable", "preparation-rejected", "preparation-timeout", "transport-timeout",
-    "connection-replaced-or-closed", "capacity-occupied", "recovery-clear-unavailable",
+    "connection-replaced-or-closed", "capacity-occupied",
     "attempt-not-dispatchable", "internal-failure",
 }
 
