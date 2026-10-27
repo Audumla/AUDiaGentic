@@ -586,7 +586,7 @@ class NodeReceiptStore:
             finally:
                 os.close(fd)
 
-    def _read_output(self, digest):
+    def _read_output_bytes(self, digest, *, max_bytes: int | None = None):
         if (
             not isinstance(digest, str)
             or len(digest) != 64
@@ -596,10 +596,33 @@ class NodeReceiptStore:
         path = self.outputs / (digest + ".txt")
         if self.outputs.is_symlink() or path.is_symlink():
             raise conflict(1, "Private output path changed")
-        raw = path.read_bytes()
+        if max_bytes is not None:
+            _integer(max_bytes)
+        with path.open("rb") as handle:
+            raw = handle.read() if max_bytes is None else handle.read(max_bytes + 1)
+        if max_bytes is not None and len(raw) > max_bytes:
+            raise invalid(1, "Private terminal artifact exceeds trusted byte bound")
         if hashlib.sha256(raw).hexdigest() != digest:
             raise conflict(1, "Private terminal output digest mismatch")
-        return raw.decode("utf-8")
+        return raw
+
+    def _read_output(self, digest):
+        return self._read_output_bytes(digest).decode("utf-8")
+
+    def artifact_bytes(self, identity: CommandIdentity, *, expected_sha256: str,
+                       max_bytes: int) -> tuple[str | None, bytes]:
+        """Read descriptor and hash-bound terminal bytes with bounded allocation.
+
+        Unlike get(), this does not first materialize output to validate the
+        receipt. The same transaction validates its row and bounded file read.
+        """
+        _integer(max_bytes)
+        _digest(expected_sha256)
+        with self._transaction() as db:
+            row = self._row(db, identity)
+            if row[1] != "terminal" or row[3] != expected_sha256:
+                raise conflict(1, "Artifact does not match exact terminal receipt digest")
+            return row[6], self._read_output_bytes(row[3], max_bytes=max_bytes)
 
     def output(self, identity: CommandIdentity) -> str:
         """Local owner read, including old epoch evidence; never a public route."""

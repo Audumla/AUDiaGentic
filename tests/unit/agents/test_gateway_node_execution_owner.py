@@ -814,3 +814,279 @@ def test_original_source_locator_is_required_no_legacy_fallback(env):
             timeout_seconds=1,
         )
     assert owner.receipts_after() == ()
+
+
+def worker_artifact(env, monkeypatch, *, text=None):
+    """Actual retained worker artifact; fake child proof I/O, no native E2E."""
+    owner = open_owner(env)
+    connection = connect(owner)
+    mint_proof(monkeypatch, env.case, result_data=None if text is None else {"output": text})
+    receipt = run(owner, env.case)
+    store = NodeReceiptStore(
+        root=env.config.state_root, node_id="node", node_epoch="boot", gateway_owner_epoch="gateway"
+    )
+    return owner, connection, receipt, store.output(env.case.identity).encode("utf-8")
+
+
+def test_receipt_checkpoint_and_missing_artifact_do_not_create_store(env):
+    owner = open_owner(env)
+    before = {p.relative_to(env.config.state_root) for p in env.config.state_root.rglob("*")}
+    assert owner.receipt_checkpoint() is None
+    with pytest.raises(AudiaGenticError, match="No local receipt"):
+        owner.read_artifact_chunk(env.case.identity, "a" * 64, 0, 10, 1000)
+    assert owner.receipt_checkpoint() is None
+    assert {
+        p.relative_to(env.config.state_root) for p in env.config.state_root.rglob("*")
+    } == before
+    assert not (env.config.state_root / "receipts.sqlite3").exists()
+
+
+def test_receipt_checkpoint_exposes_existing_durable_ack_without_mutation(env, monkeypatch):
+    owner, connection, receipt, raw = worker_artifact(env, monkeypatch)
+    checkpoint = owner.receipt_checkpoint()
+    assert checkpoint.log_incarnation_id
+    assert checkpoint.server_id is None and checkpoint.through_sequence == 0
+    acknowledged = owner.acknowledge(ack(owner, connection, receipt, env.config.state_root))
+    assert owner.receipt_checkpoint() == acknowledged
+    assert acknowledged.through_sequence == receipt.sequence
+    assert acknowledged.through_receipt_sha256 == receipt.digest
+    assert owner.receipt_checkpoint().log_incarnation_id == checkpoint.log_incarnation_id
+    assert [r.state for r in owner.receipts_after()] == ["prepared", "effect-intent", "terminal"]
+
+
+def test_worker_artifact_byte_chunks_reassemble_exact_envelope_and_digest(env, monkeypatch):
+    from dataclasses import FrozenInstanceError
+
+    owner, connection, receipt, raw = worker_artifact(env, monkeypatch)
+    data, offset = [], 0
+    while offset < len(raw):
+        chunk = owner.read_artifact_chunk(
+            env.case.identity, receipt.output_sha256, offset, 7, len(raw)
+        )
+        assert chunk.artifact_kind == "worker-terminal-result"
+        assert chunk.total_bytes == len(raw) and chunk.offset == offset
+        assert chunk.artifact_sha256 == receipt.output_sha256
+        assert len(chunk.data) <= 7
+        assert chunk.eof == (offset + len(chunk.data) == len(raw))
+        data.append(chunk.data)
+        offset += len(chunk.data)
+    assert b"".join(data) == raw
+    assert sha(b"".join(data)) == receipt.output_sha256
+    assert json.loads(raw)["output"]["text"].startswith("Verified answer")
+    whole = owner.read_artifact_chunk(
+        env.case.identity, receipt.output_sha256, 0, 256 * 1024, len(raw)
+    )
+    assert whole.eof and whole.data == raw
+    assert "Verified answer" not in repr(whole) and "data=" not in repr(whole)
+    with pytest.raises(FrozenInstanceError):
+        whole.eof = False
+
+
+def test_chunk_cap_accepts_exact_256k_and_preserves_utf8_byte_offsets(env, monkeypatch):
+    owner, connection, receipt, raw = worker_artifact(
+        env, monkeypatch, text="PRIVATE " + "λ" * 140000
+    )
+    first = owner.read_artifact_chunk(
+        env.case.identity, receipt.output_sha256, 0, 256 * 1024, len(raw)
+    )
+    assert len(first.data) == 256 * 1024 and not first.eof
+    rest = owner.read_artifact_chunk(
+        env.case.identity, receipt.output_sha256, len(first.data), 256 * 1024, len(raw)
+    )
+    assert rest.eof and first.data + rest.data == raw
+    # Deliberately split a UTF-8 code point: byte chunks need not decode alone.
+    index = raw.index("λ".encode())
+    byte = owner.read_artifact_chunk(env.case.identity, receipt.output_sha256, index, 1, len(raw))
+    assert byte.data == b"\xce"
+    assert "PRIVATE" not in repr(first)
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("offset", -1),
+        ("offset", True),
+        ("offset", 1.0),
+        ("offset", 2**63),
+        ("limit", 0),
+        ("limit", -1),
+        ("limit", True),
+        ("limit", 1.0),
+        ("limit", 256 * 1024 + 1),
+        ("max_total_bytes", 0),
+        ("max_total_bytes", -1),
+        ("max_total_bytes", True),
+        ("max_total_bytes", 1.0),
+        ("max_total_bytes", 2**63),
+        ("expected_sha256", "A" * 64),
+        ("expected_sha256", "wrong"),
+        ("expected_sha256", None),
+    ],
+)
+def test_artifact_invalid_bounds_and_digest_rejected_before_store_read(
+    env, monkeypatch, field, value
+):
+    owner = open_owner(env)
+    connect(owner)
+    args = dict(
+        identity=env.case.identity,
+        expected_sha256="a" * 64,
+        offset=0,
+        limit=1,
+        max_total_bytes=1000,
+    )
+    args[field] = value
+    monkeypatch.setattr(
+        NodeReceiptStore, "get", lambda *args: pytest.fail("invalid input reached store")
+    )
+    with pytest.raises(AudiaGenticError):
+        owner.read_artifact_chunk(**args)
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "hash",
+        "foreign-command",
+        "changed-request",
+        "changed-epoch",
+        "changed-payload",
+        "untyped",
+        "end",
+        "past-end",
+        "total-cap",
+        "byte-total-cap",
+    ],
+)
+def test_artifact_exact_identity_digest_offsets_and_total_cap_fail_closed(env, monkeypatch, bad):
+    owner, connection, receipt, raw = worker_artifact(env, monkeypatch)
+    args = dict(
+        identity=env.case.identity,
+        expected_sha256=receipt.output_sha256,
+        offset=0,
+        limit=10,
+        max_total_bytes=len(raw),
+    )
+    changes = {
+        "hash": dict(expected_sha256="f" * 64),
+        "foreign-command": dict(identity=replace(env.case.identity, command_id="foreign")),
+        "changed-request": dict(identity=replace(env.case.identity, request_id="foreign")),
+        "changed-epoch": dict(identity=replace(env.case.identity, node_epoch="reboot")),
+        "changed-payload": dict(identity=replace(env.case.identity, payload_sha256="f" * 64)),
+        "untyped": dict(identity=env.case.identity.to_mapping()),
+        "end": dict(offset=len(raw)),
+        "past-end": dict(offset=len(raw) + 1),
+        "total-cap": dict(max_total_bytes=1),
+        "byte-total-cap": dict(max_total_bytes=len(raw.decode("utf-8"))),
+    }
+    args.update(changes[bad])
+    before = owner.receipt_checkpoint()
+    with pytest.raises(AudiaGenticError):
+        owner.read_artifact_chunk(**args)
+    assert owner.receipt_checkpoint() == before
+    assert not owner.snapshot().capacity_blocked
+
+
+def test_nonterminal_artifact_rejected(env):
+    owner = open_owner(env)
+    connect(owner)
+    store = NodeReceiptStore(
+        root=env.config.state_root, node_id="node", node_epoch="boot", gateway_owner_epoch="gateway"
+    )
+    store.prepare(env.case.identity, canonical_json(env.case.payload))
+    with pytest.raises(AudiaGenticError, match="terminal receipt"):
+        owner.read_artifact_chunk(env.case.identity, "a" * 64, 0, 10, 1000)
+
+
+def test_historical_worker_artifact_and_checkpoint_survive_handoff_and_disconnect(env, monkeypatch):
+    owner, connection, receipt, raw = worker_artifact(env, monkeypatch)
+    checkpoint = owner.receipt_checkpoint()
+    new = replace(connection, gateway_owner_epoch="gateway2")
+    owner.observe_connection(new)
+    owner.handoff_if_quiescent()
+    owner.connection_lost(new)
+    assert owner.receipt_checkpoint() == checkpoint
+    chunk = owner.read_artifact_chunk(
+        env.case.identity, receipt.output_sha256, 0, 256 * 1024, len(raw)
+    )
+    assert chunk.data == raw and chunk.eof
+    assert chunk.artifact_kind == "worker-terminal-result"
+    assert owner.snapshot().owner_scope.gateway_owner_epoch == "gateway2"
+
+
+@pytest.mark.parametrize("kind", ["native-plaintext", None])
+@pytest.mark.parametrize("text", ["", '{"kind":"worker-terminal-result","output":"plaintext"}'])
+def test_plaintext_and_unknown_historical_kind_never_inferred_from_content(env, kind, text):
+    owner = open_owner(env)
+    connect(owner)
+    c = env.case
+    store = NodeReceiptStore(
+        root=env.config.state_root, node_id="node", node_epoch="boot", gateway_owner_epoch="gateway"
+    )
+    store.prepare(c.identity, canonical_json(c.payload))
+    store.effect_intent(c.identity, c.auth_request, c.auth_reply, connection_generation=1)
+    store.native_accepted(c.identity, native_ref="PRIVATE-native-ref")
+    receipt = store.terminal(c.identity, text=text)
+    if kind is None:
+        # Fixture models historical nullable metadata, never an implementation migration.
+        with sqlite3.connect(store.path) as db:
+            db.execute("UPDATE commands SET artifact_kind=NULL")
+    raw = text.encode("utf-8")
+    chunk = owner.read_artifact_chunk(
+        c.identity, receipt.output_sha256, 0, 256 * 1024, max(1, len(raw))
+    )
+    assert chunk.artifact_kind == kind
+    assert chunk.data == raw and chunk.total_bytes == len(raw) and chunk.eof
+    assert "PRIVATE-native-ref" not in repr(chunk)
+
+
+@pytest.mark.parametrize("damage", ["corrupt", "missing"])
+def test_artifact_file_corruption_or_absence_returns_no_chunk(env, monkeypatch, damage):
+    owner, connection, receipt, raw = worker_artifact(env, monkeypatch)
+    # Test-only fault injection into a real artifact; implementation reconstructs no paths.
+    path = env.config.state_root / "outputs" / (receipt.output_sha256 + ".txt")
+    if damage == "corrupt":
+        path.write_bytes(b"PRIVATE corrupt data")
+    else:
+        path.unlink()
+    with pytest.raises(AudiaGenticError):
+        owner.read_artifact_chunk(env.case.identity, receipt.output_sha256, 0, 10, len(raw))
+
+
+def test_new_read_apis_preserve_process_owner_fence(env, monkeypatch):
+    owner, connection, receipt, raw = worker_artifact(env, monkeypatch)
+    ManagedServiceOwner(env.service).retire(expected_epoch=env.record.owner_epoch)
+    with pytest.raises(AudiaGenticError):
+        owner.receipt_checkpoint()
+    with pytest.raises(AudiaGenticError):
+        owner.read_artifact_chunk(env.case.identity, receipt.output_sha256, 0, 10, len(raw))
+
+
+def test_artifact_allocation_is_bounded_before_reading_oversized_file(env, monkeypatch):
+    from pathlib import Path
+
+    owner, _, receipt, raw = worker_artifact(env, monkeypatch)
+    path = env.config.state_root / "outputs" / (receipt.output_sha256 + ".txt")
+    original_open = Path.open
+    requested = []
+
+    class Reader:
+        def __enter__(self):
+            self.handle = original_open(path, "rb")
+            return self
+
+        def read(self, size=-1):
+            requested.append(size)
+            assert size == 9, "remote artifact read must not allocate the full file"
+            return self.handle.read(size)
+
+        def __exit__(self, *args):
+            self.handle.close()
+
+    def bounded_open(candidate, *args, **kwargs):
+        return Reader() if candidate == path else original_open(candidate, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", bounded_open)
+    with pytest.raises(AudiaGenticError, match="byte bound"):
+        owner.read_artifact_chunk(env.case.identity, receipt.output_sha256, 0, 8, 8)
+    assert requested == [9]

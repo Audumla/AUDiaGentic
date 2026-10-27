@@ -10,6 +10,7 @@ uncertainty and occupancy; neither disconnect nor handoff grants another effect.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import os
@@ -17,7 +18,7 @@ import threading
 import weakref
 from collections.abc import Mapping
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from audiagentic.components.agents.contracts.execution_context import (
@@ -56,7 +57,7 @@ from .preparation import (
     RetainedNodePreparation,
     validate_final_command_preparation,
 )
-from .receipts import NodeReceiptStore, Receipt, ReceiptCheckpoint, ReceiptOwnerScope
+from .receipts import NodeReceiptStore, Receipt, ReceiptCheckpoint, ReceiptOwnerScope, _digest
 from .source_workspace import validate_recipient_workspace
 
 _OPEN_LOCK = threading.Lock()
@@ -73,6 +74,18 @@ class NodeExecutionSnapshot:
     producer_running: bool
     handoff_pending: bool
     capacity_blocked: bool
+
+
+@dataclass(frozen=True)
+class NodeArtifactChunk:
+    """Private local bytes/descriptor, never a wire frame or execution proof."""
+
+    artifact_kind: str | None
+    total_bytes: int
+    data: bytes = field(repr=False)
+    eof: bool
+    artifact_sha256: str
+    offset: int
 
 
 def _worker_inputs(identity, preparation, payload, workspace):
@@ -341,6 +354,55 @@ class NodeExecutionOwner:
         """Evidence replay also includes old epochs; never authorizes execution."""
         with self._guard():
             return () if self._store is None else self._store.receipts_after(sequence, limit=limit)
+
+    def receipt_checkpoint(self) -> ReceiptCheckpoint | None:
+        """Read durable log/custody metadata without initializing receipt storage."""
+        with self._guard():
+            return None if self._store is None else self._store.ack_checkpoint()
+
+    def read_artifact_chunk(
+        self,
+        identity: CommandIdentity,
+        expected_sha256: str,
+        offset: int,
+        limit: int,
+        max_total_bytes: int,
+    ) -> NodeArtifactChunk:
+        """Read exact terminal evidence, including historical command epochs.
+
+        max_total_bytes is trusted local policy, never a peer-selected allowance.
+        Run off the control event loop. The receipt owner bounds the file read
+        before allocation and verifies its digest before any chunk is returned.
+        No missing artifact kind is inferred from JSON-looking text.
+        """
+        if type(identity) is not CommandIdentity:
+            raise invalid(1, "Artifact read requires exact typed command identity")
+        _digest(expected_sha256)
+        _integer(offset, 0)
+        _integer(limit)
+        _integer(max_total_bytes)
+        if limit > 256 * 1024 or offset > max_total_bytes:
+            raise invalid(1, "Artifact read exceeds trusted chunk or total bounds")
+        with self._guard():
+            if self._store is None:
+                raise conflict(1, "No local receipt storage exists")
+            kind, raw = self._store.artifact_bytes(identity,
+                expected_sha256=expected_sha256, max_bytes=max_total_bytes)
+            if kind not in (None, "worker-terminal-result", "native-plaintext"):
+                raise conflict(1, "Unsupported stored artifact kind")
+            total = len(raw)
+            if total > max_total_bytes:
+                raise invalid(1, "Artifact exceeds trusted total byte bound")
+            if hashlib.sha256(raw).hexdigest() != expected_sha256:
+                raise conflict(1, "Artifact bytes do not match terminal receipt digest")
+            # Nonempty artifacts require progress; only an empty artifact has a
+            # valid zero-byte EOF chunk. Match the existing artifact wire parser.
+            if offset > total or (total > 0 and offset == total):
+                raise invalid(1, "Artifact offset is outside available bytes")
+            data = raw[offset : offset + limit]
+            return NodeArtifactChunk(
+                kind, total, data, offset + len(data) == total, expected_sha256, offset
+            )
 
     def run_one(
         self,
