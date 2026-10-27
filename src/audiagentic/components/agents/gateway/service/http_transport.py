@@ -227,7 +227,13 @@ class GatewayHTTPRequestHandler(BaseHTTPRequestHandler):
     def _dispatch_shared(self, method: str) -> None:
         ingress = self.server.shared_ingress
         assert ingress is not None
-        principal = ingress.authenticate(self.headers.get("Authorization", ""))
+        authorizations = self.headers.get_all("Authorization", [])
+        source_tokens = self.headers.get_all("X-AUDiaGentic-Source-Node-Token", [])
+        if len(authorizations) != 1 or len(source_tokens) > 1:
+            raise transport_error(22, "Shared authentication headers must be unique")
+        if source_tokens and not (method == "POST" and self.path == "/shared/v1/call"):
+            raise transport_error(22, "Source credentials are restricted to node submission")
+        principal = ingress.authenticate(authorizations[0])
         if method == "GET" and self.path == "/shared/v1/health":
             result = ingress.health(self.server.application, principal)
         elif method == "POST" and self.path == "/shared/v1/call":
@@ -235,10 +241,18 @@ class GatewayHTTPRequestHandler(BaseHTTPRequestHandler):
             lease_id, epoch = _string(body, "lease-id"), _string(body, "owner-epoch")
             client_id = self.server.application.require_client_principal(lease_id, epoch, principal.principal_id)
             operation, root, params = ingress.prepare_call(principal, body, client_instance_id=client_id)
+            node_context = None
+            if source_tokens or {"node_id", "workspace_id", "source_workspace"}.intersection(params):
+                if operation != "submit_execution_request" or len(source_tokens) != 1:
+                    raise transport_error(22, "Node submission requires one enrolled source credential")
+                node_context, params = ingress.node_submission_context(
+                    principal, body["project-id"], params, source_node_token=source_tokens[0],
+                )
             result = self.server.application.invoke(
                 operation, root, params,
                 protocol_version=_string(body, "protocol-version"),
                 owner_epoch=epoch, lease_id=lease_id,
+                **({"node_context": node_context} if node_context is not None else {}),
             )
             # Compact only the shared wire boundary. Local HTTP and the Python
             # application retain their existing contracts; explicit reads of

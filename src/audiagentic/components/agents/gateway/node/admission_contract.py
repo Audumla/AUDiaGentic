@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from .contracts import _identifier, canonical_json, invalid
@@ -106,6 +106,37 @@ class SourceWorkspaceIdentity:
     def from_mapping(cls, value: Mapping) -> SourceWorkspaceIdentity:
         mapping = _exact(value, {"version", "source-node-id", "workspace-id", "access-mode", "binding-sha256"})
         return cls(**{key.replace("-", "_"): item for key, item in mapping.items()})
+
+
+@dataclass(frozen=True)
+class NodeSubmissionContext:
+    """Ingress-owned principal and opaque source claims, not a node grant.
+
+    The node authority must authenticate the credential inside its canonical
+    admission gate. This object is never reconstructed from ordinary RPC params
+    or serialized into public request records.
+    """
+
+    principal_id: str
+    server_id: str
+    server_project_id: str
+    node_id: str
+    workspace_id: str
+    source_workspace: SourceWorkspaceIdentity
+    caller_root: str = field(repr=False)
+    source_node_token: str = field(repr=False)
+
+    def __post_init__(self):
+        for value in (self.principal_id, self.server_id, self.server_project_id, self.node_id, self.workspace_id):
+            _identifier(value)
+        if type(self.source_workspace) is not SourceWorkspaceIdentity:
+            raise invalid(1, "Node ingress context requires typed caller workspace")
+        if (not isinstance(self.caller_root, str) or not self.caller_root or len(self.caller_root) > 32768
+                or any(ord(c) < 32 for c in self.caller_root)):
+            raise invalid(1, "Node ingress requires a bounded private caller locator")
+        if (not isinstance(self.source_node_token, str) or not self.source_node_token
+                or any(c.isspace() for c in self.source_node_token)):
+            raise invalid(1, "Node ingress requires a source credential")
 
 
 @dataclass(frozen=True)
