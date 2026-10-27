@@ -6,15 +6,18 @@ from types import SimpleNamespace
 
 import pytest
 
-from audiagentic.components.agents.agents_paths import gateway_final_response_path, gateway_request_path
+from audiagentic.components.agents.agents_paths import (
+    gateway_final_response_path,
+    gateway_request_path,
+)
 from audiagentic.components.agents.gateway import output, store
 from audiagentic.components.agents.gateway.node.authority import NodeConnectionIdentity
 from audiagentic.components.agents.gateway.node.preparation import PreparationAttestation
 from audiagentic.components.agents.gateway.node.publication import publish_owned_node_terminal
 from audiagentic.components.agents.gateway.node.receipts import Receipt
 from audiagentic.components.agents.gateway.node.terminal_output import WorkerTerminalOutput
-from audiagentic.components.agents.gateway.session import sessions_store
 from audiagentic.components.agents.gateway.service.contract import GATEWAY_SERVICE_KEY
+from audiagentic.components.agents.gateway.session import sessions_store
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.system.managed_service import ManagedServiceStore
 
@@ -78,6 +81,26 @@ def test_exact_text_not_private_envelope_and_completed_replay_is_no_write(publis
     assert gateway_final_response_path(case.root, case.identity.request_id).read_bytes() == case.artifact.text.encode()
     assert publish(case) == completed
     assert store.read_record(case.root, case.identity.request_id, include_output=False) == completed
+
+
+def test_new_gateway_owner_publishes_original_terminal_without_reexecution(published_case):
+    from tests.unit.agents.test_gateway_node_checkpoints import _restart
+
+    case = published_case
+    _restart(case.service, "replacement")
+    recovered = store.takeover_nonterminal_owner(case.root, case.identity.request_id,
+        expected_owner_epoch="owner", new_owner_epoch="replacement")
+    assert recovered["worker-id"] == case.accepted.worker_id
+    assert recovered["attempt-epoch"] == case.accepted.attempt_epoch
+    with pytest.raises(AudiaGenticError):
+        publish(case)  # The original owner/connection is now stale.
+    assert not gateway_final_response_path(case.root, case.identity.request_id).exists()
+    completed = publish(case, current_owner_epoch="replacement",
+        connection=NodeConnectionIdentity("node", "new-boot", "replacement", 2))
+    assert completed["state"] == "completed"
+    assert completed["node-dispatch"]["identity"] == case.identity.to_mapping()
+    assert output.read_final_response(case.root, case.identity.request_id,
+        completed["response-artifact"]) == case.artifact.text
 
 
 def test_artifact_write_before_terminal_crash_recovers_same_bytes(published_case, monkeypatch):

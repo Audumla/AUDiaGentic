@@ -64,6 +64,16 @@ def command_for(attestation, payload):
     return CommandIdentity(b.command_id, b.request_id, b.node_id, b.node_epoch, b.gateway_owner_epoch, b.connection_generation, b.workspace_id, b.grant_revision, b.binding_generation, hashlib.sha256(canonical_json(payload)).hexdigest(), attestation.semantic.execution_profile_id)
 
 
+def test_owner_takeover_preserves_original_bound_preparation(prepared):
+    root, record, identity, accepted, _ = persisted_bound(prepared)
+    recovered = store.takeover_nonterminal_owner(root, identity.request_id,
+        expected_owner_epoch=record["dispatch-owner-epoch"], new_owner_epoch="replacement")
+    assert recovered["worker-id"] == accepted.worker_id
+    assert recovered["attempt-epoch"] == accepted.attempt_epoch
+    assert recovered["node-dispatch"]["identity"] == identity.to_mapping()
+    assert read_prepared_evidence(root, identity, recovered).attestation == accepted
+
+
 def mutable(value):
     return json.loads(canonical_json(value))
 
@@ -218,7 +228,6 @@ def test_malformed_forged_or_noncanonical_evidence_never_reads(prepared, change)
 @pytest.mark.parametrize("field,value", [
     ("request-id", "req_other"), ("execution-profile-id", "other-profile"),
     ("worker-id", "other-worker"), ("attempt-epoch", 2), ("attempt-epoch", True),
-    ("dispatch-owner-epoch", "other-owner"),
 ])
 def test_wrong_canonical_request_or_attempt_rejected(prepared, field, value):
     root, record, identity, _, _ = persisted_bound(prepared)

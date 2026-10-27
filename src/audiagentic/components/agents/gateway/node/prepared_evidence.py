@@ -204,11 +204,14 @@ def _require_bound_record(
             or record.get("worker-id") != accepted.worker_id
             or type(record.get("attempt-epoch")) is not int
             or record["attempt-epoch"] != accepted.attempt_epoch
-            or record.get("dispatch-owner-epoch") != identity.gateway_owner_epoch
             or dispatch.get("attestation-sha256") != accepted.digest
             or any(placement.get(key) != identity.to_mapping()[key]
                    for key in ("node-id", "workspace-id", "grant-revision"))):
         raise conflict(1, "Prepared evidence differs from canonical accepted attempt")
+    # Command epoch is immutable historical provenance. Current request owner
+    # may change on restart; publication separately fences the live service and
+    # connection. Exact bound identity, attestation and original worker/attempt
+    # remain mandatory here. This read never permits a fresh effect.
     if require_authorized:
         authorization = dispatch.get("authorization-id")
         if (not isinstance(authorization, str)
