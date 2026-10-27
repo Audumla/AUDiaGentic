@@ -566,3 +566,29 @@ def test_actual_queue_preserves_validated_node_failure_stage_without_private_det
     }
     assert after["recovery"]["side-effect-state"] == "may-have-started"
     assert "PRIVATE" not in str(after["recovery"])
+
+
+def test_pending_observer_uses_latest_recovery_phase_for_same_original_command(tmp_path, monkeypatch):
+    from audiagentic.components.agents.gateway.node.contracts import conflict
+
+    before = recoverable(tmp_path)
+    manager = queue_mod.GatewayQueueManager(node_project_roots=(tmp_path,), node_server_id="server")
+    drain = manager._drain_all
+    monkeypatch.setattr(manager, "_drain_all", lambda: None)
+    observed = threading.Event()
+    def runner(root, record, *, reconcile_only):
+        assert reconcile_only
+        assert record["node-dispatch"]["identity"] == before["node-dispatch"]["identity"]
+        assert record["recovery"]["phase"] == "node-disconnected"
+        observed.set()
+        return record
+    recover_enqueue(manager, tmp_path, before, runner)
+    store.defer_owned_recovery(tmp_path, before["request-id"], owner_epoch="owner",
+        worker_id=before["worker-id"], attempt_epoch=before["attempt-epoch"],
+        expected_revision=before["revision"], error=conflict(1, "Node disconnected"),
+        phase="node-disconnected", side_effect_state="may-have-started", retry_delay_seconds=None)
+    monkeypatch.setattr(manager, "_drain_all", drain)
+    drain()
+    assert observed.wait(3)
+    after = manager.wait(tmp_path, before["request-id"], 1)
+    assert after["state"] == "running" and after["attempt-epoch"] == before["attempt-epoch"]
