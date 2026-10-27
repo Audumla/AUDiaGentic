@@ -87,7 +87,7 @@ def _uninstall_shared_gateway_registry(_registry: Any) -> None:
     profiles_mod.set_gateway_registry(None)
 
 
-def _build_gateway_queue_manager() -> Any:
+def _build_gateway_queue_manager(*, node_config=None, node_ports=None) -> Any:
     """AS63 step 9/10: the queue manager is genuine per-process state (live
     per-profile queues, in-flight concurrency slots) — the same composition
     candidacy the profile registry already met, not an "internal helper with
@@ -97,7 +97,14 @@ def _build_gateway_queue_manager() -> Any:
     from audiagentic.components.agents.gateway import api as gateway_api
     from audiagentic.components.agents.gateway.queue import queue as queue_mod
 
-    manager = queue_mod.GatewayQueueManager()
+    options = {}
+    if node_config is not None:
+        if node_ports is None:
+            raise ValueError("node queue composition requires late-bound ports")
+        options = dict(node_project_roots=tuple(node_config.projects.values()),
+            node_server_id=node_config.server_id, node_ids=tuple(n.node_id for n in node_config.nodes),
+            node_ready=node_ports.ready, node_recovery_wakeup=node_ports.wake)
+    manager = queue_mod.GatewayQueueManager(**options)
     gateway_api.set_queue_manager(manager)
     return manager
 
@@ -171,7 +178,7 @@ def _shutdown_session_runtime(_owner: object) -> None:
         reset_session_runtime()
 
 
-def builtin_contributions() -> tuple[ServiceContribution, ...]:
+def builtin_contributions(*, node_config=None, node_ports=None) -> tuple[ServiceContribution, ...]:
     """Every implementation this process can be configured to use."""
     return (
         ServiceContribution(
@@ -183,7 +190,7 @@ def builtin_contributions() -> tuple[ServiceContribution, ...]:
         ServiceContribution(
             service_id=QUEUE_MANAGER,
             implementation_id=ImplementationId("agents.gateway-queue-manager"),
-            factory=_build_gateway_queue_manager,
+            factory=lambda: _build_gateway_queue_manager(node_config=node_config, node_ports=node_ports),
             finalizer=_uninstall_gateway_queue_manager,
         ),
         ServiceContribution(
@@ -205,6 +212,8 @@ def build_gateway_service_graph(
     *,
     config: CompositionConfig | None = None,
     overrides: dict[ServiceId, Any] | None = None,
+    node_config=None,
+    node_ports=None,
 ) -> BuiltGraph:
     """Build the gateway-service process graph.
 
@@ -217,7 +226,7 @@ def build_gateway_service_graph(
         namespace=CONFIG_NAMESPACE,
     )
     return build_graph(
-        builtin_contributions(),
+        builtin_contributions(node_config=node_config, node_ports=node_ports),
         resolved_config,
         overrides=overrides,
     )

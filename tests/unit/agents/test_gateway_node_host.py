@@ -37,12 +37,22 @@ def _config(tmp_path, *, duplicate_token=False):
     return load_shared_server_config(path)
 
 
-def test_host_uses_one_authority_and_existing_pump_for_durable_revoke(tmp_path, monkeypatch):
+def install_graph(monkeypatch, shutdowns=None):
     from audiagentic.runtime.bootstrap import gateway_service_composition as composition
 
+    def build(**options):
+        manager = composition._build_gateway_queue_manager(**options)
+        def shutdown():
+            manager.shutdown()
+            if shutdowns is not None:
+                shutdowns.append(True)
+        return SimpleNamespace(root=lambda service: manager, shutdown=shutdown)
+    monkeypatch.setattr(composition, "build_gateway_service_graph", build)
+
+
+def test_host_uses_one_authority_and_existing_pump_for_durable_revoke(tmp_path, monkeypatch):
     shutdowns = []
-    monkeypatch.setattr(composition, "build_gateway_service_graph",
-                        lambda: SimpleNamespace(shutdown=lambda: shutdowns.append(True)))
+    install_graph(monkeypatch, shutdowns)
     config = _config(tmp_path)
     host = GatewayServiceHost.create(shared_config=config, application=object())
     try:
@@ -66,11 +76,8 @@ def test_host_uses_one_authority_and_existing_pump_for_durable_revoke(tmp_path, 
 
 
 def test_host_refuses_equal_human_and_node_tokens_before_claim(tmp_path, monkeypatch):
-    from audiagentic.runtime.bootstrap import gateway_service_composition as composition
-
     shutdowns = []
-    monkeypatch.setattr(composition, "build_gateway_service_graph",
-                        lambda: SimpleNamespace(shutdown=lambda: shutdowns.append(True)))
+    install_graph(monkeypatch, shutdowns)
     config = _config(tmp_path, duplicate_token=True)
     with pytest.raises(AudiaGenticError, match="VAL-AGND-001"):
         GatewayServiceHost.create(shared_config=config, application=object())
@@ -86,9 +93,7 @@ def test_host_startup_defers_node_work_without_interrupting_or_local_dispatch(tm
     from audiagentic.components.agents.gateway import api, store
     from audiagentic.components.agents.gateway.queue import recovery, work_index
     from audiagentic.components.providers import providers_api
-    from audiagentic.runtime.bootstrap import gateway_service_composition as composition
-
-    monkeypatch.setattr(composition, "build_gateway_service_graph", lambda: SimpleNamespace(shutdown=lambda: None))
+    install_graph(monkeypatch)
     config = _config(tmp_path)
     host = GatewayServiceHost.create(shared_config=config, application=object())
     root = config.projects["project"]

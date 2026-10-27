@@ -49,6 +49,7 @@ class GatewayServiceHost:
         service_root: Path | None = None,
         composition_graph: object | None = None,
         node_authority: object | None = None,
+        node_runtime: object | None = None,
     ) -> None:
         self.server = server
         self.service_store = service_store
@@ -69,6 +70,7 @@ class GatewayServiceHost:
         # uninstalls the shared-gateway execution-profile registry.
         self._composition_graph = composition_graph
         self._node_authority = node_authority
+        self._node_runtime = node_runtime
 
     @property
     def endpoint(self) -> str:
@@ -108,7 +110,15 @@ class GatewayServiceHost:
             build_gateway_service_graph,
         )
 
-        composition_graph = build_gateway_service_graph()
+        node_ports = None
+        if shared_config is not None and shared_config.nodes:
+            from audiagentic.components.agents.gateway.node.server_runtime import NodeQueuePorts
+
+            node_ports = NodeQueuePorts()
+        composition_graph = (build_gateway_service_graph(node_config=shared_config, node_ports=node_ports)
+                             if node_ports is not None else build_gateway_service_graph())
+        node_runtime = None
+        claimed_epoch = None
         try:
             store = ManagedServiceStore(GATEWAY_SERVICE_KEY, root=service_root)
             resolved_token_path = token_path or store.root / "auth.token"
@@ -161,6 +171,22 @@ class GatewayServiceHost:
                         ),
                         health_facts={"ready": False},
                     )
+                    claimed_epoch = record.owner_epoch
+                if node_ports is not None:
+                    from audiagentic.components.agents.gateway import api as gateway_api
+                    from audiagentic.components.agents.gateway.node.server_runtime import (
+                        NodeServerRuntime,
+                    )
+                    from audiagentic.runtime.bootstrap.gateway_service_composition import (
+                        QUEUE_MANAGER,
+                    )
+
+                    queue = composition_graph.root(QUEUE_MANAGER)
+                    if queue is not gateway_api.get_queue_manager():
+                        raise RuntimeError("Gateway graph queue is not the installed manager")
+                    node_runtime = NodeServerRuntime(shared_config, store, node_authority,
+                        queue, record.owner_epoch, node_ports)
+                    service_application._node_admission = node_runtime.admission
             except Exception:
                 server.server_close()
                 raise
@@ -168,6 +194,17 @@ class GatewayServiceHost:
             # This process's composition root: a failure after the graph is
             # built but before the host object exists must still uninstall
             # the registry the graph's factory just installed.
+            cleaned = True
+            try:
+                if node_runtime is not None:
+                    node_runtime.close()
+            except Exception:
+                cleaned = False
+            if claimed_epoch is not None and cleaned:
+                try:
+                    owner.retire(expected_epoch=claimed_epoch)
+                except Exception:
+                    pass  # Preserve the original construction failure.
             composition_graph.shutdown()
             raise
         # SH10: bind the lifecycle controller now that the owner epoch is
@@ -204,9 +241,23 @@ class GatewayServiceHost:
             service_root=service_root,
             composition_graph=composition_graph,
             node_authority=node_authority,
+            node_runtime=node_runtime,
         )
 
     def serve_forever(self) -> None:
+        try:
+            self._serve_forever()
+        except BaseException:
+            try:
+                self.close()
+            except Exception:
+                try:
+                    logger.warning("Gateway startup or shutdown cleanup failed")
+                except Exception:
+                    pass
+            raise
+
+    def _serve_forever(self) -> None:
         # SH07: reconcile durable active work from the prior service generation
         # BEFORE readiness and before ingress admits new work. A recovery
         # failure propagates and prevents the service from reporting ready.
@@ -246,7 +297,7 @@ class GatewayServiceHost:
                 )
             for project_root, record in sorted(running, key=ordering):
                 if record.get("node-placement") is not None:
-                    self._defer_unavailable_node(project_root, record)
+                    self._enqueue_node_recovery(project_root, record)
                     continue
                 runtime = record.get("gateway-profile-runtime") or {}
                 queue_manager.enqueue_recovered_running(
@@ -259,7 +310,7 @@ class GatewayServiceHost:
                 )
             for project_root, record in sorted(queued, key=ordering):
                 if record.get("node-placement") is not None:
-                    self._defer_unavailable_node(project_root, record)
+                    self._enqueue_node_recovery(project_root, record)
                     continue
                 runtime = record.get("gateway-profile-runtime") or {}
                 queue_manager.enqueue_recovered_queued(
@@ -284,19 +335,36 @@ class GatewayServiceHost:
             self.service_store.root / "known-projects.json",
             check_project=validate_gpt_auto_configuration,
         )
+        if self._node_runtime is not None:
+            self._node_runtime.start()
         if not self._externally_managed:
             self.service_store.heartbeat({"ready": True}, expected_epoch=self.owner_epoch)
         self._start_ingress_poller()
         self._start_operations_poller()
         if self.lifecycle is not None:
             self.lifecycle.start()  # type: ignore[attr-defined]
+        serving_failed = False
         try:
             self.server.serve_forever(poll_interval=0.1)
+        except BaseException:
+            serving_failed = True
+            raise
         finally:
-            self._stop_background()
+            try:
+                self._stop_background()
+                if self._node_runtime is not None:
+                    self._node_runtime.close()
+            except Exception:
+                if not serving_failed:
+                    raise
 
     def shutdown(self) -> None:
         self.server.shutdown()
+
+    def _enqueue_node_recovery(self, project_root: Path, record: dict) -> dict:
+        if self._node_runtime is None or record.get("node-admission") is None:
+            return self._defer_unavailable_node(project_root, record)
+        return self._node_runtime.enqueue_recovered(project_root, record)
 
     def _defer_unavailable_node(self, project_root: Path, record: dict) -> dict:
         """Keep original node work observable while native routing is disabled.
@@ -371,9 +439,10 @@ class GatewayServiceHost:
         )
 
         authority = getattr(self, "_node_authority", None)
+        operation_authority = getattr(self, "_node_runtime", None) or authority
         executor = (
-            GatewayOperationExecutor(self._application, node_authority=authority)
-            if authority is not None else GatewayOperationExecutor(self._application)
+            GatewayOperationExecutor(self._application, node_authority=operation_authority)
+            if operation_authority is not None else GatewayOperationExecutor(self._application)
         )
         pump = ManagementOperationPump(
             ManagementOperationStore(self.service_store.root),
@@ -391,6 +460,15 @@ class GatewayServiceHost:
                     pump.run_once(owner_epoch=self.owner_epoch)
                 except Exception:  # noqa: BLE001 - keep the poller alive
                     logger.exception("gateway management operation poll failed")
+                runtime = getattr(self, "_node_runtime", None)
+                if runtime is not None:
+                    try:
+                        runtime.queue.retry_node_notifications()
+                    except Exception:
+                        try:
+                            logger.warning("Node notification maintenance failed")
+                        except Exception:
+                            pass
                 try:
                     self.run_watchdog_pass()
                 except Exception:  # noqa: BLE001 - keep the poller alive
@@ -529,6 +607,11 @@ class GatewayServiceHost:
         runtime = peek_session_runtime()
         results: list[dict[str, Any]] = []
         for project_root, record in registry.snapshot():
+            if record.get("node-placement") is not None:
+                # Remote receipts, not local session/DOM absence, settle nodes.
+                # Their existing queue notification/reconciliation path owns
+                # progress; never enter ordinary watchdog recovery here.
+                continue
             try:
                 try:
                     updated = diagnose_activity_lease(project_root, record)
@@ -801,8 +884,9 @@ class GatewayServiceHost:
     def close(self) -> None:
         if self._closed:
             return
-        self._closed = True
         self._stop_background()
+        if self._node_runtime is not None:
+            self._node_runtime.close()
         if self._composition_graph is not None:
             self._composition_graph.shutdown()  # type: ignore[attr-defined]
         self.server.server_close()
@@ -814,6 +898,7 @@ class GatewayServiceHost:
                 extra={"service_kind": GATEWAY_SERVICE_KEY.service_kind},
                 exc_info=True,
             )
+        self._closed = True
 
     def __enter__(self) -> GatewayServiceHost:
         return self
