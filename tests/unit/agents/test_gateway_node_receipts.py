@@ -195,8 +195,7 @@ def test_missing_or_corrupt_terminal_artifact_fails_closed(tmp_path):
         store.output(command)
     with pytest.raises(AudiaGenticError, match="IO-AGND-001"):
         store.get(command)
-    with pytest.raises(AudiaGenticError, match="IO-AGND-001"):
-        store.receipts_after()
+    assert store.receipts_after()[-1] == receipt  # Metadata survives missing output bytes.
     with sqlite3.connect(store.path) as db:
         assert db.execute("SELECT state FROM commands").fetchone()[0] == "terminal"
 
@@ -1229,3 +1228,122 @@ def test_open_descriptor_metadata_rejected_without_read_and_closed(tmp_path, mon
     assert len(descriptors) == 1
     with pytest.raises(OSError):
         original_fstat(descriptors[0])
+
+
+
+@pytest.mark.parametrize('artifact', ['missing', 'oversized', 'corrupt'])
+def test_metadata_replay_never_reads_artifact_or_get_even_if_unavailable(tmp_path, monkeypatch, artifact):
+    store, command, receipt, raw = terminal_artifact(tmp_path / 'node')
+    path = store.outputs / (receipt.output_sha256 + '.txt')
+    if artifact == 'missing':
+        path.unlink()
+    elif artifact == 'oversized':
+        with path.open('wb') as handle:
+            handle.truncate(16 * 1024 * 1024)  # Sparse oversized fixture, not a read allocation.
+    else:
+        path.write_bytes(b'corrupt')
+    original_path_open, original_os_open = Path.open, os.open
+    def no_path_artifact(candidate, *args, **kwargs):
+        if candidate == path:
+            pytest.fail('metadata replay opened an artifact through Path.open')
+        return original_path_open(candidate, *args, **kwargs)
+    def no_descriptor_artifact(candidate, *args, **kwargs):
+        if Path(candidate) == path:
+            pytest.fail('metadata replay opened an artifact descriptor')
+        return original_os_open(candidate, *args, **kwargs)
+    monkeypatch.setattr(Path, 'open', no_path_artifact)
+    monkeypatch.setattr(os, 'open', no_descriptor_artifact)
+    for method in ('get', '_read_output', '_read_output_bytes', 'artifact_bytes'):
+        monkeypatch.setattr(store, method, lambda *args, **kwargs: pytest.fail('metadata replay read output'))
+    rows = store.receipts_after()
+    assert [r.state for r in rows] == ['prepared', 'effect-intent', 'native-accepted', 'terminal']
+    assert rows[-1] == receipt
+    assert store.receipts_after(receipt.sequence - 1, limit=1) == (receipt,)
+    assert store.receipts_after(receipt.sequence) == ()
+
+
+def test_metadata_replay_does_not_weaken_bounded_artifact_validation(tmp_path):
+    store, command, receipt, raw = terminal_artifact(tmp_path / 'node')
+    path = store.outputs / (receipt.output_sha256 + '.txt')
+    path.write_bytes(b'corrupt')
+    assert store.receipts_after()[-1] == receipt
+    with pytest.raises(AudiaGenticError):
+        artifact_read(store, command, receipt, len(raw))
+    with pytest.raises(AudiaGenticError):
+        store.get(command)
+    with pytest.raises(AudiaGenticError):
+        store.output(command)
+
+
+@pytest.mark.parametrize('damage', ['json', 'duplicate-key', 'identity-field', 'foreign-node',
+    'command-key', 'stage', 'terminal-digest', 'nonterminal-digest', 'gap', 'zero-sequence', 'negative-sequence', 'orphan', 'owner'])
+def test_metadata_replay_malformed_rows_fail_closed(tmp_path, damage):
+    store, command, receipt, raw = terminal_artifact(tmp_path / 'node')
+    with sqlite3.connect(store.path) as db:
+        # Fault injection only. Production append-only guards remain unchanged.
+        db.execute('DROP TRIGGER outbox_no_update')
+        db.execute('DROP TRIGGER outbox_no_delete')
+        if damage in ('json', 'duplicate-key', 'identity-field', 'foreign-node', 'command-key'):
+            mapping = command.to_mapping()
+            if damage == 'json':
+                value = '{'
+            elif damage == 'duplicate-key':
+                original = json.dumps(mapping)
+                value = original[:-1] + ',"command-id":"' + command.command_id + '"}'
+            else:
+                if damage == 'identity-field':
+                    mapping['connection-generation'] = True
+                elif damage == 'foreign-node':
+                    mapping['node-id'] = 'foreign'
+                else:
+                    mapping['command-id'] = 'other'
+                from audiagentic.components.agents.gateway.node.contracts import canonical_json
+                value = canonical_json(mapping).decode()
+            db.execute('UPDATE commands SET identity=?', (value,))
+        elif damage == 'stage':
+            db.execute("UPDATE outbox SET state='unknown' WHERE sequence=1")
+        elif damage == 'terminal-digest':
+            db.execute("UPDATE outbox SET output_digest='invalid' WHERE state='terminal'")
+        elif damage == 'nonterminal-digest':
+            db.execute('UPDATE outbox SET output_digest=? WHERE sequence=1', ('a' * 64,))
+        elif damage == 'gap':
+            db.execute('UPDATE outbox SET sequence=8 WHERE sequence=2')
+        elif damage in ('zero-sequence', 'negative-sequence'):
+            db.execute('UPDATE outbox SET sequence=? WHERE sequence=1', (0 if damage == 'zero-sequence' else -1,))
+        elif damage == 'orphan':
+            db.execute("UPDATE outbox SET command='absent' WHERE sequence=1")
+        else:
+            db.execute("UPDATE owner SET node='foreign'")
+    with pytest.raises(AudiaGenticError):
+        store.receipts_after()
+
+
+def test_metadata_replay_orders_and_pages_node_wide_interleaved_history(tmp_path):
+    store = store_at(tmp_path / 'node')
+    first, second = identity(command_id='first'), identity(command_id='second', request_id='other')
+    prepared_first = store.prepare(first, b'payload')
+    prepared_second = store.prepare(second, b'payload')
+    request, reply = authorization(first)
+    store.effect_intent(first, request, reply, connection_generation=1)
+    assert [r.sequence for r in store.receipts_after(limit=2)] == [1, 2]
+    assert [r.sequence for r in store.receipts_after(2, limit=1)] == [3]
+    assert store.receipts_after(3) == ()
+    store.advance_epoch(node_epoch='reboot', gateway_owner_epoch='newgateway')
+    current = store_at(store.root, node_epoch='reboot', gateway_owner_epoch='newgateway')
+    # Both current and stale-scope instances may read old evidence, never rebind it.
+    for reader in (store, current):
+        rows = reader.receipts_after()
+        assert rows[:2] == (prepared_first, prepared_second)
+        assert rows[-1].identity == first
+        assert all(r.identity.node_epoch == 'boot-1' for r in rows)
+
+
+@pytest.mark.parametrize('field,value', [('sequence', 1.0), ('sequence', 2**63),
+    ('limit', 0), ('limit', -1), ('limit', 1.0), ('limit', 2**63)])
+def test_metadata_replay_invalid_bounds_fail_before_transaction(tmp_path, monkeypatch, field, value):
+    store = store_at(tmp_path / 'node')
+    monkeypatch.setattr(store, '_transaction', lambda: pytest.fail('invalid replay bounds entered transaction'))
+    args = {'sequence': 0, 'limit': 100}
+    args[field] = value
+    with pytest.raises(AudiaGenticError):
+        store.receipts_after(**args)

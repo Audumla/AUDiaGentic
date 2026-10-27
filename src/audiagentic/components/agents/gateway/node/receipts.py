@@ -47,8 +47,10 @@ from .contracts import (
     MAX_FRAME_BYTES,
     CommandIdentity,
     Frame,
+    _constant,
     _identifier,
     _integer,
+    _pairs,
     canonical_json,
     conflict,
     invalid,
@@ -691,23 +693,53 @@ class NodeReceiptStore:
             return self._row(db, identity)[5]
 
     def receipts_after(self, sequence: int = 0, *, limit: int = 100) -> tuple[Receipt, ...]:
-        """Bounded append-only replay; acknowledgement/retention belongs to owner."""
+        """Bounded metadata-only replay, including historical command epochs.
+
+        Durable receipt custody is independent of artifact availability. Output
+        bytes/hash remain checked by output/get/artifact_bytes, never this path.
+        """
         _integer(sequence, 0)
         _integer(limit)
         if limit > 1000:
             raise invalid(1, "Receipt replay limit exceeds 1000")
         with self._transaction() as db:
+            if db.execute("SELECT singleton,node FROM owner").fetchall() != [(1, self.node_id)]:
+                raise conflict(1, "Receipt replay belongs to another or missing node owner")
+            # Nonpositive corrupted keys would otherwise be hidden by every
+            # valid cursor's WHERE clause. This is an indexed, bounded check.
+            if db.execute("SELECT 1 FROM outbox WHERE sequence<=0 LIMIT 1").fetchone():
+                raise conflict(1, "Invalid receipt replay sequence")
             rows = db.execute(
-                "SELECT c.identity,o.state,o.sequence,o.output_digest FROM outbox o JOIN commands c ON c.command=o.command WHERE o.sequence>? ORDER BY o.sequence LIMIT ?",
+                "SELECT c.identity,o.state,o.sequence,o.output_digest,o.command,c.command FROM outbox o LEFT JOIN commands c ON c.command=o.command WHERE o.sequence>? ORDER BY o.sequence LIMIT ?",
                 (sequence, limit),
             ).fetchall()
-            for row in rows:
-                if row[1] == "terminal":
-                    self._read_output(row[3])
-            return tuple(
-                Receipt(CommandIdentity.from_mapping(json.loads(r[0])), r[1], r[2], r[3])
-                for r in rows
-            )
+            receipts = []
+            previous = sequence
+            for raw_identity, state, current, digest, outbox_command, stored_command in rows:
+                if not isinstance(raw_identity, str) or len(raw_identity) > MAX_FRAME_BYTES:
+                    raise conflict(1, "Invalid receipt replay command metadata")
+                try:
+                    identity = CommandIdentity.from_mapping(json.loads(
+                        raw_identity, object_pairs_hook=_pairs, parse_constant=_constant,
+                    ))
+                except (TypeError, ValueError, RecursionError):
+                    raise conflict(1, "Invalid receipt replay command identity") from None
+                if (identity.node_id != self.node_id
+                        or identity.command_id != outbox_command or outbox_command != stored_command
+                        or canonical_json(identity.to_mapping()).decode("utf-8") != raw_identity):
+                    raise conflict(1, "Receipt replay command identity or node scope changed")
+                _integer(current)
+                if current != previous + 1:
+                    raise conflict(1, "Receipt replay sequence is not contiguous and ordered")
+                if state not in ("prepared", "effect-intent", "native-accepted", "terminal"):
+                    raise conflict(1, "Invalid receipt replay stage")
+                if state == "terminal":
+                    _digest(digest)
+                elif digest is not None:
+                    raise conflict(1, "Nonterminal receipt replay has an output digest")
+                receipts.append(Receipt(identity, state, current, digest))
+                previous = current
+            return tuple(receipts)
 
     @property
     def log_incarnation_id(self) -> str:
