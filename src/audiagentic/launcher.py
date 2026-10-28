@@ -262,6 +262,16 @@ def _main(argv: list[str] | None = None) -> int:
     if args.command is not None and remaining:
         parser.error(f"unrecognized arguments: {' '.join(remaining)}")
 
+    # A bare invocation is a configuration CLI, not an agent session. Only an
+    # explicit --prompt or provider passthrough reaches the harness launch, so
+    # plain `audiagentic` never composes the app graph or probes providers.
+    if args.command is None and not args.prompt and not remaining:
+        from audiagentic.commands.mcp import _help
+
+        print(parser.format_help())
+        print(_help("root"))
+        return 0
+
     if args.command in {"mcp", "harness", "help"}:
         from audiagentic.commands.mcp import dispatch
 
