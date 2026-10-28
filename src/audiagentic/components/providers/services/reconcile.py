@@ -143,7 +143,10 @@ def reconcile_provider(
     descriptor = _get_descriptor(provider_id)
     probe = probe_provider_cli(descriptor)
     cli_available = bool(probe and probe["available"])
-    _emit(on_progress, f"CLI {'available' if cli_available else 'not found'}")
+    _emit(
+        on_progress,
+        "No CLI probe declared" if probe is None else f"CLI {'available' if cli_available else 'not found'}",
+    )
 
     # Enablement is feature state, independent of providers.yaml.
     currently_enabled = is_provider_enabled(project_root, provider_id)
@@ -198,7 +201,7 @@ def reconcile_provider(
                 on_progress,
                 f"Skipping catalog fetch for {provider_id} — use refresh_provider_catalog to update",
             )
-    elif not cli_available and currently_enabled:
+    elif probe is not None and not cli_available and currently_enabled:
         _emit(on_progress, f"Disabling {provider_id} — CLI not found")
         set_provider_enabled(project_root, provider_id, enabled=False)
         from ..providers_api import operate_provider_surface
@@ -216,9 +219,15 @@ def reconcile_provider(
         )
         action_taken = "disabled"
     else:
+        state = "enabled" if currently_enabled else "disabled"
         _emit(
             on_progress,
-            f"{provider_id} already in sync ({('enabled' if currently_enabled else 'disabled')})",
+            # No declared CLI probe (browser- or endpoint-backed providers such
+            # as gpt-auto): a missing binary proves nothing, so the configured
+            # enablement stands.
+            f"{provider_id} has no CLI probe; enablement left as configured ({state})"
+            if probe is None
+            else f"{provider_id} already in sync ({state})",
         )
         _reconcile_model_projection(
             provider_id, project_root, enabled=currently_enabled, on_progress=on_progress
@@ -226,7 +235,9 @@ def reconcile_provider(
         _sync_host_extensions(project_root, on_progress)
         action_taken = "ok"
 
-    now_enabled = cli_available and action_taken in ("enabled", "ok")
+    now_enabled = (
+        currently_enabled if probe is None else cli_available and action_taken in ("enabled", "ok")
+    )
     result: dict[str, Any] = {
         "provider-id": provider_id,
         "action": "reconcile",
