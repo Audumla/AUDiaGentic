@@ -119,6 +119,37 @@ def test_saved_gpt_error_retains_typed_unsent_recovery_proof_without_prompt_text
     assert classify_error(saved)["side-effect-state"] == "not-started"
 
 
+def test_internal_error_original_type_survives_redaction_without_repr_or_prompt() -> None:
+    """SH31: the bare exception classname must reach the durable record even
+    though _REDACTED_ERROR_KEYS strips the rest of ``details``."""
+    from audiagentic.components.agents.gateway.store._records import _redact_error
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+    saved = _redact_error(AudiaGenticError(
+        code="INT-AGW-098", kind="agents", message="session dispatch failed: TimeoutError()",
+        details={
+            "original-type": "TimeoutError",
+            "original-repr": "TimeoutError('private stdout/prompt content')",
+        },
+    ))
+    assert saved["details"] == {"original-type": "TimeoutError"}
+    assert "original-repr" not in saved["details"]
+    assert "private" not in str(saved)
+    # Idempotent re-redaction of an already-saved record (dict-shaped error).
+    assert _redact_error(saved) == saved
+
+
+def test_internal_error_without_original_type_has_no_details() -> None:
+    from audiagentic.components.agents.gateway.store._records import _redact_error
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+    saved = _redact_error(AudiaGenticError(
+        code="INT-AGW-098", kind="agents", message="session dispatch failed",
+        details={"original-repr": "only the repr, no type"},
+    ))
+    assert "details" not in saved
+
+
 def test_response_policy_timeout_is_reconciliation_timeout() -> None:
     result = classify_error(
         {

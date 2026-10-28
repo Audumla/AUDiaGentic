@@ -118,6 +118,7 @@ VAL-MPROC-002: "Use an existing directory as the managed-process working directo
 CON-MPROC-003: "Check executable access and whether the Windows host Job Object permits detached-process breakaway."
 CON-MPROC-004: "The platform could not provide a process creation identity; stop the launch and use a supported process host."
 CON-MPROC-005: "Do not signal the process because its PID and non-PID ownership evidence do not match."
+VAL-MPROC-006: "Use an existing directory for the managed-process log file."
 VAL-TRANSPORT-001: "A transport contract field is missing or has the wrong type. Check that string fields are non-empty strings and bounded by their length limits."
 VAL-TRANSPORT-002: "An attribute key is not allowed for this observation kind, or too many attributes were provided. Use only keys from the closed vocabulary for each TransportObservationKind."
 VAL-TRANSPORT-003: "An observation attribute value must be a scalar (str, int, float, bool, None). Callables, dicts, lists, and tuples are not permitted."

@@ -39,12 +39,17 @@ class DetachedLaunch:
     cwd: Path | None = None
     env: Mapping[str, str] | None = None
     detached: bool = True
+    log_file: Path | None = None
 
     def __post_init__(self) -> None:
         if not self.command or any(not isinstance(part, str) or not part for part in self.command):
             raise validation_error(1, "managed-process command must contain non-empty strings")
         if self.cwd is not None and not self.cwd.is_dir():
             raise validation_error(2, "managed-process working directory does not exist", cwd=str(self.cwd))
+        if self.log_file is not None and not self.log_file.parent.is_dir():
+            raise validation_error(
+                6, "managed-process log file directory does not exist", log_file=str(self.log_file)
+            )
 
 
 def command_fingerprint(command: Sequence[str]) -> str:
@@ -248,45 +253,56 @@ def launch_detached(declaration: DetachedLaunch, *, owner_epoch: str) -> Process
         else:
             start_new_session = True
     degraded_job_lifetime = False
+    # A real file, opened append-only, lets an operator recover the traceback
+    # a detached process's logger.exception() would otherwise lose the moment
+    # it's written (SH31). DEVNULL remains the default for callers that never
+    # pass log_file; this never rotates, matching the existing minimal scope.
+    log_target = subprocess.DEVNULL if declaration.log_file is None else open(
+        declaration.log_file, "ab", buffering=0
+    )
     try:
-        process = subprocess.Popen(
-            declaration.command,
-            cwd=declaration.cwd,
-            env=env,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            creationflags=creationflags,
-            start_new_session=start_new_session,
-            close_fds=True,
-        )
-    except OSError as exc:
-        breakaway = getattr(subprocess, "CREATE_BREAKAWAY_FROM_JOB", 0)
-        if os.name != "nt" or not declaration.detached or not breakaway:
-            raise process_error(
-                3, "managed-process launch failed", executable=declaration.command[0]
-            ) from exc
         try:
             process = subprocess.Popen(
                 declaration.command,
                 cwd=declaration.cwd,
                 env=env,
                 stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                creationflags=creationflags & ~breakaway,
-                start_new_session=False,
+                stdout=log_target,
+                stderr=log_target,
+                creationflags=creationflags,
+                start_new_session=start_new_session,
                 close_fds=True,
             )
-        except OSError as fallback_exc:
-            raise process_error(
-                3, "managed-process launch failed", executable=declaration.command[0]
-            ) from fallback_exc
-        degraded_job_lifetime = True
-        logger.warning(
-            "managed process launched without Windows job breakaway",
-            extra={"lifetime_scope": "session-child"},
-        )
+        except OSError as exc:
+            breakaway = getattr(subprocess, "CREATE_BREAKAWAY_FROM_JOB", 0)
+            if os.name != "nt" or not declaration.detached or not breakaway:
+                raise process_error(
+                    3, "managed-process launch failed", executable=declaration.command[0]
+                ) from exc
+            try:
+                process = subprocess.Popen(
+                    declaration.command,
+                    cwd=declaration.cwd,
+                    env=env,
+                    stdin=subprocess.DEVNULL,
+                    stdout=log_target,
+                    stderr=log_target,
+                    creationflags=creationflags & ~breakaway,
+                    start_new_session=False,
+                    close_fds=True,
+                )
+            except OSError as fallback_exc:
+                raise process_error(
+                    3, "managed-process launch failed", executable=declaration.command[0]
+                ) from fallback_exc
+            degraded_job_lifetime = True
+            logger.warning(
+                "managed process launched without Windows job breakaway",
+                extra={"lifetime_scope": "session-child"},
+            )
+    finally:
+        if log_target is not subprocess.DEVNULL:
+            log_target.close()
     creation_identity = process_creation_identity(process.pid)
     if creation_identity is None:
         process.terminate()

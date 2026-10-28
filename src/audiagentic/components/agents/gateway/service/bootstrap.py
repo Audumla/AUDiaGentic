@@ -91,6 +91,7 @@ def _gateway_lifecycle() -> tuple[
                 "AUDIAGENTIC_REPO_ROOT": "",
                 "AUDIAGENTIC_COMPONENT_PROFILE": "",
             },
+            log_file=store.root / "service.log",
         ),
         endpoint=endpoint_info,
         protocol_version=PROTOCOL_VERSION,
