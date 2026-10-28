@@ -2,7 +2,7 @@
 id: LSP17
 order: 17
 plan: lsp-mcp-enhancement
-state: done
+state: completed
 wave: W5.3
 phase: Phase 1
 ---
