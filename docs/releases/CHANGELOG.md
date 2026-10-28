@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/Audumla/AUDiaGentic/compare/v0.6.6...v0.7.0) (2026-10-28)
+
+
+### Features
+
+* **gpt-auto:** validate the CDP session surface on linux-amd64 ([#82](https://github.com/Audumla/AUDiaGentic/issues/82)) ([84e74b4](https://github.com/Audumla/AUDiaGentic/commit/84e74b4f2367b2421d2f95f9c7595a3e9cdc82a0))
+
 ## [0.6.6](https://github.com/Audumla/AUDiaGentic/compare/v0.6.5...v0.6.6) (2026-10-28)
 
 
