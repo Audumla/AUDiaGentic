@@ -189,6 +189,10 @@ from FILE. workspaces maps IDs to {root: PATH, execution-profiles: [PROFILE]}.
 Only allowed local profiles and configured workspaces can prepare isolated work;
 read-only configuration/inspection grants do not authorize execution. This route
 does not grant enrollment or access, attach to human sessions, or enable joins.
+Native effect execution over this channel is NOT yet qualified against RV1232's
+integration gates (DRAIN-vs-disabled-grant isolation, trusted terminal-from-intent
+proof, protected output envelope validation). Do not point this at a production
+grant or credential until that review closes.
 SIGINT/SIGTERM/SIGBREAK request stop only. Shutdown waits for the retained producer;
 repeated signals never kill it. Drain preserves historical receipts/ACK/artifacts.
 A clean explicit stop exits 0, including after transient errors; exhausted retry
@@ -415,5 +419,7 @@ def _serve_node(config_path: Path) -> int:
     if outcome.disposition == "stopped":
         return 0
     cause = outcome.terminal_cause
-    print_error(f"Node recipient {outcome.disposition}: {cause.code} ({cause.stage}/{cause.reason})")
+    stage = cause.details.get("stage")
+    reason = cause.details.get("reason-code")
+    print_error(f"Node recipient {outcome.disposition}: {cause.code} ({stage}/{reason})")
     return 1

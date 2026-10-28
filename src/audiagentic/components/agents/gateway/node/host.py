@@ -33,30 +33,16 @@ from .transport import NodeTransportClient
 
 
 @dataclass(frozen=True)
-class NodeRecipientCause:
-    """Closed diagnostic projection, with no mutable details or exception text."""
-
-    code: str
-    stage: str
-    reason: str
-
-    @classmethod
-    def from_error(cls, error):
-        safe = sanitize_node_error(error, stage="observe")
-        return cls(safe.code, safe.details["stage"], safe.details["reason-code"])
-
-
-@dataclass(frozen=True)
 class NodeRecipientOutcome:
     disposition: Literal["stopped", "retry-exhausted", "deferred"]
-    terminal_cause: NodeRecipientCause | None = None
+    terminal_cause: AudiaGenticError | None = None
 
 
 @dataclass(frozen=True)
 class _ChannelOutcome:
     elapsed_seconds: float
     retryable: bool
-    terminal_cause: NodeRecipientCause | None
+    terminal_cause: AudiaGenticError | None
 
 
 def _sender_timeout_retryable(error: Exception) -> bool:
@@ -254,7 +240,7 @@ class NodeRecipientHost:
                             stage="observe",
                         )
                         self._remember(safe)
-                        cause = NodeRecipientCause.from_error(safe)
+                        cause = safe
                         if failure.reason_code not in {
                             "transport-disconnected",
                             "transport-send-failed",
@@ -281,7 +267,7 @@ class NodeRecipientHost:
                 raise conflict(1, "Unsupported recipient control boundary")
         except Exception as error:
             self._remember(error)
-            cause = NodeRecipientCause.from_error(error)
+            cause = sanitize_node_error(error, stage="observe")
             retryable = _sender_timeout_retryable(error)
         finally:
             cleanup_error = None
@@ -297,14 +283,14 @@ class NodeRecipientHost:
             if not sender.cancelled() and sender.exception() is not None:
                 self._remember(sender.exception())
                 if cause is None:
-                    cause = NodeRecipientCause.from_error(sender.exception())
+                    cause = sanitize_node_error(sender.exception(), stage="observe")
                 retryable = retryable and _sender_timeout_retryable(sender.exception())
             if cleanup_error is not None:
                 self._remember(cleanup_error)
                 # Separate policy from first cause: a primary timeout remains
                 # visible, but unproven cleanup never permits another channel.
                 retryable = False
-                cause = NodeRecipientCause.from_error(cleanup_error)
+                cause = cleanup_error
         return _ChannelOutcome(elapsed, retryable, cause)
 
     async def _finish(self):
@@ -357,7 +343,7 @@ class NodeRecipientHost:
                     raise
                 except (OSError, TimeoutError) as error:
                     self._remember(error)
-                    cause = NodeRecipientCause.from_error(error)
+                    cause = sanitize_node_error(error, stage="observe")
                     # Missing credentials/files, TLS validation and unknown OS
                     # failures are configuration boundaries, not network retry.
                     terminal = not (
@@ -374,19 +360,23 @@ class NodeRecipientHost:
                     )
                 except Exception as error:
                     self._remember(error)
-                    cause = NodeRecipientCause.from_error(error)
+                    cause = sanitize_node_error(error, stage="observe")
                     terminal = True  # Auth/config/cursor/unknown errors fail closed.
                 if not self._stop.is_set() and self.failure is None:
                     self._remember(None)
                 await asyncio.to_thread(self._observe, "node.host-disconnected", elapsed=elapsed)
                 failures = (0 if elapsed >= self.reconnect.stable_seconds else failures) + 1
                 if terminal:
-                    result = NodeRecipientOutcome("deferred", cause or NodeRecipientCause.from_error(None))
+                    result = NodeRecipientOutcome(
+                        "deferred", cause or sanitize_node_error(None, stage="observe")
+                    )
                     break
                 if self._stop.is_set():
                     break
                 if failures >= self.reconnect.max_failures:
-                    result = NodeRecipientOutcome("retry-exhausted", cause or NodeRecipientCause.from_error(None))
+                    result = NodeRecipientOutcome(
+                        "retry-exhausted", cause or sanitize_node_error(None, stage="observe")
+                    )
                     break
                 await self._interruptible(asyncio.sleep(self.reconnect.delay_seconds))
         finally:

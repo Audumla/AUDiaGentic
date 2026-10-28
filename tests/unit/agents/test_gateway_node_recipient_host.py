@@ -657,15 +657,13 @@ async def test_outcome_exhaustion_uses_current_cause_not_historic_first(tmp_path
     result = await asyncio.wait_for(host.run(), 2)
     assert result.disposition == "retry-exhausted"
     assert result.terminal_cause.code == "CON-AGND-001"
-    assert result.terminal_cause.reason == "receipt-resume-timeout"
+    assert result.terminal_cause.details["reason-code"] == "receipt-resume-timeout"
     assert host.failure["code"] == "IO-AGND-001"
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("cleanup_failure", [False, True])
 async def test_outcome_deferred_current_boundary_and_cleanup_veto(tmp_path, monkeypatch, cleanup_failure):
-    from dataclasses import FrozenInstanceError
-
     from audiagentic.components.agents.gateway.node.contracts import conflict
     connection = _HostConnection()
     host, _, _ = _recipient_scaffold(tmp_path, monkeypatch, [connection])
@@ -681,5 +679,3 @@ async def test_outcome_deferred_current_boundary_and_cleanup_veto(tmp_path, monk
     assert result.terminal_cause.code == ("IO-AGND-001" if cleanup_failure else "CON-AGND-001")
     assert host.failure["code"] == "CON-AGND-001"
     assert "secret" not in repr(result)
-    with pytest.raises(FrozenInstanceError):
-        result.terminal_cause.reason = "private"

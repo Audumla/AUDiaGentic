@@ -289,10 +289,10 @@ def test_node_serve_entrypoint_outcome_and_stop_only_signal_restoration(node_ser
     from types import SimpleNamespace
 
     from audiagentic.components.agents.gateway.node.host import (
-        NodeRecipientCause,
         NodeRecipientHost,
         NodeRecipientOutcome,
     )
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
     from audiagentic.runtime import component_context
     handlers, installs = {}, []
     originals = {sig: object() for sig in gateway._shutdown_signals()}
@@ -305,7 +305,10 @@ def test_node_serve_entrypoint_outcome_and_stop_only_signal_restoration(node_ser
     async def run():
         for sig in originals:
             handlers[sig](sig, None)
-        cause = None if disposition == "stopped" else NodeRecipientCause("CON-AGND-001", "observe", "receipt-ack-timeout")
+        cause = None if disposition == "stopped" else AudiaGenticError(
+            code="CON-AGND-001", kind="agents", message="receipt ack timeout",
+            details={"stage": "observe", "reason-code": "receipt-ack-timeout"},
+        )
         return NodeRecipientOutcome(disposition, cause)
     host = SimpleNamespace(run=run, request_stop=stop, failure={"code": "historic"})
     def create(config, *, component_context_reader):
