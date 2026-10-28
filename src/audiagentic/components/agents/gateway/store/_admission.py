@@ -212,6 +212,11 @@ def admit_record(
     # next ordinal. Do that scan before taking the admission lock: it is
     # read-only, and running it while holding the lock would block every
     # other admission in the project for as long as the scan takes.
+    # This pre-lock value is only safe to trust under the lock because
+    # nothing in this codebase ever deletes sequence_path once written --
+    # grep for "enqueue-sequence" before weakening that invariant, since a
+    # delete-then-recreate race would let a stale pre-lock scan assign an
+    # already-used ordinal.
     fallback_ordinal = None
     if candidate.get("provider-transport-kind") == "provider-session" and not sequence_path.exists():
         fallback_ordinal = max(
@@ -285,12 +290,14 @@ def admit_record(
                 if type(previous) is not int or previous < 0:
                     raise ValueError("invalid gateway enqueue sequence")
             except FileNotFoundError:
-                # The pre-lock scan above is only a hint: if the file still
-                # doesn't exist now that we hold the lock, re-derive the same
-                # way rather than trust a value computed before admission
-                # was serialized. A concurrent admitter racing for the same
-                # missing file always loses this lock first, so by the time
-                # we are here any record it wrote is already visible to us.
+                # The pre-lock scan above is only a hint, reused here rather
+                # than rescanning under the lock. It stays correct only
+                # because nothing deletes sequence_path once this function
+                # writes it: a concurrent admitter racing for the same
+                # missing file can only win by acquiring this same lock
+                # first, and doing so always (over)writes sequence_path
+                # before releasing it -- so reaching this branch at all
+                # means no admitter has won that race since our scan ran.
                 previous = fallback_ordinal if fallback_ordinal is not None else max(
                     (r["enqueue-ordinal"] for r in _records.list_records(project_root)
                      if type(r.get("enqueue-ordinal")) is int), default=0,
