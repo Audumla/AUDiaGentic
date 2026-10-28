@@ -245,7 +245,7 @@ def test_failed_revoke_refresh_retries_without_second_revision(runtime, monkeypa
 
 
 def test_listener_start_failure_keeps_first_cause_and_stops_thread(runtime, monkeypatch):
-    async def fail():
+    async def fail(**_kwargs):
         raise OSError("first startup failure")
     closed = runtime.transport.close
     async def close_then_fail():
@@ -429,7 +429,7 @@ def test_host_listener_start_failure_never_readies_and_retires_managed_claim(tmp
     install_graph(monkeypatch)
     host = GatewayServiceHost.create(shared_config=_config(tmp_path), application=object())
     runtime = host._node_runtime
-    async def failed():
+    async def failed(**_kwargs):
         raise OSError("listener bind failed")
     monkeypatch.setattr(runtime.transport, "start", failed)
     monkeypatch.setattr(providers_api, "validate_gpt_auto_configuration", lambda: None)

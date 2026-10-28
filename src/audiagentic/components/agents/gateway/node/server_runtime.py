@@ -65,12 +65,17 @@ class NodeQueuePorts:
 
 class NodeServerRuntime:
     def __init__(self, config, service_store, authority, queue, owner_epoch, ports: NodeQueuePorts,
-                 *, shutdown_timeout: float = 35):
+                 *, shutdown_timeout: float = 35, ssl_context=None):
         if type(shutdown_timeout) not in (int, float) or not math.isfinite(shutdown_timeout) or shutdown_timeout <= 0:
             raise invalid(1, "Node bridge shutdown deadline must be positive and finite")
         self.config, self.service, self.authority, self.queue = config, service_store, authority, queue
         self.owner_epoch, self.ports = owner_epoch, ports
         self.shutdown_timeout = shutdown_timeout
+        # None in production: the listener is a loopback backend for the
+        # deployment's own TLS-terminating reverse proxy (see module
+        # docstring). An explicit context here is for qualification/test use
+        # only, terminating TLS in-process instead of through that proxy.
+        self._ssl_context = ssl_context
         self.transport = NodeTransportServer(config, authority, gateway_owner_epoch=owner_epoch,
             drain_eligibility=NodeDrainEligibility(config, service_store), configure_work=self._configure)
         self.connections = self.transport.owner
@@ -109,7 +114,9 @@ class NodeServerRuntime:
         starting = None
         try:
             self._thread.start()
-            starting = asyncio.run_coroutine_threadsafe(self.transport.start(), self.loop)
+            starting = asyncio.run_coroutine_threadsafe(
+                self.transport.start(ssl_context=self._ssl_context), self.loop
+            )
             starting.result(timeout=15)
             self._available = True
             self.ports.bind(self)
