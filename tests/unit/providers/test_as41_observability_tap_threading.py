@@ -53,7 +53,8 @@ class TestObservabilityTapThreading:
             binding_sink=lambda update: None,
             provider_id="pi",
             surface_hint=SurfaceHint(surface_id="pi-community-acp", platform_hint="linux-amd64"),
-            model_id="audiagentic/audiagentic-rig",
+            model_id="audiagentic-rig",
+            model_selector="audiagentic/audiagentic-rig",
             request_runtime_root=tmp_path / "runtime",
             enable_observability_tap=True,
         )
@@ -74,7 +75,8 @@ class TestObservabilityTapThreading:
             binding_sink=lambda update: None,
             provider_id="pi",
             surface_hint=SurfaceHint(surface_id="pi-community-acp", platform_hint="linux-amd64"),
-            model_id="audiagentic/audiagentic-rig",
+            model_id="audiagentic-rig",
+            model_selector="audiagentic/audiagentic-rig",
             request_runtime_root=tmp_path / "runtime",
             enable_observability_tap=False,
         )
@@ -94,7 +96,8 @@ class TestObservabilityTapThreading:
             binding_sink=lambda update: None,
             provider_id="pi",
             surface_hint=SurfaceHint(surface_id="pi-community-acp", platform_hint="linux-amd64"),
-            model_id="audiagentic/audiagentic-rig",
+            model_id="audiagentic-rig",
+            model_selector="audiagentic/audiagentic-rig",
             enable_observability_tap=True,
         )
 
@@ -163,7 +166,8 @@ class TestSignatureGuardWithFakeBuilders:
             binding_sink=lambda update: None,
             provider_id="pi",
             surface_hint=SurfaceHint(surface_id="pi-community-acp", platform_hint="linux-amd64"),
-            model_id="audiagentic/audiagentic-rig",
+            model_id="audiagentic-rig",
+            model_selector="audiagentic/audiagentic-rig",
             request_runtime_root=tmp_path / "runtime",
             **kwargs,
         )
