@@ -585,3 +585,26 @@ def test_passive_capture_missing_tab_never_reopens_or_navigates(monkeypatch, tmp
 
     assert result == {"outcome": "unavailable", "reason": "conversation-tab-not-found"}
     assert calls == [("list_pages", None)]
+
+
+def test_capture_without_project_gpt_auto_entry_uses_packaged_defaults(monkeypatch, tmp_path):
+    """GA27: a project that never seeded a gpt-auto entry still dispatches on the
+    packaged defaults, so capture must resolve the same config, not refuse."""
+    seen = {}
+
+    class Runtime:
+        async def connect_existing(self):
+            return False
+
+    def fake_runtime(project_root, config):
+        seen["config"] = config
+        return Runtime()
+
+    monkeypatch.setattr(conversation_focus, "load_provider_config", lambda _: {})
+    monkeypatch.setattr(conversation_focus, "get_runtime", fake_runtime)
+    result = asyncio.run(conversation_focus.capture_latest_response(tmp_path, provider_id="gpt-auto",
+        locator=ConversationCaptureLocator(chat_url="https://chatgpt.com/g/g-p-x/c/s1", provider_session_id="s1",
+            prompt_text_digest=PromptFingerprint.from_text("owned").digest, baseline_user_count=0), passive=True))
+
+    assert result == {"outcome": "unavailable", "reason": "cdp-unavailable"}
+    assert seen["config"].cdp.endpoint == "http://127.0.0.1:9222"

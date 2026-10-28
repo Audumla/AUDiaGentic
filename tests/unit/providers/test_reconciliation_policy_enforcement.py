@@ -132,3 +132,46 @@ def test_component_install_defers_reconciliation_until_initial_choice(monkeypatc
     reconcile.reconcile_all(tmp_path)
 
     assert calls == []
+
+
+def test_provider_without_cli_probe_keeps_configured_enablement(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """gpt-auto declares no CLI probe; reconcile must not read that as 'CLI missing'."""
+    import audiagentic.components.providers.services.lifecycle.lifecycle as lifecycle
+    from audiagentic.components.providers.services.config.provider_config import (
+        set_provider_enabled,
+    )
+
+    monkeypatch.setattr(lifecycle, "probe_provider_cli", lambda d: None)
+    set_provider_enabled(tmp_path, "gpt-auto", enabled=True)
+
+    result = reconcile_provider("gpt-auto", project_root=tmp_path)
+
+    assert result["status"] == "ok"
+    assert result["enabled"] is True
+    assert is_provider_enabled(tmp_path, "gpt-auto") is True
+
+    set_provider_enabled(tmp_path, "gpt-auto", enabled=False)
+    result = reconcile_provider("gpt-auto", project_root=tmp_path)
+
+    assert result["status"] == "ok"
+    assert result["enabled"] is False
+    assert is_provider_enabled(tmp_path, "gpt-auto") is False
+
+
+def test_declared_probe_reporting_missing_cli_still_disables(
+    monkeypatch, tmp_path: Path
+) -> None:
+    import audiagentic.components.providers.services.lifecycle.lifecycle as lifecycle
+    from audiagentic.components.providers.services.config.provider_config import (
+        set_provider_enabled,
+    )
+
+    monkeypatch.setattr(lifecycle, "probe_provider_cli", lambda d: {**_AVAILABLE_PROBE, "available": False})
+    set_provider_enabled(tmp_path, "codex", enabled=True)
+
+    result = reconcile_provider("codex", project_root=tmp_path)
+
+    assert result["status"] == "disabled"
+    assert is_provider_enabled(tmp_path, "codex") is False

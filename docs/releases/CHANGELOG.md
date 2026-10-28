@@ -1,5 +1,40 @@
 # Changelog
 
+## [0.7.2](https://github.com/Audumla/AUDiaGentic/compare/v0.7.1...v0.7.2) (2026-10-28)
+
+
+### Bug Fixes
+
+* **gpt-auto:** capture and focus use packaged defaults without a project entry (GA27) ([#88](https://github.com/Audumla/AUDiaGentic/issues/88)) ([c950917](https://github.com/Audumla/AUDiaGentic/commit/c950917c8f0ae8ede3b4dec82ea0b814b2870f5d))
+
+## [0.7.1](https://github.com/Audumla/AUDiaGentic/compare/v0.7.0...v0.7.1) (2026-10-28)
+
+
+### Bug Fixes
+
+* **providers:** keep configured enablement for providers without a CLI probe ([#84](https://github.com/Audumla/AUDiaGentic/issues/84)) ([f5311e7](https://github.com/Audumla/AUDiaGentic/commit/f5311e723a7f5ab176e6f484aeee0e8b6fd9d11a))
+
+## [0.7.0](https://github.com/Audumla/AUDiaGentic/compare/v0.6.6...v0.7.0) (2026-10-28)
+
+
+### Features
+
+* **gpt-auto:** validate the CDP session surface on linux-amd64 ([#82](https://github.com/Audumla/AUDiaGentic/issues/82)) ([84e74b4](https://github.com/Audumla/AUDiaGentic/commit/84e74b4f2367b2421d2f95f9c7595a3e9cdc82a0))
+
+## [0.6.6](https://github.com/Audumla/AUDiaGentic/compare/v0.6.5...v0.6.6) (2026-10-28)
+
+
+### Bug Fixes
+
+* **project:** name projects by git repository so worktrees agree ([#81](https://github.com/Audumla/AUDiaGentic/issues/81)) ([f9319cc](https://github.com/Audumla/AUDiaGentic/commit/f9319ccf8a980b7e221c259c79fb6c7ccabfa1a8))
+
+## [0.6.5](https://github.com/Audumla/AUDiaGentic/compare/v0.6.4...v0.6.5) (2026-10-28)
+
+
+### Bug Fixes
+
+* **packaging:** ship runtime data files missing from the wheel ([#80](https://github.com/Audumla/AUDiaGentic/issues/80)) ([17137cb](https://github.com/Audumla/AUDiaGentic/commit/17137cb5d05576c65da68a7554fb13c94e996304))
+
 ## [0.6.4](https://github.com/Audumla/AUDiaGentic/compare/v0.6.3...v0.6.4) (2026-10-28)
 
 
