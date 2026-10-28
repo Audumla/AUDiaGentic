@@ -244,6 +244,38 @@ def test_concurrent_admission_creates_one_record_for_one_key(tmp_path: Path) -> 
     assert len(store.list_records(tmp_path)) == 1
 
 
+def test_concurrent_provider_session_admission_assigns_distinct_ordinals(tmp_path: Path) -> None:
+    """RV1259 follow-up: the enqueue-ordinal fallback runs before the lock is
+    taken (store/_admission.py) when enqueue-sequence.json is missing. Several
+    distinct provider-session records racing that missing file must still get
+    unique, gapless ordinals -- none may reuse a stale pre-lock scan result."""
+    barrier = threading.Barrier(8)
+    results: list[int] = []
+    errors: list[BaseException] = []
+
+    def submit(index: int) -> None:
+        try:
+            candidate = store.build_record(
+                execution_profile_id="default", prompt_body="private", prompt_digest="a" * 64,
+                context_fingerprint="b" * 64, provider_transport_kind="provider-session",
+                session_id=f"ses_{index}",
+            )
+            barrier.wait(timeout=5)
+            record, _ = store.admit_record(tmp_path, candidate, idempotency_key=f"key-{index}")
+            results.append(record["enqueue-ordinal"])
+        except BaseException as exc:  # pragma: no cover - asserted below
+            errors.append(exc)
+
+    threads = [threading.Thread(target=submit, args=(i,)) for i in range(8)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=10)
+
+    assert not errors, errors
+    assert sorted(results) == list(range(1, 9))
+
+
 @pytest.mark.no_parallel
 def test_cross_process_admission_creates_one_record_for_one_key(tmp_path: Path) -> None:
     context = multiprocessing.get_context("spawn")
