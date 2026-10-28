@@ -1386,7 +1386,9 @@ def recover_execution_request(
             details={"request-id": request_id},
         )
     diagnostics = record.get("diagnostics")
-    if not isinstance(diagnostics, dict) and action == "reconcile":
+    # A request orphaned mid-turn (its gateway host exited) never got a
+    # classification; durable evidence still supports reconcile or abandon.
+    if not isinstance(diagnostics, dict) and action in {"reconcile", "abandon"}:
         from audiagentic.components.agents.gateway.queue.recovery import (
             recoverable_reconcile_diagnostics,
         )
@@ -1465,8 +1467,17 @@ def recover_execution_request(
             if isinstance(session_id, str) and session_id:
                 try:
                     from audiagentic.components.agents.gateway.session import sessions_store
+                    from audiagentic.components.agents.gateway.session.sessions import (
+                        get_session_runtime,
+                    )
                     session = sessions_store.read_session_record(project_root, session_id)
                     session_terminal = session.get("state") in {"failed", "closed", "expired"}
+                    if not session_terminal and session_id not in set(get_session_runtime().live_session_ids()):
+                        # Persisted active but not live in this gateway: orphaned
+                        # by its host exiting. Close it exactly as a client close
+                        # would (failed, binding retired) so abandon can settle.
+                        close_execution_session(project_root, session_id)
+                        session_terminal = True
                 except Exception:  # noqa: BLE001 - preserve best-effort cancellation semantics
                     session_terminal = False
             if session_terminal:
