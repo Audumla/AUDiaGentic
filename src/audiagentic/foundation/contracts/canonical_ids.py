@@ -40,6 +40,7 @@ CANONICAL_SCHEMA_IDS = (
     "resolved-execution-profile",
     "review-bundle",
     "review-report",
+    "settings",
     "stage-result",
     "status-evidence",
     "task-status-v4",
