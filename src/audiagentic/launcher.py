@@ -227,6 +227,9 @@ def _main(argv: list[str] | None = None) -> int:
     from audiagentic.commands.settings import add_settings_parsers
 
     add_settings_parsers(config_sub)
+    from audiagentic.commands.agents import add_agent_parsers
+
+    add_agent_parsers(subparsers)
 
     # Private stdio entrypoint retained for generated MCP configuration.
     mcp_parser = subparsers.add_parser(
@@ -274,6 +277,12 @@ def _main(argv: list[str] | None = None) -> int:
         print(parser.format_help())
         print(_help("root"))
         return 0
+
+    # Agent file commands touch only agent files and must not compose the application graph.
+    if args.command == "agent":
+        from audiagentic.commands.agents import run_agent_command
+
+        return run_agent_command(args)
 
     # Settings commands are read-only and must not compose the application graph.
     if args.command == "config":
