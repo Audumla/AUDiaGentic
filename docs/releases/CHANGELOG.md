@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.4](https://github.com/Audumla/AUDiaGentic/compare/v0.6.3...v0.6.4) (2026-10-28)
+
+
+### Bug Fixes
+
+* **cli:** bare audiagentic prints management help instead of launching an agent ([#78](https://github.com/Audumla/AUDiaGentic/issues/78)) ([c758c26](https://github.com/Audumla/AUDiaGentic/commit/c758c269e2e21079ebf5725ab2e0457e31208c49))
+
 ## [0.6.3](https://github.com/Audumla/AUDiaGentic/compare/v0.6.2...v0.6.3) (2026-10-28)
 
 
