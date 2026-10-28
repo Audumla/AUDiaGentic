@@ -1112,7 +1112,13 @@ def claim_dispatch(
             raise AudiaGenticError(
                 "CON-AGW-083", "agents", "gateway request dispatch ownership changed", {}
             )
-        if current_owner == owner_epoch:
+        # Already owned by this epoch: a no-op only when the service root is
+        # recorded too. Restart takeover transfers the owner of an admitted,
+        # never-claimed request without one; node receipt and publication
+        # custody require it, so complete the claim instead of returning.
+        if current_owner == owner_epoch and (
+            service_root is None or record.get("dispatch-service-root")
+        ):
             record_active_work(service_root, project_root, request_id, owner_epoch=owner_epoch)
             return record
         updated = dict(record)
