@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.2](https://github.com/Audumla/AUDiaGentic/compare/v0.7.1...v0.7.2) (2026-10-28)
+
+
+### Bug Fixes
+
+* **gpt-auto:** capture and focus use packaged defaults without a project entry (GA27) ([#88](https://github.com/Audumla/AUDiaGentic/issues/88)) ([c950917](https://github.com/Audumla/AUDiaGentic/commit/c950917c8f0ae8ede3b4dec82ea0b814b2870f5d))
+
 ## [0.7.1](https://github.com/Audumla/AUDiaGentic/compare/v0.7.0...v0.7.1) (2026-10-28)
 
 
