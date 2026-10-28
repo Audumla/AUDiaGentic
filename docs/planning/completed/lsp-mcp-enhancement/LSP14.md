@@ -2,7 +2,7 @@
 id: LSP14
 order: 14
 plan: lsp-mcp-enhancement
-state: done
+state: completed
 wave: W4.2
 phase: Phase 0
 ---
