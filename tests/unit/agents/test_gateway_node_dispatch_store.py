@@ -767,6 +767,65 @@ def test_old_attestation_cannot_follow_changed_canonical_attempt(
     assert {p.relative_to(root) for p in root.rglob("*") if p.is_file()} == files_before
 
 
+def fence(root, record, retired_connection_generation, **changes):
+    command = identity(record)
+    return store.fence_node_dispatch_no_effect(
+        root, record["request-id"], identity=command,
+        retired_connection_generation=retired_connection_generation, **fences(record, **changes),
+    )
+
+
+def test_fence_no_effect_requires_strictly_newer_generation(running):
+    root, record = running
+    record = bind(root, record)
+    with pytest.raises(AudiaGenticError, match="CON-AGND-001"):
+        fence(root, record, 1)  # equal to the bound generation
+    assert store.read_record(root, record["request-id"]) == record
+
+
+def test_fence_no_effect_marks_binding_and_blocks_future_authorization(running):
+    root, record = running
+    record = bind(root, record)
+    fenced = fence(root, record, 2)
+    assert fenced["node-dispatch"]["authorization-state"] == "no-effect"
+    assert fenced["node-dispatch"]["identity"] == record["node-dispatch"]["identity"]
+    assert fenced["node-dispatch"]["authorization-id"] is None
+    # A late authorization callback for the exact fenced binding must lose.
+    with pytest.raises(AudiaGenticError, match="CON-AGND-001"):
+        authorize(root, fenced)
+    assert store.read_record(root, record["request-id"]) == fenced
+
+
+def test_fence_no_effect_rejects_already_authorized_binding(running):
+    root, record = running
+    record = authorize(root, bind(root, record))
+    with pytest.raises(AudiaGenticError, match="CON-AGND-001"):
+        fence(root, record, 2)
+    assert store.read_record(root, record["request-id"]) == record
+
+
+def test_fence_no_effect_rejects_changed_identity(running):
+    root, record = running
+    record = bind(root, record)
+    changed = identity(record, node_epoch="other")
+    with pytest.raises(AudiaGenticError, match="CON-AGND-001"):
+        store.fence_node_dispatch_no_effect(
+            root, record["request-id"], identity=changed,
+            retired_connection_generation=2, **fences(record),
+        )
+    assert store.read_record(root, record["request-id"]) == record
+
+
+def test_fence_no_effect_checks_owned_fences_before_writing(running):
+    root, record = running
+    record = bind(root, record)
+    before = gateway_request_path(root, record["request-id"]).read_bytes()
+    with pytest.raises(AudiaGenticError) as error:
+        fence(root, record, 2, owner_epoch="other")
+    assert error.value.code == "CON-AGW-083"
+    assert gateway_request_path(root, record["request-id"]).read_bytes() == before
+
+
 def test_attested_node_provider_model_do_not_require_unset_central_facts(running):
     root, record = running
     assert record.get("provider-id") is None

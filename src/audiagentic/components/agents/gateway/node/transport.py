@@ -228,6 +228,15 @@ class NodeConnectionOwner:
         slot = self._active.get(node_id)
         return slot.identity if slot is not None else None
 
+    def last_generation(self, node_id: str) -> int:
+        """Read only while the caller already holds the shared authority lock.
+
+        Durable even once the connection is gone: replace() never reuses a
+        generation, so a value greater than some historical bound connection's
+        generation proves the owner itself admitted a strictly later one.
+        """
+        return self._generations.get(node_id, 0)
+
     def current_slot(self, node_id: str) -> CurrentNodeSlot | None:
         """Snapshot only INSIDE the authority lock; no recursive auth acquisition.
 

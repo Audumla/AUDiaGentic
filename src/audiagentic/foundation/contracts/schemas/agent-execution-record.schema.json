@@ -304,7 +304,8 @@
             "authorized",
             "effect-observed",
             "uncertain",
-            "terminal"
+            "terminal",
+            "no-effect"
           ]
         },
         "receipt-sequence": {

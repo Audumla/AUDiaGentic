@@ -2523,6 +2523,47 @@ def authorize_owned_node_effect(
         })
 
 
+def fence_node_dispatch_no_effect(
+    project_root: Path, request_id: str, *, identity: Any,
+    owner_epoch: str, worker_id: str, attempt_epoch: int, expected_revision: int,
+    retired_connection_generation: int,
+) -> dict[str, Any]:
+    """Durably prove the original binding never obtained authorization.
+
+    Caller must supply retired_connection_generation from the owning
+    connection authority's own serialized generation counter for this exact
+    node, strictly greater than the original bound connection-generation. A
+    send timeout, reconnect gap or peer absence alone is never sufficient:
+    only a newer connection the owner itself admitted proves the original one
+    is gone, since at most one connection per node is ever live at a time.
+    This never resends, rebinds or clears the original identity, attestation,
+    worker or attempt; it only fences this exact binding against any later
+    authorization and marks it as positively having no effect.
+    """
+    command = _node_identity(identity)
+    if (
+        type(retired_connection_generation) is not int
+        or retired_connection_generation <= command["connection-generation"]
+    ):
+        raise _node_conflict("No-effect fence requires a proven strictly newer connection generation")
+    with _request_lock(project_root, request_id):
+        record = _node_owned_record(
+            project_root, request_id, owner_epoch=owner_epoch, worker_id=worker_id,
+            attempt_epoch=attempt_epoch, expected_revision=expected_revision,
+        )
+        _node_matches_record(record, command)
+        prior = record.get("node-dispatch")
+        if (
+            prior is None or prior["identity"] != command
+            or prior["authorization-state"] != "not-authorized"
+            or prior["authorization-id"] is not None
+        ):
+            raise _node_conflict("No-effect fence requires an original unauthorized binding")
+        return _write_node_dispatch(project_root, record, {
+            **prior, "authorization-state": "no-effect",
+        })
+
+
 def apply_owned_node_receipt(
     project_root: Path, request_id: str, *, receipt: Mapping[str, Any],
     owner_epoch: str, worker_id: str, attempt_epoch: int, expected_revision: int,

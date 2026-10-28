@@ -261,6 +261,48 @@ async def test_unbound_running_recovery_atomically_binds_original_attempt(case):
 
 
 @pytest.mark.asyncio
+async def test_unauthorized_dispatch_stays_may_have_started_without_retired_connection(case):
+    from .test_gateway_node_dispatch_store import bind
+
+    record = bind(case.admission.root, case.record)
+    case.record = record
+    deferred = await invoke(case, reconcile_only=True)
+    assert deferred.side_effect_state == "may-have-started"
+    current = store.read_record(case.admission.root, record["request-id"])
+    assert current["node-dispatch"]["authorization-state"] == "not-authorized"
+
+
+@pytest.mark.asyncio
+async def test_unauthorized_dispatch_with_retired_connection_fences_to_not_started(case):
+    from .test_gateway_node_dispatch_store import bind, prepared_command
+
+    record = bind(case.admission.root, case.record)
+    case.record = record
+    # The owning connection authority itself admits a strictly newer
+    # connection for this node; this is the only proof the fence accepts,
+    # never a send timeout or peer absence.
+    await asyncio.to_thread(case.connections.replace, "node", "new-boot", case.gateway.websocket)
+    deferred = await invoke(case, reconcile_only=True)
+    assert deferred.side_effect_state == "not-started"
+    current = store.read_record(case.admission.root, record["request-id"])
+    assert current["node-dispatch"]["authorization-state"] == "no-effect"
+    assert current["node-dispatch"]["identity"] == record["node-dispatch"]["identity"]
+    assert current["node-dispatch"]["authorization-id"] is None
+    # The fence is terminal for this exact binding: a late authorization must lose.
+    command, _, accepted = prepared_command(record)
+    with pytest.raises(AudiaGenticError, match="CON-AGND-001") as error:
+        await asyncio.to_thread(
+            store.authorize_owned_node_effect, case.admission.root, record["request-id"],
+            identity=record["node-dispatch"]["identity"], authorization_id="late-auth",
+            accepted_attestation=accepted,
+            current_node_epoch=command.node_epoch, current_connection_generation=command.connection_generation,
+            owner_epoch="owner", worker_id=current["worker-id"], attempt_epoch=current["attempt-epoch"],
+            expected_revision=current["revision"],
+        )
+    assert "evidence reconciliation" in error.value.message
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("recovering", [False, True])
 async def test_preparation_timeout_is_null_bind_not_uncertain_native_work(case, recovering):
     if recovering:

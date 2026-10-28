@@ -81,14 +81,48 @@ class NodeRunner:
                 side_effect = SideEffectState.NOT_STARTED
             elif dispatch.get("receipt-stage") == "terminal":
                 side_effect = SideEffectState.TERMINAL_EVIDENCE_SEEN
+            elif dispatch.get("authorization-state") == "no-effect":
+                side_effect = SideEffectState.NOT_STARTED
         except Exception:
             pass
         safe = sanitize_node_error(error, stage, reason, phase)
         return RecoveryDeferred(safe, phase=safe.details["phase"], side_effect_state=side_effect.value)
 
+    def _fence_unauthorized_dispatch(self, root, record):
+        """Prove, under the owning connection authority, that a never-sent
+        authorization opportunity is retired; never infer this from absence.
+
+        Narrow and best-effort: any failure (including no live owner proof
+        yet) leaves the original binding exactly as it was, still eligible for
+        the default may-have-started observation-only recovery.
+        """
+        dispatch = record.get("node-dispatch")
+        if (
+            dispatch is None or dispatch.get("authorization-state") != "not-authorized"
+            or dispatch.get("authorization-id") is not None
+        ):
+            return record
+        bound = dispatch["identity"]
+        try:
+            latest = self.authority.serialize(
+                lambda: self.connections.last_generation(bound["node-id"])
+            )
+            if latest <= bound["connection-generation"]:
+                return record
+            with self.service.owner_guard(self.owner_epoch):
+                return store.fence_node_dispatch_no_effect(
+                    root, record["request-id"], identity=CommandIdentity.from_mapping(bound),
+                    owner_epoch=self.owner_epoch, worker_id=record["worker-id"],
+                    attempt_epoch=record["attempt-epoch"], expected_revision=record["revision"],
+                    retired_connection_generation=latest,
+                )
+        except Exception:
+            return record
+
     def _observe(self, root, record, *, started_ns=None):
         started_ns = time.monotonic_ns() if started_ns is None else started_ns
         emit_node_stage(root, record, "reconciliation-started", started_ns=started_ns)
+        record = self._fence_unauthorized_dispatch(root, record)
         if record.get("node-dispatch") is None:
             raise self._defer(root, record)
         if record["state"] in store.TERMINAL_STATES and not record_holds_node(record):
