@@ -315,6 +315,33 @@ async def test_unauthorized_dispatch_with_retired_connection_fences_to_not_start
 
 
 @pytest.mark.asyncio
+async def test_non_cas_fence_failure_is_diagnosed_not_silently_absorbed(case, monkeypatch, caplog):
+    import logging
+
+    from .test_gateway_node_dispatch_store import bind
+
+    record = bind(case.admission.root, case.record)
+    case.record = record
+    await asyncio.to_thread(case.connections.replace, "node", "new-boot", case.gateway.websocket)
+
+    def lost_ownership(*args, **kwargs):
+        raise AudiaGenticError("VAL-AGW-005", "agents", "SECRET simulated ownership loss")
+
+    # Patch only the store call the fence attempt makes, not the outer
+    # __call__/_read owner_guard usage that must keep working normally.
+    monkeypatch.setattr(store, "fence_node_dispatch_no_effect", lost_ownership)
+    with caplog.at_level(logging.WARNING):
+        deferred = await invoke(case, reconcile_only=True)
+    # A genuine non-CAS registered error must surface as a diagnostic, not
+    # look identical to ordinary absence of generation proof.
+    assert deferred.side_effect_state == "may-have-started"
+    current = store.read_record(case.admission.root, record["request-id"])
+    assert current["node-dispatch"]["authorization-state"] == "not-authorized"
+    assert "SECRET" not in caplog.text
+    assert any("fence" in message.lower() for message in caplog.messages)
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("recovering", [False, True])
 async def test_preparation_timeout_is_null_bind_not_uncertain_native_work(case, recovering):
     if recovering:

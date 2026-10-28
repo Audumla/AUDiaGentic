@@ -37,6 +37,11 @@ from .work_protocol import EffectAuthorize, PreparationRejected, PreparedReply, 
 
 logger = logging.getLogger(__name__)
 
+# _node_owned_record's owned-attempt CAS and fence_node_dispatch_no_effect's
+# own node-dispatch-conflict code: the only registered errors that mean this
+# exact record already moved under us, not a genuine ownership/I-O failure.
+_EXPECTED_FENCE_RACE_CODES = frozenset({"CON-AGW-083", "CON-AGW-072", "CON-AGW-073", "CON-AGW-071", "CON-AGND-001"})
+
 
 class NodeRunner:
     def __init__(self, config, service_store, authority, connections, loop, *,
@@ -133,8 +138,17 @@ class NodeRunner:
                     attempt_epoch=record["attempt-epoch"], expected_revision=record["revision"],
                     retired_connection_generation=latest,
                 )
-        except AudiaGenticError:
-            return record  # Expected CAS race: owner/revision/attempt/bind already changed.
+        except AudiaGenticError as error:
+            # Only the record's own owned-attempt CAS and node-dispatch
+            # conflict codes mean "this exact record already moved under
+            # us" -- an expected, silent race, since the caller re-reads
+            # fresh regardless. Any other registered error (including
+            # service.owner_guard losing ownership, or canonical I/O)
+            # is a genuine recovery-relevant failure and must not look
+            # identical to ordinary absence of proof.
+            if error.code not in _EXPECTED_FENCE_RACE_CODES:
+                self._fence_failure(error)
+            return record
         except Exception as error:
             self._fence_failure(error)
             return record
