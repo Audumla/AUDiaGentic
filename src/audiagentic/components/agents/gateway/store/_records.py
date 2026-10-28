@@ -66,6 +66,10 @@ def _redact_error(error: BaseException | dict[str, Any] | None) -> dict[str, Any
             details = _project_bounded_recovery_error_details(error.details)
             if details:
                 projected["details"] = details
+        elif error.code == "INT-AGW-098" and isinstance(error.details, dict):
+            details = _project_internal_error_details(error.details)
+            if details:
+                projected["details"] = details
         return projected
     if isinstance(error, BaseException):
         # Preserve ordinary validation/configuration detail so operators can
@@ -85,6 +89,10 @@ def _redact_error(error: BaseException | dict[str, Any] | None) -> dict[str, Any
             projected["details"] = details
     elif error.get("code") == "CON-AGW-084" and isinstance(error.get("details"), dict):
         details = _project_bounded_recovery_error_details(error["details"])
+        if details:
+            projected["details"] = details
+    elif error.get("code") == "INT-AGW-098" and isinstance(error.get("details"), dict):
+        details = _project_internal_error_details(error["details"])
         if details:
             projected["details"] = details
     return projected
@@ -365,6 +373,18 @@ def _project_session_error_details(details: dict[str, Any]) -> dict[str, Any]:
         elif isinstance(value, (bool, int, float)) or value is None:
             projected[key] = value
     return projected
+
+
+def _project_internal_error_details(details: dict[str, Any]) -> dict[str, Any]:
+    """Expose only the bare original exception classname for INT-AGW-098.
+
+    The classname alone (e.g. "TimeoutError") is never sensitive and is
+    exactly what SH31's investigation needed to avoid a dead end; the
+    sibling "original-repr" field is not projected here since an exception's
+    repr can embed the same sensitive content str() can (Standard 8).
+    """
+    value = details.get("original-type")
+    return {"original-type": value[:128]} if isinstance(value, str) and value else {}
 
 
 def _project_acp_error_details(details: dict[str, Any]) -> dict[str, Any]:
