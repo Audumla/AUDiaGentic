@@ -116,6 +116,17 @@ where = ["src"]
   "components/planning/*.yaml",
   # Agent LLM Gateway workflow definition (loaded at module load time)
   "components/agents/*.yaml",
+  # Component contracts read at runtime (job/approval/ledger schemas and the
+  # model-sources package-default layer)
+  "components/*/contracts/*.json",
+  "components/*/contracts/*.yaml",
+  # Provider adapter package defaults (gpt-auto settings)
+  "components/providers/adapters/**/*.yaml",
+  # Recipe schema and provisioning fixtures, LSP template, ledger git hook
+  "config/recipes/*.json",
+  "config/recipes/fixtures/*.yaml",
+  "components/coding_lsp/templates/*",
+  "components/source_control/*.sh",
 ]
 
 [tool.pytest.ini_options]
