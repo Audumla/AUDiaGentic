@@ -1,0 +1,38 @@
+{
+  "schema-version": 1,
+  "producer": {
+    "component": "providers",
+    "qualifier-version": "1",
+    "suite-digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "adapter-id": "codex-acp",
+    "adapter-version": "1",
+    "adapter-digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "target": {
+    "provider-id": "codex",
+    "surface-id": "codex-acp",
+    "platform": "linux-amd64",
+    "executable-version": "0.165.0",
+    "native-protocol": "acp",
+    "native-schema-version": "1",
+    "endpoint-kind": "stdio"
+  },
+  "qualification": {
+    "state": "partial",
+    "capabilities": {
+      "passive-identity": true,
+      "safe-detach": false
+    },
+    "unsupported-reasons": [
+      "existing-session-attach-unproven"
+    ]
+  },
+  "proof": {
+    "fixture-id": "disposable-codex",
+    "test-run-id": "run-1",
+    "artifact-digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "verified-at": "2026-10-28T00:00:00Z"
+  },
+  "evidence-id": "qe_dd631fd31da4d8b082dea283",
+  "created-at": "2026-10-28T00:00:00Z"
+}

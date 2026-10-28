@@ -37,6 +37,7 @@ CANONICAL_SCHEMA_IDS = (
     "provider-stream-manifest",
     "provider-session-input",
     "provider-session-manifest",
+    "qualification-evidence",
     "resolved-execution-profile",
     "review-bundle",
     "review-report",
