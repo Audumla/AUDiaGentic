@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.3](https://github.com/Audumla/AUDiaGentic/compare/v0.6.2...v0.6.3) (2026-10-28)
+
+
+### Bug Fixes
+
+* **planning:** normalize legacy state: done items to completed ([#77](https://github.com/Audumla/AUDiaGentic/issues/77)) ([cb86922](https://github.com/Audumla/AUDiaGentic/commit/cb86922746069dc14df6af33069c74545b34129c))
+
 ## [0.6.2](https://github.com/Audumla/AUDiaGentic/compare/v0.6.1...v0.6.2) (2026-10-26)
 
 
