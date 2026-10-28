@@ -2,13 +2,17 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from audiagentic.components.agents.agents_paths import global_agents_config_path
 from audiagentic.components.agents.configuration.repository import (
-    AgentsConfigRepository,
     AgentsConfigSnapshot,
 )
+
+if TYPE_CHECKING:
+    from audiagentic.components.agents.configuration.effective_catalog import (
+        EffectiveAgentsRepository,
+    )
 from audiagentic.components.agents.models.agent_definition import (
     AgentDefinitionStore,
     agent_definition_to_dict,
@@ -20,8 +24,11 @@ from audiagentic.components.agents.models.execution_profile import (
 from audiagentic.components.agents.models.role import role_from_dict
 
 
-def global_agents_repository() -> AgentsConfigRepository:
-    return AgentsConfigRepository(global_agents_config_path(), required=True)
+def global_agents_repository() -> EffectiveAgentsRepository:
+    """Read-only hosted catalog: legacy agents.yaml plus machine-scope agent files."""
+    from .effective_catalog import EffectiveAgentsRepository
+
+    return EffectiveAgentsRepository()
 
 
 def read_global_agents_config(project_root: Path | None = None) -> AgentsConfigSnapshot:
