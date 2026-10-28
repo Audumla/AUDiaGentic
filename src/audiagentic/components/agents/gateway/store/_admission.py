@@ -180,6 +180,18 @@ def admit_record(
     candidate["idempotency-key"] = key_digest
     intent_digest = _intent_digest(candidate)
     index_path = gateway_idempotency_index_path(project_root, key_digest)
+    sequence_path = gateway_root(project_root) / "enqueue-sequence.json"
+    # A missing sequence file (first provider-session admission, or recovery
+    # from a lost file) forces a full project record scan to reconstruct the
+    # next ordinal. Do that scan before taking the admission lock: it is
+    # read-only, and running it while holding the lock would block every
+    # other admission in the project for as long as the scan takes.
+    fallback_ordinal = None
+    if candidate.get("provider-transport-kind") == "provider-session" and not sequence_path.exists():
+        fallback_ordinal = max(
+            (r["enqueue-ordinal"] for r in _records.list_records(project_root)
+             if type(r.get("enqueue-ordinal")) is int), default=0,
+        )
 
     with _admission_lock(project_root):
         index = _read_idempotency_index(index_path)
@@ -242,13 +254,18 @@ def admit_record(
         if before_write is not None:
             before_write()
         if candidate.get("provider-transport-kind") == "provider-session":
-            sequence_path = gateway_root(project_root) / "enqueue-sequence.json"
             try:
                 previous = read_json_with_retry(sequence_path)
                 if type(previous) is not int or previous < 0:
                     raise ValueError("invalid gateway enqueue sequence")
             except FileNotFoundError:
-                previous = max(
+                # The pre-lock scan above is only a hint: if the file still
+                # doesn't exist now that we hold the lock, re-derive the same
+                # way rather than trust a value computed before admission
+                # was serialized. A concurrent admitter racing for the same
+                # missing file always loses this lock first, so by the time
+                # we are here any record it wrote is already visible to us.
+                previous = fallback_ordinal if fallback_ordinal is not None else max(
                     (r["enqueue-ordinal"] for r in _records.list_records(project_root)
                      if type(r.get("enqueue-ordinal")) is int), default=0,
                 )
