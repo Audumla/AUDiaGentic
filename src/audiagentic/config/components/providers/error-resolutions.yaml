@@ -118,6 +118,7 @@ UNS-PEXE-005: "The provider has no interactive CLI launch adapter. Choose a prov
 UNS-PEXE-004: "Choose a provider launch surface that guarantees exclusive MCP selection, or disable the isolation requirement only for an operator-owned native launch."
 INT-PEXE-001: "The provider ACP adapter returned no resolved model identifier. Inspect the provider adapter configuration."
 INT-PEXE-003: "The provider execution environment builder must return a string-to-string environment mapping."
+EXT-PEXE-001: "The provider adapter refused the turn. Inspect the preserved provider error message and underlying details before retrying."
 CFG-OPENC-001: "Correct the OpenCode inline or host configuration JSON before launching an isolated worker."
 CFG-OPENC-002: "Declare at least one entry under the OpenCode config's 'provider' object before launching an isolated worker; a project with no declared providers must not silently execute against the machine's global OpenCode whitelist."
 RES-PHKS-001: "No descriptor or managed-hooks automation capability found for the specified provider. Check the provider-id against registered providers."

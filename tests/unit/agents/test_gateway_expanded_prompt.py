@@ -114,7 +114,7 @@ def test_rendering_after_file_change_uses_frozen_content_without_reread(
         ("cycle", "VAL-AGW-110", {"prompt-id": "main"}),
         ("unknown", "RES-AGW-110", {"prompt-id": "main", "included-prompt-id": "missing"}),
         ("escape", "VAL-AGW-111", {"prompt-id": "main"}),
-        ("unreadable", "RES-AGW-111", {"prompt-id": "main", "path": "absent.txt"}),
+        ("unreadable", "RES-AGW-114", {"prompt-id": "main", "path": "absent.txt"}),
     ],
 )
 def test_expansion_and_materializer_preserve_errors(tmp_path, case, code, details):
@@ -147,7 +147,7 @@ def test_permission_error_keeps_unreadable_error_and_cause(tmp_path, monkeypatch
     monkeypatch.setattr(Path, "read_text", denied)
     with pytest.raises(AudiaGenticError) as caught:
         expand_agent_prompt(main, prompts=(main,), config_root=tmp_path)
-    assert caught.value.code == "RES-AGW-111"
+    assert caught.value.code == "RES-AGW-114"
     assert caught.value.__cause__ is error
 
 

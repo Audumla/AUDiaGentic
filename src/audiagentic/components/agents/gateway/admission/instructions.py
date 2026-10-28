@@ -76,7 +76,7 @@ def expand_agent_prompt(
                     fragments.append(candidate.read_text(encoding="utf-8"))
                 except OSError as exc:
                     raise AudiaGenticError(
-                        code="RES-AGW-111",
+                        code="RES-AGW-114",
                         kind="agents",
                         message="agent prompt file could not be read",
                         details={"prompt-id": current.prompt_id, "path": part.path},
