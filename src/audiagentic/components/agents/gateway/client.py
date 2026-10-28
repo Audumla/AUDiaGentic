@@ -64,9 +64,10 @@ def resolve_request_project_root(root: Path, request_id: str) -> Path:
     """Route a project-scoped request using the public client boundary."""
     if _uses_shared_connector(root):
         return root
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+
     from . import store as gateway_store
     from .api import _resolve_workspace_project_root
-    from audiagentic.foundation.contracts.errors import AudiaGenticError
     if not isinstance(request_id, str) or not request_id.startswith("req_"):
         return root
     parts = request_id.split("_")
@@ -126,8 +127,9 @@ def resolve_session_project_root(root: Path, session_id: str) -> Path:
     """
     if _uses_shared_connector(root):
         return root
-    from .session import sessions_store
     from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+    from .session import sessions_store
 
     root = root.resolve()
     configured = os.environ.get("AUDIAGENTIC_WORKSPACE_ROOTS", "")
@@ -252,7 +254,9 @@ class EmbeddedGatewayClient:
         self._logical_client_id = logical_client_id
 
     def list_agent_definition_cards(self, project_root: Path) -> list[dict[str, Any]]:
-        from audiagentic.components.agents.configuration.management import list_agent_definition_cards
+        from audiagentic.components.agents.configuration.management import (
+            list_agent_definition_cards,
+        )
 
         return list_agent_definition_cards(project_root)
 

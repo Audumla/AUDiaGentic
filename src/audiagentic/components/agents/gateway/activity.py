@@ -7,7 +7,6 @@ the store allocates the aggregate sequence under the request lock.
 from __future__ import annotations
 
 import math
-
 import threading
 import time
 from pathlib import Path

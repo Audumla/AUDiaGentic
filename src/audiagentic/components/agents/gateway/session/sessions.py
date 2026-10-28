@@ -1030,7 +1030,7 @@ class SessionRuntime:
 
     async def _await_captured_memory_fence(self, handle: Any, cancel: asyncio.Event) -> None:
         """Keep a queued successor out of provider admission until memory agrees."""
-        from .capture_handoff import read_captured_handoff, acknowledge_captured_handoff
+        from .capture_handoff import acknowledge_captured_handoff, read_captured_handoff
         while handle.capture_handoff_pending is not None:
             if cancel.is_set():
                 raise AudiaGenticError(code="CON-AGW-099", kind="agents", message="session request cancelled before captured-turn handoff")
@@ -3703,8 +3703,9 @@ class SessionRuntime:
             captured_authority: dict[str, Any] = {}
             captured_owner = None
             if request_id and getattr(handle.transport, "supports_external_completion", False):
-                from .capture_handoff import capture_owner
                 from audiagentic.components.agents.gateway import store as gateway_store
+
+                from .capture_handoff import capture_owner
                 try:
                     owned_request = await asyncio.to_thread(gateway_store.read_record, project_root, request_id)
                     captured_owner = capture_owner(owned_request)
@@ -3813,7 +3814,7 @@ class SessionRuntime:
                 if request_id is not None:
                     self._turn_cancels.pop(request_id, None)
             if result.stop_reason == "externally-captured":
-                from .capture_handoff import read_captured_handoff, acknowledge_captured_handoff
+                from .capture_handoff import acknowledge_captured_handoff, read_captured_handoff
                 verified = await asyncio.to_thread(
                     read_captured_handoff, project_root, request_id, session_id, captured_owner,
                 )

@@ -2,15 +2,21 @@ from __future__ import annotations
 
 import json
 
-from audiagentic.components.agents.gateway import replay
 from audiagentic.components.agents.agents_paths import (
     gateway_observation_index_path,
     gateway_timeline_index_path,
     gateway_timeline_path,
 )
-from audiagentic.components.agents.gateway.evidence_projection import project_public_gateway_evidence
+from audiagentic.components.agents.gateway import replay
+from audiagentic.components.agents.gateway.evidence_projection import (
+    project_public_gateway_evidence,
+)
+from audiagentic.components.agents.gateway.observability import (
+    append_observation,
+    observation_summary,
+    read_observation_page,
+)
 from audiagentic.components.agents.gateway.observation_projection import append_request_projection
-from audiagentic.components.agents.gateway.observability import append_observation, observation_summary, read_observation_page
 from audiagentic.components.agents.gateway.store import transition_history_page
 
 

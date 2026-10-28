@@ -3,11 +3,17 @@ import os
 from pathlib import Path
 
 import pytest
-
 from tests.integration.agents.gateway_docker_harness import (
-    HoldableRigHandler, enable_local_openai, free_port, start_gateway_subprocess,
-    start_rig_server, stop_rig_server, stop_subprocess_gracefully,
-    wait_for_index_phase, wait_for_record_state, write_execution_profile,
+    HoldableRigHandler,
+    enable_local_openai,
+    free_port,
+    start_gateway_subprocess,
+    start_rig_server,
+    stop_rig_server,
+    stop_subprocess_gracefully,
+    wait_for_index_phase,
+    wait_for_record_state,
+    write_execution_profile,
 )
 
 pytestmark = [pytest.mark.integration, pytest.mark.opt_in,
@@ -18,7 +24,10 @@ pytestmark = [pytest.mark.integration, pytest.mark.opt_in,
 def test_real_gateway_serializes_profile_lane_and_drains_queue(tmp_path: Path, separate_projects):
     if os.environ.get("AUDIAGENTIC_GATEWAY_CONCURRENCY_DOCKER") != "1":
         pytest.skip("run in the gateway concurrency image")
-    from audiagentic.components.agents.gateway.remote_client import StandaloneGatewayClient, load_auth_token
+    from audiagentic.components.agents.gateway.remote_client import (
+        StandaloneGatewayClient,
+        load_auth_token,
+    )
 
     rig = start_rig_server()
     roots = [tmp_path / "first", tmp_path / ("second" if separate_projects else "first")]

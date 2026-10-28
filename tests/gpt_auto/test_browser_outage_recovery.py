@@ -153,7 +153,9 @@ async def test_idle_completed_conversation_recovers_new_browser_target(monkeypat
 
         monkeypatch.setattr(chat, "_replace_load_failed_page", replacement_unavailable)
     if hazard not in (None, "physical-idle"):
-        from audiagentic.components.providers.adapters.gpt_auto.session_transport import GptAutoSessionTransport
+        from audiagentic.components.providers.adapters.gpt_auto.session_transport import (
+            GptAutoSessionTransport,
+        )
 
         if operation == "open":
             transport = GptAutoSessionTransport(chat)
@@ -171,7 +173,9 @@ async def test_idle_completed_conversation_recovers_new_browser_target(monkeypat
             assert failed.value.details["submission-ambiguous"] is False
         return
     if operation == "open":
-        from audiagentic.components.providers.adapters.gpt_auto.session_transport import GptAutoSessionTransport
+        from audiagentic.components.providers.adapters.gpt_auto.session_transport import (
+            GptAutoSessionTransport,
+        )
 
         transport = GptAutoSessionTransport(chat)
         transport.set_durable_owner_probe(lambda _request: owner_live)

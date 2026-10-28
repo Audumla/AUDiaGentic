@@ -6,8 +6,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from audiagentic.components.providers.adapters.gpt_auto.turn import GptAutoTurn, TurnState
 from audiagentic.components.providers.adapters.gpt_auto.chat import PersistentChat
+from audiagentic.components.providers.adapters.gpt_auto.turn import GptAutoTurn, TurnState
 from audiagentic.foundation.transports.agent_session import SessionPrompt
 
 from .test_greenfield_bridge_turn import _Chat, snap

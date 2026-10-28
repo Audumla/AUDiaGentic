@@ -138,7 +138,9 @@ def test_direct_declaration_validation_rejects_untyped_claims():
 @pytest.mark.parametrize("claims", [{}, {"detach_safe": True}, ALL_CLAIMS])
 def test_actual_yaml_loader_and_public_resolution_project_same_claims(tmp_path, monkeypatch, claims):
     from audiagentic.components.providers.descriptors.registry import _registry, register
-    from audiagentic.components.providers.services.config.provider_config import set_provider_enabled
+    from audiagentic.components.providers.services.config.provider_config import (
+        set_provider_enabled,
+    )
 
     surface = surface_data()
     surface["joined_capabilities"] = claims

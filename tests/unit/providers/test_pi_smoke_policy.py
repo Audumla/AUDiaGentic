@@ -4,7 +4,6 @@ import os
 import shlex
 
 import pytest
-
 from tests.helpers.pi_smoke import restrict_smoke_pi
 
 

@@ -132,6 +132,7 @@ def _raw_get(endpoint: str, route: str) -> tuple[str, bytes]:
 def test_service_background_expires_old_trace_without_new_requests(tmp_path, monkeypatch):
     """Run the real host/poller/worker against isolated, old terminal data."""
     import os
+
     from audiagentic.components.agents.agents_paths import gateway_request_dir
     from audiagentic.components.agents.gateway import retention, store
     from audiagentic.foundation.observability.journal_segments import segment_paths

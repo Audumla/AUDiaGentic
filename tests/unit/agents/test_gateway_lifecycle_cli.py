@@ -1,5 +1,6 @@
 """Current keyword CLI boundary and retained serve shutdown lifecycle tests."""
 import pytest
+
 from audiagentic.commands import gateway
 
 

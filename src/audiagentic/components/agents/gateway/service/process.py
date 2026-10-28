@@ -10,7 +10,6 @@ from pathlib import Path
 
 from audiagentic.components.agents.gateway.service.host import GatewayServiceHost
 
-
 _CLOSE_DEADLINE_SECONDS = 30.0
 
 

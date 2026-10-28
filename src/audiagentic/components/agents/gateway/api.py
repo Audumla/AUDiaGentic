@@ -1192,11 +1192,14 @@ def get_execution_evidence(
             message="evidence limit must be between 1 and 100", details={},
         )
     record = store.read_record(project_root, request_id, include_output=False)
-    from audiagentic.components.agents.gateway.observability import (
-        observation_summary, read_observation_page,
-    )
     from audiagentic.components.agents.gateway.diagnostics import activity_monitoring_snapshot
-    from audiagentic.components.agents.status.diagnostics_projection import project_public_diagnostics
+    from audiagentic.components.agents.gateway.observability import (
+        observation_summary,
+        read_observation_page,
+    )
+    from audiagentic.components.agents.status.diagnostics_projection import (
+        project_public_diagnostics,
+    )
     latest_transition = store.latest_transition_projection(project_root, request_id)
     diagnostic_view = project_public_diagnostics(
         {
@@ -1237,7 +1240,9 @@ def get_execution_evidence(
             project_root, request_id, limit=limit, cursor=history_cursor
         )
     try:
-        from audiagentic.components.agents.gateway.evidence_projection import project_public_gateway_evidence
+        from audiagentic.components.agents.gateway.evidence_projection import (
+            project_public_gateway_evidence,
+        )
         return project_public_gateway_evidence(
             {key: value for key, value in result.items() if value is not None}
         )
@@ -1317,8 +1322,8 @@ def recover_execution_request(
         RecoveryClaimLostError,
         assert_recovery_claim_owner,
         prepare_recovery_action,
-        recovery_capture_lock,
         record_recovery_result,
+        recovery_capture_lock,
         renew_recovery_claim,
     )
     action_attempt_id = f"recovery_{request_id}_{uuid.uuid4().hex[:16]}_{action}"
@@ -1699,10 +1704,10 @@ def complete_execution_from_provider(
     effective_metadata = dict(metadata)
     session_id = record.get("session-id")
     if session_id:
-        from audiagentic.components.agents.gateway.session import sessions_store as session_store
         from audiagentic.components.agents.gateway.queue.recovery import (
             resolve_effective_turn_evidence,
         )
+        from audiagentic.components.agents.gateway.session import sessions_store as session_store
 
         try:
             session_record = session_store.read_session_record(project_root, str(session_id))
@@ -1877,12 +1882,14 @@ def complete_execution_from_provider(
         # the exact prompt-owned ordered slot and an independent terminal DOM
         # witness prove that it is the same response.  Ambiguous/later-turn
         # captures remain fail-closed.
+        from audiagentic.components.providers.adapters.gpt_auto.prompt_fingerprint import (
+            PromptFingerprint,
+        )
         from audiagentic.components.providers.adapters.gpt_auto.turn import (
+            _same_response_slot_replacement,
             _terminal_owned_response_span,
             _terminal_response_replacement,
-            _same_response_slot_replacement,
         )
-        from audiagentic.components.providers.adapters.gpt_auto.prompt_fingerprint import PromptFingerprint
         from audiagentic.components.providers.adapters.gpt_auto.urls import canonical_chat_url
 
         # The new structural proof is deliberately stricter than legacy
@@ -1940,7 +1947,9 @@ def complete_execution_from_provider(
         # a later foreign prompt in the same conversation could satisfy it.
         # Require the durable normalized prompt fingerprint before automatic
         # or operator capture can terminalize the visible assistant response.
-        from audiagentic.components.providers.adapters.gpt_auto.prompt_fingerprint import PromptFingerprint
+        from audiagentic.components.providers.adapters.gpt_auto.prompt_fingerprint import (
+            PromptFingerprint,
+        )
         expected_prompt_digest = effective_metadata.get("prompt-text-digest")
         if not isinstance(expected_prompt_digest, str) or not expected_prompt_digest:
             raise AudiaGenticError(
@@ -1963,9 +1972,10 @@ def complete_execution_from_provider(
                 details={"request-id": request_id, "failure-reason": "prompt-digest-mismatch"},
             )
     if not prompt_is_real and not prompt_is_virtualized and effective_metadata.get("unresolved-turn-pending") is not True:
+        import hashlib
+
         from audiagentic.components.agents.agents_paths import gateway_admitted_prompt_path
         from audiagentic.foundation.io import read_bytes_with_retry
-        import hashlib
         try:
             prompt = read_bytes_with_retry(
                 gateway_admitted_prompt_path(project_root, request_id)
@@ -2467,8 +2477,10 @@ def purge_execution_session(project_root: Path, session_id: str) -> dict[str, An
         binding_store.retire_binding(project_root, record, state="failed")
 
     from contextlib import ExitStack
+
     from audiagentic.components.agents.agents_paths import (
-        gateway_request_maintenance_lock_path, gateway_session_maintenance_lock_path,
+        gateway_request_maintenance_lock_path,
+        gateway_session_maintenance_lock_path,
     )
 
     with ExitStack() as maintenance_fences:

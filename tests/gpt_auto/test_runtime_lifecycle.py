@@ -15,7 +15,6 @@ from audiagentic.components.providers.adapters.gpt_auto.chat import (
     _unresolved_prompt_match,
     _unresolved_prompt_match_diagnostics,
 )
-from audiagentic.components.providers.adapters.gpt_auto.turn import _scalar_binding_metadata
 from audiagentic.components.providers.adapters.gpt_auto.config import GptAutoConfig
 from audiagentic.components.providers.adapters.gpt_auto.prompt_fingerprint import (
     PromptFingerprint,
@@ -28,6 +27,7 @@ from audiagentic.components.providers.adapters.gpt_auto.session_transport import
     GptAutoSessionTransport,
 )
 from audiagentic.components.providers.adapters.gpt_auto.snapshot import ChatMessageRef, ChatSnapshot
+from audiagentic.components.providers.adapters.gpt_auto.turn import _scalar_binding_metadata
 from audiagentic.components.providers.adapters.gpt_auto.window_anchor import (
     gateway_dashboard_anchor_url,
     gateway_dashboard_url,

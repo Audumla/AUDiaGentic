@@ -27,15 +27,15 @@ from audiagentic.components.providers.adapters.gpt_auto.snapshot import (
 from audiagentic.components.providers.adapters.gpt_auto.turn import (
     GptAutoTurn,
     TurnState,
+    _assistant_identity_is_pending,
     _facts,
+    _owned_prompt_response_remount,
     _progress_activity_labels,
     _same_response_slot_replacement,
     _scope_response_snapshot,
     _terminal_checkpoint_fingerprint,
     _terminal_response_replacement,
     _terminal_single_response_remount,
-    _assistant_identity_is_pending,
-    _owned_prompt_response_remount,
 )
 from audiagentic.components.providers.adapters.gpt_auto.urls import (
     parse_provider_session_id,

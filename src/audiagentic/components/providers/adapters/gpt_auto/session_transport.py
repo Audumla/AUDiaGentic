@@ -30,8 +30,8 @@ from audiagentic.foundation.transports.session_binding import (
     ProviderSessionRef,
 )
 
-from .chat import ChatState, PersistentChat
 from .cdp.client import CdpError
+from .chat import ChatState, PersistentChat
 from .config import GptAutoConfig
 from .gpt_auto_cdp import ProjectReadinessError
 from .runtime_registry import get_runtime

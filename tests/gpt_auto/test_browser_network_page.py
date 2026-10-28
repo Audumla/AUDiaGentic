@@ -7,12 +7,13 @@ from unittest.mock import AsyncMock
 import pytest
 from playwright.async_api import async_playwright
 
-from audiagentic.components.providers.adapters.gpt_auto.chat import PersistentChat
-
-from audiagentic.components.providers.adapters.gpt_auto.gpt_auto_cdp import (
-    GptAutoCdpBrowserController, _RETRY_CONVERSATION_LOAD_FN, _SNAPSHOT_FN,
-)
 from audiagentic.components.providers.adapters.gpt_auto.cdp.cdp_browser import CdpPageRef
+from audiagentic.components.providers.adapters.gpt_auto.chat import PersistentChat
+from audiagentic.components.providers.adapters.gpt_auto.gpt_auto_cdp import (
+    _RETRY_CONVERSATION_LOAD_FN,
+    _SNAPSHOT_FN,
+    GptAutoCdpBrowserController,
+)
 
 URL = 'https://chatgpt.com/g/g-p-test/c/conversation'
 ERROR = '<div id="main-frame-error"><div class="error-code">DNS_PROBE_FINISHED_NO_INTERNET</div></div>'

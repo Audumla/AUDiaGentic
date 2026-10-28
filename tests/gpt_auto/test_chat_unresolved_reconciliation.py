@@ -110,7 +110,9 @@ async def test_delayed_turn_cleanup_cannot_clear_successor_checkpoint_writer():
 async def test_successor_turn_checkpoint_does_not_invoke_completed_opening_owner(tmp_path):
     from audiagentic.components.agents.gateway import store
     from audiagentic.components.agents.gateway.session import sessions_store
-    from audiagentic.components.agents.gateway.session.sessions import _make_submission_checkpoint_sink
+    from audiagentic.components.agents.gateway.session.sessions import (
+        _make_submission_checkpoint_sink,
+    )
 
     session_id = "ses-reused-checkpoint"
     project_id = "g-p-project"

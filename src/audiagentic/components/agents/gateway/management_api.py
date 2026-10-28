@@ -243,8 +243,11 @@ def gateway_connect_config(project_root: Path, config_path: Path) -> dict[str, A
     replacement; unrelated implementation options/features are preserved.
     """
     from copy import deepcopy
+
     from audiagentic.foundation.features.state import (
-        get_component_state, set_component_state, shard_path,
+        get_component_state,
+        set_component_state,
+        shard_path,
     )
     from audiagentic.foundation.system.process import StartupLock
 

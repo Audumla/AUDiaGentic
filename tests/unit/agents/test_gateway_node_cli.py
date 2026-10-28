@@ -220,3 +220,147 @@ def test_status_reports_pump_failure_without_exception_details(configured, capsy
     assert result["state"] == "failed"
     assert result["error"] == {"code": "CON-AGND-001"}
     assert "private-owner" not in output
+
+
+@pytest.mark.parametrize("tokens", [["node", "serve", "help"], ["node", "help"], ["help"]])
+def test_node_serve_help_is_cold_and_lists_exact_keyword(tokens):
+    script = '''
+import importlib.abc
+import sys
+class Guard(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname.startswith(("audiagentic.runtime", "audiagentic.components", "websockets", "playwright")):
+            raise AssertionError("cold import: " + fullname)
+sys.meta_path.insert(0, Guard())
+from audiagentic.launcher import main
+raise SystemExit(main(["gateway", *sys.argv[1:]]))
+'''
+    env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[3] / "src"))
+    result = subprocess.run([sys.executable, "-c", script, *tokens], env=env, capture_output=True, text=True, timeout=15)
+    assert result.returncode == 0, result.stderr
+    assert "gateway node serve config FILE" in result.stdout
+    assert not result.stderr
+
+
+@pytest.mark.parametrize("tail", [[], ["config"], ["--config", "x"], ["config", "x", "extra"],
+    ["config", "--private"], ["help", "extra"], ["config", "x", "--force"]])
+def test_node_serve_grammar_rejected_before_owner_imports(tail):
+    script = '''
+import importlib.abc
+import sys
+class Guard(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname.startswith(("audiagentic.runtime", "audiagentic.components", "websockets")):
+            raise AssertionError("startup import: " + fullname)
+sys.meta_path.insert(0, Guard())
+from audiagentic.launcher import main
+raise SystemExit(main(["gateway", "node", "serve", *sys.argv[1:]]))
+'''
+    env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[3] / "src"))
+    result = subprocess.run([sys.executable, "-c", script, *tail], env=env, capture_output=True, text=True, timeout=15)
+    assert result.returncode == 2
+    assert "node serve help" in result.stderr and "private" not in result.stderr
+
+
+@pytest.fixture
+def node_serve_config(tmp_path):
+    (tmp_path / "state").mkdir()
+    (tmp_path / "workspace").mkdir()
+    token = tmp_path / "node.token"
+    token.write_text("private-node-token")
+    token.chmod(0o600)
+    path = tmp_path / "node.yaml"
+    path.write_text('''schema-version: 1
+node-id: build-node
+server-id: local-test
+endpoint: wss://localhost/shared/v1/nodes/connect
+token-file: node.token
+state-root: state
+workspaces:
+  checkout:
+    root: workspace
+    execution-profiles: [profile]
+''')
+    return path
+
+
+@pytest.mark.parametrize("disposition,expected", [("stopped", 0), ("retry-exhausted", 1), ("deferred", 1)])
+def test_node_serve_entrypoint_outcome_and_stop_only_signal_restoration(node_serve_config, monkeypatch, capsys, disposition, expected):
+    from types import SimpleNamespace
+
+    from audiagentic.components.agents.gateway.node.host import (
+        NodeRecipientCause,
+        NodeRecipientHost,
+        NodeRecipientOutcome,
+    )
+    from audiagentic.runtime import component_context
+    handlers, installs = {}, []
+    originals = {sig: object() for sig in gateway._shutdown_signals()}
+    monkeypatch.setattr(gateway.signal, "getsignal", lambda sig: originals[sig])
+    def install(sig, handler):
+        handlers[sig] = handler
+        installs.append((sig, handler))
+    monkeypatch.setattr(gateway.signal, "signal", install)
+    stop = Mock()
+    async def run():
+        for sig in originals:
+            handlers[sig](sig, None)
+        cause = None if disposition == "stopped" else NodeRecipientCause("CON-AGND-001", "observe", "receipt-ack-timeout")
+        return NodeRecipientOutcome(disposition, cause)
+    host = SimpleNamespace(run=run, request_stop=stop, failure={"code": "historic"})
+    def create(config, *, component_context_reader):
+        assert config.node_id == "build-node" and config.server_id == "local-test"
+        assert component_context_reader is component_context.collect_component_context
+        return host
+    monkeypatch.setattr(NodeRecipientHost, "create", create)
+    assert main(["gateway", "node", "serve", "config", str(node_serve_config)]) == expected
+    assert stop.call_count == len(originals)
+    assert all(handlers[sig] is original for sig, original in originals.items())
+    assert len(installs) == 2 * len(originals)
+    output = capsys.readouterr()
+    assert "private-node-token" not in output.out + output.err
+    if expected:
+        assert disposition in output.err
+
+
+@pytest.mark.parametrize("installed", [None, "14.2", "16.0"])
+def test_node_serve_missing_pinned_dependency_is_actionable(node_serve_config, monkeypatch, capsys, installed):
+    from types import SimpleNamespace
+    monkeypatch.setitem(sys.modules, "websockets", None if installed is None else SimpleNamespace(__version__=installed))
+    assert main(["gateway", "node", "serve", "config", str(node_serve_config)]) == 1
+    error = capsys.readouterr().err
+    assert "VAL-AGND-001" in error and "audiagentic[node]" in error and "websockets>=15,<16" in error
+
+
+def test_node_serve_server_configuration_is_rejected_by_node_loader(configured, monkeypatch):
+    from audiagentic.components.agents.gateway.service import shared_config
+    server_config = configured[0]
+    forbidden = Mock(side_effect=AssertionError("serve must never load SERVER configuration"))
+    monkeypatch.setattr(shared_config, "load_shared_server_config", forbidden)
+    assert main(["gateway", "node", "serve", "config", str(server_config)]) == 1
+    forbidden.assert_not_called()
+
+
+def test_node_revoke_still_rejects_node_configuration(node_serve_config):
+    assert main(revoke(node_serve_config)) == 1
+
+
+def test_node_serve_real_claim_stop_without_transport(node_serve_config, monkeypatch):
+    from audiagentic.components.agents.gateway.node.host import NodeRecipientHost
+    from audiagentic.components.agents.gateway.node.transport import NodeTransportClient
+    hosts = []
+    original = NodeRecipientHost.create
+    def create(*args, **kwargs):
+        host = original(*args, **kwargs)
+        hosts.append(host)
+        return host
+    monkeypatch.setattr(NodeRecipientHost, "create", create)
+    monkeypatch.setattr(NodeTransportClient, "connect", Mock(side_effect=AssertionError("no native/transport start")))
+    monkeypatch.setattr(gateway.signal, "getsignal", lambda sig: None)
+    def install(sig, handler):
+        if callable(handler):
+            assert hosts[0].service_store.read().state == "running"
+            handler(sig, None)
+    monkeypatch.setattr(gateway.signal, "signal", install)
+    assert main(["gateway", "node", "serve", "config", str(node_serve_config)]) == 0
+    assert hosts[0].service_store.read().state == "stopped"

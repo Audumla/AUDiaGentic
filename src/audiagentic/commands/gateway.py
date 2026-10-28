@@ -130,6 +130,8 @@ _KEYWORD_HELP = {
   audiagentic gateway serve config FILE
   audiagentic gateway status config FILE [output json]
   audiagentic gateway connect config FILE project PATH [dry-run|non-interactive]
+  audiagentic gateway node serve config FILE
+  audiagentic gateway node serve help
   audiagentic gateway node revoke config FILE node ID revision N
   audiagentic gateway node revoke status config FILE operation OP_ID output json
 
@@ -141,13 +143,16 @@ Use COMMAND help for configuration and credential details.
 Retired lifecycle commands drain/resume/stop/recover are not public CLI routes.
 Options beginning with -- are not accepted; use the keywords shown above.""",
     "node": """Local node operator commands (keyword syntax):
+  audiagentic gateway node serve config FILE
+  audiagentic gateway node serve help
   audiagentic gateway node revoke config FILE node ID revision N
   audiagentic gateway node revoke status config FILE operation OP_ID output json
 
-FILE is the shared SERVER configuration, not a connector or node config.
+node serve is experimental and uses NODE configuration; see node serve help.
+For revoke/status, FILE is the shared SERVER configuration, not a node config.
 The existing loader validates it and resolves service-root relative to FILE.
 If service-root is omitted, use the canonical managed-service default root.
-Both commands use the existing local management-operation store only: no HTTP,
+Both revoke commands use the existing local management-operation store only: no HTTP,
 MCP, browser, provider, service startup or direct node-authority execution.
 
 revoke queues NODE_REVOKE with node-id and expected-grant-revision. N is a
@@ -169,6 +174,28 @@ Help:
   audiagentic gateway node help
   audiagentic gateway node revoke help
   audiagentic gateway node revoke status help""",
+    "node-serve": """Usage: audiagentic gateway node serve config FILE
+
+EXPERIMENTAL: explicit foreground recipient; native end-to-end qualification is
+pending. Install the pinned transport extra: pip install 'audiagentic[node]'.
+FILE is NODE YAML, never SERVER YAML (node revoke still takes SERVER YAML).
+Required: schema-version: 1, node-id, server-id, endpoint, token-file, state-root,
+workspaces. endpoint is wss://HOST/shared/v1/nodes/connect exactly: no userinfo,
+query or fragment. Optional ca-file selects private CA trust; TLS verification
+stays enabled. token-file is a private node credential, not a human credential;
+never put token values in YAML, arguments or logs. Protect secrets and local state.
+state-root and each workspace root must already exist; relative paths resolve
+from FILE. workspaces maps IDs to {root: PATH, execution-profiles: [PROFILE]}.
+Only allowed local profiles and configured workspaces can prepare isolated work;
+read-only configuration/inspection grants do not authorize execution. This route
+does not grant enrollment or access, attach to human sessions, or enable joins.
+SIGINT/SIGTERM/SIGBREAK request stop only. Shutdown waits for the retained producer;
+repeated signals never kill it. Drain preserves historical receipts/ACK/artifacts.
+A clean explicit stop exits 0, including after transient errors; exhausted retry
+budget or deferred terminal boundaries exit nonzero. Retry uses finite fixed delay
+and a stable-connection reset, not automatic prompt replay. A new boot requires a
+new OS process: use explicit OS supervision, never same-process restart.
+Help starts no endpoint, configuration loader, provider, catalog or application.""",
     "serve": """Usage: audiagentic gateway serve config FILE
 
 Run the shared gateway in the foreground. FILE is the Agents server config:
@@ -298,6 +325,15 @@ def _dispatch_node_keyword(tokens: list[str]) -> int:
 
     from audiagentic.foundation.cli_io import print_error
 
+    if tokens == ["serve", "help"]:
+        print(_KEYWORD_HELP["node-serve"])
+        return 0
+    if tokens and tokens[0] == "serve":
+        if (len(tokens) != 3 or tokens[1] != "config"
+                or any(token.startswith("--") for token in tokens)):
+            print_error("Invalid node serve syntax. Run: audiagentic gateway node serve help")
+            return 2
+        return _serve_node(Path(tokens[2]))
     if tokens in ([], ["help"], ["revoke", "help"], ["revoke", "status", "help"]):
         print(_KEYWORD_HELP["node"])
         return 0
@@ -338,3 +374,46 @@ def _dispatch_node_keyword(tokens: list[str]) -> int:
         raise AudiaGenticError("VAL-AGM-004", "agents", "operation is not a node-revoke operation", {})
     _json_out(result)
     return 0
+
+
+def _serve_node(config_path: Path) -> int:
+    """Explicit process composition root, reached only after closed parsing."""
+    import asyncio
+
+    from audiagentic.components.agents.gateway.node.contracts import invalid
+    from audiagentic.components.agents.gateway.service.shared_config import load_shared_node_config
+    from audiagentic.foundation.cli_io import print_error
+
+    try:
+        import websockets
+        if websockets.__version__.partition(".")[0] != "15":
+            raise ImportError
+        from audiagentic.components.agents.gateway.node.host import NodeRecipientHost
+    except ImportError:
+        raise invalid(1, "Node serve requires websockets>=15,<16; install with pip install 'audiagentic[node]'") from None
+
+    from audiagentic.runtime.component_context import collect_component_context
+
+    config = load_shared_node_config(config_path.resolve())
+    host = NodeRecipientHost.create(config, component_context_reader=collect_component_context)
+    previous = {}
+
+    def stop_only(_signum, _frame):
+        host.request_stop()
+
+    try:
+        for sig in _shutdown_signals():
+            with contextlib.suppress(OSError, ValueError):
+                old = signal.getsignal(sig)
+                signal.signal(sig, stop_only)
+                previous[sig] = old
+        outcome = asyncio.run(host.run())
+    finally:
+        for sig, handler in previous.items():
+            with contextlib.suppress(OSError, ValueError):
+                signal.signal(sig, handler)
+    if outcome.disposition == "stopped":
+        return 0
+    cause = outcome.terminal_cause
+    print_error(f"Node recipient {outcome.disposition}: {cause.code} ({cause.stage}/{cause.reason})")
+    return 1

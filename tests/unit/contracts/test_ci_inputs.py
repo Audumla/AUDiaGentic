@@ -1,9 +1,9 @@
 """CI images must not depend on ignored developer-local generated surfaces."""
 
 import shlex
-from fnmatch import fnmatchcase
 import subprocess
 import sys
+from fnmatch import fnmatchcase
 from pathlib import Path
 
 import pytest

@@ -4,6 +4,7 @@ import pytest
 from audiagentic.components.agents.agents_paths import gateway_request_path
 from audiagentic.components.agents.gateway import store
 from audiagentic.components.agents.gateway.node.occupancy import NodeOccupancy, record_holds_node
+
 from .test_gateway_node_dispatch_store import apply, authorize, bind, identity, placement, receipt
 
 

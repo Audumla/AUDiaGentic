@@ -629,3 +629,57 @@ async def test_retry_requires_explicit_typed_con_timeout(tmp_path, monkeypatch, 
     host.sender.run = sender
     await asyncio.wait_for(host.run(), 2)
     assert host.client.calls == 1 and len(retired) == 1
+
+
+@pytest.mark.asyncio
+async def test_outcome_clean_stop_ignores_historic_transient(tmp_path, monkeypatch):
+    from dataclasses import FrozenInstanceError
+    connection = _HostConnection()
+    host, _, _ = _recipient_scaffold(tmp_path, monkeypatch, [ConnectionRefusedError("old"), connection])
+    run = asyncio.create_task(host.run())
+    await asyncio.wait_for(host.sender.started.get(), 2)
+    host.request_stop()
+    result = await asyncio.wait_for(run, 2)
+    assert result.disposition == "stopped" and result.terminal_cause is None
+    assert host.failure["code"] == "IO-AGND-001"
+    with pytest.raises(FrozenInstanceError):
+        result.disposition = "deferred"
+
+
+@pytest.mark.asyncio
+async def test_outcome_exhaustion_uses_current_cause_not_historic_first(tmp_path, monkeypatch):
+    from audiagentic.components.agents.gateway.node.contracts import conflict
+    host, _, _ = _recipient_scaffold(tmp_path, monkeypatch, [ConnectionRefusedError("old"), _HostConnection()],
+        policy=recipient_host.NodeReconnectPolicy(2, .001, 60))
+    async def sender(connection):
+        raise conflict(1, "private", reason_code="receipt-resume-timeout")
+    host.sender.run = sender
+    result = await asyncio.wait_for(host.run(), 2)
+    assert result.disposition == "retry-exhausted"
+    assert result.terminal_cause.code == "CON-AGND-001"
+    assert result.terminal_cause.reason == "receipt-resume-timeout"
+    assert host.failure["code"] == "IO-AGND-001"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("cleanup_failure", [False, True])
+async def test_outcome_deferred_current_boundary_and_cleanup_veto(tmp_path, monkeypatch, cleanup_failure):
+    from dataclasses import FrozenInstanceError
+
+    from audiagentic.components.agents.gateway.node.contracts import conflict
+    connection = _HostConnection()
+    host, _, _ = _recipient_scaffold(tmp_path, monkeypatch, [connection])
+    async def sender(channel):
+        raise conflict(1, "private", reason_code="receipt-ack-timeout" if cleanup_failure else "receipt-cursor-contradiction")
+    host.sender.run = sender
+    if cleanup_failure:
+        async def close_failure():
+            raise OSError("/private/token=secret")
+        connection.close = close_failure
+    result = await asyncio.wait_for(host.run(), 2)
+    assert result.disposition == "deferred"
+    assert result.terminal_cause.code == ("IO-AGND-001" if cleanup_failure else "CON-AGND-001")
+    assert host.failure["code"] == "CON-AGND-001"
+    assert "secret" not in repr(result)
+    with pytest.raises(FrozenInstanceError):
+        result.terminal_cause.reason = "private"
