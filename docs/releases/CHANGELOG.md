@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.1](https://github.com/Audumla/AUDiaGentic/compare/v0.7.0...v0.7.1) (2026-10-28)
+
+
+### Bug Fixes
+
+* **providers:** keep configured enablement for providers without a CLI probe ([#84](https://github.com/Audumla/AUDiaGentic/issues/84)) ([f5311e7](https://github.com/Audumla/AUDiaGentic/commit/f5311e723a7f5ab176e6f484aeee0e8b6fd9d11a))
+
 ## [0.7.0](https://github.com/Audumla/AUDiaGentic/compare/v0.6.6...v0.7.0) (2026-10-28)
 
 
