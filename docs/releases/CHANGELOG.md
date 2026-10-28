@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.5](https://github.com/Audumla/AUDiaGentic/compare/v0.6.4...v0.6.5) (2026-10-28)
+
+
+### Bug Fixes
+
+* **packaging:** ship runtime data files missing from the wheel ([#80](https://github.com/Audumla/AUDiaGentic/issues/80)) ([17137cb](https://github.com/Audumla/AUDiaGentic/commit/17137cb5d05576c65da68a7554fb13c94e996304))
+
 ## [0.6.4](https://github.com/Audumla/AUDiaGentic/compare/v0.6.3...v0.6.4) (2026-10-28)
 
 
