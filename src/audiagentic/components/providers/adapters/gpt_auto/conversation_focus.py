@@ -167,6 +167,20 @@ def _capture_checkpoint_matches(
     )
 
 
+def _provider_settings(project_root: Path, provider_id: str) -> dict:
+    """Project overlay for this provider, like session dispatch resolves it.
+
+    A project without its own gpt-auto entry runs on the packaged defaults
+    (GptAutoConfig.from_project_dict layers defaults, machine override and
+    this overlay), so a missing entry is an empty overlay, not an error.
+    """
+    providers = load_provider_config(project_root).get("providers") or {}
+    provider_cfg = providers.get(provider_id)
+    if not isinstance(provider_cfg, dict) and provider_id.startswith("gpt-auto-"):
+        provider_cfg = providers.get("gpt-auto")
+    return provider_cfg if isinstance(provider_cfg, dict) else {}
+
+
 async def focus_existing_conversation(
     project_root: Path,
     *,
@@ -174,13 +188,7 @@ async def focus_existing_conversation(
     locator: ConversationFocusLocator,
 ) -> ConversationFocusResult:
     """Focus a retained GPT tab, opening its durable URL when absent."""
-    document = load_provider_config(project_root)
-    provider_cfg = (document.get("providers") or {}).get(provider_id)
-    if not isinstance(provider_cfg, dict) and provider_id.startswith("gpt-auto-"):
-        provider_cfg = (document.get("providers") or {}).get("gpt-auto")
-    if not isinstance(provider_cfg, dict):
-        return ConversationFocusResult(ConversationFocusOutcome.UNAVAILABLE, "provider-config-unavailable")
-    runtime = get_runtime(project_root, GptAutoConfig.from_project_dict(provider_cfg))
+    runtime = get_runtime(project_root, GptAutoConfig.from_project_dict(_provider_settings(project_root, provider_id)))
     if not await runtime.connect_existing():
         return ConversationFocusResult(ConversationFocusOutcome.UNAVAILABLE, "cdp-unavailable")
     if locator.gateway_session_id:
@@ -261,13 +269,7 @@ async def capture_latest_response(
     strictly existing-target-only: it never creates, navigates, activates,
     refreshes, or materializes a page.
     """
-    document = load_provider_config(project_root)
-    provider_cfg = (document.get("providers") or {}).get(provider_id)
-    if not isinstance(provider_cfg, dict) and provider_id.startswith("gpt-auto-"):
-        provider_cfg = (document.get("providers") or {}).get("gpt-auto")
-    if not isinstance(provider_cfg, dict):
-        return {"outcome": "unavailable", "reason": "provider-config-unavailable"}
-    runtime = get_runtime(project_root, GptAutoConfig.from_project_dict(provider_cfg))
+    runtime = get_runtime(project_root, GptAutoConfig.from_project_dict(_provider_settings(project_root, provider_id)))
     if not await runtime.connect_existing():
         return {"outcome": "unavailable", "reason": "cdp-unavailable"}
     pages = await runtime.bridge.call("list_pages")
