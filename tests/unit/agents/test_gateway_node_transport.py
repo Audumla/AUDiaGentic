@@ -1163,3 +1163,33 @@ async def test_owner_close_makes_readiness_unavailable_before_slot_cleanup(chann
         await asyncio.wait_for(connection.wait_closed(), 2)
     finally:
         await node.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(sys.version_info < (3, 12), reason="per-address connect errors need Python 3.12+")
+async def test_refused_multi_address_connect_stays_retryable(tmp_path, tls):
+    import socket
+
+    with socket.socket() as probe:  # A port nothing listens on, on any localhost address.
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    token = tmp_path / "node"
+    token.write_text("token-node")
+    token.chmod(0o600)
+    client = SharedGatewayNodeConfig(
+        "node", "server", f"wss://localhost:{port}{NODE_PATH}", token, tmp_path, {}, tls.ca,
+    )
+    with pytest.raises(ConnectionRefusedError):
+        await NodeTransportClient(client, node_epoch="boot-1").connect()
+
+
+@pytest.mark.skipif(sys.version_info < (3, 11), reason="exception groups need Python 3.11+")
+def test_representative_connect_error_prefers_non_refusal():
+    from audiagentic.components.agents.gateway.node.transport import (
+        _EXCEPTION_GROUP,
+        _representative_connect_error,
+    )
+
+    refused, unreachable = ConnectionRefusedError(111, "refused"), OSError(113, "unreachable")
+    assert _representative_connect_error(_EXCEPTION_GROUP("x", [refused, unreachable])) is unreachable
+    assert _representative_connect_error(_EXCEPTION_GROUP("x", [refused, ConnectionRefusedError()])) is refused

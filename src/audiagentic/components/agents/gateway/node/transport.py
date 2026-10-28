@@ -11,9 +11,11 @@ TLS may terminate at the configured front door; this listener binds loopback onl
 from __future__ import annotations
 
 import asyncio
+import builtins
 import hashlib
 import hmac
 import ssl
+import sys
 import uuid
 from dataclasses import dataclass, field
 from http import HTTPStatus
@@ -508,6 +510,32 @@ def _validate_endpoint(endpoint: str):
         raise invalid(1, "Node endpoint must be WSS with the exact configured node path") from None
 
 
+# Multi-address hosts (localhost -> ::1, 127.0.0.1) otherwise collapse every
+# per-address refusal into one errno-less OSError, which the host must treat
+# as a configuration boundary instead of a retryable disconnect. Python 3.12+
+# can report each address failure; older runtimes keep the collapsed error.
+_CONNECT_ERRORS = {"all_errors": True} if sys.version_info >= (3, 12) else {}
+_EXCEPTION_GROUP = getattr(builtins, "ExceptionGroup", None)
+
+
+def _representative_connect_error(group) -> Exception:
+    """One per-address failure for the host's errno-based retry decision.
+
+    Anything that is not a plain connection error wins, so an unusual
+    address failure still fails closed instead of being masked by a refusal.
+    """
+    errors = list(_leaf_errors(group))
+    return next((error for error in errors if not isinstance(error, ConnectionError)), errors[0])
+
+
+def _leaf_errors(group):
+    for error in group.exceptions:
+        if _EXCEPTION_GROUP is not None and isinstance(error, _EXCEPTION_GROUP):
+            yield from _leaf_errors(error)
+        else:
+            yield error
+
+
 class NodeTransportClient:
     def __init__(self, config: SharedGatewayNodeConfig, *, node_epoch: str, configure_work=None):
         _validate_endpoint(config.endpoint)
@@ -524,16 +552,22 @@ class NodeTransportClient:
         context = ssl.create_default_context(
             cafile=str(self.config.ca_file) if self.config.ca_file else None
         )
-        websocket = await DirectNodeConnect(
-            self.config.endpoint,
-            ssl=context,
-            proxy=None,
-            additional_headers={
-                "Authorization": f"Bearer {load_auth_token(self.config.token_file)}"
-            },
-            subprotocols=[SUBPROTOCOL],
-            **_LIMITS,
-        )
+        try:
+            websocket = await DirectNodeConnect(
+                self.config.endpoint,
+                ssl=context,
+                proxy=None,
+                additional_headers={
+                    "Authorization": f"Bearer {load_auth_token(self.config.token_file)}"
+                },
+                subprotocols=[SUBPROTOCOL],
+                **_CONNECT_ERRORS,
+                **_LIMITS,
+            )
+        except Exception as error:
+            if _EXCEPTION_GROUP is not None and isinstance(error, _EXCEPTION_GROUP):
+                raise _representative_connect_error(error) from None
+            raise
         connection = None
         try:
             if websocket.subprotocol != SUBPROTOCOL:
