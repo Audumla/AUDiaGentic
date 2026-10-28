@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.7.0](https://github.com/Audumla/AUDiaGentic/compare/v0.6.6...v0.7.0) (2026-10-28)
+
+
+### Features
+
+* **gpt-auto:** validate the CDP session surface on linux-amd64 ([#82](https://github.com/Audumla/AUDiaGentic/issues/82)) ([84e74b4](https://github.com/Audumla/AUDiaGentic/commit/84e74b4f2367b2421d2f95f9c7595a3e9cdc82a0))
+
+## [0.6.6](https://github.com/Audumla/AUDiaGentic/compare/v0.6.5...v0.6.6) (2026-10-28)
+
+
+### Bug Fixes
+
+* **project:** name projects by git repository so worktrees agree ([#81](https://github.com/Audumla/AUDiaGentic/issues/81)) ([f9319cc](https://github.com/Audumla/AUDiaGentic/commit/f9319ccf8a980b7e221c259c79fb6c7ccabfa1a8))
+
+## [0.6.5](https://github.com/Audumla/AUDiaGentic/compare/v0.6.4...v0.6.5) (2026-10-28)
+
+
+### Bug Fixes
+
+* **packaging:** ship runtime data files missing from the wheel ([#80](https://github.com/Audumla/AUDiaGentic/issues/80)) ([17137cb](https://github.com/Audumla/AUDiaGentic/commit/17137cb5d05576c65da68a7554fb13c94e996304))
+
+## [0.6.4](https://github.com/Audumla/AUDiaGentic/compare/v0.6.3...v0.6.4) (2026-10-28)
+
+
+### Bug Fixes
+
+* **cli:** bare audiagentic prints management help instead of launching an agent ([#78](https://github.com/Audumla/AUDiaGentic/issues/78)) ([c758c26](https://github.com/Audumla/AUDiaGentic/commit/c758c269e2e21079ebf5725ab2e0457e31208c49))
+
 ## [0.6.3](https://github.com/Audumla/AUDiaGentic/compare/v0.6.2...v0.6.3) (2026-10-28)
 
 

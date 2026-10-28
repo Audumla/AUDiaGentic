@@ -89,7 +89,51 @@ def resolve_project_name(
         return configured_name.strip()
     if isinstance(workspace_name, str) and workspace_name.strip():
         return workspace_name.strip()
-    return project_root.resolve().name
+    # Worktree and clone directories are arbitrary local names; the repository
+    # name is the same in every worktree of it.
+    return _git_repository_name(project_root) or project_root.resolve().name
+
+
+def _git_repository_name(project_root: Path) -> str | None:
+    """Name the git repository at project_root: origin's repo, else main checkout.
+
+    Reads git's own files rather than running git, so it is cheap and has no
+    process or PATH dependency. Any unreadable layout yields None.
+    """
+    try:
+        dot_git = project_root.resolve() / ".git"
+        if dot_git.is_dir():
+            git_dir = dot_git
+        elif dot_git.is_file():
+            pointer = dot_git.read_text(encoding="utf-8").strip()
+            if not pointer.startswith("gitdir:"):
+                return None
+            git_dir = (project_root.resolve() / pointer[len("gitdir:"):].strip()).resolve()
+        else:
+            return None
+        commondir = git_dir / "commondir"
+        common = (git_dir / commondir.read_text(encoding="utf-8").strip()).resolve() if commondir.is_file() else git_dir
+        origin = _origin_url(common / "config")
+        name = origin.rstrip("/").rsplit("/", 1)[-1].rsplit(":", 1)[-1] if origin else ""
+        if not name:
+            name = common.parent.name if common.name == ".git" else common.name
+        name = name[: -len(".git")] if name.endswith(".git") else name
+        return name.strip() or None
+    except OSError:
+        return None
+
+
+def _origin_url(config_path: Path) -> str | None:
+    if not config_path.is_file():
+        return None
+    section = None
+    for raw in config_path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if line.startswith("["):
+            section = line.strip("[]").replace(" ", "")
+        elif section == 'remote"origin"' and line.split("=", 1)[0].strip() == "url" and "=" in line:
+            return line.split("=", 1)[1].strip() or None
+    return None
 
 
 def context(

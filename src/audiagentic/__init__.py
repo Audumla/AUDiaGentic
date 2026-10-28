@@ -8,4 +8,4 @@ Top-level package for the AUDiaGentic system. Domain layout:
   config/       — component descriptors and provisioning configuration
 """
 
-__version__ = "0.6.3"
+__version__ = "0.7.0"
