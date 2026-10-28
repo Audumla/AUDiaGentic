@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.6](https://github.com/Audumla/AUDiaGentic/compare/v0.6.5...v0.6.6) (2026-10-28)
+
+
+### Bug Fixes
+
+* **project:** name projects by git repository so worktrees agree ([#81](https://github.com/Audumla/AUDiaGentic/issues/81)) ([f9319cc](https://github.com/Audumla/AUDiaGentic/commit/f9319ccf8a980b7e221c259c79fb6c7ccabfa1a8))
+
 ## [0.6.5](https://github.com/Audumla/AUDiaGentic/compare/v0.6.4...v0.6.5) (2026-10-28)
 
 
