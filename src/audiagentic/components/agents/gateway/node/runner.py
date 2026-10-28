@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import logging
 import math
 import time
 import uuid
@@ -33,6 +34,8 @@ from .preparation import (
 )
 from .prepared_evidence import persist_prepared_once, read_prepared_evidence
 from .work_protocol import EffectAuthorize, PreparationRejected, PreparedReply, parse_work_frame
+
+logger = logging.getLogger(__name__)
 
 
 class NodeRunner:
@@ -92,9 +95,14 @@ class NodeRunner:
         """Prove, under the owning connection authority, that a never-sent
         authorization opportunity is retired; never infer this from absence.
 
-        Narrow and best-effort: any failure (including no live owner proof
-        yet) leaves the original binding exactly as it was, still eligible for
-        the default may-have-started observation-only recovery.
+        Narrow and best-effort: no live owner proof yet, or any unexpected
+        failure, leaves the original binding exactly as it was, still
+        eligible for the default may-have-started observation-only recovery.
+        An expected CAS race (record changed concurrently) is silent, since
+        the caller re-reads the record fresh regardless; a genuinely
+        unexpected failure is still surfaced as a bounded diagnostic so an
+        ownership-loss or canonical I/O defect does not look identical to
+        ordinary absence of proof.
         """
         dispatch = record.get("node-dispatch")
         if (
@@ -103,12 +111,21 @@ class NodeRunner:
         ):
             return record
         bound = dispatch["identity"]
+        if bound["gateway-owner-epoch"] != self.owner_epoch:
+            # The generation counter is scoped to this live owner epoch's
+            # connection authority; it proves nothing about a binding made
+            # under a retired epoch's own (reset) counter.
+            return record
         try:
             latest = self.authority.serialize(
                 lambda: self.connections.last_generation(bound["node-id"])
             )
-            if latest <= bound["connection-generation"]:
-                return record
+        except Exception as error:
+            self._fence_failure(error)
+            return record
+        if latest <= bound["connection-generation"]:
+            return record
+        try:
             with self.service.owner_guard(self.owner_epoch):
                 return store.fence_node_dispatch_no_effect(
                     root, record["request-id"], identity=CommandIdentity.from_mapping(bound),
@@ -116,8 +133,22 @@ class NodeRunner:
                     attempt_epoch=record["attempt-epoch"], expected_revision=record["revision"],
                     retired_connection_generation=latest,
                 )
-        except Exception:
+        except AudiaGenticError:
+            return record  # Expected CAS race: owner/revision/attempt/bind already changed.
+        except Exception as error:
+            self._fence_failure(error)
             return record
+
+    @staticmethod
+    def _fence_failure(error):
+        try:
+            safe = sanitize_node_error(error, stage="observe")
+            logger.warning(
+                "Node no-effect fence attempt failed; retaining may-have-started",
+                extra={"code": safe.code, "reason-code": safe.details["reason-code"]},
+            )
+        except Exception:
+            pass
 
     def _observe(self, root, record, *, started_ns=None):
         started_ns = time.monotonic_ns() if started_ns is None else started_ns

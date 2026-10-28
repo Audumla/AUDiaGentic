@@ -38,7 +38,10 @@ _STAGES = frozenset({
     "artifact-verified", "terminal-published",
 })
 _RECEIPTS = frozenset({"prepared", "effect-intent", "native-accepted", "terminal"})
-_AUTHORIZATION = frozenset({"not-authorized", "authorized", "uncertain", "effect-observed", "terminal"})
+_AUTHORIZATION = frozenset(
+    {"not-authorized", "authorized", "uncertain", "effect-observed", "terminal", "no-effect"}
+)
+_UNAUTHORIZED_STATES = frozenset({"not-authorized", "no-effect"})
 
 
 def node_observation_failure_count() -> int:
@@ -135,7 +138,7 @@ def _facts(root, record, milestone, started_ns, connection, error):
         auth_id = dispatch["authorization-id"]
         if auth_id is not None:
             _identifier(auth_id)
-        if (authorization == "not-authorized") != (auth_id is None):
+        if (authorization in _UNAUTHORIZED_STATES) != (auth_id is None):
             raise ValueError("authorization evidence mismatch")
         if dispatch.get("attestation-sha256") is not None:
             _sha(dispatch["attestation-sha256"])
@@ -154,13 +157,16 @@ def _facts(root, record, milestone, started_ns, connection, error):
                 raise ValueError("nonterminal output digest")
             if Receipt(command, receipt_stage, sequence, output_hash).digest != receipt_hash:
                 raise ValueError("receipt digest differs from canonical identity")
-            if authorization == "not-authorized" and receipt_stage != "prepared":
+            if authorization in _UNAUTHORIZED_STATES and receipt_stage != "prepared":
                 raise ValueError("receipt has no effect authorization")
             if (receipt_stage == "terminal") != (authorization == "terminal"):
                 raise ValueError("terminal receipt/authorization mismatch")
             facts.update({"receipt-stage": receipt_stage, "receipt-sequence": sequence})
-        side_effect = (SideEffectState.TERMINAL_EVIDENCE_SEEN if receipt_stage == "terminal"
-                       else SideEffectState.MAY_HAVE_STARTED)
+        side_effect = (
+            SideEffectState.TERMINAL_EVIDENCE_SEEN if receipt_stage == "terminal"
+            else SideEffectState.NOT_STARTED if authorization == "no-effect"
+            else SideEffectState.MAY_HAVE_STARTED
+        )
         # The generic journal's existing hash-safe key preserves exact command
         # payload SHA256 without bypassing redaction or adding another schema.
         facts["command"] = {"id": command.command_id, "artifact-sha256": command.payload_sha256}

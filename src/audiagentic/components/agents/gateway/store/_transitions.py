@@ -2539,6 +2539,16 @@ def fence_node_dispatch_no_effect(
     This never resends, rebinds or clears the original identity, attestation,
     worker or attempt; it only fences this exact binding against any later
     authorization and marks it as positively having no effect.
+
+    The generation counter is scoped to one connection-owner-authority
+    instance (one per live gateway owner epoch) and resets across a
+    restart. A caller's generation proof is therefore only meaningful
+    against a binding made under that SAME owner epoch; comparing it
+    against a binding from a prior, retired owner epoch would compare two
+    unrelated counters and can produce a false positive. owner_epoch here
+    is the live caller fence (checked by _node_owned_record below); this
+    additionally requires the historical binding's own recorded epoch to
+    equal it, never extending proof across an owner takeover.
     """
     command = _node_identity(identity)
     if (
@@ -2551,6 +2561,11 @@ def fence_node_dispatch_no_effect(
             project_root, request_id, owner_epoch=owner_epoch, worker_id=worker_id,
             attempt_epoch=attempt_epoch, expected_revision=expected_revision,
         )
+        # owner_epoch is now confirmed to be the current live record owner.
+        # The generation proof is only meaningful against a binding made
+        # under that SAME epoch's connection-owner-authority instance.
+        if command["gateway-owner-epoch"] != owner_epoch:
+            raise _node_conflict("No-effect fence requires a proven strictly newer connection generation")
         _node_matches_record(record, command)
         prior = record.get("node-dispatch")
         if (

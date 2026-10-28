@@ -783,6 +783,22 @@ def test_fence_no_effect_requires_strictly_newer_generation(running):
     assert store.read_record(root, record["request-id"]) == record
 
 
+def test_fence_no_effect_rejects_generation_proof_from_a_different_owner_epoch(running):
+    # A retired owner's connection-generation counter is a distinct
+    # namespace from a later owner's. A generation proof from "other-owner"
+    # must never fence a binding made under the original "owner" epoch, even
+    # if the new counter's value happens to exceed the old one numerically.
+    root, record = running
+    record = bind(root, record)
+    assert record["node-dispatch"]["identity"]["gateway-owner-epoch"] == "owner"
+    record["dispatch-owner-epoch"] = "other-owner"
+    record["revision"] += 1
+    store.write_record(root, record)
+    with pytest.raises(AudiaGenticError, match="CON-AGND-001"):
+        fence(root, record, 2, owner_epoch="other-owner")
+    assert store.read_record(root, record["request-id"]) == record
+
+
 def test_fence_no_effect_marks_binding_and_blocks_future_authorization(running):
     root, record = running
     record = bind(root, record)

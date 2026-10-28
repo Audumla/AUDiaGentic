@@ -300,6 +300,18 @@ async def test_unauthorized_dispatch_with_retired_connection_fences_to_not_start
             expected_revision=current["revision"],
         )
     assert "evidence reconciliation" in error.value.message
+    # The diagnostic journal's own authorization-state validator must accept
+    # the new fenced value too, not just the CAS; a reconcile-only pass after
+    # fencing exercises reconciliation-completed/deferred emission over it.
+    from audiagentic.components.agents.gateway.observability import read_observation_page
+
+    await invoke(case, reconcile_only=True)
+    page = await asyncio.to_thread(
+        read_observation_page, case.admission.root, record["request-id"], limit=100
+    )
+    rows = [e for e in page["items"] if e["event"] == "node-stage-observed"]
+    facts = [e["facts"]["diagnostic-facts"] for e in rows]
+    assert any(f["side-effect-state"] == "not-started" for f in facts)
 
 
 @pytest.mark.asyncio
