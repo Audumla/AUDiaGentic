@@ -98,6 +98,12 @@ Open gap found while applying it: the registered servers inherit the session env
 
 Remaining before CFG08 can complete: (1) the end-to-end criterion has not been repeated with the user-scope MCP tools and a `home` setting in place (setup harness, then agent_task_submit from a session started outside a project); (2) installed-wheel qualification; (3) the fixed gateway port 8765 still collides if two homes ever run services (CON-MSVC-037 now reports it instead of timing out), which the single home removes in practice but does not enforce. Related finding from the shared-service restart: a handoff replacement started while the retiring process still held 8765 died with 'Address already in use' (a race, belongs to SH63).
 
+2026-10-29 (20:45) end-to-end criterion repeated through the user-scope registration. Setup: `audiagentic setup harness` registered the worktree-scoped MCP servers (#174) and the shared user settings (/agents/home/.config/audiagentic/settings.yaml, HOME=/agents/home) now has `home: /work/development/AUDiaGentic/home` (#208). Check: the registered gateway command (the audiagentic console script, `mcp audiagentic.components.agents.mcp.gateway_mcp`, no environment) was started fresh from /work, outside any project, with no AUDIAGENTIC_* variable. It listed the agents of the shared home (reviewer-gpt-agent, gpt-auto-reviewer-agent), and one agent_task_submit of a one-line prompt to reviewer-gpt-agent completed with the exact reply, attaching to the single running shared service (no second service). Not done by hand: no stub, no env, no hand-edited catalog; the only manual steps were `setup harness` and the `home` line in user settings.
+
+A caveat found on the way: an MCP server process that was already running when the runtime moved forward (here, started 19:27, before #203 at 20:41) fails lazily with an ImportError from a mixed old/new module set (gateway_session_generation_lock_path); a freshly started server is fine. A harness session must restart its MCP servers after the shared runtime changes.
+
+Still open before CFG08 can complete: installed-wheel qualification (the criterion above ran from the editable shared runtime, not an installed wheel), and the fixed gateway port 8765 is not enforced against two homes (CON-MSVC-037 reports it; one shared home avoids it in practice).
+
 ## Change Log
 
 - 2026-10-28T21:05:53.564412+00:00 (created-by): Created by claude
@@ -113,3 +119,4 @@ Remaining before CFG08 can complete: (1) the end-to-end criterion has not been r
 - 2026-10-29T07:40:55.635463+00:00 (updated-by): Updated: section:notes
 - 2026-10-29T14:28:12.548201+00:00 (updated-by): Updated: section:notes
 - 2026-10-29T20:28:37.050401+00:00 (updated-by): Updated: section:notes
+- 2026-10-29T20:46:36.103718+00:00 (updated-by): Updated: section:notes
