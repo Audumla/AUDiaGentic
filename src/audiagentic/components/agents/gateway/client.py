@@ -30,19 +30,13 @@ def _uses_shared_connector(root: Path) -> bool:
         and os.environ.get("AUDIAGENTIC_GATEWAY_TOKEN_FILE")
     ):
         return False
-    from audiagentic.foundation.features.registry import resolve_active_implementation
     from audiagentic.foundation.features.state import get_component_state
 
-    override = os.environ.get("AUDIAGENTIC_GATEWAY_MODE")
-    if override and override.strip().lower() != "standalone":
+    # The one implementation resolver (settings, then the project's selection);
+    # selection logic is not duplicated here.
+    if _resolve_implementation_id(root)[0] != "standalone":
         return False
     component = get_component_state(root, _COMPONENT_ID, persist_migration=False)
-    mode = "standalone" if override else resolve_active_implementation(
-        root, _COMPONENT_ID, component_state=component,
-        implementation_descriptors={}, fallback="embedded",
-    )
-    if mode != "standalone":
-        return False
     standalone = (component.get("implementations") or {}).get("standalone") or {}
     return bool((standalone.get("options") or {}).get("connector-config"))
 

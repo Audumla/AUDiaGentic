@@ -333,15 +333,18 @@ def test_cli_root_escape_and_literal_module_use_same_parser(root, monkeypatch):
     )
     monkeypatch.setattr(bootstrap, "build_application_graph", lambda **_kw: graph)
     launched = []
+    # The launcher imports its command handlers lazily, so patch them at their source modules.
+    from audiagentic.commands import internal, launch
+
     monkeypatch.setattr(
-        launcher, "_cmd_launch", lambda root, tokens, params: launched.append(tokens) or 0
+        launch, "_cmd_launch", lambda root, tokens, params: launched.append(tokens) or 0
     )
     assert launcher._main(["--project", str(root), "--", "mcp", "--opaque"]) == 0
     assert launched == [["mcp", "--opaque"]]
     modules = []
-    monkeypatch.setitem(
-        launcher._COMMAND_HANDLERS,
-        "mcp",
+    monkeypatch.setattr(
+        internal,
+        "cmd_mcp",
         lambda args, root: modules.append((args.module, args.module_args)) or 0,
     )
     assert launcher._main(["mcp", "--", "install", "help", "--opaque"]) == 0

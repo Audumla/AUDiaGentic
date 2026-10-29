@@ -162,7 +162,9 @@ def test_nonshared_root_resolvers_keep_local_routing(tmp_path, connector, monkey
     from audiagentic.components.agents.gateway.session import sessions_store
 
     management_api.gateway_connect_config(tmp_path, connector)
-    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_MODE", mode)
+    settings_file = connector.parent / "settings.yaml"  # machine-scope gateway section, outside the project
+    settings_file.write_text(f"schema_version: 1\ngateway:\n  implementation: {mode}\n", encoding="utf-8")
+    monkeypatch.setenv("AUDIAGENTIC_CONFIG", str(settings_file))
     if local_override:
         monkeypatch.setenv("AUDIAGENTIC_GATEWAY_ENDPOINT", "http://127.0.0.1:9000")
         monkeypatch.setenv("AUDIAGENTIC_GATEWAY_TOKEN_FILE", str(connector.parent / "token"))
