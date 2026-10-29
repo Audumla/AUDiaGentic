@@ -982,6 +982,43 @@ def get_provider_status(project_root: Path, provider_id: str) -> dict[str, Any]:
     return {"provider_id": provider_id, "ok": False, "error": "provider status unavailable"}
 
 
+def check_provider_availability(project_root: Path | None, provider_id: str) -> tuple[bool | None, str]:
+    """Read-only availability observation for one provider (never writes config).
+
+    ``True``/``False`` with a reason, or ``None`` when the provider declares
+    nothing that can be checked here. CLI providers use their declared probe;
+    providers on the gpt-auto CDP surface probe the configured browser.
+    """
+    from audiagentic.components.providers.descriptors import all_descriptors
+    from audiagentic.components.providers.services.lifecycle.lifecycle import probe_provider_cli
+
+    descriptor = all_descriptors().get(provider_id)
+    if descriptor is None:
+        return False, f"unknown provider {provider_id!r}"
+    if "gpt-auto-cdp" in list_session_surface_ids(provider_id):
+        from audiagentic.components.providers.adapters.gpt_auto.availability import cdp_availability
+
+        return cdp_availability(project_root, provider_id)
+    probe = probe_provider_cli(descriptor)
+    if probe is None:
+        return None, "no availability check declared"
+    if probe.get("available"):
+        return True, f"CLI found: {probe.get('executable') or 'on PATH'}"
+    return False, "CLI not found on PATH"
+
+
+def list_session_surface_ids(provider_id: str) -> tuple[str, ...]:
+    """Session surface ids a provider declares, in declaration order.
+
+    Lets callers default a surface only when exactly one exists; an unknown
+    provider yields an empty tuple.
+    """
+    from audiagentic.components.providers.descriptors import all_descriptors
+
+    descriptor = all_descriptors().get(provider_id)
+    return tuple(surface.surface_id for surface in descriptor.session_surfaces) if descriptor else ()
+
+
 def list_provider_descriptors() -> list[dict[str, Any]]:
     from audiagentic.components.providers.descriptors import all_descriptors
 
@@ -1915,6 +1952,76 @@ def resolve_session_surface(
     return _resolve(project_root, provider_id, surface_hint)
 
 
+def resolve_join_readiness(provider_id: str, surface_id: str, *, state_root: Path | None = None):
+    """Static readiness of a surface to join an existing human session (SH46).
+
+    Read-only: the execution-side inventory, the surface declaration, the join
+    adapter's declared identity and exact qualification evidence. Returns a
+    frozen ``JoinReadiness``; anything unknown is a refusal, never support.
+    """
+    from audiagentic.components.providers.services.session.join_readiness import (
+        resolve_join_readiness as _resolve_join,
+    )
+
+    return _resolve_join(provider_id, surface_id, state_root=state_root)
+
+
+def inspect_join_instance(
+    provider_id: str,
+    surface_id: str,
+    *,
+    endpoint: str,
+    session_ref: str,
+    expected_generation: str | None = None,
+    state_root: Path | None = None,
+):
+    """Passively prove the exact live instance behind a joinable surface (SH47).
+
+    Requires static join readiness (SH46), then has the join adapter observe
+    the instance and compares it with the qualified evidence. Sends no prompt
+    and starts no process; any gap is a refusal. Returns a frozen
+    ``JoinInstanceProof`` carrying the evidence id and observed generation.
+    """
+    from audiagentic.components.providers.services.session.join_proof import (
+        inspect_join_instance as _inspect,
+    )
+
+    return _inspect(provider_id, surface_id, endpoint=endpoint, session_ref=session_ref,
+                    expected_generation=expected_generation, state_root=state_root)
+
+
+def join_matrix(*, state_root: Path | None = None):
+    """Join readiness of every provider surface, from the one Provider authority (SH48)."""
+    from audiagentic.components.providers.services.session.join_authority import join_matrix as _matrix
+
+    return _matrix(state_root=state_root)
+
+
+def register_join(provider_id: str, surface_id: str, *, endpoint: str, session_ref: str,
+                  state_root: Path | None = None):
+    """Prove the requested live instance and return a ``JoinDecision`` with its registration (SH48).
+
+    No registration exists unless the surface is join-ready and the instance is
+    proven. The caller stores the frozen registration; nothing is kept here.
+    """
+    from audiagentic.components.providers.services.session.join_authority import register_join as _register
+
+    return _register(provider_id, surface_id, endpoint=endpoint, session_ref=session_ref, state_root=state_root)
+
+
+def revalidate_join(registration, *, state_root: Path | None = None):
+    """Re-prove a registration immediately before an effect or on reconnect (SH48).
+
+    Refuses when the evidence, executable or instance generation changed or any
+    gate no longer passes; a refused registration must not be routed.
+    """
+    from audiagentic.components.providers.services.session.join_authority import (
+        revalidate_join as _revalidate,
+    )
+
+    return _revalidate(registration, state_root=state_root)
+
+
 def prepare_provider_session_transport(
     project_root: Path,
     *,
@@ -2186,6 +2293,11 @@ __all__ = [
     # AS29 slice 5a — session-surface resolution through public boundary
     "ResolvedSessionSurface",
     "SurfaceHint",
+    "inspect_join_instance",
+    "join_matrix",
+    "register_join",
+    "revalidate_join",
+    "resolve_join_readiness",
     "resolve_session_surface",
     # Surfaces
     "operate_provider_surface",

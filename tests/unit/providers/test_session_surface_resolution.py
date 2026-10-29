@@ -140,7 +140,7 @@ def _enabled_test_provider(tmp_path: Path) -> str:
     """Register and enable a test provider with one surface declaration."""
     descriptor = _fake_descriptor(
         "test-provider",
-        session_surfaces=(_fake_surface_decl()),
+        session_surfaces=(_fake_surface_decl(),),
     )
     register(descriptor)
     set_provider_enabled(tmp_path, "test-provider", enabled=True)
@@ -166,7 +166,7 @@ class TestExplicitProjectRootAndProviderId:
         """A provider enabled on root A is not found on root B."""
         descriptor = _fake_descriptor(
             "root-test-prov",
-            session_surfaces=(_fake_surface_decl()),
+            session_surfaces=(_fake_surface_decl(),),
         )
         register(descriptor)
         # Enable on tmp_path but NOT on another path.
@@ -665,7 +665,7 @@ class TestDisabledProvider:
     def test_disabled_provider_unsupported(self, tmp_path: Path):
         descriptor = _fake_descriptor(
             "disabled-prov",
-            session_surfaces=(_fake_surface_decl()),
+            session_surfaces=(_fake_surface_decl(),),
         )
         register(descriptor)
         set_provider_enabled(tmp_path, "disabled-prov", enabled=False)
@@ -960,3 +960,34 @@ def _inspect_source(module: Any) -> str:
     import inspect
 
     return inspect.getsource(module)
+
+
+@pytest.mark.parametrize(
+    ("output", "expected"),
+    [
+        ("1.4.0", (1, 4, 0)),
+        ("2.1.312 (Claude Code)", (2, 1, 312)),
+        ("codex-cli 0.165.0", (0, 165, 0)),  # name-prefixed CLI output
+        ("opencode v2.2.0", (2, 2, 0)),
+        ("pi 1.4.0\n", (1, 4, 0)),
+        ("1x2", (1,)),  # the dot is literal: "x2" is not a version component
+        ("no version", None),
+        ("build 20260101", None),
+    ],
+)
+def test_parse_version_accepts_name_prefixed_cli_output(output, expected) -> None:
+    from audiagentic.components.providers.services.session.session_surface_resolution import (
+        _parse_version,
+    )
+
+    assert _parse_version(output) == expected
+
+
+def test_name_prefixed_versions_now_evaluate_constraints() -> None:
+    from audiagentic.components.providers.services.session.session_surface_resolution import (
+        _version_satisfies,
+    )
+
+    assert _version_satisfies("codex-cli 0.165.0", ">=0.147") is True
+    assert _version_satisfies("codex-cli 0.140.0", ">=0.147") is False
+    assert _version_satisfies("opencode v2.2.0", ">=1.0") is True

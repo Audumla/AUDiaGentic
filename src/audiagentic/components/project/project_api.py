@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -80,16 +81,137 @@ def resolve_project_name(
     client workspace labels are not necessarily the name of the corresponding
     provider project.
     """
+    return project_identity(project_root, workspace_name=workspace_name)[0]
+
+
+def project_identity(project_root: Path, *, workspace_name: str | None = None) -> tuple[str, str]:
+    """The project name and where it came from.
+
+    Sources, in precedence order: ``configured`` (project.yaml), ``workspace``
+    (host label), ``git-remote`` (origin repository name), ``main-checkout``
+    (the main checkout's directory) and ``folder`` (this directory). The last
+    two are provisional: they differ between clones.
+    """
     config_path = project_root / ".audiagentic" / "config" / "project.yaml"
     data = load_yaml_file(config_path) if config_path.is_file() else {}
     if not isinstance(data, dict):
         data = {}
     configured_name = data.get("project-name") or data.get("project_name")
     if isinstance(configured_name, str) and configured_name.strip():
-        return configured_name.strip()
+        return configured_name.strip(), "configured"
     if isinstance(workspace_name, str) and workspace_name.strip():
-        return workspace_name.strip()
-    return project_root.resolve().name
+        return workspace_name.strip(), "workspace"
+    # Worktree and clone directories are arbitrary local names; the repository
+    # name is the same in every worktree of it.
+    identity = _git_repository_identity(project_root)
+    return identity or (project_root.resolve().name, "folder")
+
+
+def project_id(project_root: Path) -> tuple[str, str]:
+    """The stable, path-safe project identity and where it came from.
+
+    Unlike the display name, this is the same in every worktree and clone and
+    is safe to use in file names (docs/design/configuration-model.md,
+    Discovery). Sources, in precedence order: ``settings`` (``project.id`` in
+    the resolved settings), ``legacy`` (``project-id`` in
+    ``.audiagentic/config/project.yaml``), ``git-remote`` (origin repository
+    name), ``main-checkout`` and ``folder``. The last two are provisional.
+    """
+    from audiagentic.foundation.config.settings import resolve_settings
+
+    # A root that does not exist (yet) has no project scope to read.
+    declared = resolve_settings(project=project_root).get("project.id") if project_root.is_dir() else None
+    if isinstance(declared, str) and declared:
+        return declared, "settings"
+    config_path = project_root / ".audiagentic" / "config" / "project.yaml"
+    data = load_yaml_file(config_path) if config_path.is_file() else {}
+    legacy = _path_safe_id(str(data.get("project-id") or "")) if isinstance(data, dict) else None
+    if legacy:
+        return legacy, "legacy"
+    name, source = _git_repository_identity(project_root) or (project_root.resolve().name, "folder")
+    return _path_safe_id(name) or "project", source
+
+
+def git_remote_ids(project_root: Path) -> dict[str, str]:
+    """Path-safe repository id per git remote, for spotting ambiguous identity."""
+    common = _git_common_dir(project_root)
+    if common is None:
+        return {}
+    ids = {}
+    for remote, url in _remote_urls(common / "config").items():
+        repo_id = _path_safe_id(_repository_name(url))
+        if repo_id:
+            ids[remote] = repo_id
+    return ids
+
+
+def _path_safe_id(name: str) -> str | None:
+    """Restrict a name to the ``project.id`` schema: [A-Za-z0-9._-], alnum first, 64 chars."""
+    candidate = re.sub(r"[^A-Za-z0-9._-]+", "-", name.strip()).lstrip("._-")[:64].rstrip("._-")
+    return candidate or None
+
+
+def _repository_name(url: str) -> str:
+    name = url.rstrip("/").rsplit("/", 1)[-1].rsplit(":", 1)[-1]
+    return name[: -len(".git")] if name.endswith(".git") else name
+
+
+def _git_common_dir(project_root: Path) -> Path | None:
+    """The git common directory of project_root (shared by all its worktrees).
+
+    Reads git's own files rather than running git, so it is cheap and has no
+    process or PATH dependency. Any unreadable layout yields None.
+    """
+    try:
+        dot_git = project_root.resolve() / ".git"
+        if dot_git.is_dir():
+            git_dir = dot_git
+        elif dot_git.is_file():
+            pointer = dot_git.read_text(encoding="utf-8").strip()
+            if not pointer.startswith("gitdir:"):
+                return None
+            git_dir = (project_root.resolve() / pointer[len("gitdir:"):].strip()).resolve()
+        else:
+            return None
+        commondir = git_dir / "commondir"
+        return (git_dir / commondir.read_text(encoding="utf-8").strip()).resolve() if commondir.is_file() else git_dir
+    except OSError:
+        return None
+
+
+def _git_repository_identity(project_root: Path) -> tuple[str, str] | None:
+    """Name the git repository at project_root: origin's repo, else main checkout."""
+    common = _git_common_dir(project_root)
+    if common is None:
+        return None
+    try:
+        origin = _remote_urls(common / "config").get("origin")
+    except OSError:
+        return None
+    name = _repository_name(origin) if origin else ""
+    source = "git-remote"
+    if not name:
+        name, source = (common.parent.name if common.name == ".git" else common.name), "main-checkout"
+        name = name[: -len(".git")] if name.endswith(".git") else name
+    return (name.strip(), source) if name.strip() else None
+
+
+def _remote_urls(config_path: Path) -> dict[str, str]:
+    """``url`` of each ``[remote "name"]`` section in a git config file."""
+    if not config_path.is_file():
+        return {}
+    urls: dict[str, str] = {}
+    remote = None
+    for raw in config_path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if line.startswith("["):
+            section = line.strip("[]").strip()
+            remote = section[len("remote"):].strip().strip('"') if section.startswith("remote ") else None
+        elif remote and line.split("=", 1)[0].strip() == "url" and "=" in line:
+            url = line.split("=", 1)[1].strip()
+            if url:
+                urls.setdefault(remote, url)
+    return urls
 
 
 def context(
@@ -103,7 +225,7 @@ def context(
     if not isinstance(data, dict):
         data = {}
     return {
-        "id": data.get("project-id"),
+        "id": project_id(project_root)[0],
         "name": resolve_project_name(project_root, workspace_name=workspace_name),
         "root": str(project_root.resolve()),
         "workflow_profile": data.get("workflow-profile"),

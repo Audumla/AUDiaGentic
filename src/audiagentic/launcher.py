@@ -188,6 +188,15 @@ def _main(argv: list[str] | None = None) -> int:
         "clean",
         help="Prune AUDiaGentic-owned surfaces and remove generated runtime config",
     )
+    from audiagentic.commands.settings import add_settings_parsers
+
+    add_settings_parsers(config_sub)
+    from audiagentic.commands.agents import add_agent_parsers
+
+    add_agent_parsers(subparsers)
+    from audiagentic.commands.doctor import add_doctor_parsers
+
+    add_doctor_parsers(subparsers)
 
     # Private stdio entrypoint retained for generated MCP configuration.
     mcp_parser = subparsers.add_parser(
@@ -225,6 +234,35 @@ def _main(argv: list[str] | None = None) -> int:
     # No-command invocation intentionally retains passthrough for provider CLIs.
     if args.command is not None and remaining:
         parser.error(f"unrecognized arguments: {' '.join(remaining)}")
+
+    # A bare invocation is a configuration CLI, not an agent session. Only an
+    # explicit --prompt or provider passthrough reaches the harness launch, so
+    # plain `audiagentic` never composes the app graph or probes providers.
+    if args.command is None and not args.prompt and not remaining:
+        from audiagentic.commands.mcp import _help
+
+        print(parser.format_help())
+        print(_help("root"))
+        return 0
+
+    # doctor is read-only and setup writes only user settings: neither composes the app graph.
+    if args.command in {"doctor", "setup"}:
+        from audiagentic.commands.doctor import run_doctor_command
+
+        return run_doctor_command(args)
+
+    # Agent file commands touch only agent files and must not compose the application graph.
+    if args.command == "agent":
+        from audiagentic.commands.agents import run_agent_command
+
+        return run_agent_command(args)
+
+    # Settings commands are read-only and must not compose the application graph.
+    if args.command == "config":
+        from audiagentic.commands.settings import SETTINGS_COMMANDS, run_settings_command
+
+        if args.config_cmd in SETTINGS_COMMANDS:
+            return run_settings_command(args)
 
     if args.command in {"mcp", "harness", "help"}:
         from audiagentic.commands.mcp import dispatch

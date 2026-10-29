@@ -68,13 +68,10 @@ def _build_shared_gateway_registry_factory() -> Any:
     """Return a factory for the machine-global Agents catalog registry."""
 
     def factory() -> Any:
-        from audiagentic.components.agents.agents_paths import global_agents_config_path
         from audiagentic.components.agents.gateway import profiles as profiles_mod
 
-        resolved_path = global_agents_config_path()
-        registry = profiles_mod.load_gateway_registry_from_agents_catalog(
-            resolved_path, required=True
-        )
+        # No explicit path: the effective catalog (agents.yaml plus agent files).
+        registry = profiles_mod.load_gateway_registry_from_agents_catalog(required=True)
         profiles_mod.set_gateway_registry(registry)
         return registry
 

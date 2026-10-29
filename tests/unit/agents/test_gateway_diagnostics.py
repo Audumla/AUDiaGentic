@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
+import pytest
+
 from audiagentic.components.agents.gateway import store
 from audiagentic.components.agents.gateway.api import (
     get_execution_diagnostics,
@@ -13,6 +15,7 @@ from audiagentic.components.agents.gateway.diagnostics import (
     merge_diagnostics,
 )
 from audiagentic.components.agents.gateway.queue.dispatch import diagnose_activity_lease
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 
 def test_ambiguous_gpt_auto_error_is_not_provider_failure() -> None:
@@ -664,3 +667,65 @@ def test_abandon_recovery_is_single_cas_operation(tmp_path) -> None:
     assert result["disposition"] == "accepted"
     assert result["revision"] == running["revision"] + 1
     assert result["diagnostics"]["resolution-state"] == "abandon-requested"
+
+
+def _orphaned_running(tmp_path, *, evidence: bool = True) -> dict:
+    """A provider-session request whose gateway host exited mid-turn (GA27)."""
+    record = store.build_record(
+        execution_profile_id="gpt-auto",
+        prompt_body="orphaned",
+        provider_transport_kind="provider-session",
+        session_id="ses-orphan",
+    )
+    record.update({"state": "running", "dispatch-owner-epoch": "owner-gone", "worker-id": "worker-1",
+                   "attempt-epoch": 1})
+    if evidence:
+        record["diagnostic-evidence"] = [{
+            "evidence-id": "ev_1", "sequence": 1, "request-id": record["request-id"], "session-id": "ses-orphan",
+            "attempt-epoch": 1, "phase": "in-progress", "kind": "activity", "certainty": "strong",
+            "side-effect-state": "may-have-started", "source": "session-transport", "source-sequence": 1,
+        }]
+    store.write_record(tmp_path, record)
+    return record
+
+
+def _sessions(monkeypatch, *, live: set[str], state: str = "active") -> list[str]:
+    from audiagentic.components.agents.gateway import api
+    from audiagentic.components.agents.gateway.session import sessions, sessions_store
+
+    closed: list[str] = []
+    monkeypatch.setattr(sessions_store, "read_session_record", lambda _root, _sid: {"state": state})
+    monkeypatch.setattr(sessions, "get_session_runtime", lambda: type("R", (), {"live_session_ids": lambda self: live})())
+    monkeypatch.setattr(api, "close_execution_session", lambda _root, sid: closed.append(sid) or {"state": "failed"})
+    return closed
+
+
+def test_abandon_settles_orphaned_request_without_persisted_diagnostics(tmp_path, monkeypatch) -> None:
+    record = _orphaned_running(tmp_path)
+    closed = _sessions(monkeypatch, live=set())
+
+    result = recover_execution_request(tmp_path, record["request-id"], action="abandon")
+
+    assert closed == ["ses-orphan"]  # the orphaned session is closed like a client close
+    assert result["state"] == "cancelled"
+    terminal = store.read_record(tmp_path, record["request-id"])
+    assert terminal["state"] == "cancelled"
+    assert terminal["error"]["code"] == "CON-AGW-CANCELLED"
+
+
+def test_abandon_without_any_evidence_is_still_refused(tmp_path, monkeypatch) -> None:
+    record = _orphaned_running(tmp_path, evidence=False)
+    _sessions(monkeypatch, live=set())
+    with pytest.raises(AudiaGenticError) as raised:
+        recover_execution_request(tmp_path, record["request-id"], action="abandon")
+    assert raised.value.code == "CON-AGW-145"
+
+
+def test_abandon_does_not_close_a_live_session(tmp_path, monkeypatch) -> None:
+    record = _orphaned_running(tmp_path)
+    closed = _sessions(monkeypatch, live={"ses-orphan"})
+
+    result = recover_execution_request(tmp_path, record["request-id"], action="abandon")
+
+    assert closed == []
+    assert result["state"] == "running"  # cancel requested; the live owner settles it

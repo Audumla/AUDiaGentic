@@ -416,14 +416,17 @@ def _resolve_embedded_coexistence_policy(project_root: Path | None) -> str:
     """"warn" or "refuse" when a live shared owner exists (SH11 Slice D).
 
     Precedence: ``AUDIAGENTIC_GATEWAY_EMBEDDED_ALLOW`` env override (explicit
-    migration escape hatch) > the project's ``embedded`` implementation
+    migration escape hatch) > ``gateway.embedded_with_live_shared_owner`` in
+    settings > the project's ``embedded`` implementation
     config > the descriptor default (``refuse``, per RV736 A6 -- silent
     coexistence beside a shared owner is the exact dual-ownership bug this
     boundary exists to prevent).
     """
-    env_override = os.environ.get("AUDIAGENTIC_GATEWAY_EMBEDDED_ALLOW")
-    if env_override:
-        return env_override.strip().lower()
+    from audiagentic.components.agents.gateway.settings import gateway_setting
+
+    configured = gateway_setting("embedded_with_live_shared_owner", "AUDIAGENTIC_GATEWAY_EMBEDDED_ALLOW")
+    if configured:
+        return str(configured).strip().lower()
     if project_root is not None:
         from audiagentic.components.agents.gateway.management_api import gateway_get_config
 
@@ -442,18 +445,25 @@ def _resolve_implementation_id(project_root: Path | None) -> tuple[str, str]:
        path for the pre-SH11 env-only world; the "in-process" spelling is
        aliased to "embedded", the real implementation id, without silently
        treating them as different things.
-    2. the project's selected component implementation
+    2. ``gateway.implementation`` in settings (CFG09).
+    3. the project's selected component implementation
        (``foundation.features.registry.resolve_active_implementation``),
        which itself falls through to the descriptor-declared default
        (``embedded``) when nothing was ever explicitly selected.
-    3. "automatic" as a final production fallback -- only reachable if the
+    4. "automatic" as a final production fallback -- only reachable if the
        registry itself is unavailable (e.g. descriptors not loaded), so
        resolution never raises merely for lack of project context.
 
     Returns ``(implementation_id, source)`` where source is one of
-    ``env-override`` / ``component-config`` / ``schema-default``.
+    ``env-override`` / ``settings`` / ``component-config`` / ``schema-default``.
     """
     env_mode = os.environ.get("AUDIAGENTIC_GATEWAY_MODE")
+    if not env_mode:
+        from audiagentic.components.agents.gateway.settings import gateway_setting
+
+        configured = gateway_setting("implementation")
+        if configured:
+            return str(configured), "settings"
     if env_mode:
         normalized = env_mode.strip().lower()
         resolved = _MODE_ALIASES.get(normalized, normalized)

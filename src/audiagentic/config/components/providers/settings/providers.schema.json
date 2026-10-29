@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "settings: providers",
+  "description": "Provider policy, owned by the providers component. Availability is observed at use time and qualification comes from evidence; neither is configured here.",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^[a-z0-9][a-z0-9_-]{0,63}$": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "enum": ["auto", true, false],
+          "description": "auto (default) enables a provider that is usable here; true and false force it on or off."
+        }
+      }
+    }
+  }
+}

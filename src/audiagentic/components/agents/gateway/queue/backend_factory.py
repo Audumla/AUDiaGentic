@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import os
-
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
+from ..settings import gateway_setting
 from .backend import AgentWorkQueue, InMemoryAgentWorkQueue
 
 
@@ -16,7 +15,7 @@ def create_work_queue() -> AgentWorkQueue:
     broker adapter passes the conformance suite. Unknown values fail closed;
     there is no silent fallback that could hide a misconfigured cutover.
     """
-    backend = os.environ.get("AUDIAGENTIC_GATEWAY_QUEUE_BACKEND", "in-memory").strip().lower()
+    backend = str(gateway_setting("queue_backend", "AUDIAGENTIC_GATEWAY_QUEUE_BACKEND", "in-memory")).strip().lower()
     if backend == "in-memory":
         return InMemoryAgentWorkQueue()
     raise AudiaGenticError(

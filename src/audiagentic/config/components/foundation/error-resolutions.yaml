@@ -194,3 +194,10 @@ VAL-SPOOL-005: "Check the event-id; the dead-letter record does not exist or cou
 VAL-STEP-001: "Fix the step definition — check for a duplicate step-type registration, a missing required field (type/key_path/id), or an unrecognized step type against the registered set."
 VAL-STUB-002: "Check the placeholder syntax and available context keys; an unknown or invalid substitution was requested."
 
+CFG-SET-001: "A settings file could not be read (missing packaged defaults, permissions, larger than 1 MiB, or not UTF-8). Check the file named in the error; reinstall the package if the packaged defaults are missing."
+CFG-SET-002: "A settings file is not valid YAML. Fix the syntax at the reported line and column."
+CFG-SET-003: "A settings file uses YAML that settings do not allow: anchors, aliases, tags, duplicate or non-string keys, multiple documents, infinity/NaN, or nesting deeper than 64 levels. Rewrite the reported node as plain YAML."
+CFG-SET-004: "A settings value does not match the settings schema. Fix or remove the key at the reported file, line and pointer; run 'audiagentic config validate' to list every issue."
+CFG-SET-005: "The project directory given by --project or AUDIAGENTIC_PROJECT does not exist. Point it at an existing checkout."
+CFG-SET-006: "The settings file given by --config or AUDIAGENTIC_CONFIG does not exist. Point it at an existing file."
+CFG-SET-007: "Two components declare the same settings section (config/components/<component>/settings/<section>.schema.json). Each top-level settings section must have exactly one owning component; rename or remove one declaration."

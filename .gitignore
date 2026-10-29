@@ -14,7 +14,11 @@
 /.agents/mcp_config.json
 /.qwen/settings.json
 /.qwen/settings.json.orig
-/.audiagentic/
+# Tracked project settings (docs/guides/PROJECT_SETTINGS.md); everything else is local.
+/.audiagentic/*
+!/.audiagentic/settings.yaml
+!/.audiagentic/agents/
+!/.audiagentic/templates/
 /.pi-subagents/
 /.claude/
 /.cline/

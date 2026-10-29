@@ -10,7 +10,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from audiagentic.foundation.io import read_text_with_retry
 
 
 @dataclass(frozen=True)
@@ -36,18 +35,24 @@ class WatchdogPolicy:
         }
 
 
+_POLICY_ENV = "AUDIAGENTIC_GATEWAY_WATCHDOG_POLICY"
+
+
 def policy_path() -> Path:
-    override = os.environ.get("AUDIAGENTIC_GATEWAY_WATCHDOG_POLICY")
+    """The legacy JSON policy file (read when ``gateway.watchdog`` is not in settings)."""
+    override = os.environ.get(_POLICY_ENV)
     return Path(override).expanduser() if override else Path.home() / ".audiagentic" / "gateway-watchdog.json"
 
 
 def load_watchdog_policy() -> WatchdogPolicy:
+    """``gateway.watchdog`` from settings, else the legacy JSON file (see ``policy_mapping``)."""
+    from audiagentic.components.agents.gateway.settings import policy_mapping
+
     fallback = WatchdogPolicy(300.0, 0.0, 30.0, 30.0, "unavailable", "unavailable", False)
-    path = policy_path()
-    if not path.is_file():
-        return fallback
     try:
-        raw = json.loads(read_text_with_retry(path))
+        raw = policy_mapping("watchdog", _POLICY_ENV, policy_path())
+        if raw is None:
+            return fallback
         if not isinstance(raw, dict):
             raise ValueError
         lease = float(raw.get("activity-lease-seconds", 300.0))

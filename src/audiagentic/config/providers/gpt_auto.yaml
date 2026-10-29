@@ -105,3 +105,7 @@ session_surfaces:
         evidence:
           validated: true
           reference: "tests/gpt_auto/test_session_transport_live.py"
+      - platform: "linux-amd64"
+        evidence:
+          validated: true
+          reference: "tests/gpt_auto/test_session_transport_live.py"

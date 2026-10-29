@@ -1,7 +1,6 @@
 """Gateway-specific declaration over foundation managed-service lifecycle."""
 from __future__ import annotations
 
-import os
 import sys
 import uuid
 from pathlib import Path
@@ -143,7 +142,9 @@ def _handshake(record: Any, endpoint: str, token_path: Path) -> ServiceHandshake
 
 
 def _configured_port() -> int:
-    raw = os.environ.get("AUDIAGENTIC_GATEWAY_PORT", str(_DEFAULT_PORT))
+    from audiagentic.components.agents.gateway.settings import gateway_setting
+
+    raw = gateway_setting("port", "AUDIAGENTIC_GATEWAY_PORT", _DEFAULT_PORT)
     try:
         port = int(raw)
     except ValueError as exc:

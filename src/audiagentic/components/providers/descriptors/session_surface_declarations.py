@@ -142,6 +142,9 @@ def _validate_declarations(declarations: Sequence[SessionSurfaceDeclaration]) ->
            is rejected (both max_bytes == 0 and max_events == 0).
         5. Managed-hook/plugin lifecycle installation without a nonempty
            adapter_ref is rejected.
+        6. A fully qualified joined-capability claim (all five) without
+           attach-existing support, EXTERNAL ownership, an exact shared session
+           mapping and validated platform evidence is rejected.
     """
     seen_keys: set[tuple[str, str]] = set()
 

@@ -2,7 +2,7 @@
 id: CAP05
 order: 5
 plan: lsp-capability-expansion
-state: done
+state: completed
 validate-first: true
 priority: P2
 work: L

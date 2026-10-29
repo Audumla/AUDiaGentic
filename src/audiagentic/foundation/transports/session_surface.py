@@ -60,6 +60,11 @@ class JoinedSessionCapabilities:
                 raise ValueError(f"JoinedSessionCapabilities.{declared.name} must be a boolean")
 
     @property
+    def claimed(self) -> bool:
+        """Any joined capability is claimed (partial claims are readiness input, not support)."""
+        return any(getattr(self, declared.name) for declared in fields(self))
+
+    @property
     def qualified(self) -> bool:
         """All five claims are present; consumers still require independent proof."""
         return all((

@@ -10,7 +10,7 @@ import yaml
 
 from audiagentic.components.agents.agents_paths import global_agents_config_path
 from audiagentic.components.agents.configuration import resolution
-from audiagentic.components.agents.configuration.repository import AgentsConfigRepository
+from audiagentic.components.agents.configuration.effective_catalog import EffectiveAgentsRepository
 from audiagentic.components.agents.gateway import api
 from audiagentic.components.agents.gateway.admission import local_dispatch
 from audiagentic.components.agents.gateway.admission import semantics as semantics_owner
@@ -104,7 +104,8 @@ def test_actual_semantic_resolution_never_reads_execution_local_facts(catalog, m
 
 def test_catalog_snapshot_is_retained_through_composition_and_rendering(catalog, monkeypatch):
     path, data = catalog
-    original_read = AgentsConfigRepository.read
+    # The gateway reads the effective catalog (legacy agents.yaml merged with agent files, CFG09).
+    original_read = EffectiveAgentsRepository.read
     original_resolve = resolution.resolve_agent_composition
     reads = []
     snapshots = []
@@ -120,7 +121,7 @@ def test_catalog_snapshot_is_retained_through_composition_and_rendering(catalog,
         path.write_text(yaml.safe_dump(data), encoding="utf-8")
         return original_resolve(root, agent_id, snapshot=snapshot)
 
-    monkeypatch.setattr(AgentsConfigRepository, "read", read)
+    monkeypatch.setattr(EffectiveAgentsRepository, "read", read)
     monkeypatch.setattr(resolution, "resolve_agent_composition", resolve)
     semantics = semantics_owner.resolve_agent_semantics("reader")
     assert len(reads) == 1 and len(snapshots) == 1

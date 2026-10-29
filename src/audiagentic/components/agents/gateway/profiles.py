@@ -427,7 +427,15 @@ def load_gateway_registry_from_agents_catalog(
 
     catalog_path = path or global_agents_config_path()
     try:
-        snapshot = AgentsConfigRepository(catalog_path, required=required).read(catalog_path.parent)
+        if path is None:
+            # Effective hosted catalog: legacy agents.yaml plus machine-scope agent files (CFG09).
+            from audiagentic.components.agents.configuration.effective_catalog import (
+                EffectiveAgentsRepository,
+            )
+
+            snapshot = EffectiveAgentsRepository().read(catalog_path.parent)
+        else:
+            snapshot = AgentsConfigRepository(catalog_path, required=required).read(catalog_path.parent)
     except Exception as exc:  # noqa: BLE001 - configuration boundary
         raise AudiaGenticError(
             code="IO-AGW-107",
