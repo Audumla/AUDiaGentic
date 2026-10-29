@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.23.2](https://github.com/Audumla/AUDiaGentic/compare/v0.23.1...v0.23.2) (2026-10-29)
+
+
+### Documentation
+
+* **planning:** EV04 is completed (state matched its placement) ([#168](https://github.com/Audumla/AUDiaGentic/issues/168)) ([b9c0c2b](https://github.com/Audumla/AUDiaGentic/commit/b9c0c2bbffc0777e8ff87001fefee167c1d6aaeb))
+
 ## [0.23.1](https://github.com/Audumla/AUDiaGentic/compare/v0.23.0...v0.23.1) (2026-10-29)
 
 
