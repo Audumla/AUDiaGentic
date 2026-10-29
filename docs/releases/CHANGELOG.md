@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.32.0](https://github.com/Audumla/AUDiaGentic/compare/v0.31.4...v0.32.0) (2026-10-29)
+
+
+### Features
+
+* **config:** the AUDiaGentic home can be chosen in the machine-scope settings (CFG08) ([#208](https://github.com/Audumla/AUDiaGentic/issues/208)) ([4cab757](https://github.com/Audumla/AUDiaGentic/commit/4cab757e576c89220be9382a812de390f7c7a705))
+
 ## [0.31.4](https://github.com/Audumla/AUDiaGentic/compare/v0.31.3...v0.31.4) (2026-10-29)
 
 
