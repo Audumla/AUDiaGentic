@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.28.0](https://github.com/Audumla/AUDiaGentic/compare/v0.27.0...v0.28.0) (2026-10-29)
+
+
+### Features
+
+* **gateway:** execution-node protocol, connection, transport and drain, unwired (SH38-SH41, slice P9 of [#70](https://github.com/Audumla/AUDiaGentic/issues/70)) ([#185](https://github.com/Audumla/AUDiaGentic/issues/185)) ([a85dfb9](https://github.com/Audumla/AUDiaGentic/commit/a85dfb9c3be02c105b90f6847952af9432aa00ab))
+
 ## [0.27.0](https://github.com/Audumla/AUDiaGentic/compare/v0.26.3...v0.27.0) (2026-10-29)
 
 
