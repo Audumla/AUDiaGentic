@@ -1,6 +1,7 @@
 """Typed callback and result contracts for managed-service coordination."""
 from __future__ import annotations
 
+import socket
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any, Literal
@@ -53,6 +54,25 @@ class ServiceHandshake:
     health_facts: Mapping[str, Any] | None = None
 
 
+def loopback_endpoint_in_use(endpoint: EndpointInfo) -> bool:
+    """True when a loopback ``host:port`` endpoint already accepts connections.
+
+    Checked before launching a replacement: a fixed port held by some other
+    process (another home, a leaked test service) would otherwise only show up
+    as a readiness timeout. Non-loopback or non-``host:port`` addresses are not
+    probed.
+    """
+    host, sep, port = endpoint.address.rpartition(":")
+    host = host.strip("[]")
+    if not sep or not port.isdigit() or host not in {"127.0.0.1", "::1", "localhost"}:
+        return False
+    try:
+        with socket.create_connection((host, int(port)), timeout=0.25):
+            return True
+    except OSError:
+        return False
+
+
 @dataclass(frozen=True)
 class ManagedServiceHooks:
     handshake: Callable[[ManagedServiceRecord], ServiceHandshake]
@@ -61,6 +81,7 @@ class ManagedServiceHooks:
     observe: Callable[[ProcessEvidence], ProcessIdentity | None] = observe_process
     launch: Callable[..., ProcessEvidence] = launch_detached
     signal: Callable[..., None] = signal_owned_process
+    endpoint_in_use: Callable[[EndpointInfo], bool] = loopback_endpoint_in_use
 
 
 @dataclass(frozen=True)
