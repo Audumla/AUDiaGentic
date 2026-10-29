@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.27.0](https://github.com/Audumla/AUDiaGentic/compare/v0.26.3...v0.27.0) (2026-10-29)
+
+
+### Features
+
+* **gateway:** execution-node core contracts, preparation, authority and receipts, unwired (SH38-SH41, slice P8 of [#70](https://github.com/Audumla/AUDiaGentic/issues/70)) ([#183](https://github.com/Audumla/AUDiaGentic/issues/183)) ([8ca69cc](https://github.com/Audumla/AUDiaGentic/commit/8ca69cc5421e71345c409bc1b2dc682faa9b337d))
+
 ## [0.26.3](https://github.com/Audumla/AUDiaGentic/compare/v0.26.2...v0.26.3) (2026-10-29)
 
 
