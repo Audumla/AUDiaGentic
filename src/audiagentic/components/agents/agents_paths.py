@@ -243,8 +243,11 @@ def gateway_session_generation_lock_path(project_root: Path, session_id: str) ->
     resume holds this fence, then ``record_resume_attempt`` takes the record
     lock) and from the session mutation lock, which is never held across
     provider I/O while this fence may be.
+
+    The file keeps its original name (``resume-concurrency.lock``) so a
+    process still running older code serializes on the same lock.
     """
-    return gateway_session_dir(project_root, session_id) / "generation.lock"
+    return gateway_session_dir(project_root, session_id) / "resume-concurrency.lock"
 
 
 def gateway_session_control_idempotency_path(project_root: Path, session_id: str) -> Path:

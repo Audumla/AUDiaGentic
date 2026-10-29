@@ -2416,7 +2416,9 @@ def record_accepted_turn(project_root: Path, session_id: str) -> dict[str, Any]:
             raise _retention_claimed(session_id, record)
         updated = dict(record)
         timing = dict(updated.get("timing") or {})
-        timing["last-accepted-turn-at"] = timing["updated-at"] = now_iso_z()
+        # Only ever forward: a clock step back must not make a session look older.
+        timing["last-accepted-turn-at"] = max(now_iso_z(), timing.get("last-accepted-turn-at") or "")
+        timing["updated-at"] = now_iso_z()
         updated["timing"] = timing
         write_session_record(project_root, updated)
         return updated
@@ -2453,7 +2455,12 @@ def claim_retention(project_root: Path, session_id: str, *, operation_id: str) -
 
 
 def release_retention_claim(project_root: Path, session_id: str, *, operation_id: str) -> dict[str, Any]:
-    """Release a claim before any destructive work; only the claiming operation may."""
+    """Cancel a claim before any destructive work begins; only the claiming operation may.
+
+    A retention operation that goes on to delete keeps its claim until the
+    session record itself is removed, so nothing can resume or continue a
+    partially deleted lineage.
+    """
     with session_generation_fence(project_root, session_id):
         with _ordered_session_mutation_lock(project_root, session_id):
             record = read_session_record(project_root, session_id)
