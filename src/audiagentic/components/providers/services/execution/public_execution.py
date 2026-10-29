@@ -174,13 +174,22 @@ def get_provider_runtime_config_state(
     }
 
 
+def _provider_usable(project_root: Path, provider_id: str, runtime: dict[str, Any]) -> bool:
+    """Runtime gate: enabled by state or policy, else observed available (CFG06)."""
+    if runtime["enabled"]:
+        return True
+    from ..config.provider_config import is_provider_usable
+
+    return is_provider_usable(project_root, provider_id)
+
+
 def execute_provider_turn(request: ProviderExecutionRequest) -> ProviderExecutionResult:
     """Resolve and execute one provider turn inside its assigned worker."""
     from ..catalog.models import resolve_model_selection
     from .execution import execute_provider
 
     runtime = get_provider_runtime_config_state(request.project_root, request.provider_id)
-    if not runtime["enabled"]:
+    if not _provider_usable(request.project_root, request.provider_id, runtime):
         raise AudiaGenticError(
             code="CFG-PEXE-001",
             kind="providers",
@@ -305,7 +314,7 @@ def prepare_provider_acp_launch(
     from .execution import load_acp_launch_builder
 
     runtime = get_provider_runtime_config_state(project_root, provider_id)
-    if not runtime["enabled"]:
+    if not _provider_usable(project_root, provider_id, runtime):
         raise AudiaGenticError(
             code="CFG-PEXE-001",
             kind="providers",

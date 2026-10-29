@@ -140,7 +140,7 @@ def _enabled_test_provider(tmp_path: Path) -> str:
     """Register and enable a test provider with one surface declaration."""
     descriptor = _fake_descriptor(
         "test-provider",
-        session_surfaces=(_fake_surface_decl()),
+        session_surfaces=(_fake_surface_decl(),),
     )
     register(descriptor)
     set_provider_enabled(tmp_path, "test-provider", enabled=True)
@@ -166,7 +166,7 @@ class TestExplicitProjectRootAndProviderId:
         """A provider enabled on root A is not found on root B."""
         descriptor = _fake_descriptor(
             "root-test-prov",
-            session_surfaces=(_fake_surface_decl()),
+            session_surfaces=(_fake_surface_decl(),),
         )
         register(descriptor)
         # Enable on tmp_path but NOT on another path.
@@ -665,7 +665,7 @@ class TestDisabledProvider:
     def test_disabled_provider_unsupported(self, tmp_path: Path):
         descriptor = _fake_descriptor(
             "disabled-prov",
-            session_surfaces=(_fake_surface_decl()),
+            session_surfaces=(_fake_surface_decl(),),
         )
         register(descriptor)
         set_provider_enabled(tmp_path, "disabled-prov", enabled=False)

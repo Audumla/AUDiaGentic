@@ -222,7 +222,10 @@ def _dispatch_one_attempt(
     from audiagentic.components.providers import providers_api
 
     provider_id = profile["provider_id"]
-    if not providers_api.get_provider_runtime_config_state(project_root, provider_id)["enabled"]:
+    runtime_state = providers_api.get_provider_runtime_config_state(project_root, provider_id)
+    if not (
+        runtime_state["enabled"] or providers_api.is_provider_enabled_for_launch(project_root, provider_id)
+    ):
         raise AudiaGenticError(
             code="VAL-AGW-031",
             kind="agents",

@@ -484,10 +484,10 @@ def resolve_session_surface(
 
     # ── 2. Disabled provider ───────────────────────────────────────
     from ..config.provider_config import (
-        is_provider_enabled,
+        is_provider_usable,
     )
 
-    if not is_provider_enabled(project_root, provider_id):
+    if not is_provider_usable(project_root, provider_id):
         return _unsupported_snapshot(
             provider_id,
             surface_hint.surface_id,

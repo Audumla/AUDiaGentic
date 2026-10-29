@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -101,13 +102,75 @@ def _save_provider_config(path: Path, payload: dict[str, Any]) -> None:
     save_yaml_file(path, payload, sort_keys=False, atomic=True)
 
 
-def is_provider_enabled(project_root: Path, provider_id: str) -> bool:
-    """Single source of truth for provider enablement: implementation feature state.
+def provider_enabled_policy(project_root: Path, provider_id: str) -> str | bool:
+    """``providers.<id>.enabled`` from settings: ``"auto"`` (default), ``True`` or ``False``."""
+    if not project_root.is_dir():
+        return "auto"
+    return _enabled_policies(str(project_root.resolve()), _settings_stamp(project_root)).get(provider_id, "auto")
 
-    Provider settings files hold launch config; whether a provider is enabled
-    lives in `features.yaml` under the provider's implementation state.
+
+def _settings_stamp(project_root: Path) -> tuple[Any, ...]:
+    """What the settings files and their location depend on, so edits apply without a restart."""
+    import os
+
+    from audiagentic.foundation.config.settings import scope_sources
+
+    sources = scope_sources(project_root=project_root)
+    mtimes = tuple(
+        source.path.stat().st_mtime_ns if source.path is not None and source.path.is_file() else None
+        for source in sources
+    )
+    return (mtimes, tuple(os.environ.get(name, "") for name in ("AUDIAGENTIC_CONFIG", "XDG_CONFIG_HOME", "HOME")))
+
+
+@lru_cache(maxsize=16)
+def _enabled_policies(project: str, _stamp: tuple[Any, ...]) -> dict[str, str | bool]:
+    from audiagentic.foundation.config.settings import resolve_settings
+
+    section = resolve_settings(project=project).get("providers")
+    if not isinstance(section, dict):
+        return {}
+    return {
+        provider_id: entry["enabled"]
+        for provider_id, entry in section.items()
+        if isinstance(entry, dict) and "enabled" in entry
+    }
+
+
+def is_provider_enabled(project_root: Path, provider_id: str) -> bool:
+    """Whether a provider is enabled: policy, else persisted enablement.
+
+    ``providers.<id>.enabled`` ``true``/``false`` in settings decides outright.
+    Under ``auto`` the persisted implementation state applies (written by
+    ``set_provider_enabled`` and reconciliation, which also own the provider's
+    generated footprint). Runtime gates use ``is_provider_usable`` instead.
     """
+    policy = provider_enabled_policy(project_root, provider_id)
+    if isinstance(policy, bool):
+        return policy
     return get_implementation_state(project_root, _COMPONENT_ID, provider_id).enabled
+
+
+def is_provider_usable(project_root: Path, provider_id: str) -> bool:
+    """Whether a provider may run here (CFG06): enabled, or ``auto`` and observed available.
+
+    Under ``auto`` with no persisted enablement, the provider's own availability
+    check decides (CLI found, browser reachable), so a clean install needs no
+    enablement step. A provider with nothing checkable stays disabled until
+    enabled in settings.
+    """
+    policy = provider_enabled_policy(project_root, provider_id)
+    if isinstance(policy, bool):
+        return policy
+    implementations = get_component_state(project_root, _COMPONENT_ID, persist_migration=False).get(
+        "implementations", {}
+    )
+    stored = implementations.get(provider_id)
+    if isinstance(stored, dict) and "enabled" in stored:
+        return bool(stored["enabled"])
+    from audiagentic.components.providers.providers_api import check_provider_availability
+
+    return check_provider_availability(project_root, provider_id)[0] is True
 
 
 def is_native_mcp_target_enabled(project_root: Path, provider_id: str) -> bool:

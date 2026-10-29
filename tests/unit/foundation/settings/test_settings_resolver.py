@@ -103,7 +103,7 @@ def test_fragment_errors_point_at_the_file_and_line(user_config: Path, tmp_path:
     [
         "agents:\n  default: x\n",            # every file declares schema_version
         "schema_version: 2\n",                 # unknown schema version
-        "schema_version: 1\nproviders: {}\n",  # sections not yet implemented are rejected
+        "schema_version: 1\nbogus_section: {}\n",  # sections not yet implemented are rejected
         "schema_version: 1\nproject:\n  id: has spaces\n",
     ],
 )
