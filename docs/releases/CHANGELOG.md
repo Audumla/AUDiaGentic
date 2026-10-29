@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.31.4](https://github.com/Audumla/AUDiaGentic/compare/v0.31.3...v0.31.4) (2026-10-29)
+
+
+### Documentation
+
+* **planning:** SH63 correction, a supported restart exists; only the CLI route is missing ([#206](https://github.com/Audumla/AUDiaGentic/issues/206)) ([5be142c](https://github.com/Audumla/AUDiaGentic/commit/5be142cab53a6ec4aa40b43ca38d0f21a8d825ee))
+
 ## [0.31.3](https://github.com/Audumla/AUDiaGentic/compare/v0.31.2...v0.31.3) (2026-10-29)
 
 
