@@ -27,6 +27,7 @@ from typing import Any
 
 from audiagentic.components.agents.agents_paths import (
     gateway_retention_lock_path,
+    gateway_session_generation_lock_path,
     gateway_session_path,
     gateway_session_timeline_path,
     gateway_sessions_root,
@@ -2375,6 +2376,103 @@ def _ordered_session_mutation_lock(project_root: Path, session_id: str):
     with StartupLock(gateway_retention_lock_path(project_root)):
         with _session_lock(project_root, session_id):
             yield
+
+
+def session_generation_fence(project_root: Path, session_id: str) -> StartupLock:
+    """The session generation fence (AS118); see ``gateway_session_generation_lock_path``.
+
+    Held by resume across successor creation and by continuation admission
+    until the turn is durably accepted. Take it before any request, retention
+    or session mutation lock, and never while holding one of them.
+    """
+    return StartupLock(gateway_session_generation_lock_path(project_root, session_id))
+
+
+def _retention_claimed(session_id: str, record: dict[str, Any]) -> AudiaGenticError:
+    return AudiaGenticError(
+        code="CON-AGW-158", kind="agents",
+        message="session is claimed by a retention operation and cannot be resumed or continued",
+        details={"session-id": session_id},
+    )
+
+
+def assert_no_retention_claim(project_root: Path, session_id: str) -> dict[str, Any]:
+    """Refuse when a retention operation has claimed the session. Call under the generation fence."""
+    record = read_session_record(project_root, session_id)
+    if record.get("retention-claim") is not None:
+        raise _retention_claimed(session_id, record)
+    return record
+
+
+def record_accepted_turn(project_root: Path, session_id: str) -> dict[str, Any]:
+    """Stamp ``timing.last-accepted-turn-at`` when a turn is durably admitted.
+
+    The purge inactivity clock (SH32) reads only this field. Call under the
+    generation fence; a claimed session is refused rather than revived.
+    """
+    with _ordered_session_mutation_lock(project_root, session_id):
+        record = read_session_record(project_root, session_id)
+        if record.get("retention-claim") is not None:
+            raise _retention_claimed(session_id, record)
+        updated = dict(record)
+        timing = dict(updated.get("timing") or {})
+        # Only ever forward: a clock step back must not make a session look older.
+        timing["last-accepted-turn-at"] = max(now_iso_z(), timing.get("last-accepted-turn-at") or "")
+        timing["updated-at"] = now_iso_z()
+        updated["timing"] = timing
+        write_session_record(project_root, updated)
+        return updated
+
+
+def claim_retention(project_root: Path, session_id: str, *, operation_id: str) -> dict[str, Any]:
+    """Durably claim a terminal session for a retention operation (idempotent per operation).
+
+    Takes the generation fence, so it serializes with resume and continuation
+    admission: whichever commits first wins, and the loser rereads. The claim
+    outlives the process, unlike the file lock.
+    """
+    if not isinstance(operation_id, str) or not operation_id or len(operation_id) > 128:
+        raise AudiaGenticError(code="VAL-AGW-052", kind="agents",
+                               message="retention claim requires a bounded operation id", details={})
+    with session_generation_fence(project_root, session_id):
+        with _ordered_session_mutation_lock(project_root, session_id):
+            record = read_session_record(project_root, session_id)
+            claim = record.get("retention-claim")
+            if claim is not None:
+                if claim.get("operation-id") == operation_id:
+                    return record
+                raise _retention_claimed(session_id, record)
+            if record.get("state") not in SESSION_TERMINAL_STATES:
+                raise AudiaGenticError(
+                    code="CON-AGW-159", kind="agents",
+                    message="only a terminal session can be claimed for retention",
+                    details={"session-id": session_id, "state": record.get("state")},
+                )
+            updated = dict(record)
+            updated["retention-claim"] = {"operation-id": operation_id, "claimed-at": now_iso_z()}
+            write_session_record(project_root, updated)
+            return updated
+
+
+def release_retention_claim(project_root: Path, session_id: str, *, operation_id: str) -> dict[str, Any]:
+    """Cancel a claim before any destructive work begins; only the claiming operation may.
+
+    A retention operation that goes on to delete keeps its claim until the
+    session record itself is removed, so nothing can resume or continue a
+    partially deleted lineage.
+    """
+    with session_generation_fence(project_root, session_id):
+        with _ordered_session_mutation_lock(project_root, session_id):
+            record = read_session_record(project_root, session_id)
+            claim = record.get("retention-claim")
+            if claim is None:
+                return record
+            if claim.get("operation-id") != operation_id:
+                raise _retention_claimed(session_id, record)
+            updated = dict(record)
+            del updated["retention-claim"]
+            write_session_record(project_root, updated)
+            return updated
 
 
 def generate_session_id() -> str:

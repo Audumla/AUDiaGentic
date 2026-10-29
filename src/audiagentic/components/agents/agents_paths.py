@@ -231,13 +231,21 @@ def gateway_session_resume_lock_path(project_root: Path, session_id: str) -> Pat
     return gateway_session_dir(project_root, session_id) / "resume-idempotency.lock"
 
 
-def gateway_session_resume_concurrency_lock_path(project_root: Path, session_id: str) -> Path:
-    """Return the lock serializing all successor creation for one source session.
+def gateway_session_generation_lock_path(project_root: Path, session_id: str) -> Path:
+    """Return the session generation fence (AS118).
 
-    This is deliberately separate from the idempotency-record lock.  The
-    resume operation holds this lock while it resolves the source and creates
-    the successor, then ``record_resume_attempt`` takes the record lock while
-    persisting the result.  Reusing the record lock here would deadlock.
+    Serializes everything that decides a session's next generation or accepts
+    work onto it: resume/successor creation, continuation-turn admission and
+    destructive retention claims. Lock order: generation fence, then request,
+    then retention, then the session mutation lock; never the reverse.
+
+    It is deliberately separate from the resume idempotency-record lock (the
+    resume holds this fence, then ``record_resume_attempt`` takes the record
+    lock) and from the session mutation lock, which is never held across
+    provider I/O while this fence may be.
+
+    The file keeps its original name (``resume-concurrency.lock``) so a
+    process still running older code serializes on the same lock.
     """
     return gateway_session_dir(project_root, session_id) / "resume-concurrency.lock"
 

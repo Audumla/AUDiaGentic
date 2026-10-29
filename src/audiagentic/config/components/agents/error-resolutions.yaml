@@ -255,6 +255,8 @@ CON-AGW-154: "The provider response could not be captured from the request-owned
 CON-AGW-155: "The provider response is not proven complete; wait for completion controls and a quiescent turn."
 CON-AGW-156: "The provider response could not be proven to belong to this request."
 CON-AGW-157: "The request has not durably proven that its own prompt was submitted; wait for provider submission evidence before capturing."
+CON-AGW-158: "A retention operation has claimed this session, so it cannot be resumed or continued. Start a new session; the claim is released only by the operation that made it."
+CON-AGW-159: "Only a closed or expired session can be claimed for retention. Close it first or wait until it is terminal."
 # SH38 private execution-node contracts and receipt evidence.
 VAL-AGND-001: "Use the supported v1 bounded node frame, exact command identity and valid finite JSON fields."
 CON-AGND-001: "Reconcile the original command under current epoch, identity and authorization fences; never repeat an uncertain native effect."

@@ -42,9 +42,6 @@ from collections.abc import Awaitable, Callable, Mapping
 from pathlib import Path
 from typing import Any, cast
 
-from audiagentic.components.agents.agents_paths import (
-    gateway_session_resume_concurrency_lock_path,
-)
 from audiagentic.components.agents.gateway.event_topics import (
     SESSION_CLOSED_TOPIC,
     SESSION_EXPIRED_TOPIC,
@@ -79,7 +76,6 @@ from audiagentic.components.agents.status.session_lifecycle_projection import (
 from audiagentic.components.providers import providers_api
 from audiagentic.components.providers.contracts.conversation_focus import ConversationFocusLocator
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.foundation.system.process import StartupLock
 from audiagentic.foundation.time import now_iso_z
 from audiagentic.foundation.transports.agent_session import (
     SessionControlAction,
@@ -1153,9 +1149,7 @@ class SessionRuntime:
         # different control ids for the same closed source.  Serialize the
         # complete source->successor decision so automatic recovery cannot
         # race an explicit resume and create two successor sessions.
-        with StartupLock(
-            gateway_session_resume_concurrency_lock_path(project_root, source_session_id)
-        ):
+        with session_store.session_generation_fence(project_root, source_session_id):
             return self._call(
                 self._resume_session(
                     project_root,
@@ -2865,8 +2859,12 @@ class SessionRuntime:
             )
 
         # ── Resolve source record + binding (raw/protected reads) ──
+        # AS118: the caller holds the source's generation fence. A retention
+        # claim refuses the resume before any provider call; otherwise the
+        # source is stamped as accepted activity first, so a purge that loses
+        # this race rereads it as recently active (only ever newer, never older).
         try:
-            source_record = session_store.read_session_record(project_root, source_session_id)
+            source_record = session_store.record_accepted_turn(project_root, source_session_id)
         except AudiaGenticError as exc:
             _record_failure(exc)
             raise
