@@ -13,7 +13,6 @@ from __future__ import annotations
 import base64
 import binascii
 import hashlib
-import math
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import TypeAlias
@@ -45,7 +44,6 @@ class PrepareWork(WorkMessage):
     caller_root: str = field(repr=False)
     source: str | None
     metadata: Mapping = field(repr=False)
-    timeout_seconds: int | float | None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -206,7 +204,7 @@ class _Wire:
 def _parse_prepare(w):
     p, c = w.p, w.c
     w.exact(
-        "kind binding semantic agent-id worker-id attempt-epoch raw-prompt source metadata timeout-seconds source-workspace caller-root"
+        "kind binding semantic agent-id worker-id attempt-epoch raw-prompt source metadata source-workspace caller-root"
     )
     metadata = p["metadata"]
     if (
@@ -215,13 +213,6 @@ def _parse_prepare(w):
         or any(v is not None and type(v) not in (str, int, float, bool) for v in metadata.values())
     ):
         raise invalid(1, "Work metadata must contain only admitted primitive fields")
-    timeout = p["timeout-seconds"]
-    if timeout is not None and (
-        type(timeout) not in (int, float)
-        or (type(timeout) is float and not math.isfinite(timeout))
-        or timeout <= 0
-    ):
-        raise invalid(1, "Work timeout must be positive finite or null")
     source = p["source"]
     if source is not None:
         _text(source)
@@ -247,7 +238,6 @@ def _parse_prepare(w):
         caller_root=caller_root,
         source=source,
         metadata=metadata,
-        timeout_seconds=timeout,
     )
 
 

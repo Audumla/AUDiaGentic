@@ -63,7 +63,6 @@ def _dispatch(project_root: Path, record: dict, prompt: str = "do the thing") ->
         context_fingerprint="0" * 64,
         component_profile="",
         provider_isolation_tier="full-isolation",
-        worker_timeout_seconds=10,
     )
 
 
@@ -145,7 +144,7 @@ def test_dispatch_success_builds_expected_packet_ctx(tmp_path: Path, monkeypatch
 
     captured = {}
 
-    def fake_execute_provider(*, identity, execution_request, timeout_seconds):
+    def fake_execute_provider(*, identity, execution_request, activity_callback=None):
         packet_ctx = execution_request["packet-data"]
         provider_id = execution_request["provider-id"]
         if packet_ctx.get("request-id") != record["request-id"]:
@@ -177,8 +176,8 @@ def test_worker_dispatch_writes_operator_trace(tmp_path: Path, monkeypatch):
     trace_path = tmp_path / "gateway-console-trace.log"
     use_gateway_settings(monkeypatch, tmp_path, console_trace={"mode": "summary", "file": str(trace_path)})
 
-    def fake_execute_provider(*, identity, execution_request, timeout_seconds, activity_callback):
-        del identity, execution_request, timeout_seconds, activity_callback
+    def fake_execute_provider(*, identity, execution_request, activity_callback=None):
+        del identity, execution_request, activity_callback
         return _worker_result({"provider-id": "local-openai", "model": "gpt-4o", "output": "worker output"})
 
     monkeypatch.setattr(
@@ -210,8 +209,8 @@ def test_worker_dispatch_persists_provider_runtime_metadata(tmp_path: Path, monk
         "provider-session-id": "session-example",
     }
 
-    def fake_execute_provider(*, identity, execution_request, timeout_seconds, activity_callback):
-        del identity, execution_request, timeout_seconds, activity_callback
+    def fake_execute_provider(*, identity, execution_request, activity_callback=None):
+        del identity, execution_request, activity_callback
         return _worker_result(
             {
                 "provider-id": "local-openai",
@@ -244,7 +243,7 @@ def test_dispatch_reloads_admitted_prompt_snapshot_when_fast_path_is_lost(
     )
     captured: dict[str, object] = {}
 
-    def fake_execute_provider(*, identity, execution_request, timeout_seconds):
+    def fake_execute_provider(*, identity, execution_request, activity_callback=None):
         captured.update(execution_request["packet-data"])
         return _worker_result({"provider-id": "local-openai", "model": "gpt-4o", "output": "ok"})
 
@@ -261,7 +260,6 @@ def test_dispatch_reloads_admitted_prompt_snapshot_when_fast_path_is_lost(
         context_fingerprint="0" * 64,
         component_profile="",
         provider_isolation_tier="full-isolation",
-        worker_timeout_seconds=10,
     )
 
     assert result["state"] == "completed"
@@ -297,7 +295,6 @@ def test_restart_observation_does_not_require_prompt_snapshot(
         context_fingerprint="0" * 64,
         component_profile="",
         provider_isolation_tier="none",
-        worker_timeout_seconds=10,
         resume_existing=True,
     )
 
@@ -320,7 +317,7 @@ def test_dispatch_uses_profile_stream_controls_and_ignores_metadata_working_root
     store.write_record(tmp_path, record)
     captured = {}
 
-    def fake_execute_provider(*, identity, execution_request, timeout_seconds):
+    def fake_execute_provider(*, identity, execution_request, activity_callback=None):
         packet_ctx = execution_request["packet-data"]
         provider_id = execution_request["provider-id"]
         captured.update(packet_ctx)
@@ -344,7 +341,7 @@ def test_dispatch_retries_transient_then_succeeds(tmp_path: Path, monkeypatch):
 
     calls = {"count": 0}
 
-    def flaky_execute_provider(*, identity, execution_request, timeout_seconds):
+    def flaky_execute_provider(*, identity, execution_request, activity_callback=None):
         packet_ctx = execution_request["packet-data"]
         provider_id = execution_request["provider-id"]
         # execute_provider is monkeypatched process-wide — a straggler
@@ -378,7 +375,7 @@ def test_retry_attempts_keep_admitted_prompt_after_source_mutation(tmp_path: Pat
     observed: list[str] = []
     calls = {"count": 0}
 
-    def flaky_execute_provider(*, identity, execution_request, timeout_seconds):
+    def flaky_execute_provider(*, identity, execution_request, activity_callback=None):
         calls["count"] += 1
         observed.append(execution_request["packet-data"]["prompt-body"])
         if calls["count"] == 1:
@@ -403,7 +400,6 @@ def test_retry_attempts_keep_admitted_prompt_after_source_mutation(tmp_path: Pat
         context_fingerprint="0" * 64,
         component_profile="",
         provider_isolation_tier="full-isolation",
-        worker_timeout_seconds=10,
     )
     assert result["state"] == "completed"
     assert observed == [frozen, frozen]
@@ -456,7 +452,7 @@ def test_dispatch_stops_retrying_once_cancel_requested(tmp_path: Path, monkeypat
 
     calls = {"count": 0}
 
-    def fake_execute_provider(*, identity, execution_request, timeout_seconds):
+    def fake_execute_provider(*, identity, execution_request, activity_callback=None):
         packet_ctx = execution_request["packet-data"]
         if packet_ctx.get("request-id") != record["request-id"]:
             raise AudiaGenticError(code="NET-STRAY-001", kind="providers", message="not this test's request")

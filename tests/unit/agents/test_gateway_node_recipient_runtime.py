@@ -106,7 +106,6 @@ def prepare_payload(case, **changes):
             "caller-root": case.caller_root,
             "source": None,
             "metadata": {},
-            "timeout-seconds": 1,
         },
         **changes,
     )

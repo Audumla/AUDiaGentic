@@ -37,7 +37,7 @@ def test_async_submit_wait_completed_flow(tmp_path: Path, monkeypatch) -> None:
     """submit (async, default) -> wait -> completed, using a fake provider adapter."""
     _make_profile(tmp_path, "default", "local-openai")
 
-    def fake_execute_provider(*, identity, execution_request, timeout_seconds):
+    def fake_execute_provider(*, identity, execution_request, activity_callback=None):
         return ProviderExecutionResult(
             provider_id="local-openai", model_id="gpt-4o",
             worker_id=identity.worker_id, attempt_epoch=identity.attempt_epoch,
@@ -58,7 +58,7 @@ def test_async_submit_wait_completed_flow(tmp_path: Path, monkeypatch) -> None:
 def test_blocking_run_returns_terminal_result(tmp_path: Path, monkeypatch) -> None:
     _make_profile(tmp_path, "default", "local-openai")
 
-    def fake_execute_provider(*, identity, execution_request, timeout_seconds):
+    def fake_execute_provider(*, identity, execution_request, activity_callback=None):
         return ProviderExecutionResult(
             provider_id="local-openai", model_id="gpt-4o",
             worker_id=identity.worker_id, attempt_epoch=identity.attempt_epoch,
@@ -90,7 +90,7 @@ def test_event_triggered_request_reaches_completed_event(tmp_path: Path, monkeyp
     try:
         _make_profile(tmp_path, "default", "local-openai")
 
-        def fake_execute_provider(*, identity, execution_request, timeout_seconds):
+        def fake_execute_provider(*, identity, execution_request, activity_callback=None):
             return ProviderExecutionResult(
                 provider_id="local-openai", model_id="gpt-4o",
                 worker_id=identity.worker_id, attempt_epoch=identity.attempt_epoch,
@@ -136,7 +136,7 @@ def test_disabled_provider_produces_user_facing_error(tmp_path: Path, monkeypatc
 
     calls = {"count": 0}
 
-    def fake_execute_provider(*, identity, execution_request, timeout_seconds):
+    def fake_execute_provider(*, identity, execution_request, activity_callback=None):
         calls["count"] += 1
         raise AssertionError("disabled provider reached worker execution")
 

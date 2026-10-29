@@ -39,7 +39,6 @@ def test_validate_fields_does_not_inspect_root_or_canonicalize(root, monkeypatch
         ({"model_id": 1}, "VAL-AGW-082", "model_id"),
         ({"component_profile": 1}, "VAL-AGW-082", "component_profile"),
         ({"mode": None}, "VAL-AGW-082", "mode"),
-        ({"timeout_seconds": float("nan")}, "VAL-AGW-082", "timeout_seconds"),
         ({"session": {}}, "VAL-AGW-082", "session"),
         ({"session": SessionSpec(keep_alive=1)}, "VAL-AGW-082", "session.keep_alive"),
         ({"prompt_body": None}, "VAL-AGW-082", "prompt_body"),

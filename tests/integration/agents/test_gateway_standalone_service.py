@@ -664,7 +664,7 @@ def test_real_gateway_work_survives_submitter_disconnect(tmp_path: Path, monkeyp
     provider_started = threading.Event()
     provider_release = threading.Event()
 
-    def slow_provider(*, identity, execution_request, timeout_seconds):
+    def slow_provider(*, identity, execution_request, activity_callback=None):
         provider_started.set()
         provider_release.wait(timeout=5)
         return ProviderExecutionResult(

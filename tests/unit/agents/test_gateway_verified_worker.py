@@ -125,7 +125,7 @@ def rig(tmp_path, monkeypatch):
 def verified(rig, **kwargs):
     identity, request, _, _ = rig
     return worker.execute_verified_isolated_provider_turn(
-        identity=identity, execution_request=request, timeout_seconds=10,
+        identity=identity, execution_request=request,
         allowed_model_ids=kwargs.pop("allowed_model_ids", {"fixture-model"}), **kwargs,
     )
 
@@ -199,7 +199,7 @@ def test_input_worker_attempt_mismatch_rejected_before_any_spawn(rig, api):
     request["worker-id"] = "other-worker"
     with pytest.raises(AudiaGenticError, match="CON-AGW-074"):
         if api == "ordinary":
-            worker.execute_isolated_provider_turn(identity=identity, execution_request=request, timeout_seconds=10)
+            worker.execute_isolated_provider_turn(identity=identity, execution_request=request)
         else:
             verified(rig)
     assert state["invocations"] == 0
@@ -231,7 +231,7 @@ def test_alias_model_behavior_uses_single_implementation(rig, api):
     request["model-id"], request["model-alias"] = None, "friendly-alias"
     if api == "ordinary":
         result = worker.execute_isolated_provider_turn(
-            identity=identity, execution_request=request, timeout_seconds=10,
+            identity=identity, execution_request=request,
         )
         assert type(result) is providers_api.ProviderExecutionResult
     else:
@@ -252,7 +252,7 @@ def test_verified_alias_cannot_choose_an_unprepared_result_model(rig):
 def test_ordinary_result_shape_and_mutability_remain_unchanged(rig):
     identity, request, state, _ = rig
     result = worker.execute_isolated_provider_turn(
-        identity=identity, execution_request=request, timeout_seconds=10,
+        identity=identity, execution_request=request,
     )
     assert type(result) is providers_api.ProviderExecutionResult
     assert result.to_mapping() == {
@@ -322,7 +322,7 @@ def test_permission_denied_home_cleanup_preserves_valid_terminal(rig, tmp_path, 
         with caplog.at_level("WARNING"):
             if api == "ordinary":
                 result = worker.execute_isolated_provider_turn(
-                    identity=identity, execution_request=request, timeout_seconds=10,
+                    identity=identity, execution_request=request,
                 )
             else:
                 proof = verified(rig)
@@ -352,7 +352,7 @@ def test_permission_denied_home_cleanup_does_not_mask_provider_error(rig, tmp_pa
         with caplog.at_level("WARNING"), pytest.raises(AudiaGenticError) as error:
             if api == "ordinary":
                 worker.execute_isolated_provider_turn(
-                    identity=identity, execution_request=request, timeout_seconds=10,
+                    identity=identity, execution_request=request,
                 )
             else:
                 verified(rig)

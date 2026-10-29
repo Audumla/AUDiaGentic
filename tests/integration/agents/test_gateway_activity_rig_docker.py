@@ -35,7 +35,7 @@ def test_activity_rig_emits_authenticated_progress_sequence(tmp_path: Path, monk
     )
     frames: list[WorkerActivityEnvelope] = []
     result = execute_isolated_provider_turn(
-        identity=identity, execution_request=request.to_mapping(), timeout_seconds=10,
+        identity=identity, execution_request=request.to_mapping(),
         activity_callback=frames.append,
     )
     assert result.result_data["status"] == "completed"
@@ -63,7 +63,7 @@ def test_activity_rig_stall_after_first_activity_is_observable(tmp_path: Path, m
     )
     frames: list[WorkerActivityEnvelope] = []
     result = execute_isolated_provider_turn(
-        identity=identity, execution_request=request.to_mapping(), timeout_seconds=10,
+        identity=identity, execution_request=request.to_mapping(),
         activity_callback=frames.append,
     )
     assert result.result_data["status"] == "completed"

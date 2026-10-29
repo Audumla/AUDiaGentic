@@ -312,7 +312,6 @@ class NodeRunner:
                 "raw-prompt": snapshot.raw_prompt, "source-workspace": snapshot.source_workspace.to_mapping(),
                 "caller-root": snapshot.caller_root, "source": snapshot.source,
                 "metadata": {k: v for k, v in snapshot.metadata.items() if k in {"schema_version", "correlation_id"}},
-                "timeout-seconds": current.get("timeout-seconds"),
             }))
             stage = "prepared-reply"
             if type(reply) is PreparationRejected:

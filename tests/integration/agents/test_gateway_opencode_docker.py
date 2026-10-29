@@ -315,7 +315,6 @@ def test_gateway_runs_real_cli_provider_against_local_rig(
             tmp_path,
             execution_profile_id="docker-harness-rig",
             prompt_body="Reply exactly GATEWAY_HARNESS_OK",
-            timeout_seconds=90,
         )
     finally:
         reset_gateway_client()

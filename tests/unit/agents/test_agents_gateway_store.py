@@ -78,14 +78,21 @@ def test_build_record_rejects_empty_prompt_body() -> None:
     assert exc_info.value.code == "VAL-AGW-007"
 
 
-def test_build_record_rejects_non_positive_timeout(tmp_path: Path) -> None:
-    with pytest.raises(AudiaGenticError) as exc_info:
-        store.build_record(execution_profile_id="default", prompt_body="x", timeout_seconds=0)
-    assert exc_info.value.code == "VAL-AGW-008"
+def test_records_carry_no_execution_timeout_and_migrate_it_out(tmp_path: Path) -> None:
+    """SH22: the caller's wait window is not execution policy; old records drop it."""
+    record = store.build_record(execution_profile_id="default", prompt_body="x")
+    assert "timeout-seconds" not in record
+    store.write_record(tmp_path, record)
+    import json
 
-    with pytest.raises(AudiaGenticError) as exc_info:
-        store.build_record(execution_profile_id="default", prompt_body="x", timeout_seconds=-5)
-    assert exc_info.value.code == "VAL-AGW-008"
+    from audiagentic.components.agents.agents_paths import gateway_request_path
+
+    path = gateway_request_path(tmp_path, record["request-id"])
+
+    persisted = json.loads(path.read_text(encoding="utf-8"))
+    persisted["timeout-seconds"] = 120
+    path.write_text(json.dumps(persisted), encoding="utf-8")
+    assert "timeout-seconds" not in store.read_record(tmp_path, record["request-id"])
 
 
 def test_write_and_read_round_trip(tmp_path: Path) -> None:

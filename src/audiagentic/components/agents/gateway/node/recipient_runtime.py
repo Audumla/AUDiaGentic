@@ -57,7 +57,6 @@ class NodeRecipientRuntime:
         preparer: NodeLocalPreparer | None = None,
         max_artifact_bytes: int = 1024 * 1024,
         authorization_timeout_seconds: float = 10,
-        default_timeout_seconds: float = 300,
     ):
         if type(config) is not SharedGatewayNodeConfig or type(owner) is not NodeExecutionOwner:
             raise invalid(1, "Recipient requires configured process-owned execution owner")
@@ -65,15 +64,14 @@ class NodeRecipientRuntime:
             raise invalid(1, "Recipient requires the local preparation owner")
         if type(max_artifact_bytes) is not int or max_artifact_bytes <= 0:
             raise invalid(1, "Recipient artifact bound must be positive")
-        for value in (authorization_timeout_seconds, default_timeout_seconds):
-            if type(value) not in (int, float) or not math.isfinite(value) or value <= 0:
-                raise invalid(1, "Recipient timeouts must be positive finite values")
+        if (type(authorization_timeout_seconds) not in (int, float)
+                or not math.isfinite(authorization_timeout_seconds) or authorization_timeout_seconds <= 0):
+            raise invalid(1, "Recipient timeouts must be positive finite values")
         self._config = config
         self._owner = owner
         self._preparer = preparer or NodeLocalPreparer(config)
         self._max_artifact_bytes = max_artifact_bytes
         self._authorization_timeout = authorization_timeout_seconds
-        self._default_timeout = default_timeout_seconds
         self._configure_lock = asyncio.Lock()
         self._admission_gate = asyncio.Lock()
         self._state_revision = 0
@@ -337,7 +335,7 @@ class NodeRecipientRuntime:
                 binding=b, semantic=work.semantic, agent_id=work.agent_id,
                 raw_prompt=work.raw_prompt, worker_id=work.worker_id,
                 attempt_epoch=work.attempt_epoch, source=work.source,
-                metadata=work.metadata, timeout_seconds=work.timeout_seconds,
+                metadata=work.metadata,
             )
 
         async with self._admission_gate:
@@ -480,7 +478,6 @@ class NodeRecipientRuntime:
                 caller_root=accepted.work.caller_root,
                 authorization_request=sent,
                 authorization_reply=reply,
-                timeout_seconds=accepted.work.timeout_seconds or self._default_timeout,
             )
         except Exception as error:
             self._remember(error, "producer-failed")

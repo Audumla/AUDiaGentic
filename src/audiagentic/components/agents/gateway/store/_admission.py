@@ -103,7 +103,6 @@ def _intent_digest(record: dict[str, Any]) -> str:
         "context-fingerprint": record.get("context-fingerprint"),
         "prompt-digest": record.get("prompt-digest"),
         "mode": record["mode"],
-        "timeout-seconds": record.get("timeout-seconds"),
         # Automatically allocated gateway-session IDs group a request but do
         # not alter its execution intent. Only an explicit continuation ID is
         # semantically significant for an idempotency replay.

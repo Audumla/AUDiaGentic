@@ -264,25 +264,25 @@ def test_closed_operation_router_rejects_unknown_or_missing_parameters(tmp_path:
         )
 
 
-def test_submission_discards_retired_null_timeout_fields(tmp_path: Path) -> None:
+@pytest.mark.parametrize("field", ["timeout_seconds", "session_idle_timeout_seconds", "session_max_lifetime_seconds"])
+def test_submission_rejects_retired_fields_even_when_null(tmp_path: Path, field: str) -> None:
     service = _service(tmp_path)
     authorization = _authorization(service)
 
-    result = service.invoke(
-        "submit_execution_request",
-        str(tmp_path),
-        {
-            "prompt_body": "hello",
-            "timeout_seconds": None,
-            "session_idle_timeout_seconds": None,
-            "session_max_lifetime_seconds": None,
-        },
-        **authorization,
-    )
+    with pytest.raises(AudiaGenticError, match="VAL-AGSV-022"):
+        service.invoke(
+            "submit_execution_request", str(tmp_path), {"prompt_body": "hello", field: None}, **authorization,
+        )
 
-    assert "timeout_seconds" not in result
-    assert "session_idle_timeout_seconds" not in result
-    assert "session_max_lifetime_seconds" not in result
+
+@pytest.mark.parametrize("value", [0, -1, True, "soon", float("inf")])
+def test_submission_wait_timeout_must_be_a_positive_number(tmp_path: Path, value) -> None:
+    service = _service(tmp_path)
+    with pytest.raises(AudiaGenticError, match="VAL-AGSV-022"):
+        service.invoke(
+            "run_execution_request", str(tmp_path), {"prompt_body": "hello", "wait_timeout_seconds": value},
+            **_authorization(service),
+        )
 
 
 def test_submission_rejects_non_null_retired_timeout_fields(tmp_path: Path) -> None:

@@ -34,7 +34,8 @@ from audiagentic.foundation.time import now_iso_z
 logger = logging.getLogger(__name__)
 
 # A blocking wait with no requested timeout still needs a bound so it cannot
-# hang forever; callers that want longer pass an explicit timeout_seconds.
+# hang forever; callers that want longer pass an explicit wait_timeout_seconds.
+# This bounds only how long the caller waits, never the execution (SH22).
 DEFAULT_BLOCKING_TIMEOUT_SECONDS = 300.0
 
 _QUEUE_MANAGER = queue_mod.GatewayQueueManager()
@@ -431,7 +432,7 @@ def submit_execution_request(
     execution_profile_id: str | None = None,
     prompt_body: str | None = None,
     mode: str = "async",
-    timeout_seconds: float | None = None,
+    wait_timeout_seconds: float | None = None,
     source: str | None = None,
     metadata: dict[str, Any] | None = None,
     session_id: str | None = None,
@@ -549,7 +550,6 @@ def submit_execution_request(
         "model_id": raw_metadata.get("model_id"),
         "component_profile": component_profile,
         "mode": mode,
-        "timeout_seconds": timeout_seconds,
         "session": {
             "session_id": session_id,
             "keep_alive": session_keep_alive,
@@ -782,7 +782,6 @@ def submit_execution_request(
             prompt_profile_id=prompt_profile_id,
             prompt_body=prompt_body,  # carried in-memory; redacted before persistence
             mode=mode,
-            timeout_seconds=timeout_seconds,
             source=source,
             metadata=persisted_metadata,
             client_default_session=default_selection.identity,
@@ -925,7 +924,6 @@ def submit_execution_request(
                 context_fingerprint=request_context_fingerprint,
                 component_profile=manifest.identity.component_profile,
                 provider_isolation_tier=manifest.identity.provider_isolation_tier,
-                worker_timeout_seconds=manifest.timeout_seconds or DEFAULT_BLOCKING_TIMEOUT_SECONDS,
             )
             record = admission_queue.enqueue(
                 project_root,
@@ -939,7 +937,7 @@ def submit_execution_request(
             )
 
     if mode == "blocking":
-        wait_timeout = timeout_seconds or DEFAULT_BLOCKING_TIMEOUT_SECONDS
+        wait_timeout = wait_timeout_seconds or DEFAULT_BLOCKING_TIMEOUT_SECONDS
         raw = get_queue_manager().wait(project_root, record["request-id"], wait_timeout)
         return _enrich_terminal_result(raw, project_root)
     # Admission returns the durable request envelope so callers retain the
@@ -2175,7 +2173,7 @@ def run_execution_request(
     *,
     execution_profile_id: str | None = None,
     prompt_body: str | None = None,
-    timeout_seconds: float | None = None,
+    wait_timeout_seconds: float | None = None,
     source: str | None = None,
     metadata: dict[str, Any] | None = None,
     session_id: str | None = None,
@@ -2195,7 +2193,7 @@ def run_execution_request(
         execution_profile_id=execution_profile_id,
         prompt_body=prompt_body,
         mode="blocking",
-        timeout_seconds=timeout_seconds,
+        wait_timeout_seconds=wait_timeout_seconds,
         source=source,
         metadata=metadata,
         session_id=session_id,

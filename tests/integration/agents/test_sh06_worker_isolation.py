@@ -128,7 +128,7 @@ def test_concurrent_workers_keep_project_profile_and_secret_context_isolated(
         left_result, right_result = list(
             pool.map(
                 lambda work: execute_isolated_provider_turn(
-                    identity=work[0], execution_request=work[1], timeout_seconds=20
+                    identity=work[0], execution_request=work[1]
                 ),
                 ((left_identity, left_request), (right_identity, right_request)),
             )
@@ -165,7 +165,6 @@ def test_non_full_tiers_return_explicit_policy_outcome(tmp_path: Path) -> None:
         execute_isolated_provider_turn(
             identity=identity,
             execution_request=request.to_mapping(),
-            timeout_seconds=10,
         )
     assert error.value.code == "UNS-AGW-076"
 
@@ -196,7 +195,6 @@ def test_gateway_dispatches_full_isolation_provider_in_a_worker(
         tmp_path,
         prompt_body="return context",
         component_profile="isolated-profile",
-        timeout_seconds=20,
     )
 
     assert result["state"] == "completed"
@@ -226,7 +224,6 @@ def test_provider_crash_reaps_the_detached_descendant_tree(
         execute_isolated_provider_turn(
             identity=identity,
             execution_request=request,
-            timeout_seconds=20,
         )
     assert error.value.code == "EXT-QWEN-001"
 
@@ -281,7 +278,6 @@ def test_gateway_runs_three_profiles_in_parallel_os_processes(
                     prompt_body="return context",
                     execution_profile_id=pair[0],
                     component_profile=pair[1],
-                    timeout_seconds=20,
                 ),
                 zip(profiles, ("deep", "lite", "supp"), strict=True),
             )

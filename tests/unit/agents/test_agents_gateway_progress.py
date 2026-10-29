@@ -563,7 +563,7 @@ def test_all_keys_present() -> None:
 def test_request_runtime_status_includes_progress(tmp_path: Path, monkeypatch) -> None:
     _make_profile(tmp_path, "default", "local-openai")
 
-    def fake_execute_provider(*, identity, execution_request, timeout_seconds):
+    def fake_execute_provider(*, identity, execution_request, activity_callback=None):
         return _result(
             {"provider-id": "local-openai", "status": "ok", "model": "gpt-4o", "output": "done"}
         )
@@ -659,7 +659,7 @@ def test_wait_timeout_marker_on_non_terminal(tmp_path: Path, monkeypatch) -> Non
 
     hold = threading.Event()
 
-    def slow_execute_provider(*, identity, execution_request, timeout_seconds):
+    def slow_execute_provider(*, identity, execution_request, activity_callback=None):
         hold.wait(timeout=5)
         return _result(
             {"provider-id": "local-openai", "status": "ok", "model": "gpt-4o", "output": "done"}
@@ -683,7 +683,7 @@ def test_wait_timeout_marker_on_non_terminal(tmp_path: Path, monkeypatch) -> Non
 def test_gateway_overview_includes_runtime_fingerprint(tmp_path: Path, monkeypatch) -> None:
     _make_profile(tmp_path, "default", "local-openai")
 
-    def fake_execute_provider(*, identity, execution_request, timeout_seconds):
+    def fake_execute_provider(*, identity, execution_request, activity_callback=None):
         return _result(
             {"provider-id": "local-openai", "status": "ok", "model": "gpt-4o", "output": "done"}
         )
@@ -733,7 +733,7 @@ def test_runtime_fingerprint_process_identity_is_stable() -> None:
 def test_terminal_wait_does_not_add_timeout_marker(tmp_path: Path, monkeypatch) -> None:
     _make_profile(tmp_path, "default", "local-openai")
 
-    def fake_execute_provider(*, identity, execution_request, timeout_seconds):
+    def fake_execute_provider(*, identity, execution_request, activity_callback=None):
         return _result(
             {"provider-id": "local-openai", "status": "ok", "model": "gpt-4o", "output": "done"}
         )
@@ -1097,7 +1097,7 @@ def test_wait_timeout_includes_progress_summary(tmp_path: Path, monkeypatch) -> 
 
     hold = threading.Event()
 
-    def slow_execute_provider(*, identity, execution_request, timeout_seconds):
+    def slow_execute_provider(*, identity, execution_request, activity_callback=None):
         hold.wait(timeout=5)
         return _result(
             {"provider-id": "local-openai", "status": "ok", "model": "gpt-4o", "output": "done"}
@@ -1209,7 +1209,7 @@ def test_request_runtime_status_includes_sh15_progress_summary(tmp_path: Path, m
 
     hold = threading.Event()
 
-    def slow_execute_provider(*, identity, execution_request, timeout_seconds):
+    def slow_execute_provider(*, identity, execution_request, activity_callback=None):
         hold.wait(timeout=5)
         return _result(
             {"provider-id": "local-openai", "status": "ok", "model": "gpt-4o", "output": "done"}

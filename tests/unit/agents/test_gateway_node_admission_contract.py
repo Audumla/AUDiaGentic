@@ -38,7 +38,7 @@ def test_ordinary_intent_digest_historical_golden_bytes():
     ordinary = {"execution-profile-id": "profile", "mode": "async"}
     golden = (b'{"context-fingerprint":null,"continuation-session-id":null,"execution-profile-id":"profile",'
               b'"mode":"async","prompt-digest":null,"provider-transport-kind":null,"session-idle-timeout-seconds":null,'
-              b'"session-keep-alive":null,"session-max-lifetime-seconds":null,"timeout-seconds":null}')
+              b'"session-keep-alive":null,"session-max-lifetime-seconds":null}')
     assert _intent_digest(ordinary) == hashlib.sha256(golden).hexdigest()
     assert _intent_digest({**ordinary, "node-placement": None, "node-admission": None}) == _intent_digest(ordinary)
 

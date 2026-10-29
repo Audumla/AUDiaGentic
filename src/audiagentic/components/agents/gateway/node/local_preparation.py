@@ -78,7 +78,6 @@ class NodeLocalPreparer:
         mode: str = "async",
         session: SessionSpec | None = None,
         provider_chat_url: str | None = None,
-        timeout_seconds: float | None = None,
     ) -> RetainedNodePreparation:
         """Materialize once, verify selected semantics, then resolve local facts.
 
@@ -182,7 +181,7 @@ class NodeLocalPreparer:
         envelope = SubmissionEnvelope(
             project_root=str(root), execution_profile_id=selected.execution_profile_id,
             component_profile=self._component_profile, prompt_body=raw_prompt,
-            mode=mode, session=session, timeout_seconds=timeout_seconds, source=source,
+            mode=mode, session=session, source=source,
             metadata=sanitize_submission_metadata(metadata),
         )
         canonical_root = envelope.validate()
