@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.0](https://github.com/Audumla/AUDiaGentic/compare/v0.8.0...v0.9.0) (2026-10-29)
+
+
+### Features
+
+* **agents:** agent definitions as single validated files with templates (CFG05) ([#98](https://github.com/Audumla/AUDiaGentic/issues/98)) ([53fbfdb](https://github.com/Audumla/AUDiaGentic/commit/53fbfdb0061def4d51aa0eb6b9c9c5f977c72fba))
+
 ## [0.8.0](https://github.com/Audumla/AUDiaGentic/compare/v0.7.2...v0.8.0) (2026-10-29)
 
 
