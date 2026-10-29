@@ -87,8 +87,8 @@ def resolve_project_name(
 def project_identity(project_root: Path, *, workspace_name: str | None = None) -> tuple[str, str]:
     """The project name and where it came from.
 
-    Sources, in precedence order: ``configured`` (project.yaml), ``workspace``
-    (host label), ``git-remote`` (origin repository name), ``main-checkout``
+    Sources, in precedence order: ``configured`` (project.yaml), ``settings``
+    (``project.id``), ``workspace`` (host label), ``git-remote`` (origin repository name), ``main-checkout``
     (the main checkout's directory) and ``folder`` (this directory). The last
     two are provisional: they differ between clones.
     """
@@ -99,6 +99,9 @@ def project_identity(project_root: Path, *, workspace_name: str | None = None) -
     configured_name = data.get("project-name") or data.get("project_name")
     if isinstance(configured_name, str) and configured_name.strip():
         return configured_name.strip(), "configured"
+    declared = _declared_project_id(project_root)
+    if declared:
+        return declared, "settings"
     if isinstance(workspace_name, str) and workspace_name.strip():
         return workspace_name.strip(), "workspace"
     # Worktree and clone directories are arbitrary local names; the repository
@@ -117,11 +120,8 @@ def project_id(project_root: Path) -> tuple[str, str]:
     ``.audiagentic/config/project.yaml``), ``git-remote`` (origin repository
     name), ``main-checkout`` and ``folder``. The last two are provisional.
     """
-    from audiagentic.foundation.config.settings import resolve_settings
-
-    # A root that does not exist (yet) has no project scope to read.
-    declared = resolve_settings(project=project_root).get("project.id") if project_root.is_dir() else None
-    if isinstance(declared, str) and declared:
+    declared = _declared_project_id(project_root)
+    if declared:
         return declared, "settings"
     config_path = project_root / ".audiagentic" / "config" / "project.yaml"
     data = load_yaml_file(config_path) if config_path.is_file() else {}
@@ -130,6 +130,16 @@ def project_id(project_root: Path) -> tuple[str, str]:
         return legacy, "legacy"
     name, source = _git_repository_identity(project_root) or (project_root.resolve().name, "folder")
     return _path_safe_id(name) or "project", source
+
+
+def _declared_project_id(project_root: Path) -> str | None:
+    """``project.id`` from the resolved settings; a root that does not exist has none."""
+    if not project_root.is_dir():
+        return None
+    from audiagentic.foundation.config.settings import resolve_settings_cached
+
+    declared = resolve_settings_cached(project_root).get("project.id")
+    return declared if isinstance(declared, str) and declared else None
 
 
 def git_remote_ids(project_root: Path) -> dict[str, str]:

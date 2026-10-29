@@ -48,9 +48,11 @@ project:
 ```
 
 Ids use letters, digits, `.`, `_` and `-` (up to 64 characters, starting with a
-letter or digit); derived names are normalized to that form. The display name
-used by chat providers is separate (`project-name` in the legacy project file,
-else the repository name).
+letter or digit); derived names are normalized to that form. Providers such as
+gpt-auto use the project name to find their project (for gpt-auto, the ChatGPT
+project of that name): an explicit `project-name` in the legacy project file
+wins, then `project.id`, then the repository name. A repository with no remote
+and no `project.id` is named after its directory, which differs between clones.
 
 See `docs/design/configuration-model.md` on the planning branch for the full
 model.

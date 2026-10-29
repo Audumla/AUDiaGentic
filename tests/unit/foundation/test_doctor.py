@@ -112,3 +112,40 @@ def test_setup_creates_user_settings_once(env: dict[str, Path], capsys: pytest.C
     assert (env["user"] / "settings.yaml").read_text().endswith("schema_version: 1\n")
     assert _main(["setup", "--json"]) == 0
     assert json.loads(capsys.readouterr().out)["created"] == []
+
+
+def test_clean_home_warns_about_the_catalog_instead_of_failing(env: dict[str, Path], monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AUDIAGENTIC_HOME", str(env["tmp"] / "agentic-home"))
+    checks = _by_check(run_checks(DoctorContext(None)))
+    assert checks["agents.files"][0].status == "warn"
+    assert checks["agents.catalog"][0].status == "warn"
+    assert "agent add" in checks["agents.catalog"][0].fix
+    assert not [r for rs in checks.values() for r in rs if r.status == FAIL]
+
+
+def test_an_invalid_legacy_catalog_still_fails(env: dict[str, Path], monkeypatch: pytest.MonkeyPatch) -> None:
+    home = env["tmp"] / "agentic-home"
+    (home / "config").mkdir(parents=True)
+    (home / "config" / "agents.yaml").write_text("not: [valid", encoding="utf-8")
+    monkeypatch.setenv("AUDIAGENTIC_HOME", str(home))
+    assert _by_check(run_checks(DoctorContext(None)))["agents.catalog"][0].status == FAIL
+
+
+def test_gpt_auto_on_an_embedded_gateway_is_flagged_with_the_fix(
+    env: dict[str, Path], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import audiagentic.components.providers.providers_api as providers_api
+
+    agents = env["user"] / "agents"
+    agents.mkdir(parents=True)
+    (agents / "r.yaml").write_text("schema_version: 1\nextends: reviewer\nprovider: gpt-auto\nmodel: chatgpt\n")
+    monkeypatch.setenv("AUDIAGENTIC_HOME", str(env["tmp"] / "agentic-home"))
+    monkeypatch.setattr(providers_api, "is_provider_enabled_for_launch", lambda root, provider: True)
+    monkeypatch.setattr(providers_api, "check_provider_availability", lambda root, provider: (True, "CDP answers"))
+    monkeypatch.delenv("AUDIAGENTIC_GATEWAY_MODE", raising=False)
+    warned = _by_check(run_checks(DoctorContext(None)))["agents.gateway"][0]
+    assert warned.status == "warn" and "gateway.implementation" in warned.fix
+
+    env["user"].mkdir(parents=True, exist_ok=True)
+    (env["user"] / "settings.yaml").write_text("schema_version: 1\ngateway:\n  implementation: automatic\n")
+    assert _by_check(run_checks(DoctorContext(None)))["agents.gateway"][0].status == OK
