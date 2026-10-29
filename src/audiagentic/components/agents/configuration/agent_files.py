@@ -154,8 +154,11 @@ def _default_surface(fields: dict[str, Any], agent_id: str) -> None:
                                provider=fields["provider"], surfaces=list(surfaces))
 
 
-def resolve_agents(*, project: Path | str | None = None, cwd: Path | None = None) -> dict[str, ResolvedAgent]:
-    project_root = discover_project_root(project, cwd=cwd)
+def resolve_agents(
+    *, project: Path | str | None = None, cwd: Path | None = None, machine_only: bool = False,
+) -> dict[str, ResolvedAgent]:
+    """Resolve agents from vendor, user and (unless ``machine_only``) project scopes."""
+    project_root = None if machine_only else discover_project_root(project, cwd=cwd)
     grouped = _loaded(agent_file_sources(project_root))
     resolved: dict[str, ResolvedAgent] = {}
     for (kind, agent_id), layers in sorted(grouped.items()):
