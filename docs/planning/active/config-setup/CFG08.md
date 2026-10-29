@@ -86,6 +86,8 @@ Next: a doctor check that the gpt-auto dashboard anchor and project name resolve
 
 2026-10-29 repeat of the live check on main with #140, using only documented steps in a fresh throwaway home and a repo with no remote: audiagentic setup; audiagentic agent add NAME --extends reviewer --provider gpt-auto --model chatgpt; settings gateway.implementation: automatic (user) and project.id (tracked project settings) as doctor instructs; doctor all ok; agent_task_submit of a one-line prompt through the gateway MCP completed with the expected reply. No stub page, no environment variables, no hand-edited catalog. The criterion holds when two documented settings are counted as configuration, not as manual file edits; a default install still needs them because the default implementation is embedded and a repo without a remote is named after its directory. Remaining before CFG08 can complete: decide whether setup should offer or apply those two settings, and MCP registration through the CLI entrypoint.
 
+2026-10-29 correction to the live-check findings above. Gap 3 (gpt-auto dashboard anchor) is environment-dependent, not a general clean-install failure: ensure_dedicated_window_anchor reuses any open browser tab whose scheme, host and path match the dashboard URL (served or not) and keeps an in-memory handle between calls, so gpt-auto works under the embedded gateway whenever such a tab or handle already exists (the other session ran many requests that way) and fails with ERR_CONNECTION_REFUSED only when none does, as in my fresh-browser first run. Not reproduced on a truly clean browser since. The agents.gateway doctor check now says exactly that. Whether to make shared (automatic) the default is an explicit decision, not a side effect: the SH11 item is closed but records no soak or rollback rehearsal, embedded.yaml still says default until that soak, and every session using the global gateway MCP runs the embedded default today. Before any flip: run the five integration files that set the gateway mode, a real gpt-auto request under the flipped default, and reproduce the anchor failure on a clean browser.
+
 ## Change Log
 
 - 2026-10-28T21:05:53.564412+00:00 (created-by): Created by claude
@@ -98,3 +100,4 @@ Next: a doctor check that the gpt-auto dashboard anchor and project name resolve
 - 2026-10-29T05:00:17.238284+00:00 (updated-by): Updated: section:notes
 - 2026-10-29T05:27:58.309590+00:00 (updated-by): Updated: section:notes
 - 2026-10-29T05:31:22.215189+00:00 (updated-by): Updated: section:notes
+- 2026-10-29T07:40:55.635463+00:00 (updated-by): Updated: section:notes
