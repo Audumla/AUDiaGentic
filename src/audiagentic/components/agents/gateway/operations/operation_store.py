@@ -21,7 +21,7 @@ from audiagentic.foundation.system.process import StartupLock
 from audiagentic.foundation.time import now_iso_z
 from audiagentic.foundation.workflow import load_workflow, states_in_set, transition_allowed
 
-from .contracts import ManagementCommand
+from .contracts import ManagementCommand, ManagementOperationKind, validate_node_revoke_scope
 
 _WORKFLOW = load_workflow(Path(__file__).parent.parent.parent / "workflows.yaml", "gateway-operation")
 _DISPATCHABLE = frozenset(states_in_set(_WORKFLOW, "dispatchable"))
@@ -54,10 +54,21 @@ class ManagementOperationStore:
     def root(self) -> Path:
         return self._root
 
-    def create(self, command: ManagementCommand) -> dict[str, Any]:
-        """Create accepted work, or return the same operation idempotently."""
+    def create(self, command: ManagementCommand, *, local_only: bool = False) -> dict[str, Any]:
+        """Create accepted work, or return the same operation idempotently.
+
+        Node revocation is local-only: the generic service application cannot
+        forward this keyword. This is a surface restriction, not grant policy.
+        """
         operation_id = _require_id(command.operation_id)
-        scope = _validate_scope(command.scope)
+        if command.kind is ManagementOperationKind.NODE_REVOKE and local_only is not True:
+            raise AudiaGenticError(
+                "UNS-AGM-001", "agents", "node-revoke requires explicit local operation creation", {},
+            )
+        scope = (
+            validate_node_revoke_scope(command.scope)
+            if command.kind is ManagementOperationKind.NODE_REVOKE else _validate_scope(command.scope)
+        )
         intent = {
             "kind": command.kind.value,
             "scope": scope,
@@ -338,7 +349,10 @@ def _validate_record(record: Mapping[str, Any]) -> None:
         raise AudiaGenticError("VAL-AGM-007", "agents", "gateway operation record is invalid", {})
     if not isinstance(record.get("revision"), int) or int(record["revision"]) < 0:
         raise AudiaGenticError("VAL-AGM-007", "agents", "gateway operation record is invalid", {})
-    _validate_scope(record.get("scope", {}))
+    if record.get("kind") == ManagementOperationKind.NODE_REVOKE.value:
+        validate_node_revoke_scope(record.get("scope", {}))
+    else:
+        _validate_scope(record.get("scope", {}))
     if record.get("result") is not None:
         _validate_result(record["result"])
     if record.get("error") is not None:

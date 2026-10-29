@@ -68,7 +68,7 @@ def segment_paths(path: Path) -> list[Path]:
     return [
         p
         for name, p in sorted(paths.items(), key=lambda pair: (int(pair[0].split(".")[1]), pair[0]))
-        if not (name + ".gz") in paths
+        if (name + ".gz") not in paths
     ]
 
 

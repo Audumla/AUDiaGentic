@@ -4,8 +4,8 @@ stack wired together (store + queue + dispatch), against a fake execute_provider
 
 from __future__ import annotations
 
-import threading
 import os
+import threading
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -56,6 +56,26 @@ def _result(data: dict) -> SimpleNamespace:
     return SimpleNamespace(result_data=data)
 
 
+@pytest.fixture
+def bounded_workspace_discovery(tmp_path: Path, monkeypatch):
+    """Exercise automatic sibling discovery without enumerating host ancestors."""
+    monkeypatch.delenv("AUDIAGENTIC_WORKSPACE_ROOTS", raising=False)
+    real_iterdir = Path.iterdir
+    visits: list[Path] = []
+    candidates: list[Path] = []
+
+    def iterdir(parent: Path):
+        visits.append(parent)
+        if parent != tmp_path:
+            return iter(())
+        children = list(real_iterdir(parent))
+        candidates.extend(children)
+        return iter(children)
+
+    monkeypatch.setattr(Path, "iterdir", iterdir)
+    return visits, candidates
+
+
 def test_workspace_name_resolves_sibling_project_root(tmp_path: Path, monkeypatch) -> None:
     current = tmp_path / "AUDiaGentic"
     target = tmp_path / "bigcherry"
@@ -73,7 +93,7 @@ def test_workspace_name_resolves_sibling_project_root(tmp_path: Path, monkeypatc
 
 
 def test_workspace_name_ignores_sibling_config_dir_that_normalizes_to_project_id(
-    tmp_path: Path,
+    tmp_path: Path, bounded_workspace_discovery,
 ) -> None:
     current = tmp_path / "AUDiaGentic"
     current_config = current / ".audiagentic" / "config"
@@ -95,13 +115,26 @@ def test_workspace_name_ignores_sibling_config_dir_that_normalizes_to_project_id
     )
 
     assert gateway._resolve_workspace_project_root(current, "AUDiaGentic") == current.resolve()
+    visits, candidates = bounded_workspace_discovery
+    assert tmp_path in visits  # The automatic-discovery branch was exercised.
+    assert tmp_path / ".audiagentic" in candidates
+    assert similarly_named in candidates
 
 
-def test_workspace_name_resolution_fails_closed_when_missing(tmp_path: Path) -> None:
+def test_workspace_name_resolution_fails_closed_when_missing(
+    tmp_path: Path, bounded_workspace_discovery,
+) -> None:
+    unrelated = tmp_path / "unrelated"
+    manifest = unrelated / ".audiagentic" / "config" / "project.yaml"
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text("project-id: unrelated\n", encoding="utf-8")
     with pytest.raises(AudiaGenticError) as exc_info:
         gateway._resolve_workspace_project_root(tmp_path / "AUDiaGentic", "missing")
 
     assert exc_info.value.code == "RES-AGW-152"
+    visits, candidates = bounded_workspace_discovery
+    assert tmp_path in visits
+    assert unrelated in candidates
 
 
 def test_absolute_workspace_root_disambiguates_duplicate_worktrees(tmp_path: Path) -> None:

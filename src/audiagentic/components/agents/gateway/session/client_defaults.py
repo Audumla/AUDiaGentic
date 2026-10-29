@@ -432,7 +432,6 @@ def replace_failed_session(
     warning_message: str = "Provider conversation could not be loaded; resubmitting in a fresh session.",
 ) -> dict[str, Any] | None:
     """Reserve a fresh provider session for an explicit session-bound request."""
-    from audiagentic.components.agents.gateway import store
     from audiagentic.components.agents.gateway.session import sessions_store
 
     try:

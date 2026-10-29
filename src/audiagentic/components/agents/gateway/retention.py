@@ -289,12 +289,12 @@ def _drain_request_retention() -> None:
         duration_ms = round((time.perf_counter() - started) * 1000, 3)
         if trigger_request_id:
             try:
+                from audiagentic.components.agents.agents_paths import (
+                    gateway_request_maintenance_lock_path,
+                    gateway_request_path,
+                )
                 from audiagentic.components.agents.gateway.observability import (
                     append_observation,
-                )
-
-                from audiagentic.components.agents.agents_paths import (
-                    gateway_request_maintenance_lock_path, gateway_request_path,
                 )
 
                 # Purge and maintenance share an external fence. A completed sweep

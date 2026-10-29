@@ -96,6 +96,7 @@ def assert_one_shot_state_matrix(
     # route rather than pretending their requests still use disposable workers.
     if provider_id.startswith("gpt-auto"):
         from dataclasses import replace
+
         from audiagentic.foundation.transports.session_surface import (
             SurfaceValidation,
             ValidationEvidence,

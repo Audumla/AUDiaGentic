@@ -4,7 +4,6 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-
 _GENERIC_CHAT_TITLES = frozenset({
     "skip to content",
     "chat history",

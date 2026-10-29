@@ -1,14 +1,12 @@
 """Causal recovery intents and offline replay analysis (GA04)."""
 from __future__ import annotations
 
-from audiagentic.foundation.observability.journal_segments import has_segments, head_read_lock
-
 import base64
 import json
 import os
-from datetime import datetime, timedelta, timezone
 from collections import defaultdict
 from collections.abc import Iterable, Mapping
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +16,7 @@ from audiagentic.components.agents.agents_paths import (
     gateway_request_path,
 )
 from audiagentic.foundation.io import iter_ndjson, last_ndjson
+from audiagentic.foundation.observability.journal_segments import has_segments, head_read_lock
 from audiagentic.foundation.system.process import StartupLock
 from audiagentic.foundation.time import now_iso_z
 from audiagentic.foundation.transports.agent_session import is_meaningful_activity_label
@@ -162,7 +161,11 @@ def _append(project_root: Path, request_id: str, event: dict[str, Any]) -> dict[
 
 
 def _append_locked(project_root: Path, request_id: str, event: dict[str, Any]) -> dict[str, Any]:
-    from audiagentic.foundation.observability.journal_segments import prepare_append, journal_sequence_watermark
+    from audiagentic.foundation.observability.journal_segments import (
+        journal_sequence_watermark,
+        prepare_append,
+    )
+
     from .retention import journal_max_bytes
 
     path = gateway_recovery_action_path(project_root, request_id)

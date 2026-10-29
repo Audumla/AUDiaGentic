@@ -15,11 +15,11 @@ Tools: lsp_capabilities, lsp_symbols, lsp_doc_symbols, lsp_definition,
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 import time
 from pathlib import Path
-import re
 
 import pytest
 

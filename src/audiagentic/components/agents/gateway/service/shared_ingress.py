@@ -9,6 +9,10 @@ import hashlib
 import hmac
 from typing import Any
 
+from audiagentic.components.agents.gateway.node.admission_contract import (
+    NodeSubmissionContext,
+    SourceWorkspaceIdentity,
+)
 from audiagentic.components.agents.gateway.remote_client import load_auth_token
 from audiagentic.components.agents.gateway.service.shared_config import (
     SharedGatewayPrincipal,
@@ -37,6 +41,7 @@ _ACTIONS = {
 _SUBMISSION = frozenset({
     "agent_id", "execution_profile_id", "prompt_body", "mode", "source", "metadata",
     "session_id", "session_keep_alive", "new_session", "title", "logical_client_id",
+    "node_id", "workspace_id", "source_workspace",
 })
 _METADATA = frozenset({"schema_version", "idempotency_key", "correlation_id"})
 
@@ -76,6 +81,9 @@ class SharedGatewayIngress:
         if operation == "submit_execution_request":
             if params.keys() - _SUBMISSION:
                 raise _error(22, "Shared submission contains unsupported parameters")
+            node_fields = {"node_id", "workspace_id", "source_workspace"}
+            if node_fields.intersection(params) and not node_fields <= params.keys():
+                raise _error(22, "Node submission requires complete recipient and caller context")
             metadata = params.get("metadata") or {}
             if not isinstance(metadata, dict) or metadata.keys() - _METADATA:
                 raise _error(22, "Shared submission metadata contains unsupported parameters")
@@ -99,6 +107,30 @@ class SharedGatewayIngress:
         if operation == "resume_execution_session" and params.keys() - {"source_session_id", "control_id"}:
             raise _error(22, "Shared resume cannot override execution authority")
         return operation, str(self.config.projects[project]), params
+
+    def node_submission_context(
+        self, principal: SharedGatewayPrincipal, project_id: str,
+        params: dict[str, Any], *, source_node_token: str,
+    ) -> tuple[NodeSubmissionContext, dict[str, Any]]:
+        """Separate authenticated ingress scope from untrusted operation params.
+
+        Source credential verification remains in NodeGrantAuthority under its
+        current grant/revocation lock. Never resolve the foreign locator here.
+        """
+        if project_id not in principal.projects or project_id not in self.config.projects or "submit" not in principal.actions:
+            raise _error(5, "Node submission principal or project is not authorized")
+        source = params.get("source_workspace")
+        if not isinstance(source, dict) or set(source) != {"identity", "caller-root"}:
+            raise _error(22, "Node submission requires connector-owned caller context")
+        context = NodeSubmissionContext(
+            principal.principal_id, self.config.server_id, project_id,
+            params.get("node_id"), params.get("workspace_id"),
+            SourceWorkspaceIdentity.from_mapping(source["identity"]),
+            source["caller-root"], source_node_token,
+        )
+        arguments = {key: value for key, value in params.items()
+                     if key not in {"node_id", "workspace_id", "source_workspace"}}
+        return context, arguments
 
     def health(self, application: Any, principal: SharedGatewayPrincipal) -> dict[str, Any]:
         raw = application.health()

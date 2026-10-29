@@ -55,16 +55,18 @@ def shared(tmp_path):
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
 
-    def request(path, body=None, token="token-alice"):
+    def request(path, body=None, token="token-alice", *, headers=None):
         req = Request(f"http://127.0.0.1:{server.server_port}{path}",
                       data=None if body is None else json.dumps(body).encode(),
-                      headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"})
+                      headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json", **(headers or {})})
         try:
             with urlopen(req, timeout=3) as response:
                 return response.status, json.load(response)
         except HTTPError as error:
             return error.code, json.load(error)
 
+    request.application = application
+    request.server = server
     yield request
     server.shutdown()
     thread.join(timeout=3)
@@ -83,6 +85,134 @@ def call(lease, **overrides):
     return {"operation": "list_execution_requests", "project-id": "one", "params": {},
             "protocol-version": PROTOCOL_VERSION, "owner-epoch": lease["owner-epoch"],
             "lease-id": lease["lease-id"], **overrides}
+
+
+def node_params():
+    return {
+        "agent_id": "reviewer", "prompt_body": "inspect caller files",
+        "node_id": "local-node", "workspace_id": "working-tree",
+        "source_workspace": {
+            "identity": {"version": 1, "source-node-id": "local-node",
+                         "workspace-id": "working-tree", "access-mode": "read-write",
+                         "binding-sha256": "a" * 64},
+            # An opaque foreign locator: ingress must never resolve or inspect it.
+            "caller-root": "/unavailable-on-gateway/caller-workspace",
+        },
+    }
+
+
+SOURCE_HEADER = {"X-AUDiaGentic-Source-Node-Token": "node-credential"}
+
+
+def test_node_submission_is_private_context_not_ordinary_provider_submission(shared):
+    from audiagentic.components.agents.gateway.node.admission_contract import NodeSubmissionContext
+
+    calls = []
+
+    class Admission:
+        def submit(self, root, **kwargs):
+            calls.append((root, kwargs))
+            return {"request-id": "req_test_node", "state": "queued",
+                    "private-source-token": "must-not-leak"}
+
+    shared.application._node_admission = Admission()
+    lease = acquire(shared)
+    status, response = shared("/shared/v1/call", call(
+        lease, operation="submit_execution_request", params=node_params()), headers=SOURCE_HEADER)
+    assert status == 200, response
+    assert response["result"] == {"request-id": "req_test_node", "state": "queued"}
+    root, invocation = calls.pop()
+    assert root.name == "one"
+    context = invocation["context"]
+    assert type(context) is NodeSubmissionContext
+    assert (context.principal_id, context.server_id, context.server_project_id) == ("alice", "test", "one")
+    assert context.source_node_token == "node-credential"
+    assert context.caller_root == "/unavailable-on-gateway/caller-workspace"
+    assert "node-credential" not in repr(context)
+    assert context.caller_root not in repr(context)
+    assert invocation["owner_epoch"] == lease["owner-epoch"]
+    assert not {"node_id", "workspace_id", "source_workspace"}.intersection(invocation["arguments"])
+    assert invocation["arguments"]["prompt_body"] == "inspect caller files"
+    assert shared.application._application.responses == {}
+
+
+def test_node_submission_disabled_does_not_fall_back_to_server_execution(shared):
+    status, response = shared("/shared/v1/call", call(
+        acquire(shared), operation="submit_execution_request", params=node_params()), headers=SOURCE_HEADER)
+    assert status == 400, response
+    assert "Node execution is not enabled" in json.dumps(response)
+    assert shared.application._application.responses == {}
+
+
+@pytest.mark.parametrize("missing", ["node_id", "workspace_id", "source_workspace", "credential"])
+def test_node_submission_requires_all_context_and_header(shared, missing):
+    params = node_params()
+    headers = SOURCE_HEADER
+    if missing == "credential":
+        headers = {}
+    else:
+        params.pop(missing)
+    status, _ = shared("/shared/v1/call", call(
+        acquire(shared), operation="submit_execution_request", params=params), headers=headers)
+    assert status == 400
+    assert shared.application._application.responses == {}
+
+
+@pytest.mark.parametrize("route", ["health", "lease", "read"])
+def test_source_credential_is_rejected_outside_node_submission(shared, route):
+    lease = acquire(shared)
+    path, body = {
+        "health": ("/shared/v1/health", None),
+        "lease": ("/shared/v1/client-leases/acquire", {"client-instance-id": "other"}),
+        "read": ("/shared/v1/call", call(lease)),
+    }[route]
+    assert shared(path, body, headers=SOURCE_HEADER)[0] == 400
+
+
+def test_node_submission_cannot_use_another_principals_lease(shared):
+    lease = acquire(shared, "token-bob")
+    assert shared("/shared/v1/call", call(lease, operation="submit_execution_request",
+        params=node_params()), headers=SOURCE_HEADER)[0] == 401
+
+
+def test_node_admission_respects_gateway_drain(shared):
+    lease = acquire(shared)
+
+    class UnexpectedAdmission:
+        def submit(self, *args, **kwargs):
+            pytest.fail("draining gateway must not reach node admission")
+
+    shared.application._node_admission = UnexpectedAdmission()
+    store = shared.application._service_store
+    record = store.read()
+    store.transition("draining", expected_revision=record.revision, expected_epoch=record.owner_epoch)
+    status, response = shared("/shared/v1/call", call(
+        lease, operation="submit_execution_request", params=node_params()), headers=SOURCE_HEADER)
+    assert status == 400, response
+    assert "CON-AGSV-029" in json.dumps(response)
+
+
+@pytest.mark.parametrize("header,value", [
+    ("Authorization", "Bearer token-alice"),
+    ("X-AUDiaGentic-Source-Node-Token", "node-credential"),
+])
+def test_duplicate_authentication_headers_are_rejected(shared, header, value):
+    from http.client import HTTPConnection
+
+    lease = acquire(shared)
+    body = json.dumps(call(lease, operation="submit_execution_request", params=node_params()))
+    connection = HTTPConnection("127.0.0.1", shared.server.server_port, timeout=3)
+    try:
+        connection.putrequest("POST", "/shared/v1/call")
+        connection.putheader("Authorization", "Bearer token-alice")
+        connection.putheader("X-AUDiaGentic-Source-Node-Token", "node-credential")
+        connection.putheader(header, value)
+        connection.putheader("Content-Length", str(len(body.encode())))
+        connection.endheaders(body.encode())
+        response = connection.getresponse()
+        assert response.status == 400, response.read()
+    finally:
+        connection.close()
 
 
 @pytest.mark.parametrize("path", ["/dashboard", "/dashboard/snapshot", "/v1/health", "/v1/call", "/shared/v1/health?extra=1"])

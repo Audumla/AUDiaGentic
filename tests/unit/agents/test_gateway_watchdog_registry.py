@@ -670,8 +670,8 @@ def test_host_watchdog_orphan_retirement_aborts_on_revision_race(
     """A binding/revision race must not terminalize the request or session."""
     from datetime import datetime, timedelta, timezone
 
-    from audiagentic.foundation.contracts.errors import AudiaGenticError
     from audiagentic.components.agents.gateway.service.host import GatewayServiceHost
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
 
     project_root = tmp_path / "project"
     project_root.mkdir()

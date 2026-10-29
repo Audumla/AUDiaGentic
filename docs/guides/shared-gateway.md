@@ -3,8 +3,8 @@
 This guide describes the stage 1 configuration and intended deployment boundary.
 It is not installed-service, live TLS, multi-client or recovery qualification
 evidence. Check the implementation and deployment acceptance results before
-exposing a service. Node transport and joined harness sessions are outside this
-slice.
+exposing a service. Execution nodes (`gateway node serve`) are experimental and
+not qualified; joined harness sessions are outside this slice.
 
 ## Server configuration
 
@@ -87,6 +87,108 @@ YAML, command arguments, logs or examples. Rotation requires coordinated owner
 restart/reload according to the service's implemented lifecycle; this parser
 does not watch files.
 
+## Execution-node grant administration (SH38 foundation)
+
+Node execution is not enabled by these administrative primitives. The server
+parser accepts optional `node-listen` and `nodes` entries for the later transport:
+
+```yaml
+node-listen:
+  host: 127.0.0.1
+  port: 8766
+nodes:
+  build-node:
+    token-file: ./secrets/build-node.token
+    workspaces: {checkout: sample}
+    principals: [developer-a]
+    revision: 1
+    enabled: true
+```
+
+Workspace IDs map to existing server project IDs; node-local paths belong only
+in the node configuration. Node and user credentials must have distinct values
+and files. Protect the server config and management state with local operator
+filesystem permissions. Write access to the operation store grants local
+operator authority; shared HTTP and MCP cannot enqueue node revocations.
+
+Queue a revision-fenced revoke and inspect its returned operation ID:
+
+```text
+audiagentic gateway node revoke config server.yaml node build-node revision 1
+audiagentic gateway node revoke status config server.yaml operation OPERATION_ID output json
+audiagentic gateway node revoke help
+```
+
+An accepted operation is queued, not completed. The existing gateway operation
+pump persists `enabled: false` and increments the revision before completing its
+receipt. The same authority lock orders effect authorization and revocation;
+network and provider calls happen outside it. An already authorized attempt may
+proceed, but revocation prevents later authorization. Recovery of an interrupted
+revoke recognizes the exact disabled successor revision without another write.
+The CLI never starts the service or executes the revoke itself.
+
+Use the supported writer while the service runs. Other config changes require
+an owner restart; unexpected edits fail closed. An uncertain write retains
+denial until durable config is reconciled. Atomic replacement inherits the
+underlying filesystem durability limits; these tests do not prove hardware
+power-loss persistence. Transport, node-local materialization and two-machine
+qualification remain separate gates.
+
+### Request diagnostics and node stage evidence
+
+Use the request's authorized project context. `agent_task_status` stays compact;
+it does not return diagnostic history or response text. For an investigation,
+request `agent_task_diagnostics(request_id=...)`, then a bounded page with
+`agent_task_observations(request_id=..., limit=25, tail=25)` or
+`agent_task_evidence(request_id=..., include_observations=True,
+include_recovery=True, limit=25)`. Follow the returned opaque cursor rather than
+loading all history. A request missing from another project is inconclusive.
+
+The server project owns
+`.audiagentic/runtime/agent-execution-gateway/<request-id>/timeline.ndjson` and
+`observations.ndjson`, with their indexes and retained segments. Use the existing
+readers/tools across plain or compressed segments; these files belong to the
+server project, not an arbitrary caller or recipient workspace.
+
+Node instrumentation uses `node-stage-observed` alongside existing DOM events.
+It records validated control milestones, original/current ownership epochs,
+command hashes, bounded failure reasons and operation-local timings. A prepared
+command or a completed local socket send does not prove native acceptance or a
+completed response. A receipt ACK proves custody, not publication or permission
+to delete evidence. Canonical request/receipt state remains authoritative;
+observation history is evidence for diagnosis, never permission to replay work.
+Node service composition and native end-to-end qualification remain separate
+from these instrumentation primitives.
+
+For instrumentation faults, `timeline_failure_count()` in Foundation reports
+failed timeline operations, while `node_observation_failure_count()` reports
+exceptions observed by the node emitter. Lower layers may isolate their own
+faults, so neither is a combined count or proof of lost rows. Both are
+process-local. Diagnostic failures cannot reverse committed work; authoritative
+custody failures must still stop ACK/effect progression. Never retry a mutation
+or blindly append again because a diagnostic counter increased.
+
+### Recovery boundaries under node qualification
+
+These are recovery contracts for the node implementation, not a claim that
+the standalone node runtime is enabled or qualified. Connection readiness is
+a reusable scheduling hint, consumed at fresh preparation; it never replaces
+current grant, ownership, canonical occupancy or effect authorization checks.
+
+| Boundary | Required disposition |
+| --- | --- |
+| Offline or not ready | Leave fresh work queued; historical observation may continue on an authorized channel. |
+| RPC timeout or cancellation | Retire that exact channel before discarding reply correlation; reconnect to observe the original command. |
+| Receipt/cursor write uncertainty | Withhold ACK and preserve custody evidence; never reset a cursor to make progress. |
+| Corrupt or incomplete artifact | Keep terminal receipt evidence, defer publication and fetch immutable output within configured bounds. |
+| Terminal CAS followed by cleanup interruption | Repair through the existing idempotent session finalizer without fetching or rewriting the response. |
+| Diagnostic sink failure | Preserve committed work and its primary outcome; expose bounded sanitized diagnostics where the remaining sink permits. |
+
+Readiness must renew after receipt drainage and recipient quiescence for each
+command cycle. A terminal receipt can release canonical occupancy before the
+producer finishes cleanup. Host qualification therefore includes this race,
+lost recovery wakeups, failed callback retriggering and producer-safe shutdown.
+
 ## Connector configuration
 
 Save this as `connector.yaml` on the client. Provision its token file with the
@@ -110,6 +212,14 @@ regular file and resolves relative to the connector YAML; omit it to use the
 client's default system CA trust. The config parser does not parse certificates
 or prove TLS reachability. The client builds the TLS context and validates trust
 during connection startup; do not disable certificate verification.
+
+Optional `source-node-config` (experimental) names this machine's NODE
+configuration and makes the connector a node-enrolled caller: **every**
+submission through it becomes a node submission to the caller's own enrolled
+node and workspace, derived from that file, never from tool parameters. The
+binding is rechecked on each submit, and the node credential is sent only with
+`submit_execution_request`. Omit it for ordinary submissions, which are
+unchanged.
 
 ## Keyword CLI
 

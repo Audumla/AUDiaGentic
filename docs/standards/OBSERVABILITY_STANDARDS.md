@@ -61,6 +61,22 @@ be conflated with the package-owned topic registries.
 Regular `logger` calls remain useful for operator diagnostics, but must not be
 the only durable observability surface for async resource state.
 
+For valid event arguments, `record_timeline_event` isolates persistence and
+fallback logging failures from the primary operation. Its returned event is the
+constructed record, not an acknowledgement of durable persistence. Inspect
+`audiagentic.foundation.observability.timeline_failure_count()` for the
+thread-safe, process-local count of failed timeline operations. The counter is
+not durable loss accounting: an event append may succeed before its index write
+fails. Do not retry an authoritative operation or blindly append the event again
+because this diagnostic count increased.
+
+The shared helper emits at most one fixed warning per process on these failures,
+without caller fields, private paths or exception text; a failed warning sink
+must not cause recursive logging or escape into the caller. This best-effort
+contract applies to diagnostic timelines, not authoritative receipt, checkpoint
+or result custody writes. Custody uncertainty must still stop acknowledgement
+and effect progression until reconciled.
+
 ## Operational Sidecar Records
 
 Operational sidecar records are cross-cutting, append-only ndjson files that

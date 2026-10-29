@@ -3,14 +3,24 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from .contracts import ManagementCommand, ManagementOperationKind, ManagementWorkNotifier
+from .contracts import (
+    ManagementCommand,
+    ManagementOperationKind,
+    ManagementWorkNotifier,
+    validate_node_revoke_scope,
+)
 from .notifier import NoopManagementWorkNotifier, notify_best_effort
 from .operation_store import ManagementOperationStore
 from .retention_policy import load_retention_policy
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from audiagentic.components.agents.gateway.service.shared_config import (
+        SharedGatewayServerConfig,
+    )
 
 
 class GatewayOperationsApplication:
@@ -21,6 +31,36 @@ class GatewayOperationsApplication:
     ) -> None:
         self._store = store
         self._notifier = notifier or NoopManagementWorkNotifier()
+
+    @classmethod
+    def for_local_server(cls, config: SharedGatewayServerConfig) -> GatewayOperationsApplication:
+        """Compose local operator storage only; never start or contact a service."""
+        from audiagentic.components.agents.gateway.service.contract import GATEWAY_SERVICE_KEY
+        from audiagentic.foundation.system.managed_service import ManagedServiceStore
+
+        service = ManagedServiceStore(GATEWAY_SERVICE_KEY, root=config.service_root)
+        return cls(ManagementOperationStore(service.root))
+
+    def create_local_node_revoke(
+        self,
+        *,
+        operation_id: str,
+        node_id: str,
+        expected_grant_revision: int,
+    ) -> dict[str, Any]:
+        """Queue fixed local revoke intent; only the existing pump executes it.
+
+        The generic remote creation path remains unable to select local-only
+        admission. Local creation retains polling, with no startup or notifier.
+        """
+        scope = validate_node_revoke_scope(
+            {
+                "node-id": node_id,
+                "expected-grant-revision": expected_grant_revision,
+            }
+        )
+        command = ManagementCommand(operation_id, ManagementOperationKind.NODE_REVOKE, scope)
+        return _project_public(self._store.create(command, local_only=True))
 
     def create_operation(self, command: ManagementCommand) -> dict[str, Any]:
         if command.kind is ManagementOperationKind.PURGE:
