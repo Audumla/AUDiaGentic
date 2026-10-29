@@ -269,3 +269,4 @@ CON-XSR-008: "Another writer already holds this external session. Only one gatew
 CON-XSR-009: "Only the current writer at the current generation can release the claim."
 CON-XSR-010: "This writer does not hold the external session; it must claim it before sending."
 VAL-XSR-011: "The external session is not registered. Register it through the Provider join authority first."
+CON-XSR-012: "The writer claim on this external session belongs to a gateway owner epoch that is no longer current. Claim it again from the current owner; that increases the generation and fences the retired owner out."
