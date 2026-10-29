@@ -1,7 +1,7 @@
 """Submission order must survive concurrent worker preparation."""
 import asyncio
-import functools
 import threading
+import functools
 from types import SimpleNamespace
 
 import pytest
@@ -188,8 +188,8 @@ def test_service_recovery_seeds_running_then_uses_durable_queue_ordinals(tmp_pat
     monkeypatch.setattr(known_projects, "scan_known_gpt_auto_projects", lambda *args, **kwargs: None)
     instance = SimpleNamespace(
         service_store=SimpleNamespace(root=tmp_path), owner_epoch="new-owner", _externally_managed=True,
-        _start_ingress_poller=lambda: None, _start_operations_poller=lambda: None, _node_runtime=None,
+        _start_ingress_poller=lambda: None, _start_operations_poller=lambda: None,
         lifecycle=None, server=SimpleNamespace(serve_forever=lambda **kwargs: None), _stop_background=lambda: None,
     )
-    host.GatewayServiceHost._serve_forever(instance)
+    host.GatewayServiceHost.serve_forever(instance)
     assert calls == [("running", "active"), ("queued", "earlier"), ("queued", "later")]
