@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.21.2](https://github.com/Audumla/AUDiaGentic/compare/v0.21.1...v0.21.2) (2026-10-29)
+
+
+### Documentation
+
+* **planning:** CFG08 live check findings (criterion not met; four gaps) ([#136](https://github.com/Audumla/AUDiaGentic/issues/136)) ([3f862d6](https://github.com/Audumla/AUDiaGentic/commit/3f862d64dc8277f57ff0ef65432b6847ee691e65))
+
 ## [0.21.1](https://github.com/Audumla/AUDiaGentic/compare/v0.21.0...v0.21.1) (2026-10-29)
 
 
