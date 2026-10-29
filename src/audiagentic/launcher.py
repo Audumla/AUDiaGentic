@@ -224,6 +224,9 @@ def _main(argv: list[str] | None = None) -> int:
         "clean",
         help="Prune AUDiaGentic-owned surfaces and remove generated runtime config",
     )
+    from audiagentic.commands.settings import add_settings_parsers
+
+    add_settings_parsers(config_sub)
 
     # Private stdio entrypoint retained for generated MCP configuration.
     mcp_parser = subparsers.add_parser(
@@ -271,6 +274,13 @@ def _main(argv: list[str] | None = None) -> int:
         print(parser.format_help())
         print(_help("root"))
         return 0
+
+    # Settings commands are read-only and must not compose the application graph.
+    if args.command == "config":
+        from audiagentic.commands.settings import SETTINGS_COMMANDS, run_settings_command
+
+        if args.config_cmd in SETTINGS_COMMANDS:
+            return run_settings_command(args)
 
     if args.command in {"mcp", "harness", "help"}:
         from audiagentic.commands.mcp import dispatch

@@ -38,6 +38,10 @@ def _inventory() -> tuple[dict[str, list[str]], set[str]]:
     return data["env"], set(data["path-builders"])
 
 
+def _configuration_core() -> set[str]:
+    return set(yaml.safe_load(INVENTORY.read_text(encoding="utf-8")).get("configuration-core", []))
+
+
 def test_env_classes_are_disjoint() -> None:
     env, _ = _inventory()
     seen: dict[str, str] = {}
@@ -63,6 +67,9 @@ def test_every_env_name_is_classified() -> None:
 def test_every_path_builder_is_listed() -> None:
     _, found = _scan()
     _, listed = _inventory()
+    core = _configuration_core()
+    assert core <= found, "configuration-core modules must exist and resolve settings paths"
+    found -= core
     assert sorted(found - listed) == [], (
         "new modules build .audiagentic paths themselves; use the configuration core or list them"
     )
