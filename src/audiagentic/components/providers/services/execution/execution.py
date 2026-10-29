@@ -48,7 +48,20 @@ def _adapter_hook(provider_id: str, submodule: str, fn_name: str) -> Callable[..
     The single find_spec+import+getattr helper behind every provider adapter
     hook (one-shot run, ACP/interactive launch builders, MCP surface, execution
     environment). Detection via find_spec avoids importing an absent module.
+    A provider whose descriptor ``extends`` another (gpt-auto-t1 extends gpt-auto)
+    uses its base's adapter when it has no package of its own.
     """
+    hook = _own_adapter_hook(provider_id, submodule, fn_name)
+    if hook is not None:
+        return hook
+    from ...descriptors import get_descriptor
+
+    descriptor = get_descriptor(provider_id)
+    base = descriptor.extends if descriptor is not None else None
+    return _own_adapter_hook(base, submodule, fn_name) if base else None
+
+
+def _own_adapter_hook(provider_id: str, submodule: str, fn_name: str) -> Callable[..., Any] | None:
     name = provider_id.replace("-", "_")
     if keyword.iskeyword(name):
         name = name + "_"
@@ -193,7 +206,7 @@ def load_session_transport_builder(provider_id: str) -> Callable[..., Any] | Non
     package exposes ``build_session_transport(...)`` in its ``session_transport``
     submodule; any provider_id whose adapter package declares this hook is
     routed through it, with no dispatcher edit needed to add another one
-    (including a same-implementation alias package such as gpt-auto-t1/t2).
+    (including an extending provider such as gpt-auto-t1/t2).
     """
     builder = _adapter_hook(provider_id, "session_transport", "build_session_transport")
     if builder is None:
@@ -234,25 +247,12 @@ def load_session_transport_builder(provider_id: str) -> Callable[..., Any] | Non
 
 def load_conversation_focus_capability(provider_id: str) -> Callable[..., Any] | None:
     """Load an optional provider-owned existing-conversation focus hook."""
-    hook = _adapter_hook(provider_id, "conversation_focus", "focus_existing_conversation")
-    if hook is not None:
-        return hook
-    # gpt-auto-t1/t2 are descriptor aliases over the shared implementation;
-    # keep that aliasing explicit at the provider seam rather than duplicating
-    # browser code in each package.
-    if provider_id.startswith("gpt-auto-"):
-        return _adapter_hook("gpt-auto", "conversation_focus", "focus_existing_conversation")
-    return None
+    return _adapter_hook(provider_id, "conversation_focus", "focus_existing_conversation")
 
 
 def load_conversation_capture_capability(provider_id: str) -> Callable[..., Any] | None:
     """Load the optional read-only latest-response capability."""
-    hook = _adapter_hook(provider_id, "conversation_focus", "capture_latest_response")
-    if hook is not None:
-        return hook
-    if provider_id.startswith("gpt-auto-"):
-        return _adapter_hook("gpt-auto", "conversation_focus", "capture_latest_response")
-    return None
+    return _adapter_hook(provider_id, "conversation_focus", "capture_latest_response")
 
 
 _EXECUTION_MODE_BY_DECLARATION: dict[str, str] = {
