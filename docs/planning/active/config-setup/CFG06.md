@@ -50,7 +50,7 @@ Also: provider instances under providers.<id>.instances, selected by agents with
 
 ## Standards
 
-
+docs/design/configuration-model.md (Providers: enabled is policy, available is observed, qualified is evidence); docs/standards/ARCHITECTURE_STANDARDS.md section 2 (configuration, not central lists) and section 3 (ownership); docs/standards/ARCHITECTURE_GUIDELINES.md section 8 (lazy, cached loaders), section 9 (no compatibility paths without a recorded obligation; the one-release transition is recorded in the design doc Migration section) and section 10 (callers outside providers use providers_api).
 
 ## Acceptance Criteria
 
@@ -77,3 +77,4 @@ Phase 2: deferred until needed (see 'Phasing' in docs/design/configuration-model
 - 2026-10-29T03:06:35.428651+00:00 (updated-by): Updated: section:notes
 - 2026-10-29T03:06:37.786536+00:00 (state-transition): State: pending → in_progress
 - 2026-10-29T04:00:56.152954+00:00 (updated-by): Updated: section:notes
+- 2026-10-29T04:21:46.043510+00:00 (updated-by): Updated: section:standards
