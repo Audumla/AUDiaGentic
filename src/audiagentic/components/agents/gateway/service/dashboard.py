@@ -9,7 +9,6 @@ request metadata are never included in its public payload.
 from __future__ import annotations
 
 import json
-import os
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -44,8 +43,10 @@ def _safe_gpt_chat_url(value: object) -> str | None:
 
 
 def recent_window_seconds(value: object | None = None) -> int:
-    """Return a bounded dashboard window, using the gateway env by default."""
-    raw = os.environ.get(RECENT_WINDOW_ENV) if value is None else value
+    """Return a bounded dashboard window, using gateway settings by default."""
+    from audiagentic.components.agents.gateway.settings import gateway_setting
+
+    raw = gateway_setting("dashboard.recent_seconds", RECENT_WINDOW_ENV) if value is None else value
     try:
         parsed = int(raw) if not isinstance(raw, bool) else 0
     except (TypeError, ValueError):

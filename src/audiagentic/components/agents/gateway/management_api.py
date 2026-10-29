@@ -8,7 +8,6 @@ registry, or custom validation -- these are thin wrappers over the shared
 """
 from __future__ import annotations
 
-import os
 import time
 from pathlib import Path
 from typing import Any
@@ -21,7 +20,9 @@ _RESTART_POLL_SECONDS = 0.25
 
 
 def _restart_wait_seconds() -> float:
-    raw = os.environ.get(_RESTART_WAIT_SECONDS_ENV, "60")
+    from audiagentic.components.agents.gateway.settings import gateway_setting
+
+    raw = gateway_setting("restart_wait_seconds", _RESTART_WAIT_SECONDS_ENV, 60)
     try:
         value = float(raw)
     except ValueError as exc:

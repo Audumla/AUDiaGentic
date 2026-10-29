@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "settings: gateway",
+  "description": "Agent gateway settings, owned by the agents component. Each key's legacy AUDIAGENTIC_GATEWAY_* variable still overrides it for one transition release.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "implementation": {
+      "enum": ["embedded", "automatic", "standalone"],
+      "description": "Gateway implementation; overrides the project's selected component implementation (AUDIAGENTIC_GATEWAY_MODE)."
+    },
+    "port": {
+      "type": "integer", "minimum": 1, "maximum": 65535,
+      "description": "Loopback port of the automatically started gateway (AUDIAGENTIC_GATEWAY_PORT)."
+    },
+    "idle_grace_seconds": {
+      "type": "number", "minimum": 0,
+      "description": "Idle time before an automatic gateway shuts itself down; 0 keeps it warm (AUDIAGENTIC_GATEWAY_IDLE_GRACE_SECONDS)."
+    },
+    "queue_backend": {
+      "enum": ["in-memory"],
+      "description": "Work-queue backend (AUDIAGENTIC_GATEWAY_QUEUE_BACKEND)."
+    },
+    "restart_wait_seconds": {
+      "type": "number", "exclusiveMinimum": 0,
+      "description": "How long a restart waits for the old gateway to stop (AUDIAGENTIC_GATEWAY_RESTART_WAIT_SECONDS)."
+    },
+    "embedded_with_live_shared_owner": {
+      "enum": ["refuse", "warn"],
+      "description": "Whether an embedded gateway may run beside a live shared gateway (AUDIAGENTIC_GATEWAY_EMBEDDED_ALLOW)."
+    },
+    "console_trace": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "enum": ["off", "summary", "full"],
+          "description": "Operator trace detail (AUDIAGENTIC_GATEWAY_CONSOLE_TRACE)."
+        },
+        "file": {
+          "type": "string", "minLength": 1,
+          "description": "Trace file; defaults to the gateway log directory (AUDIAGENTIC_GATEWAY_CONSOLE_TRACE_FILE)."
+        },
+        "max_chars": {
+          "type": "integer", "minimum": 256, "maximum": 1048576,
+          "description": "Longest body written per trace line (AUDIAGENTIC_GATEWAY_CONSOLE_TRACE_MAX_CHARS)."
+        }
+      }
+    },
+    "dashboard": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "recent_seconds": {
+          "type": "integer", "minimum": 1, "maximum": 2592000,
+          "description": "Window of recent requests the dashboard shows (AUDIAGENTIC_GATEWAY_DASHBOARD_RECENT_SECONDS)."
+        }
+      }
+    },
+    "retention": {
+      "type": "object",
+      "description": "Machine retention policy; replaces ~/.audiagentic/gateway-retention.json (AUDIAGENTIC_GATEWAY_RETENTION_POLICY).",
+      "additionalProperties": false,
+      "properties": {
+        "policy_id": {"type": "string", "minLength": 1},
+        "purge_enabled": {"type": "boolean"},
+        "minimum_archive_age_seconds": {"type": "number", "minimum": 0},
+        "max_batch_size": {"type": "integer", "minimum": 1, "maximum": 10000},
+        "request_history_limit": {"type": "integer", "minimum": 1, "maximum": 10000},
+        "timeline_max_bytes": {"type": "integer", "minimum": 1, "maximum": 268435456},
+        "observation_max_bytes": {"type": "integer", "minimum": 1, "maximum": 268435456},
+        "recovery_max_bytes": {"type": "integer", "minimum": 1, "maximum": 268435456},
+        "console_trace_max_bytes": {"type": "integer", "minimum": 1, "maximum": 268435456},
+        "journal_retention_days": {"type": "integer", "minimum": 1, "maximum": 3650}
+      }
+    },
+    "watchdog": {
+      "type": "object",
+      "description": "Execution watchdog policy; replaces ~/.audiagentic/gateway-watchdog.json (AUDIAGENTIC_GATEWAY_WATCHDOG_POLICY).",
+      "additionalProperties": false,
+      "properties": {
+        "policy_id": {"type": "string", "minLength": 1},
+        "activity_lease_seconds": {"type": "number", "exclusiveMinimum": 0},
+        "absolute_safety_ceiling_seconds": {"type": "number", "minimum": 0},
+        "diagnostic_grace_seconds": {"type": "number", "exclusiveMinimum": 0},
+        "initial_activity_grace_seconds": {"type": "number", "exclusiveMinimum": 0}
+      }
+    }
+  }
+}

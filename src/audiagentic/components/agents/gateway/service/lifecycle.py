@@ -17,7 +17,6 @@ post-drain re-check is race-free (leases are refused in ``draining``).
 from __future__ import annotations
 
 import logging
-import os
 import threading
 from pathlib import Path
 from typing import Any
@@ -37,8 +36,10 @@ _CHECK_INTERVAL_SECONDS = 2.0
 
 def resolve_idle_grace_seconds() -> float:
     """Component idle policy; 0 disables self-shutdown (keep-warm)."""
-    raw = os.environ.get(IDLE_GRACE_ENV, "").strip()
-    if not raw:
+    from audiagentic.components.agents.gateway.settings import gateway_setting
+
+    raw = gateway_setting("idle_grace_seconds", IDLE_GRACE_ENV)
+    if raw is None:
         return 0.0
     try:
         value = float(raw)
