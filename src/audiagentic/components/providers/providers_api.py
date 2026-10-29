@@ -982,7 +982,6 @@ def get_provider_status(project_root: Path, provider_id: str) -> dict[str, Any]:
     return {"provider_id": provider_id, "ok": False, "error": "provider status unavailable"}
 
 
-<<<<<<< HEAD
 def check_provider_availability(project_root: Path | None, provider_id: str) -> tuple[bool | None, str]:
     """Read-only availability observation for one provider (never writes config).
 
@@ -1008,8 +1007,6 @@ def check_provider_availability(project_root: Path | None, provider_id: str) -> 
     return False, "CLI not found on PATH"
 
 
-=======
->>>>>>> origin/main
 def list_session_surface_ids(provider_id: str) -> tuple[str, ...]:
     """Session surface ids a provider declares, in declaration order.
 
