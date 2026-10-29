@@ -12,6 +12,7 @@ never persisted (only its digest); it is threaded to dispatch via functools.part
 
 from __future__ import annotations
 
+import contextlib
 import functools
 import logging
 import os
@@ -835,53 +836,62 @@ def submit_execution_request(
         # admission critical section as the request record, so no observable
         # request can be sessionless.
         pending_session: dict[str, Any] | None = None
-        if continuation_session_id:
-            if existing_session is None:
-                existing_session = _session_store.read_session_record(project_root, continuation_session_id)
-            if existing_session.get("provider-transport-kind") != "provider-session":
-                raise AudiaGenticError(
-                    code="VAL-AGW-148",
-                    kind="agents",
-                    message="a worker-backed gateway session cannot be continued as a provider session",
-                    details={"session-id": continuation_session_id},
+        # AS118: a continuation holds the session's generation fence until the
+        # turn is durably admitted, so it serializes with resume and retention
+        # claims; the session is reread under it and a claimed one is refused.
+        with contextlib.ExitStack() as admission_fence:
+            if continuation_session_id:
+                admission_fence.enter_context(
+                    _session_store.session_generation_fence(project_root, continuation_session_id)
                 )
-            if existing_session.get("execution-profile-id") != resolved_profile_id:
-                raise AudiaGenticError(
-                    code="VAL-AGW-060",
-                    kind="agents",
-                    message="request execution profile does not match the session's profile",
-                    details={"session-id": continuation_session_id},
+                existing_session = _session_store.assert_no_retention_claim(project_root, continuation_session_id)
+                if existing_session.get("provider-transport-kind") != "provider-session":
+                    raise AudiaGenticError(
+                        code="VAL-AGW-148",
+                        kind="agents",
+                        message="a worker-backed gateway session cannot be continued as a provider session",
+                        details={"session-id": continuation_session_id},
+                    )
+                if existing_session.get("execution-profile-id") != resolved_profile_id:
+                    raise AudiaGenticError(
+                        code="VAL-AGW-060",
+                        kind="agents",
+                        message="request execution profile does not match the session's profile",
+                        details={"session-id": continuation_session_id},
+                    )
+            else:
+                pending_session = _session_store.build_session_record(
+                    session_id=session_id,
+                    created_by_request_id=request_id,
+                    provider_transport_kind=provider_transport_kind,
+                    execution_profile_id=resolved_profile_id,
+                    provider_id=resolved_provider_id,
+                    model_id=resolved_model_id,
+                    idle_timeout_seconds=session_idle_timeout_seconds,
+                    max_lifetime_seconds=session_max_lifetime_seconds,
                 )
-        else:
-            pending_session = _session_store.build_session_record(
-                session_id=session_id,
-                created_by_request_id=request_id,
-                provider_transport_kind=provider_transport_kind,
-                execution_profile_id=resolved_profile_id,
-                provider_id=resolved_provider_id,
-                model_id=resolved_model_id,
-                idle_timeout_seconds=session_idle_timeout_seconds,
-                max_lifetime_seconds=session_max_lifetime_seconds,
+            admission_queue = get_queue_manager()
+            record, created = store.admit_record(
+                project_root,
+                record,
+                idempotency_key=idempotency_key,
+                # C7: without this, the admission-phase work-index entry (which
+                # recovery relies on to discover admitted-but-unclaimed requests
+                # after a crash) is never written — service_root defaults to None
+                # inside admit_record and the write is silently skipped.
+                service_root=Path(_dispatch_service_root) if _dispatch_service_root else None,
+                # A new session is written with the request; a continued one
+                # records the accepted turn (written just before the request,
+                # so a failed admission can only make it newer, never older).
+                before_write=(
+                    (lambda: _session_store.write_session_record(project_root, pending_session))
+                    if pending_session is not None
+                    else (lambda: _session_store.record_accepted_turn(project_root, continuation_session_id))
+                ),
+                on_admitted=functools.partial(
+                    admission_queue.reserve_session_admission, project_root=project_root,
+                ),
             )
-        admission_queue = get_queue_manager()
-        record, created = store.admit_record(
-            project_root,
-            record,
-            idempotency_key=idempotency_key,
-            # C7: without this, the admission-phase work-index entry (which
-            # recovery relies on to discover admitted-but-unclaimed requests
-            # after a crash) is never written — service_root defaults to None
-            # inside admit_record and the write is silently skipped.
-            service_root=Path(_dispatch_service_root) if _dispatch_service_root else None,
-            before_write=(
-                (lambda: _session_store.write_session_record(project_root, pending_session))
-                if pending_session is not None
-                else None
-            ),
-            on_admitted=functools.partial(
-                admission_queue.reserve_session_admission, project_root=project_root,
-            ),
-        )
 
         default_selection.commit(record)
 

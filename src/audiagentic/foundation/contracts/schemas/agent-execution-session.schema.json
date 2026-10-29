@@ -97,6 +97,7 @@
         "created-at": {"type": "string"},
         "updated-at": {"type": "string"},
         "last-activity-at": {"type": "string"},
+        "last-accepted-turn-at": {"type": "string"},
         "closed-at": {"type": "string"}
       }
     },
@@ -119,6 +120,16 @@
           "type": "array",
           "items": {"type": "string"}
         }
+      }
+    },
+    "retention-claim": {
+      "type": "object",
+      "description": "Durable claim by a destructive retention operation; while present, resume and continuation admission are refused. Not a lifecycle state.",
+      "required": ["operation-id", "claimed-at"],
+      "additionalProperties": false,
+      "properties": {
+        "operation-id": {"type": "string", "minLength": 1, "maxLength": 128},
+        "claimed-at": {"type": "string"}
       }
     },
     "close-reason": {
