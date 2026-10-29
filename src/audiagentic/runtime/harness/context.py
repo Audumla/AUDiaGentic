@@ -30,13 +30,8 @@ class AgentContext:
     agent_log_dir: Path
     endpoint: str
     model: str
-    model_profile: dict[str, object]
-    profile_name: str
     provider: str
-    embedded_rig: bool
     enable_mcp: bool
-    rig_attachment: object | None = None
-    server_version: str | None = None
     harness_cfg: dict = field(default_factory=dict)
     agent_runtime: Path | None = None
     launch_runtime_root: Path | None = None

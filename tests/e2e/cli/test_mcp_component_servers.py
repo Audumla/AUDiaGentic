@@ -235,9 +235,8 @@ def test_session_server_exposes_expected_tools(tmp_path, _session_server):
         "status",
         "config",
         "set_auto_update",
-        "rig_upgrade_status",
-        "update_rig",
     }.issubset(names)
+    assert "update_rig" not in names and "rig_upgrade_status" not in names
     assert "cli_visibility" not in names
     assert "set_cli_visibility" not in names
 
@@ -248,46 +247,6 @@ def test_session_server_status_returns_environment(tmp_path, project_root, _sess
     assert payload["environment"]["repo_root"] == str(project_root)
     assert "versions" in payload
 
-
-@pytest.mark.opt_in
-def test_session_server_update_rig(tmp_path, _session_server):
-    result = _send_and_wait(
-        _session_server,
-        [
-            {
-                "jsonrpc": "2.0",
-                "id": 2,
-                "method": "tools/call",
-                "params": {
-                    "name": "update_rig",
-                    "arguments": {"scope": "local"},
-                    "_meta": {"progressToken": "test-2"},
-                },
-            }
-        ],
-        {2},
-        time.time() + 60,
-    )
-    resp = next(r for r in result if r.get("id") == 2)
-    assert "error" not in resp, f"update_rig error: {resp['error']}"
-    blocks = resp["result"]["content"]
-    parsed = [json.loads(b["text"]) for b in blocks]
-    payload = (
-        parsed[0] if len(parsed) == 1 else parsed[0] if isinstance(parsed[0], dict) else parsed
-    )
-    assert isinstance(payload, dict)
-    assert payload["ok"] is True
-    assert "output" in payload
-
-
-def test_session_server_detects_active_embedded_rig_profile(monkeypatch) -> None:
-    from audiagentic.components.session.session_embedded_rig import (
-        active_embedded_rig_profile,
-    )
-
-    monkeypatch.setenv("AUDIAGENTIC_RIG_TYPE", "embedded")
-    monkeypatch.setenv("AUDIAGENTIC_RIG_PROFILE", "qwen3.5-2b-q4_k_s")
-    assert active_embedded_rig_profile() == "qwen3.5-2b-q4_k_s"
 
 
 # ── project server tests ─────────────────────────────────────────────────────
@@ -384,32 +343,3 @@ def test_ledger_server_can_get_summary(tmp_path, project_root, _ledger_server):
 
 # ── direct unit-style test (no subprocess) ───────────────────────────────────
 
-
-def test_update_rig_works_directly(tmp_path: Path) -> None:
-    """Exercise the owned llama.cpp recipe directly (avoids MCP subprocess timeout)."""
-    import contextlib
-    import io
-
-    from audiagentic.foundation.contracts.output import ComponentOutputEvent
-    from audiagentic.foundation.paths.home import global_harness_runtime
-    from audiagentic.runtime.rig.embedded.recipe import llama_cpp_recipe
-
-    os.environ["AUDIAGENTIC_HOME"] = str(tmp_path / ".audiagentic")
-    out = io.StringIO()
-    events = []
-
-    def _sink(event: ComponentOutputEvent) -> None:
-        events.append(event)
-
-    harness = global_harness_runtime()
-    with contextlib.redirect_stdout(out):
-        result = llama_cpp_recipe(harness / "rig" / "bin").provision({})
-    assert result.success, result.error or result.status
-    _sink(ComponentOutputEvent(message=out.getvalue().strip()))
-
-    assert len(events) > 0
-    assert (
-        "llama-server" in events[-1].message
-        or "Installed" in events[-1].message
-        or "up to date" in events[-1].message
-    )

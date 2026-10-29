@@ -296,8 +296,6 @@ def _main(argv: list[str] | None = None) -> int:
             build_runtime_sync,
             default_config_path,
             get_harness_type,
-            load_active_profile,
-            query_rig_server_version,
             refresh_harness_config_if_installed,
             resolve_session_info,
             version_info,
@@ -309,10 +307,8 @@ def _main(argv: list[str] | None = None) -> int:
             "harness_cli_available": harness_cli_available,
             "build_runtime_sync": build_runtime_sync,
             "refresh_harness_config_if_installed": refresh_harness_config_if_installed,
-            "query_rig_server_version": query_rig_server_version,
             "version_info": version_info,
             "default_config_path": default_config_path,
-            "load_active_profile": load_active_profile,
             "resolve_session_info": resolve_session_info,
         }
 
