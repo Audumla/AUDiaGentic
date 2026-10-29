@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.31.2](https://github.com/Audumla/AUDiaGentic/compare/v0.31.1...v0.31.2) (2026-10-29)
+
+
+### Documentation
+
+* **planning:** SH22 audit against main ([#199](https://github.com/Audumla/AUDiaGentic/issues/199)) ([9dcee31](https://github.com/Audumla/AUDiaGentic/commit/9dcee31a61933c18ba3f2f3f141229c5506cd290))
+
 ## [0.31.1](https://github.com/Audumla/AUDiaGentic/compare/v0.31.0...v0.31.1) (2026-10-29)
 
 
