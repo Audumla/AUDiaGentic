@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.19.0](https://github.com/Audumla/AUDiaGentic/compare/v0.18.0...v0.19.0) (2026-10-29)
+
+
+### Features
+
+* **agents:** external session registry with a generation-fenced single writer claim (SH50a) ([#124](https://github.com/Audumla/AUDiaGentic/issues/124)) ([91de59e](https://github.com/Audumla/AUDiaGentic/commit/91de59e6fb58e0f8507c97349fc7a6a503cb8f66))
+
 ## [0.18.0](https://github.com/Audumla/AUDiaGentic/compare/v0.17.0...v0.18.0) (2026-10-29)
 
 
