@@ -10,7 +10,7 @@ from __future__ import annotations
 import os
 import re
 import stat
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
@@ -39,6 +39,46 @@ class SharedGatewayServerConfig:
     service_root: Path | None
     projects: dict[str, Path]
     principals: tuple[SharedGatewayPrincipal, ...]
+    node_listen: SharedNodeListen | None = None
+    nodes: tuple[SharedNodeGrant, ...] = ()
+    config_path: Path | None = field(default=None, repr=False)
+
+
+@dataclass(frozen=True)
+class SharedNodeListen:
+    host: str
+    port: int
+
+
+@dataclass(frozen=True)
+class SharedNodeGrant:
+    """Server authorization: workspace IDs map to server project IDs, not paths."""
+
+    node_id: str
+    token_file: Path
+    workspaces: dict[str, str]
+    principals: frozenset[str]
+    revision: int
+    enabled: bool
+
+
+@dataclass(frozen=True)
+class SharedGatewayNodeWorkspace:
+    """Node-local paths; never serialize this configuration onto the wire."""
+
+    root: Path
+    execution_profiles: frozenset[str]
+
+
+@dataclass(frozen=True)
+class SharedGatewayNodeConfig:
+    node_id: str
+    server_id: str
+    endpoint: str
+    token_file: Path
+    state_root: Path
+    workspaces: dict[str, SharedGatewayNodeWorkspace]
+    ca_file: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -48,6 +88,7 @@ class SharedGatewayConnectorConfig:
     project_id: str
     token_file: Path
     ca_file: Path | None = None
+    source_node_config_file: Path | None = field(default=None, repr=False)
 
 
 def _mapping(value: Any, required: set[str], optional: set[str] | None = None) -> dict:
@@ -107,10 +148,34 @@ def _grants(value: Any, allowed: set[str] | frozenset[str]) -> frozenset[str]:
     return grants
 
 
+def _credential(base: Path, value: Any, previous: list[Path]) -> Path:
+    token_file = _path(base, value, credential=True)
+    try:
+        duplicate = any(token_file.samefile(other) for other in previous)
+    except OSError:
+        raise _error(11, "Cannot verify shared gateway credential file identity") from None
+    if duplicate:
+        raise _error(11, "Shared gateway identities must use distinct credential files")
+    previous.append(token_file)
+    return token_file
+
+
+def _listen(value: Any) -> SharedNodeListen:
+    listen = _mapping(value, {"port"}, {"host"})
+    host = _text(listen.get("host", "127.0.0.1"))
+    if host != "127.0.0.1":
+        raise _error(8, "Shared gateway listen host must be 127.0.0.1")
+    port = listen["port"]
+    if type(port) is not int or not 0 <= port <= 65535:
+        raise _error(17, "Shared gateway listen port must be an integer from 0 through 65535")
+    return SharedNodeListen(host, port)
+
+
 def load_shared_server_config(path: Path) -> SharedGatewayServerConfig:
     """Load server identity, existing directories and principal grants."""
     base, data = _load(path)
-    _mapping(data, {"schema-version", "server-id", "listen", "projects", "principals"}, {"service-root"})
+    _mapping(data, {"schema-version", "server-id", "listen", "projects", "principals"},
+             {"service-root", "node-listen", "nodes"})
     server_id = _identifier(data["server-id"])
     listen = _mapping(data["listen"], {"port"}, {"host"})
     host = _text(listen.get("host", "127.0.0.1"))
@@ -133,31 +198,48 @@ def load_shared_server_config(path: Path) -> SharedGatewayServerConfig:
     for key, value in entries.items():
         principal_id = _identifier(key)
         item = _mapping(value, {"token-file", "projects", "actions"})
-        token_file = _path(base, item["token-file"], credential=True)
-        try:
-            duplicate = any(token_file.samefile(previous) for previous in credential_files)
-        except OSError:
-            raise _error(11, "Cannot verify shared gateway credential file identity") from None
-        if duplicate:
-            raise _error(11, "Shared gateway principals must use distinct credential files")
-        credential_files.append(token_file)
+        token_file = _credential(base, item["token-file"], credential_files)
         principals.append(SharedGatewayPrincipal(
             principal_id=principal_id,
             token_file=token_file,
             projects=_grants(item["projects"], set(projects)),
             actions=_grants(item["actions"], _ACTIONS),
         ))
+    node_listen = _listen(data["node-listen"]) if "node-listen" in data else None
+    nodes = []
+    if "nodes" in data:
+        if node_listen is None or not isinstance(data["nodes"], dict) or not data["nodes"]:
+            raise _error(6, "Shared gateway nodes require node-listen and a non-empty mapping")
+        for key, value in data["nodes"].items():
+            node_id = _identifier(key)
+            item = _mapping(value, {"token-file", "workspaces", "principals", "revision", "enabled"})
+            revision = item["revision"]
+            if type(revision) is not int or revision < 1 or type(item["enabled"]) is not bool:
+                raise _error(6, "Node revision must be a positive integer and enabled a boolean")
+            workspace_map = item["workspaces"]
+            if not isinstance(workspace_map, dict) or not workspace_map:
+                raise _error(6, "Node workspaces must be a non-empty project-ID mapping")
+            workspaces = {_identifier(w): _identifier(p) for w, p in workspace_map.items()}
+            if not set(workspaces.values()) <= projects.keys():
+                raise _error(6, "Node workspaces must reference configured server projects")
+            nodes.append(SharedNodeGrant(
+                node_id=node_id, token_file=_credential(base, item["token-file"], credential_files),
+                workspaces=workspaces, principals=_grants(item["principals"], {p.principal_id for p in principals}),
+                revision=revision, enabled=item["enabled"],
+            ))
     return SharedGatewayServerConfig(
         server_id=server_id, host=host, port=port,
         service_root=_path(base, data["service-root"], directory=True) if "service-root" in data else None,
         projects=projects, principals=tuple(principals),
+        node_listen=node_listen, nodes=tuple(nodes), config_path=Path(path).resolve(strict=True),
     )
 
 
 def load_shared_connector_config(path: Path) -> SharedGatewayConnectorConfig:
     """Load an HTTPS origin with no path, userinfo, query or fragment."""
     base, data = _load(path)
-    _mapping(data, {"schema-version", "endpoint", "server-id", "project-id", "token-file"}, {"ca-file"})
+    _mapping(data, {"schema-version", "endpoint", "server-id", "project-id", "token-file"},
+             {"ca-file", "source-node-config"})
     endpoint = _text(data["endpoint"])
     try:
         parsed = urlsplit(endpoint)
@@ -173,5 +255,58 @@ def load_shared_connector_config(path: Path) -> SharedGatewayConnectorConfig:
         endpoint=endpoint, server_id=_identifier(data["server-id"]),
         project_id=_identifier(data["project-id"]),
         token_file=_path(base, data["token-file"], credential=True),
+        ca_file=_path(base, data["ca-file"]) if "ca-file" in data else None,
+        source_node_config_file=_path(base, data["source-node-config"]) if "source-node-config" in data else None,
+    )
+
+
+def load_shared_node_config(path: Path) -> SharedGatewayNodeConfig:
+    """Load private node-local configuration, not a public wire payload.
+
+    Component profile selection remains the existing one-profile-per-process
+    CLI/environment mechanism. No profile or local root is supplied per request.
+    Token values and certificate contents are validated by their startup owners.
+
+    Schema 1 requires node-id, server-id, endpoint, token-file, state-root and
+    workspaces. Each workspace maps its ID to {root, execution-profiles}; root
+    and state-root are existing config-file-relative directories. ca-file is
+    optional. endpoint is a WSS origin plus /shared/v1/nodes/connect exactly.
+    Server enrollment is separate: node-listen selects a loopback port and nodes
+    maps IDs to {token-file, workspaces, principals, revision, enabled} grants.
+    Neither parsing function writes enrollment or configuration files.
+    """
+    base, data = _load(path)
+    _mapping(data, {"schema-version", "node-id", "server-id", "endpoint", "token-file",
+                    "state-root", "workspaces"}, {"ca-file"})
+    endpoint = _text(data["endpoint"])
+    try:
+        parsed = urlsplit(endpoint)
+        if (parsed.scheme != "wss" or not parsed.hostname or parsed.username is not None
+                or parsed.password is not None or parsed.path != "/shared/v1/nodes/connect"
+                or "?" in endpoint or "#" in endpoint or "\\" in endpoint
+                or any(c.isspace() for c in endpoint) or parsed.netloc.endswith(":")
+                or (parsed.port is not None and not 1 <= parsed.port <= 65535)):
+            raise ValueError
+    except ValueError:
+        raise _error(6, "Node endpoint must be WSS with exactly /shared/v1/nodes/connect") from None
+    entries = data["workspaces"]
+    if not isinstance(entries, dict) or not entries:
+        raise _error(6, "Node workspaces must be a non-empty mapping")
+    workspaces = {}
+    for key, value in entries.items():
+        workspace_id = _identifier(key)
+        item = _mapping(value, {"root", "execution-profiles"})
+        profiles = item["execution-profiles"]
+        if not isinstance(profiles, list) or not profiles:
+            raise _error(6, "Node execution-profiles must be a non-empty list")
+        profile_ids = frozenset(_identifier(profile) for profile in profiles)
+        if len(profile_ids) != len(profiles):
+            raise _error(6, "Node execution-profiles must be distinct")
+        workspaces[workspace_id] = SharedGatewayNodeWorkspace(
+            root=_path(base, item["root"], directory=True), execution_profiles=profile_ids)
+    return SharedGatewayNodeConfig(
+        node_id=_identifier(data["node-id"]), server_id=_identifier(data["server-id"]),
+        endpoint=endpoint, token_file=_path(base, data["token-file"], credential=True),
+        state_root=_path(base, data["state-root"], directory=True), workspaces=workspaces,
         ca_file=_path(base, data["ca-file"]) if "ca-file" in data else None,
     )

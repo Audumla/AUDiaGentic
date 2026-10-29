@@ -1,0 +1,1285 @@
+"""Node-only receipt transactions, fencing and real process-death recovery."""
+
+import hashlib
+import json
+import os
+import sqlite3
+import subprocess
+import sys
+import time
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
+from pathlib import Path
+
+import pytest
+
+from audiagentic.components.agents.gateway.node.receipts import NodeReceiptStore
+from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+from .test_gateway_node_contracts import authorization, identity
+
+
+def child_environment():
+    # Match the package under test, not a stale wheel installed in this venv.
+    package_root = Path(sys.modules[NodeReceiptStore.__module__].__file__).parents[5]
+    environment = os.environ.copy()
+    environment["PYTHONPATH"] = str(package_root) + (
+        os.pathsep + environment["PYTHONPATH"] if environment.get("PYTHONPATH") else ""
+    )
+    return environment
+
+
+def store_at(root, **changes):
+    return NodeReceiptStore(
+        **(
+            dict(node_id="node-1", node_epoch="boot-1", gateway_owner_epoch="gateway-1", root=root)
+            | changes
+        )
+    )
+
+
+def advance(store, command=None):
+    command = command or identity()
+    store.prepare(command, b"payload")
+    request, reply = authorization(command)
+    assert store.effect_intent(command, request, reply, connection_generation=1)
+    return command
+
+
+def test_state_machine_exact_dedupe_and_private_output(tmp_path):
+    store = store_at(tmp_path / "node")
+    command = identity()
+    prepared = store.prepare(command, b"payload")
+    assert prepared == store.prepare(command, b"payload")
+    assert prepared.sequence == 1
+    request, reply = authorization(command)
+    assert store.effect_intent(command, request, reply, connection_generation=1)
+    assert not store.effect_intent(command, request, reply, connection_generation=1)
+    accepted = store.native_accepted(command, native_ref="private://native/conversation/turn")
+    assert accepted == store.native_accepted(
+        command, native_ref="private://native/conversation/turn"
+    )
+    terminal = store.terminal(command, text="answer\nλ")
+    assert terminal == store.terminal(command, text="answer\nλ")
+    assert not store.effect_intent(command, request, reply, connection_generation=1)
+    assert store.output(command) == "answer\nλ"
+    receipts = store.receipts_after()
+    assert [r.sequence for r in receipts] == [1, 2, 3, 4]
+    assert [r.state for r in receipts] == [
+        "prepared",
+        "effect-intent",
+        "native-accepted",
+        "terminal",
+    ]
+    assert [r.sequence for r in store.receipts_after(2, limit=1)] == [3]
+    wire = json.dumps([r.public_payload() for r in receipts])
+    for private in ("private://", "answer", str(tmp_path), "native-ref"):
+        assert private not in wire
+    with sqlite3.connect(store.path) as db:
+        assert db.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
+        assert db.execute("SELECT native_ref FROM commands").fetchone()[0].startswith("private://")
+        with pytest.raises(sqlite3.IntegrityError):
+            db.execute("DELETE FROM outbox")
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("request_id", "other"),
+        ("node_epoch", "other"),
+        ("gateway_owner_epoch", "other"),
+        ("workspace_id", "other"),
+        ("grant_revision", 2),
+        ("binding_generation", 2),
+        ("connection_generation", 2),
+        ("execution_profile_id", "other"),
+        ("payload_sha256", hashlib.sha256(b"changed").hexdigest()),
+    ],
+)
+def test_same_command_changed_identity_conflicts(tmp_path, field, value):
+    store = store_at(tmp_path / "node")
+    store.prepare(identity(), b"payload")
+    changed = replace(identity(), **{field: value})
+    with pytest.raises(AudiaGenticError, match="CON-AGND-001"):
+        store.prepare(changed, b"changed" if field == "payload_sha256" else b"payload")
+    assert len(store.receipts_after()) == 1
+
+
+def test_bad_digest_no_record_and_distinct_identical_payloads_are_distinct(tmp_path):
+    store = store_at(tmp_path / "node")
+    with pytest.raises(AudiaGenticError):
+        store.prepare(identity(), b"not payload")
+    assert store.receipts_after() == ()
+    a = store.prepare(identity(), b"payload")
+    b = store.prepare(identity(command_id="cmd-2"), b"payload")
+    assert a.identity != b.identity
+    assert b.sequence == a.sequence + 1
+
+
+def test_no_skipped_states_or_changed_receipts(tmp_path):
+    store = store_at(tmp_path / "node")
+    command = identity()
+    store.prepare(command, b"payload")
+    for method, kwargs in (
+        (store.native_accepted, {"native_ref": "private"}),
+        (store.terminal, {"text": "answer"}),
+    ):
+        with pytest.raises(AudiaGenticError):
+            method(command, **kwargs)
+    advance(store, command)
+    with pytest.raises(AudiaGenticError):
+        store.terminal(command, text="answer")
+    store.native_accepted(command, native_ref="private")
+    with pytest.raises(AudiaGenticError):
+        store.native_accepted(command, native_ref="changed")
+    store.terminal(command, text="answer")
+    with pytest.raises(AudiaGenticError):
+        store.terminal(command, text="changed")
+    assert len(store.receipts_after()) == 4
+
+
+def test_old_epoch_is_query_only_and_stale_instances_are_fenced(tmp_path):
+    root = tmp_path / "node"
+    store = store_at(root)
+    command = advance(store)
+    store.advance_epoch(node_epoch="boot-2", gateway_owner_epoch="gateway-2")
+    current = store_at(root, node_epoch="boot-2", gateway_owner_epoch="gateway-2")
+    assert current.get(command).state == "effect-intent"
+    assert store.get(command).state == "effect-intent"
+    for writer in (store, current):
+        with pytest.raises(AudiaGenticError, match="CON-AGND-001"):
+            writer.native_accepted(command, native_ref="private")
+        with pytest.raises(AudiaGenticError, match="CON-AGND-001"):
+            writer.prepare(command, b"payload")
+    with pytest.raises(AudiaGenticError):
+        store.advance_epoch(node_epoch="boot-3", gateway_owner_epoch="gateway-3")
+    new = identity(command_id="cmd-2", node_epoch="boot-2", gateway_owner_epoch="gateway-2")
+    assert current.prepare(new, b"payload").state == "prepared"
+
+
+def test_concurrent_stores_grant_only_one_effect_intent(tmp_path):
+    root = tmp_path / "node"
+    stores = [store_at(root) for _ in range(4)]
+    command = identity()
+    request, reply = authorization(command)
+
+    def contend(store):
+        store.prepare(command, b"payload")
+        return store.effect_intent(command, request, reply, connection_generation=1)
+
+    with ThreadPoolExecutor(max_workers=4) as workers:
+        assert sum(workers.map(contend, stores)) == 1
+    assert [r.state for r in stores[0].receipts_after()] == ["prepared", "effect-intent"]
+
+
+def test_auth_mismatch_cannot_persist_intent(tmp_path):
+    store = store_at(tmp_path / "node")
+    store.prepare(identity(), b"payload")
+    request, reply = authorization()
+    with pytest.raises(AudiaGenticError):
+        store.effect_intent(identity(), request, reply, connection_generation=2)
+    assert store.get(identity()).state == "prepared"
+
+
+def test_missing_or_corrupt_terminal_artifact_fails_closed(tmp_path):
+    store = store_at(tmp_path / "node")
+    command = advance(store)
+    store.native_accepted(command, native_ref="private")
+    receipt = store.terminal(command, text="answer")
+    path = store.outputs / (receipt.output_sha256 + ".txt")
+    path.write_bytes(b"corrupt")
+    with pytest.raises(AudiaGenticError, match="CON-AGND-001"):
+        store.output(command)
+    path.unlink()
+    with pytest.raises(AudiaGenticError, match="IO-AGND-001"):
+        store.output(command)
+    with pytest.raises(AudiaGenticError, match="IO-AGND-001"):
+        store.get(command)
+    assert store.receipts_after()[-1] == receipt  # Metadata survives missing output bytes.
+    with sqlite3.connect(store.path) as db:
+        assert db.execute("SELECT state FROM commands").fetchone()[0] == "terminal"
+
+
+_CHILD = r"""
+import json, sys, time
+from pathlib import Path
+from audiagentic.components.agents.gateway.node.contracts import CommandIdentity, Frame
+from audiagentic.components.agents.gateway.node.receipts import NodeReceiptStore
+settings=json.loads(sys.stdin.readline())
+root=Path(settings['root'])
+i=CommandIdentity.from_mapping(settings['identity'])
+s=NodeReceiptStore(root=root,node_id=i.node_id,node_epoch=i.node_epoch,gateway_owner_epoch=i.gateway_owner_epoch)
+q=Frame.from_bytes(settings['request'].encode())
+r=Frame.from_bytes(settings['reply'].encode())
+stage=settings['stage']
+def pause():
+    (root/'ready').write_text('ready')
+    while True: time.sleep(1)
+s.prepare(i,b'payload')
+if stage=='prepared': pause()
+if stage=='uncommitted-intent':
+    original=s._append
+    def uncommitted(db,identity,state,output_digest=None):
+        original(db,identity,state,output_digest)
+        pause()
+    s._append=uncommitted
+if s.effect_intent(i,q,r,connection_generation=1):
+    # A fake external native effect, deliberately outside the SQLite lock.
+    with (root/'native-calls').open('ab') as f:
+        f.write(b'one\n'); f.flush()
+if stage=='effect-intent': pause()
+s.native_accepted(i,native_ref='private-native-turn')
+if stage=='native-accepted': pause()
+if stage=='orphan-output':
+    original=s._append
+    def append(db,identity,state,output_digest=None):
+        if state=='terminal': pause()
+        return original(db,identity,state,output_digest)
+    s._append=append
+s.terminal(i,text='verified answer')
+pause()
+"""
+
+
+@pytest.mark.parametrize(
+    "stage,expected,count",
+    [
+        ("prepared", "prepared", 1),
+        ("uncommitted-intent", "prepared", 1),
+        ("effect-intent", "effect-intent", 2),
+        ("native-accepted", "native-accepted", 3),
+        ("orphan-output", "native-accepted", 3),
+        ("terminal", "terminal", 4),
+    ],
+)
+def test_hard_kill_reopen_preserves_barriers_without_repeating_native_call(
+    tmp_path, stage, expected, count
+):
+    root = tmp_path / "node"
+    command = identity()
+    request, reply = authorization(command)
+    child = subprocess.Popen(
+        [sys.executable, "-c", _CHILD],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env=child_environment(),
+    )
+    try:
+        child.stdin.write(
+            json.dumps(
+                {
+                    "root": str(root),
+                    "identity": command.to_mapping(),
+                    "request": request.to_bytes().decode(),
+                    "reply": reply.to_bytes().decode(),
+                    "stage": stage,
+                }
+            )
+            + "\n"
+        )
+        child.stdin.flush()
+        deadline = time.monotonic() + 10
+        while (
+            not (root / "ready").exists() and child.poll() is None and time.monotonic() < deadline
+        ):
+            time.sleep(0.01)
+        if not (root / "ready").exists():
+            child.kill()
+            _, error = child.communicate(timeout=5)
+            pytest.fail("Child never reached persistence barrier: " + error)
+        child.kill()
+        child.communicate(timeout=5)
+    finally:
+        if child.poll() is None:
+            child.kill()
+            child.communicate(timeout=5)
+    store = store_at(root)
+    assert store.get(command).state == expected
+    assert store.authorization_id(command) == (None if expected == "prepared" else "grant-1")
+    assert len(store.receipts_after()) == count
+    with sqlite3.connect(store.path) as db:
+        assert db.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    if expected == "prepared":
+        assert store.effect_intent(command, request, reply, connection_generation=1)
+        assert not (root / "native-calls").exists()
+    else:
+        assert not store.effect_intent(command, request, reply, connection_generation=1)
+        assert (root / "native-calls").read_bytes() == b"one\n"
+    if stage == "orphan-output":
+        assert store.terminal(command, text="verified answer").state == "terminal"
+    if stage == "terminal":
+        assert store.output(command) == "verified answer"
+
+
+def test_registered_errors_and_private_root(tmp_path):
+    from audiagentic.foundation.io import load_yaml_file
+
+    codes = load_yaml_file(
+        Path(__file__).parents[3]
+        / "src/audiagentic/config/components/agents/error-resolutions.yaml"
+    )
+    assert {"VAL-AGND-001", "CON-AGND-001", "IO-AGND-001"} <= codes.keys()
+    with pytest.raises(AudiaGenticError, match="VAL-AGND-001"):
+        store_at(Path("relative"))
+    if os.name == "posix":
+        root = tmp_path / "public"
+        root.mkdir(mode=0o755)
+        with pytest.raises(AudiaGenticError, match="VAL-AGND-001"):
+            store_at(root)
+
+
+@pytest.mark.parametrize("stage", ["prepared", "effect-intent", "native-accepted", "terminal"])
+def test_reboot_preserves_old_epoch_evidence_without_new_effect_authority(tmp_path, stage):
+    root = tmp_path / "node"
+    store = store_at(root)
+    command = identity()
+    store.prepare(command, b"payload")
+    request, reply = authorization(command)
+    if stage != "prepared":
+        assert store.effect_intent(command, request, reply, connection_generation=1)
+    if stage in {"native-accepted", "terminal"}:
+        store.native_accepted(command, native_ref="private-native-correlation")
+    if stage == "terminal":
+        store.terminal(command, text="completed before reboot")
+    store.advance_epoch(node_epoch="boot-2", gateway_owner_epoch="gateway-1")
+    rebooted = store_at(root, node_epoch="boot-2")
+    assert rebooted.get(command).state == stage
+    assert rebooted.receipts_after()[-1].identity.node_epoch == "boot-1"
+    assert rebooted.native_reference(command) == (
+        "private-native-correlation" if stage in {"native-accepted", "terminal"} else None
+    )
+    if stage == "terminal":
+        assert rebooted.output(command) == "completed before reboot"
+    with pytest.raises(AudiaGenticError, match="CON-AGND-001"):
+        rebooted.effect_intent(command, request, reply, connection_generation=1)
+
+
+def test_receipt_and_outbox_mutations_rollback_together_on_persistence_error(tmp_path, monkeypatch):
+    store = store_at(tmp_path / "node")
+    command = identity()
+    store.prepare(command, b"payload")
+    request, reply = authorization(command)
+    original = store._append
+
+    def fail_after_append(db, identity, state, output_digest=None):
+        original(db, identity, state, output_digest)
+        raise sqlite3.OperationalError("simulated disk failure before commit")
+
+    monkeypatch.setattr(store, "_append", fail_after_append)
+    with pytest.raises(AudiaGenticError, match="IO-AGND-001"):
+        store.effect_intent(command, request, reply, connection_generation=1)
+    assert store.get(command).state == "prepared"
+    assert store.authorization_id(command) is None
+    assert [r.state for r in store.receipts_after()] == ["prepared"]
+    with store._transaction() as db:
+        assert db.execute("PRAGMA synchronous").fetchone()[0] == 2
+        with pytest.raises(sqlite3.IntegrityError):
+            db.execute("UPDATE outbox SET state='terminal'")
+
+
+@pytest.mark.parametrize(
+    "field,value", [("cursor", True), ("cursor", -1), ("limit", True), ("limit", 1001)]
+)
+def test_outbox_bounds(tmp_path, field, value):
+    store = store_at(tmp_path / "node")
+    with pytest.raises(AudiaGenticError, match="VAL-AGND-001"):
+        store.receipts_after(
+            value if field == "cursor" else 0, limit=value if field == "limit" else 100
+        )
+
+
+def test_wrong_node_and_future_store_version_fail_closed(tmp_path):
+    root = tmp_path / "node"
+    store = store_at(root)
+    with pytest.raises(AudiaGenticError, match="CON-AGND-001"):
+        store_at(root, node_id="other-node")
+    with sqlite3.connect(store.path) as db:
+        db.execute("PRAGMA user_version=5")
+    with pytest.raises(AudiaGenticError, match="CON-AGND-001"):
+        store_at(root)
+
+
+@pytest.mark.parametrize("stage", ["effect-intent", "native-accepted", "terminal"])
+def test_exact_authorization_persists_on_reopen_and_never_authorizes_second_effect(tmp_path, stage):
+    root = tmp_path / "node"
+    store = store_at(root)
+    command = advance(store)
+    if stage in {"native-accepted", "terminal"}:
+        store.native_accepted(command, native_ref="private")
+    if stage == "terminal":
+        store.terminal(command, text="answer")
+    reopened = store_at(root)
+    assert reopened.authorization_id(command) == "grant-1"
+    request, reply = authorization(command)
+    before = reopened.receipts_after()
+    assert not reopened.effect_intent(command, request, reply, connection_generation=1)
+    # A fresh authorization-request ID using the same grant still cannot Send twice.
+    fresh_request = replace(request, message_id="auth-2")
+    fresh_reply = replace(
+        reply, payload=dict(reply.payload) | {"authorization-request-id": "auth-2"}
+    )
+    assert not reopened.effect_intent(command, fresh_request, fresh_reply, connection_generation=1)
+    changed = replace(reply, payload=dict(reply.payload) | {"authorization-id": "grant-2"})
+    with pytest.raises(AudiaGenticError, match="CON-AGND-001"):
+        reopened.effect_intent(command, request, changed, connection_generation=1)
+    assert reopened.authorization_id(command) == "grant-1"
+    assert reopened.receipts_after() == before
+    assert "grant-1" not in json.dumps([r.public_payload() for r in before])
+    with sqlite3.connect(reopened.path) as db:
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 4
+        assert db.execute("SELECT state,authorization_id FROM commands").fetchone() == (
+            stage,
+            "grant-1",
+        )
+    reopened.advance_epoch(node_epoch="boot-2", gateway_owner_epoch="gateway-2")
+    historical = store_at(root, node_epoch="boot-2", gateway_owner_epoch="gateway-2")
+    assert historical.authorization_id(command) == "grant-1"
+    with pytest.raises(AudiaGenticError, match="CON-AGND-001"):
+        historical.effect_intent(command, request, reply, connection_generation=1)
+
+
+@pytest.mark.parametrize("mutation", ["missing", "malformed", "connection", "request", "denied"])
+def test_invalid_authorization_never_persists_grant_or_intent(tmp_path, mutation):
+    store = store_at(tmp_path / "node")
+    command = identity()
+    store.prepare(command, b"payload")
+    request, reply = authorization(command)
+    payload = dict(reply.payload)
+    generation = 1
+    if mutation == "missing":
+        del payload["authorization-id"]
+    elif mutation == "malformed":
+        payload["authorization-id"] = "../grant"
+    elif mutation == "connection":
+        generation = 2
+    elif mutation == "request":
+        payload["authorization-request-id"] = "other-request"
+    else:
+        payload["authorized"] = False
+    with pytest.raises(AudiaGenticError):
+        store.effect_intent(
+            command, request, replace(reply, payload=payload), connection_generation=generation
+        )
+    assert store.authorization_id(command) is None
+    assert store.get(command).state == "prepared"
+    assert len(store.receipts_after()) == 1
+
+
+@pytest.mark.parametrize("version", [0, 1])
+def test_pre_authorization_schema_is_rejected_without_backfill(tmp_path, version):
+    root = tmp_path / "node"
+    root.mkdir(mode=0o700)
+    path = root / "receipts.sqlite3"
+    with sqlite3.connect(path) as db:
+        db.execute("CREATE TABLE commands (command TEXT PRIMARY KEY, state TEXT)")
+        db.execute("INSERT INTO commands VALUES ('legacy-command','effect-intent')")
+        db.execute(f"PRAGMA user_version={version}")
+    with pytest.raises(AudiaGenticError, match="CON-AGND-001"):
+        store_at(root)
+    with sqlite3.connect(path) as db:
+        assert db.execute("PRAGMA user_version").fetchone()[0] == version
+        assert db.execute("SELECT * FROM commands").fetchall() == [
+            ("legacy-command", "effect-intent")
+        ]
+        assert "authorization_id" not in {r[1] for r in db.execute("PRAGMA table_info(commands)")}
+
+
+def test_concurrent_distinct_grants_pin_only_winning_authorization(tmp_path):
+    root = tmp_path / "node"
+    stores = [store_at(root), store_at(root)]
+    command = identity()
+    stores[0].prepare(command, b"payload")
+    request, reply = authorization(command)
+
+    def contend(index):
+        grant = f"grant-{index + 1}"
+        changed = replace(reply, payload=dict(reply.payload) | {"authorization-id": grant})
+        try:
+            return grant, stores[index].effect_intent(
+                command, request, changed, connection_generation=1
+            )
+        except AudiaGenticError as error:
+            assert error.code == "CON-AGND-001"
+            return grant, False
+
+    with ThreadPoolExecutor(max_workers=2) as workers:
+        results = list(workers.map(contend, range(2)))
+    winners = [grant for grant, won in results if won]
+    assert len(winners) == 1
+    reopened = store_at(root)
+    assert reopened.authorization_id(command) == winners[0]
+    assert [r.state for r in reopened.receipts_after()] == ["prepared", "effect-intent"]
+
+
+# Local ACK API tests. Authentication/current-channel facts are injected by the
+# trusted owner, never reconstructed from incoming ACK fields.
+def live_connection(**changes):
+    from audiagentic.components.agents.gateway.node.authority import NodeConnectionIdentity
+
+    return NodeConnectionIdentity(
+        **(
+            dict(
+                node_id="node-1",
+                node_epoch="boot-1",
+                gateway_owner_epoch="gateway-1",
+                connection_generation=1,
+            )
+            | changes
+        )
+    )
+
+
+def ack_frame(store, receipt, **payload_changes):
+    from audiagentic.components.agents.gateway.node.contracts import Frame
+
+    return Frame(
+        1,
+        "reconcile-result",
+        "ack-1",
+        "node-1",
+        "boot-1",
+        "gateway-1",
+        1,
+        {
+            "kind": "receipt-ack",
+            "server-id": "server-1",
+            "log-incarnation-id": store.log_incarnation_id,
+            "connection-generation": 1,
+            "through-sequence": receipt.sequence,
+            "through-receipt-sha256": receipt.digest,
+            **payload_changes,
+        },
+    )
+
+
+def accept_ack(store, frame, **trusted_changes):
+    return store.acknowledge(
+        frame,
+        **(
+            dict(expected_server_id="server-1", current_connection=live_connection())
+            | trusted_changes
+        ),
+    )
+
+
+def durable_facts(path):
+    with sqlite3.connect(path) as db:
+        return (
+            db.execute(
+                "SELECT command,identity,payload,state,native_ref,output_digest,sequence,authorization_id FROM commands ORDER BY command"
+            ).fetchall(),
+            db.execute("SELECT * FROM outbox ORDER BY sequence").fetchall(),
+            db.execute("SELECT * FROM sqlite_sequence ORDER BY name").fetchall(),
+        )
+
+
+@pytest.mark.parametrize("version", [2, 3, 5])
+def test_other_schema_versions_are_rejected_unchanged(tmp_path, version):
+    """Earlier numbers were unreleased prototypes: rejected, never migrated."""
+    root = tmp_path / "node"
+    path = store_at(root).path
+    with sqlite3.connect(path) as db:
+        db.execute(f"PRAGMA user_version={version}")
+        facts = db.execute("SELECT command,state FROM commands").fetchall()
+    with pytest.raises(AudiaGenticError, match="CON-AGND-001"):
+        store_at(root)
+    with sqlite3.connect(path) as db:
+        assert db.execute("PRAGMA user_version").fetchone()[0] == version
+        assert db.execute("SELECT command,state FROM commands").fetchall() == facts
+
+
+@pytest.mark.parametrize("damage", ["missing-authorization", "missing-trigger", "missing-checkpoint"])
+def test_damaged_current_schema_is_rejected(tmp_path, damage):
+    root = tmp_path / "node"
+    path = store_at(root).path
+    with sqlite3.connect(path) as db:
+        if damage == "missing-authorization":
+            db.execute("ALTER TABLE commands RENAME COLUMN authorization_id TO unknown_id")
+        elif damage == "missing-trigger":
+            db.execute("DROP TRIGGER outbox_no_delete")
+        else:
+            db.execute("DROP TABLE receipt_checkpoint")
+    with pytest.raises(AudiaGenticError, match="CON-AGND-001"):
+        store_at(root)
+
+
+def test_new_store_has_the_released_schema_and_a_log_identity(tmp_path):
+    store = store_at(tmp_path / "node")
+    import uuid
+
+    checkpoint = store.ack_checkpoint()
+    assert checkpoint.server_id is None and checkpoint.through_sequence == 0
+    assert checkpoint.through_receipt_sha256 is None
+    assert uuid.UUID(checkpoint.log_incarnation_id).version == 4
+    assert store_at(tmp_path / "node").log_incarnation_id == checkpoint.log_incarnation_id
+    with sqlite3.connect(store.path) as db:
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 4
+
+
+def test_log_uuid_and_ack_survive_reopen_and_epoch_rotation_not_database_recreation(tmp_path):
+    root = tmp_path / "node"
+    store = store_at(root)
+    receipt = store.prepare(identity(), b"payload")
+    log_id = store.log_incarnation_id
+    accepted = accept_ack(store, ack_frame(store, receipt))
+    assert store_at(root).ack_checkpoint() == accepted
+    store.advance_epoch(node_epoch="boot-2", gateway_owner_epoch="gateway-2")
+    current = store_at(root, node_epoch="boot-2", gateway_owner_epoch="gateway-2")
+    assert current.log_incarnation_id == log_id
+    assert current.ack_checkpoint() == accepted
+    # Recreate only the named database; no recursive deletion or artifact purge.
+    store.path.unlink()
+    recreated = store_at(root)
+    assert recreated.log_incarnation_id != log_id
+    assert recreated.ack_checkpoint().through_sequence == 0
+    assert recreated.ack_checkpoint().server_id is None
+    with pytest.raises(AudiaGenticError):
+        accept_ack(recreated, ack_frame(store_at(root), receipt, **{"log-incarnation-id": log_id}))
+
+
+def test_cumulative_ack_duplicate_noop_regression_and_changed_digest_conflict(
+    tmp_path, monkeypatch
+):
+    store = store_at(tmp_path / "node")
+    command = advance(store)
+    receipts = store.receipts_after()
+    # A valid cumulative ACK may cover already emitted intermediate receipts.
+    accepted = accept_ack(store, ack_frame(store, receipts[-1]))
+    assert accepted.through_sequence == 2 and accepted.server_id == "server-1"
+
+    def no_write(*args):
+        pytest.fail("Duplicate ACK mutated the checkpoint")
+
+    monkeypatch.setattr(store, "_write_ack", no_write)
+    assert accept_ack(store, ack_frame(store, receipts[-1])) == accepted
+    with pytest.raises(AudiaGenticError, match="CON-AGND-001"):
+        accept_ack(store, ack_frame(store, receipts[0]))
+    with pytest.raises(AudiaGenticError, match="CON-AGND-001"):
+        accept_ack(store, ack_frame(store, receipts[-1], **{"through-receipt-sha256": "0" * 64}))
+    assert store.ack_checkpoint() == accepted
+    assert store.get(command).state == "effect-intent"  # ACK isn't successful work.
+    assert store.authorization_id(command) == "grant-1"
+    assert store.receipts_after() == receipts  # ACK isn't permission to delete.
+
+
+@pytest.mark.parametrize(
+    "key,value",
+    [
+        ("kind", "other"),
+        ("server-id", "server-2"),
+        ("log-incarnation-id", "00000000-0000-4000-8000-000000000000"),
+        ("log-incarnation-id", "invalid"),
+        ("connection-generation", 2),
+        ("connection-generation", True),
+        ("through-sequence", True),
+        ("through-sequence", 0),
+        ("through-sequence", 2),
+        ("through-sequence", -1),
+        ("through-sequence", 1.0),
+        ("through-sequence", 2**63),
+        ("through-receipt-sha256", "0" * 64),
+        ("through-receipt-sha256", "A" * 64),
+        ("through-receipt-sha256", True),
+        ("unexpected", "value"),
+    ],
+)
+def test_bad_ack_never_establishes_server_binding_or_cursor(tmp_path, key, value):
+    store = store_at(tmp_path / "node")
+    receipt = store.prepare(identity(), b"payload")
+    before = store.ack_checkpoint()
+    with pytest.raises(AudiaGenticError):
+        accept_ack(store, ack_frame(store, receipt, **{key: value}))
+    assert store.ack_checkpoint() == before
+    assert store.receipts_after() == (receipt,)
+
+
+@pytest.mark.parametrize(
+    "key",
+    [
+        "kind",
+        "server-id",
+        "log-incarnation-id",
+        "connection-generation",
+        "through-sequence",
+        "through-receipt-sha256",
+    ],
+)
+def test_ack_missing_field_is_rejected(tmp_path, key):
+    store = store_at(tmp_path / "node")
+    receipt = store.prepare(identity(), b"payload")
+    frame = ack_frame(store, receipt)
+    payload = dict(frame.payload)
+    del payload[key]
+    with pytest.raises(AudiaGenticError, match="VAL-AGND-001"):
+        accept_ack(store, replace(frame, payload=payload))
+    assert store.ack_checkpoint().server_id is None
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("node_id", "foreign"),
+        ("node_epoch", "old"),
+        ("gateway_owner_epoch", "old"),
+        ("connection_generation", True),
+    ],
+)
+def test_ack_rejects_untrusted_or_stale_connection_facts(tmp_path, field, value):
+    store = store_at(tmp_path / "node")
+    receipt = store.prepare(identity(), b"payload")
+    with pytest.raises(AudiaGenticError):
+        accept_ack(
+            store, ack_frame(store, receipt), current_connection=live_connection(**{field: value})
+        )
+    assert store.ack_checkpoint().through_sequence == 0
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("node_id", "foreign"),
+        ("node_epoch", "old"),
+        ("gateway_owner_epoch", "unbound"),
+        ("type", "receipt"),
+    ],
+)
+def test_ack_frame_scope_cannot_override_trusted_context(tmp_path, field, value):
+    store = store_at(tmp_path / "node")
+    receipt = store.prepare(identity(), b"payload")
+    with pytest.raises(AudiaGenticError):
+        accept_ack(store, replace(ack_frame(store, receipt), **{field: value}))
+    assert store.ack_checkpoint().server_id is None
+
+
+def test_ack_singleton_server_binding_blocks_retarget_even_with_new_trusted_argument(tmp_path):
+    store = store_at(tmp_path / "node")
+    receipt = store.prepare(identity(), b"payload")
+    accepted = accept_ack(store, ack_frame(store, receipt))
+    with pytest.raises(AudiaGenticError, match="CON-AGND-001"):
+        accept_ack(
+            store,
+            ack_frame(store, receipt, **{"server-id": "server-2"}),
+            expected_server_id="server-2",
+        )
+    assert store_at(store.root).ack_checkpoint() == accepted
+
+
+def test_current_epoch_ack_can_cover_historical_receipt_without_reauthorizing_it(tmp_path):
+    store = store_at(tmp_path / "node")
+    receipt = store.prepare(identity(), b"payload")
+    old_frame = ack_frame(store, receipt)
+    store.advance_epoch(node_epoch="boot-2", gateway_owner_epoch="gateway-2")
+    with pytest.raises(AudiaGenticError, match="CON-AGND-001"):
+        accept_ack(store, old_frame)
+    current = store_at(store.root, node_epoch="boot-2", gateway_owner_epoch="gateway-2")
+    frame = replace(
+        ack_frame(current, receipt, **{"connection-generation": 3}),
+        node_epoch="boot-2",
+        gateway_owner_epoch="gateway-2",
+    )
+    accepted = accept_ack(
+        current,
+        frame,
+        current_connection=live_connection(
+            node_epoch="boot-2", gateway_owner_epoch="gateway-2", connection_generation=3
+        ),
+    )
+    assert accepted.through_sequence == receipt.sequence
+    with pytest.raises(AudiaGenticError):
+        current.prepare(identity(), b"payload")
+
+
+def test_ack_transaction_failure_preserves_unbound_cursor(tmp_path, monkeypatch):
+    store = store_at(tmp_path / "node")
+    receipt = store.prepare(identity(), b"payload")
+    original = store._write_ack
+
+    def fail_after_update(*args):
+        original(*args)
+        raise sqlite3.OperationalError("simulated ACK failure")
+
+    monkeypatch.setattr(store, "_write_ack", fail_after_update)
+    with pytest.raises(AudiaGenticError, match="IO-AGND-001"):
+        accept_ack(store, ack_frame(store, receipt))
+    assert store.ack_checkpoint().server_id is None
+    assert store.ack_checkpoint().through_sequence == 0
+
+
+def test_public_receipt_digest_remains_stable_without_log_or_private_fields(tmp_path):
+    from audiagentic.components.agents.gateway.node.contracts import canonical_json
+
+    store = store_at(tmp_path / "node")
+    receipt = store.prepare(identity(), b"payload")
+    original = receipt.public_payload()
+    assert receipt.digest == hashlib.sha256(canonical_json(original)).hexdigest()
+    accept_ack(store, ack_frame(store, receipt))
+    assert store.receipts_after()[0].public_payload() == original
+    assert "log-incarnation-id" not in original and "server-id" not in original
+
+
+_ACK_CHILD = r"""
+import json,sys,time
+from pathlib import Path
+from audiagentic.components.agents.gateway.node.receipts import NodeReceiptStore
+from audiagentic.components.agents.gateway.node.contracts import Frame
+from audiagentic.components.agents.gateway.node.authority import NodeConnectionIdentity
+settings=json.loads(sys.stdin.readline())
+root=Path(settings['root'])
+def pause():
+    (root/'ack-ready').write_text('ready')
+    while True: time.sleep(1)
+s=NodeReceiptStore(root=root,node_id='node-1',node_epoch='boot-1',gateway_owner_epoch='gateway-1')
+if settings['stage']=='ack-before-commit':
+    original=s._write_ack
+    def held(*args):
+        original(*args)
+        pause()
+    s._write_ack=held
+s.acknowledge(Frame.from_bytes(settings['ack'].encode()),expected_server_id='server-1',
+    current_connection=NodeConnectionIdentity('node-1','boot-1','gateway-1',1))
+pause()
+"""
+
+
+def kill_at_ack_barrier(root, stage, frame=None):
+    child = subprocess.Popen(
+        [sys.executable, "-c", _ACK_CHILD],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env=child_environment(),
+    )
+    try:
+        child.stdin.write(
+            json.dumps(
+                {
+                    "root": str(root),
+                    "stage": stage,
+                    "ack": frame.to_bytes().decode() if frame is not None else "",
+                }
+            )
+            + "\n"
+        )
+        child.stdin.flush()
+        deadline = time.monotonic() + 10
+        while (
+            not (root / "ack-ready").exists()
+            and child.poll() is None
+            and time.monotonic() < deadline
+        ):
+            time.sleep(0.01)
+        if not (root / "ack-ready").exists():
+            child.kill()
+            _, error = child.communicate(timeout=5)
+            pytest.fail("ACK child missed persistence barrier: " + error)
+        child.kill()
+        child.communicate(timeout=5)
+    finally:
+        if child.poll() is None:
+            child.kill()
+            child.communicate(timeout=5)
+
+
+@pytest.mark.parametrize("stage,sequence", [("ack-before-commit", 0), ("ack-after-commit", 1)])
+def test_hard_kill_ack_reopen_is_atomic_and_does_not_delete_receipts(tmp_path, stage, sequence):
+    root = tmp_path / "node"
+    store = store_at(root)
+    receipt = store.prepare(identity(), b"payload")
+    log_id = store.log_incarnation_id
+    before = durable_facts(store.path)
+    frame = ack_frame(store, receipt)
+    kill_at_ack_barrier(root, stage, frame)
+    reopened = store_at(root)
+    checkpoint = reopened.ack_checkpoint()
+    assert checkpoint.log_incarnation_id == log_id
+    assert checkpoint.through_sequence == sequence
+    assert checkpoint.server_id == ("server-1" if sequence else None)
+    assert durable_facts(reopened.path) == before
+    accepted = accept_ack(reopened, frame)
+    assert accepted.through_sequence == 1
+    assert reopened.receipts_after() == (receipt,)
+
+
+@pytest.mark.parametrize("damage", ["missing-row", "missing-log", "unknown-row", "changed-digest"])
+def test_missing_or_corrupt_checkpoint_never_resets_itself(tmp_path, damage):
+    root = tmp_path / "node"
+    store = store_at(root)
+    receipt = store.prepare(identity(), b"payload")
+    accept_ack(store, ack_frame(store, receipt))
+    with sqlite3.connect(store.path) as db:
+        if damage == "missing-row":
+            db.execute("DELETE FROM receipt_checkpoint")
+        elif damage == "missing-log":
+            db.execute("UPDATE owner SET log_incarnation_id=NULL")
+        elif damage == "unknown-row":
+            db.execute("UPDATE receipt_checkpoint SET through_sequence=99")
+        else:
+            db.execute("UPDATE receipt_checkpoint SET through_digest=?", ("0" * 64,))
+    with pytest.raises(AudiaGenticError):
+        store_at(root)
+    with sqlite3.connect(store.path) as db:
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 4
+        if damage == "missing-row":
+            assert not db.execute("SELECT 1 FROM receipt_checkpoint").fetchone()
+
+
+def test_ack_cannot_take_connection_facts_from_payload(tmp_path):
+    store = store_at(tmp_path / "node")
+    receipt = store.prepare(identity(), b"payload")
+    frame = ack_frame(store, receipt)
+    with pytest.raises(AudiaGenticError, match="VAL-AGND-001"):
+        accept_ack(store, frame, current_connection=dict(frame.payload))
+    assert store.ack_checkpoint().server_id is None
+
+
+
+def terminal_artifact(root):
+    store = store_at(root)
+    command = advance(store)
+    store.native_accepted(command, native_ref='PRIVATE-local-reference')
+    text = 'retained answer\r\nλ'
+    receipt = store.terminal(command, text=text)
+    return store, command, receipt, text.encode('utf-8')
+
+
+def artifact_read(store, command, receipt, max_bytes=1024):
+    return store.artifact_bytes(command, expected_sha256=receipt.output_sha256, max_bytes=max_bytes)
+
+
+def symlink_or_skip(link, target, *, directory=False):
+    try:
+        link.symlink_to(target, target_is_directory=directory)
+    except OSError:
+        pytest.skip('OS does not permit test symlinks')
+
+
+@pytest.mark.parametrize('redirect', ['file', 'parent'])
+def test_artifact_redirects_rejected_without_touching_link_target(tmp_path, redirect):
+    store, command, receipt, raw = terminal_artifact(tmp_path / 'node')
+    path = store.outputs / (receipt.output_sha256 + '.txt')
+    outside = tmp_path / 'outside'
+    outside.mkdir()
+    target = outside / path.name
+    target.write_bytes(raw)
+    if redirect == 'file':
+        path.unlink()
+        symlink_or_skip(path, target)
+    else:
+        store.outputs.rename(store.root / 'original-outputs')
+        symlink_or_skip(store.outputs, outside, directory=True)
+    before = {p.name: p.read_bytes() for p in outside.iterdir()}
+    with pytest.raises(AudiaGenticError):
+        artifact_read(store, command, receipt)
+    assert {p.name: p.read_bytes() for p in outside.iterdir()} == before
+
+
+@pytest.mark.skipif(os.name != 'nt', reason='Windows junction qualification')
+def test_artifact_parent_junction_rejected_without_modifying_target(tmp_path):
+    store, command, receipt, raw = terminal_artifact(tmp_path / 'node')
+    outside = tmp_path / 'junction-target'
+    outside.mkdir()
+    target = outside / (receipt.output_sha256 + '.txt')
+    target.write_bytes(raw)
+    store.outputs.rename(store.root / 'original-outputs')
+    made = subprocess.run(['cmd', '/c', 'mklink', '/J', str(store.outputs), str(outside)],
+        capture_output=True, text=True)
+    if made.returncode:
+        pytest.skip('OS did not permit test junction')
+    try:
+        assert store.outputs.is_junction()
+        with pytest.raises(AudiaGenticError):
+            artifact_read(store, command, receipt)
+        assert target.read_bytes() == raw and list(outside.iterdir()) == [target]
+    finally:
+        assert store.outputs.is_junction()
+        store.outputs.rmdir()  # Verified junction only; never recursively touch its target.
+
+
+def test_nonregular_artifact_rejected_before_reader(tmp_path, monkeypatch):
+    store, command, receipt, raw = terminal_artifact(tmp_path / 'node')
+    path = store.outputs / (receipt.output_sha256 + '.txt')
+    path.unlink()
+    path.mkdir()
+    monkeypatch.setattr(os, 'fdopen', lambda *args, **kwargs: pytest.fail('read nonregular artifact'))
+    with pytest.raises(AudiaGenticError):
+        artifact_read(store, command, receipt)
+
+
+@pytest.mark.parametrize('replacement', ['regular', 'symlink', 'directory', 'fifo'])
+def test_precheck_open_replacement_is_rejected_and_descriptor_closed(tmp_path, monkeypatch, replacement):
+    if replacement == 'fifo' and not hasattr(os, 'mkfifo'):
+        pytest.skip('POSIX FIFO qualification')
+    store, command, receipt, raw = terminal_artifact(tmp_path / 'node')
+    path = store.outputs / (receipt.output_sha256 + '.txt')
+    target = tmp_path / 'outside.txt'
+    target.write_bytes(raw)
+    if replacement == 'symlink':
+        probe = tmp_path / 'symlink-probe'
+        symlink_or_skip(probe, target)
+        probe.unlink()
+    original_open = os.open
+    descriptors, flags_seen = [], []
+    def replace_then_open(candidate, flags, *args, **kwargs):
+        if Path(candidate) == path:
+            path.rename(store.outputs / 'original.txt')
+            if replacement == 'regular':
+                path.write_bytes(raw)
+            elif replacement == 'symlink':
+                path.symlink_to(target)
+            elif replacement == 'directory':
+                path.mkdir()
+            else:
+                os.mkfifo(path, 0o600)
+                assert flags & os.O_NONBLOCK, 'raced FIFO must never block the test or owner'
+            flags_seen.append(flags)
+        fd = original_open(candidate, flags, *args, **kwargs)
+        if Path(candidate) == path:
+            descriptors.append(fd)
+        return fd
+    monkeypatch.setattr(os, 'open', replace_then_open)
+    with pytest.raises(AudiaGenticError):
+        artifact_read(store, command, receipt)
+    assert flags_seen and target.read_bytes() == raw
+    for fd in descriptors:
+        with pytest.raises(OSError):
+            os.fstat(fd)
+
+
+@pytest.mark.parametrize('failure', ['oversize', 'fdopen', 'read', 'digest', 'success'])
+def test_artifact_descriptor_cleanup_and_bounded_read(tmp_path, monkeypatch, failure):
+    store, command, receipt, raw = terminal_artifact(tmp_path / 'node')
+    path = store.outputs / (receipt.output_sha256 + '.txt')
+    if failure == 'digest':
+        path.write_bytes(b'x' * len(raw))
+    original_open, original_fdopen = os.open, os.fdopen
+    descriptors, requested = [], []
+    def opened(candidate, flags, *args, **kwargs):
+        fd = original_open(candidate, flags, *args, **kwargs)
+        if Path(candidate) == path:
+            descriptors.append(fd)
+        return fd
+    class Reader:
+        def __init__(self, handle):
+            self.handle = handle
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            self.handle.close()
+        def fileno(self):
+            return self.handle.fileno()
+        def read(self, size):
+            requested.append(size)
+            assert size == len(raw) + 1
+            if failure == 'read':
+                raise OSError('PRIVATE test read failure')
+            return self.handle.read(size)
+    def reader(fd, *args, **kwargs):
+        if failure == 'fdopen':
+            raise OSError('PRIVATE test fdopen failure')
+        return Reader(original_fdopen(fd, *args, **kwargs))
+    monkeypatch.setattr(os, 'open', opened)
+    monkeypatch.setattr(os, 'fdopen', reader)
+    if failure == 'success':
+        assert artifact_read(store, command, receipt, len(raw)) == ('native-plaintext', raw)
+    else:
+        with pytest.raises(AudiaGenticError) as error:
+            artifact_read(store, command, receipt, len(raw) - 1 if failure == 'oversize' else len(raw))
+        assert str(path) not in str(error.value) and 'PRIVATE test' not in str(error.value)
+    assert len(descriptors) == 1
+    for fd in descriptors:
+        with pytest.raises(OSError):
+            os.fstat(fd)
+    assert requested == ([] if failure in ('oversize', 'fdopen') else [len(raw) + 1])
+
+
+def test_post_read_replacement_same_bytes_rejected(tmp_path, monkeypatch):
+    if os.name == 'nt':
+        pytest.skip('POSIX open-file replacement; Windows sharing prevents this test mutation')
+    store, command, receipt, raw = terminal_artifact(tmp_path / 'node')
+    path = store.outputs / (receipt.output_sha256 + '.txt')
+    original_fdopen = os.fdopen
+    descriptors = []
+    class Reader:
+        def __init__(self, handle):
+            self.handle = handle
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            self.handle.close()
+        def fileno(self):
+            return self.handle.fileno()
+        def read(self, size):
+            data = self.handle.read(size)
+            path.rename(store.outputs / 'retained-original.txt')
+            path.write_bytes(data)
+            return data
+    def reader(fd, *args, **kwargs):
+        descriptors.append(fd)
+        return Reader(original_fdopen(fd, *args, **kwargs))
+    monkeypatch.setattr(os, 'fdopen', reader)
+    with pytest.raises(AudiaGenticError, match='changed during read'):
+        artifact_read(store, command, receipt)
+    with pytest.raises(OSError):
+        os.fstat(descriptors[0])
+
+
+def test_historical_artifact_exact_bytes_and_utf8_behavior_unchanged(tmp_path):
+    store, command, receipt, raw = terminal_artifact(tmp_path / 'node')
+    store.advance_epoch(node_epoch='boot-2', gateway_owner_epoch='gateway-2')
+    current = store_at(store.root, node_epoch='boot-2', gateway_owner_epoch='gateway-2')
+    assert artifact_read(current, command, receipt, len(raw)) == ('native-plaintext', raw)
+    assert current.output(command) == raw.decode('utf-8')
+    assert current.get(command).output_sha256 == hashlib.sha256(raw).hexdigest()
+
+
+
+@pytest.mark.parametrize('bad_metadata', ['nonregular', 'reparse'])
+def test_open_descriptor_metadata_rejected_without_read_and_closed(tmp_path, monkeypatch, bad_metadata):
+    import stat
+    from types import SimpleNamespace
+    store, command, receipt, raw = terminal_artifact(tmp_path / 'node')
+    path = store.outputs / (receipt.output_sha256 + '.txt')
+    original_open, original_fstat = os.open, os.fstat
+    descriptors = []
+    def opened(candidate, flags, *args, **kwargs):
+        fd = original_open(candidate, flags, *args, **kwargs)
+        if Path(candidate) == path:
+            descriptors.append(fd)
+        return fd
+    def metadata(fd):
+        info = original_fstat(fd)
+        if fd not in descriptors:
+            return info
+        return SimpleNamespace(st_mode=stat.S_IFCHR if bad_metadata == 'nonregular' else info.st_mode,
+            st_dev=info.st_dev, st_ino=info.st_ino, st_size=info.st_size,
+            st_file_attributes=0x400 if bad_metadata == 'reparse' else 0)
+    monkeypatch.setattr(os, 'open', opened)
+    monkeypatch.setattr(os, 'fstat', metadata)
+    monkeypatch.setattr(os, 'fdopen', lambda *args, **kwargs: pytest.fail('unsafe descriptor read'))
+    with pytest.raises(AudiaGenticError, match='descriptor changed or is not regular'):
+        artifact_read(store, command, receipt)
+    assert len(descriptors) == 1
+    with pytest.raises(OSError):
+        original_fstat(descriptors[0])
+
+
+
+@pytest.mark.parametrize('artifact', ['missing', 'oversized', 'corrupt'])
+def test_metadata_replay_never_reads_artifact_or_get_even_if_unavailable(tmp_path, monkeypatch, artifact):
+    store, command, receipt, raw = terminal_artifact(tmp_path / 'node')
+    path = store.outputs / (receipt.output_sha256 + '.txt')
+    if artifact == 'missing':
+        path.unlink()
+    elif artifact == 'oversized':
+        with path.open('wb') as handle:
+            handle.truncate(16 * 1024 * 1024)  # Sparse oversized fixture, not a read allocation.
+    else:
+        path.write_bytes(b'corrupt')
+    original_path_open, original_os_open = Path.open, os.open
+    def no_path_artifact(candidate, *args, **kwargs):
+        if candidate == path:
+            pytest.fail('metadata replay opened an artifact through Path.open')
+        return original_path_open(candidate, *args, **kwargs)
+    def no_descriptor_artifact(candidate, *args, **kwargs):
+        if Path(candidate) == path:
+            pytest.fail('metadata replay opened an artifact descriptor')
+        return original_os_open(candidate, *args, **kwargs)
+    monkeypatch.setattr(Path, 'open', no_path_artifact)
+    monkeypatch.setattr(os, 'open', no_descriptor_artifact)
+    for method in ('get', '_read_output', '_read_output_bytes', 'artifact_bytes'):
+        monkeypatch.setattr(store, method, lambda *args, **kwargs: pytest.fail('metadata replay read output'))
+    rows = store.receipts_after()
+    assert [r.state for r in rows] == ['prepared', 'effect-intent', 'native-accepted', 'terminal']
+    assert rows[-1] == receipt
+    assert store.receipts_after(receipt.sequence - 1, limit=1) == (receipt,)
+    assert store.receipts_after(receipt.sequence) == ()
+
+
+def test_metadata_replay_does_not_weaken_bounded_artifact_validation(tmp_path):
+    store, command, receipt, raw = terminal_artifact(tmp_path / 'node')
+    path = store.outputs / (receipt.output_sha256 + '.txt')
+    path.write_bytes(b'corrupt')
+    assert store.receipts_after()[-1] == receipt
+    with pytest.raises(AudiaGenticError):
+        artifact_read(store, command, receipt, len(raw))
+    with pytest.raises(AudiaGenticError):
+        store.get(command)
+    with pytest.raises(AudiaGenticError):
+        store.output(command)
+
+
+@pytest.mark.parametrize('damage', ['json', 'duplicate-key', 'identity-field', 'foreign-node',
+    'command-key', 'stage', 'terminal-digest', 'nonterminal-digest', 'gap', 'zero-sequence', 'negative-sequence', 'orphan', 'owner'])
+def test_metadata_replay_malformed_rows_fail_closed(tmp_path, damage):
+    store, command, receipt, raw = terminal_artifact(tmp_path / 'node')
+    with sqlite3.connect(store.path) as db:
+        # Fault injection only. Production append-only guards remain unchanged.
+        db.execute('DROP TRIGGER outbox_no_update')
+        db.execute('DROP TRIGGER outbox_no_delete')
+        if damage in ('json', 'duplicate-key', 'identity-field', 'foreign-node', 'command-key'):
+            mapping = command.to_mapping()
+            if damage == 'json':
+                value = '{'
+            elif damage == 'duplicate-key':
+                original = json.dumps(mapping)
+                value = original[:-1] + ',"command-id":"' + command.command_id + '"}'
+            else:
+                if damage == 'identity-field':
+                    mapping['connection-generation'] = True
+                elif damage == 'foreign-node':
+                    mapping['node-id'] = 'foreign'
+                else:
+                    mapping['command-id'] = 'other'
+                from audiagentic.components.agents.gateway.node.contracts import canonical_json
+                value = canonical_json(mapping).decode()
+            db.execute('UPDATE commands SET identity=?', (value,))
+        elif damage == 'stage':
+            db.execute("UPDATE outbox SET state='unknown' WHERE sequence=1")
+        elif damage == 'terminal-digest':
+            db.execute("UPDATE outbox SET output_digest='invalid' WHERE state='terminal'")
+        elif damage == 'nonterminal-digest':
+            db.execute('UPDATE outbox SET output_digest=? WHERE sequence=1', ('a' * 64,))
+        elif damage == 'gap':
+            db.execute('UPDATE outbox SET sequence=8 WHERE sequence=2')
+        elif damage in ('zero-sequence', 'negative-sequence'):
+            db.execute('UPDATE outbox SET sequence=? WHERE sequence=1', (0 if damage == 'zero-sequence' else -1,))
+        elif damage == 'orphan':
+            db.execute("UPDATE outbox SET command='absent' WHERE sequence=1")
+        else:
+            db.execute("UPDATE owner SET node='foreign'")
+    with pytest.raises(AudiaGenticError):
+        store.receipts_after()
+
+
+def test_metadata_replay_orders_and_pages_node_wide_interleaved_history(tmp_path):
+    store = store_at(tmp_path / 'node')
+    first, second = identity(command_id='first'), identity(command_id='second', request_id='other')
+    prepared_first = store.prepare(first, b'payload')
+    prepared_second = store.prepare(second, b'payload')
+    request, reply = authorization(first)
+    store.effect_intent(first, request, reply, connection_generation=1)
+    assert [r.sequence for r in store.receipts_after(limit=2)] == [1, 2]
+    assert [r.sequence for r in store.receipts_after(2, limit=1)] == [3]
+    assert store.receipts_after(3) == ()
+    store.advance_epoch(node_epoch='reboot', gateway_owner_epoch='newgateway')
+    current = store_at(store.root, node_epoch='reboot', gateway_owner_epoch='newgateway')
+    # Both current and stale-scope instances may read old evidence, never rebind it.
+    for reader in (store, current):
+        rows = reader.receipts_after()
+        assert rows[:2] == (prepared_first, prepared_second)
+        assert rows[-1].identity == first
+        assert all(r.identity.node_epoch == 'boot-1' for r in rows)
+
+
+@pytest.mark.parametrize('field,value', [('sequence', 1.0), ('sequence', 2**63),
+    ('limit', 0), ('limit', -1), ('limit', 1.0), ('limit', 2**63)])
+def test_metadata_replay_invalid_bounds_fail_before_transaction(tmp_path, monkeypatch, field, value):
+    store = store_at(tmp_path / 'node')
+    monkeypatch.setattr(store, '_transaction', lambda: pytest.fail('invalid replay bounds entered transaction'))
+    args = {'sequence': 0, 'limit': 100}
+    args[field] = value
+    with pytest.raises(AudiaGenticError):
+        store.receipts_after(**args)
