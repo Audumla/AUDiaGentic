@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.26.3](https://github.com/Audumla/AUDiaGentic/compare/v0.26.2...v0.26.3) (2026-10-29)
+
+
+### Bug Fixes
+
+* **gateway:** a broken settings edit no longer breaks a running gateway; harden the settings cache ([#180](https://github.com/Audumla/AUDiaGentic/issues/180)) ([d82e75e](https://github.com/Audumla/AUDiaGentic/commit/d82e75e0b7f69f0b308b1bdcdcc76fd137d10a62))
+
+## [0.26.2](https://github.com/Audumla/AUDiaGentic/compare/v0.26.1...v0.26.2) (2026-10-29)
+
+
+### Documentation
+
+* **planning:** CFG08 note for user-scope MCP registration ([#174](https://github.com/Audumla/AUDiaGentic/issues/174)) ([#178](https://github.com/Audumla/AUDiaGentic/issues/178)) ([1ac7f4e](https://github.com/Audumla/AUDiaGentic/commit/1ac7f4ebfe2f16011505aa2d11a3fb0b99e1c022))
+
 ## [0.26.1](https://github.com/Audumla/AUDiaGentic/compare/v0.26.0...v0.26.1) (2026-10-29)
 
 

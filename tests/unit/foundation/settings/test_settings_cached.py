@@ -112,3 +112,24 @@ def test_other_threads_resolving_settings_do_not_break_the_count(project: Path, 
         stop.set()
         thread.join(timeout=5)
     assert len(calls) == 1
+
+
+def test_a_same_size_edit_with_the_old_mtime_restored_is_still_seen(project: Path) -> None:
+    """mtime and size alone can be forged or collide; the inode and ctime change on any rewrite."""
+    import os
+
+    path = project / ".audiagentic" / "settings.yaml"
+    _write(path, "project: {id: aaaa}\n")
+    before = path.stat()
+    assert resolve_settings_cached(project).get("project.id") == "aaaa"
+
+    replacement = path.with_name("settings.yaml.new")
+    replacement.write_text("schema_version: 1\nproject: {id: bbbb}\n", encoding="utf-8")  # same length
+    os.utime(replacement, ns=(before.st_atime_ns, before.st_mtime_ns))  # old mtime restored
+    os.replace(replacement, path)  # atomic editor-style replace: new inode, same size, same mtime
+    assert path.stat().st_size == before.st_size and path.stat().st_mtime_ns == before.st_mtime_ns
+    assert resolve_settings_cached(project).get("project.id") == "bbbb"
+
+    path.write_text("schema_version: 1\nproject: {id: cccc}\n", encoding="utf-8")  # in-place, same size
+    os.utime(path, ns=(before.st_atime_ns, before.st_mtime_ns))
+    assert resolve_settings_cached(project).get("project.id") == "cccc"

@@ -228,7 +228,7 @@ def resolve_settings_cached(
 ) -> ResolvedSettings:
     """``resolve_settings`` for hot readers that must not re-read files on every call.
 
-    Memoized on the identity of every scope file (path, mtime, size), so an edit
+    Memoized on the identity of every scope file (path, mtime, ctime, size, inode), so an edit
     to any scope applies on the next call without a restart and nothing else is
     ever served stale. Invalid settings raise as in ``resolve_settings`` and are
     not cached. Callers that need CLI overrides, ``collect=True`` or an explicit
@@ -241,7 +241,10 @@ def resolve_settings_cached(
             stat = source.path.stat() if source.path is not None else None
         except OSError:
             stat = None
-        stamp.append((str(source.path), stat.st_mtime_ns, stat.st_size) if stat else (str(source.path), None, None))
+        stamp.append(
+            (str(source.path), stat.st_mtime_ns, stat.st_ctime_ns, stat.st_size, stat.st_ino)
+            if stat else (str(source.path), None, None, None, None)
+        )
     return _resolve_for_stamp(root, tuple(stamp), machine_only)
 
 

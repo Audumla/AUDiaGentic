@@ -98,6 +98,13 @@ with `--config` / `AUDIAGENTIC_CONFIG`). A `gateway:` block in a project's own
 | `retention` | machine retention policy: purge, age, batch size, history limit, per-journal byte caps, journal days |
 | `watchdog` | execution watchdog lease, ceiling and grace periods |
 
+A settings file that stops validating does not take a running gateway down. Values
+read once to decide something (`port`, `implementation`, `queue_backend`,
+`restart_wait_seconds`) fail with the file, line and key. Values a running service
+reads continually (`console_trace.*`, `idle_grace_seconds`, `dashboard.recent_seconds`)
+keep their last valid value, the problem is logged once, and the next valid edit
+applies without a restart.
+
 `retention` and `watchdog` are validated as a whole: an invalid policy is
 reported in the log and treated as unavailable, which keeps purges and deletions
 off. Whether an embedded gateway may run beside a live shared one is the

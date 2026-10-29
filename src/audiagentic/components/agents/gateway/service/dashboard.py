@@ -45,7 +45,7 @@ def recent_window_seconds(value: object | None = None) -> int:
     """Return a bounded dashboard window, using gateway settings by default."""
     from audiagentic.components.agents.gateway.settings import gateway_setting
 
-    raw = gateway_setting("dashboard.recent_seconds") if value is None else value
+    raw = gateway_setting("dashboard.recent_seconds", strict=False) if value is None else value
     try:
         parsed = int(raw) if not isinstance(raw, bool) else 0
     except (TypeError, ValueError):

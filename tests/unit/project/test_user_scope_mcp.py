@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -21,7 +22,7 @@ from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 SERVERS = {"ag-planning", "ag-ledger", "ag-agents-gateway"}
 
-_STUB = """#!{python}
+_STUB = """
 import json, os, sys
 path = os.path.join(os.environ["CLAUDE_CONFIG_DIR"], ".claude.json")
 data = json.load(open(path)) if os.path.exists(path) else {{"numStartups": 7}}
@@ -43,14 +44,21 @@ with open(path + ".calls", "a") as log:
 
 @pytest.fixture
 def claude(tmp_path: Path, monkeypatch) -> Path:
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
-    stub = bin_dir / "claude"
-    stub.write_text(_STUB.format(python=sys.executable))
-    stub.chmod(0o755)
+    """The adapter finds this stub as ``claude`` and runs it.
+
+    The stub runs through this interpreter, so the test needs neither a real
+    claude nor an executable temp directory (/tmp is often mounted noexec).
+    """
+    from audiagentic.components.providers.adapters.claude import user_mcp
+
+    stub = tmp_path / "claude"
+    stub.write_text(_STUB.format())
+    real_run = subprocess.run
+    monkeypatch.setattr(user_mcp.shutil, "which", lambda name: str(stub) if name == "claude" else None)
+    monkeypatch.setattr(user_mcp.subprocess, "run",
+                        lambda argv, **kwargs: real_run([sys.executable, *argv], **kwargs))
     config = tmp_path / "claude-config"
     config.mkdir()
-    monkeypatch.setenv("PATH", f"{bin_dir}:{Path(sys.executable).parent}:/usr/bin:/bin")
     monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(config))
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "xdg-state"))
