@@ -75,9 +75,9 @@ def get_provider_prompt_settings_profile(project_root: Path, provider_id: str) -
 
 def is_provider_enabled_for_launch(project_root: Path, provider_id: str) -> bool:
     """Return whether a provider is enabled for a prompt launch."""
-    from ..config.provider_config import is_provider_enabled
+    from ..config.provider_config import is_provider_usable
 
-    return is_provider_enabled(project_root, provider_id)
+    return is_provider_usable(project_root, provider_id)
 
 
 def resolve_launch_model(
