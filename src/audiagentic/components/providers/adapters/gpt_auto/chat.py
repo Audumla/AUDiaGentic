@@ -199,6 +199,7 @@ class PersistentChat:
         self._unresolved_recovery_details: dict[str, object] = {}
         self._reconciliation_refresh_attempted = False
         self._reconciliation_delivery_retry_attempted = False
+        self._reconciliation_prompt_expansion_key: tuple[object, ...] | None = None
         self._defer_unresolved_reconciliation = False
         self._defer_page_creation_on_recovery = False
         # A retained exact-URL tab can survive a gateway restart while its
@@ -853,6 +854,13 @@ class PersistentChat:
             # Only a new admission can reopen an intentionally reaped tab.
             self._physical_idle_closed = False
             self._idle_closed_turn_id = None
+        # Idle disconnect recovery deliberately leaves the runtime offline.
+        # A retained chat must drive the same lazy reconnect as open() before
+        # touching bridge-local handles. This only restores transport; existing
+        # conversation/turn reconciliation still owns any page recovery.
+        ensure_available = getattr(self.runtime, "ensure_available", None)
+        if callable(ensure_available):
+            await ensure_available()
         # Bridge page handles are local to one CDP connection and can be
         # invalidated without the runtime seeing a Target event (for example,
         # an operator closes a tab through a second CDP client).  A handle can
@@ -1761,6 +1769,82 @@ class PersistentChat:
         page = await browser.page_by_handle(self.page_handle)
         await release(page)
 
+    async def _expand_unresolved_prompt_once(self, snapshot: ChatSnapshot) -> ChatSnapshot | None:
+        """Materialize one uniquely fresh prompt, never infer submission from it."""
+        def current_key() -> tuple[object, ...]:
+            metadata = self._checkpoint_metadata
+            return (metadata.get("unresolved-turn-id"), metadata.get("submission-attempt-id"),
+                    self.unresolved_prompt_text_digest, metadata.get("unresolved-baseline-user-id"))
+
+        key = current_key()
+        if (not all(isinstance(value, str) and value for value in key)
+                or self._reconciliation_prompt_expansion_key == key
+                or _unresolved_prompt_match_diagnostics(self, snapshot)[0] is not None
+                or snapshot.generating or not snapshot.latest_assistant_text
+                or not _reconciliation_evidence_clear(snapshot)):
+            return snapshot
+
+        def sole_fresh_prompt(observed: ChatSnapshot) -> str | None:
+            # Counts can stay unchanged under virtualization. Require the
+            # retained baseline anchor and exactly one subsequent user node;
+            # missing anchors or several fresh prompts are not ownership proof.
+            users = observed.user_prompt_refs()
+            anchors = [i for i, ref in enumerate(users) if ref.message_id == key[3]]
+            if len(anchors) != 1:
+                return None
+            tail = users[anchors[0] + 1:]
+            if (len(tail) != 1 or not tail[0].message_id
+                    or tail[0].message_id == key[3]
+                    or tail[0].message_id != observed.latest_user_id
+                    or tail[0].message_id.startswith(("fallback-", "virtualized-prompt-for-"))):
+                return None
+            return tail[0].message_id
+
+        prompt_id = sole_fresh_prompt(snapshot)
+        token = self._binding_token(snapshot)
+        if (not prompt_id or not self.target_id or not self.provider_session_id
+                or not self.chat_url or canonical_chat_url(snapshot.url) != canonical_chat_url(self.chat_url)
+                or not url_matches_provider_session(snapshot.url, self.provider_session_id)):
+            return snapshot
+        browser = self._gpt_browser()
+        expand = getattr(browser, "expand_user_prompt", None)
+        if not callable(expand):
+            return snapshot
+        try:
+            async with self._page_mutation_lock:
+                if (not self._page_mutation_owner_is_live()
+                        or not await self._binding_token_is_current(token)):
+                    return snapshot
+                page = await browser.page_by_handle(self.page_handle)
+                if (page.target_id != self.target_id or canonical_chat_url(page.url) != token[-1]
+                        or self._binding_token(snapshot) != token
+                        or current_key() != key
+                        or not self._page_mutation_owner_is_live()):
+                    return snapshot
+                # Reserve before the UI call: exceptions/false ACKs cannot cause
+                # repeated clicks on subsequent recovery polls for this attempt.
+                self._reconciliation_prompt_expansion_key = key
+                if not await expand(page, prompt_id):
+                    return snapshot
+            expanded = await self.snapshot(allow_recovering=True)
+            binding_current = await self._binding_token_is_current(token)
+            if (not binding_current or self._binding_token(expanded) != token
+                    or current_key() != key
+                    or not self._page_mutation_owner_is_live()
+                    or sole_fresh_prompt(expanded) != prompt_id
+                    or expanded.latest_assistant_id != snapshot.latest_assistant_id
+                    or not _reconciliation_evidence_clear(expanded)
+                    or expanded.generating
+                    or PromptFingerprint.from_text(expanded.latest_user_correlation_text() or "").digest != key[2]):
+                self._reset_unresolved_match_candidate()
+                self._set_unresolved_recovery("prompt-expansion-correlation-not-proven")
+                return None
+            return expanded
+        except Exception:  # noqa: BLE001 - no prompt/DOM/exception text in recovery facts
+            self._reset_unresolved_match_candidate()
+            self._set_unresolved_recovery("prompt-expansion-observation-failed")
+            return None
+
     async def _reconcile_unresolved_turn(self) -> bool:
         """Prove the retained prompt reached a terminal provider outcome."""
         if not self.unresolved_turn_pending:
@@ -1793,12 +1877,15 @@ class PersistentChat:
         # unresolved even though the conversation is still recoverable. Use
         # the exact Retry control once, without resubmitting the prompt, then
         # re-read the same conversation before applying failure evidence.
-        completion_candidate = _reconciliation_completion_candidate(self, snapshot)
         # Authentication is a hard veto and must never be followed by a
         # provider-side click, even when a stale Retry control is visible.
         if "auth-required" in snapshot.dom_signals:
             self._set_unresolved_recovery("authentication-required")
             return False
+        snapshot = await self._expand_unresolved_prompt_once(snapshot)
+        if snapshot is None:
+            return False
+        completion_candidate = _reconciliation_completion_candidate(self, snapshot)
         # See turn.py's mirrored delivery_timeout_signal_now: two independent
         # detections of the same recovery opportunity, either sufficient.
         delivery_timeout_signal = (
@@ -2845,6 +2932,35 @@ class PersistentChat:
         """
         if not _recoverable_turn_failure(error) or self.state is ChatState.CLOSED:
             return False
+        details = error.details if isinstance(error, AudiaGenticError) else {}
+        if (
+            self.state is ChatState.RECOVERING
+            and isinstance(error, AudiaGenticError)
+            and error.code == "EXT-GPTAUTO-004"
+            and isinstance(details, dict)
+            and details.get("failure-stage") == "readiness"
+            and details.get("submission-state") == "not_started"
+            and details.get("submission-attempted") is False
+            and details.get("submission-proven") is False
+            and details.get("submission-ambiguous") is False
+            and details.get("previous-turn-unresolved") is False
+            and not self._turn_requires_recovery_proof()
+            and url_matches_provider_session(self.chat_url or "", self.provider_session_id)
+            and self._page_mutation_owner_is_live()
+            and details.get("cause-type") != "ProviderBindingIntegrityError"
+            and self._unresolved_recovery_reason not in {
+                "provider-binding-invalid", "provider-conversation-not-found",
+            }
+            and not (
+                self._last_snapshot is not None
+                and "auth-required" in self._last_snapshot.dom_signals
+            )
+        ):
+            # A missing/unready renderer does not invalidate its saved GPT
+            # conversation. Keep admission closed in RECOVERING and let the
+            # existing queue retry readiness under its outer deadline. This
+            # path neither promotes READY nor replays a possibly sent turn.
+            return True
         try:
             if self.state is not ChatState.RECOVERING:
                 self._move(ChatState.RECOVERING)
