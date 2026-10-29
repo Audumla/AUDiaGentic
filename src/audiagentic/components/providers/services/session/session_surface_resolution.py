@@ -360,7 +360,7 @@ def _build_resolved_surface(
     content_channels: tuple[ContentChannelCapability, ...],
     evidence: ValidationEvidence,
     platforms: tuple[PlatformEvidence, ...],
-    joined: JoinedSessionCapabilities,
+    joined_capabilities: JoinedSessionCapabilities,
 ) -> ResolvedSessionSurface:
     """Construct a successful ResolvedSessionSurface from declaration fields.
 
@@ -400,7 +400,7 @@ def _build_resolved_surface(
             ),
             reason="" if evidence.validated else "missing-validation-evidence",
         ),
-        joined=joined if evidence.validated else JoinedSessionCapabilities(),
+        joined_capabilities=joined_capabilities if evidence.validated else JoinedSessionCapabilities(),
     )
 
 
@@ -601,7 +601,7 @@ def resolve_session_surface(
         content_channels=declaration.content_channels,
         evidence=eff_evidence,
         platforms=declaration.platforms,
-        joined=declaration.joined_capabilities,
+        joined_capabilities=declaration.joined_capabilities,
     )
 
 

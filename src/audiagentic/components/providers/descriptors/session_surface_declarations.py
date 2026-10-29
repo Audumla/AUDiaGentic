@@ -71,11 +71,10 @@ class SessionSurfaceDeclaration:
     # Validation / platform evidence (AS67 — simplified)
     evidence: ValidationEvidence = field(default_factory=ValidationEvidence)
     platforms: tuple[PlatformEvidence, ...] = ()
-    # Joined-session claims (SH45); all unsupported unless declared
-    joined_capabilities: JoinedSessionCapabilities = field(default_factory=JoinedSessionCapabilities)
     # Descriptor-local adapter reference — a dotted path string, NOT resolved.
     # This field must not appear in ResolvedSessionSurface (foundation type).
     adapter_ref: str | None = None
+    joined_capabilities: JoinedSessionCapabilities = field(default_factory=JoinedSessionCapabilities)
 
 
 # ---------------------------------------------------------------------------
@@ -143,8 +142,9 @@ def _validate_declarations(declarations: Sequence[SessionSurfaceDeclaration]) ->
            is rejected (both max_bytes == 0 and max_events == 0).
         5. Managed-hook/plugin lifecycle installation without a nonempty
            adapter_ref is rejected.
-        6. A joined-capability claim without attach-existing support, external
-           ownership, an exact session mapping and validated evidence is rejected.
+        6. A fully qualified joined-capability claim (all five) without
+           attach-existing support, EXTERNAL ownership, an exact shared session
+           mapping and validated platform evidence is rejected.
     """
     seen_keys: set[tuple[str, str]] = set()
 
@@ -158,6 +158,39 @@ def _validate_declarations(declarations: Sequence[SessionSurfaceDeclaration]) ->
                 version_constraint=decl.version_constraint,
             )
         seen_keys.add(key)
+
+        if not isinstance(decl.joined_capabilities, JoinedSessionCapabilities):
+            raise _error("joined_capabilities must be typed capability claims", surface_id=decl.surface_id)
+        if decl.joined_capabilities.qualified:
+            mapping = decl.mapping_facts
+            exact_mapping = (
+                isinstance(mapping.ref_scope, str) and bool(mapping.ref_scope.strip())
+                and mapping.ref_scope.strip().lower() != "unknown"
+                and isinstance(mapping.ref_namespace, str) and bool(mapping.ref_namespace.strip())
+                and mapping.ref_namespace.strip().lower() != "unknown"
+                and mapping.requires_same_project is True
+                and mapping.requires_same_execution_context is True
+                and mapping.concurrent_attachments is True
+                and mapping.share_existing is True
+                and mapping.replace_existing is False
+                and type(mapping.attach_while_turn_active) is bool
+            )
+            if (
+                decl.identity_operations.get(SessionIdentityOperation.ATTACH_EXISTING) != ControlSupport.SUPPORTED
+                or SessionOwnershipMode.EXTERNAL not in decl.ownership_modes
+                or not exact_mapping
+                or decl.evidence.validated is not True
+                or not any(
+                    pe.evidence.validated is True
+                    and isinstance(pe.platform, str) and bool(pe.platform.strip())
+                    and pe.platform.strip().lower() != "unknown"
+                    for pe in decl.platforms
+                )
+            ):
+                raise _error(
+                    "qualified joined claims require attach-existing, EXTERNAL, exact shared mapping and validated platform evidence",
+                    surface_id=decl.surface_id,
+                )
 
         # Rule 2: controls or content channels require validated=True
         if not decl.evidence.validated and (decl.controls or decl.content_channels):
@@ -210,29 +243,6 @@ def _validate_declarations(declarations: Sequence[SessionSurfaceDeclaration]) ->
                     surface_id=decl.surface_id,
                     version_constraint=decl.version_constraint,
                     lifecycle_installation=decl.lifecycle_installation.value,
-                )
-
-        # Rule 6 (SH45): a joined-capability claim is only meaningful on a
-        # surface that can attach to an existing session it does not own, maps
-        # sessions exactly and has validated platform evidence.
-        joined = decl.joined_capabilities
-        if joined.claimed:
-            missing = []
-            if decl.identity_operations.get(SessionIdentityOperation.ATTACH_EXISTING) != ControlSupport.SUPPORTED:
-                missing.append("attach-existing")
-            if SessionOwnershipMode.EXTERNAL not in decl.ownership_modes:
-                missing.append("external-ownership")
-            if decl.mapping_facts.ref_scope == "unknown":
-                missing.append("exact-session-mapping")
-            if not decl.evidence.validated:
-                missing.append("validated-evidence")
-            if missing:
-                raise _error(
-                    "joined capabilities require attach-existing, external ownership, "
-                    "exact session mapping and validated evidence",
-                    surface_id=decl.surface_id,
-                    version_constraint=decl.version_constraint,
-                    missing=missing,
                 )
 
 

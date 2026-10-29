@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.22.0](https://github.com/Audumla/AUDiaGentic/compare/v0.21.6...v0.22.0) (2026-10-29)
+
+
+### Features
+
+* **providers:** one joined-session capability type with strict claim rules (SH45) ([#147](https://github.com/Audumla/AUDiaGentic/issues/147)) ([0f82249](https://github.com/Audumla/AUDiaGentic/commit/0f8224978c4215fd4c0ef938d556d59e8e324251))
+
+## [0.21.6](https://github.com/Audumla/AUDiaGentic/compare/v0.21.5...v0.21.6) (2026-10-29)
+
+
+### Documentation
+
+* **planning:** CFG08 status after [#140](https://github.com/Audumla/AUDiaGentic/issues/140) ([#143](https://github.com/Audumla/AUDiaGentic/issues/143)) ([1bf83bd](https://github.com/Audumla/AUDiaGentic/commit/1bf83bda0c5dc530fd695b03c131e4439f42d4e3))
+
 ## [0.21.5](https://github.com/Audumla/AUDiaGentic/compare/v0.21.4...v0.21.5) (2026-10-29)
 
 

@@ -390,41 +390,6 @@ def _parse_evidence(raw: Any, *, field_name: str) -> ValidationEvidence:
         ) from exc
 
 
-def _parse_joined_capabilities(raw: Any) -> JoinedSessionCapabilities:
-    """Strict parse of a surface's joined-session claims (SH45).
-
-    Absent means every capability is unsupported. Only the declared keys are
-    accepted and each value must be a YAML boolean: a string such as "yes" is
-    rejected rather than coerced.
-    """
-    if raw is None:
-        return JoinedSessionCapabilities()
-    if not isinstance(raw, dict):
-        raise AudiaGenticError(
-            code="VAL-PCAP-011",
-            kind="providers",
-            message="joined_capabilities must be a mapping or absent",
-        )
-    allowed = set(JoinedSessionCapabilities.__dataclass_fields__)
-    unknown = sorted(set(raw) - allowed)
-    if unknown:
-        raise AudiaGenticError(
-            code="VAL-PCAP-011",
-            kind="providers",
-            message="unknown joined_capabilities fields",
-            details={"fields": unknown},
-        )
-    not_bool = sorted(key for key, value in raw.items() if not isinstance(value, bool))
-    if not_bool:
-        raise AudiaGenticError(
-            code="VAL-PCAP-011",
-            kind="providers",
-            message="joined_capabilities values must be booleans",
-            details={"fields": not_bool},
-        )
-    return JoinedSessionCapabilities(**raw)
-
-
 def _build_session_surfaces(
     data: list[dict[str, Any]],
 ) -> tuple[SessionSurfaceDeclaration, ...]:
@@ -460,8 +425,8 @@ def _build_session_surfaces(
         "content_channels",
         "evidence",
         "platforms",
-        "joined_capabilities",
         "adapter_ref",
+        "joined_capabilities",
     }
 
     declarations: list[SessionSurfaceDeclaration] = []
@@ -637,7 +602,30 @@ def _build_session_surfaces(
                 )
             )
 
-        joined_capabilities = _parse_joined_capabilities(item.get("joined_capabilities"))
+        raw_joined = item.get("joined_capabilities", {})
+        if not isinstance(raw_joined, dict):
+            raise AudiaGenticError(
+                code="VAL-PCAP-011", kind="providers",
+                message="joined_capabilities must be a mapping",
+            )
+        try:
+            # The neutral value rejects coercion; its constructor rejects every
+            # unknown key (including the derived 'qualified' property).
+            joined_capabilities = JoinedSessionCapabilities(**raw_joined)
+        except (TypeError, ValueError) as exc:
+            raise AudiaGenticError(
+                code="VAL-PCAP-011", kind="providers", message=str(exc),
+            ) from exc
+        if joined_capabilities.qualified and (
+            (item.get("evidence") or {}).get("validated") is not True
+            or not any((pe.get("evidence") or {}).get("validated") is True for pe in raw_platforms)
+        ):
+            # Ordinary declarations retain their existing evidence parser.
+            # Qualified joins cannot turn a truthy string/number into proof.
+            raise AudiaGenticError(
+                code="VAL-PCAP-011", kind="providers",
+                message="qualified joined claims require boolean validated platform evidence",
+            )
 
         declarations.append(
             SessionSurfaceDeclaration(
@@ -655,8 +643,8 @@ def _build_session_surfaces(
                 content_channels=tuple(content_channels),
                 evidence=evidence,
                 platforms=tuple(platforms),
-                joined_capabilities=joined_capabilities,
                 adapter_ref=str(item["adapter_ref"]).strip() if item.get("adapter_ref") else None,
+                joined_capabilities=joined_capabilities,
             )
         )
 
