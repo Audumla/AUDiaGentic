@@ -112,6 +112,8 @@ CON-MSVC-033: "The managed-service lifecycle callback failed; inspect the consum
 CON-MSVC-034: "Attach to the existing live managed service or stop it through its current owner before claiming ownership."
 CON-MSVC-035: "Release or expire all active client leases before retiring the managed-service owner."
 CON-MSVC-036: "Wait for the managed service to enter running or draining state before publishing a heartbeat."
+CON-MSVC-037: "Another process already accepts connections on this managed service's endpoint, so a new service could not bind it. Stop that process (check what holds the port), or configure a different port for the service."
+CON-MSVC-038: "The managed service's process exited before it became ready. Read its log file for the cause, fix it, and start again."
 VAL-MSVC-037: "Reduce readiness_timeout or increase the managed-service lock timeout so readiness polling remains inside the bounded lock budget."
 VAL-MPROC-001: "Provide a non-empty managed-process command made only of strings."
 VAL-MPROC-002: "Use an existing directory as the managed-process working directory."

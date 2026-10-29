@@ -72,6 +72,7 @@ def test_blocking_run_returns_terminal_result(tmp_path: Path, monkeypatch) -> No
     assert result["output"] == "blocking answer"
 
 
+@pytest.mark.usefixtures("in_process_gateway")
 def test_event_triggered_request_reaches_completed_event(tmp_path: Path, monkeypatch) -> None:
     from audiagentic.components.agents.gateway import events as events
     from audiagentic.foundation.event import event_bus as event_bus_mod

@@ -7,6 +7,8 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from audiagentic.components.agents.mcp import gateway_mcp as agents_gateway_mcp
 
 _ROOT = Path("/fake/root").resolve()
@@ -439,9 +441,8 @@ def test_agent_task_submit_resolves_agent_and_delegates():
     )
 
 
+@pytest.mark.usefixtures("in_process_gateway")
 def test_agent_task_submit_unknown_agent_propagates_error():
-    import pytest
-
     from audiagentic.foundation.contracts.errors import AudiaGenticError
     from audiagentic.foundation.mcp.component_server import ToolError
 
