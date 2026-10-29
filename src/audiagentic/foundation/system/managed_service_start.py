@@ -265,6 +265,12 @@ class ManagedServiceStarter:
     ) -> StartOrAttachResult:
         process = None
         try:
+            if self.hooks.endpoint_in_use(declaration.endpoint):
+                raise conflict_error(
+                    37,
+                    "managed service endpoint is already in use by another process",
+                    address=declaration.endpoint.address,
+                )
             process = self.hooks.launch(declaration.process, owner_epoch=record.owner_epoch)
             if process.owner_epoch != record.owner_epoch:
                 raise conflict_error(16, "launched process evidence has the wrong owner epoch")
@@ -336,6 +342,14 @@ class ManagedServiceStarter:
                 handshake = None
             if handshake is not None and handshake.ready:
                 return handshake
+            if record.process is not None and self._observe(record.process) is None:
+                log_file = declaration.process.log_file
+                raise conflict_error(
+                    38,
+                    "managed service process exited before becoming ready",
+                    pid=record.process.pid,
+                    log=str(log_file) if log_file is not None else None,
+                )
             time.sleep(interval)
         raise conflict_error(
             29,
