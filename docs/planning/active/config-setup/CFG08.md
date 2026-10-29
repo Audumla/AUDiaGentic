@@ -84,6 +84,8 @@ Next: a doctor check that the gpt-auto dashboard anchor and project name resolve
 
 2026-10-29: PR #140 fixed gaps 1, 2 and 4 of the live check as far as doctor can: agents.catalog warns with the agent add fix on a clean home (an invalid legacy file still fails); a declared project.id is now the project name providers use, so declaring it fixes the gpt-auto ChatGPT project lookup; and a new agents.gateway check flags gpt-auto on the default embedded gateway and gives the fix (gateway.implementation: automatic in user settings). Still open: gap 3 (the embedded gateway serves no dashboard for gpt-auto window anchor, and window_anchor.py ignores gateway.port; needs a gateway/providers ownership decision, or a different default) and gap 5 (setup registers no MCP servers). CFG08 stays in progress until a repeat of the live check passes with only setup, agent add and the documented settings; that repeat is not yet done after #140.
 
+2026-10-29 repeat of the live check on main with #140, using only documented steps in a fresh throwaway home and a repo with no remote: audiagentic setup; audiagentic agent add NAME --extends reviewer --provider gpt-auto --model chatgpt; settings gateway.implementation: automatic (user) and project.id (tracked project settings) as doctor instructs; doctor all ok; agent_task_submit of a one-line prompt through the gateway MCP completed with the expected reply. No stub page, no environment variables, no hand-edited catalog. The criterion holds when two documented settings are counted as configuration, not as manual file edits; a default install still needs them because the default implementation is embedded and a repo without a remote is named after its directory. Remaining before CFG08 can complete: decide whether setup should offer or apply those two settings, and MCP registration through the CLI entrypoint.
+
 ## Change Log
 
 - 2026-10-28T21:05:53.564412+00:00 (created-by): Created by claude
@@ -95,3 +97,4 @@ Next: a doctor check that the gpt-auto dashboard anchor and project name resolve
 - 2026-10-29T02:22:47.262707+00:00 (updated-by): Updated: section:notes
 - 2026-10-29T05:00:17.238284+00:00 (updated-by): Updated: section:notes
 - 2026-10-29T05:27:58.309590+00:00 (updated-by): Updated: section:notes
+- 2026-10-29T05:31:22.215189+00:00 (updated-by): Updated: section:notes
