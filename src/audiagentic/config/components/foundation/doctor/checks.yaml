@@ -1,0 +1,6 @@
+# Doctor checks owned by foundation (read-only). Each ref is module:attr.
+checks:
+  - id: package.data
+    ref: audiagentic.foundation.lifecycle.doctor:check_package_data
+  - id: settings.valid
+    ref: audiagentic.foundation.config.settings:doctor_settings

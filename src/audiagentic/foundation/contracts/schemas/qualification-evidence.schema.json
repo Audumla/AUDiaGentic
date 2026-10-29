@@ -1,0 +1,212 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://audiagentic.dev/schemas/qualification-evidence.schema.json",
+  "title": "Native surface qualification evidence (SH53)",
+  "description": "One immutable record of what was proven about one installed implementation of one provider session surface on one platform. Generated state, never configuration; shared by SH46 resolution and CFG07 `audiagentic qualify`. A capability is true only if its own tests passed.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema-version",
+    "evidence-id",
+    "created-at",
+    "producer",
+    "target",
+    "qualification",
+    "proof"
+  ],
+  "properties": {
+    "schema-version": {
+      "const": 1
+    },
+    "evidence-id": {
+      "type": "string",
+      "pattern": "^qe_[0-9a-f]{24}$"
+    },
+    "created-at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "producer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "component",
+        "qualifier-version",
+        "suite-digest",
+        "adapter-id",
+        "adapter-version",
+        "adapter-digest"
+      ],
+      "properties": {
+        "component": {
+          "const": "providers"
+        },
+        "qualifier-version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "suite-digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "adapter-id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+        },
+        "adapter-version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "adapter-digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      }
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider-id",
+        "surface-id",
+        "platform",
+        "executable-version",
+        "executable-digest",
+        "native-protocol",
+        "native-schema-version",
+        "endpoint-kind"
+      ],
+      "properties": {
+        "provider-id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+        },
+        "surface-id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+        },
+        "surface-version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "platform": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+-[a-z0-9_]+$"
+        },
+        "executable-version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "executable-digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "native-protocol": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+        },
+        "native-schema-version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "endpoint-kind": {
+          "enum": [
+            "pipe",
+            "socket",
+            "http",
+            "stdio",
+            "browser-cdp",
+            "other"
+          ]
+        }
+      }
+    },
+    "qualification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "state",
+        "capabilities",
+        "unsupported-reasons"
+      ],
+      "properties": {
+        "state": {
+          "enum": [
+            "supported",
+            "partial",
+            "unsupported",
+            "inconclusive"
+          ]
+        },
+        "capabilities": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "passive-identity": {
+              "type": "boolean"
+            },
+            "existing-session-attach": {
+              "type": "boolean"
+            },
+            "conditional-admission": {
+              "type": "boolean"
+            },
+            "correlated-result": {
+              "type": "boolean"
+            },
+            "safe-detach": {
+              "type": "boolean"
+            },
+            "reconnect": {
+              "type": "boolean"
+            },
+            "concurrent-human-use": {
+              "type": "boolean"
+            }
+          }
+        },
+        "unsupported-reasons": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "proof": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fixture-id",
+        "test-run-id",
+        "artifact-digest",
+        "verified-at"
+      ],
+      "properties": {
+        "fixture-id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+        },
+        "test-run-id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+        },
+        "artifact-digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "verified-at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    }
+  }
+}
