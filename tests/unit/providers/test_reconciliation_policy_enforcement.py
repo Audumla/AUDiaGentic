@@ -160,7 +160,7 @@ def test_provider_without_cli_probe_keeps_configured_enablement(
     assert is_provider_enabled(tmp_path, "gpt-auto") is False
 
 
-def test_declared_probe_reporting_missing_cli_still_disables(
+def test_declared_probe_reporting_missing_cli_does_not_disable(
     monkeypatch, tmp_path: Path
 ) -> None:
     import audiagentic.components.providers.services.lifecycle.lifecycle as lifecycle
@@ -173,5 +173,5 @@ def test_declared_probe_reporting_missing_cli_still_disables(
 
     result = reconcile_provider("codex", project_root=tmp_path)
 
-    assert result["status"] == "disabled"
-    assert is_provider_enabled(tmp_path, "codex") is False
+    assert result["status"] == "unavailable"
+    assert is_provider_enabled(tmp_path, "codex") is True

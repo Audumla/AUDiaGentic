@@ -88,7 +88,7 @@ def test_reconcile_provider_enables_when_cli_available_and_not_enabled(
     assert result["action"] == "reconcile"
 
 
-def test_reconcile_provider_disables_when_cli_absent_and_was_enabled(
+def test_reconcile_provider_keeps_enablement_when_cli_absent_and_was_enabled(
     monkeypatch, tmp_path: Path
 ) -> None:
     import audiagentic.components.providers.services.lifecycle.lifecycle as lifecycle
@@ -112,9 +112,11 @@ def test_reconcile_provider_disables_when_cli_absent_and_was_enabled(
 
     result = reconcile_provider("codex", project_root=tmp_path)
 
-    assert result["status"] == "disabled"
+    assert result["status"] == "unavailable"
     assert result["cli-available"] is False
     assert result["was-enabled"] is True
+    assert result["enabled"] is True  # a failed probe never changes enablement
+    assert "surfaces" not in result  # and never prunes
 
 
 def test_reconcile_provider_noop_when_already_in_sync_enabled(monkeypatch, tmp_path: Path) -> None:
