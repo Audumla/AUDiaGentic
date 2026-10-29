@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.0](https://github.com/Audumla/AUDiaGentic/compare/v0.13.0...v0.14.0) (2026-10-29)
+
+
+### Features
+
+* **providers:** strict joined-session readiness from exact evidence (SH46) ([#111](https://github.com/Audumla/AUDiaGentic/issues/111)) ([e69afa1](https://github.com/Audumla/AUDiaGentic/commit/e69afa192b8223be51696e41267afc6ab4a14911))
+
 ## [0.13.0](https://github.com/Audumla/AUDiaGentic/compare/v0.12.0...v0.13.0) (2026-10-29)
 
 
