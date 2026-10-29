@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.20.1](https://github.com/Audumla/AUDiaGentic/compare/v0.20.0...v0.20.1) (2026-10-29)
+
+
+### Documentation
+
+* **planning:** sync config-setup and shared-gateway plan state, add configuration model design ([#129](https://github.com/Audumla/AUDiaGentic/issues/129)) ([4b6aead](https://github.com/Audumla/AUDiaGentic/commit/4b6aead6daf87d0324330664425d44c430cdeba8))
+
+## [0.20.0](https://github.com/Audumla/AUDiaGentic/compare/v0.19.0...v0.20.0) (2026-10-29)
+
+
+### Features
+
+* **agents:** owner-epoch fencing and canonical target resolution for external sessions (SH50b) ([#127](https://github.com/Audumla/AUDiaGentic/issues/127)) ([522e60a](https://github.com/Audumla/AUDiaGentic/commit/522e60a2772006f3068b71ffc58f571a12540452))
+* **providers:** providers.&lt;id&gt;.enabled policy and runtime usability (CFG06 slice 1) ([#126](https://github.com/Audumla/AUDiaGentic/issues/126)) ([cb33613](https://github.com/Audumla/AUDiaGentic/commit/cb33613eae75f3e2f097eea8181bcfde123b0540))
+
 ## [0.19.0](https://github.com/Audumla/AUDiaGentic/compare/v0.18.0...v0.19.0) (2026-10-29)
 
 
