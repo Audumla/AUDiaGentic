@@ -14,7 +14,7 @@ from audiagentic.foundation.components.base import (
     McpServerDeclaration,
 )
 from audiagentic.foundation.mcp import McpServerEntry
-from audiagentic.foundation.mcp.launch import component_mcp_launch
+from audiagentic.foundation.mcp.launch import cli_entrypoint, component_mcp_launch
 from audiagentic.foundation.paths.names import get_active_profile
 
 
@@ -37,6 +37,18 @@ def entry_from_mcp_declaration(
         args=(subcommand, *args),
         env=env,
     )
+
+
+def user_entry_from_mcp_declaration(decl: McpServerDeclaration) -> McpServerEntry:
+    """Build a project-independent entry for a worktree-scoped server.
+
+    ``audiagentic mcp <module>`` through this installation's CLI entrypoint,
+    with no environment: the server is bound to no project, and each call
+    selects its worktree.
+    """
+    if not decl.worktree_scoped:
+        raise ValueError(f"MCP server {decl.name} is not worktree-scoped; it needs a project entry")
+    return McpServerEntry(name=decl.name, command=cli_entrypoint(), args=("mcp", decl.module, *decl.args))
 
 
 def entry_from_external_declaration(ext: ExternalMcpServerDeclaration) -> McpServerEntry:

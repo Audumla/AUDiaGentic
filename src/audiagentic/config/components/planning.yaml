@@ -72,6 +72,7 @@ mcp-servers:
 
   - name: ag-planning
     module: audiagentic.components.planning.planning_mcp
+    worktree-scoped: true
     direct-tools:
       - plan_create_item
       - plan_list_standards
