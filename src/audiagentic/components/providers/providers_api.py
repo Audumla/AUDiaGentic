@@ -1927,6 +1927,20 @@ def resolve_session_surface(
     return _resolve(project_root, provider_id, surface_hint)
 
 
+def resolve_join_readiness(provider_id: str, surface_id: str, *, state_root: Path | None = None):
+    """Static readiness of a surface to join an existing human session (SH46).
+
+    Read-only: the execution-side inventory, the surface declaration, the join
+    adapter's declared identity and exact qualification evidence. Returns a
+    frozen ``JoinReadiness``; anything unknown is a refusal, never support.
+    """
+    from audiagentic.components.providers.services.session.join_readiness import (
+        resolve_join_readiness as _resolve_join,
+    )
+
+    return _resolve_join(provider_id, surface_id, state_root=state_root)
+
+
 def prepare_provider_session_transport(
     project_root: Path,
     *,
@@ -2180,6 +2194,7 @@ __all__ = [
     # AS29 slice 5a — session-surface resolution through public boundary
     "ResolvedSessionSurface",
     "SurfaceHint",
+    "resolve_join_readiness",
     "resolve_session_surface",
     # Surfaces
     "operate_provider_surface",
