@@ -51,6 +51,8 @@ from audiagentic.components.agents.work.work_api import (
     submit_review,
 )
 
+pytestmark = pytest.mark.usefixtures("in_process_gateway")
+
 
 def _seed(root: Path) -> None:
     document = AgentsConfigDocument(
