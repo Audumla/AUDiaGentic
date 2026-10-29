@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.0](https://github.com/Audumla/AUDiaGentic/compare/v0.12.0...v0.13.0) (2026-10-29)
+
+
+### Features
+
+* **agents:** hosted catalog includes compiled agent files (CFG09 part 1) ([#101](https://github.com/Audumla/AUDiaGentic/issues/101)) ([bcf090c](https://github.com/Audumla/AUDiaGentic/commit/bcf090c72bc851763e2bf34519b94547235bdfb2))
+
 ## [0.12.0](https://github.com/Audumla/AUDiaGentic/compare/v0.11.1...v0.12.0) (2026-10-29)
 
 
