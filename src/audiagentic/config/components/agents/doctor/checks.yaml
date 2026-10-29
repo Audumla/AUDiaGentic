@@ -4,5 +4,7 @@ checks:
     ref: audiagentic.components.agents.configuration.doctor_checks:check_agent_files
   - id: agents.providers
     ref: audiagentic.components.agents.configuration.doctor_checks:check_agent_providers
+  - id: agents.gateway
+    ref: audiagentic.components.agents.configuration.doctor_checks:check_gateway_mode
   - id: agents.catalog
     ref: audiagentic.components.agents.configuration.doctor_checks:check_catalog

@@ -38,12 +38,43 @@ def check_agent_providers(context: Any) -> list[CheckResult]:
     return results
 
 
+def check_gateway_mode(context: Any) -> list[CheckResult]:
+    """A provider that anchors its browser window on the gateway dashboard needs a gateway that serves one."""
+    from audiagentic.components.agents.gateway.client import _resolve_implementation_id
+    from audiagentic.components.providers.providers_api import list_session_surface_ids
+
+    root = discover_project_root(context.project)
+    providers = sorted({agent.fields["provider"] for agent in resolve_agents(project=context.project).values()})
+    needing = [provider for provider in providers if "gpt-auto-cdp" in list_session_surface_ids(provider)]
+    if not needing:
+        return []
+    implementation, source = _resolve_implementation_id(root)
+    if implementation != "embedded":
+        return [CheckResult("agents.gateway", OK, f"gateway implementation {implementation!r} ({source})")]
+    return [CheckResult(
+        "agents.gateway", WARN,
+        f"{', '.join(needing)} opens its browser window on the gateway dashboard, which the embedded gateway does not serve",
+        "Run the gateway as a service: set gateway.implementation to automatic in your user settings "
+        "(audiagentic config paths shows where)",
+    )]
+
+
 def check_catalog(context: Any) -> list[CheckResult]:
     """The hosted catalog loads; agent files that shadow agents.yaml entries are reported."""
     del context
     from .effective_catalog import effective_catalog_mapping
+    from .repository import AgentsConfigValidationError
 
-    mapping, clashes = effective_catalog_mapping()
+    try:
+        mapping, clashes = effective_catalog_mapping()
+    except AgentsConfigValidationError:
+        from ..agents_paths import global_agents_config_path
+
+        if global_agents_config_path().exists():
+            raise  # a legacy file is present but invalid: that is a real failure
+        # Nothing to load yet; agents.files reports the same state with its fix.
+        return [CheckResult("agents.catalog", WARN, "no agents defined yet, so there is no hosted catalog",
+                            "Create one: audiagentic agent add NAME --extends reviewer --provider P --model M")]
     if clashes:
         return [CheckResult("agents.catalog", WARN,
                             f"agent files override agents.yaml entries: {', '.join(clashes)}",
