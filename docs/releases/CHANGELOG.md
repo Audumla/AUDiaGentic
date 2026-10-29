@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.21.1](https://github.com/Audumla/AUDiaGentic/compare/v0.21.0...v0.21.1) (2026-10-29)
+
+
+### Documentation
+
+* **planning:** CFG06 slices 1 and 2 merged ([#133](https://github.com/Audumla/AUDiaGentic/issues/133)) ([339029c](https://github.com/Audumla/AUDiaGentic/commit/339029c1a2c201006c482b3c377d2fa0fab71d01))
+
 ## [0.21.0](https://github.com/Audumla/AUDiaGentic/compare/v0.20.1...v0.21.0) (2026-10-29)
 
 
