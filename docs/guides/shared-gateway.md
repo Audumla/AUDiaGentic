@@ -5,6 +5,8 @@ It is not installed-service, live TLS, multi-client or recovery qualification
 evidence. Check the implementation and deployment acceptance results before
 exposing a service. Execution nodes (`gateway node serve`) are experimental and
 not qualified; joined harness sessions are outside this slice.
+The opt-in installed-package native qualification harness (server-hosted
+execution only) is described in `tests/e2e/shared_gateway/README.md`.
 
 ## Server configuration
 
