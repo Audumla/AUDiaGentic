@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.26.1](https://github.com/Audumla/AUDiaGentic/compare/v0.26.0...v0.26.1) (2026-10-29)
+
+
+### Bug Fixes
+
+* **gateway:** console trace rotation only touches streams backed by a real file ([#175](https://github.com/Audumla/AUDiaGentic/issues/175)) ([9736282](https://github.com/Audumla/AUDiaGentic/commit/97362825561a79cdb240f23ef6e8b01fee1f1993))
+
 ## [0.26.0](https://github.com/Audumla/AUDiaGentic/compare/v0.25.1...v0.26.0) (2026-10-29)
 
 
