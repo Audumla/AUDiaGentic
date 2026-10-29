@@ -271,6 +271,15 @@ mcp-servers:
       local-openai) return a direct completion. Use agent_task_gateway_overview
       or agent_task_list_requests to see what's happening without already
       knowing a request-id.
+      For a remote shared gateway, select an explicit connector with
+      audiagentic gateway connect config FILE project PATH non-interactive
+      after inspecting gateway connect help. Execution uses the connector's
+      server project and server-local agent definitions/files, never the
+      caller's filesystem root. Stage-1 shared ingress supports scoped request
+      and session operations; local dashboard/focus, purge, operator lifecycle,
+      caller execution-context/profile overrides and direct provider_chat_url
+      attachment are unavailable remotely. Project/action grants are
+      collaborative across requests in the authorized server project.
     tool-descriptions:
       agent_task_list_definitions: >
         List available agents as a slim, client-facing summary per agent
@@ -291,6 +300,9 @@ mcp-servers:
         existing GPT-auto conversation directly, pass provider_chat_url with
         a full project-scoped /g/<project>/c/<id> ChatGPT URL; a /project
         landing URL is not sufficient.
+        Direct provider_chat_url attachment, workspace_name and caller
+        execution-context overrides are local-only and rejected by the
+        stage-1 shared connector. Remote continuation uses a returned session_id.
       agent_task_status: >
         Return the compact lifecycle/activity status for request-id. The
         response contains task_id, lifecycle, activity_seq, plus only

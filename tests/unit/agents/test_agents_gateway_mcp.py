@@ -32,6 +32,16 @@ def _patch_root():
     )
 
 
+def _patch_definition_client():
+    from audiagentic.components.agents.gateway.client import EmbeddedGatewayClient
+
+    embedded = EmbeddedGatewayClient(application=object())
+    return patch(
+        "audiagentic.components.agents.mcp.gateway_mcp.call_gateway_method",
+        side_effect=lambda operation, root: getattr(embedded, operation)(root),
+    )
+
+
 def test_agent_task_list_definitions_returns_slim_client_facing_cards():
     """Modeled on the A2A AgentCard shape (protocols/a2a/agent_card.py):
     what an agent IS to a caller, never how it's implemented. Harness/
@@ -54,6 +64,7 @@ def test_agent_task_list_definitions_returns_slim_client_facing_cards():
     ]
     with (
         _patch_root(),
+        _patch_definition_client(),
         patch(
             "audiagentic.components.agents.configuration.management.list_agent_definitions",
             return_value=raw,
@@ -76,6 +87,7 @@ def test_agent_task_list_definitions_returns_slim_client_facing_cards():
 def test_agent_task_list_definitions_delegates():
     with (
         _patch_root(),
+        _patch_definition_client(),
         patch(
             "audiagentic.components.agents.configuration.management.list_agent_definitions",
             return_value=[{"agent_id": "reviewer-agent"}],

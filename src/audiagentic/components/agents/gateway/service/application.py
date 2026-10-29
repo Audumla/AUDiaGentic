@@ -22,6 +22,7 @@ from audiagentic.components.agents.gateway.service.contract import (
 from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error_factory
 from audiagentic.foundation.io import atomic_write_text
 from audiagentic.foundation.system.managed_service import ManagedServiceStore
+from audiagentic.foundation.system.managed_service_contracts import ClientLease
 
 service_validation_error = make_error_factory("VAL", "AGSV", "gateway-service")
 service_conflict_error = make_error_factory("CON", "AGSV", "gateway-service")
@@ -247,6 +248,7 @@ class GatewayServiceApplication:
         ttl_seconds: float,
         protocol_version: str,
         correlation_id: str | None = None,
+        facts: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         _require_protocol(protocol_version)
         _require_ttl(ttl_seconds)
@@ -256,6 +258,7 @@ class GatewayServiceApplication:
             ttl_seconds=ttl_seconds,
             expected_epoch=record.owner_epoch,
             correlation_id=correlation_id,
+            facts=facts,
         )
         from .client_icons import assign_client_icon
 
@@ -266,6 +269,20 @@ class GatewayServiceApplication:
             "expires-at": lease.expires_at,
             "service-revision": updated.revision,
         }
+
+    def _require_active_client_lease(self, lease_id: str, owner_epoch: str) -> ClientLease:
+        """Normalize stale lease failures once for local and shared ingress."""
+        try:
+            return self._service_store.require_active_lease(lease_id, expected_epoch=owner_epoch)
+        except AudiaGenticError as exc:
+            raise service_conflict_error(18, "gateway client lease is stale or inactive") from exc
+
+    def require_client_principal(self, lease_id: str, owner_epoch: str, principal_id: str) -> str:
+        """Fence shared ingress with the existing durable lease authority."""
+        lease = self._require_active_client_lease(lease_id, owner_epoch)
+        if (lease.facts or {}).get("shared-principal-id") != principal_id:
+            raise service_validation_error(5, "gateway client lease principal does not match")
+        return lease.client_instance_id
 
     def renew_client(
         self,
@@ -310,10 +327,7 @@ class GatewayServiceApplication:
     ) -> Any:
         """Invoke one closed v1 gateway operation without transport concerns."""
         _require_protocol(protocol_version)
-        try:
-            self._service_store.require_active_lease(lease_id, expected_epoch=owner_epoch)
-        except AudiaGenticError as exc:
-            raise service_conflict_error(18, "gateway client lease is stale or inactive") from exc
+        self._require_active_client_lease(lease_id, owner_epoch)
         root = _canonical_root(project_root)
         arguments = dict(params or {})
         if operation in _WORK_PRODUCING_OPERATIONS and self._service_is_draining():
@@ -324,6 +338,13 @@ class GatewayServiceApplication:
             )
         if operation in _WORK_PRODUCING_OPERATIONS:
             self._record_project_encounter(root)
+        if operation == "list_agent_definition_cards":
+            _reject_unknown(arguments, set())
+            from audiagentic.components.agents.configuration.management import (
+                list_agent_definition_cards,
+            )
+
+            return list_agent_definition_cards(root)
         if operation == "submit_execution_request":
             submitted = _validated_submission_arguments(root, arguments)
             from .client_icons import assign_client_icon
