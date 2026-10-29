@@ -15,6 +15,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 import pytest
+from tests.helpers.model_server import start_model_server
 
 from audiagentic.components.providers.descriptors.registry import all_descriptors
 from audiagentic.components.providers.services.execution.execution import execute_provider
@@ -29,7 +30,6 @@ from audiagentic.runtime.harness import (
     refresh_materialized_agent_config,
     run_agent,
 )
-from audiagentic.runtime.harness.provisioning import provision_embedded_rig
 
 pytestmark = [
     pytest.mark.mutates_host,
@@ -168,23 +168,25 @@ def _pi_case(project_root: Path) -> None:
     def _run() -> None:
         model = os.environ.get("AUDIAGENTIC_TEST_PI_MODEL", "qwen3.5-0.8b")
         os.environ["AUDIAGENTIC_AG_MODEL"] = model
-        os.environ["AUDIAGENTIC_RIG_MODEL_PROFILE"] = model
         os.environ["AUDIAGENTIC_AG_PROVIDER"] = os.environ.get(
             "AUDIAGENTIC_TEST_PI_PROVIDER",
             "audiagentic",
         )
         harness_runtime = global_harness_runtime()
-        provision_embedded_rig(harness_runtime, project_root)
         refresh_materialized_agent_config(harness_runtime, project_root=project_root)
-        rig_bin_dir = harness_runtime / "rig" / "bin"
-        assert rig_bin_dir.is_dir(), f"AG rig bin directory was not provisioned: {rig_bin_dir}"
-        ctx = build_global_context(
-            project_root=project_root,
-            agent_runtime=harness_runtime,
-            enable_mcp=False,
-        )
-        exit_code = run_agent(ctx, RunnerParams(prompt=_DEFAULT_PROMPT, mode="text"), smoke=False)
-        assert exit_code == 0, f"pi harness exited with {exit_code}"
+        server = start_model_server()
+        os.environ["AUDIAGENTIC_AG_BASE_URL"] = server.endpoint
+        try:
+            ctx = build_global_context(
+                project_root=project_root,
+                agent_runtime=harness_runtime,
+                enable_mcp=False,
+            )
+            exit_code = run_agent(ctx, RunnerParams(prompt=_DEFAULT_PROMPT, mode="text"), smoke=False)
+            assert exit_code == 0, f"pi harness exited with {exit_code}"
+        finally:
+            os.environ.pop("AUDIAGENTIC_AG_BASE_URL", None)
+            server.stop()
 
     _with_installed_cli("pi", project_root, _run)
 

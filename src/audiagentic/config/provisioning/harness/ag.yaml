@@ -33,7 +33,7 @@ harness:
 # Embedded rig settings.
 rig:
   port: 42001
-  # Which model to use. Resolved against rig.yaml profile list.
+  # Which model to use..
   model: audiagentic-rig
   # Provider id passed to the harness CLI (names the models.json backend block).
   provider: audiagentic

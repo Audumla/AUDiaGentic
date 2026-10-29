@@ -35,10 +35,7 @@ def _make_ctx(tmp_path: Path) -> AgentContext:
         agent_log_dir=tmp_path / "logs",
         endpoint="http://127.0.0.1:0",
         model="test-model",
-        model_profile={},
-        profile_name="default",
         provider="pi",
-        embedded_rig=False,
         enable_mcp=False,
         agent_runtime=tmp_path / "runtime",
     )
