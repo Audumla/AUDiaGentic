@@ -58,6 +58,7 @@ from .session_surface import (
     ContentChannelId,
     ContentStreamCapabilities,
     ControlSupport,
+    JoinedSessionCapabilities,
     LifecycleInstallation,
     LifecycleObservationCapabilities,
     LifecycleSource,
@@ -97,6 +98,7 @@ __all__ = [
     "TransportObservationKind",
     # AS29 session-surface value types
     "ControlSupport",
+    "JoinedSessionCapabilities",
     "PreparedSessionTransport",
     "ContentChannelCapability",
     "ContentChannelId",

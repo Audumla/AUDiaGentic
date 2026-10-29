@@ -36,3 +36,16 @@ def check_agent_providers(context: Any) -> list[CheckResult]:
         fix = None if available is not False else f"Make {provider} available: {detail}"
         results.append(CheckResult(f"provider.{provider}", status, detail, fix))
     return results
+
+
+def check_catalog(context: Any) -> list[CheckResult]:
+    """The hosted catalog loads; agent files that shadow agents.yaml entries are reported."""
+    del context
+    from .effective_catalog import effective_catalog_mapping
+
+    mapping, clashes = effective_catalog_mapping()
+    if clashes:
+        return [CheckResult("agents.catalog", WARN,
+                            f"agent files override agents.yaml entries: {', '.join(clashes)}",
+                            "Remove the duplicate entries from agents.yaml (the agent files win)")]
+    return [CheckResult("agents.catalog", OK, f"hosted catalog has {len(mapping['agents'])} agent(s)")]

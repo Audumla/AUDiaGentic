@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.13.0](https://github.com/Audumla/AUDiaGentic/compare/v0.12.0...v0.13.0) (2026-10-29)
+
+
+### Features
+
+* **agents:** hosted catalog includes compiled agent files (CFG09 part 1) ([#101](https://github.com/Audumla/AUDiaGentic/issues/101)) ([bcf090c](https://github.com/Audumla/AUDiaGentic/commit/bcf090c72bc851763e2bf34519b94547235bdfb2))
+
+## [0.12.0](https://github.com/Audumla/AUDiaGentic/compare/v0.11.1...v0.12.0) (2026-10-29)
+
+
+### Features
+
+* **providers:** typed joined-session capability declarations, unsupported by default (SH45) ([#109](https://github.com/Audumla/AUDiaGentic/issues/109)) ([010a4fb](https://github.com/Audumla/AUDiaGentic/commit/010a4fb57c0f61096d209fcc17bb4eecc19b3595))
+
+## [0.11.1](https://github.com/Audumla/AUDiaGentic/compare/v0.11.0...v0.11.1) (2026-10-29)
+
+
+### Bug Fixes
+
+* **providers:** parse name-prefixed CLI versions so surface constraints evaluate ([#104](https://github.com/Audumla/AUDiaGentic/issues/104)) ([bf260da](https://github.com/Audumla/AUDiaGentic/commit/bf260da636f4fb944ebfc8357c9efe20dbaf4acb))
+
 ## [0.11.0](https://github.com/Audumla/AUDiaGentic/compare/v0.10.1...v0.11.0) (2026-10-29)
 
 

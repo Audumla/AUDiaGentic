@@ -23,6 +23,7 @@ from audiagentic.foundation.transports.session_surface import (
     ContentChannelCapability,
     ContentChannelId,
     ControlSupport,
+    JoinedSessionCapabilities,
     LifecycleInstallation,
     LifecycleSource,
     PlatformEvidence,
@@ -70,6 +71,8 @@ class SessionSurfaceDeclaration:
     # Validation / platform evidence (AS67 — simplified)
     evidence: ValidationEvidence = field(default_factory=ValidationEvidence)
     platforms: tuple[PlatformEvidence, ...] = ()
+    # Joined-session claims (SH45); all unsupported unless declared
+    joined_capabilities: JoinedSessionCapabilities = field(default_factory=JoinedSessionCapabilities)
     # Descriptor-local adapter reference — a dotted path string, NOT resolved.
     # This field must not appear in ResolvedSessionSurface (foundation type).
     adapter_ref: str | None = None
@@ -140,6 +143,8 @@ def _validate_declarations(declarations: Sequence[SessionSurfaceDeclaration]) ->
            is rejected (both max_bytes == 0 and max_events == 0).
         5. Managed-hook/plugin lifecycle installation without a nonempty
            adapter_ref is rejected.
+        6. A joined-capability claim without attach-existing support, external
+           ownership, an exact session mapping and validated evidence is rejected.
     """
     seen_keys: set[tuple[str, str]] = set()
 
@@ -205,6 +210,29 @@ def _validate_declarations(declarations: Sequence[SessionSurfaceDeclaration]) ->
                     surface_id=decl.surface_id,
                     version_constraint=decl.version_constraint,
                     lifecycle_installation=decl.lifecycle_installation.value,
+                )
+
+        # Rule 6 (SH45): a joined-capability claim is only meaningful on a
+        # surface that can attach to an existing session it does not own, maps
+        # sessions exactly and has validated platform evidence.
+        joined = decl.joined_capabilities
+        if joined.claimed:
+            missing = []
+            if decl.identity_operations.get(SessionIdentityOperation.ATTACH_EXISTING) != ControlSupport.SUPPORTED:
+                missing.append("attach-existing")
+            if SessionOwnershipMode.EXTERNAL not in decl.ownership_modes:
+                missing.append("external-ownership")
+            if decl.mapping_facts.ref_scope == "unknown":
+                missing.append("exact-session-mapping")
+            if not decl.evidence.validated:
+                missing.append("validated-evidence")
+            if missing:
+                raise _error(
+                    "joined capabilities require attach-existing, external ownership, "
+                    "exact session mapping and validated evidence",
+                    surface_id=decl.surface_id,
+                    version_constraint=decl.version_constraint,
+                    missing=missing,
                 )
 
 
