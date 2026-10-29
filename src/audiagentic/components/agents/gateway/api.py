@@ -576,13 +576,20 @@ def submit_execution_request(
     # Capture component-owned template facts once at admission.  Dispatch,
     # retries, and recovery use the durable snapshot rather than re-reading
     # project state such as the current Git branch.
-    if component_context_reader is None:
-        from audiagentic.components.agents.gateway.admission.context import (
-            empty_component_context,
-        )
+    from audiagentic.components.agents.gateway.admission.context import (
+        build_agent_template_context,
+        empty_component_context,
+    )
 
-        component_context_reader = empty_component_context
-    template_context = component_context_reader(Path(canonical_root.display))
+    # Global agents must be usable from an unmanaged repository as well as a
+    # fully installed AUDiaGentic project: for an agent, component context is
+    # an optional enrichment over the baseline project/source-control facts.
+    template_context = build_agent_template_context(
+        Path(canonical_root.display),
+        component_reader=component_context_reader or empty_component_context,
+        workspace_name=workspace_name,
+        agent_id=agent_id,
+    )
     dispatch_prompt = prompt_body
 
     # Resolve the machine-global agent definition at gateway admission. MCP
@@ -597,31 +604,10 @@ def submit_execution_request(
             read_global_agents_config,
         )
         from audiagentic.components.agents.configuration.resolution import resolve_agent_composition
-        from audiagentic.components.agents.gateway.admission.context import (
-            baseline_agent_template_context,
-        )
         from audiagentic.components.agents.gateway.admission.instructions import (
             materialize_agent_prompt,
         )
 
-        # Global agents must be usable from an unmanaged repository as well
-        # as a fully installed AUDiaGentic project.  Component context is an
-        # optional enrichment layer, never a prerequisite for these baseline
-        # project/source-control template namespaces.
-        baseline_context = baseline_agent_template_context(
-            Path(canonical_root.display), workspace_name=workspace_name
-        )
-        template_context = {**baseline_context, **template_context}
-        # The project component owns the canonical name precedence. Preserve
-        # richer component-provided project facts, but never let an older
-        # reader overwrite that canonical value.
-        if isinstance(baseline_context.get("project"), dict) and isinstance(
-            template_context.get("project"), dict
-        ):
-            template_context["project"] = {
-                **template_context["project"],
-                "name": baseline_context["project"]["name"],
-            }
         catalog = read_global_agents_config(project_root)
         try:
             composition = resolve_agent_composition(project_root, agent_id, snapshot=catalog)
