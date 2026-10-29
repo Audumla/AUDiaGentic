@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.30.0](https://github.com/Audumla/AUDiaGentic/compare/v0.29.1...v0.30.0) (2026-10-29)
+
+
+### Features
+
+* **gateway:** wire shared-gateway execution nodes (SH38-SH41, slice P11 of [#70](https://github.com/Audumla/AUDiaGentic/issues/70)) ([#191](https://github.com/Audumla/AUDiaGentic/issues/191)) ([a45f790](https://github.com/Audumla/AUDiaGentic/commit/a45f790b7cb566b40ad1b8652dbd0d155eaa1694))
+
 ## [0.29.1](https://github.com/Audumla/AUDiaGentic/compare/v0.29.0...v0.29.1) (2026-10-29)
 
 
