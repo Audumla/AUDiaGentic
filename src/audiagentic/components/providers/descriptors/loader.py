@@ -170,6 +170,7 @@ def _build_mcp_config_spec(data: dict[str, Any]) -> McpConfigSpec:
         refresh_mode=data.get("refresh_mode", "none"),
         reload_fn=resolve_ref(data["reload_fn"]) if "reload_fn" in data else None,
         transports=frozenset(transports),
+        user_scope=_build_managed_config_spec(data["user_scope"]) if data.get("user_scope") else None,
     )
 
 

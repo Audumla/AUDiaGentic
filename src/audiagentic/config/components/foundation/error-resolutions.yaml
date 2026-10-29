@@ -50,6 +50,8 @@ CON-OPR-002: "Operational record contains a denylisted field that must be redact
 IO-PATH-001: "The resolved path escapes the project root. Configuration paths must stay within the project directory — remove traversal sequences (../) and ensure absolute paths are inside the project."
 CFG-CONF-001: "Package default config file is missing. The package may need to be reinstalled."
 VAL-COMP-001: "Component status payload failed validation. Check that enabled, configured, and other fields have correct types."
+VAL-COMP-011: "An MCP server declaration has a non-boolean worktree-scoped value. Set it to true or false in the owning component YAML."
+CFG-MCPLAUNCH-001: "The running installation has no audiagentic console script next to its interpreter. Reinstall the package (pip install) so the script exists, then re-run setup with that installation's audiagentic."
 VAL-COMP-010: "A different component profile is already active in this process. Switching profiles mid-process is not allowed — restart with the desired --component-profile flag."
 VAL-PSTEP-002: "A placeholder variable is unknown or could not be substituted. Check that all {KEY} placeholders have matching params."
 VAL-REG-001: "A registry key is already registered with a different value. Use replace=True to overwrite, or use a unique key."

@@ -1,8 +1,8 @@
 """Per-call git worktree selection shared by every worktree-scoped MCP server.
 
 One session works in several git worktrees, so a server cannot bind one
-project at start-up. A worktree-scoped server (``mcp_server(...,
-worktree_scoped=True)``) gives every tool an optional ``worktree`` argument:
+project at start-up. A worktree-scoped server (declared ``worktree-scoped:
+true`` in its component YAML) gives every tool an optional ``worktree`` argument:
 the absolute path of the git worktree to act on. It must be the ROOT of a
 git worktree (plans, ledger events and gateway state are files that belong
 to a branch). When omitted, the server's own project is used (an explicit
@@ -54,7 +54,10 @@ def _confirm(candidate: Path) -> Worktree:
         raise worktree_error(4, "Path is not inside a git worktree", worktree=str(resolved))
     if root != resolved:
         raise worktree_error(
-            5, "Path is inside a git worktree but is not its root", worktree=str(resolved), worktree_root=str(root),
+            # The root is the fix, so it goes in the message: error details are
+            # truncated for clients, which would cut a long path.
+            5, f"Path is inside a git worktree but is not its root; use {root}",
+            worktree=str(resolved), worktree_root=str(root),
         )
     branch, head = describe_checkout(resolved)
     return Worktree(resolved, branch, head)

@@ -211,6 +211,7 @@ mcp-servers:
       agent_gateway_get_retention_policy: Read machine-owned rolling request-history retention and byte caps; no automatic request-directory deletion is performed.
   - name: ag-agents-gateway
     module: audiagentic.components.agents.mcp.gateway_mcp
+    worktree-scoped: true
     direct-tools:
       - agent_task_list_definitions
       - agent_task_submit

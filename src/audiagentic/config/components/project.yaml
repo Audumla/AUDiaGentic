@@ -87,4 +87,7 @@ contributions:
         Install with `audiagentic mcp install MCP_ID harness ID[,ID...]`.
         This sets that MCP's complete native target selection; other MCPs remain unchanged.
         Component installation alone does not select native MCP exposure.
+        For every directory instead of one project, `audiagentic setup harness ID[,ID...]`
+        registers the worktree-scoped servers at that harness's user scope
+        (`dry-run` reports only); their tools take a per-call `worktree`.
         Report configured separately from verified.

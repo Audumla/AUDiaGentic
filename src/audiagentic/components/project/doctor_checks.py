@@ -43,3 +43,22 @@ def check_mcp_onboarding(context: Any) -> list[CheckResult]:
     mcp_id = state.get("mcp_id", "the MCP")
     return [CheckResult("mcp.onboarding", FAIL, f"MCP installation for {mcp_id} is {state.get('phase', 'incomplete')}",
                         "Repeat the same 'audiagentic mcp install' command to resume it")]
+
+
+def check_user_mcp(context: Any) -> list[CheckResult]:
+    """User-scope MCP registrations made by setup: configured, or the fix to restore them."""
+    from .onboarding.user_scope import user_mcp_states
+
+    results = []
+    for state in user_mcp_states():
+        check = f"mcp.user.{state['provider_id']}"
+        if not state["registered"]:
+            results.append(CheckResult(check, OK, "no user-scope MCP registration (optional)"))
+            continue
+        problems = [f"{entry['name']} {entry['state']}" for entry in state["entries"] if entry["state"] != "configured"]
+        if not problems:
+            results.append(CheckResult(check, OK, f"worktree-scoped MCP servers configured in {state['target']}"))
+        else:
+            results.append(CheckResult(check, WARN, f"user-scope MCP: {', '.join(problems)}",
+                                       f"audiagentic setup harness {state['provider_id']}"))
+    return results

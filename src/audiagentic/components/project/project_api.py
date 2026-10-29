@@ -26,6 +26,20 @@ def get_mcp_help(mcp_id: str, project_root: Path | None = None):
     return list_mcp_catalog(project_root, mcp_id)
 
 
+def setup_user_mcp(harness_ids: list[str], *, dry_run: bool = False) -> list[dict]:
+    """Register worktree-scoped MCP servers at the named harnesses' user scope."""
+    from .onboarding.user_scope import setup_user_mcp as _setup
+
+    return _setup(harness_ids, dry_run=dry_run)
+
+
+def user_mcp_states() -> list[dict]:
+    """Read-only user-scope MCP state at every harness that has one."""
+    from .onboarding.user_scope import user_mcp_states as _states
+
+    return _states()
+
+
 def install_mcp(
     project_root: Path,
     *,

@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from audiagentic.foundation.components.base import McpServerDeclaration
 from audiagentic.foundation.mcp.component_server import mcp_server, project_root_from_env
 
 
@@ -26,8 +27,16 @@ def repo(tmp_path: Path) -> tuple[Path, Path]:
     return main.resolve(), other.resolve()
 
 
+def _scoped_server(scoped: bool = True):
+    """A server whose (test) declaration sets ``worktree-scoped``."""
+    server = mcp_server("tests.unit.foundation.test_mcp_worktree")
+    server._decl = McpServerDeclaration(  # the declaration a component YAML would supply
+        name="test-worktree", module="tests.unit.foundation.test_mcp_worktree", worktree_scoped=scoped)
+    return server
+
+
 def _server(scoped: bool = True):
-    server = mcp_server("tests.unit.foundation.test_mcp_worktree", worktree_scoped=scoped)
+    server = _scoped_server(scoped)
 
     @server.tool()
     def where() -> dict:
@@ -111,7 +120,7 @@ def test_schema_exposes_the_shared_parameter_only_on_scoped_servers():
 
 
 def test_reserved_name_is_rejected_at_registration():
-    server = mcp_server("tests.unit.foundation.test_mcp_worktree", worktree_scoped=True)
+    server = _scoped_server()
     with pytest.raises(ValueError, match="reserved"):
         @server.tool()
         def clash(worktree: str) -> dict:
