@@ -25,7 +25,6 @@ from audiagentic.foundation.paths.home import global_log_dir
 
 _DEFAULT_MAX_BODY_CHARS = 4096
 _PROGRESS_INTERVAL_SECONDS = 5.0
-_VALID_MODES = frozenset({"off", "summary", "full"})
 
 
 def _default_stream() -> TextIO:
@@ -34,12 +33,11 @@ def _default_stream() -> TextIO:
     The managed gateway deliberately has no console and its service host
     discards child stderr/stdout.  Persisting the bounded trace to the shared
     gateway log makes it observable without reintroducing console windows.
-    ``gateway.console_trace.file`` (or the legacy
-    ``AUDIAGENTIC_GATEWAY_CONSOLE_TRACE_FILE``) is an explicit override;
-    stderr is only the safe fallback if the log cannot be opened.
+    ``gateway.console_trace.file`` is an explicit override; stderr is only the
+    safe fallback if the log cannot be opened.
     """
 
-    configured = str(gateway_setting("console_trace.file", "AUDIAGENTIC_GATEWAY_CONSOLE_TRACE_FILE", "")).strip()
+    configured = str(gateway_setting("console_trace.file", "")).strip()
     path = Path(os.path.expandvars(configured)) if configured else global_log_dir("gateway") / "console-trace.log"
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -49,16 +47,11 @@ def _default_stream() -> TextIO:
 
 
 def _mode() -> str:
-    value = str(gateway_setting("console_trace.mode", "AUDIAGENTIC_GATEWAY_CONSOLE_TRACE", "summary")).strip().lower()
-    return value if value in _VALID_MODES else "summary"
+    return str(gateway_setting("console_trace.mode", "summary"))
 
 
 def _max_body_chars() -> int:
-    try:
-        value = int(gateway_setting("console_trace.max_chars", "AUDIAGENTIC_GATEWAY_CONSOLE_TRACE_MAX_CHARS", ""))
-    except ValueError:
-        value = _DEFAULT_MAX_BODY_CHARS
-    return max(256, min(value or _DEFAULT_MAX_BODY_CHARS, 1_048_576))
+    return int(gateway_setting("console_trace.max_chars", _DEFAULT_MAX_BODY_CHARS))
 
 
 def _safe_body(value: Any) -> str:

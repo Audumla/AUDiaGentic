@@ -142,7 +142,6 @@ def test_gpt_auto_on_an_embedded_gateway_is_flagged_with_the_fix(
     monkeypatch.setenv("AUDIAGENTIC_HOME", str(env["tmp"] / "agentic-home"))
     monkeypatch.setattr(providers_api, "is_provider_enabled_for_launch", lambda root, provider: True)
     monkeypatch.setattr(providers_api, "check_provider_availability", lambda root, provider: (True, "CDP answers"))
-    monkeypatch.delenv("AUDIAGENTIC_GATEWAY_MODE", raising=False)
     warned = _by_check(run_checks(DoctorContext(None)))["agents.gateway"][0]
     assert warned.status == "warn" and "gateway.implementation" in warned.fix
 

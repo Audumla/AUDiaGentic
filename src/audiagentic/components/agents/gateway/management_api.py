@@ -15,21 +15,13 @@ from typing import Any
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 _COMPONENT_ID = "agents"
-_RESTART_WAIT_SECONDS_ENV = "AUDIAGENTIC_GATEWAY_RESTART_WAIT_SECONDS"
 _RESTART_POLL_SECONDS = 0.25
 
 
 def _restart_wait_seconds() -> float:
     from audiagentic.components.agents.gateway.settings import gateway_setting
 
-    raw = gateway_setting("restart_wait_seconds", _RESTART_WAIT_SECONDS_ENV, 60)
-    try:
-        value = float(raw)
-    except ValueError as exc:
-        raise ValueError(f"{_RESTART_WAIT_SECONDS_ENV} must be a number") from exc
-    if value <= 0:
-        raise ValueError(f"{_RESTART_WAIT_SECONDS_ENV} must be positive")
-    return value
+    return float(gateway_setting("restart_wait_seconds", 60))
 
 
 def active_implementation_id(project_root: Path) -> str:

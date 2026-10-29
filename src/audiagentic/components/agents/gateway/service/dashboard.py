@@ -19,7 +19,6 @@ from audiagentic.components.agents.gateway.mapping import normalize_chat_title
 
 DEFAULT_RECENT_WINDOW_SECONDS = 12 * 60 * 60
 MAX_RECENT_WINDOW_SECONDS = 30 * 24 * 60 * 60
-RECENT_WINDOW_ENV = "AUDIAGENTIC_GATEWAY_DASHBOARD_RECENT_SECONDS"
 _ACTIVE_REQUEST_STATES = frozenset({"queued", "dispatching", "running"})
 _ACTIVE_SESSION_STATES = frozenset({"active", "closing"})
 _FAILED_REQUEST_STATES = frozenset(
@@ -46,7 +45,7 @@ def recent_window_seconds(value: object | None = None) -> int:
     """Return a bounded dashboard window, using gateway settings by default."""
     from audiagentic.components.agents.gateway.settings import gateway_setting
 
-    raw = gateway_setting("dashboard.recent_seconds", RECENT_WINDOW_ENV) if value is None else value
+    raw = gateway_setting("dashboard.recent_seconds") if value is None else value
     try:
         parsed = int(raw) if not isinstance(raw, bool) else 0
     except (TypeError, ValueError):

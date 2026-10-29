@@ -14,6 +14,13 @@ import pytest
 
 
 @pytest.fixture(autouse=True)
+def _isolated_machine_settings(tmp_path_factory, monkeypatch):
+    """Gateway settings are machine-scope: keep the developer's own settings out of a test."""
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path_factory.mktemp("xdg-config")))
+    monkeypatch.delenv("AUDIAGENTIC_CONFIG", raising=False)
+
+
+@pytest.fixture(autouse=True)
 def _fresh_gateway_queue_manager():
     from tests.helpers.gateway_queue_isolation import reset_gateway_queue
 

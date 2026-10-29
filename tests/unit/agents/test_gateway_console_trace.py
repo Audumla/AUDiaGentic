@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from io import StringIO
 
+from tests.helpers.gateway_settings import use_gateway_settings
+
 from audiagentic.components.agents.gateway.session.console_trace import GatewayConsoleTrace
 
 
-def test_summary_trace_contains_launch_progress_and_terminal_metadata(monkeypatch):
-    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_CONSOLE_TRACE", "summary")
+def test_summary_trace_contains_launch_progress_and_terminal_metadata(monkeypatch, tmp_path):
+    use_gateway_settings(monkeypatch, tmp_path, console_trace={"mode": "summary"})
     stream = StringIO()
     trace = GatewayConsoleTrace(stream=stream, clock=lambda: 12.0)
 
@@ -46,9 +48,8 @@ def test_summary_trace_contains_launch_progress_and_terminal_metadata(monkeypatc
     assert "secret output" not in rendered
 
 
-def test_full_trace_includes_bounded_prompt_and_output(monkeypatch):
-    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_CONSOLE_TRACE", "full")
-    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_CONSOLE_TRACE_MAX_CHARS", "256")
+def test_full_trace_includes_bounded_prompt_and_output(monkeypatch, tmp_path):
+    use_gateway_settings(monkeypatch, tmp_path, console_trace={"mode": "full", "max_chars": 256})
     stream = StringIO()
     trace = GatewayConsoleTrace(stream=stream, clock=lambda: 1.0)
     started = trace.turn_started(request_id="req_1", session_id="ses_1", prompt="p" * 300)
@@ -68,8 +69,8 @@ def test_full_trace_includes_bounded_prompt_and_output(monkeypatch):
     assert "..." in rendered
 
 
-def test_trace_can_be_disabled(monkeypatch):
-    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_CONSOLE_TRACE", "off")
+def test_trace_can_be_disabled(monkeypatch, tmp_path):
+    use_gateway_settings(monkeypatch, tmp_path, console_trace={"mode": "off"})
     stream = StringIO()
     trace = GatewayConsoleTrace(stream=stream)
     trace.session_opened(
@@ -83,8 +84,8 @@ def test_trace_can_be_disabled(monkeypatch):
     assert stream.getvalue() == ""
 
 
-def test_response_decision_trace_renders_only_whitelisted_bounded_fields(monkeypatch):
-    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_CONSOLE_TRACE", "summary")
+def test_response_decision_trace_renders_only_whitelisted_bounded_fields(monkeypatch, tmp_path):
+    use_gateway_settings(monkeypatch, tmp_path, console_trace={"mode": "summary"})
     stream = StringIO()
     trace = GatewayConsoleTrace(stream=stream, clock=lambda: 9.0)
 
@@ -105,8 +106,8 @@ def test_response_decision_trace_renders_only_whitelisted_bounded_fields(monkeyp
     assert "elapsed=8.0s" in rendered
 
 
-def test_response_decision_observation_rejects_non_whitelisted_timing_event(monkeypatch):
-    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_CONSOLE_TRACE", "summary")
+def test_response_decision_observation_rejects_non_whitelisted_timing_event(monkeypatch, tmp_path):
+    use_gateway_settings(monkeypatch, tmp_path, console_trace={"mode": "summary"})
     stream = StringIO()
     trace = GatewayConsoleTrace(stream=stream, clock=lambda: 9.0)
 
@@ -128,7 +129,6 @@ def test_response_decision_observation_rejects_non_whitelisted_timing_event(monk
 def test_default_trace_sink_is_shared_gateway_log(monkeypatch, tmp_path):
     import audiagentic.components.agents.gateway.session.console_trace as module
 
-    monkeypatch.delenv("AUDIAGENTIC_GATEWAY_CONSOLE_TRACE_FILE", raising=False)
     monkeypatch.setattr(module, "global_log_dir", lambda component: tmp_path / component)
     trace = GatewayConsoleTrace()
     trace.session_opened(

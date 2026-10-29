@@ -25,9 +25,10 @@ logger = logging.getLogger(__name__)
 
 def resolve_request_project_root(root: Path, request_id: str) -> Path:
     """Route a project-scoped request using the public client boundary."""
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+
     from . import store as gateway_store
     from .api import _resolve_workspace_project_root
-    from audiagentic.foundation.contracts.errors import AudiaGenticError
     if not isinstance(request_id, str) or not request_id.startswith("req_"):
         return root
     parts = request_id.split("_")
@@ -85,8 +86,9 @@ def resolve_session_project_root(root: Path, session_id: str) -> Path:
     process CWD.  Multiple matches fail closed rather than selecting a
     session from the wrong project.
     """
-    from .session import sessions_store
     from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+    from .session import sessions_store
 
     root = root.resolve()
     configured = os.environ.get("AUDIAGENTIC_WORKSPACE_ROOTS", "")
@@ -128,10 +130,6 @@ def resolve_session_project_root(root: Path, session_id: str) -> Path:
     return root
 
 _COMPONENT_ID = "agents"
-# SH11 migration compatibility: AUDIAGENTIC_GATEWAY_MODE historically used
-# "in-process"; the component-implementation id is "embedded". Accept both
-# on the env path without silently favoring one meaning over the other.
-_MODE_ALIASES = {"in-process": "embedded"}
 
 
 class GatewayClient(Protocol):
@@ -363,18 +361,10 @@ def _has_live_provable_shared_owner() -> bool:
 def _resolve_embedded_coexistence_policy(project_root: Path | None) -> str:
     """"warn" or "refuse" when a live shared owner exists (SH11 Slice D).
 
-    Precedence: ``AUDIAGENTIC_GATEWAY_EMBEDDED_ALLOW`` env override (explicit
-    migration escape hatch) > ``gateway.embedded_with_live_shared_owner`` in
-    settings > the project's ``embedded`` implementation
-    config > the descriptor default (``refuse``, per RV736 A6 -- silent
-    coexistence beside a shared owner is the exact dual-ownership bug this
-    boundary exists to prevent).
+    The project's ``embedded`` implementation config, else the descriptor
+    default (``refuse``, per RV736 A6 -- silent coexistence beside a shared
+    owner is the exact dual-ownership bug this boundary exists to prevent).
     """
-    from audiagentic.components.agents.gateway.settings import gateway_setting
-
-    configured = gateway_setting("embedded_with_live_shared_owner", "AUDIAGENTIC_GATEWAY_EMBEDDED_ALLOW")
-    if configured:
-        return str(configured).strip().lower()
     if project_root is not None:
         from audiagentic.components.agents.gateway.management_api import gateway_get_config
 
@@ -389,39 +379,23 @@ def _resolve_implementation_id(project_root: Path | None) -> tuple[str, str]:
     """Resolve which gateway implementation is active, and how it was chosen.
 
     Resolution order (SH11 Slice B), highest precedence first:
-    1. explicit ``AUDIAGENTIC_GATEWAY_MODE`` env override -- compatibility
-       path for the pre-SH11 env-only world; the "in-process" spelling is
-       aliased to "embedded", the real implementation id, without silently
-       treating them as different things.
-    2. ``gateway.implementation`` in settings (CFG09).
-    3. the project's selected component implementation
+    1. ``gateway.implementation`` in settings (CFG09).
+    2. the project's selected component implementation
        (``foundation.features.registry.resolve_active_implementation``),
        which itself falls through to the descriptor-declared default
        (``embedded``) when nothing was ever explicitly selected.
-    4. "automatic" as a final production fallback -- only reachable if the
+    3. "automatic" as a final production fallback -- only reachable if the
        registry itself is unavailable (e.g. descriptors not loaded), so
        resolution never raises merely for lack of project context.
 
     Returns ``(implementation_id, source)`` where source is one of
-    ``env-override`` / ``settings`` / ``component-config`` / ``schema-default``.
+    ``settings`` / ``component-config`` / ``schema-default``.
     """
-    env_mode = os.environ.get("AUDIAGENTIC_GATEWAY_MODE")
-    if not env_mode:
-        from audiagentic.components.agents.gateway.settings import gateway_setting
+    from audiagentic.components.agents.gateway.settings import gateway_setting
 
-        configured = gateway_setting("implementation")
-        if configured:
-            return str(configured), "settings"
-    if env_mode:
-        normalized = env_mode.strip().lower()
-        resolved = _MODE_ALIASES.get(normalized, normalized)
-        if resolved != normalized:
-            logger.warning(
-                "AUDIAGENTIC_GATEWAY_MODE=%r is a compatibility alias for %r; "
-                "prefer selecting the 'embedded' implementation via component config",
-                normalized, resolved,
-            )
-        return resolved, "env-override"
+    configured = gateway_setting("implementation")
+    if configured:
+        return str(configured), "settings"
 
     if project_root is not None:
         from audiagentic.foundation.features.registry import resolve_active_implementation

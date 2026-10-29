@@ -144,14 +144,7 @@ def _handshake(record: Any, endpoint: str, token_path: Path) -> ServiceHandshake
 def _configured_port() -> int:
     from audiagentic.components.agents.gateway.settings import gateway_setting
 
-    raw = gateway_setting("port", "AUDIAGENTIC_GATEWAY_PORT", _DEFAULT_PORT)
-    try:
-        port = int(raw)
-    except ValueError as exc:
-        raise _config_error(3, "automatic gateway port is invalid", value=raw) from exc
-    if not 1 <= port <= 65535:
-        raise _config_error(3, "automatic gateway port is outside the valid range", port=port)
-    return port
+    return int(gateway_setting("port", _DEFAULT_PORT))
 
 
 __all__ = ["attach_existing_gateway", "start_or_attach_gateway"]

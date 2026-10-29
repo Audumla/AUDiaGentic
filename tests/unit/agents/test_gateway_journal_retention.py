@@ -7,6 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from tests.helpers.gateway_settings import use_gateway_settings
 from tests.unit.foundation.test_journal_segments import DAY, append
 
 from audiagentic.components.agents.agents_paths import gateway_request_dir
@@ -37,7 +38,6 @@ def request(root: Path, *, state="completed", **extra):
 
 
 def test_default_five_day_cleanup_only_removes_trace_segments(tmp_path, monkeypatch):
-    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_RETENTION_POLICY", str(tmp_path / "absent.json"))
     directory, path = request(tmp_path)
     result = journal_retention.maintain_project_journals(tmp_path, now=DAY + timedelta(days=6))
     assert result["segments-deleted"] == 2
@@ -106,9 +106,7 @@ def test_observation_ids_do_not_restart_after_all_raw_trace_expires(tmp_path):
 
 @pytest.mark.parametrize("value", [0, -1, True, "five", 3651])
 def test_invalid_policy_disables_expiry(tmp_path, monkeypatch, value):
-    policy = tmp_path / "policy.json"
-    policy.write_text(json.dumps({"journal-retention-days": value}), encoding="utf-8")
-    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_RETENTION_POLICY", str(policy))
+    use_gateway_settings(monkeypatch, tmp_path, retention={"journal_retention_days": value})
     assert load_retention_policy().policy_id == "invalid"
     _, path = request(tmp_path)
     assert (
@@ -120,20 +118,15 @@ def test_invalid_policy_disables_expiry(tmp_path, monkeypatch, value):
     assert len(list(iter_ndjson(path))) == 2
 
 
-def test_configured_days_and_env_override_are_independent_of_history_count(tmp_path, monkeypatch):
-    policy = tmp_path / "policy.json"
-    policy.write_text('{"journal-retention-days":10,"request-history-limit":7}')
-    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_RETENTION_POLICY", str(policy))
+def test_configured_days_are_independent_of_history_count(tmp_path, monkeypatch):
+    use_gateway_settings(monkeypatch, tmp_path, retention={"journal_retention_days": 10, "request_history_limit": 7})
     assert load_retention_policy().journal_retention_days == 10
     assert load_retention_policy().request_history_limit == 7
-    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_JOURNAL_RETENTION_DAYS", "2")
-    assert journal_retention.journal_retention_days() == 2
-    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_JOURNAL_RETENTION_DAYS", "bad")
-    assert journal_retention.journal_retention_days() is None
+    assert journal_retention.journal_retention_days() == 10
 
 
 def test_observation_sequence_and_pagination_span_size_rotation_and_gzip(tmp_path, monkeypatch):
-    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_OBSERVATION_MAX_BYTES", "1000")
+    use_gateway_settings(monkeypatch, tmp_path, retention={"observation_max_bytes": 1000})
     for number in range(5):
         observability.append_observation(
             tmp_path,
@@ -166,7 +159,7 @@ def test_observation_sequence_and_pagination_span_size_rotation_and_gzip(tmp_pat
 
 
 def test_recovery_intent_sequence_and_pagination_survive_rotation(tmp_path, monkeypatch):
-    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_RECOVERY_MAX_BYTES", "80")
+    use_gateway_settings(monkeypatch, tmp_path, retention={"recovery_max_bytes": 80})
     for number in range(5):
         replay._append(
             tmp_path, "req_recover", {"event": "action-intent", "action-attempt-id": str(number)}
@@ -192,7 +185,7 @@ def test_recovery_intent_sequence_and_pagination_survive_rotation(tmp_path, monk
 def test_timeline_history_and_latest_transition_span_segments(tmp_path, monkeypatch):
     from audiagentic.components.agents.gateway.store._shared import record_gateway_timeline
 
-    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_TIMELINE_MAX_BYTES", "400")
+    use_gateway_settings(monkeypatch, tmp_path, retention={"timeline_max_bytes": 400})
     monkeypatch.setattr(retention, "schedule_request_retention", lambda *_a, **_kw: True)
     for number in range(5):
         record_gateway_timeline(tmp_path, "req_history", f"step-{number}", state="running")
@@ -288,7 +281,7 @@ def test_session_trace_expiry_requires_terminal_state(tmp_path, state):
 def test_policy_tool_reports_effective_age_without_paths(tmp_path, monkeypatch):
     from audiagentic.components.agents.gateway.management_api import gateway_get_retention_policy
 
-    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_JOURNAL_RETENTION_DAYS", "8")
+    use_gateway_settings(monkeypatch, tmp_path, retention={"journal_retention_days": 8})
     result = gateway_get_retention_policy(tmp_path)
     assert result["journal-retention-days"] == 8
     assert result["journal-rotation"] == "daily-utc-and-size"
@@ -306,15 +299,13 @@ def test_resolved_recovery_control_state_never_expires_with_raw_traces(tmp_path)
 
 
 def test_policy_is_rechecked_after_eligibility_census(tmp_path, monkeypatch):
-    policy = tmp_path / "policy.json"
-    policy.write_text('{"journal-retention-days":5}', encoding="utf-8")
-    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_RETENTION_POLICY", str(policy))
+    use_gateway_settings(monkeypatch, tmp_path, retention={"journal_retention_days": 5})
     _, path = request(tmp_path)
     real_eligible = journal_retention._eligible_record
 
     def change_policy(*args, **kwargs):
         result = real_eligible(*args, **kwargs)
-        policy.write_text('{"journal-retention-days":20}', encoding="utf-8")
+        use_gateway_settings(monkeypatch, tmp_path, retention={"journal_retention_days": 20})
         return result
 
     monkeypatch.setattr(journal_retention, "_eligible_record", change_policy)

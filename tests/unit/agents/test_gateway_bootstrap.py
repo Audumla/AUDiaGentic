@@ -4,6 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from tests.helpers.gateway_settings import use_gateway_settings
 
 from audiagentic.components.agents.gateway.service import bootstrap as bootstrap
 from audiagentic.components.agents.gateway.service.application import PROTOCOL_VERSION
@@ -41,7 +42,7 @@ def test_automatic_gateway_declares_one_foundation_managed_service(monkeypatch, 
         def adopt_managed_lease(self, lease_id, owner_epoch, *, lifetime_scope):
             captured["adopted"] = (lease_id, owner_epoch, lifetime_scope)
 
-    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_PORT", "9123")
+    use_gateway_settings(monkeypatch, tmp_path, port=9123)
     monkeypatch.setenv("AUDIAGENTIC_REPO_ROOT", str(tmp_path / "caller-project"))
     monkeypatch.setenv("AUDIAGENTIC_COMPONENT_PROFILE", "caller-profile")
     monkeypatch.setattr(bootstrap, "ManagedServiceStore", FakeStore)
@@ -102,7 +103,7 @@ def test_automatic_gateway_attach_existing_never_calls_start(monkeypatch, tmp_pa
         def adopt_managed_lease(self, lease_id, owner_epoch, *, lifetime_scope):
             captured["adopted"] = (lease_id, owner_epoch, lifetime_scope)
 
-    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_PORT", "9123")
+    use_gateway_settings(monkeypatch, tmp_path, port=9123)
     monkeypatch.setattr(bootstrap, "ManagedServiceStore", FakeStore)
     monkeypatch.setattr(bootstrap, "ManagedServiceLifecycle", FakeLifecycle)
     monkeypatch.setattr(bootstrap, "StandaloneGatewayClient", FakeClient)
@@ -115,8 +116,8 @@ def test_automatic_gateway_attach_existing_never_calls_start(monkeypatch, tmp_pa
 
 
 @pytest.mark.parametrize("value", ["zero", "0", "65536"])
-def test_automatic_gateway_rejects_invalid_port(monkeypatch, value):
-    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_PORT", value)
+def test_automatic_gateway_rejects_invalid_port(monkeypatch, tmp_path, value):
+    use_gateway_settings(monkeypatch, tmp_path, port=int(value) if value.isdigit() else value)
 
-    with pytest.raises(AudiaGenticError, match="CFG-AGSV-003"):
+    with pytest.raises(AudiaGenticError, match="CFG-SET-004"):  # the settings schema is the one validator
         bootstrap.start_or_attach_gateway()

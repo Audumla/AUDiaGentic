@@ -180,6 +180,7 @@ def resolve_settings(
     cwd: Path | None = None,
     environ: Mapping[str, str] | None = None,
     collect: bool = False,
+    machine_only: bool = False,
 ) -> ResolvedSettings:
     """Load vendor, user, project and explicit scopes, then CLI ``overrides``.
 
@@ -187,11 +188,13 @@ def resolve_settings(
     point at the file that introduced them; the merged result is validated
     again as the effective configuration. By default the first invalid file
     raises ``CFG-SET-004``; with ``collect=True`` schema issues are returned
-    for ``config validate``. Unreadable or syntactically invalid YAML always
+    for ``config validate``. ``machine_only`` skips the project scope, for
+    settings that belong to the machine and are shared by every project
+    (the gateway). Unreadable or syntactically invalid YAML always
     raises.
     """
     validator = Draft202012Validator(settings_schema())
-    project_root = discover_project_root(project, cwd=cwd, environ=environ)
+    project_root = None if machine_only else discover_project_root(project, cwd=cwd, environ=environ)
     sources = scope_sources(project_root=project_root, config_file=config_file, environ=environ)
     values: dict[str, Any] = {}
     origins: dict[str, Origin] = {}
@@ -221,7 +224,7 @@ def resolve_settings(
 
 
 def resolve_settings_cached(
-    project: Path | str | None = None, *, cwd: Path | None = None,
+    project: Path | str | None = None, *, cwd: Path | None = None, machine_only: bool = False,
 ) -> ResolvedSettings:
     """``resolve_settings`` for hot readers that must not re-read files on every call.
 
@@ -229,9 +232,9 @@ def resolve_settings_cached(
     to any scope applies on the next call without a restart and nothing else is
     ever served stale. Invalid settings raise as in ``resolve_settings`` and are
     not cached. Callers that need CLI overrides, ``collect=True`` or an explicit
-    ``environ`` use ``resolve_settings``.
+    ``environ`` use ``resolve_settings``. ``machine_only`` skips the project scope.
     """
-    root = discover_project_root(project, cwd=cwd)
+    root = None if machine_only else discover_project_root(project, cwd=cwd)
     stamp = []
     for source in scope_sources(project_root=root):
         try:
@@ -239,12 +242,12 @@ def resolve_settings_cached(
         except OSError:
             stat = None
         stamp.append((str(source.path), stat.st_mtime_ns, stat.st_size) if stat else (str(source.path), None, None))
-    return _resolve_for_stamp(root, tuple(stamp))
+    return _resolve_for_stamp(root, tuple(stamp), machine_only)
 
 
 @lru_cache(maxsize=16)
-def _resolve_for_stamp(root: Path | None, _stamp: tuple[Any, ...]) -> ResolvedSettings:
-    return resolve_settings(project=root)
+def _resolve_for_stamp(root: Path | None, _stamp: tuple[Any, ...], machine_only: bool) -> ResolvedSettings:
+    return resolve_settings(project=root, machine_only=machine_only)
 
 
 def _origin_of(scope: str, document: LoadedDocument):

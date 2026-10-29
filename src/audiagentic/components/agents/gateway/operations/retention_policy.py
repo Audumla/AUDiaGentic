@@ -5,9 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-import os
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
 DEFAULT_REQUEST_HISTORY_LIMIT = 100
@@ -18,7 +16,6 @@ DEFAULT_CONSOLE_TRACE_MAX_BYTES = 4 * 1024 * 1024
 DEFAULT_JOURNAL_RETENTION_DAYS = 5
 _MAX_CONFIGURED_BYTES = 256 * 1024 * 1024
 _MAX_REQUEST_HISTORY_LIMIT = 10_000
-_POLICY_ENV = "AUDIAGENTIC_GATEWAY_RETENTION_POLICY"
 
 
 @dataclass(frozen=True)
@@ -52,12 +49,6 @@ class RetentionPolicy:
             "journal-retention-days": self.journal_retention_days,
             "available": self.available,
         }
-
-
-def policy_path() -> Path:
-    """The legacy JSON policy file (read when ``gateway.retention`` is not in settings)."""
-    override = os.environ.get(_POLICY_ENV)
-    return Path(override).expanduser() if override else Path.home() / ".audiagentic" / "gateway-retention.json"
 
 
 def _positive_int(raw: Any, default: int, maximum: int) -> int:
@@ -102,11 +93,11 @@ def _policy_values(raw: dict[str, Any]) -> tuple[bool, float, int, int, int, int
 
 
 def load_retention_policy() -> RetentionPolicy:
-    """``gateway.retention`` from settings, else the legacy JSON file (see ``policy_mapping``)."""
-    from audiagentic.components.agents.gateway.settings import policy_mapping
+    """The ``gateway.retention`` settings as a policy; unavailable when unset, invalid when it fails validation."""
+    from audiagentic.components.agents.gateway.settings import gateway_policy
 
     try:
-        raw = policy_mapping("retention", _POLICY_ENV, policy_path())
+        raw = gateway_policy("retention")
     except (OSError, ValueError, TypeError):
         raw = []  # not a mapping: reported as an invalid policy below
     if raw is None:
@@ -191,5 +182,4 @@ __all__ = [
     "RetentionPolicy",
     "load_retention_policy",
     "policy_matches",
-    "policy_path",
 ]

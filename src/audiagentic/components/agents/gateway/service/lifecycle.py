@@ -30,7 +30,6 @@ logger = logging.getLogger(__name__)
 lifecycle_validation_error = make_error_factory("VAL", "AGLC", "gateway-lifecycle")
 lifecycle_conflict_error = make_error_factory("CON", "AGLC", "gateway-lifecycle")
 
-IDLE_GRACE_ENV = "AUDIAGENTIC_GATEWAY_IDLE_GRACE_SECONDS"
 _CHECK_INTERVAL_SECONDS = 2.0
 
 
@@ -38,15 +37,7 @@ def resolve_idle_grace_seconds() -> float:
     """Component idle policy; 0 disables self-shutdown (keep-warm)."""
     from audiagentic.components.agents.gateway.settings import gateway_setting
 
-    raw = gateway_setting("idle_grace_seconds", IDLE_GRACE_ENV)
-    if raw is None:
-        return 0.0
-    try:
-        value = float(raw)
-    except ValueError:
-        logger.warning("invalid %s=%r; keep-warm", IDLE_GRACE_ENV, raw)
-        return 0.0
-    return max(0.0, value)
+    return float(gateway_setting("idle_grace_seconds", 0))
 
 
 def gateway_quiescence_facts(service_root: Path | None = None) -> dict[str, Any]:
@@ -364,7 +355,6 @@ def recover_unprovable_owner(
 
 __all__ = [
     "GatewayLifecycleController",
-    "IDLE_GRACE_ENV",
     "gateway_quiescence_facts",
     "recover_unprovable_owner",
     "resolve_idle_grace_seconds",

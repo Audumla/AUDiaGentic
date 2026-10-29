@@ -37,6 +37,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from tests.helpers.gateway_settings import use_gateway_settings
 from tests.integration.agents.gateway_docker_harness import free_port, write_execution_profile
 from tests.integration.providers.harness import assert_install_result_ok
 
@@ -105,7 +106,7 @@ def test_gateway_dispatches_real_pi_provider_via_full_isolation_worker(
     )
 
     monkeypatch.setenv("AUDIAGENTIC_REPO_ROOT", str(tmp_path))
-    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_MODE", "in-process")
+    use_gateway_settings(monkeypatch, tmp_path, implementation="embedded")
 
     rig_port = free_port()
     _write_harness_config(tmp_path, rig_port)

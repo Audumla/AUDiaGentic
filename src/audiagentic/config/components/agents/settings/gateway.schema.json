@@ -1,33 +1,29 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "settings: gateway",
-  "description": "Agent gateway settings, owned by the agents component. Each key's legacy AUDIAGENTIC_GATEWAY_* variable still overrides it for one transition release.",
+  "description": "Agent gateway settings, owned by the agents component.",
   "type": "object",
   "additionalProperties": false,
   "properties": {
     "implementation": {
       "enum": ["embedded", "automatic", "standalone"],
-      "description": "Gateway implementation; overrides the project's selected component implementation (AUDIAGENTIC_GATEWAY_MODE)."
+      "description": "Gateway implementation; overrides the project's selected component implementation."
     },
     "port": {
       "type": "integer", "minimum": 1, "maximum": 65535,
-      "description": "Loopback port of the automatically started gateway (AUDIAGENTIC_GATEWAY_PORT)."
+      "description": "Loopback port of the automatically started gateway."
     },
     "idle_grace_seconds": {
       "type": "number", "minimum": 0,
-      "description": "Idle time before an automatic gateway shuts itself down; 0 keeps it warm (AUDIAGENTIC_GATEWAY_IDLE_GRACE_SECONDS)."
+      "description": "Idle time before an automatic gateway shuts itself down; 0 keeps it warm."
     },
     "queue_backend": {
-      "enum": ["in-memory"],
-      "description": "Work-queue backend (AUDIAGENTIC_GATEWAY_QUEUE_BACKEND)."
+      "type": "string", "minLength": 1,
+      "description": "Work-queue backend; only in-memory is available, any other value fails closed when the queue is created."
     },
     "restart_wait_seconds": {
       "type": "number", "exclusiveMinimum": 0,
-      "description": "How long a restart waits for the old gateway to stop (AUDIAGENTIC_GATEWAY_RESTART_WAIT_SECONDS)."
-    },
-    "embedded_with_live_shared_owner": {
-      "enum": ["refuse", "warn"],
-      "description": "Whether an embedded gateway may run beside a live shared gateway (AUDIAGENTIC_GATEWAY_EMBEDDED_ALLOW)."
+      "description": "How long a restart waits for the old gateway to stop."
     },
     "console_trace": {
       "type": "object",
@@ -35,15 +31,15 @@
       "properties": {
         "mode": {
           "enum": ["off", "summary", "full"],
-          "description": "Operator trace detail (AUDIAGENTIC_GATEWAY_CONSOLE_TRACE)."
+          "description": "Operator trace detail."
         },
         "file": {
           "type": "string", "minLength": 1,
-          "description": "Trace file; defaults to the gateway log directory (AUDIAGENTIC_GATEWAY_CONSOLE_TRACE_FILE)."
+          "description": "Trace file; defaults to the gateway log directory."
         },
         "max_chars": {
           "type": "integer", "minimum": 256, "maximum": 1048576,
-          "description": "Longest body written per trace line (AUDIAGENTIC_GATEWAY_CONSOLE_TRACE_MAX_CHARS)."
+          "description": "Longest body written per trace line."
         }
       }
     },
@@ -53,13 +49,13 @@
       "properties": {
         "recent_seconds": {
           "type": "integer", "minimum": 1, "maximum": 2592000,
-          "description": "Window of recent requests the dashboard shows (AUDIAGENTIC_GATEWAY_DASHBOARD_RECENT_SECONDS)."
+          "description": "Window of recent requests the dashboard shows."
         }
       }
     },
     "retention": {
       "type": "object",
-      "description": "Machine retention policy; replaces ~/.audiagentic/gateway-retention.json (AUDIAGENTIC_GATEWAY_RETENTION_POLICY).",
+      "description": "Machine retention policy.",
       "additionalProperties": false,
       "properties": {
         "policy_id": {"type": "string", "minLength": 1},
@@ -76,7 +72,7 @@
     },
     "watchdog": {
       "type": "object",
-      "description": "Execution watchdog policy; replaces ~/.audiagentic/gateway-watchdog.json (AUDIAGENTIC_GATEWAY_WATCHDOG_POLICY).",
+      "description": "Execution watchdog policy.",
       "additionalProperties": false,
       "properties": {
         "policy_id": {"type": "string", "minLength": 1},

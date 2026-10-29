@@ -1,30 +1,22 @@
 """Gateway settings: the ``gateway`` section of the resolved settings (CFG09).
 
 The section's schema is ``config/components/agents/settings/gateway.schema.json``.
-Each value comes from its legacy ``AUDIAGENTIC_GATEWAY_*`` variable when that is
-set (kept for the one transition release in docs/design/configuration-model.md,
-Migration), else from settings, else the caller's default. Settings come from
-``resolve_settings_cached``, so an edited settings file applies on the next read.
+The gateway is shared by every project and session on the machine, so this
+section is read from the machine scopes only (vendor, user, explicit file); a
+project's own settings never change it. Values come from
+``resolve_settings_cached``, so an edited file applies on the next read. There is
+no environment or legacy-file fallback.
 """
 from __future__ import annotations
 
-import json
 import logging
-import os
-from pathlib import Path
 from typing import Any
-
-from audiagentic.foundation.io import read_text_with_retry
 
 logger = logging.getLogger(__name__)
 
 
-def gateway_setting(key: str, env: str | None = None, default: Any = None) -> Any:
-    """``env`` if set and non-empty (a string), else ``gateway.<key>``, else ``default``."""
-    if env:
-        raw = os.environ.get(env, "").strip()
-        if raw:
-            return raw
+def gateway_setting(key: str, default: Any = None) -> Any:
+    """``gateway.<key>`` (dotted for nested keys), else ``default``."""
     value: Any = _gateway_section()
     for part in key.split("."):
         if not isinstance(value, dict) or part not in value:
@@ -33,49 +25,29 @@ def gateway_setting(key: str, env: str | None = None, default: Any = None) -> An
     return value
 
 
-def policy_mapping(section: str, env: str, legacy_file: Path) -> dict[str, Any] | None:
-    """One machine policy as the legacy kebab-case mapping, or None when unconfigured.
+def gateway_policy(section: str) -> dict[str, Any] | None:
+    """``gateway.<section>`` as the kebab-case mapping the policy loaders read, or None if unset.
 
-    The legacy variable names an explicit JSON file and wins during the
-    transition. Otherwise ``gateway.<section>`` is used, and the legacy default
-    file only when the section is absent; both present is ambiguous. Ambiguity
-    and invalid settings raise ``ValueError`` so callers treat the policy as
-    invalid (purges and deletions off) rather than pick one.
+    Invalid settings raise ``ValueError`` so callers treat the policy as invalid
+    (purges and deletions off) and an operator sees why in the log.
     """
     from audiagentic.foundation.contracts.errors import AudiaGenticError
 
-    override = os.environ.get(env)
-    if override:
-        return _read_json_policy(Path(override).expanduser())
     try:
         configured = _gateway_section().get(section)
     except AudiaGenticError as exc:
         logger.warning("gateway.%s policy is invalid: settings did not validate: %s", section, exc)
         raise ValueError(str(exc)) from exc
-    if configured is not None:
-        if legacy_file.is_file():
-            logger.warning(
-                "gateway.%s policy is invalid: it is in settings and in legacy %s; remove one", section, legacy_file,
-            )
-            raise ValueError(f"gateway.{section} in settings and legacy {legacy_file} both exist; remove one")
-        return {key.replace("_", "-"): value for key, value in configured.items()}
-    return _read_json_policy(legacy_file)
+    if configured is None:
+        return None
+    return {key.replace("_", "-"): value for key, value in configured.items()}
 
 
 def _gateway_section() -> dict[str, Any]:
     from audiagentic.foundation.config.settings import resolve_settings_cached
 
-    section = resolve_settings_cached().get("gateway")
+    section = resolve_settings_cached(machine_only=True).get("gateway")
     return section if isinstance(section, dict) else {}
 
 
-def _read_json_policy(path: Path) -> dict[str, Any] | None:
-    if not path.is_file():
-        return None
-    raw = json.loads(read_text_with_retry(path))
-    if not isinstance(raw, dict):
-        raise ValueError(f"{path} is not a JSON object")
-    return raw
-
-
-__all__ = ["gateway_setting", "policy_mapping"]
+__all__ = ["gateway_policy", "gateway_setting"]
