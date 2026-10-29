@@ -103,19 +103,47 @@ def test_extract_version(output: str, expected: str | None) -> None:
     assert evidence.extract_version(output) == expected
 
 
-def test_inventory_reports_identity_without_guessing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def _codex_install(root: Path) -> tuple[Path, Path]:
+    """An npm layout: bin/codex.js launcher plus the linux-x64 platform package."""
+    launcher = root / "@openai/codex/bin/codex.js"
+    native = root / "@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/bin/codex"
+    for path, content in ((launcher, b"// launcher\n"), (native, b"\x7fELF native\n")):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(content)
+    return launcher, native
+
+
+@pytest.fixture
+def linux_x64(monkeypatch: pytest.MonkeyPatch) -> None:
+    from types import SimpleNamespace
+
+    from audiagentic.components.providers.adapters.codex import native
+
+    monkeypatch.setattr(native, "sys", SimpleNamespace(platform="linux"))
+    monkeypatch.setattr(native, "platform", SimpleNamespace(machine=lambda: "x86_64"))
+
+
+def test_inventory_reports_identity_without_guessing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+                                                     linux_x64) -> None:
     from audiagentic.components.providers.services.lifecycle import lifecycle
 
-    binary = tmp_path / "codex"
-    binary.write_bytes(b"#!/bin/sh\necho codex-cli 0.165.0\n")
+    launcher, native = _codex_install(tmp_path)
     monkeypatch.setattr(lifecycle, "probe_provider_cli",
-                        lambda descriptor: {"available": True, "executable": str(binary),
+                        lambda descriptor: {"available": True, "executable": str(launcher),
                                             "command": ["codex", "--version"], "stdout": "codex-cli 0.165.0\n"})
     facts = evidence.inventory("codex")
-    assert facts["executable"] == str(binary.resolve())
+    # The native implementation is the evidence; the Node launcher is recorded beside it.
+    assert facts["executable"] == str(native.resolve())
+    assert facts["executable-digest"] == evidence.file_digest(native)
+    assert facts["launcher"] == str(launcher.resolve())
+    assert facts["launcher-digest"] == evidence.file_digest(launcher)
     assert facts["executable-version"] == "0.165.0"
-    assert facts["executable-digest"] == evidence.file_digest(binary)
     assert "codex-acp" in facts["surfaces"]
+
+    native.unlink()  # a launcher without its native binary is not evidence for it
+    orphan = evidence.inventory("codex")
+    assert orphan["executable"] is None and orphan["executable-digest"] is None
+    assert orphan["launcher-digest"] == evidence.file_digest(launcher)
 
     monkeypatch.setattr(lifecycle, "probe_provider_cli", lambda descriptor: {"available": False})
     missing = evidence.inventory("codex")
@@ -123,3 +151,39 @@ def test_inventory_reports_identity_without_guessing(tmp_path: Path, monkeypatch
     with pytest.raises(AudiaGenticError) as raised:
         evidence.inventory("no-such-provider")
     assert raised.value.code == "VAL-QEV-003"
+
+
+def test_inventory_digests_a_native_executable_directly(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from audiagentic.components.providers.services.lifecycle import lifecycle
+
+    binary = tmp_path / "claude"
+    binary.write_bytes(b"\x7fELF claude\n")
+    monkeypatch.setattr(lifecycle, "probe_provider_cli",
+                        lambda descriptor: {"available": True, "executable": str(binary), "stdout": "2.1.312"})
+    facts = evidence.inventory("claude")
+    assert facts["executable-digest"] == evidence.file_digest(binary)
+    assert facts["launcher"] is None and facts["launcher-digest"] is None
+
+
+def test_codex_native_lookup_follows_node_resolution(tmp_path: Path) -> None:
+    from audiagentic.components.providers.adapters.codex.native import locate_native_codex
+
+    launcher, nested = _codex_install(tmp_path)
+    assert locate_native_codex(launcher, os_name="linux", machine="x86_64") == nested.resolve()
+    # Hoisted platform package (an ancestor node_modules), then the launcher's own vendor.
+    nested.unlink()
+    hoisted = tmp_path / "node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/bin/codex"
+    hoisted.parent.mkdir(parents=True)
+    hoisted.write_bytes(b"native")
+    nested_launcher = tmp_path / "node_modules" / launcher.relative_to(tmp_path)
+    nested_launcher.parent.mkdir(parents=True)
+    nested_launcher.write_bytes(b"// launcher")
+    assert locate_native_codex(nested_launcher, os_name="linux", machine="amd64") == hoisted.resolve()
+    bundled = tmp_path / "@openai/codex/vendor/aarch64-apple-darwin/bin/codex"
+    bundled.parent.mkdir(parents=True)
+    bundled.write_bytes(b"native")
+    assert locate_native_codex(launcher, os_name="darwin", machine="arm64") == bundled.resolve()
+    # Unknown platform, missing binary or a path that is not the launcher: no guess.
+    assert locate_native_codex(launcher, os_name="linux", machine="riscv64") is None
+    assert locate_native_codex(launcher, os_name="win32", machine="AMD64") is None
+    assert locate_native_codex(tmp_path / "codex", os_name="linux", machine="x86_64") is None

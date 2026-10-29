@@ -154,6 +154,12 @@ def inventory(provider_id: str) -> dict[str, Any]:
     Executable path, exact version, content digest and platform triple. No
     process other than the descriptor's own version probe is run, and nothing
     is written. Missing pieces are reported as None, never guessed.
+
+    When the PATH executable is a launcher (the recipe declares
+    ``native_executable``), ``executable``/``executable-digest`` name the
+    native implementation it runs and ``launcher``/``launcher-digest`` the
+    launcher. A launcher whose native binary cannot be found has no
+    executable digest: the launcher is never evidence for the implementation.
     """
     from audiagentic.components.providers.descriptors import all_descriptors
     from audiagentic.components.providers.services.lifecycle.lifecycle import probe_provider_cli
@@ -167,6 +173,7 @@ def inventory(provider_id: str) -> dict[str, Any]:
         "platform": release_platform_name(),
         "surfaces": [surface.surface_id for surface in descriptor.session_surfaces],
         "executable": None, "executable-version": None, "executable-digest": None,
+        "launcher": None, "launcher-digest": None,
     }
     # The same probe startup reconcile uses: the descriptor's cli_probe or its
     # install recipe's own probe.
@@ -176,11 +183,15 @@ def inventory(provider_id: str) -> dict[str, Any]:
     located = probe.get("executable") or (shutil.which(probe["command"][0]) if probe.get("command") else None)
     if located:
         executable = Path(located).resolve()
-        facts["executable"] = str(executable)
-        # For wrapper launchers (for example a node script) this digests the
-        # wrapper, not a native binary it spawns; qualification producers must
-        # bind the actual native implementation where one exists.
-        facts["executable-digest"] = file_digest(executable)
+        recipe = descriptor.cli_install
+        locate_native = recipe.native_executable_fn if recipe else None
+        if locate_native is not None:
+            facts["launcher"], facts["launcher-digest"] = str(executable), file_digest(executable)
+            native = locate_native(executable)
+            executable = native.resolve() if native is not None else None
+        if executable is not None:
+            facts["executable"] = str(executable)
+            facts["executable-digest"] = file_digest(executable)
     facts["executable-version"] = extract_version(probe.get("stdout", "") or "")
     return facts
 
