@@ -128,7 +128,6 @@ def reconcile_provider(
     """
     from .config.provider_config import (
         is_provider_enabled,
-        set_provider_enabled,
     )
     from .lifecycle.lifecycle import (
         _descriptor as _get_descriptor,

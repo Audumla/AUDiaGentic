@@ -10,7 +10,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-
 DEFAULT_REQUEST_HISTORY_LIMIT = 100
 DEFAULT_TIMELINE_MAX_BYTES = 1 * 1024 * 1024
 DEFAULT_OBSERVATION_MAX_BYTES = 2 * 1024 * 1024

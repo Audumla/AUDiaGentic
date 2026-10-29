@@ -74,12 +74,13 @@ def test_defaults_without_settings(user_settings) -> None:
     assert not load_watchdog_policy().available
 
 
-def test_invalid_gateway_settings_fail_with_file_and_key(user_settings) -> None:
+def test_invalid_gateway_settings_fail_with_file_and_key(user_settings, caplog: pytest.LogCaptureFixture) -> None:
     path = user_settings("  port: 70000\n")
     with pytest.raises(AudiaGenticError) as raised:
         resolve_settings()
     assert str(path) in str(raised.value.details) or str(path) in str(raised.value)
     assert not load_retention_policy().available  # policies fail safe: purges off
+    assert "gateway.retention policy is invalid" in caplog.text
 
 
 def test_policies_from_settings_match_the_legacy_file_digest(
@@ -103,12 +104,15 @@ def test_policies_from_settings_match_the_legacy_file_digest(
     assert watchdog.available and watchdog.activity_lease_seconds == 120.0 and watchdog.policy_id == "tuned"
 
 
-def test_settings_and_legacy_default_policy_file_are_ambiguous(user_settings, tmp_path: Path) -> None:
+def test_settings_and_legacy_default_policy_file_are_ambiguous(
+    user_settings, tmp_path: Path, caplog: pytest.LogCaptureFixture,
+) -> None:
     user_settings("  watchdog: {activity_lease_seconds: 120}\n")
     legacy = tmp_path / "home" / ".audiagentic" / "gateway-watchdog.json"
     legacy.parent.mkdir(parents=True)
     legacy.write_text("{}", encoding="utf-8")
     policy = load_watchdog_policy()
     assert not policy.available and policy.policy_id == "invalid"
+    assert "gateway.watchdog policy is invalid" in caplog.text  # an operator can see why
     legacy.unlink()
     assert load_watchdog_policy().available
