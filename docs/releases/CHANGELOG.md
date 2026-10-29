@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.34.0](https://github.com/Audumla/AUDiaGentic/compare/v0.33.1...v0.34.0) (2026-10-29)
+
+
+### Documentation
+
+* **planning:** SH63 restart port race and runtime-move restart procedure ([#214](https://github.com/Audumla/AUDiaGentic/issues/214)) ([94be4ed](https://github.com/Audumla/AUDiaGentic/commit/94be4ed32395638425e57eae5abab03f2084a438))
+
 ## [0.33.1](https://github.com/Audumla/AUDiaGentic/compare/v0.33.0...v0.33.1) (2026-10-29)
 
 
