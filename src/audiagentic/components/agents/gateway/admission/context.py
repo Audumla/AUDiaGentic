@@ -35,4 +35,25 @@ def baseline_agent_template_context(
     }
 
 
-__all__ = ["ComponentContextReader", "baseline_agent_template_context", "empty_component_context"]
+def build_agent_template_context(
+    project_root: Path,
+    *,
+    component_reader: ComponentContextReader,
+    workspace_name: str | None,
+    agent_id: str | None,
+) -> dict[str, Any]:
+    """Read component then baseline facts, preserving canonical name precedence."""
+    component = component_reader(project_root)
+    if agent_id is None:
+        return component
+    baseline = baseline_agent_template_context(project_root, workspace_name=workspace_name)
+    merged = {**baseline, **component}
+    if isinstance(baseline.get("project"), dict) and isinstance(merged.get("project"), dict):
+        merged["project"] = {**merged["project"], "name": baseline["project"]["name"]}
+    return merged
+
+
+__all__ = [
+    "ComponentContextReader", "baseline_agent_template_context",
+    "build_agent_template_context", "empty_component_context",
+]
