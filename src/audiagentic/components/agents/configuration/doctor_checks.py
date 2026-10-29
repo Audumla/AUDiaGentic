@@ -39,7 +39,7 @@ def check_agent_providers(context: Any) -> list[CheckResult]:
 
 
 def check_gateway_mode(context: Any) -> list[CheckResult]:
-    """A provider that anchors its browser window on the gateway dashboard needs a gateway that serves one."""
+    """A provider that anchors its browser window on the gateway dashboard works reliably only with a gateway that serves one."""
     from audiagentic.components.agents.gateway.client import _resolve_implementation_id
     from audiagentic.components.providers.providers_api import list_session_surface_ids
 
@@ -53,9 +53,10 @@ def check_gateway_mode(context: Any) -> list[CheckResult]:
         return [CheckResult("agents.gateway", OK, f"gateway implementation {implementation!r} ({source})")]
     return [CheckResult(
         "agents.gateway", WARN,
-        f"{', '.join(needing)} opens its browser window on the gateway dashboard, which the embedded gateway does not serve",
-        "Run the gateway as a service: set gateway.implementation to automatic in your user settings "
-        "(audiagentic config paths shows where)",
+        f"{', '.join(needing)} anchors its browser window on the gateway dashboard, which the embedded gateway "
+        "does not serve; this works only while a dashboard tab or an earlier anchor already exists in the browser",
+        "If a gpt-auto request fails with ERR_CONNECTION_REFUSED or project-readiness-failed, run the gateway as a "
+        "service: set gateway.implementation to automatic in your user settings (audiagentic config paths shows where)",
     )]
 
 
