@@ -1,0 +1,76 @@
+---
+id: CFG06
+order: 6
+plan: config-setup
+state: in_progress
+created-at: '2026-10-28T21:05:44.274107+00:00'
+breadth: ''
+skill: intermediate
+created-by: claude
+work: M
+priority: P1
+---
+
+# Separate provider enabled, available and qualified
+
+## Description
+
+Provider enablement becomes user configuration (default auto), availability is a runtime check, qualification is evidence. Remove persisted probe results under .audiagentic/config/runtime/features/ so a provider without a CLI (gpt-auto) is never disabled by a probe. Coordinates with PC10 and DI01.
+
+
+
+Also: provider instances under providers.<id>.instances, selected by agents with `instance`; retire config/providers/gpt_auto_t1.yaml and gpt_auto_t2.yaml (aliases of one CDP implementation targeting different ChatGPT projects). Acceptance adds: two ChatGPT projects use one provider descriptor.
+
+## Steps
+
+1. Config key providers.<id>.enabled: auto|true|false
+2. Availability checks owned by each provider
+3. Remove feature-state persistence and its legacy migration
+4. Align PC10/DI01
+
+## Detailed Solution & Technical Design
+
+
+
+## Code Samples & Guidance
+
+
+
+## Files
+
+
+
+## Validation
+
+
+
+## Effort & Risk
+
+
+
+## Standards
+
+
+
+## Acceptance Criteria
+
+On a clean install, gpt-auto is usable without any enablement step, and disabling a provider in config is the only way it becomes disabled.
+
+## Notes
+
+Context: brief /work/development/tmp/AUDiaGentic/config-review/BRIEF.md; proposals /work/development/tmp/AUDiaGentic/config-review/claude-proposal.md and /work/development/tmp/AUDiaGentic/config-review/round1-gpt.md (GPT round 2 pending in /work/development/tmp/AUDiaGentic/config-review/round2-gpt.md). Evidence from the 2026-10-28 agent-dev container setup (PRs #77, #78, #80, #81, #82).
+
+
+
+Phase 2: deferred until needed (see 'Phasing' in docs/design/configuration-model.md). PR #84 already stops probes disabling providers without a CLI probe.
+
+2026-10-29: slice 1 in PR #126: providers settings section with providers.<id>.enabled (auto|true|false); is_provider_usable for runtime gates falls back to the provider availability check under auto, so a clean install needs no enablement step. Remaining: stop probe-driven disables in reconcile and retire persisted feature-state files; provider instances (gpt_auto_t1/t2).
+
+## Change Log
+
+- 2026-10-28T21:05:44.274107+00:00 (created-by): Created by claude
+- 2026-10-28T21:05:46.585356+00:00 (updated-by): Updated: section:description, section:steps, section:acceptance_criteria, section:notes
+- 2026-10-28T21:21:34.290936+00:00 (updated-by): Updated: section:description
+- 2026-10-28T22:07:00.801522+00:00 (updated-by): Updated: section:notes
+- 2026-10-29T03:06:35.428651+00:00 (updated-by): Updated: section:notes
+- 2026-10-29T03:06:37.786536+00:00 (state-transition): State: pending → in_progress
