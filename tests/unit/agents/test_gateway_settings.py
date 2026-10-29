@@ -101,3 +101,89 @@ def test_schema_bounds_match_the_policy_code_limits() -> None:
     for key in ("request_history_limit", "max_batch_size"):
         assert schema[key]["maximum"] == rp._MAX_REQUEST_HISTORY_LIMIT, key
     assert schema["journal_retention_days"]["maximum"] == 3650
+
+
+def _write_user_settings(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, text: str) -> Path:
+    path = tmp_path / "xdg-user" / "audiagentic" / "settings.yaml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg-user"))
+    monkeypatch.delenv("AUDIAGENTIC_CONFIG", raising=False)
+    return path
+
+
+def test_a_running_gateway_keeps_its_last_valid_runtime_settings_when_the_file_breaks(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture,
+) -> None:
+    import time
+
+    path = _write_user_settings(
+        monkeypatch, tmp_path,
+        "schema_version: 1\ngateway:\n  idle_grace_seconds: 90\n  console_trace: {mode: full, max_chars: 512}\n",
+    )
+    assert (resolve_idle_grace_seconds(), _mode(), _max_body_chars()) == (90.0, "full", 512)
+
+    time.sleep(0.01)
+    path.write_text("schema_version: 1\ngateway:\n  idle_grace_seconds: -5\n  console_trace: {mode: bogus}\n", encoding="utf-8")
+    for _ in range(3):  # many trace lines, one log line
+        assert (resolve_idle_grace_seconds(), _mode(), _max_body_chars()) == (90.0, "full", 512)
+    assert len([r for r in caplog.records if "gateway settings are invalid" in r.getMessage()]) == 1
+
+    path.write_text("schema_version: 1\ngateway:\n  idle_grace_seconds: 30\n", encoding="utf-8")
+    assert resolve_idle_grace_seconds() == 30.0  # recovers on the next read, no restart
+
+
+def test_decisions_made_once_still_fail_loudly_on_an_invalid_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _write_user_settings(monkeypatch, tmp_path, "schema_version: 1\ngateway:\n  port: 70000\n")
+    with pytest.raises(AudiaGenticError):
+        _configured_port()
+    with pytest.raises(AudiaGenticError):
+        client._resolve_implementation_id(None)
+
+
+@pytest.mark.parametrize("settings_text", [
+    "schema_version: 1\ngateway: [unclosed\n",                              # malformed YAML
+    "schema_version: 1\ngateway:\n  retention: {purge_enabled: \"yes\"}\n",  # wrong type
+    "schema_version: 1\ngateway:\n  retention: {purge_enabled: true, minimum_archive_age_seconds: -1}\n",  # out of range
+    "schema_version: 1\ngateway:\n  retention: {purge_enabled: true, surprise: 1}\n",  # unknown key
+    "schema_version: 1\ngateway:\n  watchdog: {activity_lease_seconds: 0}\n",
+])
+def test_every_invalid_policy_shape_fails_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, settings_text: str,
+) -> None:
+    _write_user_settings(monkeypatch, tmp_path, settings_text)
+    retention, watchdog = load_retention_policy(), load_watchdog_policy()
+    assert retention.available is False and retention.enabled is False  # purge stays off
+    assert watchdog.available is False
+
+
+@pytest.mark.parametrize("retention_yaml", [
+    "",                                         # no retention section
+    "retention: {policy_id: only-a-name}",      # partial policy
+    "retention: {journal_retention_days: 7}",   # partial policy without purge
+])
+def test_absent_or_partial_retention_never_enables_purge(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, retention_yaml: str,
+) -> None:
+    _write_user_settings(monkeypatch, tmp_path, f"schema_version: 1\ngateway:\n  {retention_yaml or '{}'}\n")
+    assert load_retention_policy().enabled is False
+
+
+@pytest.mark.parametrize("line", [
+    "port: true", "port: 0", "port: 65536", "idle_grace_seconds: \"5\"", "idle_grace_seconds: -1",
+    "restart_wait_seconds: 0", "console_trace: {max_chars: 255}", "console_trace: {mode: loud}",
+    "implementation: shared", "dashboard: {recent_seconds: 0}",
+])
+def test_schema_rejects_what_the_deleted_defensive_parsing_used_to_catch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, line: str,
+) -> None:
+    _write_user_settings(monkeypatch, tmp_path, f"schema_version: 1\ngateway:\n  {line}\n")
+    with pytest.raises(AudiaGenticError):
+        resolve_settings(machine_only=True)
+
+
+def test_null_removes_a_key_so_the_default_applies(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _write_user_settings(monkeypatch, tmp_path, "schema_version: 1\ngateway:\n  port: null\n")
+    from audiagentic.components.agents.gateway.service import bootstrap
+
+    assert _configured_port() == bootstrap._DEFAULT_PORT

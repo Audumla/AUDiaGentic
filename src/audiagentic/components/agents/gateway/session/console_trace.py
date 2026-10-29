@@ -37,7 +37,7 @@ def _default_stream() -> TextIO:
     safe fallback if the log cannot be opened.
     """
 
-    configured = str(gateway_setting("console_trace.file", "")).strip()
+    configured = str(gateway_setting("console_trace.file", "", strict=False)).strip()
     path = Path(os.path.expandvars(configured)) if configured else global_log_dir("gateway") / "console-trace.log"
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -47,11 +47,11 @@ def _default_stream() -> TextIO:
 
 
 def _mode() -> str:
-    return str(gateway_setting("console_trace.mode", "summary"))
+    return str(gateway_setting("console_trace.mode", "summary", strict=False))
 
 
 def _max_body_chars() -> int:
-    return int(gateway_setting("console_trace.max_chars", _DEFAULT_MAX_BODY_CHARS))
+    return int(gateway_setting("console_trace.max_chars", _DEFAULT_MAX_BODY_CHARS, strict=False))
 
 
 def _safe_body(value: Any) -> str:
