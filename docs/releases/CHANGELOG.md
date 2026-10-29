@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.33.1](https://github.com/Audumla/AUDiaGentic/compare/v0.33.0...v0.33.1) (2026-10-29)
+
+
+### Documentation
+
+* **planning:** CFG08 end-to-end criterion verified through the user-scope registration ([#211](https://github.com/Audumla/AUDiaGentic/issues/211)) ([be3a2bc](https://github.com/Audumla/AUDiaGentic/commit/be3a2bce3f8e9d6216fdc0ebdf9630568e567a53))
+
 ## [0.33.0](https://github.com/Audumla/AUDiaGentic/compare/v0.32.0...v0.33.0) (2026-10-29)
 
 
