@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0](https://github.com/Audumla/AUDiaGentic/compare/v0.7.2...v0.8.0) (2026-10-29)
+
+
+### Features
+
+* **config:** layered settings resolver and read-only config commands (CFG03) ([#90](https://github.com/Audumla/AUDiaGentic/issues/90)) ([59d3386](https://github.com/Audumla/AUDiaGentic/commit/59d338649086acf62d34127d85cd28327dec9182))
+
 ## [0.7.2](https://github.com/Audumla/AUDiaGentic/compare/v0.7.1...v0.7.2) (2026-10-28)
 
 
