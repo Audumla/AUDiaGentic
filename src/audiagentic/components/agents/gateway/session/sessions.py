@@ -88,6 +88,7 @@ from audiagentic.foundation.transports.agent_session import (
     SessionPrompt,
     SessionTurnResult,
 )
+from audiagentic.foundation.transports.session_binding import SessionOwnership
 from audiagentic.foundation.transports.session_surface import PreparedSessionTransport
 
 logger = logging.getLogger(__name__)
@@ -536,6 +537,21 @@ def _cleanup_preserving(path: Path, preserve: set[Path]) -> None:
         _cleanup_preserving(child, preserve)
 
 
+def _binding_ownership(record: Any) -> SessionOwnership:
+    """Ownership recorded on a session's durable binding (SH49).
+
+    Records without a binding predate bindings and were always gateway-owned.
+    An unrecognised value fails closed as EXTERNAL: never terminate.
+    """
+    binding = record.get("binding") if isinstance(record, dict) else None
+    if not isinstance(binding, dict):
+        return SessionOwnership.OWNED
+    try:
+        return SessionOwnership(binding.get("ownership", SessionOwnership.OWNED))
+    except ValueError:
+        return SessionOwnership.EXTERNAL
+
+
 class _SessionHandle:
     """Loop-side state for one live session. Touched only on the loop thread."""
 
@@ -555,9 +571,13 @@ class _SessionHandle:
         surface_snapshot: Any = None,
         request_runtime_root: Path | None = None,
         runtime_preserve_relpaths: tuple[str, ...] = (),
+        ownership: SessionOwnership = SessionOwnership.OWNED,
     ) -> None:
         self.session_id = session_id
         self.transport = transport
+        # From the durable binding. EXTERNAL sessions belong to someone else
+        # (a human harness, a browser): cleanup detaches, never terminates.
+        self.ownership = ownership
         self.project_root = project_root
         self.execution_profile_id = execution_profile_id
         self.idle_timeout_seconds = idle_timeout_seconds
@@ -2138,6 +2158,7 @@ class SessionRuntime:
             surface_snapshot=getattr(prepared, "surface", None),
             request_runtime_root=request_runtime_root,
             runtime_preserve_relpaths=getattr(prepared, "runtime_preserve_relpaths", ()),
+            ownership=_binding_ownership(record),
         )
         handle.child_pid = getattr(transport, "child_pid", None)
         handle.adopted_child = getattr(transport, "_adopted_child", None)
@@ -2650,6 +2671,7 @@ class SessionRuntime:
             surface_snapshot=getattr(prepared, "surface", None),
             request_runtime_root=request_runtime_root,
             runtime_preserve_relpaths=getattr(prepared, "runtime_preserve_relpaths", ()),
+            ownership=_binding_ownership(record),
         )
         handle.child_pid = child_pid
         handle.child_creation_identity = child_creation_identity
@@ -3287,6 +3309,7 @@ class SessionRuntime:
             surface_snapshot=surface,
             request_runtime_root=request_runtime_root,
             runtime_preserve_relpaths=getattr(prepared, "runtime_preserve_relpaths", ()),
+            ownership=_binding_ownership(source_record),
         )
         handle.child_pid = child_pid
         handle.adopted_child = getattr(transport, "_adopted_child", None)
@@ -3997,6 +4020,26 @@ class SessionRuntime:
         )
         return result
 
+    async def _release_transport(self, handle: _SessionHandle) -> None:
+        """The one cleanup boundary for a session's transport (SH49).
+
+        OWNED: ``close()`` (terminates the gateway's own child, unchanged).
+        EXTERNAL: ``detach()`` only; ``close()`` is never called, even when the
+        transport cannot detach, so gateway cleanup can never terminate or
+        signal a process the gateway does not own.
+        """
+        if handle.ownership is not SessionOwnership.EXTERNAL:
+            await handle.transport.close()
+            return
+        detach = getattr(handle.transport, "detach", None)
+        if not callable(detach):
+            logger.warning(
+                "external session transport cannot detach; leaving it running",
+                extra={"session-id": handle.session_id},
+            )
+            return
+        await detach()
+
     async def _fail_session(self, handle: _SessionHandle, *, reason: str) -> None:
         # Reaper and owning turn can observe the same transport failure. The
         # first caller owns the existing store/transport cleanup; later callers
@@ -4006,7 +4049,7 @@ class SessionRuntime:
         handle.failure_started = True
         self._handles.pop(handle.session_id, None)
         try:
-            await handle.transport.close()
+            await self._release_transport(handle)
         except Exception:  # noqa: BLE001 - provider cleanup is best effort
             # A provider cleanup failure must not strand the durable session
             # in an owned in-memory state.  Persist the terminal session below
@@ -4104,7 +4147,7 @@ class SessionRuntime:
                     and not owning_task.done()
                 ):
                     owning_task.cancel()
-            await handle.transport.close()
+            await self._release_transport(handle)
             if (
                 reason == "shutdown"
                 and owning_task is not None
@@ -4227,7 +4270,7 @@ class SessionRuntime:
             await asyncio.gather(owning_task, return_exceptions=True)
 
         try:
-            await asyncio.wait_for(handle.transport.close(), timeout=5.0)
+            await asyncio.wait_for(self._release_transport(handle), timeout=5.0)
         except Exception:  # noqa: BLE001 - provider cleanup is best effort
             logger.warning(
                 "provider transport close failed after authoritative session close",
