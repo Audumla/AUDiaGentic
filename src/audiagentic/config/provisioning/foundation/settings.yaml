@@ -1,0 +1,3 @@
+# Packaged defaults (vendor scope). Never copied: user and project settings
+# override only the keys they change. See docs/design/configuration-model.md.
+schema_version: 1
