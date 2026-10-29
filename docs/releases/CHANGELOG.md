@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.21.0](https://github.com/Audumla/AUDiaGentic/compare/v0.20.1...v0.21.0) (2026-10-29)
+
+
+### Features
+
+* **providers:** a failed CLI probe no longer disables a provider (CFG06 slice 2) ([#131](https://github.com/Audumla/AUDiaGentic/issues/131)) ([e3939a4](https://github.com/Audumla/AUDiaGentic/commit/e3939a4da0f9f075c7ba7842e77f49011cf30e18))
+
 ## [0.20.1](https://github.com/Audumla/AUDiaGentic/compare/v0.20.0...v0.20.1) (2026-10-29)
 
 
