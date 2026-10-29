@@ -1,6 +1,7 @@
 """One-attempt worker supervision for shared gateway dispatch."""
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 import site
@@ -8,10 +9,12 @@ import subprocess
 import sys
 import tempfile
 import time
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Collection, Iterator, Mapping
 from contextlib import contextmanager
+from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any
+from types import MappingProxyType
+from typing import TYPE_CHECKING, Any
 
 from audiagentic.components.agents.contracts.worker_protocol import (
     WorkerActivityEnvelope,
@@ -19,6 +22,7 @@ from audiagentic.components.agents.contracts.worker_protocol import (
     WorkerExecuteEnvelope,
     WorkerExecutionIdentity,
     WorkerHandshakeEnvelope,
+    WorkerProcessEvidence,
     WorkerResultEnvelope,
     decode_worker_message,
     encode_worker_message,
@@ -26,6 +30,11 @@ from audiagentic.components.agents.contracts.worker_protocol import (
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.system.managed_process import process_creation_identity
 from audiagentic.foundation.system.supervised_process import spawn_supervised
+
+if TYPE_CHECKING:
+    from audiagentic.components.providers.providers_api import ProviderExecutionResult
+
+logger = logging.getLogger(__name__)
 
 
 def _wait_for_provider_terminal(
@@ -111,7 +120,7 @@ _PROTECTED_WORKER_ENV = frozenset(
 
 @contextmanager
 def _private_worker_home() -> Iterator[Path]:
-    """Remove a private home after OS process-tree termination settles."""
+    """Best-effort removal of this protected home, not terminal/exit proof."""
     path = Path(tempfile.mkdtemp(prefix="audiagentic-worker-"))
     try:
         yield path
@@ -125,7 +134,16 @@ def _private_worker_home() -> Iterator[Path]:
                 break
             except PermissionError:
                 if time.monotonic() >= deadline:
-                    raise
+                    # Deletion is not part of the provider terminal contract.
+                    # In particular, raising during context unwind would erase
+                    # a valid result or mask the original provider exception.
+                    # Retain only this mkdtemp-owned protected directory; never
+                    # log its path, exception text, or private contents.
+                    logger.warning(
+                        "isolated worker private-home cleanup deferred; owned directory retained",
+                        extra={"cleanup-deferred": True, "cleanup-reason": "permission-denied"},
+                    )
+                    break
                 time.sleep(0.05)
 
 
@@ -183,14 +201,15 @@ def _replacement_environment(component_profile: str, private_home: Path) -> dict
     return environment
 
 
-def execute_isolated_provider_turn(
+def _execute_isolated_provider_turn(
     *,
     identity: WorkerExecutionIdentity,
     execution_request: Mapping[str, Any],
     timeout_seconds: float,
     activity_callback: Callable[[WorkerActivityEnvelope], None] | None = None,
-) -> Any:
-    """Execute one MA17 provider request in a disposable owned process."""
+    allowed_model_ids: frozenset[str] | None = None,
+) -> tuple[ProviderExecutionResult, WorkerExecutionIdentity, WorkerProcessEvidence]:
+    """One implementation; observe direct exit after both cleanup contexts."""
     envelope = WorkerExecuteEnvelope(
         identity=identity, execution_request=execution_request
     )
@@ -199,6 +218,13 @@ def execute_isolated_provider_turn(
     provider_request = providers_api.ProviderExecutionRequest.from_mapping(
         execution_request
     )
+    if (
+        allowed_model_ids is not None and provider_request.model_id is not None
+        and provider_request.model_id not in allowed_model_ids
+    ):
+        raise AudiaGenticError(
+            "CON-AGW-079", "agents", "prepared model scope excludes the provider execution request", {},
+        )
     provider_environment = providers_api.prepare_provider_execution_environment(
         provider_request
     )
@@ -340,9 +366,125 @@ def execute_isolated_provider_turn(
                 )
             from audiagentic.components.providers import providers_api
 
-            return providers_api.ProviderExecutionResult.from_mapping(
-                terminal.execution_result
-            )
+            inner = terminal.execution_result
+            if (
+                inner.get("provider-id") != provider_request.provider_id
+                or inner.get("worker-id") != identity.worker_id
+                or type(inner.get("attempt-epoch")) is not int
+                or inner["attempt-epoch"] != identity.attempt_epoch
+            ):
+                raise AudiaGenticError(
+                    "CON-AGW-079", "agents",
+                    "isolated provider result does not match its admitted provider and worker attempt", {},
+                )
+            if allowed_model_ids is not None and (
+                not isinstance(inner.get("model-id"), str) or inner["model-id"] not in allowed_model_ids
+            ):
+                raise AudiaGenticError(
+                    "CON-AGW-079", "agents", "isolated provider result model is outside prepared model scope", {},
+                )
+            result = providers_api.ProviderExecutionResult.from_mapping(inner)
+    # Check the owned process handle AFTER supervision and private-home
+    # cleanup. A returned close() is not itself positive exit evidence.
+    if allowed_model_ids is not None and child.poll() is None:
+        raise AudiaGenticError(
+            "CON-AGW-076", "agents", "verified provider worker exit is not observed", {},
+        )
+    return result, terminal.identity, terminal.process
 
 
-__all__ = ["execute_isolated_provider_turn"]
+_VERIFIED_WORKER_KEY = object()
+
+
+@dataclass(frozen=True, init=False)
+class VerifiedWorkerTerminal:
+    """Trusted local worker terminal, NOT native acceptance or command authority.
+
+    Only the executor mints this after the existing cleanup contexts exit and
+    the direct worker has demonstrably exited. Descendant/job closure is NOT
+    proven by SupervisedProcess.close returning: cleanup_proven stays false.
+    This evidence alone does not justify fresh-ready node state. A qualifying
+    one-shot also needs the node producer's durable terminal write and local
+    producer fence/no-other-writer barrier; adapters delegating an active turn
+    to a continuing background process do not qualify. Unresolved effects keep
+    logical capacity blocked even after an old producer is fenced and its epoch
+    rotates. No wire/mapping constructor or public success flag exists;
+    command binding and the combined durable barrier belong to the consumer.
+    """
+    identity: WorkerExecutionIdentity
+    process: WorkerProcessEvidence
+    result: ProviderExecutionResult = field(repr=False)
+    worker_exited: bool = field(default=True, init=False)
+    cleanup_proven: bool = field(default=False, init=False)
+
+    def __init__(
+        self, *, identity: WorkerExecutionIdentity, process: WorkerProcessEvidence,
+        result: ProviderExecutionResult, _key: object = None,
+    ) -> None:
+        if _key is not _VERIFIED_WORKER_KEY:
+            raise TypeError("VerifiedWorkerTerminal is returned only by the trusted worker executor")
+        object.__setattr__(self, "identity", identity)
+        object.__setattr__(self, "process", process)
+        object.__setattr__(self, "result", result)
+        object.__setattr__(self, "worker_exited", True)
+        object.__setattr__(self, "cleanup_proven", False)
+
+
+def _freeze_result_data(value: Any) -> Any:
+    """Freeze already JSON-validated result data without changing the old API."""
+    if isinstance(value, Mapping):
+        return MappingProxyType({key: _freeze_result_data(item) for key, item in value.items()})
+    if isinstance(value, (list, tuple)):
+        return tuple(_freeze_result_data(item) for item in value)
+    return value
+
+
+def execute_isolated_provider_turn(
+    *, identity: WorkerExecutionIdentity, execution_request: Mapping[str, Any],
+    timeout_seconds: float,
+    activity_callback: Callable[[WorkerActivityEnvelope], None] | None = None,
+) -> ProviderExecutionResult:
+    """Execute one provider request; retain ordinary model-alias behavior."""
+    result, _, _ = _execute_isolated_provider_turn(
+        identity=identity, execution_request=execution_request, timeout_seconds=timeout_seconds,
+        activity_callback=activity_callback,
+    )
+    return result
+
+
+def execute_verified_isolated_provider_turn(
+    *, identity: WorkerExecutionIdentity, execution_request: Mapping[str, Any],
+    allowed_model_ids: Collection[str], timeout_seconds: float,
+    activity_callback: Callable[[WorkerActivityEnvelope], None] | None = None,
+) -> VerifiedWorkerTerminal:
+    """Return direct-worker terminal evidence after cleanup contexts exit.
+
+    allowed_model_ids MUST come from trusted pre-effect preparation facts.
+    Snapshot it before launch; never choose/resolve a model from effect output.
+    Direct child exit is explicitly checked; descendant/job closure remains
+    unproven (cleanup_proven=False); proof alone is not fresh-ready permission.
+    A consumer may combine it with its durable terminal/producer-fencing barrier.
+    This adds no spawn path, retry, scheduler or native-acceptance inference.
+    """
+    if (
+        not isinstance(allowed_model_ids, Collection)
+        or isinstance(allowed_model_ids, (str, bytes, Mapping)) or not allowed_model_ids
+        or any(not isinstance(model, str) or not model for model in allowed_model_ids)
+    ):
+        raise AudiaGenticError(
+            "CON-AGW-079", "agents", "verified execution requires prepared allowed model identities", {},
+        )
+    prepared_models = frozenset(allowed_model_ids)
+    result, accepted_identity, process = _execute_isolated_provider_turn(
+        identity=identity, execution_request=execution_request, timeout_seconds=timeout_seconds,
+        activity_callback=activity_callback, allowed_model_ids=prepared_models,
+    )
+    # Both context managers exited. A raised cleanup error prevents evidence,
+    # but a silent best-effort teardown cannot prove descendant/job closure.
+    frozen_result = replace(result, result_data=_freeze_result_data(result.result_data))
+    return VerifiedWorkerTerminal(
+        identity=accepted_identity, process=process, result=frozen_result, _key=_VERIFIED_WORKER_KEY,
+    )
+
+
+__all__ = ["execute_isolated_provider_turn", "execute_verified_isolated_provider_turn", "VerifiedWorkerTerminal"]

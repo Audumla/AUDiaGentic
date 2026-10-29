@@ -115,6 +115,7 @@ CON-MSVC-036: "Wait for the managed service to enter running or draining state b
 VAL-MSVC-037: "Reduce readiness_timeout or increase the managed-service lock timeout so readiness polling remains inside the bounded lock budget."
 VAL-MPROC-001: "Provide a non-empty managed-process command made only of strings."
 VAL-MPROC-002: "Use an existing directory as the managed-process working directory."
+VAL-MPROC-006: "Use an existing directory for the managed-process log file."
 CON-MPROC-003: "Check executable access and whether the Windows host Job Object permits detached-process breakaway."
 CON-MPROC-004: "The platform could not provide a process creation identity; stop the launch and use a supported process host."
 CON-MPROC-005: "Do not signal the process because its PID and non-PID ownership evidence do not match."

@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from audiagentic.components.agents.gateway import store as store
+from audiagentic.components.agents.gateway.admission.packet import build_provider_packet
 from audiagentic.components.agents.gateway.mapping import first_present
 from audiagentic.components.agents.gateway.session.console_trace import GatewayConsoleTrace
 from audiagentic.components.agents.gateway.session.dispatch import (
@@ -168,29 +169,20 @@ def _build_packet_ctx(
     passed in-memory on the fast path and frozen in a private request-owned
     snapshot for restart/recovery.
     """
-    return {
-        "request-id": record["request-id"],
-        # Streaming provider adapters use this bounded request-owned job key
-        # for their normalized event log.  The disposable worker watches that
-        # log and relays provider progress as authenticated activity frames;
-        # it is never exposed as a filesystem path to callers.
-        "job-id": record["request-id"],
-        "execution-profile-id": profile["profile_id"],
-        "prompt-profile-id": record.get("prompt-profile-id", "default"),
-        "prompt-template-name": record.get("prompt-template-name"),
-        "prompt-template-digest": record.get("prompt-template-digest"),
-        "prompt-definition-fingerprint": record.get("prompt-definition-fingerprint"),
-        "provider-id": profile["provider_id"],
-        "model-id": model.get("model-id") or model.get("resolved"),
-        "model-alias": profile.get("model_alias"),
-        "prompt-body": dispatch_prompt,
-        "params": profile.get("params", {}),
-        "working-root": str(project_root.resolve()),
-        "stream-controls": dict(profile.get("params", {}).get("stream-controls") or {}),
-        "source": record.get("source"),
-        "metadata": record.get("metadata", {}),
-        "template-context": record.get("template-context", {}),
-    }
+    return build_provider_packet(
+        execution_root=project_root,
+        request_id=record["request-id"],
+        profile=profile,
+        prompt_profile_id=record.get("prompt-profile-id", "default"),
+        prompt_template_name=record.get("prompt-template-name"),
+        prompt_template_digest=record.get("prompt-template-digest"),
+        prompt_definition_fingerprint=record.get("prompt-definition-fingerprint"),
+        model_id=model.get("model-id") or model.get("resolved"),
+        dispatch_prompt=dispatch_prompt,
+        source=record.get("source"),
+        metadata=record.get("metadata", {}),
+        template_context=record.get("template-context", {}),
+    )
 
 
 def _dispatch_one_attempt(
