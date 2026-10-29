@@ -120,7 +120,7 @@ def reconcile_provider(
 
     Probes the host, reads the current config, then:
     - binary present but not enabled  → enable + apply surfaces
-    - binary absent but still enabled → disable + prune surfaces
+    - binary absent but still enabled → left enabled, reported "unavailable"
     - already in sync                 → no-op, reports current state
 
     fetch_catalog: if True, also fetches the model catalog when enabling a provider.
@@ -202,22 +202,18 @@ def reconcile_provider(
                 f"Skipping catalog fetch for {provider_id} — use refresh_provider_catalog to update",
             )
     elif probe is not None and not cli_available and currently_enabled:
-        _emit(on_progress, f"Disabling {provider_id} — CLI not found")
-        set_provider_enabled(project_root, provider_id, enabled=False)
-        from ..providers_api import operate_provider_surface
-        from .lifecycle.lifecycle import _build_surface_request
-
-        surface_result = operate_provider_surface(
-            project_root,
-            provider_id,
-            mode="prune",
-            request=_build_surface_request(project_root, provider_id),
+        # Availability is an observation, not policy (CFG06): a missing CLI never
+        # changes enablement or prunes surfaces; `providers.<id>.enabled: false`
+        # or `set_provider_enabled` is the only way a provider becomes disabled.
+        _emit(
+            on_progress,
+            f"{provider_id} is enabled but its CLI was not found; enablement left as configured",
+            level="warning",
         )
-        surfaces_result = surface_result.to_mapping()
         _reconcile_model_projection(
-            provider_id, project_root, enabled=False, on_progress=on_progress
+            provider_id, project_root, enabled=currently_enabled, on_progress=on_progress
         )
-        action_taken = "disabled"
+        action_taken = "unavailable"
     else:
         state = "enabled" if currently_enabled else "disabled"
         _emit(
@@ -235,9 +231,7 @@ def reconcile_provider(
         _sync_host_extensions(project_root, on_progress)
         action_taken = "ok"
 
-    now_enabled = (
-        currently_enabled if probe is None else cli_available and action_taken in ("enabled", "ok")
-    )
+    now_enabled = currently_enabled or action_taken == "enabled"
     result: dict[str, Any] = {
         "provider-id": provider_id,
         "action": "reconcile",
@@ -267,8 +261,9 @@ def reconcile_all_providers(
     the VS Code GUI on some platforms.
 
     on_provider(provider_id, status) is called after each provider is reconciled.
-    status is "enabled", "disabled", "skipped" (CLI detected but excluded by the
-    reconciliation-policy allowlist), or "ok".
+    status is "enabled", "unavailable" (enabled but its CLI is missing),
+    "skipped" (CLI detected but excluded by the reconciliation-policy
+    allowlist), or "ok".
     """
     eligible = _eligible_provider_descriptors()
     total = float(len(eligible))
