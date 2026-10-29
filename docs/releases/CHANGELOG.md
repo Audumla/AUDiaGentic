@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.0](https://github.com/Audumla/AUDiaGentic/compare/v0.14.0...v0.15.0) (2026-10-29)
+
+
+### Features
+
+* **project:** stable project id and tracked project settings (CFG04 phase 1) ([#113](https://github.com/Audumla/AUDiaGentic/issues/113)) ([8352f87](https://github.com/Audumla/AUDiaGentic/commit/8352f87154afd05f301f82480b9ce676ed090d43))
+
 ## [0.14.0](https://github.com/Audumla/AUDiaGentic/compare/v0.13.0...v0.14.0) (2026-10-29)
 
 
