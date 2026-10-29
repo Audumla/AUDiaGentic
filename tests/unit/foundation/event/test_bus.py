@@ -243,3 +243,36 @@ def test_cycle_detection_retention_settings_require_positive_integers(
 
     with pytest.raises(ValueError, match=field):
         EventCycleDetectionSettings(**{field: value})
+
+
+def test_persistent_subscription_survives_reset_bus(monkeypatch) -> None:
+    """A subscription made once at import must not be lost when the bus is replaced."""
+    from audiagentic.foundation.event import event_bus, get_bus, reset_bus, subscribe_persistent
+
+    monkeypatch.setattr(event_bus, "_PERSISTENT", [])
+    received: list[str] = []
+    subscribe_persistent("planning.item.created", lambda event_type, payload, metadata: received.append(event_type))
+    plain: list[str] = []
+    get_bus().subscribe("planning.item.created", lambda event_type, payload, metadata: plain.append(event_type))
+
+    reset_bus()
+    get_bus().publish("planning.item.created", {}, mode=DeliveryMode.SYNC)
+
+    assert received == ["planning.item.created"]
+    assert plain == []  # an ordinary subscription belongs to the bus it was made on
+    reset_bus()
+
+
+def test_project_mcp_reconciler_survives_reset_bus(monkeypatch) -> None:
+    """Disabling a provider still prunes its native MCP entries after a bus reset."""
+    from pathlib import Path
+
+    from audiagentic.components.project import onboarding_events
+    from audiagentic.components.providers import providers_api
+    from audiagentic.foundation.event import get_bus, reset_bus
+
+    calls: list[Path] = []
+    monkeypatch.setattr(onboarding_events, "_reconcile", lambda root, payload, metadata: calls.append(root))
+    reset_bus()
+    get_bus().publish(providers_api.PROVIDER_STATE_CHANGED, {"project_root": Path("/p")}, mode=DeliveryMode.SYNC)
+    assert calls == [Path("/p")]

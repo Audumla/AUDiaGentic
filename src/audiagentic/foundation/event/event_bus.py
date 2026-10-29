@@ -407,6 +407,8 @@ class EventBus(EventBusProtocol):
 # Singleton
 _bus_instance: EventBus | None = None
 _bus_lock = threading.Lock()
+# Process-lifetime subscriptions, re-applied to every bus reset_bus creates.
+_PERSISTENT: list[tuple[str, Callable[[str, dict, dict], None]]] = []
 
 
 def get_bus(config: EventLayerConfig | None = None) -> EventBus:
@@ -435,13 +437,24 @@ def get_bus(config: EventLayerConfig | None = None) -> EventBus:
     return _bus_instance
 
 
+def subscribe_persistent(topic: str, handler: Callable[[str, dict, dict], None]) -> None:
+    """Subscribe *handler* for the life of the process, across :func:`reset_bus`.
+
+    For subscriptions made once when a module is imported (lifecycle
+    observers, component event reconcilers): a plain ``get_bus().subscribe``
+    is lost when the bus is replaced, and the module is not imported again.
+    """
+    _PERSISTENT.append((topic, handler))
+    get_bus().subscribe(topic, handler)
+
+
 def reset_bus(config: EventLayerConfig | None = None) -> None:
     """Replace the singleton EventBus, closing the old instance first.
 
     The new bus reuses the old bus's config unless *config* is passed.
-    Lifecycle-observer dispatchers are re-subscribed on the new bus so
-    observers registered before the reset keep working. Used by tests for
-    isolation and by config hot-swap paths.
+    Persistent subscriptions (:func:`subscribe_persistent`) are re-applied to
+    the new bus so observers registered before the reset keep working. Used
+    by tests for isolation and by config hot-swap paths.
     """
     global _bus_instance
     with _bus_lock:
@@ -452,9 +465,6 @@ def reset_bus(config: EventLayerConfig | None = None) -> None:
             except Exception:
                 logger.warning("failed to close previous event bus on reset", exc_info=True)
         _bus_instance = EventBus(config=config if config is not None else (old.config if old else None))
-    try:
-        from .lifecycle_observer import _resubscribe_all
-
-        _resubscribe_all()
-    except Exception:
-        logger.debug("failed to resubscribe lifecycle observers after bus reset", exc_info=True)
+    bus = get_bus()
+    for topic, handler in _PERSISTENT:
+        bus.subscribe(topic, handler)
