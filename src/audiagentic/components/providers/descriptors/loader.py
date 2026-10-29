@@ -346,6 +346,9 @@ def _build_cli_install(data: dict[str, Any]) -> CliInstallRecipe:
             ),
             probe=list(data["probe"]) if "probe" in data else None,
             probe_fn=resolve_ref(data["probe_fn"]) if "probe_fn" in data else None,
+            native_executable_fn=(
+                resolve_ref(data["native_executable"]) if "native_executable" in data else None
+            ),
         )
     else:
         # Explicit step form
@@ -365,6 +368,9 @@ def _build_cli_install(data: dict[str, Any]) -> CliInstallRecipe:
             ),
             probe=list(data["probe"]) if "probe" in data else None,
             probe_fn=resolve_ref(data["probe_fn"]) if "probe_fn" in data else None,
+            native_executable_fn=(
+                resolve_ref(data["native_executable"]) if "native_executable" in data else None
+            ),
         )
 
 

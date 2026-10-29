@@ -20,6 +20,8 @@ capabilities:
       package: "@openai/codex"
       executable: codex
       probe: [codex, "--version"]
+      # codex on PATH is a Node launcher; the native binary is in a platform package.
+      native_executable: "audiagentic.components.providers.adapters.codex.native:locate_native_codex"
 
   host-extensions:
     mechanism:
