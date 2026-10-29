@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.29.1](https://github.com/Audumla/AUDiaGentic/compare/v0.29.0...v0.29.1) (2026-10-29)
+
+
+### Bug Fixes
+
+* **event:** import-time subscriptions survive reset_bus ([#188](https://github.com/Audumla/AUDiaGentic/issues/188)) ([ed8a6a2](https://github.com/Audumla/AUDiaGentic/commit/ed8a6a2ce65eacee7efb09dd83f4fbf2fd04e1c4))
+
 ## [0.29.0](https://github.com/Audumla/AUDiaGentic/compare/v0.28.0...v0.29.0) (2026-10-29)
 
 
