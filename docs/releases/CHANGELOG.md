@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.25.0](https://github.com/Audumla/AUDiaGentic/compare/v0.24.0...v0.25.0) (2026-10-29)
+
+
+### Features
+
+* **mcp:** per-call git worktree selection for planning, ledger and gateway servers ([#167](https://github.com/Audumla/AUDiaGentic/issues/167)) ([9fcaaa9](https://github.com/Audumla/AUDiaGentic/commit/9fcaaa9ffcefea8eefef44de7cfdc56f3f277951))
+
 ## [0.24.0](https://github.com/Audumla/AUDiaGentic/compare/v0.23.2...v0.24.0) (2026-10-29)
 
 
