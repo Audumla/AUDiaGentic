@@ -98,6 +98,16 @@ def _require_propagate(ms: dict, path: Path) -> str:
     return ms["propagate"]
 
 
+def _require_bool(ms: dict, key: str, path: Path) -> bool:
+    value = ms.get(key, False)
+    if not isinstance(value, bool):
+        raise _component_error(
+            11, f"{path.name}: MCP server {ms.get('name')!r} {key} must be true or false",
+            path=str(path), field=key,
+        )
+    return value
+
+
 def parse_component_descriptor(path: Path) -> ComponentDescriptor:
     """Read one declaration without registration, hooks or lifecycle effects."""
     data = load_yaml_file(path)
@@ -143,6 +153,7 @@ def parse_component_descriptor(path: Path) -> ComponentDescriptor:
             instructions=ms.get("instructions", ""),
             tool_descriptions=ms.get("tool-descriptions") or {},
             propagate=_require_propagate(ms, path),
+            worktree_scoped=_require_bool(ms, "worktree-scoped", path),
         )
         for ms in (data.get("mcp-servers") or [])
     )

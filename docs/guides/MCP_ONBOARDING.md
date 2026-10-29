@@ -132,3 +132,32 @@ so its extension recognition is not claimed by this check.
 
 MP02 slim/co-installable distributions remain separate.
 
+
+## User scope: every directory (`audiagentic setup`)
+
+`mcp install` binds a server to one project. A worktree-scoped server
+(`worktree-scoped: true` on its declaration in the owning component YAML;
+today `ag-planning`, `ag-ledger` and `ag-agents-gateway`) is bound to no
+project: each tool takes an optional `worktree` argument, the root of the git
+worktree to act on, and every result reports the worktree used. Such servers
+can be registered once at a harness's user scope, so a session started in any
+directory has them:
+
+```text
+audiagentic setup harness claude dry-run   # report: configured / missing / drifted / foreign
+audiagentic setup harness claude           # register, then run doctor
+```
+
+- Only harnesses named on the command line are touched, and only those that
+  declare `user_scope` under their `mcp` mechanism (`audiagentic harness list`
+  shows `user_scoped`). Claude's user scope is `mcpServers` in
+  `$CLAUDE_CONFIG_DIR/.claude.json` (else `~/.claude.json`); setup changes it
+  only through `claude mcp add-json/remove --scope user`, never by editing the file.
+- Entries launch this installation's `audiagentic` console script (an absolute
+  path, so another `audiagentic` earlier on PATH cannot serve them) as
+  `audiagentic mcp MODULE`, with no environment variables.
+- Setup changes only names it registered itself, recorded per target file in
+  the user state directory. An existing entry of the same name that setup did
+  not register is reported as foreign and left alone.
+- `audiagentic doctor` reports each target setup has registered at; a missing
+  or drifted entry is a warning whose fix is the same setup command.

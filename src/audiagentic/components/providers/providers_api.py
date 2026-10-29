@@ -140,6 +140,20 @@ def apply_managed_mcp(
     return apply(project_root, provider_id, request, expected_revision, adopt_entries)
 
 
+def user_mcp_status(provider_id: str, *, request: ManagedMcpRequest) -> dict:
+    """Read-only state of requested entries at a harness's user-scope MCP registration."""
+    from .services.mcp.user_scope import user_mcp_status as _status
+
+    return _status(provider_id, request)
+
+
+def reconcile_user_mcp(provider_id: str, *, request: ManagedMcpRequest) -> dict:
+    """Register requested entries at a harness's user scope; foreign names are never overwritten."""
+    from .services.mcp.user_scope import reconcile_user_mcp as _reconcile
+
+    return _reconcile(provider_id, request)
+
+
 def discover_component_mcp_bindings(
     project_root: Path, entries: tuple[ManagedMcpEntry, ...]
 ) -> dict:
@@ -2226,6 +2240,8 @@ __all__ = [
     "validate_gpt_auto_configuration",
     "PROVIDER_STATE_CHANGED",
     "list_harness_mcp_targets",
+    "user_mcp_status",
+    "reconcile_user_mcp",
     "preflight_managed_mcp",
     "apply_managed_mcp",
     "discover_component_mcp_bindings",

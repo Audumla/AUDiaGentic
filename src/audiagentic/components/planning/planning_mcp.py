@@ -25,7 +25,7 @@ from audiagentic.foundation.mcp.component_server import (
     tool_boundary,
 )
 
-mcp = mcp_server(__name__, worktree_scoped=True)
+mcp = mcp_server(__name__)
 
 
 @mcp.tool()

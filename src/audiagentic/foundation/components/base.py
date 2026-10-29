@@ -51,6 +51,10 @@ class McpServerDeclaration:
     #: the foundation passes them through unchanged.
     tool_descriptions: dict[str, Any] = field(default_factory=dict)
     propagate: str = "audiagentic"  # "audiagentic" | "providers" | "audiagentic,providers"
+    #: Every tool takes the shared per-call ``worktree`` argument
+    #: (foundation/mcp/worktree.py). Such a server is bound to no project, so
+    #: ``audiagentic setup`` may register it at a harness's user scope.
+    worktree_scoped: bool = False
 
 
 @dataclass(frozen=True)

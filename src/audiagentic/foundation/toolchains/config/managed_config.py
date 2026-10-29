@@ -76,6 +76,9 @@ class McpConfigSpec(ManagedConfigSpec):
     transports: frozenset[str] = field(default_factory=frozenset)
     raw_reader: Callable[[Path], dict[str, Any]] | None = None
     project_scoped: bool | None = None
+    #: The harness's per-user MCP registration (no project), when it has one.
+    #: Only worktree-scoped servers are registered there (``audiagentic setup``).
+    user_scope: ManagedConfigSpec | None = None
 
     def __post_init__(self) -> None:
         if not self.transports:

@@ -21,6 +21,7 @@ class HarnessMcpTarget:
     transports: tuple[str, ...]
     refresh_mode: str
     project_scoped: bool
+    user_scoped: bool = False
 
     def to_mapping(self) -> dict[str, Any]:
         return dict(vars(self))
@@ -50,6 +51,7 @@ def list_targets() -> tuple[HarnessMcpTarget, ...]:
                 tuple(mechanism.get("transports", ())),
                 mechanism.get("refresh_mode", "none"),
                 scoped,
+                bool(mechanism.get("user_scope")),
             )
         )
     return tuple(result)
