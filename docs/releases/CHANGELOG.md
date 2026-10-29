@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.25.1](https://github.com/Audumla/AUDiaGentic/compare/v0.25.0...v0.25.1) (2026-10-29)
+
+
+### Documentation
+
+* **planning:** give refactor-round2 items conforming IDs RR01-RR06 ([#170](https://github.com/Audumla/AUDiaGentic/issues/170)) ([85a279b](https://github.com/Audumla/AUDiaGentic/commit/85a279bcd1de32f54af2abe7f736913190d4a1c6))
+
 ## [0.25.0](https://github.com/Audumla/AUDiaGentic/compare/v0.24.0...v0.25.0) (2026-10-29)
 
 
