@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.0](https://github.com/Audumla/AUDiaGentic/compare/v0.11.1...v0.12.0) (2026-10-29)
+
+
+### Features
+
+* **providers:** typed joined-session capability declarations, unsupported by default (SH45) ([#109](https://github.com/Audumla/AUDiaGentic/issues/109)) ([010a4fb](https://github.com/Audumla/AUDiaGentic/commit/010a4fb57c0f61096d209fcc17bb4eecc19b3595))
+
 ## [0.11.1](https://github.com/Audumla/AUDiaGentic/compare/v0.11.0...v0.11.1) (2026-10-29)
 
 
