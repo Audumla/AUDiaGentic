@@ -9,7 +9,6 @@ acceptance. No heartbeat/poll loop or append retry belongs here.
 from __future__ import annotations
 
 import logging
-import re
 import threading
 import time
 from collections.abc import Mapping
@@ -19,6 +18,7 @@ from audiagentic.components.agents.gateway import observability as observations
 from audiagentic.components.agents.gateway import store
 from audiagentic.components.agents.gateway.diagnostics import SideEffectState
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.foundation.digest import is_sha256_hex
 
 from .admission_contract import NodeAdmissionDescriptor
 from .authority import NodeConnectionIdentity
@@ -69,7 +69,7 @@ def _failure():
 
 
 def _sha(value):
-    if not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{64}", value) is None:
+    if not is_sha256_hex(value):
         raise ValueError("invalid canonical digest")
     return value
 

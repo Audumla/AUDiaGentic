@@ -587,31 +587,19 @@ def test_prepared_reused_command_with_changed_binding_is_not_a_new_intent(env, m
     assert len(owner.receipts_after()) == 1
 
 
-@pytest.mark.parametrize("version", [2, 3])
-def test_scope_reader_older_supported_schema_does_not_migrate(env, version):
+@pytest.mark.parametrize("version", [2, 3, 5])
+def test_scope_reader_rejects_other_schema_versions_without_writing(env, version):
     root = env.case.store.root
     with sqlite3.connect(root / "receipts.sqlite3") as db:
-        db.execute("ALTER TABLE commands DROP COLUMN artifact_kind")
-        if version == 2:
-            db.execute("ALTER TABLE owner DROP COLUMN log_incarnation_id")
-            db.execute("DROP TABLE receipt_checkpoint")
         db.execute(f"PRAGMA user_version={version}")
-    # SQLite readers may update existing SHM read marks, never durable DB/WAL facts.
-    names = {p.name for p in root.iterdir()}
     before = {
-        p.name: p.read_bytes()
-        for p in root.iterdir()
-        if p.is_file() and not p.name.endswith("-shm")
+        p.name: p.read_bytes() for p in root.iterdir() if p.is_file() and not p.name.endswith("-shm")
     }
-    assert NodeReceiptStore.read_owner_scope(root, expected_node_id="node") == ReceiptOwnerScope(
-        "node", "boot", "gateway"
-    )
-    assert {p.name for p in root.iterdir()} == names
-    assert {
-        p.name: p.read_bytes()
-        for p in root.iterdir()
-        if p.is_file() and not p.name.endswith("-shm")
-    } == before
+    with pytest.raises(AudiaGenticError, match="CON-AGND-001"):
+        NodeReceiptStore.read_owner_scope(root, expected_node_id="node")
+    assert before == {
+        p.name: p.read_bytes() for p in root.iterdir() if p.is_file() and not p.name.endswith("-shm")
+    }
 
 
 def test_worker_error_retains_occupancy_against_valid_different_command(env, monkeypatch):

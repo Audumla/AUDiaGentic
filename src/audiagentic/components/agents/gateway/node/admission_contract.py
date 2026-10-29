@@ -6,10 +6,11 @@ Historical absence never manufactures fresh node admission authority.
 """
 from __future__ import annotations
 
-import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
+
+from audiagentic.foundation.digest import is_sha256_hex
 
 from .contracts import _identifier, canonical_json, invalid
 from .preparation import PromptSemanticIdentity
@@ -94,7 +95,7 @@ class SourceWorkspaceIdentity:
         _identifier(self.workspace_id)
         if self.access_mode not in ("read-write", "read-only"):
             raise invalid(1, "Source workspace access mode is unsupported")
-        if not isinstance(self.binding_sha256, str) or not re.fullmatch(r"[0-9a-f]{64}", self.binding_sha256):
+        if not is_sha256_hex(self.binding_sha256):
             raise invalid(1, "Source workspace binding requires lowercase SHA256")
 
     def to_mapping(self) -> dict:
@@ -156,7 +157,7 @@ class NodeAdmissionDescriptor:
             raise invalid(1, "Node admission requires typed semantic identity and policy")
         if self.semantic.execution_profile_id != self.policy.profile_id:
             raise invalid(1, "Node semantic profile must match admission policy")
-        if not isinstance(self.snapshot_sha256, str) or not re.fullmatch(r"[0-9a-f]{64}", self.snapshot_sha256):
+        if not is_sha256_hex(self.snapshot_sha256):
             raise invalid(1, "Node admission snapshot digest must be lowercase SHA256")
         if self.source_workspace is not None and type(self.source_workspace) is not SourceWorkspaceIdentity:
             raise invalid(1, "Node admission requires typed source workspace identity")

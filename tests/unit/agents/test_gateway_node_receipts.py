@@ -468,7 +468,7 @@ def test_invalid_authorization_never_persists_grant_or_intent(tmp_path, mutation
 
 
 @pytest.mark.parametrize("version", [0, 1])
-def test_pre_authorization_schema_is_rejected_without_backfill_or_migration(tmp_path, version):
+def test_pre_authorization_schema_is_rejected_without_backfill(tmp_path, version):
     root = tmp_path / "node"
     root.mkdir(mode=0o700)
     path = root / "receipts.sqlite3"
@@ -564,26 +564,6 @@ def accept_ack(store, frame, **trusted_changes):
     )
 
 
-def v2_fixture(root):
-    """Create the exact old v2 shape with real command/outbox evidence."""
-    store = store_at(root)
-    command = advance(store)
-    store.native_accepted(command, native_ref="private-native-ref")
-    store.terminal(command, text="private-output")
-    store.prepare(identity(command_id="other-command", request_id="other-request"), b"payload")
-    with sqlite3.connect(store.path) as db:
-        db.execute("DROP TABLE receipt_checkpoint")
-        db.execute("ALTER TABLE commands DROP COLUMN artifact_kind")
-        db.execute("ALTER TABLE owner RENAME TO owner_v3")
-        db.execute(
-            "CREATE TABLE owner (singleton INTEGER PRIMARY KEY CHECK(singleton=1), node TEXT NOT NULL, epoch TEXT NOT NULL, gateway TEXT NOT NULL)"
-        )
-        db.execute("INSERT INTO owner SELECT singleton,node,epoch,gateway FROM owner_v3")
-        db.execute("DROP TABLE owner_v3")
-        db.execute("PRAGMA user_version=2")
-    return store.path
-
-
 def durable_facts(path):
     with sqlite3.connect(path) as db:
         return (
@@ -595,67 +575,47 @@ def durable_facts(path):
         )
 
 
-def test_v2_guarded_migration_preserves_every_receipt_and_authorization_fact(tmp_path):
+@pytest.mark.parametrize("version", [2, 3, 5])
+def test_other_schema_versions_are_rejected_unchanged(tmp_path, version):
+    """Earlier numbers were unreleased prototypes: rejected, never migrated."""
     root = tmp_path / "node"
-    path = v2_fixture(root)
-    before = durable_facts(path)
-    migrated = store_at(root)
-    assert durable_facts(path) == before
-    assert migrated.authorization_id(identity()) == "grant-1"
-    assert migrated.native_reference(identity()) == "private-native-ref"
-    assert migrated.output(identity()) == "private-output"
-    checkpoint = migrated.ack_checkpoint()
-    assert checkpoint.server_id is None and checkpoint.through_sequence == 0
-    assert checkpoint.through_receipt_sha256 is None
-    import uuid
-
-    assert uuid.UUID(checkpoint.log_incarnation_id).version == 4
-    assert store_at(root).log_incarnation_id == checkpoint.log_incarnation_id
-    next_receipt = migrated.prepare(identity(command_id="after-migration"), b"payload")
-    assert next_receipt.sequence == 6
+    path = store_at(root).path
     with sqlite3.connect(path) as db:
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 4
-
-
-def test_migration_failure_rolls_back_schema_uuid_and_cursor(tmp_path, monkeypatch):
-    root = tmp_path / "node"
-    path = v2_fixture(root)
-    before = durable_facts(path)
-    original = NodeReceiptStore._create_checkpoint
-
-    def fail_after_create(db):
-        original(db)
-        raise sqlite3.OperationalError("failed migration commit")
-
-    monkeypatch.setattr(NodeReceiptStore, "_create_checkpoint", staticmethod(fail_after_create))
-    with pytest.raises(AudiaGenticError, match="IO-AGND-001"):
+        db.execute(f"PRAGMA user_version={version}")
+        facts = db.execute("SELECT command,state FROM commands").fetchall()
+    with pytest.raises(AudiaGenticError, match="CON-AGND-001"):
         store_at(root)
-    assert durable_facts(path) == before
     with sqlite3.connect(path) as db:
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 2
-        assert "log_incarnation_id" not in {r[1] for r in db.execute("PRAGMA table_info(owner)")}
-        assert not db.execute(
-            "SELECT 1 FROM sqlite_master WHERE name='receipt_checkpoint'"
-        ).fetchone()
+        assert db.execute("PRAGMA user_version").fetchone()[0] == version
+        assert db.execute("SELECT command,state FROM commands").fetchall() == facts
 
 
-@pytest.mark.parametrize(
-    "damage", ["missing-authorization", "missing-trigger", "unexpected-checkpoint"]
-)
-def test_migration_rejects_incomplete_or_ambiguous_v2(tmp_path, damage):
+@pytest.mark.parametrize("damage", ["missing-authorization", "missing-trigger", "missing-checkpoint"])
+def test_damaged_current_schema_is_rejected(tmp_path, damage):
     root = tmp_path / "node"
-    path = v2_fixture(root)
+    path = store_at(root).path
     with sqlite3.connect(path) as db:
         if damage == "missing-authorization":
             db.execute("ALTER TABLE commands RENAME COLUMN authorization_id TO unknown_id")
         elif damage == "missing-trigger":
             db.execute("DROP TRIGGER outbox_no_delete")
         else:
-            db.execute("CREATE TABLE receipt_checkpoint (unknown TEXT)")
+            db.execute("DROP TABLE receipt_checkpoint")
     with pytest.raises(AudiaGenticError, match="CON-AGND-001"):
         store_at(root)
-    with sqlite3.connect(path) as db:
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 2
+
+
+def test_new_store_has_the_released_schema_and_a_log_identity(tmp_path):
+    store = store_at(tmp_path / "node")
+    import uuid
+
+    checkpoint = store.ack_checkpoint()
+    assert checkpoint.server_id is None and checkpoint.through_sequence == 0
+    assert checkpoint.through_receipt_sha256 is None
+    assert uuid.UUID(checkpoint.log_incarnation_id).version == 4
+    assert store_at(tmp_path / "node").log_incarnation_id == checkpoint.log_incarnation_id
+    with sqlite3.connect(store.path) as db:
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 4
 
 
 def test_log_uuid_and_ack_survive_reopen_and_epoch_rotation_not_database_recreation(tmp_path):
@@ -870,12 +830,6 @@ root=Path(settings['root'])
 def pause():
     (root/'ack-ready').write_text('ready')
     while True: time.sleep(1)
-if settings['stage']=='migration':
-    original=NodeReceiptStore._create_checkpoint
-    def held(db):
-        original(db)
-        pause()
-    NodeReceiptStore._create_checkpoint=staticmethod(held)
 s=NodeReceiptStore(root=root,node_id='node-1',node_epoch='boot-1',gateway_owner_epoch='gateway-1')
 if settings['stage']=='ack-before-commit':
     original=s._write_ack
@@ -949,26 +903,8 @@ def test_hard_kill_ack_reopen_is_atomic_and_does_not_delete_receipts(tmp_path, s
     assert reopened.receipts_after() == (receipt,)
 
 
-def test_hard_kill_v2_migration_leaves_complete_old_schema_then_retries_safely(tmp_path):
-    root = tmp_path / "node"
-    path = v2_fixture(root)
-    before = durable_facts(path)
-    kill_at_ack_barrier(root, "migration")
-    with sqlite3.connect(path) as db:
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 2
-        assert "log_incarnation_id" not in {r[1] for r in db.execute("PRAGMA table_info(owner)")}
-        assert not db.execute(
-            "SELECT 1 FROM sqlite_master WHERE name='receipt_checkpoint'"
-        ).fetchone()
-    assert durable_facts(path) == before
-    reopened = store_at(root)
-    assert reopened.ack_checkpoint().through_sequence == 0
-    assert durable_facts(path) == before
-    assert store_at(root).log_incarnation_id == reopened.log_incarnation_id
-
-
 @pytest.mark.parametrize("damage", ["missing-row", "missing-log", "unknown-row", "changed-digest"])
-def test_v3_missing_or_corrupt_checkpoint_never_resets_itself(tmp_path, damage):
+def test_missing_or_corrupt_checkpoint_never_resets_itself(tmp_path, damage):
     root = tmp_path / "node"
     store = store_at(root)
     receipt = store.prepare(identity(), b"payload")

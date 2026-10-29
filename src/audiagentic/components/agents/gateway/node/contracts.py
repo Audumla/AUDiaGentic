@@ -12,6 +12,7 @@ from types import MappingProxyType
 from typing import Any
 
 from audiagentic.foundation.contracts.errors import make_error_factory
+from audiagentic.foundation.digest import canonical_json_bytes, is_sha256_hex
 
 invalid = make_error_factory("VAL", "AGND", "agents-node")
 conflict = make_error_factory("CON", "AGND", "agents-node")
@@ -84,13 +85,7 @@ def _plain(value: Any) -> Any:
 
 def canonical_json(value: Any) -> bytes:
     try:
-        return json.dumps(
-            _plain(_freeze(value)),
-            ensure_ascii=False,
-            allow_nan=False,
-            sort_keys=True,
-            separators=(",", ":"),
-        ).encode("utf-8")
+        return canonical_json_bytes(_plain(_freeze(value)))
     except (ValueError, TypeError, UnicodeError, RecursionError):
         raise invalid(1, "Node contract is not valid UTF-8 JSON") from None
 
@@ -128,7 +123,7 @@ class CommandIdentity:
             if field.name in {"connection_generation", "grant_revision", "binding_generation"}:
                 _integer(value)
             elif field.name == "payload_sha256":
-                if not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{64}", value):
+                if not is_sha256_hex(value):
                     raise invalid(1, "Invalid command payload digest")
             else:
                 _identifier(value)

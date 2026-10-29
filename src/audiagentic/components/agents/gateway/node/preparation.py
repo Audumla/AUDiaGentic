@@ -10,10 +10,11 @@ bytes are opaque owner output, not a wire schema or an execution authorization.
 from __future__ import annotations
 
 import hashlib
-import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field, fields
 from typing import Any
+
+from audiagentic.foundation.digest import is_sha256_hex
 
 from .contracts import (
     CommandIdentity,
@@ -27,7 +28,7 @@ from .contracts import (
 
 
 def _sha(value: Any) -> str:
-    if not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{64}", value):
+    if not is_sha256_hex(value):
         raise invalid(1, "Preparation fingerprint must be lowercase SHA256")
     return value
 

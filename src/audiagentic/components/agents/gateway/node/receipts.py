@@ -5,11 +5,10 @@ under one Foundation AdvisoryLock. Never hold that lock over network/native I/O.
 Only a newly committed effect-intent returns True; a duplicate never grants a
 second native call. A crash/commit error after intent is uncertain, never unsent.
 Old epochs are evidence-only. Epoch rotation is an explicit owner CAS operation.
-Schema v3 adds one durable log incarnation and server-bound cumulative ACK cursor.
-A guarded v2 migration adds only that metadata, preserving command/outbox facts.
-Schema v4 adds nullable private artifact_kind, with no historical backfill. New
-worker envelopes and native plaintext are durably distinguished; no JSON guessing.
-Earlier prototypes remain rejected: authorization identity cannot be inferred.
+One schema (SCHEMA_VERSION): one durable log incarnation, a server-bound cumulative
+ACK cursor and a private artifact_kind that durably distinguishes worker envelopes
+from native plaintext (no JSON guessing). Stores of any other version are rejected,
+never migrated: earlier numbers were unreleased prototypes.
 ACK is receipt custody, never native success, work completion or permission to
 delete evidence. Current channel/server facts must come from the trusted owner.
 
@@ -39,6 +38,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from audiagentic.foundation.contracts.errors import make_error_factory
+from audiagentic.foundation.digest import is_sha256_hex
 from audiagentic.foundation.io import atomic_write_bytes
 from audiagentic.foundation.paths.home import global_service_runtime
 from audiagentic.foundation.system.advisory_lock import AdvisoryLock
@@ -59,6 +59,10 @@ from .contracts import (
 from .prepared_evidence import check_private_evidence_path
 
 io_error = make_error_factory("IO", "AGND", "agents-node")
+
+# The first released receipt schema. Earlier numbers were development prototypes
+# that never shipped, so there is no migration and they are not supported.
+SCHEMA_VERSION = 4
 
 
 @dataclass(frozen=True)
@@ -95,11 +99,7 @@ def _log_id(value):
 
 
 def _digest(value):
-    if (
-        not isinstance(value, str)
-        or len(value) != 64
-        or any(c not in "0123456789abcdef" for c in value)
-    ):
+    if not is_sha256_hex(value):
         raise invalid(1, "Receipt digest must be a lowercase SHA256")
     return value
 
@@ -157,14 +157,12 @@ class NodeReceiptStore:
             db = sqlite3.connect(uri, uri=True, isolation_level=None)
             try:
                 db.execute("BEGIN")
-                version = db.execute("PRAGMA user_version").fetchone()[0]
-                if version not in (2, 3, 4):
+                if db.execute("PRAGMA user_version").fetchone()[0] != SCHEMA_VERSION:
                     raise conflict(1, "Unsupported persisted node receipt schema")
-                cls._validate_core_schema(db, version)
+                cls._validate_schema(db)
                 if db.execute("PRAGMA quick_check").fetchall() != [("ok",)]:
                     raise conflict(1, "Persisted node receipt integrity check failed")
-                if version in (3, 4):
-                    cls._checkpoint(db)
+                cls._checkpoint(db)
                 rows = db.execute("SELECT singleton,node,epoch,gateway FROM owner").fetchall()
                 if len(rows) != 1 or rows[0][0:2] != (1, expected_node_id):
                     raise conflict(1, "Persisted receipt owner is missing or belongs to another node")
@@ -195,47 +193,32 @@ class NodeReceiptStore:
                 raise invalid(1, "Node receipt files must not be symlinks")
             with self._transaction() as db:
                 version = db.execute("PRAGMA user_version").fetchone()[0]
-                if version not in (0, 2, 3, 4):
+                if version not in (0, SCHEMA_VERSION):
                     raise conflict(1, "Unsupported node receipt schema version")
                 if version == 0:
                     if db.execute(
                         "SELECT 1 FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' LIMIT 1"
                     ).fetchone():
                         raise conflict(1, "Unversioned existing node receipt store is unsupported")
-                    self._create_core(db)
-                    db.execute("INSERT INTO owner VALUES (1,?,?,?)", self._scope)
+                    self._create_schema(db)
+                    db.execute("INSERT INTO owner VALUES (1,?,?,?,?)", (*self._scope, str(uuid.uuid4())))
+                    db.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
                 else:
-                    self._validate_core_schema(db, version)
+                    self._validate_schema(db)
                 if db.execute("SELECT node FROM owner WHERE singleton=1").fetchone() != (node_id,):
                     raise conflict(1, "Receipt store belongs to another node")
-                if version in (0, 2):
-                    if db.execute(
-                        "SELECT 1 FROM sqlite_master WHERE name='receipt_checkpoint'"
-                    ).fetchone():
-                        raise conflict(
-                            1, "Unexpected checkpoint metadata in earlier receipt schema"
-                        )
-                    db.execute("ALTER TABLE owner ADD COLUMN log_incarnation_id TEXT")
-                    db.execute(
-                        "UPDATE owner SET log_incarnation_id=? WHERE singleton=1",
-                        (str(uuid.uuid4()),),
-                    )
-                    self._create_checkpoint(db)
-                if version in (0, 2, 3):
-                    db.execute("ALTER TABLE commands ADD COLUMN artifact_kind TEXT")
-                    db.execute("PRAGMA user_version=4")
-                # A v3/v4 store missing its log identity is corruption, never a new log.
+                # A store missing its log identity is corruption, never a new log.
                 self._checkpoint(db)
         except OSError:
             raise io_error(1, "Cannot initialize private node receipt storage") from None
 
     @staticmethod
-    def _create_core(db):
+    def _create_schema(db):
         db.execute(
-            "CREATE TABLE owner (singleton INTEGER PRIMARY KEY CHECK(singleton=1), node TEXT NOT NULL, epoch TEXT NOT NULL, gateway TEXT NOT NULL)"
+            "CREATE TABLE owner (singleton INTEGER PRIMARY KEY CHECK(singleton=1), node TEXT NOT NULL, epoch TEXT NOT NULL, gateway TEXT NOT NULL, log_incarnation_id TEXT)"
         )
         db.execute(
-            "CREATE TABLE commands (command TEXT PRIMARY KEY, identity TEXT NOT NULL, payload BLOB NOT NULL, state TEXT NOT NULL CHECK(state IN ('prepared','effect-intent','native-accepted','terminal')), native_ref TEXT, output_digest TEXT, sequence INTEGER NOT NULL, authorization_id TEXT)"
+            "CREATE TABLE commands (command TEXT PRIMARY KEY, identity TEXT NOT NULL, payload BLOB NOT NULL, state TEXT NOT NULL CHECK(state IN ('prepared','effect-intent','native-accepted','terminal')), native_ref TEXT, output_digest TEXT, sequence INTEGER NOT NULL, authorization_id TEXT, artifact_kind TEXT)"
         )
         db.execute(
             "CREATE TABLE outbox (sequence INTEGER PRIMARY KEY AUTOINCREMENT, command TEXT NOT NULL REFERENCES commands(command), state TEXT NOT NULL, output_digest TEXT)"
@@ -246,11 +229,15 @@ class NodeReceiptStore:
         db.execute(
             "CREATE TRIGGER outbox_no_delete BEFORE DELETE ON outbox BEGIN SELECT RAISE(ABORT, 'append-only outbox'); END"
         )
+        db.execute(
+            "CREATE TABLE receipt_checkpoint (singleton INTEGER PRIMARY KEY CHECK(singleton=1), server_id TEXT, through_sequence INTEGER NOT NULL, through_digest TEXT)"
+        )
+        db.execute("INSERT INTO receipt_checkpoint VALUES (1,NULL,0,NULL)")
 
     @staticmethod
-    def _validate_core_schema(db, version):
+    def _validate_schema(db):
         expected = {
-            "owner": {"singleton", "node", "epoch", "gateway"},
+            "owner": {"singleton", "node", "epoch", "gateway", "log_incarnation_id"},
             "commands": {
                 "command",
                 "identity",
@@ -260,13 +247,10 @@ class NodeReceiptStore:
                 "output_digest",
                 "sequence",
                 "authorization_id",
+                "artifact_kind",
             },
             "outbox": {"sequence", "command", "state", "output_digest"},
         }
-        if version in (3, 4):
-            expected["owner"].add("log_incarnation_id")
-        if version == 4:
-            expected["commands"].add("artifact_kind")
         for table, columns in expected.items():
             if {row[1] for row in db.execute(f"PRAGMA table_info({table})")} != columns:
                 raise conflict(1, "Unsupported node receipt schema shape")
@@ -275,18 +259,6 @@ class NodeReceiptStore:
         }
         if not {"outbox_no_update", "outbox_no_delete"} <= triggers:
             raise conflict(1, "Node receipt append-only guards are missing")
-        if version == 2 and (
-            db.execute("PRAGMA quick_check").fetchall() != [("ok",)]
-            or db.execute("PRAGMA foreign_key_check").fetchone()
-        ):
-            raise conflict(1, "Node receipt store failed integrity checks")
-
-    @staticmethod
-    def _create_checkpoint(db):
-        db.execute(
-            "CREATE TABLE receipt_checkpoint (singleton INTEGER PRIMARY KEY CHECK(singleton=1), server_id TEXT, through_sequence INTEGER NOT NULL, through_digest TEXT)"
-        )
-        db.execute("INSERT INTO receipt_checkpoint VALUES (1,NULL,0,NULL)")
 
     @staticmethod
     def _checkpoint(db):
@@ -594,11 +566,7 @@ class NodeReceiptStore:
                 os.close(fd)
 
     def _read_output_bytes(self, digest, *, max_bytes: int | None = None):
-        if (
-            not isinstance(digest, str)
-            or len(digest) != 64
-            or any(c not in "0123456789abcdef" for c in digest)
-        ):
+        if not is_sha256_hex(digest):
             raise conflict(1, "Invalid private output digest")
         path = self.outputs / (digest + ".txt")
         check_private_evidence_path(path)

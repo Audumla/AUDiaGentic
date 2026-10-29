@@ -12,6 +12,8 @@ import json
 from dataclasses import dataclass, field
 from typing import Any
 
+from audiagentic.foundation.digest import is_sha256_hex
+
 from .contracts import (
     CommandIdentity,
     _constant,
@@ -29,11 +31,7 @@ _MEDIA_TYPES = frozenset(
 
 
 def _sha(value: Any) -> str:
-    if (
-        not isinstance(value, str)
-        or len(value) != 64
-        or any(c not in "0123456789abcdef" for c in value)
-    ):
+    if not is_sha256_hex(value):
         raise invalid(1, "Worker terminal metadata requires lowercase SHA256")
     return value
 
