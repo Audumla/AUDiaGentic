@@ -12,6 +12,7 @@ from pathlib import Path
 CANONICAL_SCHEMA_IDS = (
     "agent-execution-record",
     "agent-execution-session",
+    "agent-file",
     "agent-output-event",
     "agent-status-snapshot",
     "agents-config",
