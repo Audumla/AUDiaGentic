@@ -10,7 +10,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from audiagentic.foundation.io import read_text_with_retry
 
 DEFAULT_REQUEST_HISTORY_LIMIT = 100
 DEFAULT_TIMELINE_MAX_BYTES = 1 * 1024 * 1024
@@ -20,6 +19,7 @@ DEFAULT_CONSOLE_TRACE_MAX_BYTES = 4 * 1024 * 1024
 DEFAULT_JOURNAL_RETENTION_DAYS = 5
 _MAX_CONFIGURED_BYTES = 256 * 1024 * 1024
 _MAX_REQUEST_HISTORY_LIMIT = 10_000
+_POLICY_ENV = "AUDIAGENTIC_GATEWAY_RETENTION_POLICY"
 
 
 @dataclass(frozen=True)
@@ -56,7 +56,8 @@ class RetentionPolicy:
 
 
 def policy_path() -> Path:
-    override = os.environ.get("AUDIAGENTIC_GATEWAY_RETENTION_POLICY")
+    """The legacy JSON policy file (read when ``gateway.retention`` is not in settings)."""
+    override = os.environ.get(_POLICY_ENV)
     return Path(override).expanduser() if override else Path.home() / ".audiagentic" / "gateway-retention.json"
 
 
@@ -102,8 +103,14 @@ def _policy_values(raw: dict[str, Any]) -> tuple[bool, float, int, int, int, int
 
 
 def load_retention_policy() -> RetentionPolicy:
-    path = policy_path()
-    if not path.is_file():
+    """``gateway.retention`` from settings, else the legacy JSON file (see ``policy_mapping``)."""
+    from audiagentic.components.agents.gateway.settings import policy_mapping
+
+    try:
+        raw = policy_mapping("retention", _POLICY_ENV, policy_path())
+    except (OSError, ValueError, TypeError):
+        raw = []  # not a mapping: reported as an invalid policy below
+    if raw is None:
         return RetentionPolicy(
             False,
             0.0,
@@ -118,7 +125,6 @@ def load_retention_policy() -> RetentionPolicy:
             False,
         )
     try:
-        raw = json.loads(read_text_with_retry(path))
         if not isinstance(raw, dict):
             raise ValueError
         enabled, minimum, batch, history_limit, timeline_max, observation_max, recovery_max, console_max = _policy_values(raw)
