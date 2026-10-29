@@ -100,3 +100,17 @@ def test_doctor_reports_provisional_and_ambiguous_identity(tmp_path: Path) -> No
     _settings(root, "project:\n  id: chosen\n")
     [result] = check_identity(DoctorContext(root))
     assert result.status == OK and "'chosen' (settings)" in result.message
+
+
+def test_provider_project_name_follows_the_declared_id(tmp_path: Path) -> None:
+    from audiagentic.components.project.project_api import resolve_project_name
+
+    root = _repo(tmp_path / "somedir")
+    assert resolve_project_name(root) == "somedir"  # directory name: provisional
+    _settings(root, "project:\n  id: declared-id\n")
+    assert resolve_project_name(root) == "declared-id"
+    assert resolve_project_name(root, workspace_name="Label") == "declared-id"  # a host label is only a fallback
+    legacy = root / ".audiagentic" / "config"
+    legacy.mkdir(parents=True)
+    (legacy / "project.yaml").write_text("project-name: Explicit Name\n", encoding="utf-8")
+    assert resolve_project_name(root) == "Explicit Name"  # an explicit display name still wins

@@ -8,7 +8,10 @@ from audiagentic.foundation.lifecycle.doctor import FAIL, OK, WARN, CheckResult
 
 from .project_api import git_remote_ids, project_id
 
-_DECLARE = "Declare project.id in the tracked .audiagentic/settings.yaml, so every clone resolves the same project"
+_DECLARE = (
+    "Declare project.id in the tracked .audiagentic/settings.yaml, so every clone resolves the same "
+    "project (providers such as gpt-auto use it as the project name)"
+)
 
 
 def check_identity(context: Any) -> list[CheckResult]:
