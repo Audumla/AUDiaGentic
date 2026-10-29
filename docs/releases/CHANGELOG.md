@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.1](https://github.com/Audumla/AUDiaGentic/compare/v0.11.0...v0.11.1) (2026-10-29)
+
+
+### Bug Fixes
+
+* **providers:** parse name-prefixed CLI versions so surface constraints evaluate ([#104](https://github.com/Audumla/AUDiaGentic/issues/104)) ([bf260da](https://github.com/Audumla/AUDiaGentic/commit/bf260da636f4fb944ebfc8357c9efe20dbaf4acb))
+
 ## [0.11.0](https://github.com/Audumla/AUDiaGentic/compare/v0.10.1...v0.11.0) (2026-10-29)
 
 
