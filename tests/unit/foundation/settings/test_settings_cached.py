@@ -25,10 +25,24 @@ def _write(path: Path, text: str) -> None:
     path.write_text(f"schema_version: 1\n{text}", encoding="utf-8")
 
 
+@pytest.fixture(autouse=True)
+def _empty_cache() -> None:
+    """The cache is process-wide; an entry from an earlier test must not satisfy a later one."""
+    settings._resolve_for_stamp.cache_clear()
+
+
 def test_unchanged_files_resolve_once(project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     calls = []
     real = settings.resolve_settings
-    monkeypatch.setattr(settings, "resolve_settings", lambda **kw: calls.append(kw) or real(**kw))
+
+    def counting(**kw):
+        # Count this project only: a background thread left by an earlier test in the
+        # same worker can resolve other settings while the patch is installed.
+        if kw.get("project") is not None and Path(kw["project"]).resolve() == project.resolve():
+            calls.append(kw)
+        return real(**kw)
+
+    monkeypatch.setattr(settings, "resolve_settings", counting)
     _write(project / ".audiagentic" / "settings.yaml", "project: {id: one}\n")
     first = resolve_settings_cached(project)
     assert resolve_settings_cached(project) is first
@@ -63,3 +77,38 @@ def test_invalid_settings_raise_every_time_and_recover_when_fixed(project: Path)
             resolve_settings_cached(project)
     _write(path, "project: {id: fixed-id}\n")
     assert resolve_settings_cached(project).get("project.id") == "fixed-id"
+
+
+def test_other_threads_resolving_settings_do_not_break_the_count(project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A background thread (as a gateway worker left by an earlier test would be) resolving
+    other settings while the patch is installed must not change this project's count."""
+    import threading
+
+    stop = threading.Event()
+
+    def background() -> None:
+        while not stop.is_set():
+            try:
+                settings.resolve_settings(project=None)  # a different project (or none)
+            except Exception:  # noqa: BLE001 - only the extra call matters here
+                pass
+
+    calls = []
+    real = settings.resolve_settings
+
+    def counting(**kw):
+        if kw.get("project") is not None and Path(kw["project"]).resolve() == project.resolve():
+            calls.append(kw)
+        return real(**kw)
+
+    monkeypatch.setattr(settings, "resolve_settings", counting)
+    thread = threading.Thread(target=background, daemon=True)
+    thread.start()
+    try:
+        _write(project / ".audiagentic" / "settings.yaml", "project: {id: one}\n")
+        first = resolve_settings_cached(project)
+        assert resolve_settings_cached(project) is first
+    finally:
+        stop.set()
+        thread.join(timeout=5)
+    assert len(calls) == 1
