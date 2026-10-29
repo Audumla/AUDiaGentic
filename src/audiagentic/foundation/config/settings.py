@@ -84,6 +84,11 @@ class ResolvedSettings:
         return self.origins.get(json_pointer(tuple(key.split("."))))
 
 
+def project_config_dir(project_root: Path) -> Path:
+    """The tracked per-checkout configuration directory (``.audiagentic``)."""
+    return project_root / ".audiagentic"
+
+
 def vendor_settings_path() -> Path:
     return get_package_config_dir() / "provisioning" / "foundation" / SETTINGS_FILE
 
@@ -134,7 +139,7 @@ def scope_sources(
         ScopeSource("vendor", vendor_settings_path(), required=True),
         ScopeSource("user", user_config_dir() / SETTINGS_FILE, required=False),
         ScopeSource(
-            "project", project_root / ".audiagentic" / SETTINGS_FILE if project_root else None, required=False,
+            "project", project_config_dir(project_root) / SETTINGS_FILE if project_root else None, required=False,
         ),
     ]
     explicit = config_file if config_file is not None else environ.get(CONFIG_ENV) or None
