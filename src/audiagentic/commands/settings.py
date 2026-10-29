@@ -134,8 +134,11 @@ def _paths(args: argparse.Namespace, settings: Any) -> int:
     rows = [{"kind": "settings", "scope": s.scope, "path": str(s.path) if s.path else None, "present": s.present}
             for s in sources]
     from audiagentic.foundation.paths.home import user_cache_dir, user_state_dir
+    from audiagentic.foundation.paths.names import home_source
 
-    rows += [{"kind": "state", "scope": "user", "path": str(user_state_dir()), "present": user_state_dir().is_dir()},
+    home, home_origin = home_source(args.config_file)
+    rows += [{"kind": "home", "scope": home_origin, "path": str(home), "present": home.is_dir()},
+             {"kind": "state", "scope": "user", "path": str(user_state_dir()), "present": user_state_dir().is_dir()},
              {"kind": "cache", "scope": "user", "path": str(user_cache_dir()), "present": user_cache_dir().is_dir()}]
     if args.as_json:
         print(json.dumps({"project-root": str(project_root) if project_root else None, "paths": rows}, indent=2))
