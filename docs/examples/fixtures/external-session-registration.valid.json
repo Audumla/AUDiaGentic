@@ -11,7 +11,11 @@
     "executable-version": "0.165.0",
     "instance-generation": "g1"
   },
-  "writer": null,
+  "writer": {
+    "writer-id": "gateway-a",
+    "owner-epoch": "epoch-1",
+    "claimed-at": "2026-10-29T00:00:00Z"
+  },
   "created-at": "2026-10-29T00:00:00Z",
   "updated-at": "2026-10-29T00:00:00Z"
 }

@@ -12,21 +12,28 @@ provider-ref key, one schema-validated record per file.
   generation increases and any writer claim is dropped, so a holder from the
   previous generation can no longer write.
 - ``claim_writer`` is a compare-and-swap on the binding generation: it fails
-  if the generation moved or another writer holds the session. Re-claiming by
-  the same writer is a no-op.
+  if the generation moved or another writer of the *current* owner epoch holds
+  the session. Re-claiming by the same writer and epoch is a no-op. A claim
+  held under a retired owner epoch is taken over atomically with a generation
+  bump, so the retired owner can never act again (SH50b).
 - ``release_writer`` only the holder can release; releasing nothing is a no-op.
-- ``assert_writer`` is the check dispatch makes immediately before an effect.
+- ``assert_writer`` is the check dispatch makes immediately before an effect;
+  a claim from another owner epoch is not honoured.
+- ``resolve_target`` is the only way dispatch obtains the node locator: it
+  asserts the writer first, so a locator never comes from a caller.
 
 Each operation runs under one lock per ref key and writes atomically. The
 registry takes no other gateway lock, so it adds no lock-order edge. Durable
 pre-effect intent and node receipts are SH51; owner-epoch fencing is SH50b.
-A registration is not an authorization grant, and nothing here can start,
-close or kill a provider process.
+Takeover does not clear delivery uncertainty; that lives with the request
+(SH51). A registration is not an authorization grant, and nothing here can
+start, close or kill a provider process.
 """
 from __future__ import annotations
 
 import json
 import re
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -114,8 +121,14 @@ def register(project_root: Path, *, ref_key: str, provider_id: str, surface_id: 
         return _store(path, record)
 
 
-def claim_writer(project_root: Path, ref_key: str, *, writer_id: str, generation: int) -> dict[str, Any]:
-    """Take the single writer claim if the generation is current and no other writer holds it."""
+def claim_writer(project_root: Path, ref_key: str, *, writer_id: str, owner_epoch: str,
+                 generation: int) -> dict[str, Any]:
+    """Take the single writer claim for ``owner_epoch`` at the current generation.
+
+    A claim held under a different (retired) owner epoch is taken over in the
+    same write, with the generation increased: the retired owner's generation
+    is then stale and its claim is gone.
+    """
     path, lock = _paths(project_root, ref_key)
     with StartupLock(lock):
         record = _require(path, ref_key)
@@ -123,11 +136,13 @@ def claim_writer(project_root: Path, ref_key: str, *, writer_id: str, generation
             raise conflict_error(7, "Binding generation is stale; re-register before claiming",
                                  current=record["generation"], given=generation)
         holder = record["writer"]
-        if holder is not None:
+        if holder is not None and holder["owner-epoch"] == owner_epoch:
             if holder["writer-id"] == writer_id:
                 return record
             raise conflict_error(8, "Another writer already holds this external session")
-        record["writer"] = {"writer-id": writer_id, "claimed-at": now_iso_z()}
+        if holder is not None:
+            record["generation"] += 1  # fence the retired owner out
+        record["writer"] = {"writer-id": writer_id, "owner-epoch": owner_epoch, "claimed-at": now_iso_z()}
         return _store(path, record)
 
 
@@ -145,8 +160,9 @@ def release_writer(project_root: Path, ref_key: str, *, writer_id: str, generati
         return _store(path, record)
 
 
-def assert_writer(project_root: Path, ref_key: str, *, writer_id: str, generation: int) -> dict[str, Any]:
-    """Immediately-before-effect check: this writer holds the claim at this generation."""
+def assert_writer(project_root: Path, ref_key: str, *, writer_id: str, owner_epoch: str,
+                  generation: int) -> dict[str, Any]:
+    """Immediately-before-effect check: this writer holds the claim, as this owner epoch, at this generation."""
     path, lock = _paths(project_root, ref_key)
     with StartupLock(lock):
         record = _require(path, ref_key)
@@ -155,7 +171,33 @@ def assert_writer(project_root: Path, ref_key: str, *, writer_id: str, generatio
         raise conflict_error(7, "Binding generation is stale", current=record["generation"], given=generation)
     if holder is None or holder["writer-id"] != writer_id:
         raise conflict_error(10, "This writer does not hold the external session")
+    if holder["owner-epoch"] != owner_epoch:
+        raise conflict_error(12, "The claim belongs to a retired gateway owner epoch")
     return record
+
+
+@dataclass(frozen=True)
+class ExternalTarget:
+    """Where dispatch may send: resolved only for the asserted writer, never from a caller."""
+
+    provider_id: str
+    surface_id: str
+    node_locator: str
+    generation: int
+    evidence_id: str
+    executable_digest: str
+    instance_generation: str
+
+
+def resolve_target(project_root: Path, ref_key: str, *, writer_id: str, owner_epoch: str,
+                   generation: int) -> ExternalTarget:
+    """The canonical dispatch target for a registered session, after asserting the writer."""
+    record = assert_writer(project_root, ref_key, writer_id=writer_id, owner_epoch=owner_epoch,
+                           generation=generation)
+    basis = record["basis"]
+    return ExternalTarget(record["provider-id"], record["surface-id"], record["node-locator"],
+                          record["generation"], basis["evidence-id"], basis["executable-digest"],
+                          basis["instance-generation"])
 
 
 def _require(path: Path, ref_key: str) -> dict[str, Any]:

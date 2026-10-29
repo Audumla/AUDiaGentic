@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://audiagentic.dev/schemas/external-session-registration.schema.json",
   "title": "External session registration (SH50a)",
-  "description": "Gateway-canonical registration of one already-running provider session the gateway may drive but does not own, keyed by the provider-ref key. Carries the opaque node locator, the join basis proven by the Provider authority, a monotonic binding generation and at most one active writer claim. Generated state, never configuration. A registration is not an authorization grant.",
+  "description": "Gateway-canonical registration of one already-running provider session the gateway may drive but does not own, keyed by the provider-ref key. Carries the opaque node locator, the join basis proven by the Provider authority, a monotonic binding generation and at most one active writer claim. Generated state, never configuration. A registration is not an authorization grant. The writer claim names the gateway owner epoch that took it.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -84,6 +84,7 @@
           "additionalProperties": false,
           "required": [
             "writer-id",
+            "owner-epoch",
             "claimed-at"
           ],
           "properties": {
@@ -94,6 +95,12 @@
             "claimed-at": {
               "type": "string",
               "format": "date-time"
+            },
+            "owner-epoch": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "description": "Managed-service ownership epoch of the gateway that holds the claim; a claim from another epoch is not honoured."
             }
           }
         }
