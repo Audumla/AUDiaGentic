@@ -106,7 +106,7 @@ def _cmd_launch(project_root: Path, args: list[str], runner_params: RunnerParams
             _status("reconciling providers...")
 
             def _on_provider(provider_id: str, status: str) -> None:
-                if status in ("enabled", "disabled", "skipped"):
+                if status in ("enabled", "unavailable", "skipped"):
                     _status(f"  {provider_id}: {status}")
 
             reconcile_all_providers(project_root=project_root, on_provider=_on_provider)
