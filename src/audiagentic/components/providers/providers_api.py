@@ -1966,6 +1966,30 @@ def resolve_join_readiness(provider_id: str, surface_id: str, *, state_root: Pat
     return _resolve_join(provider_id, surface_id, state_root=state_root)
 
 
+def inspect_join_instance(
+    provider_id: str,
+    surface_id: str,
+    *,
+    endpoint: str,
+    session_ref: str,
+    expected_generation: str | None = None,
+    state_root: Path | None = None,
+):
+    """Passively prove the exact live instance behind a joinable surface (SH47).
+
+    Requires static join readiness (SH46), then has the join adapter observe
+    the instance and compares it with the qualified evidence. Sends no prompt
+    and starts no process; any gap is a refusal. Returns a frozen
+    ``JoinInstanceProof`` carrying the evidence id and observed generation.
+    """
+    from audiagentic.components.providers.services.session.join_proof import (
+        inspect_join_instance as _inspect,
+    )
+
+    return _inspect(provider_id, surface_id, endpoint=endpoint, session_ref=session_ref,
+                    expected_generation=expected_generation, state_root=state_root)
+
+
 def prepare_provider_session_transport(
     project_root: Path,
     *,
@@ -2219,6 +2243,7 @@ __all__ = [
     # AS29 slice 5a — session-surface resolution through public boundary
     "ResolvedSessionSurface",
     "SurfaceHint",
+    "inspect_join_instance",
     "resolve_join_readiness",
     "resolve_session_surface",
     # Surfaces

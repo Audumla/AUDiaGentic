@@ -30,7 +30,8 @@ from __future__ import annotations
 
 import inspect
 import re
-from dataclasses import dataclass, fields
+from collections.abc import Callable
+from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import Any
 
@@ -64,6 +65,8 @@ class JoinAdapterInfo:
     adapter_id: str
     adapter_version: str
     native_schema_version: str
+    # Read-only passive inspection of one live instance (SH47); None = cannot inspect.
+    inspect_instance: Callable[[Any], Any] | None = field(default=None, compare=False)
 
 
 @dataclass(frozen=True)
@@ -71,6 +74,7 @@ class AdapterIdentity:
     adapter_id: str
     adapter_digest: str
     native_schema_version: str
+    inspect_instance: Callable[[Any], Any] | None = field(default=None, compare=False)
 
 
 @dataclass(frozen=True)
@@ -83,6 +87,9 @@ class JoinReadiness:
     executable_version: str | None = None
     executable_digest: str | None = None
     evidence_id: str | None = None
+    endpoint_kind: str | None = None
+    native_schema_version: str | None = None
+    adapter: AdapterIdentity | None = field(default=None, compare=False, repr=False)
     proven: JoinedSessionCapabilities = JoinedSessionCapabilities()
 
     @property
@@ -109,7 +116,7 @@ def adapter_identity(adapter_ref: str | None) -> AdapterIdentity | None:
     if not isinstance(info, JoinAdapterInfo) or not source:
         return None
     return AdapterIdentity(info.adapter_id, qualification_evidence.file_digest(Path(source)),
-                           info.native_schema_version)
+                           info.native_schema_version, info.inspect_instance)
 
 
 def resolve_join_readiness(
@@ -168,6 +175,9 @@ def resolve_join_readiness(
     if record is None:
         return result(SurfaceResolutionOutcome.UNPROVEN, "no-exact-evidence", **identity)
     identity["evidence_id"] = record["evidence-id"]
+    identity["endpoint_kind"] = record["target"]["endpoint-kind"]
+    identity["native_schema_version"] = adapter.native_schema_version
+    identity["adapter"] = adapter
     if record["target"]["executable-version"] != version:
         return result(SurfaceResolutionOutcome.UNPROVEN, "evidence-version-mismatch", **identity)
 
