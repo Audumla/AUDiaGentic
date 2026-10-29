@@ -41,19 +41,16 @@ def _wait_for_provider_terminal(
     child: Any,
     input_text: str,
     *,
-    timeout_seconds: float,
     on_activity: Callable[[WorkerActivityEnvelope], None] | None = None,
 ) -> tuple[str, str]:
     """Wait for the provider's terminal frame without inventing failure.
 
-    ``timeout_seconds`` remains part of the execution request for a provider
-    that has an explicit, provider-owned deadline.  It is deliberately not a
-    gateway kill timer: a remote agent can be legitimately quiet while it
-    runs a tool or awaits a remote service.  Completion/failure authority is
-    the authenticated worker terminal frame, explicit cancellation, or later
-    positively correlated death evidence — never elapsed time or local CPU.
+    There is no gateway kill timer (SH22): a remote agent can be legitimately
+    quiet while it runs a tool or awaits a remote service. Completion/failure
+    authority is the authenticated worker terminal frame, explicit
+    cancellation, or later positively correlated death evidence — never
+    elapsed time or local CPU.
     """
-    del timeout_seconds
     # Real supervised children expose streams; consume frames incrementally so
     # activity renewals reach the durable store while a provider is waiting.
     if getattr(child, "stdout", None) is not None and getattr(child, "stdin", None) is not None:
@@ -205,7 +202,6 @@ def _execute_isolated_provider_turn(
     *,
     identity: WorkerExecutionIdentity,
     execution_request: Mapping[str, Any],
-    timeout_seconds: float,
     activity_callback: Callable[[WorkerActivityEnvelope], None] | None = None,
     allowed_model_ids: frozenset[str] | None = None,
 ) -> tuple[ProviderExecutionResult, WorkerExecutionIdentity, WorkerProcessEvidence]:
@@ -284,7 +280,6 @@ def _execute_isolated_provider_turn(
             stdout, stderr_text = _wait_for_provider_terminal(
                 child,
                 encode_worker_message(envelope) + "\n",
-                timeout_seconds=timeout_seconds,
                 on_activity=activity_callback,
             )
             frames = [line for line in stdout.splitlines() if line]
@@ -441,12 +436,11 @@ def _freeze_result_data(value: Any) -> Any:
 
 def execute_isolated_provider_turn(
     *, identity: WorkerExecutionIdentity, execution_request: Mapping[str, Any],
-    timeout_seconds: float,
     activity_callback: Callable[[WorkerActivityEnvelope], None] | None = None,
 ) -> ProviderExecutionResult:
     """Execute one provider request; retain ordinary model-alias behavior."""
     result, _, _ = _execute_isolated_provider_turn(
-        identity=identity, execution_request=execution_request, timeout_seconds=timeout_seconds,
+        identity=identity, execution_request=execution_request,
         activity_callback=activity_callback,
     )
     return result
@@ -454,7 +448,7 @@ def execute_isolated_provider_turn(
 
 def execute_verified_isolated_provider_turn(
     *, identity: WorkerExecutionIdentity, execution_request: Mapping[str, Any],
-    allowed_model_ids: Collection[str], timeout_seconds: float,
+    allowed_model_ids: Collection[str],
     activity_callback: Callable[[WorkerActivityEnvelope], None] | None = None,
 ) -> VerifiedWorkerTerminal:
     """Return direct-worker terminal evidence after cleanup contexts exit.
@@ -476,7 +470,7 @@ def execute_verified_isolated_provider_turn(
         )
     prepared_models = frozenset(allowed_model_ids)
     result, accepted_identity, process = _execute_isolated_provider_turn(
-        identity=identity, execution_request=execution_request, timeout_seconds=timeout_seconds,
+        identity=identity, execution_request=execution_request,
         activity_callback=activity_callback, allowed_model_ids=prepared_models,
     )
     # Both context managers exited. A raised cleanup error prevents evidence,

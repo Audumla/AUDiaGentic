@@ -482,29 +482,6 @@ def _entry_profile_identity(entry: QueuedEntry) -> ProfileGenerationIdentity:
 _STARVATION_THRESHOLD_SECONDS = 30.0
 
 
-@dataclass(frozen=True, slots=True)
-class NodeQueuePolicy:
-    """Admission-approved scheduling identity/limits, never execution facts."""
-
-    profile_id: str
-    generation: str
-    config_digest: str
-    pending_capacity: int
-    global_capacity: int | None = None
-    project_capacity: int | None = None
-
-    def __post_init__(self) -> None:
-        if any(not isinstance(value, str) or not value for value in (
-            self.profile_id, self.generation, self.config_digest,
-        )):
-            raise ValueError("node queue policy requires authoritative scheduling identity")
-        for value in (self.pending_capacity, self.global_capacity, self.project_capacity):
-            if value is not None and (type(value) is not int or value < 1):
-                raise ValueError("node queue limits must be positive integers")
-        if self.pending_capacity is None:
-            raise ValueError("node pending capacity must be bounded")
-
-
 class _RuntimeState:
     """Bookkeeping for one execution profile's active requests.
 

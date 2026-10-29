@@ -82,7 +82,6 @@ def run(owner, case, **changes):
         caller_root=case.caller_root,
         authorization_request=case.auth_request,
         authorization_reply=case.auth_reply,
-        timeout_seconds=1,
     )
     args.update(changes)
     return owner.run_one(case.identity, **args)
@@ -799,7 +798,6 @@ def test_original_source_locator_is_required_no_legacy_fallback(env):
             current_binding=c.preparation.attestation.binding,
             authorization_request=c.auth_request,
             authorization_reply=c.auth_reply,
-            timeout_seconds=1,
         )
     assert owner.receipts_after() == ()
 

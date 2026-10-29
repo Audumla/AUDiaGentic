@@ -864,7 +864,6 @@ def test_queued_prompt_timeout_starts_after_fifo_admission(rig):
                     tmp_path,
                     session_id,
                     "second",
-                    timeout_seconds=0.05,
                 )
             )
         except BaseException as exc:  # pragma: no cover - assertion below reports it

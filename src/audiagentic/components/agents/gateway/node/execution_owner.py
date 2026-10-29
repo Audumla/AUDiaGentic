@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import math
 import os
 import threading
 import weakref
@@ -420,7 +419,6 @@ class NodeExecutionOwner:
         caller_root: str,
         authorization_request: Frame,
         authorization_reply: Frame,
-        timeout_seconds: float,
     ) -> Receipt:
         """Run one newly authorized intent. Caller serializes live effect grants.
 
@@ -436,12 +434,8 @@ class NodeExecutionOwner:
             or not isinstance(caller_root, str)
             or type(authorization_request) is not Frame
             or type(authorization_reply) is not Frame
-            or isinstance(timeout_seconds, bool)
-            or not isinstance(timeout_seconds, (int, float))
-            or not math.isfinite(timeout_seconds)
-            or timeout_seconds <= 0
         ):
-            raise invalid(1, "Execution requires typed correlated inputs and bounded timeout")
+            raise invalid(1, "Execution requires typed correlated inputs")
         # Detach mutable caller input before validating or retaining durable bytes.
         raw = canonical_json(command_payload)
         payload = json.loads(raw)
@@ -522,7 +516,6 @@ class NodeExecutionOwner:
                 identity=expected,
                 execution_request=request,
                 allowed_model_ids=allowed_models,
-                timeout_seconds=timeout_seconds,
             )
             with self._guard():
                 if self._running != identity or self._store is not store:

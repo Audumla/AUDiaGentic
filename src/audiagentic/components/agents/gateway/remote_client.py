@@ -350,7 +350,7 @@ class StandaloneGatewayClient:
             from audiagentic.foundation.paths.names import get_active_profile
 
             kwargs["component_profile"] = get_active_profile()
-        requested = kwargs.get("timeout_seconds")
+        requested = kwargs.get("wait_timeout_seconds")
         timeout = _DEFAULT_TRANSPORT_TIMEOUT if requested is None else float(requested) + 5  # noqa: RUF039
         return cast(
             dict[str, Any],

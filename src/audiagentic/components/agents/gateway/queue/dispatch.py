@@ -195,7 +195,6 @@ def _dispatch_one_attempt(
     context_fingerprint: str,
     component_profile: str,
     provider_isolation_tier: str,
-    worker_timeout_seconds: float,
     profile: dict[str, Any],
 ) -> dict[str, Any]:
     """Resolve profile/provider/model and call execute_provider once.
@@ -328,23 +327,11 @@ def _dispatch_one_attempt(
             logger.debug("worker console trace progress failed", exc_info=True)
 
     try:
-        try:
-            result = execute_isolated_provider_turn(
-                identity=identity,
-                execution_request=provider_request.to_mapping(),
-                timeout_seconds=worker_timeout_seconds,
-                activity_callback=_on_worker_activity,
-            )
-        except TypeError as exc:
-            # Preserve compatibility with test/delivery doubles written against
-            # the pre-SH22 worker seam; real provider TypeErrors still propagate.
-            if "activity_callback" not in str(exc):
-                raise
-            result = execute_isolated_provider_turn(
-                identity=identity,
-                execution_request=provider_request.to_mapping(),
-                timeout_seconds=worker_timeout_seconds,
-            )
+        result = execute_isolated_provider_turn(
+            identity=identity,
+            execution_request=provider_request.to_mapping(),
+            activity_callback=_on_worker_activity,
+        )
     except Exception as exc:
         try:
             trace.failed(
@@ -443,7 +430,6 @@ def _try_profile_with_retries(
     context_fingerprint: str,
     component_profile: str,
     provider_isolation_tier: str,
-    worker_timeout_seconds: float,
 ) -> dict[str, Any]:
     """Try one profile, retrying transient failures up to its retry-count.
 
@@ -505,7 +491,6 @@ def _try_profile_with_retries(
                 context_fingerprint=context_fingerprint,
                 component_profile=component_profile,
                 provider_isolation_tier=provider_isolation_tier,
-                worker_timeout_seconds=worker_timeout_seconds,
                 profile=profile,
             )
         except AudiaGenticError as exc:
@@ -583,7 +568,6 @@ def dispatch_request(
     context_fingerprint: str,
     component_profile: str,
     provider_isolation_tier: str,
-    worker_timeout_seconds: float,
     project_name: str | None = None,
     session_start: Any | None = None,
     resume_existing: bool = False,
@@ -672,7 +656,6 @@ def dispatch_request(
             context_fingerprint=context_fingerprint,
             component_profile=component_profile,
             provider_isolation_tier=provider_isolation_tier,
-            worker_timeout_seconds=worker_timeout_seconds,
         )
     except _CancelledDuringDispatch:
         return _terminal_worker_result(project_root, record, "cancelled")

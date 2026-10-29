@@ -153,7 +153,7 @@ def test_submit_returns_immediately_for_long_running_request(tmp_path: Path, mon
     _make_profile(tmp_path, "default", "local-openai")
     hold = threading.Event()
 
-    def slow_execute_provider(*, identity, execution_request, timeout_seconds):
+    def slow_execute_provider(*, identity, execution_request, activity_callback=None):
         hold.wait(timeout=5)
         return _result(
             {
@@ -180,7 +180,7 @@ def test_submit_returns_immediately_for_long_running_request(tmp_path: Path, mon
 def test_run_blocks_until_completion_and_returns_output(tmp_path: Path, monkeypatch):
     _make_profile(tmp_path, "default", "local-openai")
 
-    def fake_execute_provider(*, identity, execution_request, timeout_seconds):
+    def fake_execute_provider(*, identity, execution_request, activity_callback=None):
         return _result(
             {
                 "provider-id": execution_request["provider-id"],
@@ -232,7 +232,7 @@ def test_admission_freezes_component_template_context(tmp_path: Path, monkeypatc
     frozen = {"project": {"name": "At admission"}}
     observed: dict = {}
 
-    def fake_execute_provider(*, identity, execution_request, timeout_seconds):
+    def fake_execute_provider(*, identity, execution_request, activity_callback=None):
         observed.update(execution_request["packet-data"])
         return _result({
             "provider-id": execution_request["provider-id"], "status": "ok",
@@ -273,7 +273,7 @@ def test_application_injects_its_component_context_reader(tmp_path: Path, monkey
 def test_public_status_contains_canonical_agent_status(tmp_path: Path, monkeypatch):
     _make_profile(tmp_path, "default", "local-openai")
 
-    def fake_execute_provider(*, identity, execution_request, timeout_seconds):
+    def fake_execute_provider(*, identity, execution_request, activity_callback=None):
         return _result(
             {
                 "provider-id": execution_request["provider-id"],
@@ -301,7 +301,7 @@ def test_public_status_contains_canonical_agent_status(tmp_path: Path, monkeypat
 def test_public_status_is_slim_v4_projection(tmp_path: Path, monkeypatch):
     _make_profile(tmp_path, "default", "local-openai")
 
-    def fake_execute_provider(*, identity, execution_request, timeout_seconds):
+    def fake_execute_provider(*, identity, execution_request, activity_callback=None):
         return _result(
             {
                 "provider-id": execution_request["provider-id"],
@@ -409,7 +409,7 @@ def test_public_status_has_no_legacy_response_version_argument(tmp_path: Path):
 def test_active_component_profile_changes_execution_fingerprint(tmp_path: Path, monkeypatch):
     _make_profile(tmp_path, "default", "local-openai")
 
-    def fake_execute_provider(*, identity, execution_request, timeout_seconds):
+    def fake_execute_provider(*, identity, execution_request, activity_callback=None):
         return _result(
             {
                 "provider-id": execution_request["provider-id"],
@@ -482,7 +482,6 @@ def test_submit_replays_same_idempotency_key_without_second_enqueue(tmp_path: Pa
     [
         ({"metadata": {"idempotency_key": 7}}, "idempotency_key"),
         ({"metadata": {"schema_version": "1"}}, "schema_version"),
-        ({"timeout_seconds": "later"}, "timeout_seconds"),
     ],
 )
 def test_direct_submission_rejects_malformed_wire_values_before_resolution(
@@ -528,7 +527,7 @@ def test_wait_returns_timeout_status_for_still_running_request(tmp_path: Path, m
     _make_profile(tmp_path, "default", "local-openai")
     hold = threading.Event()
 
-    def slow_execute_provider(*, identity, execution_request, timeout_seconds):
+    def slow_execute_provider(*, identity, execution_request, activity_callback=None):
         hold.wait(timeout=5)
         return _result(
             {
@@ -616,7 +615,7 @@ def test_cancel_queued_request_reaches_cancelled_state(tmp_path: Path, monkeypat
     hold = threading.Event()
     started = threading.Event()
 
-    def slow_execute_provider(*, identity, execution_request, timeout_seconds):
+    def slow_execute_provider(*, identity, execution_request, activity_callback=None):
         started.set()
         hold.wait(timeout=5)
         return _result(
@@ -650,7 +649,7 @@ def test_cancel_queued_request_reaches_cancelled_state(tmp_path: Path, monkeypat
 def test_list_execution_requests_most_recent_first_and_filterable(tmp_path: Path, monkeypatch):
     _make_profile(tmp_path, "default", "local-openai")
 
-    def fake_execute_provider(*, identity, execution_request, timeout_seconds):
+    def fake_execute_provider(*, identity, execution_request, activity_callback=None):
         return _result(
             {
                 "provider-id": execution_request["provider-id"],
@@ -926,7 +925,7 @@ def test_terminal_status_is_equivalent_across_get_wait_and_list(
     """All request-returning entry points use the same canonical projector."""
     _make_profile(tmp_path, "default", "local-openai")
 
-    def fake_execute_provider(*, identity, execution_request, timeout_seconds):
+    def fake_execute_provider(*, identity, execution_request, activity_callback=None):
         return _result(
             {
                 "provider-id": execution_request["provider-id"],

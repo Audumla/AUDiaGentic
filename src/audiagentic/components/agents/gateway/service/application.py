@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import os
 import secrets
 from pathlib import Path
@@ -725,37 +726,25 @@ _SUBMISSION_ARGUMENTS = {
     "component_profile",
     "provider_chat_url",
     "logical_client_id",
+    # How long a blocking caller waits for the terminal result; never an
+    # execution deadline (SH22).
+    "wait_timeout_seconds",
 }
-
-# Older MCP façades may continue to serialize the removed caller-controlled
-# timeout/session-bound fields as explicit ``null`` values until that process
-# is reloaded.  Null carries no authority and is safe to discard at this
-# boundary; a non-null value remains an invalid request rather than silently
-# reintroducing caller-controlled watchdog policy.
-_RETIRED_SUBMISSION_ARGUMENTS = frozenset(
-    {"timeout_seconds", "session_idle_timeout_seconds", "session_max_lifetime_seconds"}
-)
-
 
 def _validated_submission_arguments(
     project_root: Path, arguments: dict[str, Any]
 ) -> dict[str, Any]:
     """Validate the wire submission through SH02's canonical envelope."""
-    for name in _RETIRED_SUBMISSION_ARGUMENTS:
-        if name in arguments:
-            value = arguments.pop(name)
-            if value is not None:
-                raise service_validation_error(
-                    22,
-                    "gateway service operation contains retired parameters",
-                    fields=[name],
-                )
     _reject_unknown(arguments, _SUBMISSION_ARGUMENTS)
     if not isinstance(arguments.get("new_session", False), bool) or (arguments.get("new_session") and (arguments.get("session_id") or arguments.get("provider_chat_url"))):
         raise service_validation_error(22, "new_session must be boolean and cannot be combined with session_id or provider_chat_url")
     metadata = arguments.get("metadata")
     if metadata is not None and not isinstance(metadata, dict):
         raise service_validation_error(21, "gateway submission metadata must be a mapping")
+    wait = arguments.get("wait_timeout_seconds")
+    if wait is not None and (isinstance(wait, bool) or not isinstance(wait, (int, float))
+                             or not math.isfinite(wait) or wait <= 0):
+        raise service_validation_error(22, "wait_timeout_seconds must be a positive number")
     if "workspace_name" in arguments:
         arguments["workspace_name"] = _optional_string(arguments, "workspace_name")
     if "provider_chat_url" in arguments:
@@ -783,10 +772,6 @@ def _validated_submission_arguments(
             "model_id": metadata.get("model_id"),
             "component_profile": arguments.get("component_profile"),
             "mode": arguments.get("mode", "async"),
-            # Submission execution is activity/watchdog governed. The RPC
-            # boundary deliberately has no caller-controlled wall-clock
-            # deadline; passive wait operations remain independent.
-            "timeout_seconds": None,
             "session": {
                 "session_id": arguments.get("session_id"),
                 "keep_alive": arguments.get("session_keep_alive"),

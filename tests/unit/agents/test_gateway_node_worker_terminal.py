@@ -240,7 +240,6 @@ def mint_proof(
     proof = worker.execute_verified_isolated_provider_turn(
         identity=expected,
         execution_request=request,
-        timeout_seconds=1,
         allowed_model_ids={"fixture-model", "other-model"},
     )
     assert exited == [True]

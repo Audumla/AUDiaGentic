@@ -13,7 +13,6 @@ VAL-AGW-004: "The gateway request record failed schema validation on write. Chec
 VAL-AGW-005: "The persisted gateway request record failed schema validation on read. The record may be corrupted or from an older contract version."
 VAL-AGW-006: "The current gateway request state is not recognized by the workflow engine. Check the record's state field against valid states."
 VAL-AGW-007: "A non-empty prompt_body is required. Provide a prompt with at least one character of text."
-VAL-AGW-008: "timeout_seconds must be a positive number. Use 0 or null for no timeout."
 RES-AGW-001: "The gateway request record was not found. The request may have been deleted or the ID is incorrect."
 IO-AGW-001: "Failed to read or parse the gateway request record file. Check that the file exists and contains valid JSON."
 CON-AGW-001: "The requested state transition is illegal for the current workflow. Review valid transitions in workflows.yaml."

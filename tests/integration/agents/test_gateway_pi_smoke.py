@@ -180,7 +180,6 @@ def test_gateway_dispatches_real_pi_provider_via_full_isolation_worker(
                 tmp_path,
                 execution_profile_id="pi-smoke",
                 prompt_body=_PROMPT,
-                timeout_seconds=90,
             )
             if result.get("state") not in {"completed", "failed", "cancelled", "interrupted"}:
                 # Real CPU model generation may outlive the initial caller

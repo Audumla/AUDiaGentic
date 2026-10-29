@@ -647,9 +647,6 @@
       "type": "string",
       "enum": ["async", "blocking"]
     },
-    "timeout-seconds": {
-      "type": ["number", "null"]
-    },
     "source": {
       "type": ["string", "null"]
     },

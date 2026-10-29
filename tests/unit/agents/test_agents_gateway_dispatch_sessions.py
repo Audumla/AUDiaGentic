@@ -336,7 +336,6 @@ def _dispatch(
         context_fingerprint=context_fingerprint,
         component_profile="",
         provider_isolation_tier=provider_isolation_tier,
-        worker_timeout_seconds=10,
         resume_existing=resume_existing,
         session_start=session_start,
     )

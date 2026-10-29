@@ -25,7 +25,7 @@ def main() -> int:
         agent_id="gpt-auto-reviewer-agent",
         prompt_body="Review plan item AU01. Give two concise risks.",
         session_keep_alive=True,
-        timeout_seconds=900,
+        wait_timeout_seconds=900,
         source="gpt-auto-live-test",
         metadata={"plan-item-id": "AU01"},
     )
@@ -42,7 +42,7 @@ def main() -> int:
         prompt_body="Continue that review: which risk comes first? One sentence.",
         session_id=session_id,
         session_keep_alive=True,
-        timeout_seconds=900,
+        wait_timeout_seconds=900,
         source="gpt-auto-live-test",
         metadata={"plan-item-id": "AU01"},
     )

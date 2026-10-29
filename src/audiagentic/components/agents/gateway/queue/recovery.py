@@ -509,7 +509,6 @@ def recovery_runner(record: dict[str, Any], *, project_root: Path | None = None)
         context_fingerprint=str(record.get("context-fingerprint") or ""),
         component_profile="",
         provider_isolation_tier=_resolve_provider_isolation_tier(provider_id),
-        worker_timeout_seconds=float(record.get("timeout-seconds") or 300.0),
         project_name=project_name,
         # A submitted/ambiguous provider-session turn is observation-only.
         # One exception is a durable presubmit reconciliation whose

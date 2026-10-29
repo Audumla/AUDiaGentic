@@ -122,7 +122,6 @@ def messages():
                 "caller-root": "/private/recipient-workspace",
                 "source": None,
                 "metadata": {},
-                "timeout-seconds": None,
             },
             PrepareWork,
         ),
@@ -447,9 +446,7 @@ def test_nested_exact_fields_and_integer_booleans(messages, name, key, nested):
 @pytest.mark.parametrize(
     "updates",
     [
-        {"timeout-seconds": True},
-        {"timeout-seconds": 0},
-        {"timeout-seconds": -1},
+        {"timeout-seconds": 30},  # retired field (SH22): any value is rejected
         {"source": {}},
         {"metadata": {"raw-prompt": "x"}},
         {"metadata": {"idempotency_key": "must-not-cross-wire"}},
@@ -473,13 +470,14 @@ def test_prepare_optional_values_and_primitive_metadata(messages):
     p = {
         **messages["prepare"][3],
         "source": "api",
-        "timeout-seconds": 1.5,
         "metadata": {
             "schema_version": 1,
             "correlation_id": "correlation",
         },
     }
-    assert parse(messages["prepare"], p).timeout_seconds == 1.5
+    parsed = parse(messages["prepare"], p)
+    assert parsed.source == "api"
+    assert dict(parsed.metadata) == {"schema_version": 1, "correlation_id": "correlation"}
 
 
 @pytest.mark.parametrize("field,value", [("source-node-id", "foreign"), ("workspace-id", "other"),

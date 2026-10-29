@@ -143,7 +143,7 @@ def assert_one_shot_state_matrix(
         monkeypatch.setattr(sessions_module, "get_session_runtime", lambda: runtime)
         monkeypatch.setattr(sessions_module, "peek_session_runtime", lambda: runtime)
 
-    def controlled_provider(*, identity, execution_request, timeout_seconds):
+    def controlled_provider(*, identity, execution_request, activity_callback=None):
         prompt = execution_request["packet-data"]["prompt-body"]
         if "FAIL" in prompt:
             from audiagentic.foundation.contracts.errors import AudiaGenticError
@@ -174,13 +174,13 @@ def assert_one_shot_state_matrix(
     )
 
     completed = gateway.run_execution_request(
-        project_root, prompt_body="COMPLETE", timeout_seconds=5
+        project_root, prompt_body="COMPLETE", wait_timeout_seconds=5
     )
     assert completed["state"] == "completed", completed.get("error")
     assert completed["provider-id"] == provider_id
     assert completed["output"] == f"{provider_id}:ok:COMPLETE"
 
-    failed = gateway.run_execution_request(project_root, prompt_body="FAIL", timeout_seconds=5)
+    failed = gateway.run_execution_request(project_root, prompt_body="FAIL", wait_timeout_seconds=5)
     assert failed["state"] == "failed"
     assert failed["error"]["code"] == "EXT-FAKE-500"
     assert failed["attempts"][-1]["provider-id"] == provider_id
@@ -251,7 +251,6 @@ def assert_session_binding_open_flow(
             project_root,
             prompt_body="open session",
             session_keep_alive=True,
-            timeout_seconds=5,
         )
         assert opened["state"] == "completed"
         assert opened["provider-id"] == provider_id

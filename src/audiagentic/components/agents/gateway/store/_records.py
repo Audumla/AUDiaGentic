@@ -419,7 +419,6 @@ def build_record(
     output_truncated: bool = False,
     prompt_body: str | None,
     mode: str = "async",
-    timeout_seconds: float | None = None,
     source: str | None = None,
     metadata: dict[str, Any] | None = None,
     client_default_session: dict[str, Any] | None = None,
@@ -480,13 +479,6 @@ def build_record(
             kind="agents",
             message="prompt_body is required and must not be empty",
             details={},
-        )
-    if timeout_seconds is not None and timeout_seconds <= 0:
-        raise AudiaGenticError(
-            code="VAL-AGW-008",
-            kind="agents",
-            message="timeout_seconds must be positive",
-            details={"timeout_seconds": timeout_seconds},
         )
     # Durable-session ownership is enforced by submit_execution_request(),
     # the public admission boundary. This low-level constructor remains able
@@ -585,7 +577,6 @@ def build_record(
         "diagnostic-evidence": [],
         "resolved-instance-ids": resolved_instance_ids,
         "mode": mode,
-        "timeout-seconds": timeout_seconds,
         "source": source,
         "session-id": session_id,
         "provider-transport-kind": provider_transport_kind,
@@ -732,6 +723,9 @@ def _migrate_v1_payload(payload: dict[str, Any]) -> dict[str, Any]:
     treatment of an already-dispatched record with no durable binding.
     """
     migrated = dict(payload)
+    # SH22: a request carries no execution timeout; the caller's wait window
+    # was never execution policy. Records written before that drop the field.
+    migrated.pop("timeout-seconds", None)
     migrated.setdefault("node-admission", None)
     if payload.get("contract-version") == "v10":
         # Preserve every modern ownership/session/recovery/receipt fact exactly.
@@ -883,6 +877,7 @@ def read_record(
         and "node-dispatch" in payload
         and "node-placement" in payload
         and "node-admission" in payload
+        and "timeout-seconds" not in payload
         and "cancel-acknowledged-at" in payload
         and "cancel-acknowledged-by" in payload
         and "resolved-source-id" in payload
