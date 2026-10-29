@@ -37,7 +37,7 @@ def resolve_idle_grace_seconds() -> float:
     """Component idle policy; 0 disables self-shutdown (keep-warm)."""
     from audiagentic.components.agents.gateway.settings import gateway_setting
 
-    return float(gateway_setting("idle_grace_seconds", 0))
+    return float(gateway_setting("idle_grace_seconds", 0, strict=False))
 
 
 def gateway_quiescence_facts(service_root: Path | None = None) -> dict[str, Any]:
