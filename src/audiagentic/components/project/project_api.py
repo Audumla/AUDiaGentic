@@ -76,38 +76,31 @@ def resolve_project_name(
 ) -> str:
     """Resolve one canonical display name for project-owned consumers.
 
-    Project configuration is authoritative when present.  A host-provided
-    workspace name is only a fallback for unmanaged repositories, because
-    client workspace labels are not necessarily the name of the corresponding
-    provider project.
+    In precedence order: an explicit ``project-name`` in the legacy project file,
+    the declared ``project.id``, a host-provided workspace name (only a fallback
+    for unmanaged repositories, since client labels need not match the provider
+    project), the git repository name, then the directory name. Worktree and
+    clone directories are arbitrary local names, while the repository name is the
+    same in every worktree of it.
     """
-    return project_identity(project_root, workspace_name=workspace_name)[0]
-
-
-def project_identity(project_root: Path, *, workspace_name: str | None = None) -> tuple[str, str]:
-    """The project name and where it came from.
-
-    Sources, in precedence order: ``configured`` (project.yaml), ``settings``
-    (``project.id``), ``workspace`` (host label), ``git-remote`` (origin repository name), ``main-checkout``
-    (the main checkout's directory) and ``folder`` (this directory). The last
-    two are provisional: they differ between clones.
-    """
-    config_path = project_root / ".audiagentic" / "config" / "project.yaml"
-    data = load_yaml_file(config_path) if config_path.is_file() else {}
-    if not isinstance(data, dict):
-        data = {}
-    configured_name = data.get("project-name") or data.get("project_name")
+    legacy = _legacy_project_config(project_root)
+    configured_name = legacy.get("project-name") or legacy.get("project_name")
     if isinstance(configured_name, str) and configured_name.strip():
-        return configured_name.strip(), "configured"
+        return configured_name.strip()
     declared = _declared_project_id(project_root)
     if declared:
-        return declared, "settings"
+        return declared
     if isinstance(workspace_name, str) and workspace_name.strip():
-        return workspace_name.strip(), "workspace"
-    # Worktree and clone directories are arbitrary local names; the repository
-    # name is the same in every worktree of it.
+        return workspace_name.strip()
     identity = _git_repository_identity(project_root)
-    return identity or (project_root.resolve().name, "folder")
+    return identity[0] if identity else project_root.resolve().name
+
+
+def _legacy_project_config(project_root: Path) -> dict[str, Any]:
+    """The legacy ``.audiagentic/config/project.yaml`` mapping, empty when absent or malformed."""
+    path = project_root / ".audiagentic" / "config" / "project.yaml"
+    data = load_yaml_file(path) if path.is_file() else {}
+    return data if isinstance(data, dict) else {}
 
 
 def project_id(project_root: Path) -> tuple[str, str]:
@@ -123,9 +116,7 @@ def project_id(project_root: Path) -> tuple[str, str]:
     declared = _declared_project_id(project_root)
     if declared:
         return declared, "settings"
-    config_path = project_root / ".audiagentic" / "config" / "project.yaml"
-    data = load_yaml_file(config_path) if config_path.is_file() else {}
-    legacy = _path_safe_id(str(data.get("project-id") or "")) if isinstance(data, dict) else None
+    legacy = _path_safe_id(str(_legacy_project_config(project_root).get("project-id") or ""))
     if legacy:
         return legacy, "legacy"
     name, source = _git_repository_identity(project_root) or (project_root.resolve().name, "folder")
@@ -161,9 +152,12 @@ def _path_safe_id(name: str) -> str | None:
     return candidate or None
 
 
-def _repository_name(url: str) -> str:
-    name = url.rstrip("/").rsplit("/", 1)[-1].rsplit(":", 1)[-1]
+def _strip_git_suffix(name: str) -> str:
     return name[: -len(".git")] if name.endswith(".git") else name
+
+
+def _repository_name(url: str) -> str:
+    return _strip_git_suffix(url.rstrip("/").rsplit("/", 1)[-1].rsplit(":", 1)[-1])
 
 
 def _git_common_dir(project_root: Path) -> Path | None:
@@ -201,8 +195,7 @@ def _git_repository_identity(project_root: Path) -> tuple[str, str] | None:
     name = _repository_name(origin) if origin else ""
     source = "git-remote"
     if not name:
-        name, source = (common.parent.name if common.name == ".git" else common.name), "main-checkout"
-        name = name[: -len(".git")] if name.endswith(".git") else name
+        name, source = _strip_git_suffix(common.parent.name if common.name == ".git" else common.name), "main-checkout"
     return (name.strip(), source) if name.strip() else None
 
 
@@ -230,10 +223,7 @@ def context(
     workspace_name: str | None = None,
 ) -> dict[str, Any]:
     """Return stable, public project facts for prompt templates."""
-    config_path = project_root / ".audiagentic" / "config" / "project.yaml"
-    data = load_yaml_file(config_path) if config_path.is_file() else {}
-    if not isinstance(data, dict):
-        data = {}
+    data = _legacy_project_config(project_root)
     return {
         "id": project_id(project_root)[0],
         "name": resolve_project_name(project_root, workspace_name=workspace_name),
