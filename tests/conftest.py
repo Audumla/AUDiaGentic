@@ -30,6 +30,15 @@ for _p in (str(_ROOT), str(_SRC)):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
+@pytest.fixture(scope="session", autouse=True)
+def _cache_provider_descriptor_parsing():
+    """Parse the shipped provider descriptors once per process (see the helper)."""
+    from tests.helpers import provider_descriptor_cache
+
+    provider_descriptor_cache.install()
+    yield
+
+
 _TIER_MARKERS = {
     "/unit/": "unit",
     "/integration/": "integration",
