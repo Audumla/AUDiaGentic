@@ -1,5 +1,40 @@
 # Changelog
 
+## [0.11.0](https://github.com/Audumla/AUDiaGentic/compare/v0.10.1...v0.11.0) (2026-10-29)
+
+
+### Features
+
+* **cli:** audiagentic doctor and setup with component-owned checks (CFG08) ([#100](https://github.com/Audumla/AUDiaGentic/issues/100)) ([dc94eb6](https://github.com/Audumla/AUDiaGentic/commit/dc94eb6f5edf02d3e7dc7a4a99caf96849c5ed8c))
+
+## [0.10.1](https://github.com/Audumla/AUDiaGentic/compare/v0.10.0...v0.10.1) (2026-10-29)
+
+
+### Bug Fixes
+
+* **gateway:** let abandon settle requests orphaned by their gateway host (GA27) ([#99](https://github.com/Audumla/AUDiaGentic/issues/99)) ([bb95e9a](https://github.com/Audumla/AUDiaGentic/commit/bb95e9a602964c7345441f75a96dfe3ef0191fd4))
+
+## [0.10.0](https://github.com/Audumla/AUDiaGentic/compare/v0.9.0...v0.10.0) (2026-10-29)
+
+
+### Features
+
+* **providers:** native surface qualification evidence schema and store (SH53) ([#103](https://github.com/Audumla/AUDiaGentic/issues/103)) ([9b2b06d](https://github.com/Audumla/AUDiaGentic/commit/9b2b06d1e57befd9971ef7ff932289c9a73ed8ff))
+
+## [0.9.0](https://github.com/Audumla/AUDiaGentic/compare/v0.8.0...v0.9.0) (2026-10-29)
+
+
+### Features
+
+* **agents:** agent definitions as single validated files with templates (CFG05) ([#98](https://github.com/Audumla/AUDiaGentic/issues/98)) ([53fbfdb](https://github.com/Audumla/AUDiaGentic/commit/53fbfdb0061def4d51aa0eb6b9c9c5f977c72fba))
+
+## [0.8.0](https://github.com/Audumla/AUDiaGentic/compare/v0.7.2...v0.8.0) (2026-10-29)
+
+
+### Features
+
+* **config:** layered settings resolver and read-only config commands (CFG03) ([#90](https://github.com/Audumla/AUDiaGentic/issues/90)) ([59d3386](https://github.com/Audumla/AUDiaGentic/commit/59d338649086acf62d34127d85cd28327dec9182))
+
 ## [0.7.2](https://github.com/Audumla/AUDiaGentic/compare/v0.7.1...v0.7.2) (2026-10-28)
 
 
