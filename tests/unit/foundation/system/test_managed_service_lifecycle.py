@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import socket
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from pathlib import Path
@@ -32,6 +34,8 @@ class FakeService:
         self.ready = True
         self.is_quiescent = True
         self.stop_on_request = True
+        self.endpoint_busy = False
+        self.die_on_handshake = False
 
     def launch(self, _launch: DetachedLaunch, *, owner_epoch: str) -> ProcessEvidence:
         with self.guard:
@@ -52,7 +56,20 @@ class FakeService:
         creation = self.alive.get(evidence.pid)
         return None if creation is None else ProcessIdentity(evidence.pid, creation_identity=creation)
 
+    def endpoint_in_use(self, _endpoint) -> bool:
+        return self.endpoint_busy
+
     def handshake(self, record):
+        if self.die_on_handshake:
+            # The launched process exits (e.g. it could not bind its port).
+            self.alive.pop(record.process.pid, None)
+            return ServiceHandshake(
+                ready=False,
+                owner_epoch=record.owner_epoch,
+                protocol_version=record.protocol_version,
+                endpoint=record.endpoint,
+                health_facts={"ready": False},
+            )
         return ServiceHandshake(
             ready=self.ready,
             owner_epoch=record.owner_epoch,
@@ -82,6 +99,7 @@ class FakeService:
             observe=self.observe,
             launch=self.launch,
             signal=self.signal,
+            endpoint_in_use=self.endpoint_in_use,
         )
 
 
@@ -212,6 +230,45 @@ def test_failed_readiness_cleans_up_only_the_proven_launched_process(tmp_path: P
     assert service.signal_count == 1
     assert service.alive == {}
     assert store.read().state == "failed"
+
+
+def test_occupied_endpoint_fails_fast_without_launching(tmp_path: Path) -> None:
+    lifecycle, store, service, declaration = _lifecycle(tmp_path)
+    service.endpoint_busy = True
+
+    with pytest.raises(AudiaGenticError, match="CON-MSVC-037"):
+        lifecycle.start_or_attach(declaration, client_instance_id="client-a", lease_ttl_seconds=60)
+
+    assert service.launch_count == 0
+    assert store.read().state == "failed"
+
+
+def test_process_exiting_before_ready_fails_without_waiting_out_the_timeout(tmp_path: Path) -> None:
+    lifecycle, store, service, declaration = _lifecycle(tmp_path)
+    service.die_on_handshake = True
+    started = time.monotonic()
+
+    with pytest.raises(AudiaGenticError, match="CON-MSVC-038"):
+        lifecycle.start_or_attach(
+            replace(declaration, readiness_timeout=5.0), client_instance_id="client-a", lease_ttl_seconds=60
+        )
+
+    assert time.monotonic() - started < 2.0
+    assert service.signal_count == 0  # nothing left to stop
+    assert store.read().state == "failed"
+
+
+def test_loopback_probe_sees_a_listening_port() -> None:
+    from audiagentic.foundation.system.managed_service_lifecycle_contracts import loopback_endpoint_in_use
+
+    with socket.socket() as server:
+        server.bind(("127.0.0.1", 0))
+        server.listen(1)
+        port = server.getsockname()[1]
+        assert loopback_endpoint_in_use(EndpointInfo("loopback-http", f"127.0.0.1:{port}", "auth"))
+    assert not loopback_endpoint_in_use(EndpointInfo("loopback-http", f"127.0.0.1:{port}", "auth"))
+    assert not loopback_endpoint_in_use(EndpointInfo("remote-http", "example.invalid:443", "auth"))
+    assert not loopback_endpoint_in_use(EndpointInfo("pipe", "gateway-pipe", "auth"))
 
 
 def test_native_launcher_failure_is_classified_at_public_boundary(tmp_path: Path) -> None:
