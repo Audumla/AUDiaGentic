@@ -233,3 +233,16 @@ def _raise(issues: list[SettingsIssue]) -> None:
         4, f"Invalid settings: {first.message}", file=first.file, line=first.line, column=first.column,
         pointer=first.pointer or "/", issues=len(issues),
     )
+
+
+def doctor_settings(context: Any) -> list[Any]:
+    """Doctor check: every settings scope is valid (read-only)."""
+    from audiagentic.foundation.lifecycle.doctor import FAIL, OK, CheckResult
+
+    resolved = resolve_settings(project=context.project, collect=True)
+    if not resolved.issues:
+        present = sum(1 for source in resolved.sources if source.present)
+        return [CheckResult("settings.valid", OK, f"{present} settings file(s) valid")]
+    return [CheckResult("settings.valid", FAIL, issue.describe(),
+                        "Fix the reported key, or run 'audiagentic config validate' for every issue")
+            for issue in resolved.issues]

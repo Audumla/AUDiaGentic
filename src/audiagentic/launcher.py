@@ -230,6 +230,9 @@ def _main(argv: list[str] | None = None) -> int:
     from audiagentic.commands.agents import add_agent_parsers
 
     add_agent_parsers(subparsers)
+    from audiagentic.commands.doctor import add_doctor_parsers
+
+    add_doctor_parsers(subparsers)
 
     # Private stdio entrypoint retained for generated MCP configuration.
     mcp_parser = subparsers.add_parser(
@@ -277,6 +280,12 @@ def _main(argv: list[str] | None = None) -> int:
         print(parser.format_help())
         print(_help("root"))
         return 0
+
+    # doctor is read-only and setup writes only user settings: neither composes the app graph.
+    if args.command in {"doctor", "setup"}:
+        from audiagentic.commands.doctor import run_doctor_command
+
+        return run_doctor_command(args)
 
     # Agent file commands touch only agent files and must not compose the application graph.
     if args.command == "agent":

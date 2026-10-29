@@ -80,21 +80,33 @@ def resolve_project_name(
     client workspace labels are not necessarily the name of the corresponding
     provider project.
     """
+    return project_identity(project_root, workspace_name=workspace_name)[0]
+
+
+def project_identity(project_root: Path, *, workspace_name: str | None = None) -> tuple[str, str]:
+    """The project name and where it came from.
+
+    Sources, in precedence order: ``configured`` (project.yaml), ``workspace``
+    (host label), ``git-remote`` (origin repository name), ``main-checkout``
+    (the main checkout's directory) and ``folder`` (this directory). The last
+    two are provisional: they differ between clones.
+    """
     config_path = project_root / ".audiagentic" / "config" / "project.yaml"
     data = load_yaml_file(config_path) if config_path.is_file() else {}
     if not isinstance(data, dict):
         data = {}
     configured_name = data.get("project-name") or data.get("project_name")
     if isinstance(configured_name, str) and configured_name.strip():
-        return configured_name.strip()
+        return configured_name.strip(), "configured"
     if isinstance(workspace_name, str) and workspace_name.strip():
-        return workspace_name.strip()
+        return workspace_name.strip(), "workspace"
     # Worktree and clone directories are arbitrary local names; the repository
     # name is the same in every worktree of it.
-    return _git_repository_name(project_root) or project_root.resolve().name
+    identity = _git_repository_identity(project_root)
+    return identity or (project_root.resolve().name, "folder")
 
 
-def _git_repository_name(project_root: Path) -> str | None:
+def _git_repository_identity(project_root: Path) -> tuple[str, str] | None:
     """Name the git repository at project_root: origin's repo, else main checkout.
 
     Reads git's own files rather than running git, so it is cheap and has no
@@ -115,10 +127,11 @@ def _git_repository_name(project_root: Path) -> str | None:
         common = (git_dir / commondir.read_text(encoding="utf-8").strip()).resolve() if commondir.is_file() else git_dir
         origin = _origin_url(common / "config")
         name = origin.rstrip("/").rsplit("/", 1)[-1].rsplit(":", 1)[-1] if origin else ""
+        source = "git-remote"
         if not name:
-            name = common.parent.name if common.name == ".git" else common.name
+            name, source = (common.parent.name if common.name == ".git" else common.name), "main-checkout"
         name = name[: -len(".git")] if name.endswith(".git") else name
-        return name.strip() or None
+        return (name.strip(), source) if name.strip() else None
     except OSError:
         return None
 
