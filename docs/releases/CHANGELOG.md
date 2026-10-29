@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.33.0](https://github.com/Audumla/AUDiaGentic/compare/v0.32.0...v0.33.0) (2026-10-29)
+
+
+### Features
+
+* **gateway:** session generation fence, retention claims and accepted-turn clock (AS118) ([#203](https://github.com/Audumla/AUDiaGentic/issues/203)) ([1a3b987](https://github.com/Audumla/AUDiaGentic/commit/1a3b9875c6afd78635f07e6aacab757f412ba50d))
+
 ## [0.32.0](https://github.com/Audumla/AUDiaGentic/compare/v0.31.4...v0.32.0) (2026-10-29)
 
 
