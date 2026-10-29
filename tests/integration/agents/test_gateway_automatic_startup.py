@@ -4,6 +4,8 @@ import socket
 import subprocess
 from concurrent.futures import ThreadPoolExecutor
 
+from tests.helpers.gateway_settings import use_gateway_settings
+
 from audiagentic.components.agents.gateway.service.bootstrap import start_or_attach_gateway
 from audiagentic.components.agents.gateway.service.host import GATEWAY_SERVICE_KEY
 from audiagentic.foundation.system.managed_process import (
@@ -33,7 +35,7 @@ def test_concurrent_automatic_clients_share_one_managed_gateway(monkeypatch, tmp
 
     # conftest provides an isolated home with the required agents catalog;
     # replacing it here discards that startup prerequisite.
-    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_PORT", str(port))
+    use_gateway_settings(monkeypatch, tmp_path, port=port)
     clients = []
     store = ManagedServiceStore(GATEWAY_SERVICE_KEY)
     try:

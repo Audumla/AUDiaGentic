@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from contextlib import ExitStack
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -35,18 +34,11 @@ _KINDS = {
 
 
 def journal_retention_days() -> int | None:
-    """Invalid policy/override disables deletion, never protection checks."""
+    """Invalid policy disables deletion, never protection checks."""
     policy = load_retention_policy()
     if not policy.available and policy.policy_id == "invalid":
         return None
-    raw = os.environ.get("AUDIAGENTIC_GATEWAY_JOURNAL_RETENTION_DAYS")
-    if raw is None:
-        return policy.journal_retention_days
-    try:
-        days = int(raw)
-        return days if 1 <= days <= 3650 else None
-    except ValueError:
-        return None
+    return policy.journal_retention_days
 
 
 def _session_deletable(project_root: Path, entry: Path) -> bool:

@@ -15,7 +15,7 @@ def create_work_queue() -> AgentWorkQueue:
     broker adapter passes the conformance suite. Unknown values fail closed;
     there is no silent fallback that could hide a misconfigured cutover.
     """
-    backend = str(gateway_setting("queue_backend", "AUDIAGENTIC_GATEWAY_QUEUE_BACKEND", "in-memory")).strip().lower()
+    backend = str(gateway_setting("queue_backend", "in-memory")).strip().lower()
     if backend == "in-memory":
         return InMemoryAgentWorkQueue()
     raise AudiaGenticError(

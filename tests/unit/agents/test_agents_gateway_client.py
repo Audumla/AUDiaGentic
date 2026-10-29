@@ -1,10 +1,10 @@
 """SH03 conformance tests for the public in-process gateway client."""
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 import pytest
+from tests.helpers.gateway_settings import use_gateway_settings
 
 from audiagentic.components.agents.gateway import client as client_module
 from audiagentic.components.agents.gateway.client import (
@@ -100,13 +100,8 @@ def _force_feature_registry_repopulation():
 
 
 @pytest.fixture(autouse=True)
-def _clean_gateway_mode_env():
-    saved = os.environ.pop("AUDIAGENTIC_GATEWAY_MODE", None)
+def _reset_client_after_test():
     yield
-    if saved is not None:
-        os.environ["AUDIAGENTIC_GATEWAY_MODE"] = saved
-    else:
-        os.environ.pop("AUDIAGENTIC_GATEWAY_MODE", None)
     reset_gateway_client()
 
 
@@ -117,18 +112,13 @@ def test_resolve_no_project_root_no_env_defaults_to_automatic() -> None:
     assert source == "schema-default"
 
 
-def test_resolve_env_override_wins_over_everything(tmp_path: Path) -> None:
-    os.environ["AUDIAGENTIC_GATEWAY_MODE"] = "standalone"
+def test_resolve_settings_implementation_wins_over_project_selection(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    use_gateway_settings(monkeypatch, tmp_path, implementation="standalone")
     implementation_id, source = _resolve_implementation_id(tmp_path)
     assert implementation_id == "standalone"
-    assert source == "env-override"
-
-
-def test_resolve_env_override_aliases_in_process_to_embedded() -> None:
-    os.environ["AUDIAGENTIC_GATEWAY_MODE"] = "in-process"
-    implementation_id, source = _resolve_implementation_id(None)
-    assert implementation_id == "embedded"
-    assert source == "env-override"
+    assert source == "settings"
 
 
 def test_resolve_project_selected_implementation_without_env(tmp_path: Path) -> None:
@@ -182,20 +172,6 @@ def test_live_owner_with_warn_policy_constructs_embedded_anyway(
     )
     client = get_gateway_client(tmp_path)
     assert isinstance(client, EmbeddedGatewayClient)
-
-
-def test_live_owner_with_env_override_takes_precedence_over_project_config(
-    tmp_path: Path,
-) -> None:
-    from audiagentic.components.agents.gateway.management_api import gateway_set_config
-
-    gateway_set_config(tmp_path, "embedded", {"allow-with-live-shared-owner": "warn"})
-    os.environ["AUDIAGENTIC_GATEWAY_EMBEDDED_ALLOW"] = "refuse"
-    try:
-        policy = client_module._resolve_embedded_coexistence_policy(tmp_path)
-        assert policy == "refuse"
-    finally:
-        del os.environ["AUDIAGENTIC_GATEWAY_EMBEDDED_ALLOW"]
 
 
 @pytest.mark.usefixtures("in_process_gateway")

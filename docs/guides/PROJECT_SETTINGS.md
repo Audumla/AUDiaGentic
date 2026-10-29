@@ -81,21 +81,26 @@ removes its generated configuration; only `enabled: false` (or
 
 ### `gateway`
 
-| Key | Meaning | Legacy variable |
-|---|---|---|
-| `implementation` | `automatic` (default: every session attaches to one shared gateway), `standalone`, or `embedded` (deprecated: an in-process gateway per caller) | `AUDIAGENTIC_GATEWAY_MODE` |
-| `port` | loopback port of the automatic gateway | `AUDIAGENTIC_GATEWAY_PORT` |
-| `idle_grace_seconds` | idle time before an automatic gateway exits; 0 keeps it warm | `AUDIAGENTIC_GATEWAY_IDLE_GRACE_SECONDS` |
-| `queue_backend` | work-queue backend (`in-memory`) | `AUDIAGENTIC_GATEWAY_QUEUE_BACKEND` |
-| `restart_wait_seconds` | how long a restart waits for the old gateway | `AUDIAGENTIC_GATEWAY_RESTART_WAIT_SECONDS` |
-| `embedded_with_live_shared_owner` | `refuse` (default) or `warn` | `AUDIAGENTIC_GATEWAY_EMBEDDED_ALLOW` |
-| `console_trace.mode` / `.file` / `.max_chars` | operator trace detail, file and line length | `AUDIAGENTIC_GATEWAY_CONSOLE_TRACE*` |
-| `dashboard.recent_seconds` | window of recent requests the dashboard shows | `AUDIAGENTIC_GATEWAY_DASHBOARD_RECENT_SECONDS` |
-| `retention`, `watchdog` | machine retention and watchdog policy | `AUDIAGENTIC_GATEWAY_RETENTION_POLICY`, `..._WATCHDOG_POLICY` (JSON file) |
+The gateway is shared by every project and session on the machine, so this
+section is read from the machine scopes only (the user settings, or a file passed
+with `--config` / `AUDIAGENTIC_CONFIG`). A `gateway:` block in a project's own
+`.audiagentic/settings.yaml` is valid but has no effect.
 
-Transition: for one release the legacy variable still overrides its setting,
-and a legacy `~/.audiagentic/gateway-retention.json` or `gateway-watchdog.json`
-is read only when the matching section is absent. If both exist the policy is
-treated as invalid (purges and deletions stay off) and a warning names the
-conflict; remove one. The shared server/node configuration is not part of these
-settings yet.
+| Key | Meaning |
+|---|---|
+| `implementation` | `automatic` (default: every session attaches to one shared gateway), `standalone`, or `embedded` (deprecated: an in-process gateway per caller) |
+| `port` | loopback port of the automatic gateway |
+| `idle_grace_seconds` | idle time before an automatic gateway exits; 0 keeps it warm |
+| `queue_backend` | work-queue backend; only `in-memory` exists, anything else fails closed |
+| `restart_wait_seconds` | how long a restart waits for the old gateway |
+| `console_trace.mode` / `.file` / `.max_chars` | operator trace detail, file and line length |
+| `dashboard.recent_seconds` | window of recent requests the dashboard shows |
+| `retention` | machine retention policy: purge, age, batch size, history limit, per-journal byte caps, journal days |
+| `watchdog` | execution watchdog lease, ceiling and grace periods |
+
+`retention` and `watchdog` are validated as a whole: an invalid policy is
+reported in the log and treated as unavailable, which keeps purges and deletions
+off. Whether an embedded gateway may run beside a live shared one is the
+`allow-with-live-shared-owner` option of the `embedded` implementation, not a
+setting. The shared server and node configuration is not part of these settings
+yet.

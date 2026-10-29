@@ -5,9 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-import os
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
 
@@ -34,22 +32,13 @@ class WatchdogPolicy:
         }
 
 
-_POLICY_ENV = "AUDIAGENTIC_GATEWAY_WATCHDOG_POLICY"
-
-
-def policy_path() -> Path:
-    """The legacy JSON policy file (read when ``gateway.watchdog`` is not in settings)."""
-    override = os.environ.get(_POLICY_ENV)
-    return Path(override).expanduser() if override else Path.home() / ".audiagentic" / "gateway-watchdog.json"
-
-
 def load_watchdog_policy() -> WatchdogPolicy:
-    """``gateway.watchdog`` from settings, else the legacy JSON file (see ``policy_mapping``)."""
-    from audiagentic.components.agents.gateway.settings import policy_mapping
+    """The ``gateway.watchdog`` settings as a policy; unavailable when unset, invalid when it fails validation."""
+    from audiagentic.components.agents.gateway.settings import gateway_policy
 
     fallback = WatchdogPolicy(300.0, 0.0, 30.0, 30.0, "unavailable", "unavailable", False)
     try:
-        raw = policy_mapping("watchdog", _POLICY_ENV, policy_path())
+        raw = gateway_policy("watchdog")
         if raw is None:
             return fallback
         if not isinstance(raw, dict):
@@ -76,4 +65,4 @@ def load_watchdog_policy() -> WatchdogPolicy:
         return WatchdogPolicy(300.0, 0.0, 30.0, 30.0, "invalid", "invalid", False)
 
 
-__all__ = ["WatchdogPolicy", "load_watchdog_policy", "policy_path"]
+__all__ = ["WatchdogPolicy", "load_watchdog_policy"]

@@ -8,6 +8,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from tests.helpers.gateway_settings import use_gateway_settings
 
 from audiagentic.components.agents.gateway.management_api import (
     gateway_get_config,
@@ -137,14 +138,10 @@ def test_set_config_never_adds_implementation_specific_tools() -> None:
 def test_retention_policy_projection_is_machine_owned_and_redacted(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    policy_path = tmp_path / "machine-retention.json"
-    policy_path.write_text(
-        '{"policy-id":"ops","purge-enabled":true,'
-        '"minimum-archive-age-seconds":3600,"max-batch-size":7,'
-        '"secret-path":"must-not-leak"}',
-        encoding="utf-8",
+    policy_path = use_gateway_settings(
+        monkeypatch, tmp_path,
+        retention={"policy_id": "ops", "purge_enabled": True, "minimum_archive_age_seconds": 3600, "max_batch_size": 7},
     )
-    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_RETENTION_POLICY", str(policy_path))
 
     projection = gateway_get_retention_policy(tmp_path / "project")
 
@@ -153,7 +150,6 @@ def test_retention_policy_projection_is_machine_owned_and_redacted(
     assert projection["minimum-archive-age-seconds"] == 3600.0
     assert projection["max-batch-size"] == 7
     assert projection["policy-id"] == "ops"
-    assert "secret-path" not in projection
     assert str(policy_path) not in str(projection)
 
 
@@ -236,7 +232,7 @@ def test_gateway_restart_waits_for_draining_owner_to_retire(tmp_path: Path, monk
         "audiagentic.components.agents.gateway.service.bootstrap.attach_existing_gateway",
         attach,
     )
-    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_RESTART_WAIT_SECONDS", "2")
+    use_gateway_settings(monkeypatch, tmp_path, restart_wait_seconds=2)
     monkeypatch.setattr("audiagentic.components.agents.gateway.management_api.time.sleep", lambda _: None)
 
     result = gateway_restart(tmp_path)

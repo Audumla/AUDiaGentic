@@ -11,6 +11,7 @@ from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 import pytest
+from tests.helpers.gateway_settings import use_gateway_settings
 
 from audiagentic.components.agents.configuration.management import (
     create_execution_profile,
@@ -132,6 +133,7 @@ def _raw_get(endpoint: str, route: str) -> tuple[str, bytes]:
 def test_service_background_expires_old_trace_without_new_requests(tmp_path, monkeypatch):
     """Run the real host/poller/worker against isolated, old terminal data."""
     import os
+
     from audiagentic.components.agents.agents_paths import gateway_request_dir
     from audiagentic.components.agents.gateway import retention, store
     from audiagentic.foundation.observability.journal_segments import segment_paths
@@ -153,7 +155,6 @@ def test_service_background_expires_old_trace_without_new_requests(tmp_path, mon
     response = directory / "output" / "final-response.txt"
     response.parent.mkdir(exist_ok=True)
     response.write_text("keep final response", encoding="utf-8")
-    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_RETENTION_POLICY", str(tmp_path / "absent-policy.json"))
     host, thread, service_root, token_path = _start_host(tmp_path, SharedApplication())
     client = StandaloneGatewayClient(host.endpoint, load_auth_token(token_path))
     try:
@@ -419,7 +420,7 @@ def test_dashboard_recent_window_filters_history_and_supports_query_override(
         "list_execution_sessions",
         lambda _root, *, state: list(application.session_records[str(project_root)]),
     )
-    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_DASHBOARD_RECENT_SECONDS", "60")
+    use_gateway_settings(monkeypatch, tmp_path, dashboard={"recent_seconds": 60})
     host, thread, _service_root, _token_path = _start_host(tmp_path, application)
     record_known_project(
         host.service_store.root / "known-projects.json", project_root=project_root
@@ -833,7 +834,7 @@ def test_explicit_composition_mode_selects_standalone_without_fallback(
 ) -> None:
     application = SharedApplication()
     host, thread, _service_root, token_path = _start_host(tmp_path, application)
-    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_MODE", "standalone")
+    use_gateway_settings(monkeypatch, tmp_path, implementation="standalone")
     monkeypatch.setenv("AUDIAGENTIC_GATEWAY_ENDPOINT", host.endpoint)
     monkeypatch.setenv("AUDIAGENTIC_GATEWAY_TOKEN_FILE", str(token_path))
     reset_gateway_client()
@@ -978,7 +979,7 @@ def test_idle_grace_self_shutdown_retires_record(tmp_path: Path, monkeypatch) ->
     drains and exits by itself; close() retires the record to 'stopped'."""
     from audiagentic.components.agents.gateway.service.host import GATEWAY_SERVICE_KEY
 
-    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_IDLE_GRACE_SECONDS", "0.1")
+    use_gateway_settings(monkeypatch, tmp_path, idle_grace_seconds=0.1)
     application = SharedApplication()
     host, thread, service_root, _token_path = _start_host(tmp_path, application)
     # Integration override: tighten the sweep cadence so the test is fast.

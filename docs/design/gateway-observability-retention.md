@@ -78,40 +78,29 @@ The operator `console-trace.log` is separate: it retains its existing bounded
 
 ## Configuration
 
-The machine-owned policy file is selected by
-`AUDIAGENTIC_GATEWAY_RETENTION_POLICY`, or defaults to
-`~/.audiagentic/gateway-retention.json`:
+The machine-owned policy is the `gateway.retention` section of the user settings
+(the gateway is shared by every project, so a project's own settings never apply):
 
-```json
-{
-  "policy-id": "ops",
-  "purge-enabled": false,
-  "journal-retention-days": 5,
-  "request-history-limit": 100,
-  "max-batch-size": 100,
-  "timeline-max-bytes": 1048576,
-  "observation-max-bytes": 2097152,
-  "recovery-max-bytes": 1048576,
-  "console-trace-max-bytes": 4194304
-}
+```yaml
+gateway:
+  retention:
+    policy_id: ops
+    purge_enabled: false
+    journal_retention_days: 5
+    request_history_limit: 100
+    max_batch_size: 100
+    timeline_max_bytes: 1048576
+    observation_max_bytes: 2097152
+    recovery_max_bytes: 1048576
+    console_trace_max_bytes: 4194304
 ```
 
-`journal-retention-days` accepts integers 1–3650. It defaults to five when no
-policy file exists; a malformed policy disables automatic trace deletion.
-This user-authorized trace cleanup is independent of `purge-enabled`, which
-governs explicit destructive request/archive operations.
-
-Environment overrides:
-
-- `AUDIAGENTIC_GATEWAY_JOURNAL_RETENTION_DAYS`
-- `AUDIAGENTIC_GATEWAY_REQUEST_RETENTION_COUNT`
-- `AUDIAGENTIC_GATEWAY_TIMELINE_MAX_BYTES`
-- `AUDIAGENTIC_GATEWAY_OBSERVATION_MAX_BYTES`
-- `AUDIAGENTIC_GATEWAY_RECOVERY_MAX_BYTES`
-- `AUDIAGENTIC_GATEWAY_CONSOLE_TRACE_MAX_BYTES`
-
-An invalid age override disables deletion rather than silently choosing a
-shorter retention period. Policy-file changes are read without a restart.
+`journal_retention_days` accepts integers 1-3650. It defaults to five when the
+section is absent; a policy that fails validation is logged, is treated as
+invalid, and disables automatic trace deletion. This user-authorized trace
+cleanup is independent of `purge_enabled`, which governs explicit destructive
+request/archive operations. Settings changes are read without a restart. There
+are no environment overrides and no separate policy file.
 Changing inherited environment overrides, or loading this implementation,
 requires a gateway restart.
 

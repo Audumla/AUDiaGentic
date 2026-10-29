@@ -5,6 +5,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from tests.helpers.gateway_settings import use_gateway_settings
 
 from audiagentic.components.agents.agents_paths import gateway_admitted_prompt_path
 from audiagentic.components.agents.configuration.management import (
@@ -174,8 +175,7 @@ def test_worker_dispatch_writes_operator_trace(tmp_path: Path, monkeypatch):
     _make_profile(tmp_path, "default", "local-openai", model_id="gpt-4o")
     record = _record(tmp_path, "default")
     trace_path = tmp_path / "gateway-console-trace.log"
-    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_CONSOLE_TRACE", "summary")
-    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_CONSOLE_TRACE_FILE", str(trace_path))
+    use_gateway_settings(monkeypatch, tmp_path, console_trace={"mode": "summary", "file": str(trace_path)})
 
     def fake_execute_provider(*, identity, execution_request, timeout_seconds, activity_callback):
         del identity, execution_request, timeout_seconds, activity_callback

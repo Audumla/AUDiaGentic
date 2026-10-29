@@ -41,6 +41,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from tests.helpers.gateway_settings import use_gateway_settings
 from tests.integration.agents.gateway_docker_harness import (
     gateway_rig_compatible_npm_provider_ids,
     install_provider,
@@ -200,7 +201,7 @@ def _provision_provider_project(tmp_path: Path, provider_id: str, monkeypatch) -
     from audiagentic.launcher import _main
 
     monkeypatch.setenv("AUDIAGENTIC_REPO_ROOT", str(tmp_path))
-    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_MODE", "in-process")
+    use_gateway_settings(monkeypatch, tmp_path, implementation="embedded")
     monkeypatch.setenv("AUDIAGENTIC_RIG_API_KEY", "dummy")
 
     write_execution_profile(

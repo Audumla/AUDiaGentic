@@ -5,6 +5,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from tests.helpers.gateway_settings import use_gateway_settings
 
 from audiagentic.components.agents.agents_paths import gateway_request_dir, gateway_timeline_path
 from audiagentic.components.agents.gateway import retention
@@ -97,8 +98,6 @@ def test_failed_lineage_census_skips_maintenance(tmp_path, monkeypatch):
 
 
 def test_retention_policy_defaults_and_machine_overrides(tmp_path: Path, monkeypatch) -> None:
-    policy_path = tmp_path / "missing-policy.json"
-    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_RETENTION_POLICY", str(policy_path))
     default = load_retention_policy()
     assert default.request_history_limit == DEFAULT_REQUEST_HISTORY_LIMIT
     assert default.timeline_max_bytes == DEFAULT_TIMELINE_MAX_BYTES
@@ -106,18 +105,16 @@ def test_retention_policy_defaults_and_machine_overrides(tmp_path: Path, monkeyp
     assert default.recovery_max_bytes == DEFAULT_RECOVERY_MAX_BYTES
     assert default.console_trace_max_bytes == DEFAULT_CONSOLE_TRACE_MAX_BYTES
 
-    policy_path.write_text(
-        json.dumps(
-            {
-                "policy-id": "ops",
-                "request-history-limit": 7,
-                "timeline-max-bytes": 700,
-                "observation-max-bytes": 800,
-                "recovery-max-bytes": 900,
-                "console-trace-max-bytes": 1000,
-            }
-        ),
-        encoding="utf-8",
+    use_gateway_settings(
+        monkeypatch, tmp_path,
+        retention={
+            "policy_id": "ops",
+            "request_history_limit": 7,
+            "timeline_max_bytes": 700,
+            "observation_max_bytes": 800,
+            "recovery_max_bytes": 900,
+            "console_trace_max_bytes": 1000,
+        },
     )
     configured = load_retention_policy()
     assert configured.available is True
@@ -171,8 +168,7 @@ def test_compaction_leaves_room_for_following_appends(tmp_path: Path) -> None:
 
 
 def test_rolling_retention_compacts_old_resolved_histories_without_deleting_directories(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_REQUEST_RETENTION_COUNT", "1")
-    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_TIMELINE_MAX_BYTES", "500")
+    use_gateway_settings(monkeypatch, tmp_path, retention={"request_history_limit": 1, "timeline_max_bytes": 500})
     request_ids = ["req_old", "req_middle", "req_new"]
     for index, request_id in enumerate(request_ids):
         request_dir = gateway_request_dir(tmp_path, request_id)
@@ -278,8 +274,7 @@ def test_background_retention_sweep_records_duration_and_result(tmp_path: Path, 
 
 
 def test_console_trace_rotates_one_bounded_backup(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_CONSOLE_TRACE", "summary")
-    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_CONSOLE_TRACE_MAX_BYTES", "400")
+    use_gateway_settings(monkeypatch, tmp_path, console_trace={"mode": "summary"}, retention={"console_trace_max_bytes": 400})
     path = tmp_path / "console-trace.log"
     stream = path.open("a", encoding="utf-8", buffering=1)
     trace = GatewayConsoleTrace(stream=stream)

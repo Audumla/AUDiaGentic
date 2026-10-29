@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import threading
 import time
 from datetime import datetime
@@ -45,7 +44,6 @@ _RETENTION_SCHEDULER_LOCK = threading.Lock()
 _RETENTION_PENDING: dict[str, tuple[Path, str | None]] = {}
 _RETENTION_WORKER_RUNNING = False
 
-_MAX_ENV_BYTES = 256 * 1024 * 1024
 _TERMINAL_STATES = frozenset(
     {"completed", "failed", "cancelled", "rejected", "interrupted", "timed-out", "expired", "abandoned"}
 )
@@ -56,23 +54,9 @@ _JOURNAL_SPECS = {
 }
 
 
-def _env_positive_int(name: str, default: int) -> int:
-    raw = os.environ.get(name, "")
-    if not raw:
-        return default
-    try:
-        value = int(raw)
-    except ValueError:
-        return default
-    return max(1, min(value, _MAX_ENV_BYTES))
-
-
 def request_retention_count() -> int:
     """Return the configured number of full-resolution terminal histories."""
-    return _env_positive_int(
-        "AUDIAGENTIC_GATEWAY_REQUEST_RETENTION_COUNT",
-        load_retention_policy().request_history_limit or DEFAULT_REQUEST_HISTORY_LIMIT,
-    )
+    return load_retention_policy().request_history_limit or DEFAULT_REQUEST_HISTORY_LIMIT
 
 
 def journal_max_bytes(kind: str) -> int:
@@ -85,14 +69,11 @@ def journal_max_bytes(kind: str) -> int:
     }.get(kind)
     if configured is None:
         raise ValueError(f"unknown gateway journal kind: {kind}")
-    return _env_positive_int(f"AUDIAGENTIC_GATEWAY_{kind.upper()}_MAX_BYTES", configured)
+    return configured
 
 
 def console_trace_max_bytes() -> int:
-    return _env_positive_int(
-        "AUDIAGENTIC_GATEWAY_CONSOLE_TRACE_MAX_BYTES",
-        load_retention_policy().console_trace_max_bytes or DEFAULT_CONSOLE_TRACE_MAX_BYTES,
-    )
+    return load_retention_policy().console_trace_max_bytes or DEFAULT_CONSOLE_TRACE_MAX_BYTES
 
 
 def _terminal_timeline(row: dict[str, Any]) -> bool:
