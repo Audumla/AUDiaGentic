@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.0](https://github.com/Audumla/AUDiaGentic/compare/v0.10.1...v0.11.0) (2026-10-29)
+
+
+### Features
+
+* **cli:** audiagentic doctor and setup with component-owned checks (CFG08) ([#100](https://github.com/Audumla/AUDiaGentic/issues/100)) ([dc94eb6](https://github.com/Audumla/AUDiaGentic/commit/dc94eb6f5edf02d3e7dc7a4a99caf96849c5ed8c))
+
 ## [0.10.1](https://github.com/Audumla/AUDiaGentic/compare/v0.10.0...v0.10.1) (2026-10-29)
 
 
