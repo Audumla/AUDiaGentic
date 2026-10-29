@@ -65,6 +65,28 @@ checks every scope. Edits apply on the next read, without restarting a process.
 Gateway and provider policy is normally per machine, so set it in the user
 settings (`audiagentic config paths`), not in the repository.
 
+### `home`
+
+```yaml
+# user settings (audiagentic config paths shows where)
+schema_version: 1
+home: /srv/audiagentic/home
+```
+
+The AUDiaGentic home holds the shared gateway's service records and token, provider
+runtime state, harness configuration and the legacy agent catalog. Every process on a
+machine must use the same one: two homes mean two gateway services fighting over one
+port, and agents defined in one invisible from the other. A harness that starts MCP
+servers without your environment (a user-scope registration from `setup harness`) sees
+no `AUDIAGENTIC_HOME`, so choose the home here and they all agree.
+
+Precedence: the `AUDIAGENTIC_HOME` environment variable (it wins, and a service passes it
+to its children), then this setting, then `~/.audiagentic`. Like the gateway section it is
+read from the machine scopes only, so a project's own `settings.yaml` cannot move it. An
+invalid settings file stops the command with its file, line and key instead of quietly
+using a different home. `audiagentic config paths` prints the home in effect and which of
+the three chose it.
+
 ### `providers.<id>.enabled`
 
 ```yaml
