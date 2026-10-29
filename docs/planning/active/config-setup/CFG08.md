@@ -94,6 +94,10 @@ Applied on the agent-dev container for accounts mgai2 and clai2 (shared runtime 
 
 Open gap found while applying it: the registered servers inherit the session environment, and container sessions set no AUDIAGENTIC_HOME, so the user-scope gateway sees the default home (no agent files; doctor warns agents.files) rather than /work/development/AUDiaGentic/home where reviewer-gpt-agent lives. Needs a settings-level home choice (or an agent added to the default home), not an env var in the entries. CFG08 stays in progress for the end-to-end criterion and installed-wheel qualification.
 
+2026-10-29: the home gap is closed by PR #208. A foundation-owned settings key `home` (absolute path or ~/...) chooses the AUDiaGentic home when AUDIAGENTIC_HOME is unset: precedence env, then the machine-scope setting (user settings or explicit file; a project's own settings are never read), then ~/.audiagentic. An invalid settings file raises instead of picking another home. `audiagentic config paths` prints the home in effect and its source. Verified read-only against the real shared home with no environment: doctor saw the hosted catalog (2 agents) with the setting and none without. Each account's user settings still need `home:` added; that file is the user's, so it is not edited here.
+
+Remaining before CFG08 can complete: (1) the end-to-end criterion has not been repeated with the user-scope MCP tools and a `home` setting in place (setup harness, then agent_task_submit from a session started outside a project); (2) installed-wheel qualification; (3) the fixed gateway port 8765 still collides if two homes ever run services (CON-MSVC-037 now reports it instead of timing out), which the single home removes in practice but does not enforce. Related finding from the shared-service restart: a handoff replacement started while the retiring process still held 8765 died with 'Address already in use' (a race, belongs to SH63).
+
 ## Change Log
 
 - 2026-10-28T21:05:53.564412+00:00 (created-by): Created by claude
@@ -108,3 +112,4 @@ Open gap found while applying it: the registered servers inherit the session env
 - 2026-10-29T05:31:22.215189+00:00 (updated-by): Updated: section:notes
 - 2026-10-29T07:40:55.635463+00:00 (updated-by): Updated: section:notes
 - 2026-10-29T14:28:12.548201+00:00 (updated-by): Updated: section:notes
+- 2026-10-29T20:28:37.050401+00:00 (updated-by): Updated: section:notes
