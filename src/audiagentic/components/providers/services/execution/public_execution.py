@@ -721,9 +721,9 @@ def prepare_provider_session_transport(
     # capability probe on provider_id's own adapter package, never a
     # surface_id or provider_id literal here. Any provider_id whose adapter
     # package exposes session_transport.build_session_transport gets routed
-    # through it, including same-implementation alias packages such as
+    # through it, including providers that extend another descriptor such as
     # gpt-auto-t1/t2 (dedicated GP05 test projects) -- no dispatcher edit
-    # needed to add one, only the adapter package plus provider settings.
+    # needed to add one, only a descriptor plus provider settings.
     from .execution import load_session_transport_builder
 
     session_transport_builder = load_session_transport_builder(provider_id)
