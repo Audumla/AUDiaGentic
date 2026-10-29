@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.21.3](https://github.com/Audumla/AUDiaGentic/compare/v0.21.2...v0.21.3) (2026-10-29)
+
+
+### Bug Fixes
+
+* **doctor:** clean-home gaps found by the CFG08 live check ([#140](https://github.com/Audumla/AUDiaGentic/issues/140)) ([64aa61b](https://github.com/Audumla/AUDiaGentic/commit/64aa61b8923645febddaceea6ff90d26fdb01207))
+
 ## [0.21.2](https://github.com/Audumla/AUDiaGentic/compare/v0.21.1...v0.21.2) (2026-10-29)
 
 
