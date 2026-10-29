@@ -116,3 +116,20 @@ def test_settings_and_legacy_default_policy_file_are_ambiguous(
     assert "gateway.watchdog policy is invalid" in caplog.text  # an operator can see why
     legacy.unlink()
     assert load_watchdog_policy().available
+
+
+def test_schema_bounds_match_the_policy_code_limits() -> None:
+    """The retention limits exist in the schema and in the loader; they must not drift apart."""
+    import json
+
+    from audiagentic.components.agents.gateway.operations import retention_policy as rp
+    from audiagentic.foundation.paths.names import get_package_components_config_dir
+
+    schema = json.loads(
+        (get_package_components_config_dir() / "agents" / "settings" / "gateway.schema.json").read_text("utf-8")
+    )["properties"]["retention"]["properties"]
+    for key in ("timeline_max_bytes", "observation_max_bytes", "recovery_max_bytes", "console_trace_max_bytes"):
+        assert schema[key]["maximum"] == rp._MAX_CONFIGURED_BYTES, key
+    for key in ("request_history_limit", "max_batch_size"):
+        assert schema[key]["maximum"] == rp._MAX_REQUEST_HISTORY_LIMIT, key
+    assert schema["journal_retention_days"]["maximum"] == 3650
