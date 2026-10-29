@@ -64,3 +64,26 @@ def discover_checkout_root(start: Path | None = None) -> Path | None:
         if (directory / ".git").exists():
             return directory
     return None
+
+
+def describe_checkout(root: Path) -> tuple[str | None, str | None]:
+    """``(branch, head)`` of a git checkout; ``None`` for what git cannot report.
+
+    The branch is ``None`` for a detached HEAD.
+    """
+    git = shutil.which("git")
+    if git is None:
+        return None, None
+
+    def _rev_parse(*args: str) -> str | None:
+        try:
+            completed = subprocess.run(
+                [git, "rev-parse", *args], cwd=root, capture_output=True, text=True, timeout=10,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+        value = completed.stdout.strip()
+        return value if completed.returncode == 0 and value else None
+
+    branch = _rev_parse("--abbrev-ref", "HEAD")
+    return (None if branch == "HEAD" else branch), _rev_parse("HEAD")

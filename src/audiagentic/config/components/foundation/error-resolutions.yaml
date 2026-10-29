@@ -200,3 +200,8 @@ CFG-SET-004: "A settings value does not match the settings schema. Fix or remove
 CFG-SET-005: "The project directory given by --project or AUDIAGENTIC_PROJECT does not exist. Point it at an existing checkout."
 CFG-SET-006: "The settings file given by --config or AUDIAGENTIC_CONFIG does not exist. Point it at an existing file."
 CFG-SET-007: "Two components declare the same settings section (config/components/<component>/settings/<section>.schema.json). Each top-level settings section must have exactly one owning component; rename or remove one declaration."
+CFG-MCPWT-001: "No worktree was given and the MCP server is not running in a git worktree. Pass worktree=<absolute path of a git worktree root> on the call."
+CFG-MCPWT-002: "The worktree must be an absolute path. Pass the absolute path of the git worktree root."
+CFG-MCPWT-003: "The worktree path does not exist or is not a directory. Check the path; create the worktree first if it is new."
+CFG-MCPWT-004: "The path is not inside a git worktree. Plans, ledger events and gateway state are git-managed; pass the root of a git worktree."
+CFG-MCPWT-005: "The path is inside a git worktree but is not its root. Pass the worktree root shown in the error details."
