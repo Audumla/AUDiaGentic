@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.26.3](https://github.com/Audumla/AUDiaGentic/compare/v0.26.2...v0.26.3) (2026-10-29)
+
+
+### Bug Fixes
+
+* **gateway:** a broken settings edit no longer breaks a running gateway; harden the settings cache ([#180](https://github.com/Audumla/AUDiaGentic/issues/180)) ([d82e75e](https://github.com/Audumla/AUDiaGentic/commit/d82e75e0b7f69f0b308b1bdcdcc76fd137d10a62))
+
 ## [0.26.2](https://github.com/Audumla/AUDiaGentic/compare/v0.26.1...v0.26.2) (2026-10-29)
 
 
