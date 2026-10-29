@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.22.3](https://github.com/Audumla/AUDiaGentic/compare/v0.22.2...v0.22.3) (2026-10-29)
+
+
+### Documentation
+
+* **gateway:** design shared execution nodes, admission recovery and joined harness sessions ([#153](https://github.com/Audumla/AUDiaGentic/issues/153)) ([d8e60d7](https://github.com/Audumla/AUDiaGentic/commit/d8e60d762164e5d6490e92abd83715d1e86dbd21))
+
 ## [0.22.2](https://github.com/Audumla/AUDiaGentic/compare/v0.22.1...v0.22.2) (2026-10-29)
 
 
