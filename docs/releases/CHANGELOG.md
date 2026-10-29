@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.30.1](https://github.com/Audumla/AUDiaGentic/compare/v0.30.0...v0.30.1) (2026-10-29)
+
+
+### Documentation
+
+* **planning:** SH49 re-audit after the node slices of [#70](https://github.com/Audumla/AUDiaGentic/issues/70) ([#194](https://github.com/Audumla/AUDiaGentic/issues/194)) ([5c41bc0](https://github.com/Audumla/AUDiaGentic/commit/5c41bc035aebd90e8e494661cec410716e5a6833))
+
 ## [0.30.0](https://github.com/Audumla/AUDiaGentic/compare/v0.29.1...v0.30.0) (2026-10-29)
 
 
