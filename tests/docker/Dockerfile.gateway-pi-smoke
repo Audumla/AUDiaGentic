@@ -8,9 +8,9 @@ ENV AUDIAGENTIC_HOME=/tmp/audiagentic-test-home/.audiagentic
 ENV PYTHONPATH="/app/src"
 ENV PIP_BREAK_SYSTEM_PACKAGES=1
 
-# SH16: real npm-installed Pi CLI + real embedded llama-server rig + real
+# SH16: real npm-installed Pi CLI + real llama-server (test-only helper) + real
 # local GGUF model, dispatched through the gateway's disposable full-isolation
-# worker subprocess. No external API keys, no mocked HTTP rig — complements
+# worker subprocess. No external API keys, no mocked HTTP server — complements
 # Dockerfile.gateway-opencode (real external-CLI-provider happy path) with a
 # provider that instead needs a fully local model backend.
 #
@@ -27,14 +27,12 @@ COPY src ./src
 RUN uv venv /venv \
     && uv pip install --python /venv/bin/python -q --no-compile -e '.[mcp,test]'
 
-# Provision the pinned llama.cpp server and the small local smoke model in the
-# image layer.  This is only an asset cache: the test still calls
-# provision_embedded_rig(), which verifies the pinned binary and model before
-# dispatch.  Keeping HOME identical at build and run time lets that API take
-# its normal already-provisioned path instead of downloading the same assets on
-# every container start.
-RUN /venv/bin/python -c "from pathlib import Path; from audiagentic.foundation.paths.home import global_harness_runtime; from audiagentic.runtime.harness.provisioning import provision_embedded_rig; provision_embedded_rig(global_harness_runtime(), Path('/app'))"
-
 COPY tests ./tests
+
+# Asset cache only: tests/helpers/model_server.py downloads the pinned
+# llama.cpp server and the small smoke model on first use. Doing it in the
+# image layer keeps container starts from repeating the download.
+ENV AUDIAGENTIC_TEST_MODEL_CACHE=/opt/model-cache
+RUN PYTHONPATH=/app /venv/bin/python -c "from tests.helpers.model_server import install_llama_server, ensure_model; install_llama_server(); ensure_model()"
 
 CMD ["/venv/bin/pytest", "tests/integration/agents/test_gateway_pi_smoke.py", "-q", "--tb=short", "--timeout=480"]

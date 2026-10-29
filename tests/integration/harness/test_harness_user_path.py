@@ -14,14 +14,6 @@ from types import SimpleNamespace
 from audiagentic.launcher import _main
 
 
-def _stub_embedded_rig_provision(monkeypatch) -> None:
-    """Keep this lifecycle test independent of binary/model downloads."""
-    monkeypatch.setattr(
-        "audiagentic.runtime.harness.provisioning.provision_embedded_rig",
-        lambda *_args, **_kwargs: None,
-    )
-
-
 def test_launch_fails_loud_when_config_refresh_fails(tmp_path: Path, monkeypatch) -> None:
     """A failed launch-time config rebuild must abort, not launch stale."""
     project = tmp_path / "project"
@@ -61,7 +53,6 @@ def test_bootstrap_refresh_launch_and_cleanup_materialize_owned_paths(
 
     runtime = global_harness_runtime()
     project.mkdir()
-    _stub_embedded_rig_provision(monkeypatch)
     # Install a real component so MCP collection exercises the normal
     # descriptor/lifecycle path rather than a hand-built config fixture.
     from audiagentic.foundation.components.loader import register_all_components

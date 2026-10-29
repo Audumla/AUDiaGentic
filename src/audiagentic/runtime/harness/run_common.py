@@ -27,12 +27,12 @@ def build_global_context(
     harness-specific launch state lives in each provider's
     components/providers/adapters/<harness>/interactive.py builder instead.
     """
+    from audiagentic.foundation.config.local_runtime import local_rig_host
     from audiagentic.runtime.harness.config import (
         load_harness_config,
         require_harness_provider,
         require_harness_rig_port,
     )
-    from audiagentic.foundation.config.local_runtime import local_rig_host
     from audiagentic.runtime.harness.endpoint import query_server_model
     from audiagentic.runtime.harness.resolution import harness_cli_available
 

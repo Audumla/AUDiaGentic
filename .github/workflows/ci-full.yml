@@ -186,7 +186,7 @@ jobs:
             dockerfile: Dockerfile.gateway-concurrency
             tag: audiagentic-gateway-concurrency
             base: true
-          - name: gateway-pi-smoke       # SH16 real Pi CLI + embedded rig gateway dispatch
+          - name: gateway-pi-smoke       # SH16 real Pi CLI + test model server gateway dispatch
             dockerfile: Dockerfile.gateway-pi-smoke
             tag: audiagentic-gateway-pi-smoke
             base: true
@@ -221,10 +221,6 @@ jobs:
           - name: opencode-recipe-live   # opencode upgrade recipe against a real toolchain
             dockerfile: Dockerfile.opencode-recipe-live
             tag: audiagentic-opencode-recipe-live
-            base: true
-          - name: rig-recipe-live        # llama.cpp rig recipe against a real toolchain
-            dockerfile: Dockerfile.rig-recipe-live
-            tag: audiagentic-rig-recipe-live
             base: true
           - name: reconciliation-policy-e2e  # real-CLI reconciliation policy acceptance
             dockerfile: Dockerfile.reconciliation-policy-e2e

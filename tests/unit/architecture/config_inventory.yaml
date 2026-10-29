@@ -11,7 +11,6 @@ env:
     - AUDIAGENTIC_AG_BASE_URL
     - AUDIAGENTIC_AG_ENABLE_MCP
     - AUDIAGENTIC_AG_MODEL
-    - AUDIAGENTIC_AG_MODEL_PROFILE
     - AUDIAGENTIC_AG_PROVIDER
     - AUDIAGENTIC_AI_AUDIT
     - AUDIAGENTIC_AI_AUDIT_LEVEL
@@ -27,17 +26,8 @@ env:
     - AUDIAGENTIC_LOG_LEVEL
     - AUDIAGENTIC_RECONCILE_PROVIDERS_ON_LAUNCH
     - AUDIAGENTIC_RIG_BASE_URL
-    - AUDIAGENTIC_RIG_CONTEXT
-    - AUDIAGENTIC_RIG_DEVICE
-    - AUDIAGENTIC_RIG_FIT
-    - AUDIAGENTIC_RIG_GPU_LAYERS
     - AUDIAGENTIC_RIG_HOST
-    - AUDIAGENTIC_RIG_MODEL_FILE
-    - AUDIAGENTIC_RIG_MODEL_PROFILE
-    - AUDIAGENTIC_RIG_PARALLEL
     - AUDIAGENTIC_RIG_PORT
-    - AUDIAGENTIC_RIG_REASONING
-    - AUDIAGENTIC_RIG_SERVER_BIN
     - AUDIAGENTIC_STARTUP_STATUS
   # Process wiring and credential references; candidates for the small public allowlist (CFG10). ROOT duplicates REPO_ROOT.
   deployment:
@@ -134,4 +124,3 @@ path-builders:
   - audiagentic/foundation/toolchains/config/managed_config.py
   - audiagentic/foundation/toolchains/recipe_catalogue.py
   - audiagentic/runtime/harness/run_common.py
-  - audiagentic/runtime/rig/embedded/resolution.py
