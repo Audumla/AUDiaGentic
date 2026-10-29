@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.17.0](https://github.com/Audumla/AUDiaGentic/compare/v0.16.0...v0.17.0) (2026-10-29)
+
+
+### Features
+
+* **providers:** passive proof of the exact live instance before joining (SH47) ([#120](https://github.com/Audumla/AUDiaGentic/issues/120)) ([d70bb69](https://github.com/Audumla/AUDiaGentic/commit/d70bb694f116fa177e1b562daaee37d293997fce))
+
 ## [0.16.0](https://github.com/Audumla/AUDiaGentic/compare/v0.15.0...v0.16.0) (2026-10-29)
 
 
