@@ -63,7 +63,7 @@ jobs:
         if: ${{ !inputs.release_only }}
         env:
           CI_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
-        run: python -m tests.ci.run --tier fast --base "$CI_BASE_SHA" --workers 2 --results .ci-results/fast
+        run: python -m tests.ci.run --tier fast --base "$CI_BASE_SHA" --workers 4 --results .ci-results/fast
       - name: Generated release metadata and automation regressions
         if: ${{ inputs.release_only }}
         run: python -m pytest tests/unit/release tests/unit/contracts/test_ci_policy.py -q
