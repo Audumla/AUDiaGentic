@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.18.0](https://github.com/Audumla/AUDiaGentic/compare/v0.17.0...v0.18.0) (2026-10-29)
+
+
+### Features
+
+* **providers:** one authority for joined-session matrix, registration and revalidation (SH48) ([#122](https://github.com/Audumla/AUDiaGentic/issues/122)) ([c78c211](https://github.com/Audumla/AUDiaGentic/commit/c78c211f998631ad45c6c87fdc9ce8f963822689))
+
 ## [0.17.0](https://github.com/Audumla/AUDiaGentic/compare/v0.16.0...v0.17.0) (2026-10-29)
 
 
