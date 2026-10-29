@@ -410,10 +410,10 @@ def _resolve_implementation_id(project_root: Path | None) -> tuple[str, str]:
     2. the project's selected component implementation
        (``foundation.features.registry.resolve_active_implementation``),
        which itself falls through to the descriptor-declared default
-       (``embedded``) when nothing was ever explicitly selected.
-    3. "automatic" as a final production fallback -- only reachable if the
-       registry itself is unavailable (e.g. descriptors not loaded), so
-       resolution never raises merely for lack of project context.
+       (``automatic``) when nothing was ever explicitly selected.
+    3. "automatic" as a final fallback -- only reachable without a project
+       root or if the registry itself is unavailable (e.g. descriptors not
+       loaded), so resolution never raises merely for lack of project context.
 
     Returns ``(implementation_id, source)`` where source is one of
     ``settings`` / ``component-config`` / ``schema-default``.
@@ -428,12 +428,12 @@ def _resolve_implementation_id(project_root: Path | None) -> tuple[str, str]:
         from audiagentic.foundation.features.registry import resolve_active_implementation
 
         implementation_id = resolve_active_implementation(
-            project_root, _COMPONENT_ID, fallback="embedded"
+            project_root, _COMPONENT_ID, fallback="automatic"
         )
         if implementation_id:
             return implementation_id, "component-config"
 
-    return ("automatic", "schema-default") if project_root is not None else ("embedded", "schema-default")
+    return "automatic", "schema-default"
 
 
 def get_gateway_client(project_root: Path | None = None) -> GatewayClient:

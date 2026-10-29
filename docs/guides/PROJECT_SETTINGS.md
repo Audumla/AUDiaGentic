@@ -88,7 +88,7 @@ with `--config` / `AUDIAGENTIC_CONFIG`). A `gateway:` block in a project's own
 
 | Key | Meaning |
 |---|---|
-| `implementation` | `embedded`, `automatic` or `standalone` |
+| `implementation` | `automatic` (default: every session attaches to one shared gateway), `standalone`, or `embedded` (deprecated: an in-process gateway per caller) |
 | `port` | loopback port of the automatic gateway |
 | `idle_grace_seconds` | idle time before an automatic gateway exits; 0 keeps it warm |
 | `queue_backend` | work-queue backend; only `in-memory` exists, anything else fails closed |

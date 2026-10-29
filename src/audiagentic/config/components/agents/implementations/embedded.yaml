@@ -4,10 +4,11 @@ parent: agents
 id: embedded
 display-name: Embedded
 description: >-
-  In-process gateway engine, hosted directly inside the caller. Fenced for
-  tests/dev/one-shot use; never claims sharing semantics across processes.
-  Default until automatic gateway management completes soak (SH11).
-default: true
+  DEPRECATED. In-process gateway engine, hosted directly inside the caller.
+  Fenced for tests/dev/one-shot use; never claims sharing semantics across
+  processes. Not the default: select it explicitly with gateway.implementation
+  (user settings) only when a shared gateway is unwanted.
+default: false
 options-schema:
   allow-with-live-shared-owner:
     type: enum

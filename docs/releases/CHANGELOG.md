@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.23.2](https://github.com/Audumla/AUDiaGentic/compare/v0.23.1...v0.23.2) (2026-10-29)
+
+
+### Documentation
+
+* **planning:** EV04 is completed (state matched its placement) ([#168](https://github.com/Audumla/AUDiaGentic/issues/168)) ([b9c0c2b](https://github.com/Audumla/AUDiaGentic/commit/b9c0c2bbffc0777e8ff87001fefee167c1d6aaeb))
+
+## [0.23.1](https://github.com/Audumla/AUDiaGentic/compare/v0.23.0...v0.23.1) (2026-10-29)
+
+
+### Bug Fixes
+
+* **foundation:** managed services fail fast on an occupied endpoint or an early exit ([#164](https://github.com/Audumla/AUDiaGentic/issues/164)) ([6e8660c](https://github.com/Audumla/AUDiaGentic/commit/6e8660c05bd5d885230371a2382cee0c52c00d2f))
+
 ## [0.23.0](https://github.com/Audumla/AUDiaGentic/compare/v0.22.4...v0.23.0) (2026-10-29)
 
 

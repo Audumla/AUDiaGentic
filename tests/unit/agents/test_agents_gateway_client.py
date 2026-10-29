@@ -105,11 +105,10 @@ def _reset_client_after_test():
     reset_gateway_client()
 
 
-def test_resolve_no_project_root_no_env_defaults_to_embedded() -> None:
-    """Backward compatibility: calling with no project context resolves
-    exactly as before SH11 -- the hardcoded embedded fallback."""
+def test_resolve_no_project_root_no_env_defaults_to_automatic() -> None:
+    """Without project context the shared (automatic) implementation is the fallback."""
     implementation_id, source = _resolve_implementation_id(None)
-    assert implementation_id == "embedded"
+    assert implementation_id == "automatic"
     assert source == "schema-default"
 
 
@@ -138,19 +137,21 @@ def test_resolve_project_with_no_explicit_selection_falls_through_to_default(
     tmp_path: Path,
 ) -> None:
     implementation_id, source = _resolve_implementation_id(tmp_path)
-    assert implementation_id == "embedded"
+    assert implementation_id == "automatic"
     assert source == "component-config"
 
 
 # ── SH11 Slice D: embedded coexistence guard ──────────────────────────────
 
 
+@pytest.mark.usefixtures("in_process_gateway")
 def test_no_live_owner_constructs_embedded_normally(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(client_module, "_has_live_provable_shared_owner", lambda: False)
     client = get_gateway_client(tmp_path)
     assert isinstance(client, EmbeddedGatewayClient)
 
 
+@pytest.mark.usefixtures("in_process_gateway")
 def test_live_owner_refuses_by_default(tmp_path: Path, monkeypatch) -> None:
     """RV736 A6: refuse is the descriptor default, not warn -- silent
     coexistence beside a shared owner is the exact dual-ownership bug this
@@ -161,6 +162,7 @@ def test_live_owner_refuses_by_default(tmp_path: Path, monkeypatch) -> None:
     assert exc_info.value.code == "CFG-AGSV-005"
 
 
+@pytest.mark.usefixtures("in_process_gateway")
 def test_live_owner_with_warn_policy_constructs_embedded_anyway(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -172,6 +174,7 @@ def test_live_owner_with_warn_policy_constructs_embedded_anyway(
     assert isinstance(client, EmbeddedGatewayClient)
 
 
+@pytest.mark.usefixtures("in_process_gateway")
 def test_live_owner_with_unknown_policy_raises(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(client_module, "_has_live_provable_shared_owner", lambda: True)
     monkeypatch.setattr(

@@ -5,9 +5,9 @@ id: automatic
 display-name: Automatic
 description: >-
   Discover-or-start the managed local shared gateway service (SH05/SH10
-  bootstrap). Target default implementation after SH11's soak evidence is
-  recorded -- not the default yet.
-default: false
+  bootstrap): every session on the machine attaches to one running gateway.
+  The default implementation.
+default: true
 options-schema:
   startup-timeout-seconds:
     type: number
