@@ -22,6 +22,7 @@ CANONICAL_SCHEMA_IDS = (
     "error-envelope",
     "event-envelope",
     "event-topics",
+    "external-session-registration",
     "interaction-request",
     "job-record",
     "lifecycle-plan",

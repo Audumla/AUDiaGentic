@@ -1,0 +1,17 @@
+{
+  "schema-version": 1,
+  "ref-key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "provider-id": "codex",
+  "surface-id": "codex-app-server",
+  "node-locator": "opaque-locator-1",
+  "generation": 1,
+  "basis": {
+    "evidence-id": "qe_aaaaaaaaaaaaaaaaaaaaaaaa",
+    "executable-digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "executable-version": "0.165.0",
+    "instance-generation": "g1"
+  },
+  "writer": null,
+  "created-at": "2026-10-29T00:00:00Z",
+  "updated-at": "2026-10-29T00:00:00Z"
+}

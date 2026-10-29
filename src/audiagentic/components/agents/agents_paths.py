@@ -146,6 +146,11 @@ def gateway_idempotency_index_path(project_root: Path, key_digest: str) -> Path:
     return gateway_root(project_root) / "idempotency" / f"{key_digest}.json"
 
 
+def gateway_external_sessions_root(project_root: Path) -> Path:
+    """Return the root of external-session registrations (SH50a), beside but not inside sessions/."""
+    return gateway_root(project_root) / "external-sessions"
+
+
 def gateway_sessions_root(project_root: Path) -> Path:
     """Return the .audiagentic/runtime/agent-execution-gateway/sessions root for a project."""
     return gateway_root(project_root) / "sessions"
