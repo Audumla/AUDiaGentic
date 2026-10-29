@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.22.1](https://github.com/Audumla/AUDiaGentic/compare/v0.22.0...v0.22.1) (2026-10-29)
+
+
+### Bug Fixes
+
+* **gpt-auto:** retained-conversation recovery, idle-transport reconnect and prompt expansion ([#149](https://github.com/Audumla/AUDiaGentic/issues/149)) ([76c660d](https://github.com/Audumla/AUDiaGentic/commit/76c660d65cd0ac326ca18bb97b4a12846d78ecf6))
+
 ## [0.22.0](https://github.com/Audumla/AUDiaGentic/compare/v0.21.6...v0.22.0) (2026-10-29)
 
 
