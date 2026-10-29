@@ -1990,6 +1990,38 @@ def inspect_join_instance(
                     expected_generation=expected_generation, state_root=state_root)
 
 
+def join_matrix(*, state_root: Path | None = None):
+    """Join readiness of every provider surface, from the one Provider authority (SH48)."""
+    from audiagentic.components.providers.services.session.join_authority import join_matrix as _matrix
+
+    return _matrix(state_root=state_root)
+
+
+def register_join(provider_id: str, surface_id: str, *, endpoint: str, session_ref: str,
+                  state_root: Path | None = None):
+    """Prove the requested live instance and return a ``JoinDecision`` with its registration (SH48).
+
+    No registration exists unless the surface is join-ready and the instance is
+    proven. The caller stores the frozen registration; nothing is kept here.
+    """
+    from audiagentic.components.providers.services.session.join_authority import register_join as _register
+
+    return _register(provider_id, surface_id, endpoint=endpoint, session_ref=session_ref, state_root=state_root)
+
+
+def revalidate_join(registration, *, state_root: Path | None = None):
+    """Re-prove a registration immediately before an effect or on reconnect (SH48).
+
+    Refuses when the evidence, executable or instance generation changed or any
+    gate no longer passes; a refused registration must not be routed.
+    """
+    from audiagentic.components.providers.services.session.join_authority import (
+        revalidate_join as _revalidate,
+    )
+
+    return _revalidate(registration, state_root=state_root)
+
+
 def prepare_provider_session_transport(
     project_root: Path,
     *,
@@ -2244,6 +2276,9 @@ __all__ = [
     "ResolvedSessionSurface",
     "SurfaceHint",
     "inspect_join_instance",
+    "join_matrix",
+    "register_join",
+    "revalidate_join",
     "resolve_join_readiness",
     "resolve_session_surface",
     # Surfaces
