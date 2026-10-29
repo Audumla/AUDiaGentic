@@ -46,6 +46,7 @@ from audiagentic.foundation.transports.session_surface import (
     ContentChannelCapability,
     ContentStreamCapabilities,
     ControlSupport,
+    JoinedSessionCapabilities,
     LifecycleInstallation,
     LifecycleObservationCapabilities,
     LifecycleSource,
@@ -359,12 +360,14 @@ def _build_resolved_surface(
     content_channels: tuple[ContentChannelCapability, ...],
     evidence: ValidationEvidence,
     platforms: tuple[PlatformEvidence, ...],
+    joined: JoinedSessionCapabilities,
 ) -> ResolvedSessionSurface:
     """Construct a successful ResolvedSessionSurface from declaration fields.
 
     ``resolved_version`` carries the *actual installed* provider version.
     Adapter refs are intentionally *not* passed into this function; they never
-    appear in the foundation snapshot.
+    appear in the foundation snapshot. Joined-session claims are projected only
+    when the evidence is validated; otherwise they stay unsupported.
     """
     ref = SessionSurfaceRef(
         provider_id=provider_id,
@@ -397,6 +400,7 @@ def _build_resolved_surface(
             ),
             reason="" if evidence.validated else "missing-validation-evidence",
         ),
+        joined=joined if evidence.validated else JoinedSessionCapabilities(),
     )
 
 
@@ -597,6 +601,7 @@ def resolve_session_surface(
         content_channels=declaration.content_channels,
         evidence=eff_evidence,
         platforms=declaration.platforms,
+        joined=declaration.joined_capabilities,
     )
 
 

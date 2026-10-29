@@ -208,6 +208,37 @@ class SessionIdentityCapabilities:
 
 
 # ---------------------------------------------------------------------------
+# Joined-session capabilities  (SH45, slice of SH39)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class JoinedSessionCapabilities:
+    """Claims a surface makes about joining a session a human already runs.
+
+    Every field defaults to False (unsupported). A claim is not an authority:
+    joining additionally needs exact qualified evidence for the installed
+    implementation and a passive proof of the live instance (SH46/SH47).
+    """
+
+    detach_safe: bool = False
+    prompt_delivery: bool = False
+    native_atomic_queue_admission: bool = False
+    correlated_terminal_output: bool = False
+    human_concurrency_safe: bool = False
+
+    def __post_init__(self) -> None:
+        for name in self.__dataclass_fields__:
+            if not isinstance(getattr(self, name), bool):
+                raise ValueError(f"JoinedSessionCapabilities.{name} must be a bool")
+
+    @property
+    def claimed(self) -> bool:
+        """True when any joined capability is claimed."""
+        return any(getattr(self, name) for name in self.__dataclass_fields__)
+
+
+# ---------------------------------------------------------------------------
 # Lifecycle observation capabilities  (AS29 step 1 + step 3)
 # ---------------------------------------------------------------------------
 
@@ -320,6 +351,9 @@ class ResolvedSessionSurface:
     )
     validation: SurfaceValidation = field(
         default_factory=SurfaceValidation,
+    )
+    joined: JoinedSessionCapabilities = field(
+        default_factory=JoinedSessionCapabilities,
     )
 
     def __post_init__(self) -> None:
