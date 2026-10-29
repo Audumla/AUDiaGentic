@@ -13,9 +13,12 @@ import functools
 import inspect
 import json
 import logging
+import os
 import queue
+import threading
 import time
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, TypeVar
 
@@ -428,15 +431,165 @@ def mcp_server(
     )  # type: ignore[return-value]
 
 
+_IDLE_TIMEOUT_SECONDS = 12 * 60 * 60.0
+_WATCHDOG_POLL_SECONDS = 60.0
+
+
+class _RequestActivityTracker:
+    """Timestamp of the most recent genuine MCP request, not wall-clock-since-launch.
+
+    ``clock`` is injectable so tests can drive idle-timeout logic without
+    waiting 12 real hours.
+    """
+
+    def __init__(self, *, clock: Callable[[], float] = time.monotonic) -> None:
+        self._clock = clock
+        self._lock = threading.Lock()
+        self._last_activity = clock()
+
+    def mark(self) -> None:
+        with self._lock:
+            self._last_activity = self._clock()
+
+    def idle_seconds(self) -> float:
+        with self._lock:
+            return self._clock() - self._last_activity
+
+
+def _tracking_wrapper(
+    handler: Callable[..., Any], tracker: _RequestActivityTracker
+) -> Callable[..., Any]:
+    @functools.wraps(handler)
+    async def _tracked(*args: Any, **kwargs: Any) -> Any:
+        tracker.mark()
+        return await handler(*args, **kwargs)
+
+    return _tracked
+
+
+def _install_activity_tracking(server: FastMCP) -> _RequestActivityTracker:
+    """Wrap every registered MCP request handler so idleness reflects real traffic.
+
+    FastMCP exposes no dedicated per-request hook; the lowlevel ``Server`` it
+    wraps keeps every request type's handler (tools/list, tools/call,
+    resources/*, prompts/*, ...) in a plain dict, ``request_handlers``,
+    populated as the component registers tools. Wrapping each entry here
+    marks activity on any genuine incoming request, without reimplementing
+    stdio framing or touching sys.stdin directly.
+    """
+    tracker = _RequestActivityTracker()
+    mcp_server = server._mcp_server  # type: ignore[attr-defined]
+    for request_type, handler in list(mcp_server.request_handlers.items()):
+        mcp_server.request_handlers[request_type] = _tracking_wrapper(handler, tracker)
+    return tracker
+
+
+@dataclass(frozen=True)
+class _ParentLiveness:
+    """Captured identity of the process to watch for liveness."""
+
+    pid: int
+    creation_identity: str | None
+
+
+def _capture_parent_liveness(pid: int | None = None) -> _ParentLiveness:
+    """Snapshot the parent's (or an explicit pid's) OS creation-time identity.
+
+    Reuses the creation-identity primitive from managed_process.py rather than
+    a PID-reuse-vulnerable "is this PID number still running" check: PIDs are
+    recycled by the OS, so a bare pid_alive() check can false-positive on an
+    unrelated process that happens to land on the same number later.
+    """
+    from audiagentic.foundation.system.managed_process import process_creation_identity
+
+    target_pid = pid if pid is not None else os.getppid()
+    return _ParentLiveness(pid=target_pid, creation_identity=process_creation_identity(target_pid))
+
+
+def _parent_is_live(parent: _ParentLiveness) -> bool:
+    """True while the originally-captured parent process still holds that pid.
+
+    If no creation-identity fingerprint could be captured at startup
+    (platform or permission gap), falls back to a plain liveness check --
+    a documented, conservative limitation: it cannot detect PID reuse in
+    that case, but it also never fires on a live, unrelated process when the
+    fingerprint *was* captured.
+    """
+    from audiagentic.foundation.system.managed_process import process_creation_identity
+    from audiagentic.foundation.system.process import pid_alive
+
+    if not pid_alive(parent.pid):
+        return False
+    if parent.creation_identity is None:
+        return True
+    return process_creation_identity(parent.pid) == parent.creation_identity
+
+
+def _watchdog_tick(
+    tracker: _RequestActivityTracker,
+    parent: _ParentLiveness,
+    *,
+    idle_timeout_seconds: float,
+) -> str | None:
+    """Return the self-termination reason if one applies now, else None."""
+    if not _parent_is_live(parent):
+        return "parent-exited"
+    if tracker.idle_seconds() >= idle_timeout_seconds:
+        return "idle-timeout"
+    return None
+
+
+def _start_self_termination_watchdog(
+    server: FastMCP,
+    *,
+    idle_timeout_seconds: float = _IDLE_TIMEOUT_SECONDS,
+    poll_seconds: float = _WATCHDOG_POLL_SECONDS,
+    exit_fn: Callable[[int], None] = os._exit,
+) -> tuple[threading.Thread, _RequestActivityTracker]:
+    """Start the background watchdog thread; return it plus its activity tracker.
+
+    Two independent, scoped safeguards against orphaned stdio MCP server
+    processes (root cause: ``server.run()`` only returns on stdin EOF, which
+    the OS does not reliably deliver to an orphaned child, especially on
+    Windows): parent-liveness (an identity check, not a PID-reuse-prone
+    liveness check) and a 12h idle timeout measured by genuine request
+    traffic. Runs as a daemon thread so it never blocks the blocking
+    ``server.run()`` call owned by FastMCP; fires ``os._exit(0)`` on either
+    condition -- this is a disposable, host-respawned subprocess, so no
+    graceful-shutdown ceremony is warranted.
+    """
+    tracker = _install_activity_tracking(server)
+    parent = _capture_parent_liveness()
+
+    def _poll() -> None:
+        while True:
+            time.sleep(poll_seconds)
+            reason = _watchdog_tick(tracker, parent, idle_timeout_seconds=idle_timeout_seconds)
+            if reason is not None:
+                logger.warning(
+                    "mcp server self-terminating",
+                    extra={"reason": reason, "parent_pid": parent.pid},
+                )
+                exit_fn(0)
+                return
+
+    thread = threading.Thread(target=_poll, name="mcp-self-termination-watchdog", daemon=True)
+    thread.start()
+    return thread, tracker
+
+
 def run_mcp_server(server: FastMCP, bootstrap_name: str) -> None:
     """Bootstrap logging and run an MCP server over stdio.
 
     Shared entry-point body so component MCP servers do not each re-implement
-    the bootstrap + run sequence.
+    the bootstrap + run sequence. Also starts the self-termination watchdog
+    (parent-liveness + 12h idle timeout) so an orphaned copy of this process
+    does not outlive the session that spawned it.
     """
     from audiagentic.foundation.logging import bootstrap
 
     bootstrap(bootstrap_name)
+    _start_self_termination_watchdog(server)
     server.run()
 
 
