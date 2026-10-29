@@ -8,7 +8,6 @@ from pathlib import Path
 
 import psutil
 import pytest
-
 from tests.helpers.gateway_service_cleanup import _SERVICE_MODULE, stop_gateway_services
 
 
