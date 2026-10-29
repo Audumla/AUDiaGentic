@@ -217,8 +217,12 @@ def project_root_from_env() -> Path:
     generically by walking up from CWD — the MCP server runs with CWD set to the
     project root, so no path needs to be hard-coded anywhere.
     """
+    from audiagentic.foundation.mcp.worktree import current_worktree
     from audiagentic.foundation.paths.project import find_project_root
 
+    selected = current_worktree()
+    if selected is not None:
+        return selected.path
     root = find_project_root()
     if root is None:
         raise make_error(
@@ -268,10 +272,12 @@ class _AutoDescFastMCP(FastMCP):  # type: ignore[misc,valid-type]
         *args: Any,
         structured_output_only: bool = False,
         structured_output_tool_names: frozenset[str] = frozenset(),
+        worktree_scoped: bool = False,
         **kwargs: Any,
     ) -> None:
         super().__init__(*args, **kwargs)
         self._module_name = module_name
+        self._worktree_scoped = worktree_scoped
         self._structured_output_only = structured_output_only
         self._structured_output_tool_names = frozenset(structured_output_tool_names)
         # Cache resolved declaration to avoid repeated registry lookups.
@@ -328,6 +334,8 @@ class _AutoDescFastMCP(FastMCP):  # type: ignore[misc,valid-type]
         """Register SDK-derived schemas with optional transport-only metadata."""
         name = kwargs.get("name") or (args[0] if args else None) or fn.__name__
         selected = self._structured_output_only or name in self._structured_output_tool_names
+        if self._worktree_scoped:
+            fn = _worktree_scoped_wrapper(fn, name, structured=selected)
         if selected:
             fn = _structured_output_only_wrapper(fn)
         super().add_tool(fn, *args, **kwargs)
@@ -338,11 +346,92 @@ class _AutoDescFastMCP(FastMCP):  # type: ignore[misc,valid-type]
             raise ValueError(f"registered MCP tool not found: {name}")
         try:
             _apply_parameter_descriptions(tool, tool_parameter_spec(self._get_decl(), name))
+            if self._worktree_scoped:
+                from audiagentic.foundation.mcp.worktree import WORKTREE_DESCRIPTION, WORKTREE_PARAMETER
+
+                tool.parameters["properties"][WORKTREE_PARAMETER]["description"] = WORKTREE_DESCRIPTION
             if selected:
                 _align_structured_output_schema(tool)
+                if self._worktree_scoped:
+                    _declare_worktree_output(tool)
         except (TypeError, ValueError):
             self._tool_manager.remove_tool(name)
             raise
+
+
+def _worktree_scoped_wrapper(fn: Any, name: str, *, structured: bool = False) -> Any:
+    """Add the shared ``worktree`` argument and report the worktree each call used.
+
+    The worktree is resolved and confirmed before the tool runs and is visible
+    to it only through ``project_root_from_env()``. Mapping results gain a
+    ``worktree`` key; any other result becomes ``{"result": value, "worktree": ...}``.
+    On a structured-output server the worktree sits beside ``result`` in the
+    one structured envelope (``{"result": value, "worktree": ...}``).
+    """
+    from audiagentic.foundation.mcp.worktree import WORKTREE_PARAMETER, resolve_worktree, using_worktree
+
+    signature = inspect.signature(fn, eval_str=True)
+    if WORKTREE_PARAMETER in signature.parameters:
+        raise ValueError(f"MCP tool {name}: {WORKTREE_PARAMETER!r} is reserved for worktree selection")
+    if inspect.iscoroutinefunction(fn):
+        raise ValueError(f"MCP tool {name}: worktree-scoped tools must be synchronous")
+
+    def _report(value: Any, worktree: Any) -> dict[str, Any]:
+        if isinstance(value, dict):
+            if WORKTREE_PARAMETER in value:
+                raise ValueError(f"MCP tool {name} returned a reserved {WORKTREE_PARAMETER!r} key")
+            return {**value, WORKTREE_PARAMETER: worktree.to_dict()}
+        return {"result": value, WORKTREE_PARAMETER: worktree.to_dict()}
+
+    def _scoped(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        requested = kwargs.pop(WORKTREE_PARAMETER, None)
+        try:
+            worktree = resolve_worktree(requested)
+        except Exception as exc:
+            raise ToolError(_tool_error_text(exc, name, logger)) from exc
+        with using_worktree(worktree):
+            value = fn(*args, **kwargs)
+        if structured:
+            return CallToolResult(
+                content=[], structuredContent={"result": value, WORKTREE_PARAMETER: worktree.to_dict()}
+            )
+        return _report(value, worktree)
+
+    _scoped.__name__ = getattr(fn, "__name__", name)
+    _scoped.__qualname__ = getattr(fn, "__qualname__", name)
+    _scoped.__doc__ = fn.__doc__
+    _scoped.__module__ = fn.__module__
+    parameters = [*signature.parameters.values()]
+    parameters.append(
+        inspect.Parameter(WORKTREE_PARAMETER, inspect.Parameter.KEYWORD_ONLY, default=None, annotation=str | None)
+    )
+    # A structured server keeps the tool's own result type for its schema; the
+    # worktree is declared beside it by _declare_worktree_output.
+    returns = signature.return_annotation if structured else dict[str, Any]
+    _scoped.__signature__ = signature.replace(parameters=parameters, return_annotation=returns)  # type: ignore[attr-defined]
+    _scoped.__annotations__ = {
+        **{parameter.name: parameter.annotation for parameter in parameters},
+        "return": returns,
+    }
+    return _scoped
+
+
+def _declare_worktree_output(tool: Any) -> None:
+    """Declare the reported worktree in a structured tool's output schema."""
+    schema = tool.fn_metadata.output_schema
+    if not schema:
+        return
+    schema.setdefault("properties", {})["worktree"] = {
+        "type": "object",
+        "description": "The git worktree this call acted on.",
+        "properties": {
+            "path": {"type": "string"},
+            "branch": {"type": ["string", "null"]},
+            "head": {"type": ["string", "null"]},
+        },
+        "required": ["path", "branch", "head"],
+    }
+    tool.__dict__.pop("output_schema", None)
 
 
 def _apply_parameter_descriptions(tool: Any, descriptions: dict[str, Any]) -> None:
@@ -415,8 +504,13 @@ def mcp_server(
     *,
     structured_output_only: bool = False,
     structured_output_tool_names: frozenset[str] = frozenset(),
+    worktree_scoped: bool = False,
 ) -> FastMCP:
     """Create a FastMCP instance whose name is resolved from component config.
+
+    ``worktree_scoped=True`` gives every tool the shared per-call ``worktree``
+    argument (``foundation.mcp.worktree``): one session can act on any of its
+    git worktrees, and each result reports the worktree used.
 
     Tools registered via ``@mcp.tool()`` (no explicit description) automatically
     pick up their description from the server's ``tool-descriptions`` YAML block.
@@ -428,6 +522,7 @@ def mcp_server(
         instructions=instructions,
         structured_output_only=structured_output_only,
         structured_output_tool_names=structured_output_tool_names,
+        worktree_scoped=worktree_scoped,
     )  # type: ignore[return-value]
 
 

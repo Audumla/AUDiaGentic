@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.25.0](https://github.com/Audumla/AUDiaGentic/compare/v0.24.0...v0.25.0) (2026-10-29)
+
+
+### Features
+
+* **mcp:** per-call git worktree selection for planning, ledger and gateway servers ([#167](https://github.com/Audumla/AUDiaGentic/issues/167)) ([9fcaaa9](https://github.com/Audumla/AUDiaGentic/commit/9fcaaa9ffcefea8eefef44de7cfdc56f3f277951))
+
+## [0.24.0](https://github.com/Audumla/AUDiaGentic/compare/v0.23.2...v0.24.0) (2026-10-29)
+
+
+### Features
+
+* **gateway:** automatic (shared) is the default implementation; embedded is deprecated ([#163](https://github.com/Audumla/AUDiaGentic/issues/163)) ([4858a94](https://github.com/Audumla/AUDiaGentic/commit/4858a9448cd0caf3a1da5c5e2b94fac6f7434914))
+
 ## [0.23.2](https://github.com/Audumla/AUDiaGentic/compare/v0.23.1...v0.23.2) (2026-10-29)
 
 
