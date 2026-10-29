@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import os
+import shutil
+import subprocess
 import time
 from pathlib import Path
 
@@ -31,4 +33,34 @@ def find_project_root(start: Path | None = None) -> Path | None:
         if parent == current:
             break
         current = parent
+    return None
+
+
+def discover_checkout_root(start: Path | None = None) -> Path | None:
+    """The git checkout containing ``start`` (default CWD), worktrees included.
+
+    Used by settings resolution (docs/design/configuration-model.md): the
+    project scope is the current checkout's tracked ``.audiagentic/``, so a
+    fresh worktree needs no bootstrap. Never returns the git common directory.
+    Uses ``git rev-parse --show-toplevel``; when git is missing or refuses the
+    repository (for example "dubious ownership" in containers) it walks up to
+    the nearest ``.git`` directory or file. ``None`` outside a repository.
+
+    ``find_project_root`` (``.audiagentic`` marker) remains for existing
+    callers until CFG04/CFG09 migrate them.
+    """
+    current = (start or Path.cwd()).resolve()
+    git = shutil.which("git")
+    if git is not None:
+        try:
+            completed = subprocess.run(
+                [git, "rev-parse", "--show-toplevel"], cwd=current, capture_output=True, text=True, timeout=10,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            completed = None
+        if completed is not None and completed.returncode == 0 and completed.stdout.strip():
+            return Path(completed.stdout.strip()).resolve()
+    for directory in (current, *current.parents):
+        if (directory / ".git").exists():
+            return directory
     return None

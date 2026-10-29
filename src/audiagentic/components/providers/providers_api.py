@@ -982,6 +982,18 @@ def get_provider_status(project_root: Path, provider_id: str) -> dict[str, Any]:
     return {"provider_id": provider_id, "ok": False, "error": "provider status unavailable"}
 
 
+def list_session_surface_ids(provider_id: str) -> tuple[str, ...]:
+    """Session surface ids a provider declares, in declaration order.
+
+    Lets callers default a surface only when exactly one exists; an unknown
+    provider yields an empty tuple.
+    """
+    from audiagentic.components.providers.descriptors import all_descriptors
+
+    descriptor = all_descriptors().get(provider_id)
+    return tuple(surface.surface_id for surface in descriptor.session_surfaces) if descriptor else ()
+
+
 def list_provider_descriptors() -> list[dict[str, Any]]:
     from audiagentic.components.providers.descriptors import all_descriptors
 

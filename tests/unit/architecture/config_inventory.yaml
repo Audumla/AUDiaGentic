@@ -59,12 +59,14 @@ env:
   deployment:
     - AUDIAGENTIC_COMPONENT_CONFIG_DIRS
     - AUDIAGENTIC_COMPONENT_PROFILE
+    - AUDIAGENTIC_CONFIG
     - AUDIAGENTIC_GATEWAY_ENDPOINT
     - AUDIAGENTIC_GATEWAY_TOKEN_FILE
     - AUDIAGENTIC_GITHUB_CLIENT_ID
     - AUDIAGENTIC_GITHUB_TOKEN
     - AUDIAGENTIC_HOME
     - AUDIAGENTIC_LOCAL_PROVIDER_API_KEY
+    - AUDIAGENTIC_PROJECT
     - AUDIAGENTIC_ROOT
     - AUDIAGENTIC_WORKSPACE_ROOTS
   # Set by AUDiaGentic for its own child processes; not user configuration.
@@ -99,6 +101,10 @@ env:
   # AUDIAGENTIC_-prefixed string literals that are not environment variables.
   not-env:
     - AUDIAGENTIC_MCP_EXCLUSIVE_PATCH
+
+# The configuration core (CFG03): the one sanctioned place that resolves settings paths.
+configuration-core:
+  - audiagentic/foundation/config/settings.py
 
 # Modules that join '.audiagentic' paths themselves instead of using the configuration core.
 path-builders:
