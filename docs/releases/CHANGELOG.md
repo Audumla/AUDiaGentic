@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.1](https://github.com/Audumla/AUDiaGentic/compare/v0.10.0...v0.10.1) (2026-10-29)
+
+
+### Bug Fixes
+
+* **gateway:** let abandon settle requests orphaned by their gateway host (GA27) ([#99](https://github.com/Audumla/AUDiaGentic/issues/99)) ([bb95e9a](https://github.com/Audumla/AUDiaGentic/commit/bb95e9a602964c7345441f75a96dfe3ef0191fd4))
+
 ## [0.10.0](https://github.com/Audumla/AUDiaGentic/compare/v0.9.0...v0.10.0) (2026-10-29)
 
 
