@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.0](https://github.com/Audumla/AUDiaGentic/compare/v0.9.0...v0.10.0) (2026-10-29)
+
+
+### Features
+
+* **providers:** native surface qualification evidence schema and store (SH53) ([#103](https://github.com/Audumla/AUDiaGentic/issues/103)) ([9b2b06d](https://github.com/Audumla/AUDiaGentic/commit/9b2b06d1e57befd9971ef7ff932289c9a73ed8ff))
+
 ## [0.9.0](https://github.com/Audumla/AUDiaGentic/compare/v0.8.0...v0.9.0) (2026-10-29)
 
 
