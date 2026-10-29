@@ -21,6 +21,7 @@ from .event_bus import (
     SubscriptionHandle,
     get_bus,
     reset_bus,
+    subscribe_persistent,
 )
 from .event_config import (
     EventCycleDetectionSettings,
@@ -70,4 +71,5 @@ __all__ = [
     "now_iso",
     "get_bus",
     "reset_bus",
+    "subscribe_persistent",
 ]

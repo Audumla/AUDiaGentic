@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from audiagentic.components.providers import providers_api
-from audiagentic.foundation.event import get_bus, subscribe_component_lifecycle
+from audiagentic.foundation.event import subscribe_component_lifecycle, subscribe_persistent
 from audiagentic.foundation.io import atomic_write_json
 
 from . import project_api
@@ -34,4 +34,4 @@ _on_lifecycle = subscribe_component_lifecycle(
     on_uninstalled=_reconcile,
     on_config_changed=_reconcile,
 )
-get_bus().subscribe(providers_api.PROVIDER_STATE_CHANGED, _provider_change)
+subscribe_persistent(providers_api.PROVIDER_STATE_CHANGED, _provider_change)
