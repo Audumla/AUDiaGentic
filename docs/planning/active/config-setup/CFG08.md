@@ -82,6 +82,8 @@ Gaps that needed a manual step on a clean home:
 
 Next: a doctor check that the gpt-auto dashboard anchor and project name resolve; setup offering a first agent; agent files sufficient for agents.catalog. The live check is repeatable: setup, doctor, agent add, then agent_task_submit with a one-line prompt, in a throwaway AUDIAGENTIC_HOME.
 
+2026-10-29: PR #140 fixed gaps 1, 2 and 4 of the live check as far as doctor can: agents.catalog warns with the agent add fix on a clean home (an invalid legacy file still fails); a declared project.id is now the project name providers use, so declaring it fixes the gpt-auto ChatGPT project lookup; and a new agents.gateway check flags gpt-auto on the default embedded gateway and gives the fix (gateway.implementation: automatic in user settings). Still open: gap 3 (the embedded gateway serves no dashboard for gpt-auto window anchor, and window_anchor.py ignores gateway.port; needs a gateway/providers ownership decision, or a different default) and gap 5 (setup registers no MCP servers). CFG08 stays in progress until a repeat of the live check passes with only setup, agent add and the documented settings; that repeat is not yet done after #140.
+
 ## Change Log
 
 - 2026-10-28T21:05:53.564412+00:00 (created-by): Created by claude
@@ -92,3 +94,4 @@ Next: a doctor check that the gpt-auto dashboard anchor and project name resolve
 - 2026-10-28T23:39:29.268659+00:00 (state-transition): State: pending → in_progress
 - 2026-10-29T02:22:47.262707+00:00 (updated-by): Updated: section:notes
 - 2026-10-29T05:00:17.238284+00:00 (updated-by): Updated: section:notes
+- 2026-10-29T05:27:58.309590+00:00 (updated-by): Updated: section:notes
