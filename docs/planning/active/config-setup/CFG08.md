@@ -69,6 +69,19 @@ Phase 1 (approved 2026-10-28; see 'Phasing' in docs/design/configuration-model.m
 
 2026-10-29: merged in PR #100 (squash). Validation: tests/unit/foundation/test_doctor.py (component-declared checks, read-only doctor, idempotent setup, crashing check reported not raised).
 
+2026-10-29 live check of the acceptance criterion (throwaway home and repo, throwaway settings; main at the CFG06 slice 2 merge). Result: NOT met, but a gpt-auto submit through the gateway MCP did complete (CFG08 LIVE OK) once the gaps below were worked around by hand.
+
+Worked: setup creates the user settings; doctor reports settings, package data, agent files, provider availability (CDP answered) and project identity.
+
+Gaps that needed a manual step on a clean home:
+1. doctor fails agents.catalog (legacy agents.yaml missing) before any agent exists; the required-file check should treat agent files as sufficient (CFG09 made agents.yaml optional only once agent files exist).
+2. setup creates no agent; the flow needs audiagentic agent add NAME --extends reviewer --provider gpt-auto --model chatgpt. setup should offer a first agent or doctor should say exactly that.
+3. gpt-auto first navigates the browser to the gateway dashboard URL as a window anchor. An embedded gateway serves no dashboard, so the anchor failed with ERR_CONNECTION_REFUSED. window_anchor.py reads AUDIAGENTIC_GATEWAY_PORT (default 8765) and ignores the gateway.port setting (providers cannot import gateway internals, so ownership of that value is undecided). Worked around with a stub page and AUDIAGENTIC_GATEWAY_DASHBOARD_URL.
+4. gpt-auto selects the ChatGPT project named after the repository. A repo without a remote resolves its name from the directory (project), so the Projects page lookup failed (EXT-GPTAUTO-004, submission-attempted false). A git origin remote fixed it. doctor warns on the provisional name but does not say it also selects the ChatGPT project.
+5. setup registered no MCP servers and printed nothing about it (still listed under Not yet).
+
+Next: a doctor check that the gpt-auto dashboard anchor and project name resolve; setup offering a first agent; agent files sufficient for agents.catalog. The live check is repeatable: setup, doctor, agent add, then agent_task_submit with a one-line prompt, in a throwaway AUDIAGENTIC_HOME.
+
 ## Change Log
 
 - 2026-10-28T21:05:53.564412+00:00 (created-by): Created by claude
@@ -78,3 +91,4 @@ Phase 1 (approved 2026-10-28; see 'Phasing' in docs/design/configuration-model.m
 - 2026-10-28T23:39:26.834124+00:00 (updated-by): Updated: section:notes
 - 2026-10-28T23:39:29.268659+00:00 (state-transition): State: pending → in_progress
 - 2026-10-29T02:22:47.262707+00:00 (updated-by): Updated: section:notes
+- 2026-10-29T05:00:17.238284+00:00 (updated-by): Updated: section:notes
