@@ -31,7 +31,11 @@ def test_shared_ignore_policy_covers_generated_surfaces():
     rules = set((ROOT / ".gitignore").read_text().splitlines())
     for path in GENERATED:
         assert "/" + path in rules
-    assert "/.audiagentic/" in rules
+    # Only tracked project settings are re-included (docs/guides/PROJECT_SETTINGS.md).
+    assert "/.audiagentic/*" in rules
+    assert {rule for rule in rules if rule.startswith("!/.audiagentic/")} == {
+        "!/.audiagentic/settings.yaml", "!/.audiagentic/agents/", "!/.audiagentic/templates/",
+    }
     assert not {"/.agents/", "/.qwen/", "/tmp*/"}.intersection(rules)
 
 
