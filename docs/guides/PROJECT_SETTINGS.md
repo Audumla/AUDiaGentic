@@ -83,7 +83,7 @@ removes its generated configuration; only `enabled: false` (or
 
 | Key | Meaning | Legacy variable |
 |---|---|---|
-| `implementation` | `embedded`, `automatic` or `standalone` | `AUDIAGENTIC_GATEWAY_MODE` |
+| `implementation` | `automatic` (default: every session attaches to one shared gateway), `standalone`, or `embedded` (deprecated: an in-process gateway per caller) | `AUDIAGENTIC_GATEWAY_MODE` |
 | `port` | loopback port of the automatic gateway | `AUDIAGENTIC_GATEWAY_PORT` |
 | `idle_grace_seconds` | idle time before an automatic gateway exits; 0 keeps it warm | `AUDIAGENTIC_GATEWAY_IDLE_GRACE_SECONDS` |
 | `queue_backend` | work-queue backend (`in-memory`) | `AUDIAGENTIC_GATEWAY_QUEUE_BACKEND` |

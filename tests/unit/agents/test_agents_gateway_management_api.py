@@ -41,18 +41,18 @@ def _force_feature_registry_repopulation():
     yield
 
 
-def test_status_with_no_explicit_selection_reports_embedded_default(tmp_path: Path) -> None:
+def test_status_with_no_explicit_selection_reports_automatic_default(tmp_path: Path) -> None:
     status = gateway_status(tmp_path)
-    assert status["implementation"] == "embedded"
+    assert status["implementation"] == "automatic"
     assert status["is_default"] is True
 
 
 def test_list_implementations_includes_all_three(tmp_path: Path) -> None:
     result = gateway_list_implementations(tmp_path)
     assert set(result["implementations"].keys()) == {"embedded", "standalone", "automatic"}
-    assert result["implementations"]["embedded"]["is_default"] is True
+    assert result["implementations"]["automatic"]["is_default"] is True
     assert result["implementations"]["standalone"]["is_default"] is False
-    assert result["implementations"]["automatic"]["is_default"] is False
+    assert result["implementations"]["embedded"]["is_default"] is False
 
 
 def test_select_implementation_persists_and_is_reflected_in_status(tmp_path: Path) -> None:

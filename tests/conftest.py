@@ -333,3 +333,16 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     if passed == 0:
         terminalreporter.write_sep("=", "Docker lane ran no passing tests", red=True, bold=True)
         session.exitstatus = pytest.ExitCode.TESTS_FAILED
+
+
+@pytest.fixture
+def in_process_gateway(tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Run the gateway engine inside the test process.
+
+    ``automatic`` is the default implementation and starts a shared service, which
+    a test must not do implicitly. Selecting ``embedded`` through the explicit settings
+    scope keeps the test in-process without touching the developer's own settings.
+    """
+    path = tmp_path_factory.mktemp("gateway-settings") / "settings.yaml"
+    path.write_text("schema_version: 1\ngateway:\n  implementation: embedded\n", encoding="utf-8")
+    monkeypatch.setenv("AUDIAGENTIC_CONFIG", str(path))

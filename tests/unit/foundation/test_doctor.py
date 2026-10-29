@@ -131,7 +131,7 @@ def test_an_invalid_legacy_catalog_still_fails(env: dict[str, Path], monkeypatch
     assert _by_check(run_checks(DoctorContext(None)))["agents.catalog"][0].status == FAIL
 
 
-def test_gpt_auto_on_an_embedded_gateway_is_flagged_with_the_fix(
+def test_gpt_auto_on_an_explicitly_embedded_gateway_is_flagged_with_the_fix(
     env: dict[str, Path], monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     import audiagentic.components.providers.providers_api as providers_api
@@ -143,9 +143,9 @@ def test_gpt_auto_on_an_embedded_gateway_is_flagged_with_the_fix(
     monkeypatch.setattr(providers_api, "is_provider_enabled_for_launch", lambda root, provider: True)
     monkeypatch.setattr(providers_api, "check_provider_availability", lambda root, provider: (True, "CDP answers"))
     monkeypatch.delenv("AUDIAGENTIC_GATEWAY_MODE", raising=False)
-    warned = _by_check(run_checks(DoctorContext(None)))["agents.gateway"][0]
-    assert warned.status == "warn" and "gateway.implementation" in warned.fix
+    assert _by_check(run_checks(DoctorContext(None)))["agents.gateway"][0].status == OK  # automatic is the default
 
     env["user"].mkdir(parents=True, exist_ok=True)
-    (env["user"] / "settings.yaml").write_text("schema_version: 1\ngateway:\n  implementation: automatic\n")
-    assert _by_check(run_checks(DoctorContext(None)))["agents.gateway"][0].status == OK
+    (env["user"] / "settings.yaml").write_text("schema_version: 1\ngateway:\n  implementation: embedded\n")
+    warned = _by_check(run_checks(DoctorContext(None)))["agents.gateway"][0]
+    assert warned.status == "warn" and "gateway.implementation" in warned.fix

@@ -14,6 +14,8 @@ from audiagentic.components.agents.context.service import open_context
 from audiagentic.components.agents.models.prompt_definition import PromptDefinition, PromptTextPart
 from audiagentic.components.agents.work.service import get_work
 
+pytestmark = pytest.mark.usefixtures("in_process_gateway")
+
 
 def _seed(root: Path) -> str:
     repository = AgentsConfigRepository(global_agents_config_path())
