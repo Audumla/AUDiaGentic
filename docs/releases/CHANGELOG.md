@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.31.3](https://github.com/Audumla/AUDiaGentic/compare/v0.31.2...v0.31.3) (2026-10-29)
+
+
+### Documentation
+
+* **planning:** SH63 shared service stop/restart, SH64 port collision across homes ([#204](https://github.com/Audumla/AUDiaGentic/issues/204)) ([eed9b74](https://github.com/Audumla/AUDiaGentic/commit/eed9b7442000ea3769cb0b12f44aa50d1355904e))
+
 ## [0.31.2](https://github.com/Audumla/AUDiaGentic/compare/v0.31.1...v0.31.2) (2026-10-29)
 
 
