@@ -50,7 +50,7 @@ Also: provider instances under providers.<id>.instances, selected by agents with
 
 ## Standards
 
-
+docs/design/configuration-model.md (Providers: enabled is policy, available is observed, qualified is evidence); docs/standards/ARCHITECTURE_STANDARDS.md section 2 (configuration, not central lists) and section 3 (ownership); docs/standards/ARCHITECTURE_GUIDELINES.md section 8 (lazy, cached loaders), section 9 (no compatibility paths without a recorded obligation; the one-release transition is recorded in the design doc Migration section) and section 10 (callers outside providers use providers_api).
 
 ## Acceptance Criteria
 
@@ -66,6 +66,8 @@ Phase 2: deferred until needed (see 'Phasing' in docs/design/configuration-model
 
 2026-10-29: slice 1 in PR #126: providers settings section with providers.<id>.enabled (auto|true|false); is_provider_usable for runtime gates falls back to the provider availability check under auto, so a clean install needs no enablement step. Remaining: stop probe-driven disables in reconcile and retire persisted feature-state files; provider instances (gpt_auto_t1/t2).
 
+2026-10-29: slices 1 and 2 merged (PRs #126, #131). providers.<id>.enabled (auto|true|false) is settings policy; runtime gates use is_provider_usable (policy, else persisted enablement, else the provider availability check), so a clean install needs no enablement step; a failed CLI probe no longer disables a provider or prunes surfaces (reconcile reports unavailable). Remaining: retire the persisted provider feature-state files and their legacy migration; provider instances (gpt_auto_t1/t2 become providers.gpt-auto.instances, selected by agents with instance). Tests: tests/unit/providers/test_provider_enabled_policy.py, test_provisioning.py, test_reconciliation_policy_enforcement.py.
+
 ## Change Log
 
 - 2026-10-28T21:05:44.274107+00:00 (created-by): Created by claude
@@ -74,3 +76,5 @@ Phase 2: deferred until needed (see 'Phasing' in docs/design/configuration-model
 - 2026-10-28T22:07:00.801522+00:00 (updated-by): Updated: section:notes
 - 2026-10-29T03:06:35.428651+00:00 (updated-by): Updated: section:notes
 - 2026-10-29T03:06:37.786536+00:00 (state-transition): State: pending → in_progress
+- 2026-10-29T04:00:56.152954+00:00 (updated-by): Updated: section:notes
+- 2026-10-29T04:21:46.043510+00:00 (updated-by): Updated: section:standards
