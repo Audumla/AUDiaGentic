@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.31.0](https://github.com/Audumla/AUDiaGentic/compare/v0.30.1...v0.31.0) (2026-10-29)
+
+
+### Features
+
+* **providers:** qualification evidence binds the native binary behind a CLI launcher (SH53) ([#196](https://github.com/Audumla/AUDiaGentic/issues/196)) ([f88525d](https://github.com/Audumla/AUDiaGentic/commit/f88525de6d03c4203de9182f738dc38df7215828))
+
 ## [0.30.1](https://github.com/Audumla/AUDiaGentic/compare/v0.30.0...v0.30.1) (2026-10-29)
 
 
