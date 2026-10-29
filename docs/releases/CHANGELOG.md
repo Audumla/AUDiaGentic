@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.29.0](https://github.com/Audumla/AUDiaGentic/compare/v0.28.0...v0.29.0) (2026-10-29)
+
+
+### Features
+
+* **gateway:** execution-node runner, owners, recipient runtime and host, unwired (SH38-SH41, slice P10 of [#70](https://github.com/Audumla/AUDiaGentic/issues/70)) ([#187](https://github.com/Audumla/AUDiaGentic/issues/187)) ([f55f356](https://github.com/Audumla/AUDiaGentic/commit/f55f3561617b3be332a307ee24714899e4057a25))
+
 ## [0.28.0](https://github.com/Audumla/AUDiaGentic/compare/v0.27.0...v0.28.0) (2026-10-29)
 
 
