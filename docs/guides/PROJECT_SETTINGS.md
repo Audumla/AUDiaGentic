@@ -54,3 +54,46 @@ else the repository name).
 
 See `docs/design/configuration-model.md` on the planning branch for the full
 model.
+
+## Provider and gateway settings
+
+Both sections are validated like the rest of `settings.yaml`; `audiagentic config
+show --origin` reports which file set each value and `audiagentic config validate`
+checks every scope. Edits apply on the next read, without restarting a process.
+Gateway and provider policy is normally per machine, so set it in the user
+settings (`audiagentic config paths`), not in the repository.
+
+### `providers.<id>.enabled`
+
+```yaml
+providers:
+  gpt-auto:
+    enabled: auto   # auto (default) | true | false
+```
+
+`true` and `false` decide outright. Under `auto` a provider is used when it is
+observed to be available (its CLI is found, or its browser answers), so a clean
+install needs no enablement step. A failed check never disables a provider or
+removes its generated configuration; only `enabled: false` (or
+`set_provider_enabled`) does. `audiagentic doctor` reports availability.
+
+### `gateway`
+
+| Key | Meaning | Legacy variable |
+|---|---|---|
+| `implementation` | `embedded`, `automatic` or `standalone` | `AUDIAGENTIC_GATEWAY_MODE` |
+| `port` | loopback port of the automatic gateway | `AUDIAGENTIC_GATEWAY_PORT` |
+| `idle_grace_seconds` | idle time before an automatic gateway exits; 0 keeps it warm | `AUDIAGENTIC_GATEWAY_IDLE_GRACE_SECONDS` |
+| `queue_backend` | work-queue backend (`in-memory`) | `AUDIAGENTIC_GATEWAY_QUEUE_BACKEND` |
+| `restart_wait_seconds` | how long a restart waits for the old gateway | `AUDIAGENTIC_GATEWAY_RESTART_WAIT_SECONDS` |
+| `embedded_with_live_shared_owner` | `refuse` (default) or `warn` | `AUDIAGENTIC_GATEWAY_EMBEDDED_ALLOW` |
+| `console_trace.mode` / `.file` / `.max_chars` | operator trace detail, file and line length | `AUDIAGENTIC_GATEWAY_CONSOLE_TRACE*` |
+| `dashboard.recent_seconds` | window of recent requests the dashboard shows | `AUDIAGENTIC_GATEWAY_DASHBOARD_RECENT_SECONDS` |
+| `retention`, `watchdog` | machine retention and watchdog policy | `AUDIAGENTIC_GATEWAY_RETENTION_POLICY`, `..._WATCHDOG_POLICY` (JSON file) |
+
+Transition: for one release the legacy variable still overrides its setting,
+and a legacy `~/.audiagentic/gateway-retention.json` or `gateway-watchdog.json`
+is read only when the matching section is absent. If both exist the policy is
+treated as invalid (purges and deletions stay off) and a warning names the
+conflict; remove one. The shared server/node configuration is not part of these
+settings yet.

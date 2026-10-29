@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import Any
 
 
-
 @dataclass(frozen=True)
 class WatchdogPolicy:
     activity_lease_seconds: float

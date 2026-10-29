@@ -19,6 +19,7 @@ import json
 import os
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -217,6 +218,33 @@ def resolve_settings(
         if issues and not collect:
             _raise(issues)
     return ResolvedSettings(values, origins, sources, project_root, tuple(issues))
+
+
+def resolve_settings_cached(
+    project: Path | str | None = None, *, cwd: Path | None = None,
+) -> ResolvedSettings:
+    """``resolve_settings`` for hot readers that must not re-read files on every call.
+
+    Memoized on the identity of every scope file (path, mtime, size), so an edit
+    to any scope applies on the next call without a restart and nothing else is
+    ever served stale. Invalid settings raise as in ``resolve_settings`` and are
+    not cached. Callers that need CLI overrides, ``collect=True`` or an explicit
+    ``environ`` use ``resolve_settings``.
+    """
+    root = discover_project_root(project, cwd=cwd)
+    stamp = []
+    for source in scope_sources(project_root=root):
+        try:
+            stat = source.path.stat() if source.path is not None else None
+        except OSError:
+            stat = None
+        stamp.append((str(source.path), stat.st_mtime_ns, stat.st_size) if stat else (str(source.path), None, None))
+    return _resolve_for_stamp(root, tuple(stamp))
+
+
+@lru_cache(maxsize=16)
+def _resolve_for_stamp(root: Path | None, _stamp: tuple[Any, ...]) -> ResolvedSettings:
+    return resolve_settings(project=root)
 
 
 def _origin_of(scope: str, document: LoadedDocument):
