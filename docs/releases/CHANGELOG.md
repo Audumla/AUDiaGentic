@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.31.1](https://github.com/Audumla/AUDiaGentic/compare/v0.31.0...v0.31.1) (2026-10-29)
+
+
+### Documentation
+
+* **planning:** SH44 records the decision that the simulated run is acceptable for now ([#198](https://github.com/Audumla/AUDiaGentic/issues/198)) ([097bc12](https://github.com/Audumla/AUDiaGentic/commit/097bc1265ec2706206cd5ca4ce05103361b1f674))
+
 ## [0.31.0](https://github.com/Audumla/AUDiaGentic/compare/v0.30.1...v0.31.0) (2026-10-29)
 
 
