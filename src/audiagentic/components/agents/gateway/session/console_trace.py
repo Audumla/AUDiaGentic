@@ -97,6 +97,11 @@ class GatewayConsoleTrace:
         if not isinstance(name, (str, os.PathLike)):
             return
         path = Path(name)
+        # Only a stream backed by a real file rotates. A capture wrapper (pytest's stderr)
+        # reports a repr such as "<_io.FileIO name=8 ...>" as its name; treating that as a
+        # path would recreate it as a literal file in the working directory.
+        if not path.is_absolute() and not path.exists():
+            return
         try:
             if path.stat().st_size + len(line.encode("utf-8")) <= console_trace_max_bytes():
                 return

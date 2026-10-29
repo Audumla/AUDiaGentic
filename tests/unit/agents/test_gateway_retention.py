@@ -294,3 +294,26 @@ def test_console_trace_rotates_one_bounded_backup(tmp_path: Path, monkeypatch) -
     assert backup.exists()
     assert path.stat().st_size <= 400
     assert backup.stat().st_size <= 400
+
+
+def test_console_trace_never_turns_a_capture_wrapper_name_into_a_file(tmp_path: Path, monkeypatch) -> None:
+    """pytest's stderr reports a repr like "<_io.FileIO name=8 ...>" as its name; that is not a path."""
+    import io
+
+    class _CaptureLike(io.StringIO):
+        name = "<_io.FileIO name=8 mode='rb+' closefd=True>"
+
+    use_gateway_settings(monkeypatch, tmp_path, console_trace={"mode": "summary"}, retention={"console_trace_max_bytes": 1})
+    workdir = tmp_path / "cwd"
+    workdir.mkdir()
+    monkeypatch.chdir(workdir)
+    stream = _CaptureLike()
+    trace = GatewayConsoleTrace(stream=stream)
+    for index in range(3):  # a 1-byte cap would force a rotation attempt on every line
+        trace.session_opened(
+            session_id=f"ses_{index}", provider_id="codex", model_id="model",
+            execution_profile_id="profile", surface_id="surface", child_pid=index,
+        )
+    assert list(workdir.iterdir()) == []  # nothing was created in the working directory
+    assert trace.stream is stream
+    assert "ses_2" in stream.getvalue()  # and the lines still reached the stream
