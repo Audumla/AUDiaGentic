@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.26.0](https://github.com/Audumla/AUDiaGentic/compare/v0.25.1...v0.26.0) (2026-10-29)
+
+
+### Features
+
+* **setup:** register worktree-scoped MCP servers at a harness's user scope (CFG08) ([#174](https://github.com/Audumla/AUDiaGentic/issues/174)) ([c892cb1](https://github.com/Audumla/AUDiaGentic/commit/c892cb1c74f462fbe8b198545b011d93840a62af))
+
 ## [0.25.1](https://github.com/Audumla/AUDiaGentic/compare/v0.25.0...v0.25.1) (2026-10-29)
 
 
