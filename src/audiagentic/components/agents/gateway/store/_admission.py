@@ -12,6 +12,7 @@ import logging
 import re
 import uuid
 from collections.abc import Callable
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
@@ -112,6 +113,17 @@ def _intent_digest(record: dict[str, Any]) -> str:
         "session-idle-timeout-seconds": record.get("session-idle-timeout-seconds"),
         "session-max-lifetime-seconds": record.get("session-max-lifetime-seconds"),
     }
+    descriptor = record.get("node-admission")
+    if record.get("node-placement") is not None or descriptor is not None:
+        # Ordinary requests keep the historical encoded bytes exactly. A node
+        # target is execution intent, not a second idempotency namespace.
+        intent["node-placement"] = record.get("node-placement")
+        intent["node-admission"] = (
+            {key: descriptor[key] for key in ("version", "server-id", "semantic", "policy")}
+            if descriptor is not None else None
+        )
+        if descriptor is not None and "source-workspace" in descriptor:
+            intent["node-admission"]["source-workspace"] = descriptor["source-workspace"]
     encoded = json.dumps(intent, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
@@ -176,7 +188,21 @@ def admit_record(
     the same project-local admission lock is held.
     """
     key_digest = hash_idempotency_key(idempotency_key)
-    candidate = dict(payload)
+    candidate = deepcopy(payload)
+    if candidate.get("node-placement") is not None:
+        from ..node.admission_contract import NodeAdmissionDescriptor
+
+        if candidate.get("contract-version") != _shared._CONTRACT_VERSION:
+            raise AudiaGenticError(code="VAL-AGW-002", kind="agents", message="Fresh node admission requires the current record contract")
+        descriptor = NodeAdmissionDescriptor.from_mapping(candidate.get("node-admission"))
+        if descriptor.source_workspace is None:
+            raise AudiaGenticError(code="VAL-AGW-002", kind="agents", message="Fresh node admission requires caller workspace identity")
+        if descriptor.policy.profile_id != candidate.get("execution-profile-id"):
+            raise AudiaGenticError(code="VAL-AGW-002", kind="agents", message="Node admission profile mismatch")
+        candidate["node-admission"] = descriptor.to_mapping()
+    elif candidate.get("node-admission") is not None:
+        raise AudiaGenticError(code="VAL-AGW-002", kind="agents", message="Node descriptor requires sealed placement")
+    candidate = _records._validate(candidate, code="VAL-AGW-002")
     candidate["idempotency-key"] = key_digest
     intent_digest = _intent_digest(candidate)
     index_path = gateway_idempotency_index_path(project_root, key_digest)

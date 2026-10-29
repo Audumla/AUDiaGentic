@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import pytest
 
-from audiagentic.foundation.contracts.errors import AudiaGenticError
-
 from audiagentic.components.agents.agents_paths import gateway_request_dir
 from audiagentic.components.agents.gateway.session.retention import request_retention_pin
 from audiagentic.components.agents.gateway.session.root_registry import (
@@ -17,6 +15,7 @@ from audiagentic.components.agents.gateway.session.sessions_store import (
     update_provider_metadata,
     write_session_record,
 )
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 
 def test_request_referenced_by_durable_session_is_retention_pinned(tmp_path):

@@ -31,6 +31,7 @@ from audiagentic.components.agents.gateway.session import sessions_store
 from audiagentic.components.agents.gateway.session.sessions import SessionRuntime
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
+
 @pytest.mark.parametrize("blocked", [None, "binding", "chat-url", "provider-chat-url", "provider-session-id", "pending", "same-turn", "active", "ambiguous", "other-provider", "send-intent-ever", "submission-proven", "submission-state", "submission-stage", "unknown-proof"])
 def test_terminal_unbound_session_replacement_gate(blocked):
     session = {

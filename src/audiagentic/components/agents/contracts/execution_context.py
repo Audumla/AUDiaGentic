@@ -237,6 +237,11 @@ class SubmissionEnvelope:
         metadata), VAL-AGW-066 (mode), and VAL-AGW-082 (wire shape).
         """
         _require_string("project_root", self.project_root)
+        self.validate_fields()
+        return canonicalize_project_root(self.project_root, windows=windows)
+
+    def validate_fields(self) -> None:
+        """Validate existing non-root fields without inspecting or resolving a path."""
         _require_integer("schema_version", self.schema_version)
         _require_optional_string("idempotency_key", self.idempotency_key, max_length=_MAX_IDEMPOTENCY_KEY_LENGTH)
         for name in (
@@ -281,7 +286,6 @@ class SubmissionEnvelope:
                     "credential-like material is not allowed in envelope metadata",
                     {"metadata_key": key},
                 )
-        return canonicalize_project_root(self.project_root, windows=windows)
 
 
 def sanitize_submission_metadata(metadata: Mapping[str, Any] | None) -> dict[str, Any]:

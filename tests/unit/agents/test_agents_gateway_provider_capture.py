@@ -14,8 +14,8 @@ from audiagentic.components.agents.gateway.session import sessions as session_ru
 from audiagentic.components.agents.gateway.session import sessions_store
 from audiagentic.components.providers.adapters.gpt_auto.prompt_fingerprint import PromptFingerprint
 from audiagentic.components.providers.adapters.gpt_auto.snapshot import ChatMessageRef, ChatSnapshot
-from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.components.providers.contracts.conversation_focus import ConversationCaptureLocator
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 
 @pytest.mark.parametrize("artifact_state", ["valid", "missing", "corrupt"])
@@ -1054,6 +1054,7 @@ def test_operator_capture_rechecks_session_checkpoint_before_terminal_write(tmp_
 
 def _claim_result_at_terminal_boundary(root, request_id, generation, connection):
     from contextlib import contextmanager
+
     from audiagentic.components.agents.gateway import replay
     from audiagentic.foundation.contracts.errors import AudiaGenticError
     original_lock = replay._lock
@@ -1084,6 +1085,7 @@ def _claim_result_at_terminal_boundary(root, request_id, generation, connection)
 def test_claim_result_writer_cannot_invalidate_between_final_check_and_write(tmp_path, monkeypatch):
     import importlib
     import multiprocessing
+
     from audiagentic.components.agents.gateway import replay
     from audiagentic.components.agents.gateway.store import _transitions
     record = store.build_record(execution_profile_id="gpt-auto", prompt_body="request")
@@ -1193,6 +1195,7 @@ def test_capture_process_cannot_commit_after_successor_checkpoint_write(tmp_path
 def test_capture_rejects_claim_expiring_before_terminal_write(tmp_path, monkeypatch, delay_site):
     from contextlib import contextmanager
     from datetime import datetime, timedelta, timezone
+
     from audiagentic.components.agents.gateway import output, replay
 
     record = store.build_record(execution_profile_id="gpt-auto", prompt_body="request")

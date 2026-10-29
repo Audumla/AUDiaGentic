@@ -13,7 +13,6 @@ never persisted (only its digest); it is threaded to dispatch via functools.part
 from __future__ import annotations
 
 import functools
-import hashlib
 import logging
 import os
 import threading
@@ -475,7 +474,6 @@ def submit_execution_request(
     from audiagentic.components.agents.contracts.execution_context import (
         SubmissionEnvelope,
         build_manifest,
-        compute_agent_runtime_digest,
         derive_idempotency_key,
         sanitize_submission_metadata,
     )
@@ -576,89 +574,44 @@ def submit_execution_request(
     # Capture component-owned template facts once at admission.  Dispatch,
     # retries, and recovery use the durable snapshot rather than re-reading
     # project state such as the current Git branch.
-    from audiagentic.components.agents.gateway.admission.context import (
-        build_agent_template_context,
-        empty_component_context,
-    )
+    if component_context_reader is None:
+        from audiagentic.components.agents.gateway.admission.context import (
+            empty_component_context,
+        )
 
-    # Global agents must be usable from an unmanaged repository as well as a
-    # fully installed AUDiaGentic project: for an agent, component context is
-    # an optional enrichment over the baseline project/source-control facts.
+        component_context_reader = empty_component_context
+    from audiagentic.components.agents.gateway.admission import local_dispatch
+    from audiagentic.components.agents.gateway.admission import semantics as semantics_owner
+    from audiagentic.components.agents.gateway.admission.context import build_agent_template_context
+
     template_context = build_agent_template_context(
-        Path(canonical_root.display),
-        component_reader=component_context_reader or empty_component_context,
-        workspace_name=workspace_name,
-        agent_id=agent_id,
+        Path(canonical_root.display), component_reader=component_context_reader,
+        workspace_name=workspace_name, agent_id=agent_id,
     )
-    dispatch_prompt = prompt_body
+    semantics = semantics_owner.resolve_agent_semantics(agent_id) if agent_id is not None else None
+    if semantics is not None:
+        execution_profile_id = semantics.execution_profile_id
+    prompt = local_dispatch.materialize_local_prompt(
+        raw_prompt=prompt_body, semantics=semantics, template_context=template_context,
+    )
+    dispatch_prompt = prompt.text
+    prompt_profile_id = prompt.prompt_profile_id
+    prompt_definition_fingerprint = prompt.prompt_definition_fingerprint
+    composition_fingerprint = prompt.composition_fingerprint
+    prompt_template_name = prompt.template_name
+    prompt_template_digest = prompt.template_sha256
 
-    # Resolve the machine-global agent definition at gateway admission. MCP
-    # transports pass only agent_id so execution and prompt identity come from
-    # one authoritative catalog snapshot.
-    prompt_profile_id = "default"
-    prompt_definition_fingerprint: str | None = None
-    composition_fingerprint: str | None = None
-    if agent_id is not None:
-        from audiagentic.components.agents.agents_paths import global_agents_config_path
-        from audiagentic.components.agents.configuration.global_catalog import (
-            read_global_agents_config,
-        )
-        from audiagentic.components.agents.configuration.resolution import resolve_agent_composition
-        from audiagentic.components.agents.gateway.admission.instructions import (
-            materialize_agent_prompt,
-        )
-
-        catalog = read_global_agents_config(project_root)
-        try:
-            composition = resolve_agent_composition(project_root, agent_id, snapshot=catalog)
-        except KeyError as exc:
-            raise AudiaGenticError(
-                code="RES-AGD-001",
-                kind="agents",
-                message=f"agent definition not found: {agent_id!r}",
-                details={"agent-id": agent_id},
-            ) from exc
-        execution_profile_id = composition.execution_profile.profile_id
-        composition_fingerprint = composition.identity.fingerprint
-        prompt_definition_fingerprint = composition.identity.prompt_definition_fingerprint
-        # Prompt definitions are the sole public prompt authority.  The old
-        # provider prompt-profile collection was a second, mutable authority;
-        # retain only the canonical prompt identity in the durable provenance
-        # slot while the provider receives the admitted materialized text.
-        prompt_profile_id = composition.prompt.prompt_id
-        render_context = {**template_context, "prompt-body": prompt_body}
-        dispatch_prompt = materialize_agent_prompt(
-            composition.prompt,
-            prompts=catalog.document.prompts,
-            config_root=global_agents_config_path().parent,
-            template_context=render_context,
-        )
-
-    prompt_template_name = f"prompt-definition:{prompt_profile_id}"
-    prompt_template_digest = hashlib.sha256(dispatch_prompt.encode("utf-8")).hexdigest()
-
-    # --- 2. Resolve profile ------------------------------------------------
-    # `profile` is resolved from the machine-global Agents catalog.  It keeps
-    # fields such as model_alias that are not part of the gateway snapshot and
-    # feeds the runtime digest below.
-    profile = _resolve_profile_for_submit(project_root, execution_profile_id)
-    resolved_profile_id = profile["profile_id"]
-
-    # AS60 step 2: one schema-validated resolver contract.  The global
-    # catalog is authoritative in both hosted and explicit test composition;
-    # the resolved snapshot is persisted so the queue can validate staleness
-    # without re-deriving from mutable project inputs.
+    # Keep the two historical global profile reads in the profile owner path.
     from audiagentic.components.agents.gateway import profiles as profiles_mod
 
-    # Hosted composition installs the shared registry before this API is
-    # reachable.  Direct in-process callers (including isolated unit seams)
-    # have no composed registry and may use the explicit global-catalog
-    # projection; they never consult project-local authority.
-    resolved = profiles_mod.resolve_for_admission(
-        project_root,
-        execution_profile_id,
+    selection = local_dispatch.resolve_local_profile(
+        project_root, execution_profile_id,
         allow_test_fallback=profiles_mod.get_gateway_registry() is None,
+        profile_resolver=_resolve_profile_for_submit,
     )
+    profile = selection.profile
+    resolved_profile_id = profile["profile_id"]
+    resolved = selection.snapshot
     resolved_provider_id = resolved.provider_id
     resolved_instance_ids = list(resolved.instances)
     params = dict(resolved.execution_params)
@@ -670,49 +623,17 @@ def submit_execution_request(
         # GPT identity/default binding outlives its live browser handle. Never
         # close on turn completion: the idle reaper waits for quiescent work.
         session_keep_alive = True
-    gateway_snapshot = resolved if profiles_mod.get_gateway_registry() is not None else None
+    gateway_snapshot = selection.gateway_snapshot
 
-    # AS105/AS101: free-instance dispatch binds a concrete model only at
-    # dispatch time, never at admission. A single-instance profile (the
-    # common case, matching today's one-profile-one-model behavior) is
-    # unambiguous and can be resolved now; a genuinely multi-instance
-    # profile leaves this None until the queue binds an instance.
-    resolved_model_id: str | None = None
-    if len(resolved_instance_ids) == 1:
-        from audiagentic.components.agents.gateway.instances import resolve_instance_facts
-
-        facts = resolve_instance_facts(project_root, tuple(resolved_instance_ids))
-        resolved_model_id = facts[0].model_id
-
-    # --- 3. Resolve provider isolation tier and runtime digest --------------
-    isolation_tier = _resolve_provider_isolation_tier(resolved_provider_id)
-
-    # Agent runtime digest: hash of resolved profile + provider config + component overlay
-    from audiagentic.components.providers.providers_api import (
-        get_provider_runtime_config_state,
+    # Model/provider facts stay after the API-owned GPT idle-grace policy.
+    facts = local_dispatch.resolve_local_execution_facts(
+        project_root=project_root, selection=selection, component_profile=component_profile,
+        prompt=prompt, provider_chat_url=normalized_provider_chat_url,
+        isolation_resolver=_resolve_provider_isolation_tier,
     )
-
-    provider_cfg = get_provider_runtime_config_state(
-        project_root,
-        resolved_provider_id,
-    )
-    if normalized_provider_chat_url is not None and not resolved_provider_id.startswith("gpt-auto"):
-        raise AudiaGenticError(
-            code="VAL-AGW-151",
-            kind="agents",
-            message="provider_chat_url is supported only by gpt-auto execution profiles",
-            details={"provider-id": resolved_provider_id},
-        )
-    agent_runtime_digest = compute_agent_runtime_digest(
-        resolved_profile=profile,
-        provider_config_state=provider_cfg,
-        component_overlay={
-            "component-profile": component_profile or "",
-            "prompt-profile-id": prompt_profile_id,
-            "prompt-template-name": prompt_template_name,
-            "prompt-template-digest": prompt_template_digest,
-        },
-    )
+    resolved_model_id = facts.model_id
+    isolation_tier = facts.isolation_tier
+    agent_runtime_digest = facts.runtime_digest
 
     from audiagentic.components.agents.gateway.session.client_defaults import (
         select as select_default_session,
@@ -1271,11 +1192,14 @@ def get_execution_evidence(
             message="evidence limit must be between 1 and 100", details={},
         )
     record = store.read_record(project_root, request_id, include_output=False)
-    from audiagentic.components.agents.gateway.observability import (
-        observation_summary, read_observation_page,
-    )
     from audiagentic.components.agents.gateway.diagnostics import activity_monitoring_snapshot
-    from audiagentic.components.agents.status.diagnostics_projection import project_public_diagnostics
+    from audiagentic.components.agents.gateway.observability import (
+        observation_summary,
+        read_observation_page,
+    )
+    from audiagentic.components.agents.status.diagnostics_projection import (
+        project_public_diagnostics,
+    )
     latest_transition = store.latest_transition_projection(project_root, request_id)
     diagnostic_view = project_public_diagnostics(
         {
@@ -1316,7 +1240,9 @@ def get_execution_evidence(
             project_root, request_id, limit=limit, cursor=history_cursor
         )
     try:
-        from audiagentic.components.agents.gateway.evidence_projection import project_public_gateway_evidence
+        from audiagentic.components.agents.gateway.evidence_projection import (
+            project_public_gateway_evidence,
+        )
         return project_public_gateway_evidence(
             {key: value for key, value in result.items() if value is not None}
         )
@@ -1398,8 +1324,8 @@ def recover_execution_request(
         RecoveryClaimLostError,
         assert_recovery_claim_owner,
         prepare_recovery_action,
-        recovery_capture_lock,
         record_recovery_result,
+        recovery_capture_lock,
         renew_recovery_claim,
     )
     action_attempt_id = f"recovery_{request_id}_{uuid.uuid4().hex[:16]}_{action}"
@@ -1789,10 +1715,10 @@ def complete_execution_from_provider(
     effective_metadata = dict(metadata)
     session_id = record.get("session-id")
     if session_id:
-        from audiagentic.components.agents.gateway.session import sessions_store as session_store
         from audiagentic.components.agents.gateway.queue.recovery import (
             resolve_effective_turn_evidence,
         )
+        from audiagentic.components.agents.gateway.session import sessions_store as session_store
 
         try:
             session_record = session_store.read_session_record(project_root, str(session_id))
@@ -1967,12 +1893,14 @@ def complete_execution_from_provider(
         # the exact prompt-owned ordered slot and an independent terminal DOM
         # witness prove that it is the same response.  Ambiguous/later-turn
         # captures remain fail-closed.
+        from audiagentic.components.providers.adapters.gpt_auto.prompt_fingerprint import (
+            PromptFingerprint,
+        )
         from audiagentic.components.providers.adapters.gpt_auto.turn import (
+            _same_response_slot_replacement,
             _terminal_owned_response_span,
             _terminal_response_replacement,
-            _same_response_slot_replacement,
         )
-        from audiagentic.components.providers.adapters.gpt_auto.prompt_fingerprint import PromptFingerprint
         from audiagentic.components.providers.adapters.gpt_auto.urls import canonical_chat_url
 
         # The new structural proof is deliberately stricter than legacy
@@ -2030,7 +1958,9 @@ def complete_execution_from_provider(
         # a later foreign prompt in the same conversation could satisfy it.
         # Require the durable normalized prompt fingerprint before automatic
         # or operator capture can terminalize the visible assistant response.
-        from audiagentic.components.providers.adapters.gpt_auto.prompt_fingerprint import PromptFingerprint
+        from audiagentic.components.providers.adapters.gpt_auto.prompt_fingerprint import (
+            PromptFingerprint,
+        )
         expected_prompt_digest = effective_metadata.get("prompt-text-digest")
         if not isinstance(expected_prompt_digest, str) or not expected_prompt_digest:
             raise AudiaGenticError(
@@ -2053,9 +1983,10 @@ def complete_execution_from_provider(
                 details={"request-id": request_id, "failure-reason": "prompt-digest-mismatch"},
             )
     if not prompt_is_real and not prompt_is_virtualized and effective_metadata.get("unresolved-turn-pending") is not True:
+        import hashlib
+
         from audiagentic.components.agents.agents_paths import gateway_admitted_prompt_path
         from audiagentic.foundation.io import read_bytes_with_retry
-        import hashlib
         try:
             prompt = read_bytes_with_retry(
                 gateway_admitted_prompt_path(project_root, request_id)
@@ -2557,8 +2488,10 @@ def purge_execution_session(project_root: Path, session_id: str) -> dict[str, An
         binding_store.retire_binding(project_root, record, state="failed")
 
     from contextlib import ExitStack
+
     from audiagentic.components.agents.agents_paths import (
-        gateway_request_maintenance_lock_path, gateway_session_maintenance_lock_path,
+        gateway_request_maintenance_lock_path,
+        gateway_session_maintenance_lock_path,
     )
 
     with ExitStack() as maintenance_fences:

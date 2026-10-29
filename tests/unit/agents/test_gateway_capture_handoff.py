@@ -8,12 +8,15 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from tests.unit.agents.test_agents_gateway_sessions import (
+    FakeAgentSessionTransport,
+    _build_fake_prepared,
+)
 
 from audiagentic.components.agents.gateway import api, store
 from audiagentic.components.agents.gateway.session import capture_handoff, sessions, sessions_store
 from audiagentic.components.agents.gateway.session.sessions import SessionRuntime
 from audiagentic.foundation.transports.agent_session import SessionTurnResult
-from tests.unit.agents.test_agents_gateway_sessions import FakeAgentSessionTransport, _build_fake_prepared
 
 
 def _running(root, session_id):

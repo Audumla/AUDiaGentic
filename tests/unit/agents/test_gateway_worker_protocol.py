@@ -19,8 +19,8 @@ from audiagentic.components.agents.contracts.worker_protocol import (
     encode_worker_message,
 )
 from audiagentic.components.agents.gateway.queue.worker_host import (
-    _provider_activity_path,
     _provider_activity_offset,
+    _provider_activity_path,
     _watch_provider_activity,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError

@@ -32,6 +32,8 @@ a2a = ["a2a-sdk==1.1.2"]
 mcp = ["mcp==1.27.0", "tomli-w>=1.0"]
 # Browser automation for gpt-auto provider
 gpt-auto = ["websockets>=13.0"]
+# Node transport uses the verified websockets 15 asyncio/proxy/redirect API.
+node = ["websockets>=15,<16"]
 # Test dependencies
 test = [
   "pytest>=9.0",

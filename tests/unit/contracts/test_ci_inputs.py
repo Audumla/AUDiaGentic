@@ -1,9 +1,9 @@
 """CI images must not depend on ignored developer-local generated surfaces."""
 
 import shlex
-from fnmatch import fnmatchcase
 import subprocess
 import sys
+from fnmatch import fnmatchcase
 from pathlib import Path
 
 import pytest
@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[3]
 @pytest.mark.parametrize("workflow", ["ci-tests", "ci-full"])
 def test_cdp_recovery_gates_install_optional_socket_dependency(workflow):
     text = (ROOT / ".github/workflows" / f"{workflow}.yml").read_text()
-    assert '.[test,acp,gpt-auto]' in text
+    assert '.[test,acp,gpt-auto,node]' in text
 
 
 @pytest.mark.parametrize("workflow", ["ci-tests", "ci-contracts"])

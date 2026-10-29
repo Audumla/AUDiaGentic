@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import pytest
-from playwright.async_api import Error as PlaywrightError, async_playwright
+from playwright.async_api import Error as PlaywrightError
+from playwright.async_api import async_playwright
 
 from audiagentic.components.providers.adapters.gpt_auto.gpt_auto_cdp import (
     _PROJECT_NEW_CHAT_POINT_FN,
 )
-
 
 _PROJECT_ID = "g-p-000000000000000005ef8b326bf7cec8"
 _OTHER_PROJECT_ID = "g-p-00000000000000003ba3f5f43b926026"

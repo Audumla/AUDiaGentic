@@ -1,7 +1,7 @@
 """Admission-order fence before concurrent session worker preparation."""
+import threading
 from collections import deque
 from collections.abc import Callable
-import threading
 
 
 class SessionDispatchOrder:

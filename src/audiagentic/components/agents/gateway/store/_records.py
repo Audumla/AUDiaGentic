@@ -5,8 +5,6 @@ records. Imports _shared for constants — one-way edges only.
 """
 from __future__ import annotations
 
-from audiagentic.foundation.observability.journal_segments import has_segments, head_read_lock
-
 import base64
 import json
 import logging
@@ -17,11 +15,18 @@ from typing import Any
 from audiagentic.components.agents.agents_paths import (
     gateway_request_path,
     gateway_root,
-    gateway_timeline_path,
     gateway_timeline_index_path,
+    gateway_timeline_path,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError, redact_details
-from audiagentic.foundation.io import atomic_write_json, iter_ndjson, last_ndjson, read_text_with_retry, tail_ndjson
+from audiagentic.foundation.io import (
+    atomic_write_json,
+    iter_ndjson,
+    last_ndjson,
+    read_text_with_retry,
+    tail_ndjson,
+)
+from audiagentic.foundation.observability.journal_segments import has_segments, head_read_lock
 from audiagentic.foundation.time import now_iso_z
 
 from . import _shared
@@ -418,6 +423,8 @@ def build_record(
     source: str | None = None,
     metadata: dict[str, Any] | None = None,
     client_default_session: dict[str, Any] | None = None,
+    node_placement: dict[str, Any] | None = None,
+    node_admission: Mapping[str, Any] | None = None,
     warnings: list[dict[str, Any]] | None = None,
     template_context: dict[str, Any] | None = None,
     session_id: str | None = None,
@@ -529,6 +536,9 @@ def build_record(
     timestamp = now_iso_z()
     payload: dict[str, Any] = {
         "contract-version": _shared._CONTRACT_VERSION,
+        "node-dispatch": None,
+        "node-placement": dict(node_placement) if isinstance(node_placement, dict) else node_placement,
+        "node-admission": node_admission,
         "request-id": request_id or generate_request_id(),
         "agent-id": agent_id,
         "execution-profile-id": execution_profile_id,
@@ -625,6 +635,13 @@ def generate_request_id() -> str:
 
 
 def _validate(payload: dict[str, Any], *, code: str) -> dict[str, Any]:
+    if payload.get("node-admission") is not None:
+        from ..node.admission_contract import NodeAdmissionDescriptor
+
+        descriptor = NodeAdmissionDescriptor.from_mapping(payload["node-admission"])
+        if descriptor.policy.profile_id != payload.get("execution-profile-id") or payload.get("node-placement") is None:
+            raise AudiaGenticError(code=code, kind="agents", message="Node admission requires matching placement and profile")
+        payload = {**payload, "node-admission": descriptor.to_mapping()}
     issues = _shared.validate_with_schema_fn(payload)
     if issues:
         raise AudiaGenticError(
@@ -660,8 +677,13 @@ def write_record(project_root: Path, payload: dict[str, Any]) -> Path:
             message="gateway request record missing request-id",
             details={},
         )
-    _validate(payload, code="VAL-AGW-004")
+    payload = _validate(payload, code="VAL-AGW-004")
     target = gateway_request_path(project_root, request_id)
+    if target.exists():
+        previous = _read_record_payload(project_root, request_id)
+        if previous.get("node-admission") != payload.get("node-admission"):
+            raise AudiaGenticError(code="VAL-AGW-098", kind="agents",
+                                  message="Node admission descriptor is immutable after record creation")
     # Redact raw prompt-body before public persistence; dispatch gets the
     # in-memory value or the admission-owned snapshot during recovery.
     redacted = _redact_for_persistence(payload)
@@ -699,7 +721,6 @@ def _read_record_payload(project_root: Path, request_id: str) -> dict[str, Any]:
     return payload
 
 
-import json  # noqa: E402
 
 
 def _migrate_v1_payload(payload: dict[str, Any]) -> dict[str, Any]:
@@ -711,6 +732,26 @@ def _migrate_v1_payload(payload: dict[str, Any]) -> dict[str, Any]:
     treatment of an already-dispatched record with no durable binding.
     """
     migrated = dict(payload)
+    migrated.setdefault("node-admission", None)
+    if payload.get("contract-version") == "v10":
+        # Preserve every modern ownership/session/recovery/receipt fact exactly.
+        migrated["contract-version"] = _shared._CONTRACT_VERSION
+        return _validate(migrated, code="VAL-AGW-005")
+    if payload.get("contract-version") in {"v8", "v9"}:
+        # Modern ownership/recovery/session facts are authoritative. Upgrade
+        # only the envelope; never run v8 through historical fence clearing.
+        migrated["contract-version"] = _shared._CONTRACT_VERSION
+        migrated.setdefault("node-dispatch", None)
+        migrated.setdefault("node-placement", None)
+        dispatch = migrated.get("node-dispatch")
+        if isinstance(dispatch, dict):
+            # Pre-attestation command identity is historical evidence only.
+            # Do not infer an accepted attestation from old payload/receipts.
+            migrated["node-dispatch"] = {**dispatch, "attestation-sha256": None}
+        return _validate(migrated, code="VAL-AGW-005")
+    if payload.get("contract-version") == _shared._CONTRACT_VERSION:
+        migrated.setdefault("node-dispatch", None)
+        migrated.setdefault("node-placement", None)
     for retired_key in ("gateway-execution-lane-key", "resolved-queue-limits", "admission-policy-digest"):
         migrated.pop(retired_key, None)
     migrated.setdefault("cancel-acknowledged-at", None)
@@ -724,7 +765,7 @@ def _migrate_v1_payload(payload: dict[str, Any]) -> dict[str, Any]:
     # A briefly deployed v4 writer could have persisted the version before
     # adding all activity fields. Treat that shape as migratable too; never
     # strand a durable request merely because a process restarted mid-cutover.
-    if contract_version not in {"v1", "v2", "v3", "v4", "v5", "v6", "v7", _shared._CONTRACT_VERSION}:
+    if contract_version not in {"v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8", "v9", _shared._CONTRACT_VERSION}:
         return _validate(migrated, code="VAL-AGW-005")
     # v7 is the first record contract with nested provider/owner activity.
     # Keep the historical v5 migration target for pre-v6 records, while
@@ -733,19 +774,22 @@ def _migrate_v1_payload(payload: dict[str, Any]) -> dict[str, Any]:
     # v8 introduces durable request sessions.  Existing v7 records remain
     # readable as v7: a historic sessionless record cannot honestly be
     # re-labelled v8 without first creating its companion session record.
-    # New admissions are always v8; dispatch never relies on this migration
+    # New admissions are always v11; dispatch never relies on this migration
     # to invent a session for an in-flight legacy request.
     migrated["contract-version"] = (
         _shared._CONTRACT_VERSION
-        if contract_version in {"v6", _shared._CONTRACT_VERSION}
+        if contract_version in {"v6", "v8", "v9", _shared._CONTRACT_VERSION}
         else ("v7" if contract_version == "v7" else "v5")
     )
+    if migrated["contract-version"] == _shared._CONTRACT_VERSION:
+        migrated.setdefault("node-dispatch", None)
+        migrated.setdefault("node-placement", None)
     migrated.setdefault(
         "provider-transport-kind",
         "provider-session" if migrated.get("session-id") else "worker",
     )
     migrated.setdefault("continuation-session-id", migrated.get("session-id"))
-    if contract_version != _shared._CONTRACT_VERSION:
+    if contract_version not in {"v8", "v9", _shared._CONTRACT_VERSION}:
         migrated.update({
             "dispatch-owner-epoch": None,
             "dispatch-claimed-at": None,
@@ -836,6 +880,9 @@ def read_record(
     payload = _read_record_payload(project_root, request_id)
     if (
         payload.get("contract-version") == _shared._CONTRACT_VERSION
+        and "node-dispatch" in payload
+        and "node-placement" in payload
+        and "node-admission" in payload
         and "cancel-acknowledged-at" in payload
         and "cancel-acknowledged-by" in payload
         and "resolved-source-id" in payload

@@ -197,6 +197,7 @@ VAL-SPOOL-004: "Provide the spool event payload as a mapping (dict), not another
 VAL-SPOOL-005: "Check the event-id; the dead-letter record does not exist or could not be read."
 VAL-STEP-001: "Fix the step definition — check for a duplicate step-type registration, a missing required field (type/key_path/id), or an unrecognized step type against the registered set."
 VAL-STUB-002: "Check the placeholder syntax and available context keys; an unknown or invalid substitution was requested."
+
 CFG-SET-001: "A settings file could not be read (missing packaged defaults, permissions, larger than 1 MiB, or not UTF-8). Check the file named in the error; reinstall the package if the packaged defaults are missing."
 CFG-SET-002: "A settings file is not valid YAML. Fix the syntax at the reported line and column."
 CFG-SET-003: "A settings file uses YAML that settings do not allow: anchors, aliases, tags, duplicate or non-string keys, multiple documents, infinity/NaN, or nesting deeper than 64 levels. Rewrite the reported node as plain YAML."

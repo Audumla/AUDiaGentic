@@ -52,7 +52,7 @@ jobs:
             pyproject.toml
             tests/ci/requirements.txt
       - name: Install test dependencies (no browser OS installation)
-        run: python -m pip install -c tests/ci/requirements.txt -e ".[test,acp,gpt-auto]"
+        run: python -m pip install -c tests/ci/requirements.txt -e ".[test,acp,gpt-auto,node]"
       - name: Validate canonical schemas and IDs before tests
         run: |
           python -m audiagentic.foundation.contracts.validate_schemas

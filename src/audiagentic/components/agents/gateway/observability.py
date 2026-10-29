@@ -9,8 +9,6 @@ cross-process fence as lifecycle mutations.
 
 from __future__ import annotations
 
-from audiagentic.foundation.observability.journal_segments import has_segments, head_read_lock
-
 import base64
 import gzip
 import hashlib
@@ -18,8 +16,9 @@ import json
 import os
 import re
 import time
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 from audiagentic.components.agents.agents_paths import (
     gateway_observation_artifact_dir,
@@ -29,6 +28,7 @@ from audiagentic.components.agents.agents_paths import (
 )
 from audiagentic.foundation.io import atomic_write_text, iter_ndjson, last_ndjson, tail_ndjson
 from audiagentic.foundation.logging.redaction import redact_text
+from audiagentic.foundation.observability.journal_segments import has_segments, head_read_lock
 from audiagentic.foundation.system.process import StartupLock
 from audiagentic.foundation.time import now_iso_z
 
@@ -80,6 +80,9 @@ _SAFE_TEXT_KEYS = frozenset(
         "submission-stage", "turn-bound", "provider-binding-present", "send-intent-ever",
         "terminal", "terminal-witness", "media-type", "bytes", "attempt-epoch",
         "clear-outcome",
+        "stage", "node-stage", "connection-generation", "grant-revision",
+        "gateway-owner-epoch", "command-epoch", "receipt-stage", "receipt-sequence",
+        "artifact-kind", "artifact-sha256", "ack-sequence", "elapsed-ms",
     }
 )
 
@@ -88,6 +91,11 @@ def _safe(value: Any, *, depth: int = 0, key: str | None = None) -> Any:
     """Project provider facts to bounded JSON without secret-bearing keys."""
     if depth > 3:
         return None
+    if key == "artifact-sha256":
+        # This explicitly named digest is not secret text. Syntax alone is not
+        # artifact/authority proof; its producer owns that validation.
+        text = _text(value)
+        return text if text is not None and re.fullmatch(r"[0-9a-f]{64}", text) else None
     if isinstance(value, Mapping):
         result: dict[str, Any] = {}
         for raw_key, raw_value in list(value.items())[:_MAX_ITEMS]:
@@ -185,8 +193,17 @@ def append_observation(
     observed_at: str | None = None,
     monotonic_ms: int | None = None,
     force_flush: bool = False,
+    event_kind: str = "dom-observed",
 ) -> dict[str, Any]:
-    """Append one immutable observation, coalescing identical polls safely."""
+    """Append a bounded observation; DOM polls retain historical coalescing.
+
+    Finite node milestones always append/flush and never coalesce, including
+    across event families. Projection is not node authority validation: node
+    producers must validate canonical identifiers/enums/hashes before calling,
+    and must never supply raw prompts/output, paths, native refs or exceptions.
+    """
+    if not isinstance(event_kind, str) or event_kind not in {"dom-observed", "node-stage-observed"}:
+        raise ValueError("unsupported observation event kind")
     safe_parts = {
         "dom-signals": _project_fields(dom_signals),
         "activity": _project_fields(activity),
@@ -199,7 +216,12 @@ def append_observation(
     }
     current_digest = _digest(safe_parts)
     journal_path = gateway_observation_path(project_root, request_id)
-    from audiagentic.foundation.observability.journal_segments import journal_lock, prepare_append, journal_sequence_watermark
+    from audiagentic.foundation.observability.journal_segments import (
+        journal_lock,
+        journal_sequence_watermark,
+        prepare_append,
+    )
+
     from .retention import journal_max_bytes
 
     with _journal_lock(project_root, request_id), journal_lock(journal_path):
@@ -208,13 +230,14 @@ def append_observation(
         previous_digest = previous.get("current_digest") if previous else None
         index_path = gateway_observation_index_path(project_root, request_id)
         unchanged = bool(
-            previous
+            event_kind == "dom-observed"
+            and previous
             and previous_digest == current_digest
             and previous.get("event") in {"dom-observed", "observation-coalesced"}
         )
         event: dict[str, Any] = {
             "schema_version": SCHEMA_VERSION,
-            "event": "observation-coalesced" if unchanged else "dom-observed",
+            "event": "observation-coalesced" if unchanged else event_kind,
             "event_id": f"obs_{request_id}_{event_seq}",
             "event_seq": event_seq,
             "attempt_epoch": max(1, int(attempt_epoch)),

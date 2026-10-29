@@ -3,7 +3,8 @@ from __future__ import annotations
 
 import json
 import uuid
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
+from contextlib import contextmanager
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -81,6 +82,21 @@ class ManagedServiceStore:
 
     def read(self) -> ManagedServiceRecord:
         return self._read_unlocked()
+
+    @contextmanager
+    def owner_guard(self, expected_epoch: str) -> Iterator[ManagedServiceRecord]:
+        """Fence bounded local work against owner replacement and retirement.
+
+        Reuses the lifecycle store lock; callbacks must not perform network,
+        provider work, or recursively acquire this same service lock. No
+        service/node-specific state or authorization is introduced here.
+        """
+        with self._lock():
+            record = self._read_unlocked()
+            self._check_epoch(record, expected_epoch)
+            if record.state != "running":
+                raise conflict_error(18, "service is not running", state=record.state)
+            yield record
 
     def _write_unlocked(
         self,

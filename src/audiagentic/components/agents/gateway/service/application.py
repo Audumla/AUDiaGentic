@@ -9,6 +9,7 @@ from typing import Any
 
 from audiagentic.components.agents.contracts.execution_context import SubmissionEnvelope
 from audiagentic.components.agents.gateway.application import GatewayApplication
+from audiagentic.components.agents.gateway.node.admission_contract import NodeSubmissionContext
 from audiagentic.components.agents.gateway.operations import (
     GatewayOperationsApplication,
     ManagementCommand,
@@ -97,6 +98,7 @@ class GatewayServiceApplication:
         *,
         lifecycle: Any = None,
         dashboard_recent_seconds: int | None = None,
+        node_admission: Any = None,
     ) -> None:
         self._application = application
         self._service_store = service_store
@@ -104,6 +106,7 @@ class GatewayServiceApplication:
         # status/drain/resume/stop surface; absent for bare in-process hosting.
         self._lifecycle = lifecycle
         self._dashboard_recent_seconds = dashboard_recent_seconds
+        self._node_admission = node_admission
         self._dashboard_action_token = _load_dashboard_action_token(service_store.root)
         # A distinct durable authority for gateway operator operations.  It
         # deliberately does not own request/session state or the work queue.
@@ -324,10 +327,11 @@ class GatewayServiceApplication:
         protocol_version: str,
         owner_epoch: str,
         lease_id: str,
+        node_context: NodeSubmissionContext | None = None,
     ) -> Any:
         """Invoke one closed v1 gateway operation without transport concerns."""
         _require_protocol(protocol_version)
-        self._require_active_client_lease(lease_id, owner_epoch)
+        lease = self._require_active_client_lease(lease_id, owner_epoch)
         root = _canonical_root(project_root)
         arguments = dict(params or {})
         if operation in _WORK_PRODUCING_OPERATIONS and self._service_is_draining():
@@ -336,6 +340,17 @@ class GatewayServiceApplication:
                 "gateway is draining and will not admit new agent execution work",
                 operation=operation,
             )
+        if node_context is not None:
+            if (operation != "submit_execution_request" or type(node_context) is not NodeSubmissionContext
+                    or (lease.facts or {}).get("shared-principal-id") != node_context.principal_id):
+                raise service_validation_error(5, "Node submission context does not match its authenticated lease")
+            if self._node_admission is None:
+                raise service_validation_error(22, "Node execution is not enabled on this gateway")
+            result = self._node_admission.submit(
+                root, context=node_context, arguments=arguments, owner_epoch=owner_epoch,
+            )
+            self._record_project_encounter(root)
+            return result
         if operation in _WORK_PRODUCING_OPERATIONS:
             self._record_project_encounter(root)
         if operation == "list_agent_definition_cards":

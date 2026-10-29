@@ -2,10 +2,10 @@
 import hashlib
 import importlib.util
 import json
-from pathlib import Path
 import subprocess
 import sys
 import uuid
+from pathlib import Path
 
 import pytest
 

@@ -14,6 +14,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_opener, urlopen
 
+from audiagentic.components.agents.gateway.client import validate_node_selectors
 from audiagentic.components.agents.gateway.service.contract import (
     CALL_ROUTE,
     HEALTH_ROUTE,
@@ -56,11 +57,17 @@ class StandaloneGatewayClient:
         logical_client_id: str | None = None,
         shared_server_id: str | None = None,
         shared_project_id: str | None = None,
+        shared_source_node_config: Path | None = None,
+        shared_caller_root: Path | None = None,
         ssl_context: ssl.SSLContext | None = None,
     ) -> None:
         self._shared = shared_server_id is not None or shared_project_id is not None
         self._shared_server_id = shared_server_id
         self._shared_project_id = shared_project_id
+        self._source_node_config = shared_source_node_config
+        self._source_binding = None
+        if (shared_source_node_config is None) != (shared_caller_root is None):
+            raise client_validation_error(22, "source node configuration and caller root must be supplied together")
         self._shared_opener = None
         if self._shared:
             if not all(
@@ -86,6 +93,20 @@ class StandaloneGatewayClient:
                 maximum=MAX_LEASE_TTL_SECONDS,
             )
         self._auth_token = auth_token
+        if shared_source_node_config is not None:
+            if not self._shared or not isinstance(shared_caller_root, Path):
+                raise client_validation_error(22, "source node configuration requires a shared connector and caller root")
+            from audiagentic.components.agents.gateway.node.source_workspace import (
+                resolve_caller_workspace,
+            )
+            from audiagentic.components.agents.gateway.service.shared_config import (
+                load_shared_node_config,
+            )
+
+            source_config = load_shared_node_config(shared_source_node_config)
+            if source_config.server_id != shared_server_id:
+                raise client_validation_error(22, "source node belongs to a different gateway server")
+            self._source_binding = resolve_caller_workspace(source_config, shared_caller_root)
         self._request_timeout = request_timeout
         self._lease_ttl_seconds = lease_ttl_seconds
         self._client_instance_id = client_instance_id or f"client_{uuid.uuid4().hex[:16]}"
@@ -201,13 +222,40 @@ class StandaloneGatewayClient:
         return cast(list[dict[str, Any]], self._call("list_agent_definition_cards", project_root, {}))
 
     def submit_execution_request(self, project_root: Path, **kwargs: Any) -> dict[str, Any]:
+        if "source_workspace" in kwargs:
+            raise client_validation_error(22, "caller workspace is connector-owned, not a tool parameter")
+        source_token = None
+        target_keys = {"node_id", "workspace_id"}.intersection(kwargs)
+        if self._source_binding is not None:
+            from audiagentic.components.agents.gateway.node.source_workspace import (
+                resolve_caller_workspace,
+            )
+            from audiagentic.components.agents.gateway.service.shared_config import (
+                load_shared_node_config,
+            )
+
+            config = load_shared_node_config(self._source_node_config)
+            current = resolve_caller_workspace(config, project_root)
+            if config.server_id != self._shared_server_id or current != self._source_binding:
+                raise client_validation_error(22, "caller workspace binding changed; reconnect with explicit context")
+            expected_target = (current.identity.source_node_id, current.identity.workspace_id)
+            if target_keys:
+                if validate_node_selectors(kwargs.get("node_id"), kwargs.get("workspace_id")) != expected_target:
+                    raise client_validation_error(22, "cross-node workspace access is not implemented")
+            else:
+                kwargs.update(zip(("node_id", "workspace_id"), expected_target))
+            kwargs["source_workspace"] = {"identity": current.identity.to_mapping(), "caller-root": str(current.root)}
+            source_token = load_auth_token(config.token_file)
+        elif target_keys:
+            raise client_validation_error(22, "node submission requires configured caller workspace enrollment")
         if not self._shared:
             if "component_profile" not in kwargs:
                 from audiagentic.foundation.paths.names import get_active_profile
 
                 kwargs["component_profile"] = get_active_profile()
         kwargs.setdefault("logical_client_id", self._logical_client_id)
-        return cast(dict[str, Any], self._call("submit_execution_request", project_root, kwargs))
+        return cast(dict[str, Any], self._call("submit_execution_request", project_root, kwargs,
+                                             **({"source_node_token": source_token} if source_token is not None else {})))
 
     def get_execution_request(self, project_root: Path, request_id: str, *, include_response: bool = False) -> dict[str, Any]:
         params: dict[str, Any] = {"request_id": request_id, "include_response": include_response}
@@ -466,9 +514,16 @@ class StandaloneGatewayClient:
         params: dict[str, Any],
         *,
         transport_timeout: float | None | object = _DEFAULT_TRANSPORT_TIMEOUT,
+        source_node_token: str | None = None,
     ) -> Any:
+        if not self._shared and {"node_id", "workspace_id"}.intersection(params):
+            raise client_validation_error(22, "local loopback transport does not accept node selectors")
         if self._shared and operation == "submit_execution_request":
             params = _shared_submission_params(params)
+        if source_node_token is not None and (not self._shared or operation != "submit_execution_request"):
+            raise client_validation_error(22, "source credentials are restricted to shared node submission")
+        if ("source_workspace" in params) != (source_node_token is not None):
+            raise client_validation_error(22, "source workspace requires its enrolled node credential")
         scope = (
             {"project-id": self._shared_project_id}
             if self._shared
@@ -492,6 +547,7 @@ class StandaloneGatewayClient:
                         "params": params,
                     },
                     timeout=transport_timeout,
+                    **({"source_node_token": source_node_token} if source_node_token is not None else {}),
                 )
             except AudiaGenticError as exc:
                 if exc.code != "CON-AGSV-018":
@@ -567,7 +623,16 @@ class StandaloneGatewayClient:
         method: str = "POST",
         timeout: float | None | object = _DEFAULT_TRANSPORT_TIMEOUT,
         retry_network: bool = False,
+        source_node_token: str | None = None,
     ) -> Any:
+        source_headers = {}
+        if source_node_token is not None:
+            if (not self._shared or path != CALL_ROUTE or not body
+                    or body.get("operation") != "submit_execution_request"
+                    or not isinstance(source_node_token, str) or not source_node_token
+                    or any(character.isspace() for character in source_node_token)):
+                raise client_validation_error(22, "source credentials are restricted to shared node submission")
+            source_headers["X-AUDiaGentic-Source-Node-Token"] = source_node_token
         if self._shared:
             path = "/shared" + path
         encoded = None if body is None else json.dumps(body).encode("utf-8")
@@ -578,6 +643,7 @@ class StandaloneGatewayClient:
             headers={
                 "Authorization": f"Bearer {self._auth_token}",
                 "Content-Type": "application/json",
+                **source_headers,
             },
         )
         attempts = 2 if retry_network else 1
@@ -634,14 +700,27 @@ def load_auth_token(path: Path) -> str:
 
 
 def _shared_submission_params(params: dict[str, Any]) -> dict[str, Any]:
-    """Validate caller intent; never infer a client machine execution context."""
+    """Validate intent and connector-owned source claims without resolving paths."""
     allowed = {
         "agent_id", "execution_profile_id", "prompt_body", "mode", "source", "metadata",
         "session_id", "session_keep_alive", "new_session", "title", "logical_client_id",
+        "node_id", "workspace_id", "source_workspace",
     }
     if params.keys() - allowed:
         raise client_validation_error(22, "shared submission contains unsupported parameters",
                                       fields=sorted(params.keys() - allowed))
+    if {"node_id", "workspace_id"}.intersection(params):
+        validate_node_selectors(params.get("node_id"), params.get("workspace_id"))
+    if "source_workspace" in params:
+        from audiagentic.components.agents.gateway.node.admission_contract import (
+            SourceWorkspaceIdentity,
+        )
+
+        source = params["source_workspace"]
+        if (not isinstance(source, dict) or set(source) != {"identity", "caller-root"}
+                or not isinstance(source["caller-root"], str) or not source["caller-root"]):
+            raise client_validation_error(22, "source workspace requires connector-owned private context")
+        SourceWorkspaceIdentity.from_mapping(source["identity"])
     metadata = params.get("metadata")
     if metadata is not None and (
         not isinstance(metadata, dict)

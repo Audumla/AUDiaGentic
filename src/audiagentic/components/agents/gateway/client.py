@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import threading
 import time
 from pathlib import Path
@@ -21,6 +22,18 @@ from audiagentic.components.agents.gateway.application import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def validate_node_selectors(node_id: Any, workspace_id: Any) -> tuple[str, str]:
+    """Validate an explicit pair of configured IDs without resolving files or clients."""
+    if not all(isinstance(value, str) and re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,63}", value)
+               for value in (node_id, workspace_id)):
+        from audiagentic.foundation.contracts.errors import make_error_factory
+
+        raise make_error_factory("VAL", "AGSV", "gateway-service")(
+            22, "node_id and workspace_id require a complete pair of configured IDs, not paths"
+        )
+    return node_id, workspace_id
 
 
 def _uses_shared_connector(root: Path) -> bool:
@@ -45,9 +58,10 @@ def resolve_request_project_root(root: Path, request_id: str) -> Path:
     """Route a project-scoped request using the public client boundary."""
     if _uses_shared_connector(root):
         return root
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+
     from . import store as gateway_store
     from .api import _resolve_workspace_project_root
-    from audiagentic.foundation.contracts.errors import AudiaGenticError
     if not isinstance(request_id, str) or not request_id.startswith("req_"):
         return root
     parts = request_id.split("_")
@@ -107,8 +121,9 @@ def resolve_session_project_root(root: Path, session_id: str) -> Path:
     """
     if _uses_shared_connector(root):
         return root
-    from .session import sessions_store
     from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+    from .session import sessions_store
 
     root = root.resolve()
     configured = os.environ.get("AUDIAGENTIC_WORKSPACE_ROOTS", "")
@@ -521,6 +536,9 @@ def get_gateway_client(project_root: Path | None = None) -> GatewayClient:
                     connector.endpoint, load_auth_token(connector.token_file),
                     shared_server_id=connector.server_id,
                     shared_project_id=connector.project_id,
+                    **({"shared_source_node_config": connector.source_node_config_file,
+                        "shared_caller_root": project_root}
+                       if connector.source_node_config_file is not None else {}),
                     ssl_context=ssl.create_default_context(
                         cafile=str(connector.ca_file) if connector.ca_file else None
                     ),
@@ -626,6 +644,14 @@ def call_gateway_method(
     """
     from audiagentic.foundation.contracts.errors import AudiaGenticError
 
+    if "node_id" in kwargs or "workspace_id" in kwargs:
+        validate_node_selectors(kwargs.get("node_id"), kwargs.get("workspace_id"))
+        if project_root is None or not _uses_shared_connector(project_root):
+            from audiagentic.foundation.contracts.errors import make_error_factory
+
+            raise make_error_factory("VAL", "AGSV", "gateway-service")(
+                22, "node selectors require an explicitly configured shared connector"
+            )
     client = get_gateway_client(project_root)
     try:
         return getattr(client, method_name)(project_root, *args, **kwargs)

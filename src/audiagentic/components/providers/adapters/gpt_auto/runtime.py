@@ -6,8 +6,9 @@ import asyncio
 import hashlib
 import logging
 import time
+from collections.abc import Callable
 from enum import StrEnum
-from typing import TYPE_CHECKING, Callable, Literal
+from typing import TYPE_CHECKING, Literal
 from urllib.parse import urlparse
 
 from audiagentic.foundation.workflow import TransitionConfig, TransitionEngine

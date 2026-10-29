@@ -255,6 +255,10 @@ CON-AGW-154: "The provider response could not be captured from the request-owned
 CON-AGW-155: "The provider response is not proven complete; wait for completion controls and a quiescent turn."
 CON-AGW-156: "The provider response could not be proven to belong to this request."
 CON-AGW-157: "The request has not durably proven that its own prompt was submitted; wait for provider submission evidence before capturing."
+# SH38 private execution-node contracts and receipt evidence.
+VAL-AGND-001: "Use the supported v1 bounded node frame, exact command identity and valid finite JSON fields."
+CON-AGND-001: "Reconcile the original command under current epoch, identity and authorization fences; never repeat an uncertain native effect."
+IO-AGND-001: "Inspect the protected local node receipt store and filesystem durability; reconcile effect evidence before retrying."
 CFG-AGF-001: "An agent or template file does not match the agent-file schema. Fix the field at the reported file and line; unknown keys are rejected."
 CFG-AGF-002: "An agent extends a template that does not exist, or a template tries to extend another template. Use an existing template id in 'extends'; templates cannot extend."
 CFG-AGF-003: "A resolved agent is missing provider, model or instructions. Set them in the agent file or in the template it extends."
@@ -273,6 +277,3 @@ CON-XSR-009: "Only the current writer at the current generation can release the 
 CON-XSR-010: "This writer does not hold the external session; it must claim it before sending."
 VAL-XSR-011: "The external session is not registered. Register it through the Provider join authority first."
 CON-XSR-012: "The writer claim on this external session belongs to a gateway owner epoch that is no longer current. Claim it again from the current owner; that increases the generation and fences the retired owner out."
-VAL-AGND-001: "Use the supported v1 bounded node frame, exact command identity and valid finite JSON fields."
-CON-AGND-001: "Reconcile the original command under current epoch, identity and authorization fences; never repeat an uncertain native effect."
-IO-AGND-001: "Inspect the protected local node receipt store and filesystem durability; reconcile effect evidence before retrying."
