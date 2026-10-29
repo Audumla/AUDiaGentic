@@ -982,6 +982,31 @@ def get_provider_status(project_root: Path, provider_id: str) -> dict[str, Any]:
     return {"provider_id": provider_id, "ok": False, "error": "provider status unavailable"}
 
 
+def check_provider_availability(project_root: Path | None, provider_id: str) -> tuple[bool | None, str]:
+    """Read-only availability observation for one provider (never writes config).
+
+    ``True``/``False`` with a reason, or ``None`` when the provider declares
+    nothing that can be checked here. CLI providers use their declared probe;
+    providers on the gpt-auto CDP surface probe the configured browser.
+    """
+    from audiagentic.components.providers.descriptors import all_descriptors
+    from audiagentic.components.providers.services.lifecycle.lifecycle import probe_provider_cli
+
+    descriptor = all_descriptors().get(provider_id)
+    if descriptor is None:
+        return False, f"unknown provider {provider_id!r}"
+    if "gpt-auto-cdp" in list_session_surface_ids(provider_id):
+        from audiagentic.components.providers.adapters.gpt_auto.availability import cdp_availability
+
+        return cdp_availability(project_root, provider_id)
+    probe = probe_provider_cli(descriptor)
+    if probe is None:
+        return None, "no availability check declared"
+    if probe.get("available"):
+        return True, f"CLI found: {probe.get('executable') or 'on PATH'}"
+    return False, "CLI not found on PATH"
+
+
 def list_session_surface_ids(provider_id: str) -> tuple[str, ...]:
     """Session surface ids a provider declares, in declaration order.
 

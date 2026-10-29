@@ -98,13 +98,15 @@ class _SurfaceResolutionFailure(RuntimeError):
 # Version constraint parsing (local helpers — no YAML/runtime load)
 # ---------------------------------------------------------------------------
 
-_VERSION_RE = re.compile(r"^(\d+(?:.\d+)*)")
+_VERSION_RE = re.compile(r"^(\d+(?:\.\d+)*)")
+# CLIs often print their name first ("codex-cli 0.165.0", "opencode v2.2.0").
+_VERSION_TOKEN_RE = re.compile(r"(?<![\w.])v?(\d+(?:\.\d+){1,3})(?![\w.])")
 
 
 def _parse_version(version_str: str) -> tuple[int, ...] | None:
     """Parse a version string into a tuple of integers for comparison."""
     try:
-        match = _VERSION_RE.match(version_str.strip())
+        match = _VERSION_RE.match(version_str.strip()) or _VERSION_TOKEN_RE.search(version_str)
         if not match:
             return None
         return tuple(int(part) for part in match.group(1).split("."))
