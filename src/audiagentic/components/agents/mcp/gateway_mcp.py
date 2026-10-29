@@ -33,7 +33,7 @@ from audiagentic.foundation.mcp.component_server import (
     tool_boundary,
 )
 
-mcp = mcp_server(__name__, structured_output_only=True)
+mcp = mcp_server(__name__, structured_output_only=True, worktree_scoped=True)
 
 _RESPONSE_PREVIEW_FIELDS = frozenset({"output-preview", "output-truncated"})
 
