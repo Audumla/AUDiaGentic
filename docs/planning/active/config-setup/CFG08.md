@@ -88,6 +88,12 @@ Next: a doctor check that the gpt-auto dashboard anchor and project name resolve
 
 2026-10-29 correction to the live-check findings above. Gap 3 (gpt-auto dashboard anchor) is environment-dependent, not a general clean-install failure: ensure_dedicated_window_anchor reuses any open browser tab whose scheme, host and path match the dashboard URL (served or not) and keeps an in-memory handle between calls, so gpt-auto works under the embedded gateway whenever such a tab or handle already exists (the other session ran many requests that way) and fails with ERR_CONNECTION_REFUSED only when none does, as in my fresh-browser first run. Not reproduced on a truly clean browser since. The agents.gateway doctor check now says exactly that. Whether to make shared (automatic) the default is an explicit decision, not a side effect: the SH11 item is closed but records no soak or rollback rehearsal, embedded.yaml still says default until that soak, and every session using the global gateway MCP runs the embedded default today. Before any flip: run the five integration files that set the gateway mode, a real gpt-auto request under the flipped default, and reproduce the anchor failure on a clean browser.
 
+2026-10-29: gap 5 closed by PR #174. `audiagentic setup harness ID[,ID...] [dry-run]` registers every worktree-scoped MCP server (worktree-scoped: true on its component YAML declaration; ag-planning, ag-ledger, ag-agents-gateway) at the named harnesses' user scope, so sessions started outside a project have them; each tool takes a per-call worktree (#167). Only named harnesses are touched (the MCP onboarding rule). Claude's user scope (mcpServers in $CLAUDE_CONFIG_DIR/.claude.json, else ~/.claude.json) is changed only through `claude mcp add-json/remove --scope user`. Entries are this installation's absolute audiagentic console script plus `mcp MODULE`, no interpreter path, no env. Ownership is recorded per target file in the user state directory; foreign same-named entries are reported, never overwritten. doctor check mcp.user.<harness> reports configured, or warns on missing/drifted/foreign with the setup command as fix. The bogus ~/.claude/mcp.json fallback is removed.
+
+Applied on the agent-dev container for accounts mgai2 and clai2 (shared runtime venv at main with #174): `claude mcp list` shows ag-planning, ag-ledger and ag-agents-gateway connected at user scope. Each further account needs the same one command.
+
+Open gap found while applying it: the registered servers inherit the session environment, and container sessions set no AUDIAGENTIC_HOME, so the user-scope gateway sees the default home (no agent files; doctor warns agents.files) rather than /work/development/AUDiaGentic/home where reviewer-gpt-agent lives. Needs a settings-level home choice (or an agent added to the default home), not an env var in the entries. CFG08 stays in progress for the end-to-end criterion and installed-wheel qualification.
+
 ## Change Log
 
 - 2026-10-28T21:05:53.564412+00:00 (created-by): Created by claude
@@ -101,3 +107,4 @@ Next: a doctor check that the gpt-auto dashboard anchor and project name resolve
 - 2026-10-29T05:27:58.309590+00:00 (updated-by): Updated: section:notes
 - 2026-10-29T05:31:22.215189+00:00 (updated-by): Updated: section:notes
 - 2026-10-29T07:40:55.635463+00:00 (updated-by): Updated: section:notes
+- 2026-10-29T14:28:12.548201+00:00 (updated-by): Updated: section:notes
