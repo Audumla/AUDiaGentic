@@ -5,9 +5,8 @@ import hashlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from audiagentic.components.agents.agents_paths import global_agents_config_path
 from audiagentic.components.agents.capabilities.contracts import RoleManifest
 from audiagentic.components.agents.capabilities.resolver import resolve_role_manifest
 from audiagentic.components.agents.capabilities.source_filter import eligible_instance_ids
@@ -18,6 +17,9 @@ from audiagentic.components.agents.models.role import role_from_dict
 
 from .contracts import AgentsConfigDocument
 from .repository import AgentsConfigRepository, AgentsConfigSnapshot
+
+if TYPE_CHECKING:
+    from .effective_catalog import EffectiveAgentsRepository
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,11 +76,12 @@ def resolve_agent_composition(
     agent_id: str,
     *,
     snapshot: AgentsConfigSnapshot | None = None,
-    repository: AgentsConfigRepository | None = None,
+    repository: AgentsConfigRepository | EffectiveAgentsRepository | None = None,
 ) -> ResolvedAgentComposition:
-    repository = repository or AgentsConfigRepository(
-        global_agents_config_path(), required=True
-    )
+    if repository is None:
+        from .effective_catalog import EffectiveAgentsRepository
+
+        repository = EffectiveAgentsRepository()
     current = snapshot or repository.read(project_root)
     raw = next((item for item in current.document.agents if item.get("agent_id") == agent_id), None)
     if raw is None:
