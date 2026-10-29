@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.22.4](https://github.com/Audumla/AUDiaGentic/compare/v0.22.3...v0.22.4) (2026-10-29)
+
+
+### Bug Fixes
+
+* **gateway:** request-history, unsent-evidence, worker-terminal and observability hardening ([#156](https://github.com/Audumla/AUDiaGentic/issues/156)) ([d853a2e](https://github.com/Audumla/AUDiaGentic/commit/d853a2e53702cf1c0c873c811b594923f954fbae))
+
 ## [0.22.3](https://github.com/Audumla/AUDiaGentic/compare/v0.22.2...v0.22.3) (2026-10-29)
 
 
