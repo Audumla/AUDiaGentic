@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.21.4](https://github.com/Audumla/AUDiaGentic/compare/v0.21.3...v0.21.4) (2026-10-29)
+
+
+### Bug Fixes
+
+* **mcp:** self-terminate stdio MCP servers on parent death or 12h idle ([#141](https://github.com/Audumla/AUDiaGentic/issues/141)) ([fa70bbc](https://github.com/Audumla/AUDiaGentic/commit/fa70bbcf1dbf95f400e83a7bf22ca087fe784077))
+
 ## [0.21.3](https://github.com/Audumla/AUDiaGentic/compare/v0.21.2...v0.21.3) (2026-10-29)
 
 
