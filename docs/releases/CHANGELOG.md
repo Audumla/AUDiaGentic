@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.16.0](https://github.com/Audumla/AUDiaGentic/compare/v0.15.0...v0.16.0) (2026-10-29)
+
+
+### Features
+
+* **agents:** gateway configuration from the gateway settings section (CFG09 part 2) ([#114](https://github.com/Audumla/AUDiaGentic/issues/114)) ([8d2e90a](https://github.com/Audumla/AUDiaGentic/commit/8d2e90a57a3ba30fca8e837f683d38adad81e326))
+
 ## [0.15.0](https://github.com/Audumla/AUDiaGentic/compare/v0.14.0...v0.15.0) (2026-10-29)
 
 
