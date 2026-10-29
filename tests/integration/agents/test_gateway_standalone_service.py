@@ -856,13 +856,13 @@ def test_service_process_crash_allows_deterministic_explicit_restart(tmp_path: P
     command = [
         sys.executable,
         "-m",
-        "audiagentic.launcher",
-        "gateway",
-        "serve",
+        "audiagentic.components.agents.gateway.service.process",
         "--port",
         str(port),
         "--token-file",
         str(token_path),
+        "--service-root",
+        str(tmp_path / "process-service"),
     ]
 
     def start() -> subprocess.Popen:
@@ -893,7 +893,7 @@ def test_service_process_crash_allows_deterministic_explicit_restart(tmp_path: P
     second = None
     try:
         first_health = await_health(first)
-        first_record = ManagedServiceStore(GATEWAY_SERVICE_KEY).read()
+        first_record = ManagedServiceStore(GATEWAY_SERVICE_KEY, root=tmp_path / "process-service").read()
         assert first_record.process is not None
         signal_owned_process(
             first_record.process,
@@ -912,7 +912,7 @@ def test_service_process_crash_allows_deterministic_explicit_restart(tmp_path: P
 
         assert second_health["owner-epoch"] != first_health["owner-epoch"]
         assert second.pid != first.pid
-        second_record = ManagedServiceStore(GATEWAY_SERVICE_KEY).read()
+        second_record = ManagedServiceStore(GATEWAY_SERVICE_KEY, root=tmp_path / "process-service").read()
         assert second_record.process is not None
         assert observe_process(second_record.process) is not None
     finally:

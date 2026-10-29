@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.23.0](https://github.com/Audumla/AUDiaGentic/compare/v0.22.4...v0.23.0) (2026-10-29)
+
+
+### Features
+
+* **gateway:** config-driven shared standalone service, HTTPS connector and keyword CLI (SH37) ([#160](https://github.com/Audumla/AUDiaGentic/issues/160)) ([ed8dbe1](https://github.com/Audumla/AUDiaGentic/commit/ed8dbe1994b5c806092246c4c7009cf4ad15d639))
+
 ## [0.22.4](https://github.com/Audumla/AUDiaGentic/compare/v0.22.3...v0.22.4) (2026-10-29)
 
 

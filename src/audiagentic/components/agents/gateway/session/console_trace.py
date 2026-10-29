@@ -4,7 +4,7 @@ The gateway service normally communicates over HTTP/MCP, so provider launch
 activity is otherwise difficult to see while debugging a live CLI process.
 This module writes a small, human-readable trace to stderr (never stdout,
 which may be an MCP protocol stream).  Summary mode is enabled by default;
-set ``AUDIAGENTIC_GATEWAY_CONSOLE_TRACE=off`` to disable it or ``full`` to
+set ``gateway.console_trace.mode`` to ``off`` to disable it or ``full`` to
 include bounded prompt/response bodies.
 """
 

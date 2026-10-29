@@ -5,7 +5,7 @@ supplies only the gateway's domain quiescence facts and its component idle
 policy, and drives self-managed shutdown through the existing store
 transition/retire gates — no new stop machinery.
 
-Idle policy: ``AUDIAGENTIC_GATEWAY_IDLE_GRACE_SECONDS`` (0 or unset =
+Idle policy: ``gateway.idle_grace_seconds`` (0 or unset =
 keep-warm forever, today's behavior). When set, a running service with no
 active client leases, no gateway work, and no ingress backlog for one full
 grace window drains and exits through the guarded transitions: running →

@@ -64,10 +64,16 @@ def main() -> None:
             "assert pathlib.Path(audiagentic.__file__).resolve().is_relative_to(pathlib.Path(sys.prefix).resolve()); "
             "from audiagentic.components.agents.gateway.service import process; "
             "assert callable(process.main); "
+            "from importlib.resources import files; "
+            "assert (files('audiagentic.components.providers.adapters.gpt_auto') / 'gpt-auto-defaults.yaml').read_text().strip(); "
+            "assert (files('audiagentic.components.providers.contracts') / 'model-sources-default.yaml').read_text().strip(); "
+            "assert (files('audiagentic.components.ledger.contracts') / 'change-event.schema.json').read_text().strip(); "
+            "assert (files('audiagentic.components.agent_jobs.contracts') / 'job-record.schema.json').read_text().strip(); "
             "print('installed wheel import/version proof passed')",
             expected,
         )
         run("-I", "-m", "audiagentic.launcher", "--help")
+        run("-I", "-m", "audiagentic.launcher", "gateway", "help")
     if distribution_hashes(directory) != before:
         raise ValueError("distribution bytes changed during validation")
     source = subprocess.run(

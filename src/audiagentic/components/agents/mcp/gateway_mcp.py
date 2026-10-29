@@ -15,7 +15,16 @@ from __future__ import annotations
 from typing import Any
 
 from audiagentic.components.agents.gateway.client import (
-    call_gateway_method, resolve_request_project_root, resolve_session_project_root,
+    call_gateway_method,
+    resolve_request_project_root,
+    resolve_session_project_root,
+)
+from audiagentic.components.agents.gateway.evidence_projection import (
+    project_public_gateway_request,
+    project_public_gateway_session,
+)
+from audiagentic.components.agents.gateway.evidence_projection import (
+    public_gateway_scalar as _public_scalar,
 )
 from audiagentic.foundation.mcp.component_server import (
     mcp_server,
@@ -43,47 +52,6 @@ def _page_limit(value: int) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= _MAX_PAGE:
         raise ValueError(f"limit must be an integer between 1 and {_MAX_PAGE}")
     return value
-
-def _public_scalar(value: Any) -> Any:
-    if isinstance(value, str):
-        return value[:256] if value else None
-    if isinstance(value, (bool, int, float)):
-        return value
-    return None
-
-
-def _request_dto(value: Any) -> dict[str, Any]:
-    """Project lifecycle mutations without copying arbitrary record fields."""
-    source = value if isinstance(value, dict) else {}
-    result: dict[str, Any] = {}
-    request_id = source.get("request-id") or source.get("request_id")
-    session_id = source.get("session-id") or source.get("session_id")
-    for key in ("state", "revision", "action", "disposition", "outcome", "error-code", "reason"):
-        raw = _public_scalar(source.get(key))
-        if raw is not None:
-            result[key] = raw
-    warnings = source.get("warnings")
-    if isinstance(warnings, list):
-        result["warnings"] = [item[:256] for item in warnings if isinstance(item, str)][:16]
-    if isinstance(request_id, str) and request_id:
-        result["request-id"] = request_id
-    if isinstance(session_id, str) and session_id:
-        result["session-id"] = session_id
-    return result
-
-
-def _session_dto(value: Any) -> dict[str, Any]:
-    source = value if isinstance(value, dict) else {}
-    result: dict[str, Any] = {}
-    session_id = source.get("session-id") or source.get("session_id")
-    if isinstance(session_id, str) and session_id:
-        result["session-id"] = session_id
-    for key in ("state", "live", "runtime-state", "created-at", "updated-at", "provider-id", "model-id"):
-        raw = _public_scalar(source.get(key))
-        if raw is not None:
-            result[key] = raw
-    return result
-
 
 def _status_without_response_preview(status: dict[str, Any], *, include_response: bool = False) -> dict[str, Any]:
     """Keep MCP status compact and null-free; never spend tokens on a preview."""
@@ -124,33 +92,11 @@ def _sparse(value: Any) -> Any:
     return value
 
 
-def _agent_card(definition: dict[str, Any]) -> dict[str, Any]:
-    """Client-facing summary of one Agent Definition (A2A AgentCard-style
-    projection — see protocols/a2a/agent_card.py's build_agent_card for the
-    sibling used on the A2A-publication path). Deliberately excludes
-    implementation/harness details a calling agent has no use for and must
-    not couple to: execution_profile_id, role_ids, prompt_id. What backs an
-    agent is free to change without being part of its public contract."""
-    return {
-        "agent_id": definition["agent_id"],
-        "name": definition.get("name"),
-        "description": definition.get("description"),
-        "skills": [
-            {"id": skill, "name": skill} for skill in definition.get("advertised_skills") or []
-        ],
-    }
-
-
 @mcp.tool()
 @tool_boundary
 def agent_task_list_definitions() -> list[dict[str, Any]]:
     """List valid agent_id values with concise names, descriptions, and skills."""
-    from audiagentic.components.agents.configuration.management import (
-        list_agent_definitions,
-    )
-
-    definitions = list_agent_definitions(project_root_from_env())
-    return _sparse([_agent_card(definition) for definition in definitions])
+    return call_gateway_method("list_agent_definition_cards", project_root_from_env())
 
 
 @mcp.tool()
@@ -257,7 +203,9 @@ def agent_task_evidence(
             request_id,
             **params,
         )
-    from audiagentic.components.agents.gateway.evidence_projection import project_public_gateway_evidence
+    from audiagentic.components.agents.gateway.evidence_projection import (
+        project_public_gateway_evidence,
+    )
     return _sparse(project_public_gateway_evidence(raw))
 
 @mcp.tool()
@@ -283,7 +231,7 @@ def agent_task_recover(
 ) -> dict[str, Any]:
     """Request reconcile, abandon, or clear-not-submitted; recovery never resends a prompt."""
     project_root = _request_project_root(request_id)
-    return _request_dto(
+    return project_public_gateway_request(
         call_gateway_method(
             "recover_execution_request",
             project_root,
@@ -309,11 +257,14 @@ def agent_task_response(request_id: str) -> dict[str, Any]:
         "media-type": payload["media_type"],
     }
     state = payload.get("state")
-    if isinstance(state, str) and state: result["state"] = state
+    if isinstance(state, str) and state:
+        result["state"] = state
     error_code = payload.get("error_code")
-    if isinstance(error_code, str) and error_code: result["error-code"] = error_code
+    if isinstance(error_code, str) and error_code:
+        result["error-code"] = error_code
     error_reason = payload.get("error_reason")
-    if isinstance(error_reason, str) and error_reason: result["error-reason"] = error_reason
+    if isinstance(error_reason, str) and error_reason:
+        result["error-reason"] = error_reason
     return result
 
 @mcp.tool()
@@ -336,7 +287,7 @@ def agent_task_failure_response(request_id: str) -> dict[str, Any]:
 def agent_task_complete_from_provider(request_id: str) -> dict[str, Any]:
     """Capture the request-owned current provider response and mark it completed; never send a prompt."""
     project_root = _request_project_root(request_id)
-    return _sparse(call_gateway_method("complete_execution_from_provider", project_root, request_id))
+    return project_public_gateway_request(call_gateway_method("complete_execution_from_provider", project_root, request_id))
 
 
 @mcp.tool()
@@ -344,7 +295,7 @@ def agent_task_complete_from_provider(request_id: str) -> dict[str, Any]:
 def agent_task_cancel(request_id: str) -> dict[str, Any]:
     """Cancel a queued request, or best-effort mark a running one cancel-requested."""
     project_root = _request_project_root(request_id)
-    return _request_dto(call_gateway_method("cancel_execution_request", project_root, request_id))
+    return project_public_gateway_request(call_gateway_method("cancel_execution_request", project_root, request_id))
 
 
 @mcp.tool()
@@ -376,7 +327,7 @@ def agent_task_session_list(state: str | None = "active") -> list[dict[str, Any]
     """List sessions, defaulting to active; pass a lifecycle state or ``all``."""
     project_root = project_root_from_env()
     gateway_state = None if state == "all" else state
-    return [_session_dto(item) for item in call_gateway_method("list_execution_sessions", project_root, state=gateway_state)]
+    return [project_public_gateway_session(item) for item in call_gateway_method("list_execution_sessions", project_root, state=gateway_state)]
 
 
 @mcp.tool()
@@ -384,7 +335,7 @@ def agent_task_session_list(state: str | None = "active") -> list[dict[str, Any]
 def agent_task_session_close(session_id: str) -> dict[str, Any]:
     """Close a session and its agent process; repeated close is idempotent."""
     project_root = project_root_from_env()
-    return _session_dto(call_gateway_method("close_execution_session", project_root, session_id))
+    return project_public_gateway_session(call_gateway_method("close_execution_session", project_root, session_id))
 
 
 @mcp.tool()
@@ -424,7 +375,7 @@ def agent_task_session_control(
 ) -> dict[str, Any]:
     """Send a session control acknowledgement; poll request status for lifecycle truth."""
     project_root = project_root_from_env()
-    return _request_dto(
+    return project_public_gateway_request(
         call_gateway_method(
             "control_execution_session",
             project_root,
@@ -453,7 +404,7 @@ def agent_task_session_resume(
     }
     if component_profile is not None:
         kwargs["component_profile"] = component_profile
-    return _session_dto(
+    return project_public_gateway_session(
         call_gateway_method("resume_execution_session", project_root, source_session_id, **kwargs)
     )
 
@@ -494,10 +445,7 @@ def agent_task_submit(
     if provider_chat_url is not None:
         submit_kwargs["provider_chat_url"] = provider_chat_url
     status = call_gateway_method("submit_execution_request", project_root, **submit_kwargs)
-    result = _request_dto(status)
-    if isinstance(status, dict) and isinstance(status.get("warnings"), list) and status["warnings"]:
-        result["warnings"] = status["warnings"][:16]
-    return result
+    return project_public_gateway_request(status)
 
 
 def main() -> None:
