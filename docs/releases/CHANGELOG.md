@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.21.6](https://github.com/Audumla/AUDiaGentic/compare/v0.21.5...v0.21.6) (2026-10-29)
+
+
+### Documentation
+
+* **planning:** CFG08 status after [#140](https://github.com/Audumla/AUDiaGentic/issues/140) ([#143](https://github.com/Audumla/AUDiaGentic/issues/143)) ([1bf83bd](https://github.com/Audumla/AUDiaGentic/commit/1bf83bda0c5dc530fd695b03c131e4439f42d4e3))
+
 ## [0.21.5](https://github.com/Audumla/AUDiaGentic/compare/v0.21.4...v0.21.5) (2026-10-29)
 
 
