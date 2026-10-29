@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 
 # Load environment-specific secrets from .audiagentic/secrets/<env>.env.
@@ -65,6 +66,38 @@ def _isolate_audiagentic_home(
     if request.node.get_closest_marker("mutates_host") is not None:
         return
     monkeypatch.setenv("AUDIAGENTIC_HOME", str(tmp_path_factory.mktemp("audiagentic-home")))
+
+
+@pytest.fixture(autouse=True)
+def _gateway_test_port(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Never let a test start a gateway service on the real default port.
+
+    The shared gateway owns the default port; a test-started service there blocks
+    every real client on the machine. Each test gets its own free port instead.
+    """
+    import socket
+
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    monkeypatch.setattr("audiagentic.components.agents.gateway.service.bootstrap._DEFAULT_PORT", port)
+
+
+@pytest.fixture(autouse=True)
+def _stop_leaked_gateway_services(
+    _isolate_audiagentic_home, tmp_path_factory: pytest.TempPathFactory,
+) -> Iterator[None]:
+    """Stop any gateway service the test left running under its own temp home.
+
+    Never acts on a home outside pytest's temp tree, so a real or ``mutates_host``
+    home and other sessions' services are untouched.
+    """
+    from tests.helpers.gateway_service_cleanup import stop_gateway_services
+
+    yield
+    home = os.environ.get("AUDIAGENTIC_HOME", "")
+    if home and Path(home).is_relative_to(tmp_path_factory.getbasetemp()):
+        stop_gateway_services(Path(home))
 
 
 @pytest.fixture(autouse=True)
