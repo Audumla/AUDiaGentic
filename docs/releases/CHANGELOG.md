@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.22.2](https://github.com/Audumla/AUDiaGentic/compare/v0.22.1...v0.22.2) (2026-10-29)
+
+
+### Bug Fixes
+
+* **doctor:** agents.gateway states the dashboard-anchor condition it can prove ([#152](https://github.com/Audumla/AUDiaGentic/issues/152)) ([885e54b](https://github.com/Audumla/AUDiaGentic/commit/885e54bf0cad70b1cf6bc3cbe104429229ca2b92))
+
 ## [0.22.1](https://github.com/Audumla/AUDiaGentic/compare/v0.22.0...v0.22.1) (2026-10-29)
 
 
