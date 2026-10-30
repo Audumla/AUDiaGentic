@@ -526,8 +526,10 @@ def test_provider_chat_url_rejects_non_gpt_profile(tmp_path: Path) -> None:
 def test_wait_returns_timeout_status_for_still_running_request(tmp_path: Path, monkeypatch):
     _make_profile(tmp_path, "default", "local-openai")
     hold = threading.Event()
+    started = threading.Event()
 
     def slow_execute_provider(*, identity, execution_request, activity_callback=None):
+        started.set()
         hold.wait(timeout=5)
         return _result(
             {
@@ -544,6 +546,9 @@ def test_wait_returns_timeout_status_for_still_running_request(tmp_path: Path, m
     )
 
     submitted = gateway.submit_execution_request(tmp_path, prompt_body="hi")
+    # The request is only "active" once the provider is running; wait for that instead of
+    # betting on how fast a loaded runner schedules the worker thread.
+    assert started.wait(timeout=10)
     result = gateway.wait_execution_request(tmp_path, submitted["request-id"], timeout_seconds=0.2)
     assert result["wait-outcome"] == "timeout"
     assert result["status"]["lifecycle"] == "active"

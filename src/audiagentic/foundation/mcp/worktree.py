@@ -23,6 +23,7 @@ from pathlib import Path
 
 from audiagentic.foundation.contracts.errors import make_error_factory
 from audiagentic.foundation.paths.project import describe_checkout, discover_checkout_root
+from audiagentic.foundation.system import worktree_drain
 
 worktree_error = make_error_factory("CFG", "MCPWT", "mcp")
 
@@ -58,6 +59,11 @@ def _confirm(candidate: Path) -> Worktree:
             # truncated for clients, which would cut a long path.
             5, f"Path is inside a git worktree but is not its root; use {root}",
             worktree=str(resolved), worktree_root=str(root),
+        )
+    if worktree_drain.is_draining(resolved):
+        raise worktree_error(
+            6, "This worktree is being removed and accepts no new work",
+            worktree=str(resolved), reason=worktree_drain.reason(resolved),
         )
     branch, head = describe_checkout(resolved)
     return Worktree(resolved, branch, head)
