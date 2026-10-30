@@ -225,4 +225,5 @@ CON-WTFIN-004: "The worktree changed while it was being finished (head, branch o
 CON-WTFIN-005: "The archive copy of the project's record files did not match the original. Nothing was removed; check free space and the archive directory, then run finish again."
 CON-WTFIN-006: "The remote default branch is unknown or could not be fetched, so merged-ness cannot be proven. Fix the network or the origin remote and retry."
 CON-WTFIN-007: "git refused to remove the worktree and nothing was forced. Read the reason in the error details; the quarantine ref and archive were already written and are kept."
+CON-WTFIN-008: "Abandoning unmerged work needs the tip you are discarding: repeat the command with `abandon` followed by the tip prefix shown in the message. Its unique commits are bundled and verified before removal."
 CFG-MCPWT-006: "The worktree is being removed (a finish is draining it) and accepts no new work. Use another worktree, or wait for the removal to finish or be cancelled."

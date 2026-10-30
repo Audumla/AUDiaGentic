@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.45.0](https://github.com/Audumla/AUDiaGentic/compare/v0.44.1...v0.45.0) (2026-10-30)
+
+
+### Features
+
+* **doctor:** warn when the running gateway is older than the code it was started from (DW01) ([#243](https://github.com/Audumla/AUDiaGentic/issues/243)) ([fc13f80](https://github.com/Audumla/AUDiaGentic/commit/fc13f80b1c58f78d1d099641062fa2c035585840))
+
+## [0.44.1](https://github.com/Audumla/AUDiaGentic/compare/v0.44.0...v0.44.1) (2026-10-30)
+
+
+### Documentation
+
+* **worktree:** operator guide for start, list, prune, finish and abandon (DW01) ([#241](https://github.com/Audumla/AUDiaGentic/issues/241)) ([720c599](https://github.com/Audumla/AUDiaGentic/commit/720c599355b742de01cc21ade516ff689f176ac1))
+
+## [0.44.0](https://github.com/Audumla/AUDiaGentic/compare/v0.43.0...v0.44.0) (2026-10-30)
+
+
+### Features
+
+* **worktree:** finish can abandon unmerged work after a verified self-contained bundle (DW01 slice 3b-3) ([#239](https://github.com/Audumla/AUDiaGentic/issues/239)) ([5befa94](https://github.com/Audumla/AUDiaGentic/commit/5befa944ca9c47e4ec3b6a5928f067ad616f35c0))
+
+## [0.43.0](https://github.com/Audumla/AUDiaGentic/compare/v0.42.0...v0.43.0) (2026-10-30)
+
+
+### Features
+
+* **worktree:** worktree finish removes a merged worktree after preserving it (DW01 slice 3b-2) ([#237](https://github.com/Audumla/AUDiaGentic/issues/237)) ([3363aff](https://github.com/Audumla/AUDiaGentic/commit/3363aff9e6e141d7e1ca8b345e362ba874ebc503))
+
 ## [0.42.0](https://github.com/Audumla/AUDiaGentic/compare/v0.41.0...v0.42.0) (2026-10-30)
 
 
