@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.38.0](https://github.com/Audumla/AUDiaGentic/compare/v0.37.0...v0.38.0) (2026-10-30)
+
+
+### Features
+
+* **mcp:** slim agent-facing tool schemas and deliver server instructions ([#227](https://github.com/Audumla/AUDiaGentic/issues/227)) ([64d713e](https://github.com/Audumla/AUDiaGentic/commit/64d713e9dfc0ab30bcf3433ffff96a08641c2859))
+
 ## [0.37.0](https://github.com/Audumla/AUDiaGentic/compare/v0.36.0...v0.37.0) (2026-10-30)
 
 
