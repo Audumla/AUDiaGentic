@@ -28,7 +28,6 @@ from audiagentic.foundation.system import worktree_drain
 worktree_error = make_error_factory("CFG", "MCPWT", "mcp")
 
 WORKTREE_PARAMETER = "worktree"
-WORKTREE_DESCRIPTION = "Worktree root (absolute path); default: server's project."
 
 _CURRENT: contextvars.ContextVar[Worktree | None] = contextvars.ContextVar("audiagentic_mcp_worktree", default=None)
 
@@ -100,7 +99,6 @@ def using_worktree(worktree: Worktree) -> Iterator[Worktree]:
 
 
 __all__ = [
-    "WORKTREE_DESCRIPTION",
     "WORKTREE_PARAMETER",
     "Worktree",
     "current_worktree",

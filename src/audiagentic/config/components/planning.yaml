@@ -107,7 +107,7 @@ mcp-servers:
       plan_list_items: "List items; provide plan or id_prefix. Default state is active; paginate with limit/offset."
       plan_get_item: Read an item; set include_history=true for change history.
       plan_set_state: "Set an item's state and move it to canonical active/completed placement; retry with the current state to repair misplaced items."
-      plan_update_item: Update item fields; use append for sections to append.
+      plan_update_item: "Replace item fields/sections (lowercase keys, e.g. validation). append=[names] adds to those sections instead."
       plan_delete_item: Permanently delete a plan item by ID.
       plan_create_review: "Create a review; required: review-of and title."
       plan_list_reviews: List reviews; default state is open; paginate with limit/offset.
