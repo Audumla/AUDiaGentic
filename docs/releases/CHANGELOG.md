@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.34.2](https://github.com/Audumla/AUDiaGentic/compare/v0.34.1...v0.34.2) (2026-10-30)
+
+
+### Documentation
+
+* **planning:** DW01 adds primary-checkout verification, pre-push privacy and archive convention ([#219](https://github.com/Audumla/AUDiaGentic/issues/219)) ([b3c57f9](https://github.com/Audumla/AUDiaGentic/commit/b3c57f99bddbce08d33ea5d61e1827a10c89247c))
+
 ## [0.34.1](https://github.com/Audumla/AUDiaGentic/compare/v0.34.0...v0.34.1) (2026-10-30)
 
 
