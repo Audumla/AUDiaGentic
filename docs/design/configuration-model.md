@@ -211,7 +211,9 @@ instance: default            # optional; defaults to the provider's `default` in
 
 - **Descriptors** (packaged) state capabilities and requirements only.
 - **Instances** (settings) are named configurations of one provider; agents
-  select one with `instance`. `gpt_auto_t1`/`gpt_auto_t2` become instances.
+  select one with `instance`. `gpt_auto_t1`/`gpt_auto_t2` were removed in
+  favour of instances (CFG06); the key `provider@instance` identifies a target
+  wherever state must stay separate per instance.
 - **enabled** is policy (`auto` | `true` | `false`, default `auto`).
 - **available** is an observation at use time (CLI present, endpoint reachable).
 - **qualified** comes from evidence (below).

@@ -7,10 +7,8 @@
 # inherited from here.
 #
 # This file was extracted from the AUDiaGentic project's own gpt-auto.yaml,
-# which had accumulated the fullest set of hard-won live-debugging comments;
-# gpt-auto-t1.yaml/gpt-auto-t2.yaml were near-identical duplicates of the
-# same content (confirmed via diff, 2026-08-17) modulo project-url and some
-# comment-text drift -- exactly the duplication GP09 was raised about.
+# which had accumulated the fullest set of hard-won live-debugging comments.
+# Per-project differences (project-url) belong in providers.gpt-auto.instances.
 settings:
   contract-version: v3
   browser:

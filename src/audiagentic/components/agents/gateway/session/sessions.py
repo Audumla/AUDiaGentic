@@ -1939,8 +1939,8 @@ class SessionRuntime:
             # Gated on a provider capability probe (does bound_provider's
             # adapter declare a non-ACP session transport, e.g. gpt-auto's
             # CDP seam) rather than a surface_id or provider_id literal --
-            # applies to any provider with this shape, including the
-            # dedicated gpt-auto-t1/t2 test projects, with no code change
+            # applies to any provider with this shape, including
+            # configured provider instances, with no code change
             # needed when a new one is added.
             from audiagentic.components.providers import providers_api
 

@@ -347,7 +347,7 @@ def test_dashboard_recent_window_filters_history_and_supports_query_override(
             "state": "running",
             "session-id": "ses-running",
             "execution-profile-id": "default",
-            "resolved-provider-id": "gpt-auto-t2",
+            "resolved-provider-id": "gpt-auto@t2",
             "resolved-model-id": "chatgpt",
             "updated-at": fresh,
             "last-activity-at": fresh,

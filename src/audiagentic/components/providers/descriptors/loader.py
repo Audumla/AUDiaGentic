@@ -15,7 +15,6 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from audiagentic.foundation.config.merge import Origin, merge_patch
 from audiagentic.foundation.config.refs import resolve_ref
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.paths.names import get_package_providers_config_dir
@@ -71,7 +70,7 @@ from .session_surface_declarations import (
     _parse_enum,
     _validate_declarations,
 )
-from .spec import DescriptorSpec, _load_yaml_file, iter_descriptor_files, load_descriptor
+from .spec import DescriptorSpec, iter_descriptor_files, load_descriptor
 
 logger = logging.getLogger(__name__)
 
@@ -813,7 +812,6 @@ PROVIDER_SPEC.add(
     default=tuple(),
     converter=_list_to_tuple,
 )
-PROVIDER_SPEC.add("extends", yaml_key="extends", kind="data", default=None)
 PROVIDER_SPEC.add(
     "capabilities",
     yaml_key="capabilities",
@@ -871,65 +869,17 @@ def load_provider_descriptor(path: Path) -> ProviderDescriptor:
     return load_descriptor(path, PROVIDER_SPEC)
 
 
-def _resolve_extends(raw: dict[str, tuple[Path, dict[str, Any]]]) -> dict[str, tuple[Path, dict[str, Any] | None]]:
-    """Merge each ``extends:`` descriptor onto its base's data (single level, RFC 7396).
-
-    A descriptor that extends nothing keeps ``None`` (load it from its file); one
-    whose base is missing or itself extends another is reported as an error for
-    its own file only.
-    """
-    resolved: dict[str, tuple[Path, dict[str, Any] | None]] = {}
-    for key, (path, data) in raw.items():
-        base_id = data.get("extends")
-        if base_id is None:
-            resolved[key] = (path, None)
-            continue
-        base = raw.get(base_id)
-        if base is None or base[1].get("extends") is not None:
-            error = AudiaGenticError(
-                code="VAL-PCAP-014",
-                kind="providers",
-                message="provider descriptor extends a provider that is missing or itself extends another",
-                details={"descriptor": path.name, "extends": str(base_id)},
-            )
-            logger.warning("Skipping provider descriptor %s: %s", path.name, error)
-            _load_errors.append((path, error))
-            continue
-        patch = {name: value for name, value in data.items() if name != "extends"}
-        merged = merge_patch(base[1], patch, {}, lambda pointer, _path=path: Origin("descriptor", path.name))
-        resolved[key] = (path, {**merged, "extends": str(base_id)})
-    return resolved
-
-
 def _load_providers_from_directory_diagnostic(directory: Path) -> dict[str, ProviderDescriptor]:
     """Load descriptors while retaining every malformed entry as diagnostics.
 
     Invalid descriptors are skipped with WARNING-level logging; they are
     recorded in :data:`_load_errors` and remain visible via
     :func:`get_load_errors` for operator inspection (e.g. ``gateway_overview``).
-    A descriptor may ``extends:`` another provider's descriptor in the same
-    directory; the base is merged first and the extender's fields win.
     """
     providers: dict[str, ProviderDescriptor] = {}
-    raw: dict[str, tuple[Path, dict[str, Any]]] = {}
     for path in iter_descriptor_files(directory):
         try:
-            data = _load_yaml_file(path)
-        except Exception as exc:
-            logger.warning(
-                "Skipping provider descriptor %s: %s",
-                path.name,
-                str(exc) if str(exc) else type(exc).__name__,
-                exc_info=True,
-            )
-            _load_errors.append((path, exc))
-            continue
-        raw[str(data.get("provider_id") or path.stem)] = (path, data)
-    for path, data in _resolve_extends(raw).values():
-        try:
-            # An ordinary descriptor loads exactly as before (the load_descriptor seam);
-            # an extending one is built from its merged data.
-            descriptor = load_descriptor(path, PROVIDER_SPEC) if data is None else PROVIDER_SPEC.build(data)
+            descriptor = load_descriptor(path, PROVIDER_SPEC)
         except Exception as exc:
             logger.warning(
                 "Skipping provider descriptor %s: %s",

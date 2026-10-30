@@ -298,8 +298,8 @@ def test_repository_base_gpt_auto_profile_does_not_pin_a_chatgpt_project():
 
     A fixed URL takes precedence over ``project_name`` in
     ``PersistentChat.open_project_page`` and silently routes every caller to
-    that one ChatGPT project.  Dedicated aliases such as gpt-auto-t1/t2 can
-    remain explicitly pinned; only the reusable base profile is dynamic.
+    that one ChatGPT project.  Provider instances (providers.gpt-auto.instances) can
+    pin a project explicitly; only the reusable base profile is dynamic.
     """
     root = Path(__file__).resolve().parents[2]
     document = yaml.safe_load(

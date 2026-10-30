@@ -17,8 +17,8 @@ def _assert_builder_contract(builder) -> None:
     assert parameter.default is inspect.Parameter.empty
 
 
-def test_all_gpt_auto_alias_builders_require_project_name():
-    for provider_id in ("gpt-auto", "gpt-auto-t1", "gpt-auto-t2"):
+def test_gpt_auto_and_its_instances_require_project_name():
+    for provider_id in ("gpt-auto", "gpt-auto@alpha"):
         builder = execution.load_session_transport_builder(provider_id)
         assert builder is not None
         _assert_builder_contract(builder)
@@ -29,7 +29,7 @@ def test_gpt_auto_surfaces_allow_gateway_context_drift():
     from audiagentic.foundation.transports.session_surface import SessionIdentityOperation
 
     descriptors = all_descriptors()
-    for provider_id in ("gpt-auto", "gpt-auto-t1", "gpt-auto-t2"):
+    for provider_id in ("gpt-auto",):
         declaration = descriptors[provider_id].session_surfaces[0]
         assert declaration.identity_operations[SessionIdentityOperation.RESUME_BY_REF].value == "supported"
         assert declaration.mapping_facts.requires_same_project is True

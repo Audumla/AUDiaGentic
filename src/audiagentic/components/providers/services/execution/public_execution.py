@@ -160,17 +160,21 @@ def get_provider_runtime_config_state(
     not need unrelated provider configuration and must not read provider
     internals directly.
     """
+    from ...descriptors.target import ProviderTarget
     from ..config.provider_config import (
         is_provider_enabled,
         load_provider_config,
+        provider_instance_config,
     )
 
+    target = ProviderTarget.parse(provider_id)
     document = load_provider_config(project_root)
-    configured = (document.get("providers") or {}).get(provider_id, {})
+    configured = (document.get("providers") or {}).get(target.provider_id, {})
+    config = dict(configured) if isinstance(configured, dict) else configured
     return {
-        "provider-id": provider_id,
-        "enabled": is_provider_enabled(project_root, provider_id),
-        "config": dict(configured) if isinstance(configured, dict) else configured,
+        "provider-id": target.key,
+        "enabled": is_provider_enabled(project_root, target.provider_id),
+        "config": provider_instance_config(project_root, target, config),
     }
 
 
@@ -721,9 +725,8 @@ def prepare_provider_session_transport(
     # capability probe on provider_id's own adapter package, never a
     # surface_id or provider_id literal here. Any provider_id whose adapter
     # package exposes session_transport.build_session_transport gets routed
-    # through it, including providers that extend another descriptor such as
-    # gpt-auto-t1/t2 (dedicated GP05 test projects) -- no dispatcher edit
-    # needed to add one, only a descriptor plus provider settings.
+    # through it, including provider instances (``<id>@<name>``) -- no
+    # dispatcher edit needed to add one, only provider settings.
     from .execution import load_session_transport_builder
 
     session_transport_builder = load_session_transport_builder(provider_id)

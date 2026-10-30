@@ -51,9 +51,11 @@ class ResolvedAgent:
 
     def to_catalog_records(self) -> dict[str, dict[str, Any]]:
         """Compile to the existing Agents document records (one of each)."""
+        from audiagentic.components.providers.providers_api import provider_target_key
+
         fields = self.fields
         profile: dict[str, Any] = {
-            "provider_id": fields["provider"],
+            "provider_id": provider_target_key(fields["provider"], fields.get("instance")),
             "instances": [fields["model"]],
             "params": dict(fields.get("params", {})),
             "description": fields.get("description", ""),
