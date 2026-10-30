@@ -8,7 +8,8 @@ an immutable ``refs/quarantine/<id>`` ref at the tip, and a verified copy of
 the project's ignored record files in the central archive. The journal records
 each phase so a crash resumes instead of guessing, and a refusal at any point
 before the worktree is removed lifts the fence and leaves everything as it was.
-Only merged work is finished here; abandoning unmerged work is a separate step.
+Merged work is finished on proof; unmerged work only by an explicit ``abandon <tip prefix>``, after its
+unique commits are bundled and the bundle verified.
 
 Known limits, documented rather than solved: a process that ignores the drain fence and
 writes into the worktree between the final check and the removal cannot be stopped by
@@ -155,8 +156,16 @@ def _identity(path: Path, repo: Path) -> dict[str, Any]:
             "gitdir": pointer.read_text(encoding="utf-8").strip() if pointer.is_file() else None}
 
 
-def _proof(assessment: eligibility.Assessment, repo: Path) -> dict[str, Any]:
-    pr = assessment.pull_request
+#: Blockers that only mean "the work is not proven merged"; abandoning accepts them because the commits are bundled.
+UNMERGED_CODES = frozenset({
+    "unmerged", "tip-differs-from-pr", "pr-open", "pr-closed", "pr-merged", "pr-wrong-base", "pr-ambiguous",
+    "merge-commit-unknown", "merge-commit-not-fetched", "merge-commit-not-on-default", "forge-unavailable",
+    "default-branch-unknown", "detached-head",
+})
+
+
+def _proof(assessment: eligibility.Assessment, repo: Path, abandon: bool = False) -> dict[str, Any]:
+    pr = None if abandon else assessment.pull_request
     unknown, records_found, _ = eligibility.classify_ignored(assessment.path, git.ignored_entries(assessment.path))
     return {"branch": assessment.branch, "head": assessment.head,
             "pr": None if pr is None else pr.number, "merge-commit": None if pr is None else pr.merge_commit,
@@ -175,8 +184,15 @@ def _assess(repo: Path, path: Path, *, active_work, pull_requests) -> tuple[git.
     return entry, assessment
 
 
-def _require_eligible(path: Path, assessment: eligibility.Assessment, discard_ignored: int | None) -> None:
+def _require_eligible(path: Path, assessment: eligibility.Assessment, discard_ignored: int | None,
+                      abandon: str | None = None) -> None:
     blockers = list(assessment.blockers)
+    if abandon is not None:
+        head = assessment.head or ""
+        if len(abandon) < 12 or not head.startswith(abandon):
+            raise refuse_error(8, f"To abandon this work, repeat with `abandon {head[:12]}` (the tip you are discarding)",
+                               tip=head[:12])
+        blockers = [b for b in blockers if b.code not in UNMERGED_CODES]
     ignored = [b for b in blockers if b.code == "ignored-files"]
     if ignored:
         unknown, _, _ = eligibility.classify_ignored(path, git.ignored_entries(path))
@@ -185,14 +201,48 @@ def _require_eligible(path: Path, assessment: eligibility.Assessment, discard_ig
                                   f"discard-ignored {len(unknown)}", count=len(unknown), entries=unknown[:5])
         blockers = [b for b in blockers if b.code != "ignored-files"]
     if blockers:
+        hint = ""
+        if abandon is None and all(b.code in UNMERGED_CODES for b in blockers) and assessment.head:
+            hint = (f". To discard this unmerged work instead, repeat with `abandon {assessment.head[:12]}`; "
+                    "its commits are bundled and verified first")
         raise refuse_error(2, "This worktree cannot be finished: "
-                              + "; ".join(f"{b.code}: {b.detail}" for b in blockers[:4]),
+                              + "; ".join(f"{b.code}: {b.detail}" for b in blockers[:4]) + hint,
                            blockers=[b.code for b in blockers])
 
 
+def _bundle_tip(main: Path, reference: str, tip: str, base: str | None, destination: Path) -> dict[str, Any]:
+    """Write a self-contained bundle of the tip's full history, verify it, and record a checksum.
+
+    Self-contained on purpose: a bundle that leaves out the default branch's history would need that
+    history to exist at restore time, and a force-pushed default branch can lose it. ``commits`` is the
+    number of commits not on the default branch, or ``None`` when that is unknown (never read as zero).
+    """
+    unique = git.commits_not_in(main, tip, base) if base else None
+    staging = destination.with_name(destination.name + ".partial")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        git.create_bundle(main, staging, reference, None)
+        git.verify_bundle(main, staging)
+    except Exception as error:
+        raise refuse_error(5, "The bundle of the unmerged commits could not be created and verified; "
+                              "nothing was removed", reason=getattr(error, "details", None)) from error
+    if tip not in git.run_git(main, "bundle", "list-heads", str(staging)):
+        raise refuse_error(5, "The bundle does not contain the worktree tip; nothing was removed")
+    checksum = hashlib.sha256(staging.read_bytes()).hexdigest()
+    if destination.exists():
+        raise refuse_error(5, "The bundle destination already exists; nothing was removed", path=str(destination))
+    staging.rename(destination)
+    return {"path": str(destination), "sha256": checksum, "commits": unique}
+
+
 def finish(repo: Path, target: str, *, active_work, discard_ignored: int | None = None,
-           pull_requests=forge.pull_requests_for_branch, state_root: Path | None = None) -> dict[str, Any]:
-    """Preserve, then remove, the merged worktree ``target``; refuse on anything uncertain."""
+           abandon: str | None = None, pull_requests=forge.pull_requests_for_branch,
+           state_root: Path | None = None) -> dict[str, Any]:
+    """Preserve, then remove, the worktree ``target``; refuse on anything uncertain.
+
+    Merged work is finished on proof. Unmerged work needs ``abandon`` set to the tip prefix the
+    operator was shown; its unique commits are then bundled and verified before removal.
+    """
     main = git.list_worktrees(repo)[0].path
     state = state_root or user_state_dir()
     path = _resolve_target(repo, target)
@@ -224,10 +274,10 @@ def finish(repo: Path, target: str, *, active_work, discard_ignored: int | None 
         removed = False
         try:
             _, first = _assess(repo, path, active_work=active_work, pull_requests=pull_requests)
-            _require_eligible(path, first, discard_ignored)
+            _require_eligible(path, first, discard_ignored, abandon)
             paired = records.reconcile(git.list_worktrees(repo), records.read_records(repo, state_root=state)).paired
             record = paired.get(path)
-            body = {"transaction": uuid.uuid4().hex, "path": str(path), "proof": _proof(first, repo),
+            body = {"transaction": uuid.uuid4().hex, "path": str(path), "proof": _proof(first, repo, abandon is not None), "abandon": abandon is not None,
                     "record-id": record.worktree_id if record else None, "started": now_iso_z()}
             _write_journal(journal_file, body, "PREPARED")
             _write_journal(journal_file, body, "DRAINED")
@@ -236,19 +286,25 @@ def finish(repo: Path, target: str, *, active_work, discard_ignored: int | None 
             git.create_ref(main, reference, first.head)
             if git.resolve_commit(main, reference) != first.head:
                 raise refuse_error(5, "The quarantine ref does not point at the worktree tip; nothing was removed")
+            bundle = None
+            if abandon is not None:
+                bundle = _bundle_tip(
+                    main, reference, first.head, base,
+                    state / "worktrees" / "archive" / records.repo_id(repo)
+                    / f"{_key(path)}-{first.head[:9]}-{body['transaction'][:8]}.bundle")
             archive = (state / "worktrees" / "archive" / records.repo_id(repo)
                        / f"{_key(path)}-{first.head[:9]}-{body['transaction'][:8]}")
             archived = _archive_records(path, body["proof"]["records"], archive) if body["proof"]["records"] else 0
-            body.update({"quarantine-ref": reference, "archive": str(archive) if archived else None})
+            body.update({"quarantine-ref": reference, "archive": str(archive) if archived else None, "bundle": bundle})
             if hasattr(os, "sync"):
                 os.sync()  # archive and ref reach disk before anything is removed
             _write_journal(journal_file, body, "PRESERVED")
 
             _, second = _assess(repo, path, active_work=active_work, pull_requests=pull_requests)
-            _require_eligible(path, second, discard_ignored)
-            if _proof(second, repo) != body["proof"]:
+            _require_eligible(path, second, discard_ignored, abandon)
+            if _proof(second, repo, abandon is not None) != body["proof"]:
                 raise refuse_error(4, "The worktree changed while it was being finished; nothing was removed",
-                                   before=body["proof"], after=_proof(second, repo))
+                                   before=body["proof"], after=_proof(second, repo, abandon is not None))
             for entry in body["proof"]["records"]:  # the archive must still equal the live records
                 if _entry_digest(path, entry) != _digest_entry_in(archive, entry):
                     raise refuse_error(4, "A record file changed after it was archived; nothing was removed", entry=entry)
@@ -302,4 +358,5 @@ def _finish_tail(main: Path, repo: Path, path: Path, body: dict[str, Any], journ
     _write_journal(journal_file, body, "COMPLETE")
     worktree_drain.end(path, state_root=state)
     return {"path": str(path), "branch": branch, "tip": tip, "pr": proof["pr"],
-            "quarantine-ref": body.get("quarantine-ref"), "archive": body.get("archive"), "notes": notes}
+            "quarantine-ref": body.get("quarantine-ref"), "archive": body.get("archive"),
+            "bundle": body.get("bundle"), "abandoned": bool(body.get("abandon")), "notes": notes}

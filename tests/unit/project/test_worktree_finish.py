@@ -272,3 +272,88 @@ def test_an_earlier_journal_is_kept_not_overwritten(repo, merged, state) -> None
     _run(repo, state, feature, pr)
     assert journal.with_name(f"{journal.stem}.oldtx.json").is_file()
     assert finisher._read_journal(journal)["phase"] == "COMPLETE"
+
+
+@pytest.fixture
+def unmerged(repo: Path) -> tuple[Path, str]:
+    """A worktree with two commits that exist nowhere else."""
+    feature = (repo.parent / "wip").resolve()
+    _git(repo, "worktree", "add", "-q", "-b", "me/wip", str(feature), "origin/main")
+    for name in ("one", "two"):
+        (feature / f"{name}.txt").write_text(name)
+        _git(feature, "add", f"{name}.txt")
+        _git(feature, "commit", "-q", "-m", name)
+    return feature, _git(feature, "rev-parse", "HEAD")
+
+
+def _abandon(repo, state, feature, tip, *, prs=(), **kwargs):
+    return finisher.finish(repo, str(feature), active_work=IDLE, pull_requests=lambda _r, _b: tuple(prs),
+                           state_root=state, abandon=tip[:12], **kwargs)
+
+
+def test_unmerged_work_is_refused_with_the_abandon_hint(repo, unmerged, state) -> None:
+    feature, tip = unmerged
+    with pytest.raises(AudiaGenticError) as raised:
+        finisher.finish(repo, str(feature), active_work=IDLE, pull_requests=lambda _r, _b: (), state_root=state)
+    assert raised.value.code == "CON-WTFIN-002" and f"abandon {tip[:12]}" in raised.value.message
+    assert feature.is_dir()
+
+
+def test_abandon_bundles_the_unique_commits_then_removes(repo, unmerged, state) -> None:
+    feature, tip = unmerged
+    result = _abandon(repo, state, feature, tip)
+    assert not feature.exists() and not git.branch_exists(repo, "me/wip")
+    assert git.resolve_commit(repo, result["quarantine-ref"]) == tip and result["abandoned"] is True
+    bundle = Path(result["bundle"]["path"])
+    assert bundle.is_file() and result["bundle"]["commits"] == 2
+    import hashlib
+    assert hashlib.sha256(bundle.read_bytes()).hexdigest() == result["bundle"]["sha256"]
+    assert tip in _git(repo, "bundle", "list-heads", str(bundle))
+    _git(repo, "bundle", "verify", str(bundle))
+    clone = repo.parent / "restore"  # self-contained: restores into an empty repository
+    _git(repo.parent, "init", "-q", str(clone))
+    _git(clone, "fetch", "-q", str(bundle), f"{result['quarantine-ref']}:refs/heads/restored")
+    assert _git(clone, "rev-parse", "restored") == tip
+
+
+def test_abandon_needs_the_exact_tip_and_still_refuses_dirty_trees(repo, unmerged, state) -> None:
+    feature, tip = unmerged
+    for wrong in ("0" * 12, tip[:9]):
+        with pytest.raises(AudiaGenticError) as raised:
+            finisher.finish(repo, str(feature), active_work=IDLE, pull_requests=lambda _r, _b: (),
+                            state_root=state, abandon=wrong)
+        assert raised.value.code == "CON-WTFIN-008" and feature.is_dir()
+    (feature / "one.txt").write_text("edited")
+    with pytest.raises(AudiaGenticError) as raised:
+        _abandon(repo, state, feature, tip)
+    assert raised.value.code == "CON-WTFIN-002" and "uncommitted-changes" in raised.value.message
+    assert feature.is_dir() and git.branch_exists(repo, "me/wip")
+
+
+def test_abandon_works_without_the_forge_and_on_a_detached_head(repo, unmerged, state) -> None:
+    feature, tip = unmerged
+    _git(feature, "checkout", "-q", "--detach")
+
+    def forge_down(_repo, _branch):
+        raise forge.forge_error(2, "gh failed")
+
+    result = finisher.finish(repo, str(feature), active_work=IDLE, pull_requests=forge_down, state_root=state,
+                             abandon=tip[:12])
+    assert not feature.exists() and result["bundle"]["commits"] == 2
+
+
+def test_abandoning_work_already_on_the_default_branch_still_gets_a_bundle(repo, state) -> None:
+    feature = (repo.parent / "same").resolve()
+    _git(repo, "worktree", "add", "-q", "-b", "me/same", str(feature), "origin/main")
+    tip = _git(feature, "rev-parse", "HEAD")
+    result = _abandon(repo, state, feature, tip)
+    assert result["bundle"]["commits"] == 0 and Path(result["bundle"]["path"]).is_file() and not feature.exists()
+
+
+def test_abandon_never_overrides_active_gateway_work(repo, unmerged, state) -> None:
+    feature, tip = unmerged
+    with pytest.raises(AudiaGenticError) as raised:
+        finisher.finish(repo, str(feature), active_work=lambda _p: {"requests": ["r"], "sessions": []},
+                        pull_requests=lambda _r, _b: (), state_root=state, abandon=tip[:12])
+    assert raised.value.code == "CON-WTFIN-002" and "gateway-active-work" in raised.value.message
+    assert feature.is_dir()

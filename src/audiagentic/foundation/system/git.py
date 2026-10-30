@@ -206,6 +206,19 @@ def delete_unmerged_branch(repo: Path, branch: str) -> None:
     run_git(repo, "branch", "-D", branch)
 
 
+def create_bundle(repo: Path, destination: Path, ref: str, exclude: str | None) -> None:
+    """Write a git bundle of ``ref`` (without ``exclude``'s history when given); an empty bundle is an error."""
+    arguments = ["bundle", "create", str(destination), ref]
+    if exclude:
+        arguments.append(f"^{exclude}")
+    run_git(repo, *arguments, timeout=300.0)
+
+
+def verify_bundle(repo: Path, bundle: Path) -> None:
+    """Raise unless git can read the bundle and every prerequisite commit is present."""
+    run_git(repo, "bundle", "verify", str(bundle), timeout=300.0)
+
+
 def create_ref(repo: Path, ref: str, commit: str) -> None:
     """Create ``ref`` at ``commit``; an existing ref at the same commit is fine, anywhere else is an error."""
     existing = resolve_commit(repo, ref)
