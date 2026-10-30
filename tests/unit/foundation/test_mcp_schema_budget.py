@@ -15,6 +15,7 @@ import pytest
 
 SERVERS = (
     "audiagentic.components.agents.mcp.gateway_mcp",
+    "audiagentic.components.agents.mcp.gateway_ops_mcp",
     "audiagentic.components.planning.planning_mcp",
     "audiagentic.components.ledger.ledger_mcp",
 )

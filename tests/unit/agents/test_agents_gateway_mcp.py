@@ -5,11 +5,13 @@ from __future__ import annotations
 import asyncio
 import json
 from pathlib import Path
+from contextlib import ExitStack
 from unittest.mock import patch
 
 import pytest
 
 from audiagentic.components.agents.mcp import gateway_mcp as agents_gateway_mcp
+from audiagentic.components.agents.mcp import gateway_ops_mcp as agents_gateway_ops_mcp
 
 _ROOT = Path("/fake/root").resolve()
 
@@ -28,10 +30,12 @@ def test_agent_task_list_definitions_is_a_registered_mcp_tool():
 
 
 def _patch_root():
-    return patch(
-        "audiagentic.components.agents.mcp.gateway_mcp.project_root_from_env",
-        return_value=_ROOT,
-    )
+    stack = ExitStack()
+    for module in ("gateway_mcp", "gateway_ops_mcp", "gateway_mcp_support"):
+        stack.enter_context(
+            patch(f"audiagentic.components.agents.mcp.{module}.project_root_from_env", return_value=_ROOT)
+        )
+    return stack
 
 
 def _patch_definition_client():
@@ -169,20 +173,20 @@ def test_status_and_submit_dtos_drop_raw_metadata_and_status_has_session_id():
     assert submitted == {"request-id": "req_x", "state": "queued", "session-id": "ses_x"}
 def test_agent_task_session_purge_delegates():
     with _patch_root(), patch(
-        "audiagentic.components.agents.mcp.gateway_mcp.call_gateway_method",
+        "audiagentic.components.agents.mcp.gateway_ops_mcp.call_gateway_method",
         return_value={"session-id": "ses_x", "outcome": "purged"},
     ) as mock_call:
-        result = agents_gateway_mcp.agent_task_session_purge("ses_x")
+        result = agents_gateway_ops_mcp.agent_task_session_purge("ses_x")
     assert result == {"session-id": "ses_x", "outcome": "purged"}
     mock_call.assert_called_once_with("purge_execution_session", _ROOT, "ses_x")
 
 
 def test_agent_task_gateway_purge_defaults_to_dry_run():
     with _patch_root(), patch(
-        "audiagentic.components.agents.mcp.gateway_mcp.call_gateway_method",
+        "audiagentic.components.agents.mcp.gateway_ops_mcp.call_gateway_method",
         return_value={"outcome": "dry-run", "dry-run": True},
     ) as mock_call:
-        result = agents_gateway_mcp.agent_task_gateway_purge()
+        result = agents_gateway_ops_mcp.agent_task_gateway_purge()
     assert result == {"outcome": "dry-run", "dry-run": True}
     mock_call.assert_called_once_with(
         "purge_execution_sessions", _ROOT, dry_run=True, session_ids=None
@@ -402,7 +406,7 @@ def test_agent_task_list_requests_delegates():
 def test_agent_task_gateway_overview_delegates():
     with (
         _patch_root(),
-        patch("audiagentic.components.agents.mcp.gateway_mcp.call_gateway_method") as mock_call,
+        patch("audiagentic.components.agents.mcp.gateway_ops_mcp.call_gateway_method") as mock_call,
     ):
         mock_call.return_value = {
             "total_requests": 3,
@@ -410,7 +414,7 @@ def test_agent_task_gateway_overview_delegates():
             "recent_failures": [],
             "queues": {},
         }
-        result = agents_gateway_mcp.agent_task_gateway_overview()
+        result = agents_gateway_ops_mcp.agent_task_gateway_overview()
     assert result["total_requests"] == 3
     mock_call.assert_called_once_with("gateway_overview", _ROOT)
 
@@ -515,10 +519,10 @@ def test_agent_task_list_requests_preserves_api_v4_progress_fields():
 
 def test_agent_task_evidence_reapplies_public_allowlist_before_mcp_output():
     with _patch_root(), patch(
-        "audiagentic.components.agents.mcp.gateway_mcp.call_gateway_method",
+        "audiagentic.components.agents.mcp.gateway_ops_mcp.call_gateway_method",
         return_value={"schema_version": "gateway-evidence.v1", "request-id": "req_x", "state": "running", "diagnostics": {"classification": "watchdog", "prompt": "secret"}, "evidence": [{"phase": "running", "raw-dom": "secret"}], "observation-summary": {"count": 1, "latest": {"facts": {"message": "secret"}}}, "latest-transition": {"event": "running", "timestamp": "now"}, "provider-metadata": {"target-id": "secret"}},
     ):
-        result = agents_gateway_mcp.agent_task_evidence("req_x")
+        result = agents_gateway_ops_mcp.agent_task_evidence("req_x")
     encoded = json.dumps(result)
     assert "secret" not in encoded
     assert result["request-id"] == "req_x"

@@ -138,7 +138,10 @@ qualification remain separate gates.
 
 ### Request diagnostics and node stage evidence
 
-Use the request's authorized project context. `agent_task_status` stays compact;
+Use the request's authorized project context. These operator tools are on the
+separate `ag-agents-gateway-ops` server (not registered by `audiagentic setup`;
+install it with `audiagentic mcp install ag-agents-gateway-ops harness ID`).
+`agent_task_status` stays compact;
 it does not return diagnostic history or response text. For an investigation,
 request `agent_task_diagnostics(request_id=...)`, then a bounded page with
 `agent_task_observations(request_id=..., limit=25, tail=25)` or
