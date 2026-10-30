@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.37.0](https://github.com/Audumla/AUDiaGentic/compare/v0.36.0...v0.37.0) (2026-10-30)
+
+
+### Features
+
+* **project:** drain fence and gateway active-work query for worktree removal (DW01 slice 3a) ([#225](https://github.com/Audumla/AUDiaGentic/issues/225)) ([2c129a8](https://github.com/Audumla/AUDiaGentic/commit/2c129a81347043d4c0364d7493f6dcd7ea683353))
+
 ## [0.36.0](https://github.com/Audumla/AUDiaGentic/compare/v0.35.0...v0.36.0) (2026-10-30)
 
 
