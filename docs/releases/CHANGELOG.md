@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.43.0](https://github.com/Audumla/AUDiaGentic/compare/v0.42.0...v0.43.0) (2026-10-30)
+
+
+### Features
+
+* **worktree:** worktree finish removes a merged worktree after preserving it (DW01 slice 3b-2) ([#237](https://github.com/Audumla/AUDiaGentic/issues/237)) ([3363aff](https://github.com/Audumla/AUDiaGentic/commit/3363aff9e6e141d7e1ca8b345e362ba874ebc503))
+
 ## [0.42.0](https://github.com/Audumla/AUDiaGentic/compare/v0.41.0...v0.42.0) (2026-10-30)
 
 
