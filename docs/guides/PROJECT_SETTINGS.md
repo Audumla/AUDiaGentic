@@ -122,6 +122,34 @@ and availability are shared. Names are lowercase letters, digits, `-` and `_`
 (up to 32). An unknown name is an error that lists the configured ones. The
 provider's own option file stays the base layer until its settings migrate.
 
+## Changing settings from the command line
+
+```
+audiagentic config set providers.pi.enabled=false agents.default=reviewer
+audiagentic config set --unset providers.pi.enabled
+audiagentic config set --scope user home=/srv/audiagentic --dry-run
+```
+
+`config set` edits one settings file: the project's `.audiagentic/settings.yaml`
+by default, or the user file with `--scope user`. It never picks a scope for you
+and never touches the vendor defaults. Values are YAML scalars (`false`, `7`,
+`reviewer`) or JSON for text, lists and objects (`'"123"'`, `'[1, 2]'`); a dot in
+a key part is written `\.`. `--unset KEY` (or a `null` value) removes a key.
+
+- Comments, blank lines and key order in the file are kept; only the lines for
+  the changed keys move. A file the editor cannot change without altering other
+  content is refused untouched.
+- The result must pass the same strict validation the resolver applies, and a
+  section that is only read from the machine scopes (`gateway`, `home`) is
+  refused in the project file.
+- If the file changes while the command runs (an editor save, another writer),
+  nothing is written and the command asks you to run it again. Concurrent
+  commands are serialized.
+- The previous content is kept as one of the last five backups under the user
+  state directory (`config paths` shows it). Symbolic-linked settings files or
+  directories are refused. `--dry-run` shows the diff only.
+- The output says when a higher scope overrides what was just written.
+
 ### `gateway`
 
 The gateway is shared by every project and session on the machine, so this

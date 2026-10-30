@@ -112,6 +112,18 @@ def settings_schema() -> dict[str, Any]:
     return {**schema, "properties": properties}
 
 
+def document_issues(document: LoadedDocument) -> list[SettingsIssue]:
+    """Schema issues of one loaded settings file, as the resolver reports them."""
+    return _issues(Draft202012Validator(settings_schema()), without_nulls(document.data), str(document.path),
+                   document.positions)
+
+
+def section_scopes(section: str) -> tuple[str, ...] | None:
+    """The scopes a section may be set in (``x-audiagentic-scopes``), or None when any."""
+    declared = settings_schema().get("properties", {}).get(section, {}).get("x-audiagentic-scopes")
+    return tuple(declared) if declared else None
+
+
 def discover_project_root(
     project: Path | str | None = None,
     *,
@@ -207,7 +219,7 @@ def resolve_settings(
         document = load_settings_file(source.path)
         file_issues = _issues(validator, without_nulls(document.data), str(source.path), document.positions)
         if file_issues and not collect:
-            _raise(file_issues)
+            raise_issues(file_issues)
         issues.extend(file_issues)
         values = merge_patch(values, document.data, origins, _origin_of(source.scope, document))
     if overrides:
@@ -219,7 +231,7 @@ def resolve_settings(
                 issue = SettingsIssue(origin.file, origin.line, origin.column, issue.pointer, issue.message)
             issues.append(issue)
         if issues and not collect:
-            _raise(issues)
+            raise_issues(issues)
     return ResolvedSettings(values, origins, sources, project_root, tuple(issues))
 
 
@@ -261,7 +273,7 @@ def _origin_of(scope: str, document: LoadedDocument):
     return origin
 
 
-def _raise(issues: list[SettingsIssue]) -> None:
+def raise_issues(issues: list[SettingsIssue]) -> None:
     first = issues[0]
     raise settings_error(
         4, f"Invalid settings: {first.message}", file=first.file, line=first.line, column=first.column,
