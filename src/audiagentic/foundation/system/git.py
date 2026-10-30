@@ -204,3 +204,16 @@ def remove_clean_worktree(repo: Path, path: Path) -> None:
 def delete_unmerged_branch(repo: Path, branch: str) -> None:
     """Delete a local branch the caller just created and knows carries no commits of its own."""
     run_git(repo, "branch", "-D", branch)
+
+
+def create_ref(repo: Path, ref: str, commit: str) -> None:
+    """Create ``ref`` at ``commit``; an existing ref at the same commit is fine, anywhere else is an error."""
+    existing = resolve_commit(repo, ref)
+    if existing == commit:
+        return
+    run_git(repo, "update-ref", ref, commit, "0" * 40)  # the zero old-value makes this create-only
+
+
+def delete_branch_at(repo: Path, branch: str, commit: str) -> None:
+    """Delete the local branch only if it still points at ``commit`` (compare-and-swap, no force)."""
+    run_git(repo, "update-ref", "-d", f"refs/heads/{branch}", commit)
