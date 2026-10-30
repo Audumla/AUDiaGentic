@@ -101,6 +101,27 @@ install needs no enablement step. A failed check never disables a provider or
 removes its generated configuration; only `enabled: false` (or
 `set_provider_enabled`) does. `audiagentic doctor` reports availability.
 
+### `providers.<id>.instances`
+
+```yaml
+providers:
+  gpt-auto:
+    instances:
+      first:
+        project-url: https://example.test/projects/first
+      second:
+        project-url: https://example.test/projects/second
+```
+
+An instance is a named set of options for one provider, merged over that
+provider's own options (RFC 7396, so a `null` removes a key). An agent selects it
+with `instance: first` next to its `provider`; the provider's own validation
+checks the options. Sessions, queues and evidence are kept apart per instance
+(`gpt-auto@first`), while the provider's descriptor, adapter, `enabled` policy
+and availability are shared. Names are lowercase letters, digits, `-` and `_`
+(up to 32). An unknown name is an error that lists the configured ones. The
+provider's own option file stays the base layer until its settings migrate.
+
 ### `gateway`
 
 The gateway is shared by every project and session on the machine, so this

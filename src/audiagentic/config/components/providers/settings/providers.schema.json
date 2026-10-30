@@ -12,6 +12,14 @@
         "enabled": {
           "enum": ["auto", true, false],
           "description": "auto (default) enables a provider that is usable here; true and false force it on or off."
+        },
+        "instances": {
+          "type": "object",
+          "description": "Named option overlays on this one provider. An agent selects one with `instance`; the provider's own validator checks the options.",
+          "additionalProperties": false,
+          "patternProperties": {
+            "^[a-z0-9][a-z0-9_-]{0,31}$": {"type": "object"}
+          }
         }
       }
     }

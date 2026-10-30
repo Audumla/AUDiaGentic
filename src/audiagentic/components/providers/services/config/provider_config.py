@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from audiagentic.foundation.config.merge import Origin, merge_patch
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.contracts.schema_registry import validate_with_schema
 from audiagentic.foundation.features.base import ImplementationState
@@ -14,6 +15,8 @@ from audiagentic.foundation.features.state import (
     set_implementation_state,
 )
 from audiagentic.foundation.io import load_yaml_file, save_yaml_file
+
+from ...descriptors.target import ProviderTarget, base_provider_id, provider_config_error
 
 _COMPONENT_ID = "providers"
 
@@ -107,7 +110,7 @@ def provider_enabled_policy(project_root: Path, provider_id: str) -> str | bool:
         return "auto"
     from audiagentic.foundation.config.settings import resolve_settings_cached
 
-    entry = (resolve_settings_cached(project_root).get("providers") or {}).get(provider_id)
+    entry = (resolve_settings_cached(project_root).get("providers") or {}).get(base_provider_id(provider_id))
     return entry["enabled"] if isinstance(entry, dict) and "enabled" in entry else "auto"
 
 
@@ -116,8 +119,37 @@ def _persisted_enabled(project_root: Path, provider_id: str) -> bool | None:
     implementations = get_component_state(project_root, _COMPONENT_ID, persist_migration=False).get(
         "implementations", {}
     )
-    stored = implementations.get(provider_id)
+    stored = implementations.get(base_provider_id(provider_id))
     return bool(stored["enabled"]) if isinstance(stored, dict) and "enabled" in stored else None
+
+
+def provider_instance_config(project_root: Path, target: ProviderTarget, config: Any) -> Any:
+    """``config`` with the target's ``providers.<id>.instances.<name>`` overlay applied.
+
+    The overlay is merge-patched (RFC 7396) over the provider's options, inside
+    its ``settings`` mapping when the provider file wraps them there. A name
+    that is not configured is an error that lists the configured ones.
+    """
+    if target.instance is None or not isinstance(config, dict):
+        return config
+    from audiagentic.foundation.config.settings import resolve_settings_cached
+
+    entry = (resolve_settings_cached(project_root).get("providers") or {}).get(target.provider_id) or {}
+    instances = entry.get("instances") or {}
+    if target.instance not in instances:
+        raise provider_config_error(
+            6, "Provider instance is not configured",
+            provider=target.provider_id, instance=target.instance, configured=sorted(instances),
+        )
+    overlay = instances[target.instance]
+    origin = Origin("settings", f"providers.{target.provider_id}.instances.{target.instance}")
+
+    def patch(base: Any) -> Any:
+        return merge_patch(base, overlay, {}, lambda _pointer: origin)
+
+    if isinstance(config.get("settings"), dict):
+        return {**config, "settings": patch(config["settings"])}
+    return patch(config)
 
 
 def is_provider_enabled(project_root: Path, provider_id: str) -> bool:
@@ -150,7 +182,7 @@ def is_provider_usable(project_root: Path, provider_id: str) -> bool:
         return persisted
     from audiagentic.components.providers.providers_api import check_provider_availability
 
-    return check_provider_availability(project_root, provider_id)[0] is True
+    return check_provider_availability(project_root, base_provider_id(provider_id))[0] is True
 
 
 def is_native_mcp_target_enabled(project_root: Path, provider_id: str) -> bool:

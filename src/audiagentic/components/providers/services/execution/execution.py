@@ -12,20 +12,27 @@ from typing import Any
 from audiagentic.components.providers.adapters.base_runner import resolve_execution_model
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
+from ...descriptors.target import base_provider_id
+
 ProviderRunner = Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]]
 
 _ADAPTER_BASE = "audiagentic.components.providers.adapters"
 
 
-def _adapter_module_path(provider_id: str) -> str | None:
-    name = provider_id.replace("-", "_")
+def _adapter_module(provider_id: str, submodule: str) -> str | None:
+    """Dotted path of ``adapters/<id>/<submodule>`` if that module exists (an instance uses its provider's)."""
+    name = base_provider_id(provider_id).replace("-", "_")
     if keyword.iskeyword(name):
         name = name + "_"
-    module_path = f"{_ADAPTER_BASE}.{name}.adapter"
+    module_path = f"{_ADAPTER_BASE}.{name}.{submodule}"
     try:
         return module_path if importlib.util.find_spec(module_path) else None
     except (ModuleNotFoundError, AttributeError):
         return None
+
+
+def _adapter_module_path(provider_id: str) -> str | None:
+    return _adapter_module(provider_id, "adapter")
 
 
 def _descriptor_runner(provider_id: str) -> ProviderRunner | None:
@@ -48,30 +55,10 @@ def _adapter_hook(provider_id: str, submodule: str, fn_name: str) -> Callable[..
     The single find_spec+import+getattr helper behind every provider adapter
     hook (one-shot run, ACP/interactive launch builders, MCP surface, execution
     environment). Detection via find_spec avoids importing an absent module.
-    A provider whose descriptor ``extends`` another (gpt-auto-t1 extends gpt-auto)
-    uses its base's adapter when it has no package of its own.
+    A provider instance (``gpt-auto@t1``) uses its provider's adapter.
     """
-    hook = _own_adapter_hook(provider_id, submodule, fn_name)
-    if hook is not None:
-        return hook
-    from ...descriptors import get_descriptor
-
-    descriptor = get_descriptor(provider_id)
-    base = descriptor.extends if descriptor is not None else None
-    return _own_adapter_hook(base, submodule, fn_name) if base else None
-
-
-def _own_adapter_hook(provider_id: str, submodule: str, fn_name: str) -> Callable[..., Any] | None:
-    name = provider_id.replace("-", "_")
-    if keyword.iskeyword(name):
-        name = name + "_"
-    module_path = f"{_ADAPTER_BASE}.{name}.{submodule}"
-    try:
-        if not importlib.util.find_spec(module_path):
-            return None
-    except (ModuleNotFoundError, AttributeError):
-        return None
-    return getattr(import_module(module_path), fn_name, None)
+    module_path = _adapter_module(provider_id, submodule)
+    return getattr(import_module(module_path), fn_name, None) if module_path else None
 
 
 def _load_runner(provider_id: str) -> ProviderRunner | None:

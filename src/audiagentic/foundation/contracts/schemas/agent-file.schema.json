@@ -41,6 +41,11 @@
       "type": "string",
       "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
     },
+    "instance": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_-]{0,31}$",
+      "description": "A named instance of the provider, from providers.<provider>.instances in settings."
+    },
     "model": {
       "type": "string",
       "minLength": 1

@@ -241,9 +241,6 @@ class ProviderDescriptor:
     description: str = ""
     url: str = ""
     prompt_aliases: tuple[str, ...] = field(default_factory=tuple)
-    # The provider this one extends (its descriptor file said ``extends:``); an
-    # extending provider reuses its base's adapter package.
-    extends: str | None = None
     # The provider-level execution configuration isolation fact.  It is not an
     # automation-family property: gateway admission and worker materialization
     # need one provider-wide declaration, independently of supported families.
