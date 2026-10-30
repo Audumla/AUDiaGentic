@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.39.0](https://github.com/Audumla/AUDiaGentic/compare/v0.38.0...v0.39.0) (2026-10-30)
+
+
+### Features
+
+* **mcp:** move gateway operator tools to opt-in ag-agents-gateway-ops (MC07) ([#229](https://github.com/Audumla/AUDiaGentic/issues/229)) ([ffbbff0](https://github.com/Audumla/AUDiaGentic/commit/ffbbff001803fba385b5133d0df7a91175c7c06e))
+
 ## [0.38.0](https://github.com/Audumla/AUDiaGentic/compare/v0.37.0...v0.38.0) (2026-10-30)
 
 
