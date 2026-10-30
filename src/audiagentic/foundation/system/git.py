@@ -145,6 +145,43 @@ def branch_exists(repo: Path, name: str) -> bool:
     return True
 
 
+def is_ancestor(repo: Path, commit: str, ref: str) -> bool | None:
+    """Whether ``commit`` is reachable from ``ref``; ``None`` when either is unknown locally."""
+    if resolve_commit(repo, f"{commit}^{{commit}}") is None or resolve_commit(repo, ref) is None:
+        return None
+    try:
+        run_git(repo, "merge-base", "--is-ancestor", commit, ref)
+    except Exception as error:  # noqa: BLE001 - only exit status 1 means "not an ancestor"
+        return False if (getattr(error, "details", None) or {}).get("returncode") == 1 else None
+    return True
+
+
+def commits_not_in(repo: Path, tip: str, base: str) -> int | None:
+    """Commits reachable from ``tip`` but not from ``base``; ``None`` when git cannot say."""
+    try:
+        return int(run_git(repo, "rev-list", "--count", f"{base}..{tip}").strip())
+    except Exception:  # noqa: BLE001 - unknown ref
+        return None
+
+
+def ignored_entries(path: Path) -> list[str]:
+    """Top-level ignored files and directories of a worktree, as git reports them."""
+    entries = []
+    for record in run_git(path, "status", "--porcelain=v1", "-z", "--ignored=traditional").split("\0"):
+        if record.startswith("!! "):
+            entries.append(record[3:])
+    return sorted(entries)
+
+
+def initialized_submodules(path: Path) -> list[str]:
+    """Submodule paths that are checked out (``git submodule status`` does not start with ``-``)."""
+    paths = []
+    for line in run_git(path, "submodule", "status").splitlines():
+        if line and not line.startswith("-"):
+            paths.append(line[1:].split(" ", 2)[1])
+    return paths
+
+
 # --- mutators: used only by the worktree lifecycle, which owns the rollback ---
 
 
