@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.41.0](https://github.com/Audumla/AUDiaGentic/compare/v0.40.0...v0.41.0) (2026-10-30)
+
+
+### Features
+
+* **mcp:** drop workspace_name, source and context fingerprint from agent_task_submit (MC09) ([#233](https://github.com/Audumla/AUDiaGentic/issues/233)) ([48ccf55](https://github.com/Audumla/AUDiaGentic/commit/48ccf5503a20e70dfd82c9352baeb7408ed3f644))
+
 ## [0.40.0](https://github.com/Audumla/AUDiaGentic/compare/v0.39.0...v0.40.0) (2026-10-30)
 
 
