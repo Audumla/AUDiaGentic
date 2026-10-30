@@ -274,12 +274,16 @@ class _AutoDescFastMCP(FastMCP):  # type: ignore[misc,valid-type]
         structured_output_tool_names: frozenset[str] = frozenset(),
         **kwargs: Any,
     ) -> None:
-        super().__init__(*args, **kwargs)
         self._module_name = module_name
-        self._structured_output_only = structured_output_only
-        self._structured_output_tool_names = frozenset(structured_output_tool_names)
         # Cache resolved declaration to avoid repeated registry lookups.
         self._decl: Any = None
+        if not kwargs.get("instructions"):
+            # The YAML ``instructions`` reach clients for every server, not
+            # only those that thread them through by hand.
+            kwargs["instructions"] = server_instructions(self._get_decl())
+        super().__init__(*args, **kwargs)
+        self._structured_output_only = structured_output_only
+        self._structured_output_tool_names = frozenset(structured_output_tool_names)
 
     def _get_decl(self) -> Any:
         if self._decl is None:
@@ -350,11 +354,15 @@ class _AutoDescFastMCP(FastMCP):  # type: ignore[misc,valid-type]
             if self._worktree_scoped():
                 from audiagentic.foundation.mcp.worktree import WORKTREE_DESCRIPTION, WORKTREE_PARAMETER
 
-                tool.parameters["properties"][WORKTREE_PARAMETER]["description"] = WORKTREE_DESCRIPTION
+                tool.parameters["properties"][WORKTREE_PARAMETER] = {
+                    "type": "string",
+                    "description": WORKTREE_DESCRIPTION,
+                }
             if selected:
                 _align_structured_output_schema(tool)
                 if self._worktree_scoped():
                     _declare_worktree_output(tool)
+            _slim_tool_schemas(tool)
         except (TypeError, ValueError):
             self._tool_manager.remove_tool(name)
             raise
@@ -432,6 +440,41 @@ def _declare_worktree_output(tool: Any) -> None:
         },
         "required": ["path", "branch", "head"],
     }
+    tool.__dict__.pop("output_schema", None)
+
+
+_NAME_KEYED = frozenset({"properties", "patternProperties", "$defs", "definitions"})
+_LITERAL = frozenset({"enum", "const", "default", "examples", "required"})
+
+
+def _slim_schema(node: Any, *, names: bool = False) -> Any:
+    """Drop generated ``title`` keys and ``default: null`` from schema objects.
+
+    ``names`` marks a map keyed by property/definition names, whose keys are
+    kept and whose values are schemas. Literal-valued keywords are copied as is.
+    """
+    if isinstance(node, list):
+        return [_slim_schema(item) for item in node]
+    if not isinstance(node, dict):
+        return node
+    if names:
+        return {key: _slim_schema(value) for key, value in node.items()}
+    slim: dict[str, Any] = {}
+    for key, value in node.items():
+        if key == "title" and isinstance(value, str):
+            continue
+        if key == "default" and value is None:
+            continue
+        slim[key] = value if key in _LITERAL else _slim_schema(value, names=key in _NAME_KEYED)
+    return slim
+
+
+def _slim_tool_schemas(tool: Any) -> None:
+    """Token diet for the schemas sent to clients: input and output carry no generated titles."""
+    tool.parameters = _slim_schema(tool.parameters)
+    schema = tool.fn_metadata.output_schema
+    if schema:
+        tool.fn_metadata.output_schema = _slim_schema(schema)
     tool.__dict__.pop("output_schema", None)
 
 

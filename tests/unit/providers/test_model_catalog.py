@@ -65,7 +65,7 @@ def test_mcp_list_provider_models_has_no_refresh_argument() -> None:
     tool = server._tool_manager._tools["list_provider_models"]
 
     assert tool.parameters["properties"] == {
-        "provider_id": {"title": "Provider Id", "type": "string"}
+        "provider_id": {"type": "string"}
     }
     assert tool.parameters["required"] == ["provider_id"]
 

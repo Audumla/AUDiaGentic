@@ -28,10 +28,7 @@ from audiagentic.foundation.system import worktree_drain
 worktree_error = make_error_factory("CFG", "MCPWT", "mcp")
 
 WORKTREE_PARAMETER = "worktree"
-WORKTREE_DESCRIPTION = (
-    "Absolute path of the git worktree to act on (the worktree root, not a subdirectory). "
-    "Omit to use this server's own project. The result reports the worktree used."
-)
+WORKTREE_DESCRIPTION = "Worktree root (absolute path); default: server's project."
 
 _CURRENT: contextvars.ContextVar[Worktree | None] = contextvars.ContextVar("audiagentic_mcp_worktree", default=None)
 

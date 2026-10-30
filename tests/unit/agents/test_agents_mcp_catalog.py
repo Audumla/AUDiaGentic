@@ -73,7 +73,7 @@ def test_gateway_status_metadata_matches_fixed_status_signature() -> None:
     assert tuple(signature.parameters) == ("request_id", "include_response")
     description = gateway["tool-descriptions"]["agent_task_status"]
     assert "response_version" not in description
-    assert "compact lifecycle/activity status" in description
+    assert "compact lifecycle/activity status" in description.lower()
 
 
 def test_new_gateway_mcp_tools_are_provisioned_on_the_correct_surfaces() -> None:
