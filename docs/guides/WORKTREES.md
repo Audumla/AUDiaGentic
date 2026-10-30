@@ -9,6 +9,7 @@ repository; the pull-request proof needs the `gh` CLI signed in to GitHub.
 audiagentic worktree start SLUG [item ID] [purpose TEXT] [owner NAME] [project PATH]
 audiagentic worktree list   [project PATH] [output json]
 audiagentic worktree prune  [project PATH] [output json]
+audiagentic worktree sync   [TARGET] [head TIP12] [dry-run yes] [project PATH] [output json]
 audiagentic worktree push   [TARGET] [head TIP12] [dry-run yes] [project PATH] [output json]
 audiagentic worktree merge  [TARGET] [title TEXT] [body TEXT] [head TIP12] [dry-run yes] [project PATH] [output json]
 audiagentic worktree finish TARGET [abandon TIP12] [discard-ignored N] [project PATH] [output json]
@@ -30,6 +31,18 @@ Arguments are keywords (no `--` options). `audiagentic worktree help` prints the
 4. **prune** is read-only. For each worktree it says `eligible`, `blocked` or `unknown`
    and names every blocker. It never fetches, writes or deletes.
 5. **finish** removes exactly one worktree (below).
+
+## Keeping a branch current: sync
+
+`sync` is local only; it pushes nothing. It fetches the default branch and your branch, then
+fast-forwards to the remote copy of the branch when that is strictly ahead (for example after
+GitHub updated a pull request's branch), and merges the default branch in when the branch is
+behind it. It never rebases, resets or forces, and it refuses on a dirty tree, a merge already
+under way, unfinished gateway work, an unconfirmed `head`, and a remote branch that has diverged
+from yours. A merge conflict is aborted and the worktree is left exactly as it was, with the
+conflicting files listed. After a sync, publish the new tip with `merge` or `push`. This is the
+fix for a pull request GitHub shows as "behind": the strict up-to-date rule needs the branch
+to contain the default branch before auto-merge can finish.
 
 ## Publishing: push and merge
 
@@ -167,7 +180,6 @@ or diverged. It reports only; it never changes anything.
 - The archive has no size limit; a full disk refuses before anything is removed.
 - The bundle covers the abandoned tip only. Other local branches and stashes are neither
   backed up nor removed.
-- Only GitHub through `gh` is supported as a forge. There is no `worktree sync` yet, so a pull
-  request that falls behind the default branch has its branch updated by hand or in the GitHub UI.
+- Only GitHub through `gh` is supported as a forge.
 - Checks run in the live worktree and are trusted code; another writer can still advance the
   remote branch after the final check (a non-force push cannot overwrite it).
