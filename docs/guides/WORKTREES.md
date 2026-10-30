@@ -10,7 +10,7 @@ audiagentic worktree start SLUG [item ID] [purpose TEXT] [owner NAME] [project P
 audiagentic worktree list   [project PATH] [output json]
 audiagentic worktree prune  [project PATH] [output json]
 audiagentic worktree push   [TARGET] [head TIP12] [dry-run yes] [project PATH] [output json]
-audiagentic worktree merge  [TARGET] [title TEXT] [head TIP12] dry-run yes [project PATH] [output json]
+audiagentic worktree merge  [TARGET] [title TEXT] [body TEXT] [head TIP12] [dry-run yes] [project PATH] [output json]
 audiagentic worktree finish TARGET [abandon TIP12] [discard-ignored N] [project PATH] [output json]
 ```
 
@@ -63,10 +63,22 @@ worktree with a minimal environment (no tokens). A project file that defines or 
 `worktrees.checks` is refused. `dry-run yes` lists the checks and the push without running
 or sending anything.
 
-`merge ... dry-run yes` goes one step further and plans the pull request too: the push, an
-open pull request to reuse or one to create (a closed pull request is never replaced), a
-valid conventional-commit title, and auto-merge. It only plans for now; open the pull
-request yourself (`gh pr create`) after `push`.
+`merge` publishes the worktree for merge and returns without waiting. It plans first (the
+same report as `dry-run yes`), pushes the tip with the same checks as `push` unless the remote
+already has that commit, opens the pull request (`title TEXT`, a conventional-commit title, is
+required for a new one) or reuses the one open pull request for the branch, confirms the pull
+request's head is the pushed commit, and asks GitHub to squash-merge it when the required
+checks pass. The forge itself enforces the head commit (`--match-head-commit`), so a push made
+after the check cannot be authorized, and every forge call is pinned to this repository. The
+body is `body TEXT` followed by the project's `worktrees.pr-trailer`, if set.
+
+It never waits for CI, never updates a branch that is behind (it reports `behind`; GitHub's
+strict "up to date" rule then needs the branch updated before auto-merge can finish), never
+replaces a closed pull request, and refuses an ambiguous or draft one. Run it again after any
+failure: a tip already pushed is not pushed twice, an open pull request is reused, auto-merge
+already on is left alone, and a tip whose pull request has merged reports "already merged".
+GitHub merges at once if nothing is required of the pull request, so keep the required checks
+in the repository's rules; they, not this command, are what make it wait.
 
 ## What counts as merged
 
@@ -141,6 +153,9 @@ In `.audiagentic/settings.yaml` (see [PROJECT_SETTINGS](PROJECT_SETTINGS.md)):
 | `worktrees.root` | `<main worktree>.worktrees` beside the main worktree | where `start` creates worktrees |
 | `worktrees.branch-prefix` | `{owner}/` | prefix of new branch names |
 | `worktrees.protected` | none | name to path map of worktrees that are never removed |
+| `worktrees.pre-push` | none | ids of the checks `push` and `merge` must pass before publishing (the union of your list and the project's) |
+| `worktrees.checks` | none | **user settings only**: id to a fixed command list (`{tip}`, `{base}`, `{worktree}`) |
+| `worktrees.pr-trailer` | none | text appended to the body of pull requests `merge` opens |
 
 `audiagentic doctor` reports a primary checkout that is off the default branch, behind it
 or diverged. It reports only; it never changes anything.
@@ -152,5 +167,7 @@ or diverged. It reports only; it never changes anything.
 - The archive has no size limit; a full disk refuses before anything is removed.
 - The bundle covers the abandoned tip only. Other local branches and stashes are neither
   backed up nor removed.
-- Only GitHub through `gh` is supported as a forge. `merge` plans but does not yet open the
-  pull request or request auto-merge.
+- Only GitHub through `gh` is supported as a forge. There is no `worktree sync` yet, so a pull
+  request that falls behind the default branch has its branch updated by hand or in the GitHub UI.
+- Checks run in the live worktree and are trusted code; another writer can still advance the
+  remote branch after the final check (a non-force push cannot overwrite it).

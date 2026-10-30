@@ -187,7 +187,7 @@ def test_repository_slug_never_returns_credentials(url, slug) -> None:
     assert "SECRET" not in (merge_plan.repository_slug(url) or "")
 
 
-def test_command_refuses_without_dry_run(capsys) -> None:
+def test_command_without_dry_run_executes_and_refuses_on_blockers(capsys) -> None:
     assert worktree_command.dispatch_keyword(["merge"]) == 1
-    assert "CON-WTMERGE-002" in capsys.readouterr().err
+    assert "CON-WTMERGE-003" in capsys.readouterr().err
     assert worktree_command.dispatch_keyword(["merge", "dry-run", "no"]) == 2

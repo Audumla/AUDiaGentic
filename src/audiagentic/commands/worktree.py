@@ -14,7 +14,7 @@ _HELP = """Worktree commands (keyword syntax):
   audiagentic worktree start SLUG [item ID] [purpose TEXT] [owner NAME] [project PATH] [output json]
   audiagentic worktree prune [project PATH] [output json]
   audiagentic worktree push [TARGET] [head TIP12] [dry-run yes] [project PATH] [output json]
-  audiagentic worktree merge [TARGET] [title TEXT] [head TIP12] dry-run yes [project PATH] [output json]
+  audiagentic worktree merge [TARGET] [title TEXT] [body TEXT] [head TIP12] [dry-run yes] [project PATH] [output json]
   audiagentic worktree finish TARGET [abandon TIP] [discard-ignored N] [project PATH] [output json]
   audiagentic worktree help
 
@@ -49,11 +49,14 @@ remote is not the repository the forge reports, you cannot push, or gateway work
 and again if anything changed while the checks ran. `dry-run yes` lists the checks and the push
 without running or sending anything. TARGET defaults to the worktree you are in.
 
-merge (dry-run only for now) reports what publishing a worktree would do and what blocks it: the
-tip it would push (`git push origin TIP:refs/heads/BRANCH`, never forced), whether this is the same
-repository the forge reports, whether an open pull request exists for the branch (a closed one is
-never replaced), whether the title is a valid conventional-commit title, and whether auto-merge is
-already on. TARGET defaults to the worktree you are in. Nothing is pushed, created or written.
+merge publishes a worktree for merge and returns without waiting: it plans (every check of
+`dry-run yes`), pushes the tip with the same checks as `push` unless the remote already has it,
+opens the pull request (title TEXT must be a conventional-commit title) or reuses the one open
+pull request for the branch, confirms its head is the pushed commit, and asks the forge to
+squash-merge it when the required checks pass. It never updates a branch that is behind, never
+replaces a closed pull request, never waits for CI. Run it again after any failure: each step
+converges. `dry-run yes` only reports what it would do and what blocks it. TARGET defaults to the
+worktree you are in. The body is `body TEXT` plus the project's worktrees.pr-trailer, if set.
 
 finish removes exactly one worktree whose work is merged (TARGET is its absolute path, or
 its branch or directory name when that is unique). It fetches the default branch, fences
@@ -190,13 +193,15 @@ def _push(tokens: list[str]) -> int:
 
 
 def _merge(tokens: list[str]) -> int:
-    target = tokens[0] if tokens and tokens[0] not in {"title", "head", "dry-run", "project", "output"} else None
-    clauses = _clauses(tokens[1:] if target else tokens, {"title", "head", "dry-run", "project", "output"})
+    words = {"title", "body", "head", "dry-run", "project", "output"}
+    target = tokens[0] if tokens and tokens[0] not in words else None
+    clauses = _clauses(tokens[1:] if target else tokens, words)
     if clauses is None or clauses.get("dry-run", "yes") != "yes":
         print_error("Invalid worktree merge syntax. Run: audiagentic worktree help")
         return 2
 
     from audiagentic.components.agents.gateway.api import worktree_active_work
+    from audiagentic.components.project.worktrees import merge as merger
     from audiagentic.components.project.worktrees import merge_plan
     from audiagentic.foundation.contracts.errors import AudiaGenticError
     from audiagentic.foundation.paths.project import discover_checkout_root
@@ -206,18 +211,29 @@ def _merge(tokens: list[str]) -> int:
     if here is None:
         print_error("Not inside a git repository. Give project PATH or run it inside one.")
         return 2
-    if "dry-run" not in clauses:
-        print_error("CON-WTMERGE-002: worktree merge only plans for now; pass `dry-run yes`")
-        return 1
     path = Path(target).expanduser().resolve() if target and "/" in target else here
+    dry_run = "dry-run" in clauses
     try:
-        result = merge_plan.plan(here, path, title=clauses.get("title"), head=clauses.get("head"),
-                                 active_work=worktree_active_work)
+        if dry_run:
+            result = merge_plan.plan(here, path, title=clauses.get("title"), head=clauses.get("head"),
+                                     active_work=worktree_active_work)
+        else:
+            result = merger.merge(here, path, title=clauses.get("title"), body=clauses.get("body"),
+                                  head=clauses.get("head"), active_work=worktree_active_work)
     except AudiaGenticError as error:
         print_error(f"{error.code}: {error.message}")
         return 1
     if clauses.get("output") == "json":
         print_json(result, sort_keys=True)
+        return 0
+    if not dry_run and result.get("already-merged"):
+        print_message(f"already merged: a pull request with this exact tip ({result['tip'][:12]}) is merged; nothing to do")
+        return 0
+    if not dry_run:
+        state = "BEHIND the default branch: run worktree sync" if result["behind"] else (result["merge-state"] or "pending")
+        print_message(f"{'opened' if result['created'] else 'reused'} #{result['pr']} {result['url']}\n"
+                      f"{'pushed ' + result['tip'][:12] if result['pushed'] else 'already on the remote'}; "
+                      f"auto-merge requested; state {state}")
         return 0
     lines = [f"{result['verdict'].upper()}  {result['worktree']}  [{result['branch'] or 'detached'}]  tip {result['tip'][:12]}"]
     lines += [f"  {'?' if b['unknown'] else '-'} {b['code']}: {b['detail']}" for b in result["blockers"]]
