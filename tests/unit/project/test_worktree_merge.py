@@ -1,6 +1,7 @@
 """DW01 slice 4c: push, open or reuse the pull request, request auto-merge; convergent on rerun."""
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 from pathlib import Path
@@ -114,8 +115,9 @@ def test_fresh_worktree_is_pushed_opened_and_set_to_auto_merge(world) -> None:
     assert _remote_tip(world) == world["tip"] and result["pushed"] and result["created"]
     assert _calls(fake) == ["create", "auto-merge"] and fake.calls[0][1:4] == ("me/feature", "main", TITLE)
     assert result["auto-merge"] is True and result["pr"] == 100 and result["behind"] is False
-    receipt = [__import__("json").loads(p.read_text()) for p in (world["state"] / "worktrees" / "receipts").rglob("*.json")][0]
-    assert receipt["phase"] == "AUTO_MERGE_REQUESTED" and receipt["kind"] == "merge"
+    receipts = [json.loads(p.read_text()) for p in (world["state"] / "worktrees" / "receipts").rglob("*.json")]
+    merges = [receipt for receipt in receipts if receipt.get("kind") == "merge"]  # the push attempt has its own receipt
+    assert len(merges) == 1 and merges[0]["phase"] == "AUTO_MERGE_REQUESTED"
 
 
 def test_rerun_converges_without_repeating_anything(world) -> None:
