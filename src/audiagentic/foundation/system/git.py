@@ -2,9 +2,9 @@
 
 One runner for the git facts worktree tooling needs. Queries are read-only and
 a fact git cannot report is ``None``, never a guess. The only mutators are the
-small named functions at the end (fetch, add/remove worktree, delete a branch);
-none pushes or rewrites history, and each is used only by the worktree
-lifecycle, which owns its rollback. Failures are typed errors.
+small named functions at the end (fetch, add/remove worktree, delete a branch,
+create a ref, and one non-force push of an exact commit); none rewrites history,
+and each is used only by the worktree lifecycle, which owns its rollback. Failures are typed errors.
 """
 from __future__ import annotations
 
@@ -241,3 +241,30 @@ def create_ref(repo: Path, ref: str, commit: str) -> None:
 def delete_branch_at(repo: Path, branch: str, commit: str) -> None:
     """Delete the local branch only if it still points at ``commit`` (compare-and-swap, no force)."""
     run_git(repo, "update-ref", "-d", f"refs/heads/{branch}", commit)
+
+
+def remote_branch_commit(repo: Path, remote: str, branch: str) -> str | None:
+    """The commit ``refs/heads/<branch>`` has on the remote right now (a network read), or ``None`` if absent.
+
+    Strict: exactly one record for exactly that ref with a full-length hexadecimal id, else an error.
+    """
+    reference = f"refs/heads/{branch}"
+    records = [line.split("\t") for line in run_git(repo, "ls-remote", remote, reference, timeout=120.0).splitlines()]
+    matching = [record for record in records if len(record) == 2 and record[1] == reference]
+    if len(matching) != len(records) or len(matching) > 1:
+        raise git_error(5, "the remote returned records this code cannot read", branch=branch)
+    if not matching:
+        return None
+    commit = matching[0][0]
+    if len(commit) not in (40, 64) or any(character not in "0123456789abcdef" for character in commit):
+        raise git_error(5, "the remote returned an object id this code cannot read", branch=branch)
+    return commit
+
+
+def push_commit(repo: Path, remote: str, commit: str, branch: str) -> None:
+    """Publish exactly ``commit`` as ``refs/heads/<branch>`` on ``remote``. Never forces, never a branch name.
+
+    Git refuses a push that is not a fast-forward of the remote branch; that refusal is an error here.
+    """
+    run_git(repo, "-c", "core.hooksPath=/dev/null", "-c", "push.followTags=false", "push", "--porcelain", "--no-verify",
+            "--no-follow-tags", remote, f"{commit}:refs/heads/{branch}", timeout=180.0)

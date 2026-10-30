@@ -13,6 +13,7 @@ _HELP = """Worktree commands (keyword syntax):
   audiagentic worktree list [project PATH] [output json]
   audiagentic worktree start SLUG [item ID] [purpose TEXT] [owner NAME] [project PATH] [output json]
   audiagentic worktree prune [project PATH] [output json]
+  audiagentic worktree push [TARGET] [head TIP12] [dry-run yes] [project PATH] [output json]
   audiagentic worktree merge [TARGET] [title TEXT] [head TIP12] dry-run yes [project PATH] [output json]
   audiagentic worktree finish TARGET [abandon TIP] [discard-ignored N] [project PATH] [output json]
   audiagentic worktree help
@@ -40,6 +41,14 @@ files, unknown ignored files, a process using the path, unfinished gateway work,
 lock, submodules, a detached HEAD, a protected or primary worktree. Anything it cannot
 establish is reported as unknown, which also blocks. prune never deletes anything.
 
+push runs the pre-push checks your project names (worktrees.pre-push, the ids) with the commands
+you define in your own user settings (worktrees.checks: id to a fixed command list; a project file
+cannot define them), then pushes exactly the checked commit as refs/heads/BRANCH without force,
+reads the remote back to confirm, and writes a receipt. It refuses when the tree is dirty, the
+remote is not the repository the forge reports, you cannot push, or gateway work is unfinished,
+and again if anything changed while the checks ran. `dry-run yes` lists the checks and the push
+without running or sending anything. TARGET defaults to the worktree you are in.
+
 merge (dry-run only for now) reports what publishing a worktree would do and what blocks it: the
 tip it would push (`git push origin TIP:refs/heads/BRANCH`, never forced), whether this is the same
 repository the forge reports, whether an open pull request exists for the branch (a closed one is
@@ -65,7 +74,7 @@ def dispatch_keyword(tokens: list[str]) -> int:
     if not tokens or tokens in (["help"], ["list", "help"], ["start", "help"]):
         print_message(_HELP)
         return 0
-    if tokens[0] not in {"list", "start", "prune", "finish", "merge"} or any(token.startswith("--") for token in tokens):
+    if tokens[0] not in {"list", "start", "prune", "finish", "merge", "push"} or any(token.startswith("--") for token in tokens):
         print_error("Invalid worktree syntax. Run: audiagentic worktree help")
         return 2
     if tokens[0] == "start":
@@ -76,6 +85,8 @@ def dispatch_keyword(tokens: list[str]) -> int:
         return _finish(tokens[1:])
     if tokens[0] == "merge":
         return _merge(tokens[1:])
+    if tokens[0] == "push":
+        return _push(tokens[1:])
     clauses = _clauses(tokens[1:], {"project", "output"})
     if clauses is None:
         print_error("Invalid worktree list syntax. Run: audiagentic worktree help")
@@ -142,6 +153,39 @@ def _prune(tokens: list[str]) -> int:
         lines.extend(f"    {'?' if b['unknown'] else '-'} {b['code']}: {b['detail']}" for b in row["blockers"])
         lines.extend(f"    note: {note}" for note in row["notes"])
     print_message("\n".join(lines))
+    return 0
+
+
+def _push(tokens: list[str]) -> int:
+    target = tokens[0] if tokens and tokens[0] not in {"head", "dry-run", "project", "output"} else None
+    clauses = _clauses(tokens[1:] if target else tokens, {"head", "dry-run", "project", "output"})
+    if clauses is None or clauses.get("dry-run", "yes") != "yes":
+        print_error("Invalid worktree push syntax. Run: audiagentic worktree help")
+        return 2
+
+    from audiagentic.components.agents.gateway.api import worktree_active_work
+    from audiagentic.components.project.worktrees import publish
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+    from audiagentic.foundation.paths.project import discover_checkout_root
+
+    here = discover_checkout_root(Path(clauses["project"]).resolve() if "project" in clauses else None)
+    if here is None:
+        print_error("Not inside a git repository. Give project PATH or run it inside one.")
+        return 2
+    path = Path(target).expanduser().resolve() if target and "/" in target else here
+    try:
+        result = publish.push(here, path, head=clauses.get("head"), active_work=worktree_active_work,
+                              dry_run="dry-run" in clauses)
+    except AudiaGenticError as error:
+        print_error(f"{error.code}: {error.message}")
+        return 1
+    if clauses.get("output") == "json":
+        print_json(result, sort_keys=True)
+    elif result["dry-run"]:
+        print_message(f"{result['would']}\nchecks: {', '.join(result['checks']) or 'none required'}")
+    else:
+        print_message(f"pushed {result['tip'][:12]} to origin/{result['branch']} (confirmed on the remote); "
+                      f"{len(result['checks'])} check(s) passed")
     return 0
 
 
