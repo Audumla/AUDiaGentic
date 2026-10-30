@@ -1,4 +1,4 @@
-"""Read-only pull-request facts from the code forge (DW01).
+"""Read-only pull-request and repository facts from the code forge (DW01).
 
 GitHub through the ``gh`` CLI, the only forge supported so far. The module only
 reads: it never merges, closes or comments. A fact the forge cannot give is an
@@ -18,7 +18,8 @@ forge_error = make_error_factory("EXT", "FORGE", "foundation")
 
 _TIMEOUT_SECONDS = 60.0
 _LIMIT = 100
-_FIELDS = "number,state,baseRefName,headRefName,headRefOid,mergeCommit,isCrossRepository,url"
+_FIELDS = ("number,state,baseRefName,headRefName,headRefOid,mergeCommit,isCrossRepository,url,"
+           "isDraft,autoMergeRequest,mergeStateStatus")
 
 
 @dataclass(frozen=True)
@@ -31,27 +32,52 @@ class PullRequest:
     merge_commit: str | None
     cross_repository: bool
     url: str
+    is_draft: bool = False
+    auto_merge: bool = False
+    merge_state: str | None = None  # GitHub's mergeStateStatus, e.g. CLEAN, BEHIND, BLOCKED
 
 
-def pull_requests_for_branch(repo: Path, branch: str) -> tuple[PullRequest, ...]:
-    """Every pull request, in any state, whose head branch is ``branch`` on this repository."""
+@dataclass(frozen=True)
+class RepositoryIdentity:
+    name_with_owner: str  # owner/name as the forge knows it
+    default_branch: str
+    can_push: bool
+
+
+def _gh(repo: Path, *arguments: str) -> str:
+    """Run one read-only ``gh`` command in ``repo`` and return stdout; typed errors, never a guess."""
     executable = shutil.which("gh")
     if executable is None:
         raise forge_error(1, "gh is not installed or not on PATH")
     try:
-        done = subprocess.run(
-            [executable, "pr", "list", "--head", branch, "--state", "all", "--limit", str(_LIMIT), "--json", _FIELDS],
-            cwd=repo, capture_output=True, text=True, timeout=_TIMEOUT_SECONDS, check=False,
-        )
+        done = subprocess.run([executable, *arguments], cwd=repo, capture_output=True, text=True,
+                              timeout=_TIMEOUT_SECONDS, check=False)
     except subprocess.TimeoutExpired:
         raise forge_error(3, "gh timed out", seconds=_TIMEOUT_SECONDS) from None
     except OSError as error:
         raise forge_error(1, "gh could not be started", reason=type(error).__name__) from None
     if done.returncode != 0:
-        raise forge_error(2, "gh could not list pull requests", returncode=done.returncode,
+        raise forge_error(2, "gh could not read from the forge", returncode=done.returncode,
                           stderr=done.stderr.strip()[-300:])
+    return done.stdout
+
+
+def repository_identity(repo: Path) -> RepositoryIdentity:
+    """Which repository the forge says ``repo`` is, its default branch and whether the user may push."""
     try:
-        rows = json.loads(done.stdout or "[]")
+        row = json.loads(_gh(repo, "repo", "view", "--json", "nameWithOwner,defaultBranchRef,viewerPermission"))
+        return RepositoryIdentity(
+            name_with_owner=str(row["nameWithOwner"]), default_branch=str(row["defaultBranchRef"]["name"]),
+            can_push=str(row["viewerPermission"]) in {"ADMIN", "MAINTAIN", "WRITE"})
+    except (ValueError, KeyError, TypeError):
+        raise forge_error(4, "gh returned a repository description this code cannot read") from None
+
+
+def pull_requests_for_branch(repo: Path, branch: str) -> tuple[PullRequest, ...]:
+    """Every pull request, in any state, whose head branch is ``branch`` on this repository."""
+    stdout = _gh(repo, "pr", "list", "--head", branch, "--state", "all", "--limit", str(_LIMIT), "--json", _FIELDS)
+    try:
+        rows = json.loads(stdout or "[]")
         if len(rows) >= _LIMIT:
             # A full page may be cut short; an incomplete listing is no proof of anything.
             raise forge_error(5, "pull request listing may be incomplete", limit=_LIMIT)
@@ -61,6 +87,8 @@ def pull_requests_for_branch(repo: Path, branch: str) -> tuple[PullRequest, ...]
                 head_branch=str(row["headRefName"]), head_sha=str(row["headRefOid"]),
                 merge_commit=(row.get("mergeCommit") or {}).get("oid"),
                 cross_repository=bool(row.get("isCrossRepository")), url=str(row.get("url", "")),
+                is_draft=bool(row.get("isDraft")), auto_merge=row.get("autoMergeRequest") is not None,
+                merge_state=row.get("mergeStateStatus"),
             )
             for row in rows
         )
