@@ -274,16 +274,16 @@ class _AutoDescFastMCP(FastMCP):  # type: ignore[misc,valid-type]
         structured_output_tool_names: frozenset[str] = frozenset(),
         **kwargs: Any,
     ) -> None:
-        super().__init__(*args, **kwargs)
         self._module_name = module_name
-        self._structured_output_only = structured_output_only
-        self._structured_output_tool_names = frozenset(structured_output_tool_names)
         # Cache resolved declaration to avoid repeated registry lookups.
         self._decl: Any = None
-        if not self.instructions:
+        if not kwargs.get("instructions"):
             # The YAML ``instructions`` reach clients for every server, not
             # only those that thread them through by hand.
-            self._mcp_server.instructions = server_instructions(self._get_decl()) or None
+            kwargs["instructions"] = server_instructions(self._get_decl())
+        super().__init__(*args, **kwargs)
+        self._structured_output_only = structured_output_only
+        self._structured_output_tool_names = frozenset(structured_output_tool_names)
 
     def _get_decl(self) -> Any:
         if self._decl is None:
@@ -443,20 +443,30 @@ def _declare_worktree_output(tool: Any) -> None:
     tool.__dict__.pop("output_schema", None)
 
 
-def _slim_schema(node: Any, *, in_properties: bool = False) -> Any:
-    """Drop generated ``title`` keys and ``default: null`` (clients never need them)."""
-    if isinstance(node, dict):
-        slim: dict[str, Any] = {}
-        for key, value in node.items():
-            if not in_properties and key == "title" and isinstance(value, str):
-                continue
-            if not in_properties and key == "default" and value is None:
-                continue
-            slim[key] = _slim_schema(value, in_properties=key == "properties" and not in_properties)
-        return slim
+_NAME_KEYED = frozenset({"properties", "patternProperties", "$defs", "definitions"})
+_LITERAL = frozenset({"enum", "const", "default", "examples", "required"})
+
+
+def _slim_schema(node: Any, *, names: bool = False) -> Any:
+    """Drop generated ``title`` keys and ``default: null`` from schema objects.
+
+    ``names`` marks a map keyed by property/definition names, whose keys are
+    kept and whose values are schemas. Literal-valued keywords are copied as is.
+    """
     if isinstance(node, list):
         return [_slim_schema(item) for item in node]
-    return node
+    if not isinstance(node, dict):
+        return node
+    if names:
+        return {key: _slim_schema(value) for key, value in node.items()}
+    slim: dict[str, Any] = {}
+    for key, value in node.items():
+        if key == "title" and isinstance(value, str):
+            continue
+        if key == "default" and value is None:
+            continue
+        slim[key] = value if key in _LITERAL else _slim_schema(value, names=key in _NAME_KEYED)
+    return slim
 
 
 def _slim_tool_schemas(tool: Any) -> None:
