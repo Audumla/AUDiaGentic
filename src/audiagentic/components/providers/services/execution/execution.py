@@ -193,7 +193,7 @@ def load_session_transport_builder(provider_id: str) -> Callable[..., Any] | Non
     package exposes ``build_session_transport(...)`` in its ``session_transport``
     submodule; any provider_id whose adapter package declares this hook is
     routed through it, with no dispatcher edit needed to add another one
-    (including an extending provider such as gpt-auto-t1/t2).
+    (including a provider instance such as gpt-auto@name).
     """
     builder = _adapter_hook(provider_id, "session_transport", "build_session_transport")
     if builder is None:
