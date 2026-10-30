@@ -99,7 +99,10 @@ def _merge_proof(repo: Path, entry: git.WorktreeEntry, base: str | None,
     matching = [pr for pr in own if pr.head_sha == entry.head]
     if not matching:
         numbers = ", ".join(f"#{pr.number}" for pr in own)
-        return [Blocker("tip-differs-from-pr", f"local tip is not the head of {numbers}; commits would be lost")], None
+        merged = [pr for pr in own if pr.state == "MERGED"]
+        hint = (f"; if this branch is already merged, fast-forward it to the pull request head: "
+                f"git fetch origin refs/pull/{merged[-1].number}/head && git merge --ff-only FETCH_HEAD") if merged else ""
+        return [Blocker("tip-differs-from-pr", f"local tip is not the head of {numbers}; commits would be lost{hint}")], None
     if len(matching) > 1:
         numbers = ", ".join(f"#{pr.number}" for pr in matching)
         return [Blocker("pr-ambiguous", f"several pull requests share this tip: {numbers}", True)], None

@@ -187,7 +187,16 @@ def test_repository_slug_never_returns_credentials(url, slug) -> None:
     assert "SECRET" not in (merge_plan.repository_slug(url) or "")
 
 
-def test_command_refuses_without_dry_run(capsys) -> None:
-    assert worktree_command.dispatch_keyword(["merge"]) == 1
-    assert "CON-WTMERGE-002" in capsys.readouterr().err
+def test_command_without_dry_run_executes_and_reports_a_refusal(capsys, monkeypatch) -> None:
+    from audiagentic.components.project.worktrees import merge as merger
+
+    called = []
+
+    def refuse(*args, **kwargs):
+        called.append(kwargs)
+        raise AudiaGenticError(code="CON-WTMERGE-003", kind="conflict", message="cannot publish")
+
+    monkeypatch.setattr(merger, "merge", refuse)  # never run the real thing from a test
+    assert worktree_command.dispatch_keyword(["merge", "title", "feat: x"]) == 1
+    assert "CON-WTMERGE-003" in capsys.readouterr().err and called and called[0]["title"] == "feat: x"
     assert worktree_command.dispatch_keyword(["merge", "dry-run", "no"]) == 2

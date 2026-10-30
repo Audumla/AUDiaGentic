@@ -49,6 +49,11 @@
         "pattern": "^[a-z][a-z0-9-]{0,31}$"
       },
       "description": "Ids of the checks that must pass before `worktree push` publishes. Safe in project settings: it names checks, each user maps to a command in worktrees.checks."
+    },
+    "pr-trailer": {
+      "type": "string",
+      "maxLength": 2000,
+      "description": "Text appended to every pull request body that `worktree merge` opens (for example required attribution lines)."
     }
   }
 }
