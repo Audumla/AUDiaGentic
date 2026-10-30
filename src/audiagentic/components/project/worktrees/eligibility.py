@@ -63,7 +63,7 @@ def _verdict(blockers: list[Blocker]) -> str:
     return "unknown" if blockers else "eligible"
 
 
-def _classify_ignored(path: Path, entries: list[str]) -> tuple[list[str], int, int]:
+def classify_ignored(path: Path, entries: list[str]) -> tuple[list[str], list[str], int]:
     """``(unknown ignored entries, disposable cache count, project record count)``.
 
     Everything under the project marker directory is gateway/runtime record
@@ -71,16 +71,17 @@ def _classify_ignored(path: Path, entries: list[str]) -> tuple[list[str], int, i
     """
     marker = project_marker_path(path).relative_to(path).as_posix()
     unknown: list[str] = []
-    caches = records = 0
+    records: list[str] = []
+    caches = 0
     for entry in entries:
         name = entry.rstrip("/")
         if name.rsplit("/", 1)[-1] in DISPOSABLE_CACHES:
             caches += 1
         elif name == marker or name.startswith(marker + "/"):
-            records += 1
+            records.append(entry)
         else:
             unknown.append(entry)
-    return unknown, caches, records
+    return unknown, records, caches
 
 
 def _merge_proof(repo: Path, entry: git.WorktreeEntry, base: str | None,
@@ -146,7 +147,8 @@ def assess_one(repo: Path, entry: git.WorktreeEntry, *, primary: bool, protected
         submodules = git.initialized_submodules(entry.path)
         if submodules:
             blockers.append(Blocker("submodules", f"initialized submodule(s): {', '.join(submodules[:3])}"))
-        unknown_ignored, caches, runtime = _classify_ignored(entry.path, git.ignored_entries(entry.path))
+        unknown_ignored, record_entries, caches = classify_ignored(entry.path, git.ignored_entries(entry.path))
+        runtime = len(record_entries)
         if unknown_ignored:
             shown = ", ".join(unknown_ignored[:3]) + (" ..." if len(unknown_ignored) > 3 else "")
             blockers.append(Blocker("ignored-files", f"{len(unknown_ignored)} ignored entr(ies): {shown}"))

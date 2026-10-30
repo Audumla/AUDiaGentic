@@ -13,6 +13,7 @@ _HELP = """Worktree commands (keyword syntax):
   audiagentic worktree list [project PATH] [output json]
   audiagentic worktree start SLUG [item ID] [purpose TEXT] [owner NAME] [project PATH] [output json]
   audiagentic worktree prune [project PATH] [output json]
+  audiagentic worktree finish TARGET [discard-ignored N] [project PATH] [output json]
   audiagentic worktree help
 
 start fetches the remote default branch (and refuses to continue if it cannot, so a
@@ -37,6 +38,16 @@ says the merge commit is not fetched). It also refuses on uncommitted or untrack
 files, unknown ignored files, a process using the path, unfinished gateway work, a git
 lock, submodules, a detached HEAD, a protected or primary worktree. Anything it cannot
 establish is reported as unknown, which also blocks. prune never deletes anything.
+
+finish removes exactly one worktree whose work is merged (TARGET is its absolute path, or
+its branch or directory name when that is unique). It fetches the default branch, fences
+new work, runs the same checks as prune twice and compares them, writes an immutable
+refs/quarantine/ ref at the tip and a verified archive copy of the project's ignored
+record files, then removes the worktree with plain non-force git and deletes the branch
+only if it still points at the recorded tip. Ignored files that are not caches or records
+refuse unless you repeat the count the refusal printed as `discard-ignored N`. A crash
+resumes from a journal; a refusal before removal leaves everything untouched. Unmerged
+work is never finished here.
 Options beginning with -- are not accepted; use the keywords shown above."""
 
 
@@ -45,13 +56,15 @@ def dispatch_keyword(tokens: list[str]) -> int:
     if not tokens or tokens in (["help"], ["list", "help"], ["start", "help"]):
         print_message(_HELP)
         return 0
-    if tokens[0] not in {"list", "start", "prune"} or any(token.startswith("--") for token in tokens):
+    if tokens[0] not in {"list", "start", "prune", "finish"} or any(token.startswith("--") for token in tokens):
         print_error("Invalid worktree syntax. Run: audiagentic worktree help")
         return 2
     if tokens[0] == "start":
         return _start(tokens[1:])
     if tokens[0] == "prune":
         return _prune(tokens[1:])
+    if tokens[0] == "finish":
+        return _finish(tokens[1:])
     clauses = _clauses(tokens[1:], {"project", "output"})
     if clauses is None:
         print_error("Invalid worktree list syntax. Run: audiagentic worktree help")
@@ -118,6 +131,42 @@ def _prune(tokens: list[str]) -> int:
         lines.extend(f"    {'?' if b['unknown'] else '-'} {b['code']}: {b['detail']}" for b in row["blockers"])
         lines.extend(f"    note: {note}" for note in row["notes"])
     print_message("\n".join(lines))
+    return 0
+
+
+def _finish(tokens: list[str]) -> int:
+    if not tokens:
+        print_error("worktree finish needs a TARGET. Run: audiagentic worktree help")
+        return 2
+    target, *rest = tokens
+    clauses = _clauses(rest, {"discard-ignored", "project", "output"})
+    if clauses is None or not clauses.get("discard-ignored", "0").isdigit():
+        print_error("Invalid worktree finish syntax. Run: audiagentic worktree help")
+        return 2
+
+    from audiagentic.components.agents.gateway.api import worktree_active_work
+    from audiagentic.components.project.worktrees.finish import finish
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+    from audiagentic.foundation.paths.project import discover_checkout_root
+
+    repo = discover_checkout_root(Path(clauses["project"]).resolve() if "project" in clauses else None)
+    if repo is None:
+        print_error("Not inside a git repository. Give project PATH or run it inside one.")
+        return 2
+    try:
+        result = finish(repo, target, active_work=worktree_active_work,
+                        discard_ignored=int(clauses["discard-ignored"]) if "discard-ignored" in clauses else None)
+    except AudiaGenticError as error:
+        print_error(f"{error.code}: {error.message}")
+        return 1
+    if clauses.get("output") == "json":
+        print_json(result, sort_keys=True)
+    else:
+        lines = [f"finished {result['path']} (branch {result['branch']}, PR #{result['pr']})",
+                 f"quarantine ref {result['quarantine-ref']}"]
+        lines += [f"archive {result['archive']}"] if result["archive"] else []
+        lines += [f"note: {note}" for note in result["notes"]]
+        print_message("\n".join(lines))
     return 0
 
 
