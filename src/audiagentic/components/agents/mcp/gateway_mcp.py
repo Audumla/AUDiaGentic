@@ -16,16 +16,17 @@ from typing import Any
 
 from audiagentic.components.agents.gateway.client import (
     call_gateway_method,
-    resolve_request_project_root,
-    resolve_session_project_root,
     validate_node_selectors,
 )
 from audiagentic.components.agents.gateway.evidence_projection import (
     project_public_gateway_request,
     project_public_gateway_session,
 )
-from audiagentic.components.agents.gateway.evidence_projection import (
-    public_gateway_scalar as _public_scalar,
+from audiagentic.components.agents.mcp.gateway_mcp_support import (
+    _page_limit,
+    _request_project_root,
+    _session_project_root,
+    _status_without_response_preview,
 )
 from audiagentic.foundation.mcp.component_server import (
     mcp_server,
@@ -35,62 +36,6 @@ from audiagentic.foundation.mcp.component_server import (
 )
 
 mcp = mcp_server(__name__, structured_output_only=True)
-
-_RESPONSE_PREVIEW_FIELDS = frozenset({"output-preview", "output-truncated"})
-
-_MAX_PAGE = 100
-
-
-def _request_project_root(request_id: str):
-    return resolve_request_project_root(project_root_from_env(), request_id)
-
-
-def _session_project_root(session_id: str):
-    return resolve_session_project_root(project_root_from_env(), session_id)
-
-
-def _page_limit(value: int) -> int:
-    if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= _MAX_PAGE:
-        raise ValueError(f"limit must be an integer between 1 and {_MAX_PAGE}")
-    return value
-
-def _status_without_response_preview(status: dict[str, Any], *, include_response: bool = False) -> dict[str, Any]:
-    """Keep MCP status compact and null-free; never spend tokens on a preview."""
-    allowed = {"task_id", "request_id", "request-id", "session_id", "session-id", "lifecycle", "state", "activity_seq", "activity-seq", "activity_at", "activity-at", "activity", "activity_type", "outcome", "error_code", "error-code", "contract-version", "revision"}
-    result = {key: _public_scalar(status.get(key)) for key in allowed if key not in _RESPONSE_PREVIEW_FIELDS and _public_scalar(status.get(key)) is not None}
-    session_id = status.get("session_id") or status.get("session-id")
-    if isinstance(session_id, str) and session_id:
-        result["session_id"] = session_id
-    if include_response and isinstance(status.get("response"), dict):
-        response = status["response"]
-        result["response"] = {
-            key: _public_scalar(response.get(key))
-            for key in ("text", "bytes", "format", "media_type")
-            if _public_scalar(response.get(key)) is not None
-        }
-    return result
-
-
-def _sparse(value: Any) -> Any:
-    """Remove absent values from public MCP payloads without losing false/zero."""
-    if isinstance(value, dict):
-        compact: dict[str, Any] = {}
-        for key, raw in value.items():
-            cleaned = _sparse(raw)
-            if cleaned is None or cleaned == "" or cleaned == {} or cleaned == []:
-                continue
-            compact[key] = cleaned
-        return compact
-    if isinstance(value, list):
-        return [
-            cleaned
-            for item in value
-            if (cleaned := _sparse(item)) is not None
-            and cleaned != ""
-            and cleaned != {}
-            and cleaned != []
-        ]
-    return value
 
 
 @mcp.tool()
@@ -123,129 +68,6 @@ def agent_task_status(request_id: str, include_response: bool = False) -> dict[s
 
 @mcp.tool()
 @tool_boundary
-def agent_task_diagnostics(request_id: str, limit: int = 25) -> dict[str, Any]:
-    """Return bounded, redacted failure and activity evidence for a request."""
-    project_root = _request_project_root(request_id)
-    _page_limit(limit)
-    return _sparse(
-        call_gateway_method(
-            "get_execution_diagnostics", project_root, request_id=request_id, limit=limit
-        )
-    )
-
-
-@mcp.tool()
-@tool_boundary
-def agent_task_observations(
-    request_id: str,
-    limit: int = 25,
-    cursor: str | None = None,
-    since_sequence: int | None = None,
-    tail: int | None = None,
-) -> dict[str, Any]:
-    """Read bounded DOM/activity and node-stage evidence across retained segments.
-
-    Eligible raw traces expire after five days by default; protected request
-    evidence is retained longer. Node milestones are not native completion;
-    request outcome and final output are separate.
-    """
-    project_root = _request_project_root(request_id)
-    _page_limit(limit)
-    params: dict[str, Any] = {
-        "limit": limit,
-        "cursor": cursor,
-        "since_sequence": since_sequence,
-    }
-    if tail is not None:
-        params["tail"] = tail
-    return _sparse(
-        call_gateway_method(
-            "get_execution_observations",
-            project_root,
-            request_id,
-            **params,
-        )
-    )
-
-
-@mcp.tool()
-@tool_boundary
-def agent_task_evidence(
-    request_id: str,
-    include_observations: bool = False,
-    include_history: bool = False,
-    include_recovery: bool = False,
-    limit: int = 25,
-    cursor: str | None = None,
-    observation_cursor: str | None = None,
-    recovery_cursor: str | None = None,
-    history_cursor: str | None = None,
-    since_sequence: int | None = None,
-) -> dict[str, Any]:
-    """Return compact evidence; observation/history/recovery tiers are opt-in."""
-    project_root = _request_project_root(request_id)
-    _page_limit(limit)
-    params: dict[str, Any] = {
-        "include_observations": include_observations,
-        "include_history": include_history,
-        "include_recovery": include_recovery,
-        "limit": limit,
-        "cursor": cursor,
-        "since_sequence": since_sequence,
-    }
-    if observation_cursor is not None:
-        params["observation_cursor"] = observation_cursor
-    if recovery_cursor is not None:
-        params["recovery_cursor"] = recovery_cursor
-    if history_cursor is not None:
-        params["history_cursor"] = history_cursor
-    raw = call_gateway_method(
-            "get_execution_evidence",
-            project_root,
-            request_id,
-            **params,
-        )
-    from audiagentic.components.agents.gateway.evidence_projection import (
-        project_public_gateway_evidence,
-    )
-    return _sparse(project_public_gateway_evidence(raw))
-
-@mcp.tool()
-@tool_boundary
-def agent_task_observation_replay(request_id: str) -> dict[str, Any]:
-    """Replay request-owned observations into a compact recovery analysis."""
-    project_root = _request_project_root(request_id)
-    return _sparse(
-        call_gateway_method(
-            "replay_execution_observations",
-            project_root,
-            request_id,
-        )
-    )
-
-
-@mcp.tool()
-@tool_boundary
-def agent_task_recover(
-    request_id: str,
-    action: str,
-    expected_revision: int | None = None,
-) -> dict[str, Any]:
-    """Request reconcile, abandon, or clear-not-submitted; recovery never resends a prompt."""
-    project_root = _request_project_root(request_id)
-    return project_public_gateway_request(
-        call_gateway_method(
-            "recover_execution_request",
-            project_root,
-            request_id=request_id,
-            action=action,
-            expected_revision=expected_revision,
-        )
-    )
-
-
-@mcp.tool()
-@tool_boundary
 def agent_task_response(request_id: str) -> dict[str, Any]:
     """Return the exact verified terminal response."""
     project_root = _request_project_root(request_id)
@@ -268,29 +90,6 @@ def agent_task_response(request_id: str) -> dict[str, Any]:
     if isinstance(error_reason, str) and error_reason:
         result["error-reason"] = error_reason
     return result
-
-@mcp.tool()
-@tool_boundary
-def agent_task_failure_response(request_id: str) -> dict[str, Any]:
-    """Return provider text captured as diagnostic evidence on a failed request."""
-    project_root = _request_project_root(request_id)
-    text = call_gateway_method("get_execution_failure_response", project_root, request_id)
-    return {
-        "request-id": request_id,
-        "delivery": "inline",
-        "classification": "failure-diagnostic",
-        "text": text,
-        "bytes": len(text.encode("utf-8")),
-    }
-
-
-@mcp.tool()
-@tool_boundary
-def agent_task_complete_from_provider(request_id: str) -> dict[str, Any]:
-    """Capture the request-owned current provider response and mark it completed; never send a prompt."""
-    project_root = _request_project_root(request_id)
-    return project_public_gateway_request(call_gateway_method("complete_execution_from_provider", project_root, request_id))
-
 
 @mcp.tool()
 @tool_boundary
@@ -317,14 +116,6 @@ def agent_task_list_requests(
 
 @mcp.tool()
 @tool_boundary
-def agent_task_gateway_overview() -> dict[str, Any]:
-    """Return request counts, recent redacted failures, and provider activity."""
-    project_root = project_root_from_env()
-    return _sparse(call_gateway_method("gateway_overview", project_root))
-
-
-@mcp.tool()
-@tool_boundary
 def agent_task_session_list(state: str | None = "active") -> list[dict[str, Any]]:
     """List sessions, defaulting to active; pass a lifecycle state or ``all``."""
     project_root = project_root_from_env()
@@ -338,32 +129,6 @@ def agent_task_session_close(session_id: str) -> dict[str, Any]:
     """Close a session and its agent process; repeated close is idempotent."""
     project_root = project_root_from_env()
     return project_public_gateway_session(call_gateway_method("close_execution_session", project_root, session_id))
-
-
-@mcp.tool()
-@tool_boundary
-def agent_task_session_purge(session_id: str) -> dict[str, Any]:
-    """Permanently purge one terminal gateway session and its request data."""
-    project_root = project_root_from_env()
-    return _sparse(call_gateway_method("purge_execution_session", project_root, session_id))
-
-
-@mcp.tool()
-@tool_boundary
-def agent_task_gateway_purge(
-    dry_run: bool = True,
-    session_ids: list[str] | None = None,
-) -> dict[str, Any]:
-    """Inspect or purge terminal gateway sessions; dry-run defaults to true."""
-    project_root = project_root_from_env()
-    return _sparse(
-        call_gateway_method(
-            "purge_execution_sessions",
-            project_root,
-            dry_run=dry_run,
-            session_ids=session_ids,
-        )
-    )
 
 
 @mcp.tool()

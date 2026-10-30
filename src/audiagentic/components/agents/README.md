@@ -36,6 +36,9 @@ composition CRUD. Privileged Gateway administration is isolated on
 `ag-agents-admin`.
 Operational (`ag-agents-gateway`, propagate: `providers`) exposes `agent_task_submit`
 and status/cancel/session management to provider CLIs during job execution.
+Operator tools (diagnostics, evidence, recovery, purge, overview) are on
+`ag-agents-gateway-ops` (propagate: `none`); install it explicitly with
+`audiagentic mcp install ag-agents-gateway-ops harness ID`.
 
 ## Error codes
 

@@ -216,27 +216,16 @@ mcp-servers:
       - agent_task_list_definitions
       - agent_task_submit
       - agent_task_status
-      - agent_task_diagnostics
-      - agent_task_complete_from_provider
-      - agent_task_failure_response
-      - agent_task_gateway_purge
-      - agent_task_session_purge
-      - agent_task_observations
-      - agent_task_evidence
-      - agent_task_observation_replay
-      - agent_task_recover
       - agent_task_response
       - agent_task_cancel
       - agent_task_list_requests
-      - agent_task_gateway_overview
       - agent_task_session_list
       - agent_task_session_close
       - agent_task_session_control
       - agent_task_session_resume
     description: >
-      Agent Execution Gateway — read-only agent-definition discovery,
-      agent_id-primary submission (AS63) plus status/cancel,
-      observability (list/overview), and session management
+      Agent Execution Gateway: agent discovery, async submission, status,
+      cancel, request listing and session management.
     propagate: providers
     instructions: >
       Submit with agent_id (see agent_task_list_definitions); the runtime picks
@@ -247,7 +236,7 @@ mcp-servers:
       not a raw completion. Remote shared gateway: connect with
       "audiagentic gateway connect" first; execution uses the server's project
       and agents, and local-only options (provider_chat_url, workspace_name,
-      purge, operator tools) are unavailable. The worktree argument on every
+      purge) are unavailable. The worktree argument on every
       tool selects the git worktree (root path); it defaults to the server's.
     tool-descriptions:
       agent_task_list_definitions: >
@@ -260,30 +249,6 @@ mcp-servers:
       agent_task_status: >
         Compact lifecycle/activity status for a request-id. Failure evidence is
         agent_task_diagnostics; the final response is agent_task_response.
-      agent_task_diagnostics: >
-        Bounded failure classification, recovery disposition and redacted
-        evidence for one request. No prompts, responses or credentials.
-      agent_task_observations: >
-        Page of redacted request observations (DOM/activity, node stages) by
-        cursor. Milestones do not prove acceptance or completion.
-      agent_task_evidence: >
-        Compact request evidence; observation, history and recovery pages are
-        opt-in.
-      agent_task_observation_replay: >
-        Deterministic analysis of persisted observations and recovery intents.
-        Never acts on the provider.
-      agent_task_complete_from_provider: >
-        Capture the provider's response for a request and mark it complete,
-        without sending a prompt.
-      agent_task_failure_response: >
-        Provider output retained as bounded failure evidence for a request.
-      agent_task_gateway_purge: >
-        Guarded purge of terminal gateway sessions; dry run by default.
-      agent_task_session_purge: >
-        Purge one terminal session and its request-owned artifacts.
-      agent_task_recover: >
-        Request a diagnostic recovery intent: reconcile, abandon or
-        clear-not-submitted. Never resends a prompt.
       agent_task_response: >
         The exact verified terminal response for a request.
       agent_task_cancel: >
@@ -291,9 +256,6 @@ mcp-servers:
         (best-effort).
       agent_task_list_requests: >
         List persisted requests, newest first; filter by state, limit.
-      agent_task_gateway_overview: >
-        Request counts by state, 5 latest failures, provider capacity and
-        active work.
       agent_task_session_list: >
         List gateway sessions (active by default; state=all for every state).
         "live" means this process holds the agent.
@@ -318,6 +280,56 @@ mcp-servers:
           control_id: "Idempotency id"
           model_id: "Current model id"
           component_profile: "Component profile for the resumed run"
+  - name: ag-agents-gateway-ops
+    module: audiagentic.components.agents.mcp.gateway_ops_mcp
+    worktree-scoped: true
+    direct-tools:
+      - agent_task_diagnostics
+      - agent_task_observations
+      - agent_task_evidence
+      - agent_task_observation_replay
+      - agent_task_recover
+      - agent_task_failure_response
+      - agent_task_complete_from_provider
+      - agent_task_session_purge
+      - agent_task_gateway_purge
+      - agent_task_gateway_overview
+    description: >
+      Gateway operator tools: diagnostics, evidence, recovery and purge.
+    propagate: none
+    instructions: >
+      For operators investigating or repairing gateway requests; agents that
+      submit work use ag-agents-gateway. Purge tools are destructive: run
+      agent_task_gateway_purge with dry_run first. Recovery never resends a
+      prompt. Install explicitly with "audiagentic mcp install".
+    tool-descriptions:
+      agent_task_diagnostics: >
+        Bounded failure classification, recovery disposition and redacted
+        evidence for one request. No prompts, responses or credentials.
+      agent_task_observations: >
+        Page of redacted request observations (DOM/activity, node stages) by
+        cursor. Milestones do not prove acceptance or completion.
+      agent_task_evidence: >
+        Compact request evidence; observation, history and recovery pages are
+        opt-in.
+      agent_task_observation_replay: >
+        Deterministic analysis of persisted observations and recovery intents.
+        Never acts on the provider.
+      agent_task_recover: >
+        Request a diagnostic recovery intent: reconcile, abandon or
+        clear-not-submitted. Never resends a prompt.
+      agent_task_failure_response: >
+        Provider output retained as bounded failure evidence for a request.
+      agent_task_complete_from_provider: >
+        Capture the provider's response for a request and mark it complete,
+        without sending a prompt.
+      agent_task_session_purge: >
+        Purge one terminal session and its request-owned artifacts.
+      agent_task_gateway_purge: >
+        Guarded purge of terminal gateway sessions; dry run by default.
+      agent_task_gateway_overview: >
+        Request counts by state, 5 latest failures, provider capacity and
+        active work.
 
 # AS31 Stage-2: output relay policy
 # Defaults: disabled until surface is validated; 64KiB fragments, 512KB turns.
