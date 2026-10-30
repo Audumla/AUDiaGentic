@@ -99,3 +99,23 @@ def check_gateway_code_drift(context: Any) -> list[CheckResult]:
         "Restart the gateway service so it loads the code on disk (the agent_gateway_restart admin tool), or put "
         "the runtime back to the commit the service loaded; check that no request is running first",
     )]
+
+
+def check_gateway_port(context: Any) -> list[CheckResult]:
+    """A gateway port held by another home's service explains CON-MSVC-037; name the setting that fixes it."""
+    from audiagentic.components.agents.gateway.service.port_holder import (
+        check_gateway_port as inspect_port,
+    )
+
+    finding = inspect_port()
+    if finding.status == "ok":
+        return [CheckResult("agents.gateway-port", OK, finding.detail)]
+    if finding.status == "unknown":
+        return [CheckResult("agents.gateway-port", WARN, finding.detail,
+                            "Check what listens on that port, or set gateway.port to a free port in your user settings")]
+    other = finding.holder.home if finding.holder else None
+    fix = (f"Use that service by setting home: {other} in your user settings (audiagentic config paths shows "
+           "where), or give this home its own port with gateway.port") if other else (
+        "Stop the process holding the port if it is not a gateway you want, or set gateway.port to a free port "
+        "in your user settings")
+    return [CheckResult("agents.gateway-port", WARN, finding.detail, fix)]
