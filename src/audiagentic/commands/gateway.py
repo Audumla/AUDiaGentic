@@ -130,18 +130,30 @@ _KEYWORD_HELP = {
   audiagentic gateway serve config FILE
   audiagentic gateway status config FILE [output json]
   audiagentic gateway connect config FILE project PATH [dry-run|non-interactive]
+  audiagentic gateway restart [non-interactive] [output json]
   audiagentic gateway node serve config FILE
   audiagentic gateway node serve help
   audiagentic gateway node revoke config FILE node ID revision N
   audiagentic gateway node revoke status config FILE operation OP_ID output json
 
+restart replaces the machine's managed gateway service with one on the installed code: the running
+service drains and starts its own replacement (no process is signalled), and the command waits until
+the replacement answers. Do it after moving the runtime install. It asks first unless non-interactive.
 node revoke queues local operator intent; its status reads the local queue.
 serve runs an independent foreground service using a server configuration.
 status reads remote health only; it never starts or controls a local service.
 connect validates a connector and checks remote health before binding a project.
 Use COMMAND help for configuration and credential details.
-Retired lifecycle commands drain/resume/stop/recover are not public CLI routes.
+Retired lifecycle commands drain/resume/stop/recover are not public CLI routes; restart is the one lifecycle command.
 Options beginning with -- are not accepted; use the keywords shown above.""",
+    "restart": """Restart the managed gateway service (keyword syntax):
+  audiagentic gateway restart [non-interactive] [output json]
+
+The running service drains in-flight work through its normal restart recovery and starts its own
+replacement on the installed code; no process is signalled by pid. The command waits (bounded) until
+the replacement is serving and then reports the old and new owner epochs. Without non-interactive
+it asks for confirmation first, because every session using the shared gateway is affected.
+Agent sessions do not run this on their own: it needs an explicit operator request.""",
     "node": """Local node operator commands (keyword syntax):
   audiagentic gateway node serve config FILE
   audiagentic gateway node serve help
@@ -246,6 +258,44 @@ def _shared_client(config: Any) -> StandaloneGatewayClient:
     )
 
 
+def _dispatch_restart(tail: list[str]) -> int:
+    """``gateway restart [non-interactive] [output json]``: a thin adapter over the management API."""
+    from audiagentic.foundation.cli_io import print_error
+
+    rest = list(tail)
+    non_interactive = "non-interactive" in rest
+    if non_interactive:
+        rest.remove("non-interactive")
+    as_json = rest[-2:] == ["output", "json"]
+    if as_json:
+        rest = rest[:-2]
+    if rest or any(token.startswith("--") for token in tail):
+        print_error("Invalid gateway syntax. Run: audiagentic gateway help")
+        return 2
+    if not non_interactive:
+        answer = input("Restart the shared gateway service? In-flight work drains first and every session using "
+                       "it is briefly interrupted. [y/N] ").strip().lower()
+        if answer not in {"y", "yes"}:
+            print("Not restarted.")
+            return 1
+    from audiagentic.components.agents.gateway import management_api
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+    try:
+        result = management_api.gateway_restart(Path.cwd())
+    except AudiaGenticError as error:
+        print_error(f"{error.code}: {error.message}")
+        return 1
+    if as_json:
+        _json_out(result)
+        return 0
+    old = (result.get("restarting") or {}).get("owner-epoch")
+    new = (result.get("status") or {}).get("owner-epoch")
+    print(f"gateway service restarted: owner epoch {str(old)[:8]} -> {str(new)[:8]}, state "
+          f"{(result.get('status') or {}).get('state', 'unknown')}")
+    return 0
+
+
 def dispatch_keyword(tokens: list[str]) -> int:
     """Closed keyword route; parse and help before importing any runtime owner."""
     from audiagentic.foundation.cli_io import print_error
@@ -256,6 +306,8 @@ def dispatch_keyword(tokens: list[str]) -> int:
     command = tokens[0]
     if command == "node":
         return _dispatch_node_keyword(tokens[1:])
+    if command == "restart" and tokens[1:] != ["help"]:
+        return _dispatch_restart(tokens[1:])
     if command in _KEYWORD_HELP and tokens[1:] == ["help"]:
         print(_KEYWORD_HELP[command])
         return 0

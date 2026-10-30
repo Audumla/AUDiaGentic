@@ -2,9 +2,9 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 import subprocess
 import sys
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -140,3 +140,69 @@ def test_connect_handshake_failure_never_writes(owners, tmp_path, monkeypatch):
         gateway.dispatch_keyword(["connect", "config", "connector.yaml", "project", str(tmp_path), "non-interactive"])
     writer.assert_not_called()
     owners[2].close.assert_called_once()
+
+
+@pytest.fixture
+def restart(monkeypatch):
+    """Replace the real restart with a recorder; nothing in these tests can touch a service."""
+    from audiagentic.components.agents.gateway import management_api
+
+    calls = []
+
+    def fake(project_root):
+        calls.append(project_root)
+        return {"restarting": {"owner-epoch": "old-epoch-1234"}, "restarted": True,
+                "status": {"owner-epoch": "new-epoch-5678", "state": "running"}}
+
+    monkeypatch.setattr(management_api, "gateway_restart", fake)
+    return calls
+
+
+def test_restart_non_interactive_restarts_once_and_reports_both_epochs(restart, capsys):
+    assert gateway.dispatch_keyword(["restart", "non-interactive"]) == 0
+    assert restart == [Path.cwd()]
+    out = capsys.readouterr().out
+    assert "old-epoc -> new-epoc" in out and "running" in out
+
+
+def test_restart_asks_first_and_a_refusal_restarts_nothing(restart, monkeypatch, capsys):
+    monkeypatch.setattr("builtins.input", lambda _prompt: "n")
+    assert gateway.dispatch_keyword(["restart"]) == 1
+    assert restart == [] and "Not restarted" in capsys.readouterr().out
+    monkeypatch.setattr("builtins.input", lambda _prompt: "yes")
+    assert gateway.dispatch_keyword(["restart"]) == 0 and len(restart) == 1
+
+
+def test_restart_json_output(restart, capsys):
+    assert gateway.dispatch_keyword(["restart", "output", "json", "non-interactive"]) == 0
+    assert '"restarted": true' in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("tail", [["restart", "--force"], ["restart", "now"], ["restart", "output", "text"],
+                                  ["restart", "non-interactive", "extra"]])
+def test_restart_rejects_other_grammar_without_restarting(tail, restart, capsys):
+    assert gateway.dispatch_keyword(tail) == 2 and restart == []
+    assert "gateway help" in capsys.readouterr().err
+
+
+def test_restart_reports_a_registered_error_and_fails(monkeypatch, capsys):
+    from audiagentic.components.agents.gateway import management_api
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+    def fail(_root):
+        raise AudiaGenticError(code="CON-MSVC-029", kind="conflict", message="replacement did not become ready")
+
+    monkeypatch.setattr(management_api, "gateway_restart", fail)
+    assert gateway.dispatch_keyword(["restart", "non-interactive"]) == 1
+    assert "CON-MSVC-029" in capsys.readouterr().err
+
+
+def test_the_other_lifecycle_commands_stay_retired(capsys):
+    for retired in (["stop"], ["drain"], ["resume"], ["recover"]):
+        assert gateway.dispatch_keyword(retired) == 2
+
+
+def test_restart_help_is_startup_free_and_mentions_the_operator_rule(capsys):
+    assert gateway.dispatch_keyword(["restart", "help"]) == 0
+    out = capsys.readouterr().out
+    assert "no process is signalled by pid" in out and "explicit operator request" in out

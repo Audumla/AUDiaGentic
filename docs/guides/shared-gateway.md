@@ -235,8 +235,9 @@ confusing ways (for example journal lock timeouts on every request). Moving the 
 restarting the service are one operation:
 
 1. Move the runtime install (check out the new commit, or reinstall).
-2. Restart the shared gateway service, as the operator: the `agent_gateway_restart` admin tool
-   (`ag-agents-admin`) or `management_api.gateway_restart`. The running service drains,
+2. Restart the shared gateway service, as the operator: `audiagentic gateway restart` (it asks
+   first; `non-interactive` skips the question), or the `agent_gateway_restart` admin tool
+   (`ag-agents-admin`). Both call `management_api.gateway_restart`. The running service drains,
    closes its port, and starts its own replacement on the installed code; nothing signals a
    process by pid. Work in flight is drained or recovered by the normal restart recovery.
 3. Restart harness sessions' MCP servers that were started before the move; they fail lazily
