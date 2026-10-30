@@ -1,8 +1,10 @@
-"""Read-only git queries for repository and worktree management (DW01).
+"""Git queries and the few named mutators worktree management needs (DW01).
 
-One runner for the git facts worktree tooling needs. Every query is read-only:
-nothing here creates, removes, fetches, pushes or rewrites. Failures are typed
-errors, and a fact git cannot report is ``None``, never a guess.
+One runner for the git facts worktree tooling needs. Queries are read-only and
+a fact git cannot report is ``None``, never a guess. The only mutators are the
+small named functions at the end (fetch, add/remove worktree, delete a branch);
+none pushes or rewrites history, and each is used only by the worktree
+lifecycle, which owns its rollback. Failures are typed errors.
 """
 from __future__ import annotations
 
@@ -109,6 +111,14 @@ def changes(path: Path) -> tuple[int, int]:
     return tracked, untracked
 
 
+def resolve_commit(repo: Path, ref: str = "HEAD") -> str | None:
+    """The commit ``ref`` points to, or ``None`` if git cannot resolve it."""
+    try:
+        return run_git(repo, "rev-parse", "--verify", "--quiet", ref).strip() or None
+    except Exception:  # noqa: BLE001 - unknown ref
+        return None
+
+
 def ahead_behind(path: Path, base: str) -> tuple[int, int] | None:
     """``(commits ahead of base, commits behind base)`` for HEAD, or ``None`` if base is unknown."""
     try:
@@ -116,3 +126,44 @@ def ahead_behind(path: Path, base: str) -> tuple[int, int] | None:
     except Exception:  # noqa: BLE001 - unknown base ref
         return None
     return int(ahead), int(behind)
+
+
+def valid_branch_name(repo: Path, name: str) -> bool:
+    """Whether git accepts ``name`` as a branch name (refs/heads rules)."""
+    try:
+        run_git(repo, "check-ref-format", "--branch", name)
+    except Exception:  # noqa: BLE001 - any refusal means invalid
+        return False
+    return True
+
+
+def branch_exists(repo: Path, name: str) -> bool:
+    try:
+        run_git(repo, "rev-parse", "--verify", "--quiet", f"refs/heads/{name}")
+    except Exception:  # noqa: BLE001 - absent ref
+        return False
+    return True
+
+
+# --- mutators: used only by the worktree lifecycle, which owns the rollback ---
+
+
+def fetch(repo: Path, remote: str, branch: str, *, timeout: float = 120.0) -> None:
+    """Update ``<remote>/<branch>`` from the remote. Raises when it cannot."""
+    run_git(repo, "fetch", "--quiet", remote, f"+refs/heads/{branch}:refs/remotes/{remote}/{branch}",
+            timeout=timeout)
+
+
+def add_worktree(repo: Path, path: Path, branch: str, base: str) -> None:
+    """Create ``branch`` at ``base`` and check it out at ``path`` in one git operation (no tracking)."""
+    run_git(repo, "worktree", "add", "--quiet", "--no-track", "-b", branch, str(path), base)
+
+
+def remove_clean_worktree(repo: Path, path: Path) -> None:
+    """Remove a worktree git considers clean. Never forces: a dirty tree is an error."""
+    run_git(repo, "worktree", "remove", str(path))
+
+
+def delete_unmerged_branch(repo: Path, branch: str) -> None:
+    """Delete a local branch the caller just created and knows carries no commits of its own."""
+    run_git(repo, "branch", "-D", branch)
