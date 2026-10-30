@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.44.1](https://github.com/Audumla/AUDiaGentic/compare/v0.44.0...v0.44.1) (2026-10-30)
+
+
+### Documentation
+
+* **worktree:** operator guide for start, list, prune, finish and abandon (DW01) ([#241](https://github.com/Audumla/AUDiaGentic/issues/241)) ([720c599](https://github.com/Audumla/AUDiaGentic/commit/720c599355b742de01cc21ade516ff689f176ac1))
+
 ## [0.44.0](https://github.com/Audumla/AUDiaGentic/compare/v0.43.0...v0.44.0) (2026-10-30)
 
 
