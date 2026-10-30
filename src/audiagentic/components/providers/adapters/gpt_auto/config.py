@@ -518,10 +518,9 @@ class GptAutoConfig:
 
         GP09/GP20: project config files previously had to restate the full
         settings schema, including the workflow dom-signals/evidence-policies
-        block that is genuinely shared across every project on this machine
-        (confirmed near-identical across gpt-auto.yaml/gpt-auto-t1.yaml/
-        gpt-auto-t2.yaml by diff, 2026-08-17) -- duplicating it risked exactly
-        the schema-drift incident GP09 was raised about. A project overlay may
+        block that is genuinely shared across every project on this machine --
+        duplicating it risked exactly the schema-drift incident GP09 was
+        raised about. A project overlay may
         specify project-url when the profile is intentionally pinned to a
         known ChatGPT project; when it is absent, the admitted project name
         drives discovery. Everything else is inherited from gpt-auto-defaults.yaml.
