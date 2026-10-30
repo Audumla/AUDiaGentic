@@ -4,6 +4,7 @@ root: |
   audiagentic mcp install MCP_ID harness ID[,ID...]
   audiagentic mcp MCP_ID help
   audiagentic harness ID help
+  audiagentic worktree list [project PATH] [output json]
   Use mcp help, harness help or mcp install help for details.
   Existing --project, --component-profile, --prompt and --stream options remain available.
 mcp: |

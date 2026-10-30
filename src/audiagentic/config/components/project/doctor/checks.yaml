@@ -6,3 +6,5 @@ checks:
     ref: audiagentic.components.project.doctor_checks:check_mcp_onboarding
   - id: mcp.user
     ref: audiagentic.components.project.doctor_checks:check_user_mcp
+  - id: worktrees.primary
+    ref: audiagentic.components.project.doctor_checks:check_primary_checkout

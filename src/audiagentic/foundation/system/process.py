@@ -125,6 +125,43 @@ def pid_alive(pid: int) -> bool:
     return True
 
 
+def pids_referencing_path(path: Path) -> list[int] | None:
+    """PIDs whose working directory or open files lie under ``path``.
+
+    Linux only, through ``/proc``. ``None`` means this platform cannot answer
+    (or ``/proc`` is unreadable), which callers must treat as "unknown", never
+    as "nothing uses it". Processes owned by other users that cannot be
+    inspected are skipped, so a list is a lower bound.
+    """
+    proc = Path("/proc")
+    if os.name == "nt" or not proc.is_dir():
+        return None
+    root = str(path.resolve())
+    prefix = root.rstrip(os.sep) + os.sep
+    me = os.getpid()
+    found: list[int] = []
+    for entry in proc.iterdir():
+        if not entry.name.isdigit() or int(entry.name) == me:
+            continue
+        references = [entry / "cwd", *_open_file_links(entry)]
+        for link in references:
+            try:
+                target = os.readlink(link)
+            except OSError:
+                continue
+            if target == root or target.startswith(prefix):
+                found.append(int(entry.name))
+                break
+    return sorted(found)
+
+
+def _open_file_links(process: Path) -> list[Path]:
+    try:
+        return [process / "fd" / name for name in os.listdir(process / "fd")]
+    except OSError:
+        return []
+
+
 def _windows_pid_alive(pid: int) -> bool:
     """Query process exit state instead of treating a retained handle as live."""
     import ctypes

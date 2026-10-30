@@ -62,3 +62,25 @@ def check_user_mcp(context: Any) -> list[CheckResult]:
             results.append(CheckResult(check, WARN, f"user-scope MCP: {', '.join(problems)}",
                                        f"audiagentic setup harness {state['provider_id']}"))
     return results
+
+
+def check_primary_checkout(context: Any) -> list[CheckResult]:
+    """The main worktree is a clean base: on the remote default branch, not behind or diverged."""
+    from audiagentic.foundation.paths.project import discover_checkout_root
+
+    repo = discover_checkout_root(context.project)
+    if repo is None:
+        return [CheckResult("worktrees.primary", OK, "no git repository here")]
+    from .worktrees.service import primary_checkout_problems
+
+    try:
+        problems = primary_checkout_problems(repo)
+    except Exception as error:  # noqa: BLE001 - doctor reports, it does not raise
+        return [CheckResult("worktrees.primary", WARN, f"cannot inspect the main worktree: {type(error).__name__}")]
+    if not problems:
+        return [CheckResult("worktrees.primary", OK, "the main worktree is a clean base")]
+    return [CheckResult(
+        "worktrees.primary", WARN, "; ".join(problems),
+        "Archive any local-only history on a local archive/<purpose>-<date> branch, then fast-forward or "
+        "reset the main worktree to the remote default branch; do not develop in it",
+    )]

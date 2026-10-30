@@ -7,3 +7,6 @@ CON-PROJCOMP-001: "Core components cannot be uninstalled. Only optional componen
 VAL-MCPUSR-001: "The named harness has no user-scope MCP registration. Use one listed with user_scoped true by 'audiagentic harness list', or install per project with 'audiagentic mcp install'."
 VAL-MCPONB-001: "Check the canonical MCP and harness IDs using mcp list and harness list. Resolve the reported configuration or ownership conflict before retrying; use dry-run to inspect changes."
 RES-MCPONB-001: "No matching installation operation exists in this project. Inspect the latest unresolved operation or submit the intended installation explicitly."
+VAL-WTREC-001: "The worktree ownership records are unreadable or have an unknown schema. They are never treated as empty: inspect the file named in the details under the user state directory, restore or remove it, then retry."
+VAL-WTREC-002: "A worktree id must look like wt_ followed by 12 lowercase hex characters. Use the id that 'worktree start' printed."
+VAL-WTREC-003: "Another ownership record already uses this worktree path or id. List the worktrees, finish or forget the stale record, and retry."

@@ -210,3 +210,6 @@ CFG-MCPWT-002: "The worktree must be an absolute path. Pass the absolute path of
 CFG-MCPWT-003: "The worktree path does not exist or is not a directory. Check the path; create the worktree first if it is new."
 CFG-MCPWT-004: "The path is not inside a git worktree. Plans, ledger events and gateway state are git-managed; pass the root of a git worktree."
 CFG-MCPWT-005: "The path is inside a git worktree but is not its root. Pass the worktree root shown in the error details."
+EXT-GIT-001: "git is not installed or could not be started. Install git and make sure it is on PATH."
+EXT-GIT-002: "A read-only git query failed. Read the stderr in the error details; typical causes are a path that is not a git repository or git refusing a repository owned by another user (safe.directory)."
+EXT-GIT-003: "A git query timed out. Check the repository for a stuck process or a very slow filesystem, then retry."
