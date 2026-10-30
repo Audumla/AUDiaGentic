@@ -45,12 +45,19 @@ def test_schemas_carry_no_titles_or_null_defaults(module):
 
 
 @pytest.mark.parametrize("module", SERVERS)
-def test_worktree_argument_is_a_plain_described_string(module):
+def test_worktree_argument_is_a_bare_string(module):
     server = importlib.import_module(module).mcp
     for tool in asyncio.run(server.list_tools()):
         prop = tool.inputSchema["properties"]["worktree"]
-        assert prop["type"] == "string" and len(json.dumps(prop)) < 120, tool.name
+        assert prop == {"type": "string"}, tool.name
         assert "worktree" not in tool.inputSchema.get("required", [])
+
+
+@pytest.mark.parametrize("module", SERVERS)
+def test_optional_arguments_are_not_published_as_nullable_unions(module):
+    server = importlib.import_module(module).mcp
+    for tool in asyncio.run(server.list_tools()):
+        assert {"type": "null"} not in [b for _, v in _walk(tool.inputSchema) if isinstance(v, list) for b in v], tool.name
 
 
 @pytest.mark.parametrize("module", SERVERS)

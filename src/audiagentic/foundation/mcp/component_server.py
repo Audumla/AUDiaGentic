@@ -352,12 +352,10 @@ class _AutoDescFastMCP(FastMCP):  # type: ignore[misc,valid-type]
         try:
             _apply_parameter_descriptions(tool, tool_parameter_spec(self._get_decl(), name))
             if self._worktree_scoped():
-                from audiagentic.foundation.mcp.worktree import WORKTREE_DESCRIPTION, WORKTREE_PARAMETER
+                from audiagentic.foundation.mcp.worktree import WORKTREE_PARAMETER
 
-                tool.parameters["properties"][WORKTREE_PARAMETER] = {
-                    "type": "string",
-                    "description": WORKTREE_DESCRIPTION,
-                }
+                # Explained once in the server instructions, not on every tool.
+                tool.parameters["properties"][WORKTREE_PARAMETER] = {"type": "string"}
             if selected:
                 _align_structured_output_schema(tool)
                 if self._worktree_scoped():
@@ -447,6 +445,17 @@ _NAME_KEYED = frozenset({"properties", "patternProperties", "$defs", "definition
 _LITERAL = frozenset({"enum", "const", "default", "examples", "required"})
 
 
+def _without_null_branch(node: dict[str, Any]) -> dict[str, Any]:
+    """Publish an optional ``X | None`` as ``X``: omitting the argument is the null case."""
+    branches = node.get("anyOf")
+    if not isinstance(branches, list) or len(branches) != 2:
+        return node
+    kept = [branch for branch in branches if branch != {"type": "null"}]
+    if len(kept) != 1 or not isinstance(kept[0], dict):
+        return node
+    return {**{key: value for key, value in node.items() if key != "anyOf"}, **kept[0]}
+
+
 def _slim_schema(node: Any, *, names: bool = False) -> Any:
     """Drop generated ``title`` keys and ``default: null`` from schema objects.
 
@@ -459,6 +468,7 @@ def _slim_schema(node: Any, *, names: bool = False) -> Any:
         return node
     if names:
         return {key: _slim_schema(value) for key, value in node.items()}
+    node = _without_null_branch(node)
     slim: dict[str, Any] = {}
     for key, value in node.items():
         if key == "title" and isinstance(value, str):

@@ -229,15 +229,17 @@ mcp-servers:
     propagate: providers
     instructions: >
       Submit with agent_id (see agent_task_list_definitions); the runtime picks
-      the profile. Submit is async: poll agent_task_status until terminal, then
-      read agent_task_response. Session ids come only from earlier responses,
+      the profile. Submit is async: poll agent_task_status until terminal
+      (completed, failed, cancelled, rejected), then read agent_task_response.
+      Continue a session by submitting with its agent_id and session_id; if it
+      is terminal, agent_task_session_resume first (any unique control_id). Session ids come only from earlier responses,
       never invented. Cancel is best-effort: queued requests are removed,
       running ones only record intent. Output is the provider's session output,
       not a raw completion. Remote shared gateway: connect with
       "audiagentic gateway connect" first; execution uses the server's project
       and agents, and local-only options (provider_chat_url, workspace_name,
       purge) are unavailable. The worktree argument on every
-      tool selects the git worktree (root path); it defaults to the server's.
+      tool selects the git worktree (root path); default: the server's.
     tool-descriptions:
       agent_task_list_definitions: >
         List agents (agent_id, name, description, skills); the valid agent_id
@@ -247,8 +249,8 @@ mcp-servers:
         session-id. Set session_keep_alive to open a session; pass session_id to
         continue one. Poll agent_task_status with the request-id.
       agent_task_status: >
-        Compact lifecycle/activity status for a request-id. Failure evidence is
-        agent_task_diagnostics; the final response is agent_task_response.
+        Compact lifecycle/activity status for a request-id. Failure detail is in
+        ag-agents-gateway-ops (agent_task_diagnostics); the response is agent_task_response.
       agent_task_response: >
         The exact verified terminal response for a request.
       agent_task_cancel: >
@@ -301,7 +303,8 @@ mcp-servers:
       For operators investigating or repairing gateway requests; agents that
       submit work use ag-agents-gateway. Purge tools are destructive: run
       agent_task_gateway_purge with dry_run first. Recovery never resends a
-      prompt. Install explicitly with "audiagentic mcp install".
+      prompt. The worktree argument selects the git worktree (root path).
+      Install explicitly with "audiagentic mcp install".
     tool-descriptions:
       agent_task_diagnostics: >
         Bounded failure classification, recovery disposition and redacted

@@ -14,7 +14,7 @@ mcp = mcp_server(__name__)
 @mcp.tool()
 @tool_boundary
 def record_change_event(event: dict | list[dict]) -> dict:
-    """Record one event or a batch; each event needs class, files, technical and user summaries, and status=unreleased. Batches sync once; plan-item-ids is optional."""
+    """Record one change event or a batch."""
     project_root = project_root_from_env()
     if isinstance(event, list):
         return ledger_api.record_changes(project_root, event, sync=True)

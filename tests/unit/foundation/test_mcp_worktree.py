@@ -113,7 +113,7 @@ def test_no_worktree_and_no_git_project_is_a_clear_error(tmp_path, monkeypatch):
 def test_schema_exposes_the_shared_parameter_only_on_scoped_servers():
     scoped = {tool.name: tool for tool in asyncio.run(_server().list_tools())}
     properties = scoped["where"].inputSchema["properties"]
-    assert "worktree" in properties and "absolute path" in properties["worktree"]["description"].lower()
+    assert properties["worktree"] == {"type": "string"}
     assert "worktree" not in scoped["where"].inputSchema.get("required", [])
     unscoped = {tool.name: tool for tool in asyncio.run(_server(scoped=False).list_tools())}
     assert "worktree" not in unscoped["where"].inputSchema["properties"]
