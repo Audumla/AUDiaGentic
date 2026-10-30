@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.44.0](https://github.com/Audumla/AUDiaGentic/compare/v0.43.0...v0.44.0) (2026-10-30)
+
+
+### Features
+
+* **worktree:** finish can abandon unmerged work after a verified self-contained bundle (DW01 slice 3b-3) ([#239](https://github.com/Audumla/AUDiaGentic/issues/239)) ([5befa94](https://github.com/Audumla/AUDiaGentic/commit/5befa944ca9c47e4ec3b6a5928f067ad616f35c0))
+
 ## [0.43.0](https://github.com/Audumla/AUDiaGentic/compare/v0.42.0...v0.43.0) (2026-10-30)
 
 
