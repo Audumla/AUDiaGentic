@@ -73,6 +73,11 @@ def merge_patch(
     return result
 
 
+def merged(target: Any, patch: Any) -> Any:
+    """``target`` with ``patch`` applied (RFC 7396), when provenance is not needed."""
+    return merge_patch(target, patch, {}, lambda _pointer: Origin("patch"))
+
+
 def _tombstone(origin: Origin) -> Origin:
     return Origin(origin.scope, origin.file, origin.line, origin.column, deleted=True)
 

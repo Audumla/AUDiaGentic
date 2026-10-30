@@ -70,6 +70,8 @@ Phase 2: deferred until needed (see 'Phasing' in docs/design/configuration-model
 
 2026-10-30: provider instances in PR (branch cfg06-instances): `providers.<id>.instances.<name>` overlays one provider's options; agents select with `instance`; `ProviderTarget` key `provider@instance` separates sessions/queue/evidence while descriptor, adapter, enabled policy and availability resolve to the provider. gpt_auto_t1/t2 and descriptor `extends:` (#202) deleted. GPT review (REVISE) findings applied except folding the per-provider option files into settings, deferred to the provider-settings migration. Remaining: that migration, and retiring the persisted provider feature-state shards (settings per-provider options, launch.py shard check). Local live-test config must move to providers.gpt-auto.instances.
 
+2026-10-30: generic settings writer (foundation/config/writer.py, yaml_edit.py) and `audiagentic config set` landed in the settings-writer PR. GPT review (APPROVE PR A with safety fixes) applied: lock held outside the repo, hash re-check before replace (refuse, never overwrite a human edit), candidate parsed by the strict loader and validated by the section schemas, exact-merge-result check, scope rules enforced in the writer (`x-audiagentic-scopes` on gateway/home), symlink refusal, bounded 0600 backups, mode preservation, cache invalidation via the existing file stamp. PR B (provider enable/disable via the writer, deleting the providers shard) stays deferred until the shard inventory and migration contract exist: enabled flag AND shard options must be classified first; no shard fallback without an approved obligation.
+
 ## Change Log
 
 - 2026-10-28T21:05:44.274107+00:00 (created-by): Created by claude

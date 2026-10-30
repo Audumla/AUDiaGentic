@@ -261,7 +261,7 @@ def _main(argv: list[str] | None = None) -> int:
 
         return run_agent_command(args)
 
-    # Settings commands are read-only and must not compose the application graph.
+    # Settings commands (show, validate, paths, set) must not compose the application graph.
     if args.command == "config":
         from audiagentic.commands.settings import SETTINGS_COMMANDS, run_settings_command
 

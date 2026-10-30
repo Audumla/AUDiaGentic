@@ -1,5 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "x-audiagentic-scopes": ["user", "explicit"],
   "title": "settings: gateway",
   "description": "Agent gateway settings, owned by the agents component.",
   "type": "object",

@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from audiagentic.foundation.config.merge import Origin, merge_patch
+from audiagentic.foundation.config.merge import merged
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.contracts.schema_registry import validate_with_schema
 from audiagentic.foundation.features.base import ImplementationState
@@ -142,14 +142,9 @@ def provider_instance_config(project_root: Path, target: ProviderTarget, config:
             provider=target.provider_id, instance=target.instance, configured=sorted(instances),
         )
     overlay = instances[target.instance]
-    origin = Origin("settings", f"providers.{target.provider_id}.instances.{target.instance}")
-
-    def patch(base: Any) -> Any:
-        return merge_patch(base, overlay, {}, lambda _pointer: origin)
-
     if isinstance(config.get("settings"), dict):
-        return {**config, "settings": patch(config["settings"])}
-    return patch(config)
+        return {**config, "settings": merged(config["settings"], overlay)}
+    return merged(config, overlay)
 
 
 def is_provider_enabled(project_root: Path, provider_id: str) -> bool:
