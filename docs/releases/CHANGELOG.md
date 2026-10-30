@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.36.0](https://github.com/Audumla/AUDiaGentic/compare/v0.35.0...v0.36.0) (2026-10-30)
+
+
+### Features
+
+* **project:** `audiagentic worktree start` (DW01 slice 2) ([#223](https://github.com/Audumla/AUDiaGentic/issues/223)) ([db73192](https://github.com/Audumla/AUDiaGentic/commit/db73192cd2ad8aa50b1c9de6ef770311df29afa9))
+
 ## [0.35.0](https://github.com/Audumla/AUDiaGentic/compare/v0.34.2...v0.35.0) (2026-10-30)
 
 
