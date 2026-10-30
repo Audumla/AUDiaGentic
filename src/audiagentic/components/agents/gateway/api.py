@@ -2817,6 +2817,22 @@ def resume_execution_session(
     return _public_session_projection(record)
 
 
+def worktree_active_work(project_root: Path) -> dict[str, list[str]]:
+    """Gateway work in this project directory that is not finished: request and session ids.
+
+    The authoritative answer for "may this worktree be removed", read from the gateway's own
+    stores with its own terminal-state vocabulary (the caller never reads those files). Both
+    lists empty means nothing is active; an unreadable store raises rather than reporting empty.
+    """
+    from audiagentic.components.agents.gateway.session import sessions_store
+
+    requests = [record["request-id"] for record in store.list_records(project_root, include_output=False)
+                if record.get("state") not in store.TERMINAL_STATES]
+    sessions = [record["session-id"] for record in sessions_store.list_session_records(project_root)
+                if record.get("state") not in sessions_store.SESSION_TERMINAL_STATES]
+    return {"requests": sorted(requests), "sessions": sorted(sessions)}
+
+
 def gateway_overview(project_root: Path) -> dict[str, Any]:
     """Operator-facing summary: persisted request counts by state (works even
     after a process restart) plus in-process queue depths for active profiles.

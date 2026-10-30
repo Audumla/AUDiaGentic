@@ -213,3 +213,4 @@ CFG-MCPWT-005: "The path is inside a git worktree but is not its root. Pass the 
 EXT-GIT-001: "git is not installed or could not be started. Install git and make sure it is on PATH."
 EXT-GIT-002: "A read-only git query failed. Read the stderr in the error details; typical causes are a path that is not a git repository or git refusing a repository owned by another user (safe.directory)."
 EXT-GIT-003: "A git query timed out. Check the repository for a stuck process or a very slow filesystem, then retry."
+CFG-MCPWT-006: "The worktree is being removed (a finish is draining it) and accepts no new work. Use another worktree, or wait for the removal to finish or be cancelled."
