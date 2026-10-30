@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.35.0](https://github.com/Audumla/AUDiaGentic/compare/v0.34.2...v0.35.0) (2026-10-30)
+
+
+### Features
+
+* **project:** worktree ownership records and `audiagentic worktree list` (DW01 slice 1) ([#221](https://github.com/Audumla/AUDiaGentic/issues/221)) ([5fa7d3c](https://github.com/Audumla/AUDiaGentic/commit/5fa7d3c12c3c6b78c3fe89fa2394b4c834559511))
+
 ## [0.34.2](https://github.com/Audumla/AUDiaGentic/compare/v0.34.1...v0.34.2) (2026-10-30)
 
 
