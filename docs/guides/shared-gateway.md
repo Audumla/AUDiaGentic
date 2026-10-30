@@ -226,6 +226,29 @@ binding is rechecked on each submit, and the node credential is sent only with
 `submit_execution_request`. Omit it for ordinary submissions, which are
 unchanged.
 
+## Updating the runtime under a running gateway
+
+The gateway service imports its code once, when it starts. If the installation it runs from is
+then moved to other commits (an editable install pointing at a worktree, a new wheel), the
+service keeps running the old code while new processes run the new code, and requests fail in
+confusing ways (for example journal lock timeouts on every request). Moving the runtime and
+restarting the service are one operation:
+
+1. Move the runtime install (check out the new commit, or reinstall).
+2. Restart the shared gateway service, as the operator: the `agent_gateway_restart` admin tool
+   (`ag-agents-admin`) or `management_api.gateway_restart`. The running service drains,
+   closes its port, and starts its own replacement on the installed code; nothing signals a
+   process by pid. Work in flight is drained or recovered by the normal restart recovery.
+3. Restart harness sessions' MCP servers that were started before the move; they fail lazily
+   with an import error until they are.
+
+The replacement waits (up to 30 s) for the retiring service to release the port rather than
+failing to bind, so a restart no longer reports "did not become ready" when it in fact worked.
+`audiagentic doctor` reports the mixed state: the check `agents.gateway-code` warns when the
+running service started on an older commit (or older files) than the installation it runs
+from, and `agents.gateway-port` explains a port held by another home's service. Agent sessions
+do not restart a shared service on their own: it needs an explicit operator request.
+
 ## Keyword CLI
 
 ```text

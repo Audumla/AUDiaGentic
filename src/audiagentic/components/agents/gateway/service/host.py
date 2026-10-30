@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import errno
 import logging
 import os
 import secrets
 import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
 from audiagentic.components.agents.gateway.application import (
     GatewayApplication,
@@ -30,6 +32,26 @@ from audiagentic.foundation.system.managed_service_owner import ManagedServiceOw
 from audiagentic.foundation.time import now_iso_z
 
 logger = logging.getLogger(__name__)
+
+_T = TypeVar("_T")
+_BIND_RETRY_SECONDS = 0.2
+
+
+def bind_with_wait(make: Callable[[], _T], wait_seconds: float, *, sleep: Callable[[float], None] = time.sleep,
+                   clock: Callable[[], float] = time.monotonic) -> _T:
+    """Create (and so bind) the server, retrying only while the port is still held, for at most ``wait_seconds``.
+
+    A restart's replacement starts while the retiring owner is still letting go of the port. Any other bind
+    failure, and a held port once the wait is over, is raised unchanged; with a wait of 0 it fails at once.
+    """
+    deadline = clock() + max(0.0, wait_seconds)
+    while True:
+        try:
+            return make()
+        except OSError as error:
+            if error.errno != errno.EADDRINUSE or clock() >= deadline:
+                raise
+            sleep(_BIND_RETRY_SECONDS)
 
 
 class GatewayServiceHost:
@@ -88,6 +110,7 @@ class GatewayServiceHost:
         application: GatewayApplication | None = None,
         service_root: Path | None = None,
         shared_config: Any = None,
+        bind_wait: float = 0.0,
     ) -> GatewayServiceHost:
         if shared_config is not None:
             host, port, service_root = shared_config.host, shared_config.port, shared_config.service_root
@@ -135,13 +158,16 @@ class GatewayServiceHost:
                 store,
                 dashboard_recent_seconds=configured_recent_seconds,
             )
-            server = GatewayHTTPServer(
-                (host, port),
-                service_application,
-                token,
-                dashboard_path=os.environ.get("AUDIAGENTIC_GATEWAY_DASHBOARD_PATH", "/dashboard"),
-                dashboard_recent_seconds=configured_recent_seconds,
-                shared_config=shared_config,
+            server = bind_with_wait(
+                lambda: GatewayHTTPServer(
+                    (host, port),
+                    service_application,
+                    token,
+                    dashboard_path=os.environ.get("AUDIAGENTIC_GATEWAY_DASHBOARD_PATH", "/dashboard"),
+                    dashboard_recent_seconds=configured_recent_seconds,
+                    shared_config=shared_config,
+                ),
+                bind_wait,
             )
             owner = ManagedServiceOwner(store)
             address = f"{server.server_address[0]}:{server.server_address[1]}"
