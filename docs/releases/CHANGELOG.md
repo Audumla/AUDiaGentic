@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.42.0](https://github.com/Audumla/AUDiaGentic/compare/v0.41.0...v0.42.0) (2026-10-30)
+
+
+### Features
+
+* **worktree:** read-only eligibility verdict and worktree prune (DW01 slice 3b-1) ([#235](https://github.com/Audumla/AUDiaGentic/issues/235)) ([ac0cd84](https://github.com/Audumla/AUDiaGentic/commit/ac0cd848bce52a5b76bd579ed18c8859d1b6c6bc))
+
 ## [0.41.0](https://github.com/Audumla/AUDiaGentic/compare/v0.40.0...v0.41.0) (2026-10-30)
 
 
