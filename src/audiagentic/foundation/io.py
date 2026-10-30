@@ -112,8 +112,11 @@ def atomic_write_text(path: Path, content: str) -> None:
             os.unlink(tmp)
 
 
-def atomic_write_bytes(path: Path, content: bytes) -> None:
+def atomic_write_bytes(path: Path, content: bytes, *, mode: int | None = None) -> None:
     """Atomically write exact bytes via a temp file + fsync + rename.
+
+    ``mode`` sets the file's permission bits before it replaces the target
+    (the temp file is private, so without it a replaced file would become 0600).
 
     This is deliberately separate from :func:`atomic_write_text`: text-mode
     files on Windows perform newline translation, which changes the bytes that
@@ -125,6 +128,8 @@ def atomic_write_bytes(path: Path, content: bytes) -> None:
         with os.fdopen(fd, "wb") as fh:
             fh.write(content)
             fh.flush()
+            if mode is not None and os.name != "nt":
+                os.fchmod(fh.fileno(), mode)
             os.fsync(fh.fileno())
         for attempt in range(_REPLACE_RETRY_ATTEMPTS):
             try:
