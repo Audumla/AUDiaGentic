@@ -40,3 +40,36 @@ def test_release_and_ledger_pr_statuses_require_real_exact_head_scans():
     script = step['run']
     assert script.index('python tools/privacy_guard.py --base') < script.index('gh pr merge')
     assert 'context=privacy' in script
+
+
+# The repository ruleset on the default branch requires these status contexts. Bot-created PRs do not
+# trigger CI, so release automation must report each one itself, on the exact commit it validated.
+REQUIRED_CONTEXTS = ("privacy", "tests")
+LEDGER_ARTIFACTS = (
+    "docs/releases/LEDGER.ndjson", "docs/releases/CURRENT_RELEASE_LEDGER.ndjson", "docs/releases/RELEASE_NOTES.md",
+    "docs/releases/VERSION_HISTORY.md", "docs/releases/CURRENT_RELEASE.md",
+)
+
+
+def test_release_pr_reports_every_required_context_on_the_validated_head_before_merging():
+    workflow = yaml.safe_load((ROOT / '.github/workflows/release.yml').read_text())
+    merge = workflow['jobs']['merge-release-pr']
+    assert {'release-pr-tests', 'release-pr-privacy'} <= set(merge['needs'])  # only runs after both gates passed
+    script = merge['steps'][0]['with']['script']
+    head_check = script.index('pr.head.sha !== sha')
+    for context in REQUIRED_CONTEXTS:
+        status = script.index(f"context: '{context}'")
+        assert head_check < status < script.index('pulls.merge'), context
+
+
+def test_ledger_pr_reports_every_required_context_only_after_proving_it_is_generated_artifacts_only():
+    workflow = yaml.safe_load((ROOT / '.github/workflows/release.yml').read_text())
+    step = next(s for s in workflow['jobs']['finalize-ledger']['steps'] if s.get('name') == 'Commit release artifacts')
+    script = step['run']
+    for artifact in LEDGER_ARTIFACTS:  # the same five files are staged and allow-listed
+        assert script.count(artifact) >= 2, artifact
+    guard = script.index('unexpected=$(')
+    assert script.index('python tools/privacy_guard.py --base') < guard < script.index('git push')
+    assert 'exit 1' in script[guard:script.index('git push')]
+    for context in REQUIRED_CONTEXTS:
+        assert guard < script.index(f'context={context}') < script.index('gh pr merge'), context
