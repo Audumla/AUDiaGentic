@@ -181,14 +181,11 @@ def agent_task_session_resume(
 def agent_task_submit(
     agent_id: str,
     prompt_body: str | None = None,
-    source: str | None = None,
     metadata: dict[str, Any] | None = None,
     session_id: str | None = None,
     session_keep_alive: bool = False,
     new_session: bool = False,
-    workspace_name: str | None = None,
     title: str | None = None,
-    execution_context_fingerprint: str | None = None,
     provider_chat_url: str | None = None,
     node_id: str | None = None,
     workspace_id: str | None = None,
@@ -207,19 +204,14 @@ def agent_task_submit(
     submit_kwargs: dict[str, Any] = {
         "agent_id": agent_id,
         "prompt_body": prompt_body,
-        "source": source,
         "metadata": metadata,
         "session_id": session_id,
         "session_keep_alive": session_keep_alive,
     }
     if new_session:
         submit_kwargs["new_session"] = new_session
-    if workspace_name is not None:
-        submit_kwargs["workspace_name"] = workspace_name
     if title is not None:
         submit_kwargs["title"] = title
-    if execution_context_fingerprint is not None:
-        submit_kwargs["execution_context_fingerprint"] = execution_context_fingerprint
     if provider_chat_url is not None:
         submit_kwargs["provider_chat_url"] = provider_chat_url
     if node_id is not None or workspace_id is not None:
