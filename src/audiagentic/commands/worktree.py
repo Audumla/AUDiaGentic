@@ -13,6 +13,7 @@ _HELP = """Worktree commands (keyword syntax):
   audiagentic worktree list [project PATH] [output json]
   audiagentic worktree start SLUG [item ID] [purpose TEXT] [owner NAME] [project PATH] [output json]
   audiagentic worktree prune [project PATH] [output json]
+  audiagentic worktree merge [TARGET] [title TEXT] [head TIP12] dry-run yes [project PATH] [output json]
   audiagentic worktree finish TARGET [abandon TIP] [discard-ignored N] [project PATH] [output json]
   audiagentic worktree help
 
@@ -39,6 +40,12 @@ files, unknown ignored files, a process using the path, unfinished gateway work,
 lock, submodules, a detached HEAD, a protected or primary worktree. Anything it cannot
 establish is reported as unknown, which also blocks. prune never deletes anything.
 
+merge (dry-run only for now) reports what publishing a worktree would do and what blocks it: the
+tip it would push (`git push origin TIP:refs/heads/BRANCH`, never forced), whether this is the same
+repository the forge reports, whether an open pull request exists for the branch (a closed one is
+never replaced), whether the title is a valid conventional-commit title, and whether auto-merge is
+already on. TARGET defaults to the worktree you are in. Nothing is pushed, created or written.
+
 finish removes exactly one worktree whose work is merged (TARGET is its absolute path, or
 its branch or directory name when that is unique). It fetches the default branch, fences
 new work, runs the same checks as prune twice and compares them, writes an immutable
@@ -58,7 +65,7 @@ def dispatch_keyword(tokens: list[str]) -> int:
     if not tokens or tokens in (["help"], ["list", "help"], ["start", "help"]):
         print_message(_HELP)
         return 0
-    if tokens[0] not in {"list", "start", "prune", "finish"} or any(token.startswith("--") for token in tokens):
+    if tokens[0] not in {"list", "start", "prune", "finish", "merge"} or any(token.startswith("--") for token in tokens):
         print_error("Invalid worktree syntax. Run: audiagentic worktree help")
         return 2
     if tokens[0] == "start":
@@ -67,6 +74,8 @@ def dispatch_keyword(tokens: list[str]) -> int:
         return _prune(tokens[1:])
     if tokens[0] == "finish":
         return _finish(tokens[1:])
+    if tokens[0] == "merge":
+        return _merge(tokens[1:])
     clauses = _clauses(tokens[1:], {"project", "output"})
     if clauses is None:
         print_error("Invalid worktree list syntax. Run: audiagentic worktree help")
@@ -132,6 +141,43 @@ def _prune(tokens: list[str]) -> int:
         lines.append(f"{row['verdict'].upper():8} {row['path']}  [{row['branch'] or 'detached'}]")
         lines.extend(f"    {'?' if b['unknown'] else '-'} {b['code']}: {b['detail']}" for b in row["blockers"])
         lines.extend(f"    note: {note}" for note in row["notes"])
+    print_message("\n".join(lines))
+    return 0
+
+
+def _merge(tokens: list[str]) -> int:
+    target = tokens[0] if tokens and tokens[0] not in {"title", "head", "dry-run", "project", "output"} else None
+    clauses = _clauses(tokens[1:] if target else tokens, {"title", "head", "dry-run", "project", "output"})
+    if clauses is None or clauses.get("dry-run", "yes") != "yes":
+        print_error("Invalid worktree merge syntax. Run: audiagentic worktree help")
+        return 2
+
+    from audiagentic.components.agents.gateway.api import worktree_active_work
+    from audiagentic.components.project.worktrees import merge_plan
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+    from audiagentic.foundation.paths.project import discover_checkout_root
+
+    start = Path(clauses["project"]).resolve() if "project" in clauses else None
+    here = discover_checkout_root(start)
+    if here is None:
+        print_error("Not inside a git repository. Give project PATH or run it inside one.")
+        return 2
+    if "dry-run" not in clauses:
+        print_error("CON-WTMERGE-002: worktree merge only plans for now; pass `dry-run yes`")
+        return 1
+    path = Path(target).expanduser().resolve() if target and "/" in target else here
+    try:
+        result = merge_plan.plan(here, path, title=clauses.get("title"), head=clauses.get("head"),
+                                 active_work=worktree_active_work)
+    except AudiaGenticError as error:
+        print_error(f"{error.code}: {error.message}")
+        return 1
+    if clauses.get("output") == "json":
+        print_json(result, sort_keys=True)
+        return 0
+    lines = [f"{result['verdict'].upper()}  {result['worktree']}  [{result['branch'] or 'detached'}]  tip {result['tip'][:12]}"]
+    lines += [f"  {'?' if b['unknown'] else '-'} {b['code']}: {b['detail']}" for b in result["blockers"]]
+    lines += [f"  would: {op['action']} ({op['detail']})" for op in result["operations"]]
     print_message("\n".join(lines))
     return 0
 

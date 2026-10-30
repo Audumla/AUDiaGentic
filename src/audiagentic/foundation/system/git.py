@@ -145,6 +145,17 @@ def branch_exists(repo: Path, name: str) -> bool:
     return True
 
 
+def remote_url(repo: Path, remote: str = "origin", *, push: bool = False) -> str | None:
+    """The configured fetch (or push) URL of ``remote``; ``None`` when there is no such remote.
+
+    Callers compare or parse it but never print it: URLs may carry credentials.
+    """
+    try:
+        return run_git(repo, "remote", "get-url", *(["--push"] if push else []), remote).strip() or None
+    except Exception:  # noqa: BLE001 - no such remote
+        return None
+
+
 def is_ancestor(repo: Path, commit: str, ref: str) -> bool | None:
     """Whether ``commit`` is reachable from ``ref``; ``None`` when either is unknown locally."""
     if resolve_commit(repo, f"{commit}^{{commit}}") is None or resolve_commit(repo, ref) is None:
