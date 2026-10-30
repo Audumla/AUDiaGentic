@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.40.0](https://github.com/Audumla/AUDiaGentic/compare/v0.39.0...v0.40.0) (2026-10-30)
+
+
+### Features
+
+* **mcp:** collapse nullable unions, bare worktree arg, clearer guidance (MC08) ([#231](https://github.com/Audumla/AUDiaGentic/issues/231)) ([63e2bf6](https://github.com/Audumla/AUDiaGentic/commit/63e2bf69b43906d027620e233b8509202a6b7811))
+
 ## [0.39.0](https://github.com/Audumla/AUDiaGentic/compare/v0.38.0...v0.39.0) (2026-10-30)
 
 
