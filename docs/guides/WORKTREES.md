@@ -9,6 +9,8 @@ repository; the pull-request proof needs the `gh` CLI signed in to GitHub.
 audiagentic worktree start SLUG [item ID] [purpose TEXT] [owner NAME] [project PATH]
 audiagentic worktree list   [project PATH] [output json]
 audiagentic worktree prune  [project PATH] [output json]
+audiagentic worktree push   [TARGET] [head TIP12] [dry-run yes] [project PATH] [output json]
+audiagentic worktree merge  [TARGET] [title TEXT] [head TIP12] dry-run yes [project PATH] [output json]
 audiagentic worktree finish TARGET [abandon TIP12] [discard-ignored N] [project PATH] [output json]
 ```
 
@@ -28,6 +30,43 @@ Arguments are keywords (no `--` options). `audiagentic worktree help` prints the
 4. **prune** is read-only. For each worktree it says `eligible`, `blocked` or `unknown`
    and names every blocker. It never fetches, writes or deletes.
 5. **finish** removes exactly one worktree (below).
+
+## Publishing: push and merge
+
+`push` publishes the worktree's tip. It runs the checks the project names, then pushes
+exactly the checked commit as `refs/heads/BRANCH` without force, reads the remote back to
+confirm it, and writes a receipt under the user state directory (`worktrees/receipts/`).
+It refuses, and sends nothing, when the tree is dirty or the tip is not the `head TIP12`
+you confirmed, when `origin` is not the repository the forge reports (or fetches from one
+repository and pushes to another), when you cannot push, when gateway work in the worktree
+is unfinished, when a check fails, and when anything changed while the checks ran. A remote
+branch that has moved on is never overwritten: reconcile it yourself and push again.
+
+Checks are trusted local code, so they are defined only in your own user settings. The
+project names which ones must pass, by id:
+
+```yaml
+# project  .audiagentic/settings.yaml  (committed)
+worktrees:
+  pre-push: [privacy]
+```
+```yaml
+# yours, in the user settings file (audiagentic config paths shows where)
+worktrees:
+  checks:
+    privacy: [python3, tools/privacy_guard.py, --base, "{base}"]
+```
+
+A command is a fixed argument list (no shell). `{tip}`, `{base}` (the merge base with the
+remote default branch) and `{worktree}` are replaced by the tool; the check runs in the
+worktree with a minimal environment (no tokens). A project file that defines or changes
+`worktrees.checks` is refused. `dry-run yes` lists the checks and the push without running
+or sending anything.
+
+`merge ... dry-run yes` goes one step further and plans the pull request too: the push, an
+open pull request to reuse or one to create (a closed pull request is never replaced), a
+valid conventional-commit title, and auto-merge. It only plans for now; open the pull
+request yourself (`gh pr create`) after `push`.
 
 ## What counts as merged
 
@@ -113,4 +152,5 @@ or diverged. It reports only; it never changes anything.
 - The archive has no size limit; a full disk refuses before anything is removed.
 - The bundle covers the abandoned tip only. Other local branches and stashes are neither
   backed up nor removed.
-- Only GitHub through `gh` is supported as a forge. There is no `worktree merge` yet.
+- Only GitHub through `gh` is supported as a forge. `merge` plans but does not yet open the
+  pull request or request auto-merge.

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -100,10 +101,24 @@ def _pull_request_plan(found: tuple[forge.PullRequest, ...], branch: str, tip: s
     return blockers, operations, pr
 
 
-def plan(repo: Path, path: Path, *, title: str | None = None, head: str | None = None, active_work: ActiveWork,
-         pull_requests: PullRequests = forge.pull_requests_for_branch,
-         identity: Identity = forge.repository_identity) -> dict[str, Any]:
-    """The would-be steps for the worktree at ``path``, with every blocker; nothing is changed."""
+@dataclass(frozen=True)
+class Preconditions:
+    """What must hold before anything of this worktree is published; shared by ``plan`` and ``push``."""
+
+    entry: git.WorktreeEntry
+    blockers: list[Blocker]
+    base: str | None  # e.g. origin/main
+    default: str | None  # e.g. main
+    who: forge.RepositoryIdentity | None
+
+    @property
+    def tip(self) -> str:
+        return self.entry.head or ""
+
+
+def preconditions(repo: Path, path: Path, *, head: str | None, active_work: ActiveWork,
+                  identity: Identity = forge.repository_identity) -> Preconditions:
+    """Every local, remote-identity and gateway check for publishing ``path``; nothing is changed."""
     entries = git.list_worktrees(repo)
     entry = next((e for e in entries if e.path == path), None)
     blockers: list[Blocker] = []
@@ -142,8 +157,6 @@ def plan(repo: Path, path: Path, *, title: str | None = None, head: str | None =
     except Exception as error:  # noqa: BLE001 - an unreadable store is never "empty"
         blockers.append(Blocker("active-work-unreadable", f"gateway records could not be read ({getattr(error, 'code', type(error).__name__)})", True))
 
-    operations: list[dict[str, str]] = []
-    found_pr = None
     try:
         who = identity(repo)
     except Exception as error:  # noqa: BLE001
@@ -154,6 +167,17 @@ def plan(repo: Path, path: Path, *, title: str | None = None, head: str | None =
         blockers.append(Blocker("no-push-permission", f"you cannot push to {who.name_with_owner}"))
     if who is not None and default is not None and who.default_branch != default:
         blockers.append(Blocker("default-branch-mismatch", f"the forge's default branch is {who.default_branch}, local origin/HEAD says {default}"))
+    return Preconditions(entry, blockers, base, default, who)
+
+
+def plan(repo: Path, path: Path, *, title: str | None = None, head: str | None = None, active_work: ActiveWork,
+         pull_requests: PullRequests = forge.pull_requests_for_branch,
+         identity: Identity = forge.repository_identity) -> dict[str, Any]:
+    """The would-be steps for the worktree at ``path``, with every blocker; nothing is changed."""
+    found = preconditions(repo, path, head=head, active_work=active_work, identity=identity)
+    entry, blockers, default, who, tip = found.entry, list(found.blockers), found.default, found.who, found.tip
+    operations: list[dict[str, str]] = []
+    found_pr = None
     if entry.branch and default:
         try:
             found = pull_requests(repo, entry.branch)
