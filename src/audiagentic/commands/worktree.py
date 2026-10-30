@@ -13,6 +13,7 @@ _HELP = """Worktree commands (keyword syntax):
   audiagentic worktree list [project PATH] [output json]
   audiagentic worktree start SLUG [item ID] [purpose TEXT] [owner NAME] [project PATH] [output json]
   audiagentic worktree prune [project PATH] [output json]
+  audiagentic worktree sync [TARGET] [head TIP12] [dry-run yes] [project PATH] [output json]
   audiagentic worktree push [TARGET] [head TIP12] [dry-run yes] [project PATH] [output json]
   audiagentic worktree merge [TARGET] [title TEXT] [body TEXT] [head TIP12] [dry-run yes] [project PATH] [output json]
   audiagentic worktree finish TARGET [abandon TIP] [discard-ignored N] [project PATH] [output json]
@@ -40,6 +41,13 @@ says the merge commit is not fetched). It also refuses on uncommitted or untrack
 files, unknown ignored files, a process using the path, unfinished gateway work, a git
 lock, submodules, a detached HEAD, a protected or primary worktree. Anything it cannot
 establish is reported as unknown, which also blocks. prune never deletes anything.
+
+sync brings a task branch up to date, locally only (nothing is pushed): it fetches the default
+branch and this branch, fast-forwards to the remote copy when that is strictly ahead (for example after
+the forge updated a pull request's branch), and merges the default branch in when the branch is behind
+it. It never rebases or resets, and refuses on a dirty tree, a merge already under way, unfinished
+gateway work, a diverged remote branch, and a conflict (the merge is aborted and nothing changes).
+Publish the new tip afterwards with merge or push. `dry-run yes` fetches nothing and changes nothing.
 
 push runs the pre-push checks your project names (worktrees.pre-push, the ids) with the commands
 you define in your own user settings (worktrees.checks: id to a fixed command list; a project file
@@ -77,7 +85,7 @@ def dispatch_keyword(tokens: list[str]) -> int:
     if not tokens or tokens in (["help"], ["list", "help"], ["start", "help"]):
         print_message(_HELP)
         return 0
-    if tokens[0] not in {"list", "start", "prune", "finish", "merge", "push"} or any(token.startswith("--") for token in tokens):
+    if tokens[0] not in {"list", "start", "prune", "finish", "merge", "push", "sync"} or any(token.startswith("--") for token in tokens):
         print_error("Invalid worktree syntax. Run: audiagentic worktree help")
         return 2
     if tokens[0] == "start":
@@ -90,6 +98,8 @@ def dispatch_keyword(tokens: list[str]) -> int:
         return _merge(tokens[1:])
     if tokens[0] == "push":
         return _push(tokens[1:])
+    if tokens[0] == "sync":
+        return _sync(tokens[1:])
     clauses = _clauses(tokens[1:], {"project", "output"})
     if clauses is None:
         print_error("Invalid worktree list syntax. Run: audiagentic worktree help")
@@ -156,6 +166,42 @@ def _prune(tokens: list[str]) -> int:
         lines.extend(f"    {'?' if b['unknown'] else '-'} {b['code']}: {b['detail']}" for b in row["blockers"])
         lines.extend(f"    note: {note}" for note in row["notes"])
     print_message("\n".join(lines))
+    return 0
+
+
+def _sync(tokens: list[str]) -> int:
+    target = tokens[0] if tokens and tokens[0] not in {"head", "dry-run", "project", "output"} else None
+    clauses = _clauses(tokens[1:] if target else tokens, {"head", "dry-run", "project", "output"})
+    if clauses is None or clauses.get("dry-run", "yes") != "yes":
+        print_error("Invalid worktree sync syntax. Run: audiagentic worktree help")
+        return 2
+
+    from audiagentic.components.agents.gateway.api import worktree_active_work
+    from audiagentic.components.project.worktrees import sync as syncer
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+    from audiagentic.foundation.paths.project import discover_checkout_root
+
+    here = discover_checkout_root(Path(clauses["project"]).resolve() if "project" in clauses else None)
+    if here is None:
+        print_error("Not inside a git repository. Give project PATH or run it inside one.")
+        return 2
+    path = Path(target).expanduser().resolve() if target and "/" in target else here
+    try:
+        result = syncer.sync(here, path, head=clauses.get("head"), active_work=worktree_active_work,
+                             dry_run="dry-run" in clauses)
+    except AudiaGenticError as error:
+        print_error(f"{error.code}: {error.message}")
+        return 1
+    if clauses.get("output") == "json":
+        print_json(result, sort_keys=True)
+    elif not result["actions"]:
+        print_message(f"{result['branch']} is up to date ({result['before'][:12]})")
+    else:
+        verb = "would (offline estimate from the last fetch)" if result["dry-run"] else "did"
+        lines = [f"{verb}: {action}" for action in result["actions"]]
+        lines.append(f"{result['before'][:12]} -> {result['after'][:12]}" if not result["dry-run"] else "nothing was changed")
+        lines += [result["next"]] if result["next"] else []
+        print_message("\n".join(lines))
     return 0
 
 

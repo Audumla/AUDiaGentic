@@ -243,6 +243,41 @@ def delete_branch_at(repo: Path, branch: str, commit: str) -> None:
     run_git(repo, "update-ref", "-d", f"refs/heads/{branch}", commit)
 
 
+def operation_in_progress(path: Path) -> str | None:
+    """Name of a half-done git operation in this worktree (merge, cherry-pick, revert, rebase), or ``None``."""
+    for name in ("MERGE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD"):
+        if resolve_commit(path, name) is not None:
+            return name.removesuffix("_HEAD").replace("_", "-").lower()
+    for name in ("rebase-merge", "rebase-apply"):
+        if Path(run_git(path, "rev-parse", "--path-format=absolute", "--git-path", name).strip()).exists():
+            return "rebase"
+    return None
+
+
+def merge_in_progress(path: Path) -> bool:
+    """Whether a merge is half done in this worktree (``MERGE_HEAD`` exists)."""
+    return resolve_commit(path, "MERGE_HEAD") is not None
+
+
+def conflicted_paths(path: Path) -> list[str]:
+    """Paths with unresolved merge conflicts."""
+    return [name for name in run_git(path, "diff", "--name-only", "--diff-filter=U").splitlines() if name]
+
+
+def merge_fast_forward(path: Path, ref: str) -> None:
+    """Move the checked-out branch forward to ``ref``; an error if that is not a fast-forward."""
+    run_git(path, "-c", "core.hooksPath=/dev/null", "merge", "--ff-only", "--quiet", ref)
+
+
+def merge_ref(path: Path, ref: str) -> None:
+    """Merge ``ref`` into the checked-out branch with a merge commit (never a rebase). Conflicts raise."""
+    run_git(path, "-c", "core.hooksPath=/dev/null", "merge", "--no-edit", "--quiet", ref)
+
+
+def merge_abort(path: Path) -> None:
+    run_git(path, "merge", "--abort")
+
+
 def remote_branch_commit(repo: Path, remote: str, branch: str) -> str | None:
     """The commit ``refs/heads/<branch>`` has on the remote right now (a network read), or ``None`` if absent.
 
