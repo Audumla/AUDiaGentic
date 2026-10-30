@@ -81,3 +81,21 @@ def check_catalog(context: Any) -> list[CheckResult]:
                             f"agent files override agents.yaml entries: {', '.join(clashes)}",
                             "Remove the duplicate entries from agents.yaml (the agent files win)")]
     return [CheckResult("agents.catalog", OK, f"hosted catalog has {len(mapping['agents'])} agent(s)")]
+
+
+def check_gateway_code_drift(context: Any) -> list[CheckResult]:
+    """The running gateway service must not be older than the code on disk (mixed code fails oddly)."""
+    from audiagentic.components.agents.gateway.service.code_drift import (
+        check_gateway_code_drift as compare,
+    )
+
+    drift = compare()
+    if drift.status == "ok":
+        return [CheckResult("agents.gateway-code", OK, drift.detail)]
+    if drift.status == "unknown":
+        return [CheckResult("agents.gateway-code", OK, f"not compared: {drift.detail}")]
+    return [CheckResult(
+        "agents.gateway-code", WARN, drift.detail,
+        "Restart the gateway service so it loads the code on disk (the agent_gateway_restart admin tool), or put "
+        "the runtime back to the commit the service loaded; check that no request is running first",
+    )]
