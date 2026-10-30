@@ -237,6 +237,17 @@ def get_provider_mcp_launch_isolation_tier(provider_id: str) -> McpLaunchIsolati
     return _get_tier(provider_id)
 
 
+def provider_target_key(provider_id: str, instance: str | None = None) -> str:
+    """The key that identifies one provider target in sessions, queues and evidence.
+
+    ``gpt-auto`` for the provider itself, ``gpt-auto@name`` for a configured instance.
+    Descriptor, adapter and policy lookups accept either form.
+    """
+    from audiagentic.components.providers.descriptors.target import ProviderTarget
+
+    return ProviderTarget(provider_id, instance).key
+
+
 def provider_declares_session_transport(provider_id: str) -> bool:
     """Return whether *provider_id*'s adapter package declares a non-ACP
     session transport builder (e.g. gpt-auto's CDP seam), through the public
@@ -2237,6 +2248,7 @@ def validate_gpt_auto_configuration(project_root: Path | None = None) -> None:
 
 
 __all__ = [
+    "provider_target_key",
     "validate_gpt_auto_configuration",
     "PROVIDER_STATE_CHANGED",
     "list_harness_mcp_targets",

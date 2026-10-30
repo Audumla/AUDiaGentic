@@ -38,13 +38,12 @@ session per scenario.
 
 Requires:
 - A real Chrome/Brave already running with --remote-debugging-port=9222
-  (or whatever port .audiagentic/config/providers/gpt-auto-t1.yaml points
-  at), logged into ChatGPT.
-- The local, gitignored .audiagentic/config/providers/gpt-auto-t1.yaml and
-  gpt-auto-t2.yaml provider settings files to exist (they carry the real
-  gpt-t1/gpt-t2 project URLs -- see GP05). Tests skip individually if a
-  required settings file is missing rather than failing the whole module,
-  since these files are machine-local and not committed.
+  (or whatever port the t1 instance's settings point at), logged into ChatGPT.
+- The provider instances ``t1`` and ``t2`` under ``providers.gpt-auto.instances``
+  in the project's (gitignored) settings, carrying the real gpt-t1/gpt-t2
+  project URLs -- see GP05. Tests skip individually if an instance is not
+  configured rather than failing the whole module, since these settings are
+  machine-local and not committed.
 
 These drive the real production entry point (session_transport.py's
 build_session_transport -> GptAutoSessionTransport, wrapping a real
@@ -69,7 +68,6 @@ from audiagentic.components.providers.adapters.gpt_auto.session_transport import
     build_session_transport,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.foundation.io import load_yaml_file
 from audiagentic.foundation.transports.agent_session import (
     SessionControlAction,
     SessionControlRequest,
@@ -92,14 +90,19 @@ pytestmark = [
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
-def _load_live_settings(provider_id: str) -> dict[str, Any]:
-    path = _PROJECT_ROOT / ".audiagentic" / "config" / "providers" / f"{provider_id}.yaml"
-    if not path.exists():
-        pytest.skip(f"{path} not present -- local gpt-t1/t2 test-project config not set up")
-    data = load_yaml_file(path)
-    settings = data.get("settings", data)
+def _load_live_settings(provider_key: str) -> dict[str, Any]:
+    from audiagentic.components.providers import providers_api
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+    try:
+        config = providers_api.get_provider_runtime_config_state(_PROJECT_ROOT, provider_key)["config"]
+    except AudiaGenticError as error:
+        if error.code != "VAL-PCFG-006":
+            raise
+        pytest.skip(f"{provider_key} is not configured under providers.<id>.instances in settings")
+    settings = config.get("settings", config) if isinstance(config, dict) else None
     if not isinstance(settings, dict):
-        pytest.skip(f"{path} has no usable settings block")
+        pytest.skip(f"{provider_key} has no usable settings block")
     return settings
 
 
@@ -206,8 +209,8 @@ async def test_live_concurrent_turns_on_both_test_projects_stay_isolated():
     """L3: two long-running turns on gpt-t1 and gpt-t2 at the same time must
     not interfere with each other -- each completes with its own correct,
     distinct content."""
-    transport_1, _ = await _open_transport("gpt-auto-t1")
-    transport_2, _ = await _open_transport("gpt-auto-t2")
+    transport_1, _ = await _open_transport("gpt-auto@t1")
+    transport_2, _ = await _open_transport("gpt-auto@t2")
     try:
         result_1, result_2 = await asyncio.gather(
             transport_1.prompt(
@@ -276,12 +279,12 @@ async def _run_mid_turn_tab_close(transport, config) -> None:
 
 @pytest.mark.asyncio
 async def test_live_t1_scenarios():
-    """L1 + L4 share one gpt-auto-t1 session (sequentially) instead of each
+    """L1 + L4 share one gpt-auto@t1 session (sequentially) instead of each
     opening a fresh conversation -- ChatGPT rate-limits new-session creation
     more aggressively than continuing an existing one (proven live
     2026-08-16, see GP04's notes), so this file conserves sessions rather
     than opening one per scenario."""
-    transport, config = await _open_transport("gpt-auto-t1")
+    transport, config = await _open_transport("gpt-auto@t1")
     try:
         await _run_long_generation(transport)
         await _run_mid_turn_tab_close(transport, config)
@@ -294,7 +297,7 @@ async def test_live_cancel_mid_turn_leaves_session_usable():
     """L5: cancelling mid-generation must terminate cleanly (no crash, no
     corrupted session state) and the session must remain usable for a
     follow-up turn afterward."""
-    transport, _config = await _open_transport("gpt-auto-t2")
+    transport, _config = await _open_transport("gpt-auto@t2")
     try:
         turn_id = f"turn-{uuid.uuid4().hex[:8]}"
         prompt_task = asyncio.create_task(

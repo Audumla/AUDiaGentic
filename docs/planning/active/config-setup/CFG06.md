@@ -68,6 +68,8 @@ Phase 2: deferred until needed (see 'Phasing' in docs/design/configuration-model
 
 2026-10-29: slices 1 and 2 merged (PRs #126, #131). providers.<id>.enabled (auto|true|false) is settings policy; runtime gates use is_provider_usable (policy, else persisted enablement, else the provider availability check), so a clean install needs no enablement step; a failed CLI probe no longer disables a provider or prunes surfaces (reconcile reports unavailable). Remaining: retire the persisted provider feature-state files and their legacy migration; provider instances (gpt_auto_t1/t2 become providers.gpt-auto.instances, selected by agents with instance). Tests: tests/unit/providers/test_provider_enabled_policy.py, test_provisioning.py, test_reconciliation_policy_enforcement.py.
 
+2026-10-30: provider instances in PR (branch cfg06-instances): `providers.<id>.instances.<name>` overlays one provider's options; agents select with `instance`; `ProviderTarget` key `provider@instance` separates sessions/queue/evidence while descriptor, adapter, enabled policy and availability resolve to the provider. gpt_auto_t1/t2 and descriptor `extends:` (#202) deleted. GPT review (REVISE) findings applied except folding the per-provider option files into settings, deferred to the provider-settings migration. Remaining: that migration, and retiring the persisted provider feature-state shards (settings per-provider options, launch.py shard check). Local live-test config must move to providers.gpt-auto.instances.
+
 ## Change Log
 
 - 2026-10-28T21:05:44.274107+00:00 (created-by): Created by claude

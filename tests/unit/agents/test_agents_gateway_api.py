@@ -809,7 +809,7 @@ def test_dashboard_request_projection_does_not_own_session_focus():
         {
             "request-id": "req_live",
             "state": "running",
-            "resolved-provider-id": "gpt-auto-t2",
+            "resolved-provider-id": "gpt-auto@t2",
             "session-id": "ses-live",
         }
     )
@@ -873,7 +873,7 @@ def test_dashboard_session_request_does_not_duplicate_session_focus_control():
             "request-id": "req_session_gpt",
             "state": "running",
             "session-id": "ses_shared",
-            "resolved-provider-id": "gpt-auto-t2",
+            "resolved-provider-id": "gpt-auto@t2",
         },
         include_execution=False,
     )
