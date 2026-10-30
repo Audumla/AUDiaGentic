@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.45.0](https://github.com/Audumla/AUDiaGentic/compare/v0.44.1...v0.45.0) (2026-10-30)
+
+
+### Features
+
+* **doctor:** warn when the running gateway is older than the code it was started from (DW01) ([#243](https://github.com/Audumla/AUDiaGentic/issues/243)) ([fc13f80](https://github.com/Audumla/AUDiaGentic/commit/fc13f80b1c58f78d1d099641062fa2c035585840))
+
 ## [0.44.1](https://github.com/Audumla/AUDiaGentic/compare/v0.44.0...v0.44.1) (2026-10-30)
 
 
