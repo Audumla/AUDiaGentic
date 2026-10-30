@@ -44,7 +44,7 @@ def test_load_all_error_resolutions_populates_registry() -> None:
 def test_load_error_resolutions_from_component_returns_count() -> None:
     config_dir = Path(__file__).resolve().parents[3] / "src" / "audiagentic" / "config" / "components"
     count = load_error_resolutions_from_component("project", config_dir)
-    assert count == 12
+    assert count == 18
     assert get_error_resolution("VAL-MCPONB-001")
     assert get_error_resolution("RES-MCPONB-001")
     assert get_error_resolution("VAL-MCPUSR-001")
