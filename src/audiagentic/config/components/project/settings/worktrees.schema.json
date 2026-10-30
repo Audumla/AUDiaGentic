@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "settings: worktrees",
+  "description": "Worktree lifecycle settings (DW01), owned by the project component.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "root": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Directory under which new worktrees are created. Absolute, or relative to the main worktree's parent."
+    },
+    "branch-prefix": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._/{}-]{0,63}$",
+      "description": "Prefix for task branches; {owner} expands to the owning account."
+    },
+    "protected": {
+      "type": "object",
+      "propertyNames": {"pattern": "^[a-z][a-z0-9-]{0,31}$"},
+      "additionalProperties": {"type": "string", "minLength": 1},
+      "description": "Named worktrees that list marks protected and finish/prune never touch: name to absolute path (for example the shared runtime install)."
+    }
+  }
+}
