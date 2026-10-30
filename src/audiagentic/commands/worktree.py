@@ -233,7 +233,7 @@ def _merge(tokens: list[str]) -> int:
         state = "BEHIND the default branch: run worktree sync" if result["behind"] else (result["merge-state"] or "pending")
         print_message(f"{'opened' if result['created'] else 'reused'} #{result['pr']} {result['url']}\n"
                       f"{'pushed ' + result['tip'][:12] if result['pushed'] else 'already on the remote'}; "
-                      f"auto-merge requested; state {state}")
+                      f"auto-merge on; state {state}")
         return 0
     lines = [f"{result['verdict'].upper()}  {result['worktree']}  [{result['branch'] or 'detached'}]  tip {result['tip'][:12]}"]
     lines += [f"  {'?' if b['unknown'] else '-'} {b['code']}: {b['detail']}" for b in result["blockers"]]

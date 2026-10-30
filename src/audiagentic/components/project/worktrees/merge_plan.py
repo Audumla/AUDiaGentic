@@ -185,7 +185,7 @@ def plan(repo: Path, path: Path, *, title: str | None = None, head: str | None =
             blockers.extend(more)
         except Exception as error:  # noqa: BLE001
             blockers.append(Blocker("forge-unavailable", f"pull requests could not be read ({getattr(error, 'code', type(error).__name__)})", True))
-    steps = [{"step": "pre-push-checks", "action": "none configured", "detail": "user-scope check mapping arrives in a later slice"},
+    steps = [{"step": "pre-push-checks", "action": "run the checks named by worktrees.pre-push", "detail": "defined in your user settings; see `worktree push`"},
              {"step": "push", "action": f"git push origin {tip[:12]}:refs/heads/{entry.branch}", "detail": "non-force, explicit commit"}]
     verdict = "blocked" if any(not b.unknown for b in blockers) else "unknown" if blockers else "ready"
     return {"worktree": str(entry.path), "branch": entry.branch, "tip": tip, "default-branch": default,
