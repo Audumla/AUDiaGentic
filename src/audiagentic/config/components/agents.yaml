@@ -239,156 +239,85 @@ mcp-servers:
       observability (list/overview), and session management
     propagate: providers
     instructions: >
-      agent_task_submit is the sole submission surface — pass an
-      agent_id (an Agent Definition: an execution profile plus a role bundled
-      under one stable ID) and it resolves the profile for you. Direct
-      execution_profile_id submission bypassing Agent Definition resolution
-      is available programmatically (AgentTaskFactory.submit_raw /
-      submit_execution_request) but not exposed over MCP — MCP is a
-      deliberately restrictive layer over the fuller Python API.
-      Submit returns a structured response with request-id, state, session-id
-      (auto-generated when session_keep_alive is true without a provided
-      session_id), and metadata. The runtime owns session ID generation —
-      the caller never invents one; it only references session-ids from
-      previous responses to continue a conversation.
-      agent_task_status/cancel/list_requests/gateway_overview/
-      diagnostics/recover/
-      session_list/session_close/session_control/session_resume work identically regardless of which
-      execution profile a request resolved through.
-      Async-only over MCP: submit returns request-id immediately; poll
-      agent_task_status until the request reaches a terminal state. A blocking
-      submit-and-wait-in-one-call exists only at the
-      underlying Python API (submit_execution_request/AgentTaskFactory.submit
-      with mode="blocking"), for in-process callers with no such transport
-      cap — deliberately not exposed over MCP.
-      Cancellation is best-effort: agent_task_cancel on a queued request
-      removes it before it ever runs; on a running request it only records
-      intent (cancel-requested) — the request may still complete normally,
-      and the persisted state reflects what actually happened, not the cancel
-      intent. Propagated to providers only; the AUDiaGentic CLI harness must
-      not receive the gateway server.
-      For most execution profiles, "output" is provider CLI/session execution
-      output, not a raw chat completion — only API-style providers (e.g.
-      local-openai) return a direct completion. Use agent_task_gateway_overview
-      or agent_task_list_requests to see what's happening without already
-      knowing a request-id.
-      For a remote shared gateway, select an explicit connector with
-      audiagentic gateway connect config FILE project PATH non-interactive
-      after inspecting gateway connect help. Execution uses the connector's
-      server project and server-local agent definitions/files, never the
-      caller's filesystem root. Stage-1 shared ingress supports scoped request
-      and session operations; local dashboard/focus, purge, operator lifecycle,
-      caller execution-context/profile overrides and direct provider_chat_url
-      attachment are unavailable remotely. Project/action grants are
-      collaborative across requests in the authorized server project.
+      Submit with agent_id (see agent_task_list_definitions); the runtime picks
+      the profile. Submit is async: poll agent_task_status until terminal, then
+      read agent_task_response. Session ids come only from earlier responses,
+      never invented. Cancel is best-effort: queued requests are removed,
+      running ones only record intent. Output is the provider's session output,
+      not a raw completion. Remote shared gateway: connect with
+      "audiagentic gateway connect" first; execution uses the server's project
+      and agents, and local-only options (provider_chat_url, workspace_name,
+      purge, operator tools) are unavailable. The worktree argument on every
+      tool selects the git worktree (root path); it defaults to the server's.
     tool-descriptions:
       agent_task_list_definitions: >
-        List available agents as a slim, client-facing summary per agent
-        (agent_id, name, description, skills) -- the valid agent_id values
-        for agent_task_submit. Modeled on the A2A AgentCard shape:
-        implementation/harness details (execution profile, role, prompt
-        wiring) are deliberately left out.
+        List agents (agent_id, name, description, skills); the valid agent_id
+        values for agent_task_submit.
       agent_task_submit: >
-        Submit an async request as agent_id (resolves the agent's execution
-        profile automatically). Returns structured response with:
-        {request-id, state, session-id, metadata}. When session_keep_alive
-        is true and no session_id is provided, a new session is auto-created
-        and its id returned. The runtime owns session ID generation — the
-        caller never invents one. Poll with agent_task_status using the
-        returned request-id. Once the adapter opens a session, the response
-        also includes provider-metadata when available. Raises RES-AGD-001
-        if agent_id is not a configured agent definition. To continue an
-        existing GPT-auto conversation directly, pass provider_chat_url with
-        a full project-scoped /g/<project>/c/<id> ChatGPT URL; a /project
-        landing URL is not sufficient.
-        Direct provider_chat_url attachment, workspace_name and caller
-        execution-context overrides are local-only and rejected by the
-        stage-1 shared connector. Remote continuation uses a returned session_id.
+        Submit an async request to agent_id; returns request-id, state and
+        session-id. Set session_keep_alive to open a session; pass session_id to
+        continue one. Poll agent_task_status with the request-id.
       agent_task_status: >
-        Return the compact lifecycle/activity status for request-id. The
-        response contains task_id, lifecycle, activity_seq, plus only
-        applicable activity/activity_at/outcome fields; it never contains
-        JSON null values. Response content, previews, diagnostics, attempts,
-        watchdog policy, and provider internals are never included. Use
-        agent_task_diagnostics for bounded failure evidence and
-        agent_task_response for the exact terminal response. Raises
-        RES-AGW-001 if not found.
+        Compact lifecycle/activity status for a request-id. Failure evidence is
+        agent_task_diagnostics; the final response is agent_task_response.
       agent_task_diagnostics: >
-        Return bounded semantic failure classification, recovery disposition,
-        and redacted provider/activity evidence for one request. This never
-        includes prompts, full responses, DOM, CDP handles, or credentials.
+        Bounded failure classification, recovery disposition and redacted
+        evidence for one request. No prompts, responses or credentials.
       agent_task_observations: >
-        Return a bounded opaque-cursor page of redacted request-owned
-        DOM/activity and validated node-stage facts. Node milestones do not
-        prove native acceptance or request completion. Raw prompts, responses,
-        DOM, CDP handles, and credentials are excluded.
+        Page of redacted request observations (DOM/activity, node stages) by
+        cursor. Milestones do not prove acceptance or completion.
       agent_task_evidence: >
-        Return compact request evidence by default; observation, transition
-        history, and recovery pages are explicit opt-ins.
+        Compact request evidence; observation, history and recovery pages are
+        opt-in.
       agent_task_observation_replay: >
-        Replay persisted observations and recovery intents into a deterministic
-        analysis. It never performs provider actions or resubmits prompts.
+        Deterministic analysis of persisted observations and recovery intents.
+        Never acts on the provider.
       agent_task_complete_from_provider: >
-        Capture the request-owned provider response and mark completion without sending a prompt.
+        Capture the provider's response for a request and mark it complete,
+        without sending a prompt.
       agent_task_failure_response: >
-        Return provider output retained as bounded failure evidence for a request.
+        Provider output retained as bounded failure evidence for a request.
       agent_task_gateway_purge: >
-        Perform the explicitly requested guarded gateway-session purge; defaults to a dry run.
+        Guarded purge of terminal gateway sessions; dry run by default.
       agent_task_session_purge: >
-        Purge one terminal gateway session and its request-owned artifacts after quiescence checks.
+        Purge one terminal session and its request-owned artifacts.
       agent_task_recover: >
-        Request a safe diagnostic recovery intent: reconcile, abandon, or
-        clear-not-submitted. Recovery never resends a provider prompt; poll
-        status and diagnostics for the resulting lifecycle evidence.
+        Request a diagnostic recovery intent: reconcile, abandon or
+        clear-not-submitted. Never resends a prompt.
       agent_task_response: >
-        Return the exact verified terminal response. The gateway dereferences
-        the request-owned artifact server-side; no filesystem path, URI, or
-        bounded preview is exposed through this operation.
+        The exact verified terminal response for a request.
       agent_task_cancel: >
-        Cancel a queued request, or best-effort mark a running one. See
-        instructions for the best-effort semantics.
+        Cancel a queued request, or record cancel intent on a running one
+        (best-effort).
       agent_task_list_requests: >
-        List persisted requests, most recent first. Optional state filter
-        (queued/running/completed/failed/cancelled/rejected) and limit.
-        Reads from disk, so this works even for requests from an earlier
-        process.
+        List persisted requests, newest first; filter by state, limit.
       agent_task_gateway_overview: >
-        Operator summary: persisted request counts by state, the 5 most recent
-        failures (redacted error only), and project-scoped provider capacity
-        plus active work. Long-running requests remain non-terminal while
-        providers work; watchdog diagnostics are observations, not completion.
+        Request counts by state, 5 latest failures, provider capacity and
+        active work.
       agent_task_session_list: >
-        List persisted gateway sessions in stable lifecycle/ID order. Defaults to active
-        sessions; pass a lifecycle state to filter, or state=all to include every state.
-        Each entry carries a "live" flag: true when this process holds the session's
-        agent process (only live sessions can accept new turns).
+        List gateway sessions (active by default; state=all for every state).
+        "live" means this process holds the agent.
       agent_task_session_close: >
-        Close a live agent session (terminates its agent process). Idempotent —
-        an already-closed or orphaned session returns its final record.
+        Close a live session (ends its agent process). Idempotent.
       agent_task_session_control:
         description: >
-          Issue one closed generic action against a live session. The response
-          is an acknowledgement only; it does not claim that a turn stopped or
-          a session became terminal. Poll request status for lifecycle truth.
+          One closed action on a live session. Acknowledgement only; poll
+          request status for the outcome.
         parameters:
-          session_id: "Gateway session identifier"
-          action: "cancel-turn, interrupt-turn, respond-permission, or close-session"
-          control_id: "Caller idempotency identifier for this control request"
-          turn_id: "Optional active turn/request identifier"
-          payload: "Closed action-specific payload; no provider-native fields"
+          session_id: "Session id"
+          action: "cancel-turn, interrupt-turn, respond-permission or close-session"
+          control_id: "Idempotency id"
+          turn_id: "Active turn/request id"
+          payload: "Action-specific payload"
       agent_task_session_resume:
         description: >
-          Resume a validated provider conversation by durable chat/session id,
-          even when the original tab or process is gone. The control id makes
-          retries idempotent; a successor session is created and the source
-          binding remains immutable. Provider identity is resolved from the
-          configured agent execution profile, never from provider-specific
-          gateway branches.
+          Resume a terminal session's provider conversation as a new successor
+          session. Idempotent per control_id.
         parameters:
-          source_session_id: "Terminal source session with a validated provider binding"
-          control_id: "Caller idempotency identifier for the resume request"
-          model_id: "Optional current model identifier"
-          component_profile: "Optional component profile for the resumed execution, validated by the gateway; does not change the server process profile"
+          source_session_id: "Terminal session with a provider binding"
+          control_id: "Idempotency id"
+          model_id: "Current model id"
+          component_profile: "Component profile for the resumed run"
 
 # AS31 Stage-2: output relay policy
 # Defaults: disabled until surface is validated; 64KiB fragments, 512KB turns.

@@ -91,24 +91,15 @@ mcp-servers:
     description: Plan item management — create, list, update, transition, and remove items; create and manage reviews
     propagate: providers
     instructions: >
-        Use plan_list_standards only when standards context is needed. Create items with
-        plan and title; work is optional (S/M/L), and explicit uppercase IDs must be
-        globally unique. Lists default to active items/open reviews; filter by plan or
-        ID prefix and paginate as needed. Transition state explicitly. Reviews target
-        active items only; completed items cannot receive or reopen active reviews.
-        Completion requires non-empty Validation and Acceptance Criteria; all linked
-        reviews are closed; and implementation/validation is complete. The canonical
-        contract is in workflows.yaml: items start in pending and reviews in created;
-        item transitions are pending -> in_progress, completed, superseded, deprecated;
-        in_progress -> pending, completed, superseded, deprecated; completed -> pending,
-        in_progress, superseded, deprecated; superseded -> pending, in_progress; deprecated
-        -> pending, in_progress. Review transitions are created -> considered, closed;
-        considered -> created, closed; closed -> created, considered. Placement is
-        pending -> active/, in_progress -> active/, completed -> completed/, superseded
-        -> completed/, deprecated -> completed/, created -> active/, considered -> active/,
-        closed -> completed/. Equivalently, pending/in_progress are placed in active/;
-        created/considered are placed in active/; completed/superseded/deprecated and
-        closed are placed in completed/.
+      Item states: pending (initial), in_progress, completed, superseded,
+      deprecated. Review states: created (initial), considered, closed. Open
+      states live in active/, the rest in completed/. Completion requires
+      non-empty Validation and Acceptance Criteria; all linked reviews are
+      closed. Reviews target active items only; completed items cannot receive
+      or reopen active reviews. Lists default to active items/open reviews.
+      Create with plan and title; work is optional (S/M/L); explicit uppercase
+      ids must be unique. Read plan_list_standards before authoring. The
+      worktree argument selects the git worktree (root path).
     tool-descriptions:
       plan_list_standards: List configured planning standards.
       plan_create_item: "Create an item; required: plan, title. Omit id to auto-generate it; pass id only when importing or preserving an existing ID."
