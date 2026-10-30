@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.34.1](https://github.com/Audumla/AUDiaGentic/compare/v0.34.0...v0.34.1) (2026-10-30)
+
+
+### Documentation
+
+* **planning:** DW01 project-agnostic worktree lifecycle (reviewed design) ([#217](https://github.com/Audumla/AUDiaGentic/issues/217)) ([530c2c2](https://github.com/Audumla/AUDiaGentic/commit/530c2c2be93d4b3b75c59dd92eec8557425a9da0))
+
 ## [0.34.0](https://github.com/Audumla/AUDiaGentic/compare/v0.33.1...v0.34.0) (2026-10-29)
 
 
