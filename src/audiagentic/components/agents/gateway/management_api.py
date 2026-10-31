@@ -237,14 +237,16 @@ def gateway_connect_config(project_root: Path, config_path: Path) -> dict[str, A
     """
     from copy import deepcopy
     from audiagentic.foundation.features.state import (
-        get_component_state, set_component_state, shard_path,
+        get_component_state, set_component_state,
     )
+    from audiagentic.foundation.features.observations import observations_path
     from audiagentic.foundation.system.process import StartupLock
 
     reference = str(config_path.resolve(strict=True))
     validate_standalone_config({"connector-config": reference})
-    path = shard_path(project_root, _COMPONENT_ID)
-    with StartupLock(path.with_suffix(".lock")):
+    lock = observations_path(project_root, _COMPONENT_ID).with_suffix(".selection.lock")
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    with StartupLock(lock):
         component = deepcopy(get_component_state(project_root, _COMPONENT_ID))
         implementations = component.setdefault("implementations", {})
         for entry in implementations.values():

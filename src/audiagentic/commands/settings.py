@@ -35,7 +35,7 @@ def add_settings_parsers(config_sub: Any) -> None:
     write.add_argument("assignments", nargs="*", metavar="KEY=VALUE",
                        help="Dotted key and YAML or JSON value, for example providers.pi.enabled=false")
     write.add_argument("--unset", action="append", default=[], metavar="KEY", help="Remove a key (repeatable)")
-    write.add_argument("--scope", choices=("project", "user"), default="project",
+    write.add_argument("--scope", choices=("project", "user-project", "user"), default="project",
                        help="Which settings file to write (default: project, .audiagentic/settings.yaml)")
     write.add_argument("--dry-run", action="store_true", help="Show the change without writing")
     write.add_argument("--json", action="store_true", dest="as_json", help="Machine-readable output")
@@ -263,11 +263,7 @@ def _set(args: argparse.Namespace, settings: Any) -> int:
 
 
 def _migrate(args: argparse.Namespace, settings: Any) -> int:
-    """Move legacy configuration to its current home (see features.migration).
-
-    Two independent migrations: implementation ``enabled`` flags out of the feature shards into
-    local state, and provider option files, registry and policy into settings.
-    """
+    """Move legacy configuration to its current home (see features.migration)."""
     from pathlib import Path
 
     from audiagentic.foundation.features import migration
@@ -282,40 +278,23 @@ def _migrate(args: argparse.Namespace, settings: Any) -> int:
 
     try:
         if args.rollback:
-            manifest_path = Path(args.rollback)
-            kind = json.loads(manifest_path.read_text(encoding="utf-8")).get("kind")
-            undo = {
-                migration.MANIFEST_KIND: migration.rollback_enabled_migration,
-                migration.PROVIDER_CONFIG_KIND: migration.rollback_provider_config_migration,
-            }.get(kind)
-            if undo is None:
-                raise ValueError(f"unknown migration manifest kind: {kind!r}")
-            report = undo(project_root, manifest_path)
+            report = migration.rollback_provider_config_migration(project_root, Path(args.rollback))
             return emit({"ok": True, **report}, f"restored {len(report['restored'])}, kept {len(report['kept'])}"
                         + "".join(f"\n  kept: {item}" for item in report["kept"]))
-        flags = migration.plan_enabled_migration(project_root)
-        providers = migration.plan_provider_config_migration(project_root)
-        conflicts = [*sorted(map(str, flags.conflicts)), *sorted(".".join(p) for p in providers.conflicts)]
-        if conflicts or providers.unknown:
-            raise ValueError(f"conflicting existing values: {conflicts}; legacy keys with no home: {list(providers.unknown)}")
+        plan = migration.plan_provider_config_migration(project_root)
+        conflicts = sorted(".".join(p) for p in plan.conflicts)
+        if conflicts or plan.unknown:
+            raise ValueError(f"conflicting existing values: {conflicts}; legacy keys with no home: {list(plan.unknown)}")
         if not args.apply:
             return emit(
-                {"ok": True, "applied": False, "enabled-flags": len(flags.flags),
-                 "provider-settings": len(providers.values),
-                 "sources": [str(p) for p in (*flags.shards, *providers.sources)]},
-                f"{len(flags.flags)} enabled flag(s) would move to local state; "
-                f"{len(providers.values)} provider setting(s) from {len(providers.sources)} file(s) would move to settings"
-                + ("; run with --apply" if flags.flags or providers.values or providers.sources else ""),
+                {"ok": True, "applied": False, "settings": len(plan.values), "local-state": len(plan.observations),
+                 "sources": [str(p) for p in plan.sources]},
+                f"{len(plan.values)} setting(s) and {len(plan.observations)} local-state value(s) from "
+                f"{len(plan.sources)} legacy file(s) would move" + ("; run with --apply" if plan.sources else ""),
             )
-        results = {
-            "enabled-flags": migration.apply_enabled_migration(project_root),
-            "provider-config": migration.apply_provider_config_migration(project_root),
-        }
-        return emit(
-            {"ok": True, "applied": True, **results},
-            "\n".join(f"{name}: {r['status']}" + (f" (manifest {r['manifest']})" if "manifest" in r else "")
-                      for name, r in results.items()),
-        )
+        result = migration.apply_provider_config_migration(project_root)
+        return emit({"ok": True, "applied": True, **result},
+                    result["status"] + (f": manifest {result['manifest']}" if "manifest" in result else ""))
     except (ValueError, OSError) as error:
         if args.as_json:
             print(json.dumps({"ok": False, "message": str(error)}))
