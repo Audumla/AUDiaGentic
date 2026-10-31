@@ -130,7 +130,11 @@ unique. It:
 4. runs the checks again and refuses if anything differs (branch, tip, pull request,
    worktree identity, ignored files, record contents),
 5. removes the worktree with plain `git worktree remove` (never `--force`), deletes the
-   branch only if it still points at the recorded tip, and forgets the owner record.
+   branch only if it still points at the recorded tip, and forgets the owner record,
+6. moves the task's scratch directory `<dev-root>/tmp/<project>/<branch>/` (the branch name
+   with its owner prefix) to `<dev-root>/tmp/<project>/.finished/`. Nothing is deleted: the
+   container's scratch sweep removes it later, so agents never need a recursive delete. A
+   missing directory, a link, or a name that is not plain path segments is left alone.
 
 Ignored files that are not caches or records refuse until you repeat the count the refusal
 printed: `discard-ignored 3`. A crash resumes from a journal on the next `finish`; a
