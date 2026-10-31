@@ -11,6 +11,8 @@ no AcpLaunch/AcpSessionTransport in the open path.
 
 from __future__ import annotations
 
+import hashlib
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -27,6 +29,41 @@ from audiagentic.components.agents.gateway.session import dispatch as session_di
 from audiagentic.components.agents.gateway.session import sessions as sessions_module
 from audiagentic.components.agents.gateway.session import sessions_store
 from audiagentic.components.agents.gateway.session.sessions import SessionRuntime
+from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+
+@pytest.mark.parametrize("blocked", [None, "binding", "chat-url", "provider-chat-url", "provider-session-id", "pending", "same-turn", "active", "ambiguous", "other-provider", "send-intent-ever", "submission-proven", "submission-state", "submission-stage", "unknown-proof"])
+def test_terminal_unbound_session_replacement_gate(blocked):
+    session = {
+        "state": "failed", "binding": None,
+        "provider": {"provider-id": "gpt-auto", "metadata": {
+            "unresolved-turn-id": "req_old", "unresolved-turn-pending": False,
+            "submission-proven": False,
+        }},
+    }
+    metadata = session["provider"]["metadata"]
+    if blocked == "binding":
+        session["binding"] = {"provider-session-ref": "conversation"}
+    elif blocked in {"chat-url", "provider-chat-url", "provider-session-id"}:
+        metadata[blocked] = "retained-conversation"
+    elif blocked == "pending":
+        metadata["unresolved-turn-pending"] = True
+    elif blocked == "same-turn":
+        metadata["unresolved-turn-id"] = "req_new"
+    elif blocked == "active":
+        session["state"] = "active"
+    elif blocked == "ambiguous":
+        metadata["submission-ambiguous"] = True
+    elif blocked == "other-provider":
+        session["provider"]["provider-id"] = "other"
+    elif blocked in {"send-intent-ever", "submission-proven"}:
+        metadata[blocked] = True
+    elif blocked in {"submission-state", "submission-stage"}:
+        metadata[blocked] = "dispatching"
+    elif blocked == "unknown-proof":
+        metadata.pop("submission-proven")
+    assert session_dispatch._terminal_session_needs_fresh_chat(session, "req_new") is (blocked is None)
+
 
 PROFILE = {
     "profile_id": "profile-1",
@@ -36,6 +73,86 @@ PROFILE = {
     "surface_id": "test-surface",
     "params": {},
 }
+
+
+@pytest.mark.parametrize("clear_result", [False, "raise"])
+def test_terminal_checkpoint_finalization_trace_records_delay_and_rejection(
+    tmp_path, monkeypatch, clear_result
+):
+    request_id = "req_terminal_checkpoint_trace"
+    session_id = "ses_terminal_checkpoint_trace"
+    updated_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    request = {
+        "request-id": request_id,
+        "session-id": session_id,
+        "dispatch-owner-epoch": "owner",
+        "worker-id": "worker",
+        "attempt-epoch": 1,
+    }
+    updated = {**request, "state": "completed", "updated-at": updated_at}
+    metadata = {
+        "unresolved-turn-pending": True,
+        "unresolved-turn-id": request_id,
+        "submission-proven": True,
+        "terminal-evidence": {
+            "turn-id": request_id,
+            "policy": "response-complete",
+        },
+    }
+    session_record = {"session-id": session_id, "provider": {"metadata": metadata}}
+    monkeypatch.setattr(
+        session_dispatch.store,
+        "transition_owned_terminal",
+        lambda *_args, **_kwargs: updated,
+    )
+    monkeypatch.setattr(
+        sessions_store, "read_session_record", lambda *_args: session_record
+    )
+    monkeypatch.setattr(
+        sessions_store,
+        "session_provider_metadata",
+        lambda value: value["provider"]["metadata"],
+    )
+    def clear_checkpoint(*_args, **_kwargs):
+        if clear_result == "raise":
+            raise AudiaGenticError(
+                code="TO-PROC-002",
+                kind="agents",
+                message="checkpoint lock timeout",
+                details={},
+            )
+        return False
+
+    monkeypatch.setattr(sessions_store, "clear_terminal_submission_checkpoint", clear_checkpoint)
+    from audiagentic.components.agents.gateway import observability
+
+    observations = []
+    monkeypatch.setattr(
+        observability,
+        "append_observation",
+        lambda *_args, **kwargs: observations.append(kwargs),
+    )
+    from audiagentic.components.agents.gateway import observation_projection
+
+    monkeypatch.setattr(observation_projection, "append_request_projection", lambda *_args, **_kwargs: None)
+
+    result = session_dispatch._transition_owned_attempt(
+        tmp_path, request, "completed"
+    )
+
+    assert result["state"] == "completed"
+    facts = observations[0]["diagnostic_facts"]["checkpoint"]
+    assert facts["clear-outcome"] == (
+        "error" if clear_result == "raise" else "compare-and-clear-rejected"
+    )
+    assert facts["request-terminal-durable"] is True
+    assert facts["checkpoint-cas-ms"] >= 0
+    assert facts["terminal-transition-call-ms"] >= 0
+    assert facts["finalization-duration-ms"] >= 0
+    assert facts["terminal-state-to-finalization-ms"] >= 0
+    assert facts["checkpoint-error-code"] == (
+        "TO-PROC-002" if clear_result == "raise" else None
+    )
 
 # GP13: the real "opencode" descriptor used by PROFILE above does not
 # declare RESUME_BY_REF support, so auto-resume tests need their own
@@ -112,7 +229,11 @@ def rig(tmp_path, monkeypatch):
         transport = FakeAgentSessionTransport()
         transport.ag_session_id = kwargs["ag_session_id"]
         transports.append(transport)
-        return _build_fake_prepared(transport)
+        return _build_fake_prepared(
+            transport,
+            provider_id=provider_id,
+            surface_id=surface_hint.surface_id,
+        )
 
     runtime = SessionRuntime(
         clock=clock,
@@ -204,6 +325,7 @@ def _dispatch(
     provider_isolation_tier="full-isolation",
     context_fingerprint="0" * 64,
     resume_existing=False,
+    session_start=None,
 ):
     return dispatch.dispatch_request(
         tmp_path,
@@ -214,9 +336,104 @@ def _dispatch(
         context_fingerprint=context_fingerprint,
         component_profile="",
         provider_isolation_tier=provider_isolation_tier,
-        worker_timeout_seconds=10,
         resume_existing=resume_existing,
+        session_start=session_start,
     )
+
+
+@pytest.mark.parametrize("lost_handle", [False, True])
+@pytest.mark.parametrize("queued", [False, True])
+@pytest.mark.parametrize("allocation_failure", [False, True])
+def test_terminal_unbound_session_dispatches_new_prompt_without_old_checkpoint(rig, lost_handle, queued, allocation_failure, monkeypatch):
+    runtime, transports, tmp_path = rig
+    first = _dispatch(tmp_path, _running_record(tmp_path, session_keep_alive=True), dispatch_prompt="first")
+    old_id = first["session-id"]
+    if lost_handle:
+        runtime.close_session(tmp_path, old_id, reason="shutdown")
+    source = sessions_store.read_session_record(tmp_path, old_id)
+    source["state"] = "failed"
+    source["binding"] = None
+    source["provider"] = {"provider-id": "gpt-auto", "metadata": {
+        "unresolved-turn-id": first["request-id"],
+        "unresolved-turn-pending": False,
+        "prompt-text-digest": "old-digest",
+        "submission-proven": False,
+    }}
+    sessions_store.write_session_record(tmp_path, source)
+    if allocation_failure:
+        from audiagentic.components.agents.gateway.session import client_defaults
+        monkeypatch.setattr(client_defaults, "replace_failed_session", lambda *args, **kwargs: None)
+    request = _running_record(tmp_path, session_id=old_id)
+    if queued:
+        request["state"] = "queued"
+        store.write_record(tmp_path, request)
+    def start():
+        return store.start_owned_session_attempt(
+            tmp_path, request["request-id"],
+            owner_epoch=request["dispatch-owner-epoch"],
+            worker_id=request["worker-id"], attempt_epoch=request["attempt-epoch"],
+        )
+    second = _dispatch(tmp_path, request, dispatch_prompt="second", session_start=start if queued else None)
+    if allocation_failure:
+        assert second["state"] == "failed"
+        assert second["error"]["code"] == "CON-AGW-125"
+        assert len(transports) == 1
+        assert transports[0].turns == ["first"]
+        return
+    assert second["state"] == "completed"
+    assert second["session-id"] != old_id
+    assert transports[0].turns == ["first"]
+    assert transports[1].turns == ["second"]
+    assert sessions_store.read_session_record(tmp_path, old_id)["provider"]["metadata"]["prompt-text-digest"] == "old-digest"
+
+
+def test_presubmit_exception_retry_preserves_queued_start_callback(rig):
+    runtime, transports, root = rig
+    prepare = runtime._provider_prepare_fn
+    calls = 0
+    def fail_once(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise RuntimeError("pre-submit initialization failure")
+        return prepare(*args, **kwargs)
+    runtime._provider_prepare_fn = fail_once
+    request = _running_record(root, session_keep_alive=True)
+    request["state"] = "queued"
+    store.write_record(root, request)
+    starts = []
+    def start():
+        starts.append(request["request-id"])
+        return store.start_owned_session_attempt(
+            root, request["request-id"], owner_epoch=request["dispatch-owner-epoch"],
+            worker_id=request["worker-id"], attempt_epoch=request["attempt-epoch"],
+        )
+    result = _dispatch(root, request, dispatch_prompt="once", session_start=start)
+    assert result["state"] == "completed", result
+    assert starts == [request["request-id"]]
+    assert transports[-1].turns == ["once"]
+
+
+def test_dispatch_returns_captured_winner_without_second_terminal_write(rig, monkeypatch):
+    from audiagentic.foundation.transports.agent_session import SessionTurnResult
+    runtime, transports, root = rig
+    request = _running_record(root, session_keep_alive=True)
+    calls = []
+    def captured_prompt(*args, **kwargs):
+        calls.append(kwargs["request_id"])
+        current = store.read_record(root, request["request-id"])
+        store.transition_operator_terminal(
+            root, request["request-id"], expected_revision=current["revision"],
+            updates={"__final-response-text": "captured winner", "completion": {"source": "operator-provider-capture"}},
+        )
+        return SessionTurnResult(request["request-id"], "externally-captured", 0, 0)
+    monkeypatch.setattr(runtime, "prompt_in_session", captured_prompt)
+    result = _dispatch(root, request, dispatch_prompt="once")
+    assert result["state"] == "completed"
+    assert result["completion"]["source"] == "operator-provider-capture"
+    assert calls == [request["request-id"]]
+    assert result.get("error") is None
+    assert result.get("attempts") == []
 
 
 def test_keep_alive_opens_session_and_completes(rig):
@@ -258,10 +475,23 @@ def test_composer_retry_preserves_session_and_is_bounded(rig, monkeypatch, ambig
         return original(*args, **kwargs)
     monkeypatch.setattr(runtime, "prompt_in_session", prompt)
     record = _running_record(root, session_id=session_id, session_keep_alive=True)
-    result = _dispatch(root, record, dispatch_prompt="followup")
+    if always_fail and not ambiguous:
+        with pytest.raises(RecoveryDeferred) as deferred:
+            _dispatch(root, record, dispatch_prompt="followup")
+        assert deferred.value.phase == "presubmit-retry"
+        assert deferred.value.side_effect_state == "not-started"
+        assert transports[0].turns == ["first"]
+        assert store.read_record(root, record["request-id"])["state"] == "running"
+        assert calls == [session_id] * expected_calls
+        # The queue re-enters the same session after provider recovery.
+        monkeypatch.setattr(runtime, "prompt_in_session", original)
+        result = _dispatch(root, store.read_record(root, record["request-id"]), dispatch_prompt="followup")
+        assert transports[0].turns == ["first", "followup"]
+    else:
+        result = _dispatch(root, record, dispatch_prompt="followup")
     assert calls == [session_id] * expected_calls
     assert result["session-id"] == session_id
-    assert result["state"] == ("failed" if always_fail else "completed")
+    assert result["state"] == ("failed" if ambiguous else "completed")
     assert len(transports) == 1
 
 
@@ -1139,7 +1369,8 @@ def test_idle_closed_session_transparently_resumes(resumable_rig):
     assert successor["binding"]["relation"] == "resumed-from"
 
 
-def test_auto_resume_skips_terminal_idempotent_successor(resumable_rig, monkeypatch):
+@pytest.mark.parametrize("successor_kind", ["shutdown", "failed", "failed-pending", "failed-ambiguous", "failed-missing", "failed-null", "failed-send-intent", "active-orphan"])
+def test_auto_resume_skips_terminal_idempotent_successor(resumable_rig, monkeypatch, successor_kind):
     """A shutdown can close the idempotent successor before its first use.
 
     The next continuation must advance one bounded generation instead of
@@ -1158,24 +1389,47 @@ def test_auto_resume_skips_terminal_idempotent_successor(resumable_rig, monkeypa
         result = original_resume(*args, **kwargs)
         calls.append(result["session-id"])
         if len(calls) == 1:
-            runtime.close_session(tmp_path, result["session-id"], reason="shutdown")
+            if successor_kind == "active-orphan":
+                runtime._handles.pop(result["session-id"], None)
+                return result
+            runtime.close_session(tmp_path, result["session-id"], reason="shutdown" if successor_kind == "shutdown" else "failed")
+            if successor_kind != "shutdown":
+                from audiagentic.components.agents.gateway.session import sessions_store
+                durable = sessions_store.read_session_record(tmp_path, result["session-id"])
+                durable["state"] = "failed"
+                durable["provider"].setdefault("metadata", {})["unresolved-turn-pending"] = False
+                if successor_kind == "failed-pending":
+                    durable["provider"].setdefault("metadata", {})["unresolved-turn-pending"] = True
+                elif successor_kind == "failed-ambiguous":
+                    durable["provider"].setdefault("metadata", {})["submission-ambiguous"] = True
+                elif successor_kind == "failed-missing":
+                    durable["provider"]["metadata"].pop("unresolved-turn-pending")
+                elif successor_kind == "failed-null":
+                    durable["provider"]["metadata"]["unresolved-turn-pending"] = None
+                elif successor_kind == "failed-send-intent":
+                    durable["provider"]["metadata"]["send-intent-ever"] = True
+                sessions_store.write_session_record(tmp_path, durable)
         return result
 
     monkeypatch.setattr(runtime, "resume_session", resume_then_shutdown)
     second = _dispatch(
         tmp_path, _running_record(tmp_path, session_id=source_id), dispatch_prompt="continue"
     )
+    if successor_kind not in {"shutdown", "failed", "active-orphan"}:
+        assert second["state"] == "failed", second
+        assert len(calls) == 1
+        assert not any(t.turns for t in transports[1:])
+        return
     assert second["state"] == "completed", second
-    assert len(calls) == 2
+    assert len(calls) == (1 if successor_kind == "active-orphan" else 2)
     assert second["session-id"] == calls[-1]
-    assert second["session-id"] != calls[0]
+    if successor_kind != "active-orphan":
+        assert second["session-id"] != calls[0]
 
 
-def test_closed_by_non_shutdown_reason_still_raises_res_agw_003(rig):
-    """A session closed for any reason OTHER than a gateway shutdown (client
-    request, post-turn auto-close, etc.) must NOT be transparently resumed
-    -- GP13's own notes are explicit that undoing an intentional close is
-    much closer to a correctness bug than the restart problem being fixed."""
+def test_deliberately_closed_session_without_resume_proof_is_refused(rig):
+    """A deliberate close without qualified resume/clear-checkpoint evidence
+    stays refused; only a proven safe new continuation may reopen it."""
     runtime, transports, tmp_path = rig
     first = _dispatch(
         tmp_path, _running_record(tmp_path, session_keep_alive=True), dispatch_prompt="hello"
@@ -1195,7 +1449,7 @@ def test_closed_by_non_shutdown_reason_still_raises_res_agw_003(rig):
 def test_preterminal_reconciliation_uses_passive_capture_for_proven_gpt_turn(monkeypatch, tmp_path):
     calls = []
 
-    def capture(root, request_id, *, passive=False):
+    def capture(root, request_id, *, passive=False, **kwargs):
         calls.append((root, request_id, passive))
         return {"request-id": request_id, "state": "completed"}
 
@@ -1221,6 +1475,34 @@ def test_preterminal_reconciliation_does_not_capture_ambiguous_without_submissio
     )
     assert result is None
 
+
+def test_preterminal_reconciliation_retries_transient_terminal_capture(monkeypatch, tmp_path):
+    calls = []
+
+    def capture(root, request_id, *, passive=False, **kwargs):
+        calls.append((root, request_id, passive))
+        if len(calls) < 2:
+            raise AudiaGenticError(
+                code="CON-AGW-155",
+                kind="agents",
+                message="terminal response is still settling",
+                details={},
+            )
+        return {"request-id": request_id, "state": "completed"}
+
+    from audiagentic.components.agents.gateway import api
+
+    monkeypatch.setattr(api, "complete_execution_from_provider", capture)
+    monkeypatch.setattr(session_dispatch.time, "sleep", lambda _: None)
+    result = session_dispatch._reconcile_before_failed_terminal(
+        tmp_path,
+        {"provider-metadata": {"submission-proven": True}},
+        provider_id="gpt-auto",
+        request_id="req_reconcile_retry",
+    )
+    assert result["state"] == "completed"
+    assert len(calls) == 2
+
 def test_failed_session_with_durable_binding_auto_resumes(resumable_rig):
     """A failed local generation can continue when its provider binding is safe."""
     from audiagentic.components.agents.gateway.session import sessions_store as session_store
@@ -1231,6 +1513,9 @@ def test_failed_session_with_durable_binding_auto_resumes(resumable_rig):
         tmp_path, _running_record(tmp_path, session_keep_alive=True), dispatch_prompt="hello"
     )
     session_id = first["session-id"]
+    source = session_store.read_session_record(tmp_path, session_id)
+    source["provider"].setdefault("metadata", {})["unresolved-turn-pending"] = False
+    session_store.write_session_record(tmp_path, source)
     session_store.transition_session_record(
         tmp_path, session_id, "failed", updates={"close-reason": "failed"}
     )
@@ -1365,15 +1650,34 @@ def test_completed_predecessor_fence_is_cleared_before_followup(tmp_path, monkey
             "unresolved-turn-pending": True,
             "unresolved-turn-id": "req_previous",
             "prompt-text-digest": "stale",
+            "submission-attempt-id": "attempt-previous",
+            "submission-stage": "send-click-acknowledged",
+            "send-intent-ever": True,
+            "submission-proof-source": "provider-user-message",
+            "recovery-state": "submission-proven",
         },
     }
     monkeypatch.setattr(session_dispatch.store, "read_record", lambda *_args: predecessor)
+    session_record = {
+        "provider": {"metadata": dict(record["provider-metadata"])}
+    }
+    monkeypatch.setattr(sessions_store, "read_session_record", lambda *_args: session_record)
+    monkeypatch.setattr(sessions_store, "session_provider_metadata", lambda value: dict(value["provider"]["metadata"]))
+
+    def clear_checkpoint(*_args, **_kwargs):
+        session_record["provider"]["metadata"] = {
+            "unresolved-turn-pending": False,
+            "recovery-state": "stale-predecessor-fence-cleared",
+        }
+        return True
+
+    monkeypatch.setattr(sessions_store, "clear_terminal_submission_checkpoint", clear_checkpoint)
     session_updates = []
-    monkeypatch.setattr(
-        sessions_store,
-        "update_provider_metadata",
-        lambda *args, **kwargs: session_updates.append((args, kwargs)),
-    )
+    def update_metadata(_root, _session_id, update):
+        session_updates.append(((_root, _session_id), update))
+        session_record["provider"]["metadata"].update(update)
+
+    monkeypatch.setattr(sessions_store, "update_provider_metadata", update_metadata)
     monkeypatch.setattr(
         session_dispatch.store,
         "update_owned_running_session",
@@ -1396,7 +1700,344 @@ def test_completed_predecessor_fence_is_cleared_before_followup(tmp_path, monkey
     assert cleared["provider-metadata"]["recovery-state"] == "stale-predecessor-fence-cleared"
     assert cleared["provider-metadata"]["stale-predecessor-request-id"] == "req_previous"
     assert "unresolved-turn-id" not in cleared["provider-metadata"]
+    assert not {
+        "submission-attempt-id",
+        "submission-stage",
+        "send-intent-ever",
+        "submission-proof-source",
+    }.intersection(cleared["provider-metadata"])
     assert session_updates
+
+
+def test_nonpending_terminal_checkpoint_residue_is_reconciled_before_followup(
+    tmp_path, monkeypatch
+):
+    predecessor = {
+        "request-id": "req_terminal_residue",
+        "state": "completed",
+        "session-id": "ses_shared_residue",
+        "created-at": "2026-10-20T00:00:00Z",
+        "response-artifact": {
+            "request-id": "req_terminal_residue",
+            "artifact-id": "final-response",
+            "bytes": 10,
+            "sha256": "validated-by-store-helper",
+        },
+        "provider-metadata": {
+            "terminal-evidence": {
+                "turn-id": "req_terminal_residue",
+                "policy": "response-complete",
+                "submission-attempt-fingerprint": hashlib.sha256(
+                    b"attempt-terminal-residue"
+                ).hexdigest(),
+            }
+        },
+    }
+    record = {
+        "request-id": "req_followup_residue",
+        "session-id": "ses_shared_residue",
+        "created-at": "2026-10-20T00:01:00Z",
+        "dispatch-owner-epoch": "owner",
+        "worker-id": "worker",
+        "attempt-epoch": 2,
+        "provider-metadata": {},
+    }
+    residue = {
+        "unresolved-turn-pending": False,
+        "recovery-state": "terminal-captured",
+        "submission-state": "cleared",
+        "submission-attempt-id": "attempt-terminal-residue",
+        "submission-stage": "send-click-acknowledged",
+        "send-intent-ever": True,
+        "target-id": "target-1",
+    }
+    session_record = {
+        "state": "active",
+        "binding": {"binding-id": "sbind-residue", "generation": 1},
+        "provider": {"metadata": dict(residue)},
+    }
+    monkeypatch.setattr(session_dispatch.store, "list_records", lambda *_args, **_kwargs: [predecessor])
+    monkeypatch.setattr(sessions_store, "read_session_record", lambda *_args: session_record)
+    monkeypatch.setattr(
+        sessions_store,
+        "session_provider_metadata",
+        lambda value: dict(value["provider"]["metadata"]),
+    )
+    clear_calls = []
+
+    def clear_residue(
+        _root,
+        _session_id,
+        predecessor_id,
+        *,
+        expected_metadata,
+        expected_binding_identity,
+    ):
+        clear_calls.append((predecessor_id, expected_metadata, expected_binding_identity))
+        session_record["provider"]["metadata"] = {
+            "unresolved-turn-pending": False,
+            "target-id": "target-1",
+        }
+        return True
+
+    monkeypatch.setattr(sessions_store, "clear_completed_checkpoint_residue", clear_residue)
+    monkeypatch.setattr(
+        session_dispatch.store,
+        "update_owned_running_session",
+        lambda *_args, **kwargs: {
+            **record,
+            "state": "running",
+            "provider-metadata": kwargs["provider_metadata"],
+        },
+    )
+    timeline_events = []
+    monkeypatch.setattr(
+        session_dispatch.store,
+        "record_gateway_timeline",
+        lambda *_args, **kwargs: timeline_events.append(kwargs),
+    )
+    from audiagentic.components.agents.gateway import observability
+
+    observations = []
+    monkeypatch.setattr(observability, "append_observation", lambda *args, **kwargs: observations.append(kwargs))
+
+    cleared = session_dispatch._clear_terminal_predecessor_fence(
+        tmp_path,
+        record,
+        session_store=sessions_store,
+    )
+
+    assert cleared is not None
+    assert clear_calls == [
+        (
+            "req_terminal_residue",
+            residue,
+            {"binding-id": "sbind-residue", "generation": 1},
+        )
+    ]
+    assert cleared["provider-metadata"] == {
+        "unresolved-turn-pending": False,
+        "target-id": "target-1",
+    }
+    assert timeline_events[0]["attributes"]["reason"] == (
+        "completed-attempt-matched-cleared-session-residue"
+    )
+    assert observations[0]["source"] == "session-checkpoint-recovery"
+    assert observations[0]["diagnostic_facts"]["checkpoint-residue"][
+        "response-artifact-validated"
+    ] is True
+
+
+def test_terminal_residue_scan_finds_predecessor_beyond_newest_hundred(
+    tmp_path, monkeypatch
+):
+    predecessor = {
+        "request-id": "req_old_terminal_residue",
+        "state": "completed",
+        "session-id": "ses_old_terminal_residue",
+        "created-at": "2026-10-20T00:00:00Z",
+        "response-artifact": {"request-id": "req_old_terminal_residue"},
+        "provider-metadata": {"submission-attempt-id": "attempt-old-terminal-residue"},
+    }
+    newer = [
+        {
+            "request-id": f"req_newer_{index}",
+            "state": "completed",
+            "session-id": f"ses_other_{index}",
+            "provider-metadata": {"submission-attempt-id": f"attempt-other_{index}"},
+        }
+        for index in range(101)
+    ]
+    record = {
+        "request-id": "req_followup_after_long_history",
+        "session-id": "ses_old_terminal_residue",
+        "created-at": "2026-10-20T00:01:00Z",
+        "dispatch-owner-epoch": "owner",
+        "worker-id": "worker",
+        "attempt-epoch": 1,
+        "provider-metadata": {},
+    }
+    residue = {
+        "unresolved-turn-pending": False,
+        "submission-attempt-id": "attempt-old-terminal-residue",
+    }
+    session_record = {
+        "state": "active",
+        "binding": {"binding-id": "sbind-old", "generation": 1},
+        "provider": {"metadata": dict(residue)},
+    }
+
+    def list_records(_root, *, include_output, limit=None):
+        assert include_output is False
+        assert limit is None
+        return [*newer, predecessor]
+
+    monkeypatch.setattr(session_dispatch.store, "list_records", list_records)
+    monkeypatch.setattr(sessions_store, "read_session_record", lambda *_args: session_record)
+    monkeypatch.setattr(
+        sessions_store,
+        "session_provider_metadata",
+        lambda value: dict(value["provider"]["metadata"]),
+    )
+    cleared_ids = []
+
+    def clear_residue(
+        _root,
+        _session_id,
+        predecessor_id,
+        *,
+        expected_metadata,
+        expected_binding_identity,
+    ):
+        cleared_ids.append(predecessor_id)
+        session_record["provider"]["metadata"] = {"unresolved-turn-pending": False}
+        return True
+
+    monkeypatch.setattr(sessions_store, "clear_completed_checkpoint_residue", clear_residue)
+    monkeypatch.setattr(
+        session_dispatch.store,
+        "update_owned_running_session",
+        lambda *_args, **kwargs: {
+            **record,
+            "state": "running",
+            "provider-metadata": kwargs["provider_metadata"],
+        },
+    )
+    monkeypatch.setattr(session_dispatch.store, "record_gateway_timeline", lambda *_args, **_kwargs: None)
+    from audiagentic.components.agents.gateway import observability
+
+    monkeypatch.setattr(observability, "append_observation", lambda *_args, **_kwargs: None)
+
+    cleared = session_dispatch._clear_terminal_predecessor_fence(
+        tmp_path, record, session_store=sessions_store
+    )
+
+    assert cleared is not None
+    assert cleared_ids == ["req_old_terminal_residue"]
+
+
+def test_cleared_session_checkpoint_is_not_resurrected_from_stale_request_projection(
+    tmp_path, monkeypatch
+):
+    predecessor = {
+        "state": "completed",
+        "session-id": "ses_shared",
+        "provider-metadata": {
+            "terminal-evidence": {"terminal-witness-id": "assistant-prev"},
+        },
+    }
+    record = {
+        "request-id": "req_followup",
+        "session-id": "ses_shared",
+        "dispatch-owner-epoch": "owner",
+        "worker-id": "worker",
+        "attempt-epoch": 1,
+        "provider-metadata": {
+            "unresolved-turn-pending": True,
+            "unresolved-turn-id": "req_previous",
+        },
+    }
+    clean_session = {
+        "provider": {
+            "metadata": {
+                "unresolved-turn-pending": False,
+                "stale-predecessor-request-id": "req_previous",
+            }
+        }
+    }
+    monkeypatch.setattr(session_dispatch.store, "read_record", lambda *_args: predecessor)
+    monkeypatch.setattr(sessions_store, "read_session_record", lambda *_args: clean_session)
+    monkeypatch.setattr(
+        sessions_store,
+        "session_provider_metadata",
+        lambda value: dict(value.get("provider", {}).get("metadata") or {}),
+    )
+
+    def unexpected_clear(*_args, **_kwargs):
+        pytest.fail("a stale request projection must not clear or resurrect session state")
+
+    monkeypatch.setattr(sessions_store, "clear_terminal_submission_checkpoint", unexpected_clear)
+
+    assert session_dispatch._clear_terminal_predecessor_fence(
+        tmp_path, record, session_store=sessions_store
+    ) is None
+
+
+def test_session_checkpoint_precedes_missing_request_projection_for_predecessor_fence(
+    tmp_path, monkeypatch
+):
+    """A stale session fence is reconciled even when the new request lacks metadata."""
+    from audiagentic.components.agents.gateway.session import sessions_store
+
+    predecessor_id = "req_previous"
+    record = {
+        "request-id": "req_followup",
+        "session-id": "ses_shared",
+        "dispatch-owner-epoch": "owner",
+        "worker-id": "worker",
+        "attempt-epoch": 1,
+        "provider-metadata": {},
+    }
+    predecessor = {
+        "state": "completed",
+        "session-id": "ses_shared",
+        "provider-metadata": {
+            "terminal-evidence": {"terminal-witness-id": "assistant-prev"},
+        },
+    }
+    checkpoint = {
+        "unresolved-turn-pending": True,
+        "unresolved-turn-id": predecessor_id,
+        "submission-proven": True,
+        "terminal-evidence": {"terminal-witness-id": "assistant-prev"},
+    }
+    session_record = {"provider": {"metadata": dict(checkpoint)}}
+
+    monkeypatch.setattr(session_dispatch.store, "read_record", lambda *_args: predecessor)
+    monkeypatch.setattr(
+        sessions_store,
+        "read_session_record",
+        lambda *_args: session_record,
+    )
+    monkeypatch.setattr(
+        sessions_store,
+        "session_provider_metadata",
+        lambda value: dict(value.get("provider", {}).get("metadata") or {}),
+    )
+
+    def clear_checkpoint(*_args, **_kwargs):
+        session_record["provider"]["metadata"] = {
+            "unresolved-turn-pending": False,
+            "recovery-state": "stale-predecessor-fence-cleared",
+        }
+        return True
+
+    monkeypatch.setattr(sessions_store, "clear_terminal_submission_checkpoint", clear_checkpoint)
+    monkeypatch.setattr(
+        sessions_store,
+        "update_provider_metadata",
+        lambda _root, _session_id, update: session_record["provider"]["metadata"].update(update),
+    )
+    monkeypatch.setattr(
+        session_dispatch.store,
+        "update_owned_running_session",
+        lambda *_args, **kwargs: {
+            **record,
+            "state": "running",
+            "provider-metadata": kwargs["provider_metadata"],
+        },
+    )
+    monkeypatch.setattr(session_dispatch.store, "record_gateway_timeline", lambda *_args, **_kwargs: None)
+
+    cleared = session_dispatch._clear_terminal_predecessor_fence(
+        tmp_path,
+        record,
+        session_store=sessions_store,
+    )
+
+    assert cleared is not None
+    assert cleared["provider-metadata"]["unresolved-turn-pending"] is False
+    assert cleared["provider-metadata"]["stale-predecessor-request-id"] == predecessor_id
 
 
 
@@ -1418,6 +2059,7 @@ def test_completed_session_checkpoint_repairs_missing_predecessor_record(tmp_pat
     session_record = {
         "provider": {
             "metadata": {
+                "unresolved-turn-pending": True,
                 "unresolved-turn-id": "req_previous",
                 "terminal-evidence": {"terminal-witness-id": "assistant-prev"},
             }
@@ -1429,6 +2071,19 @@ def test_completed_session_checkpoint_repairs_missing_predecessor_record(tmp_pat
         )
     monkeypatch.setattr(session_dispatch.store, "read_record", missing)
     monkeypatch.setattr(sessions_store, "read_session_record", lambda *_args: session_record)
+    monkeypatch.setattr(
+        sessions_store,
+        "session_provider_metadata",
+        lambda value: dict(value.get("provider", {}).get("metadata") or {}),
+    )
+    def clear_checkpoint(*_args, **_kwargs):
+        session_record["provider"]["metadata"] = {
+            "unresolved-turn-pending": False,
+            "recovery-state": "stale-predecessor-fence-cleared",
+        }
+        return True
+
+    monkeypatch.setattr(sessions_store, "clear_terminal_submission_checkpoint", clear_checkpoint)
     monkeypatch.setattr(
         sessions_store,
         "update_provider_metadata",
@@ -1453,3 +2108,280 @@ def test_completed_session_checkpoint_repairs_missing_predecessor_record(tmp_pat
     assert cleared["provider-metadata"]["unresolved-turn-pending"] is False
 
 
+@pytest.mark.parametrize("new_request", [False, True])
+def test_auto_resume_transient_failed_control_retries_without_duplicate_prompt(
+    resumable_rig, monkeypatch, new_request
+):
+    from audiagentic.components.agents.gateway.session import resume as resume_lib
+
+    runtime, transports, root = resumable_rig
+    first = _dispatch(root, _running_record(root, session_keep_alive=True), dispatch_prompt="hello")
+    source_id = first["session-id"]
+    runtime.close_session(root, source_id, reason="shutdown")
+    source = sessions_store.read_session_record(root, source_id)
+    source["state"] = "failed"
+    source["provider"].setdefault("metadata", {})["unresolved-turn-pending"] = False
+    sessions_store.write_session_record(root, source)
+
+    original_prepare = runtime._provider_prepare_fn
+    resume_refs = []
+
+    def prepare(*args, **kwargs):
+        prepared = original_prepare(*args, **kwargs)
+        if kwargs.get("resume_provider_ref"):
+            resume_refs.append(kwargs["resume_provider_ref"])
+            if len(resume_refs) == 1:
+                async def fail_open(*_args, **_kwargs):
+                    raise RuntimeError("idle conversation changed during reopening")
+                monkeypatch.setattr(prepared.transport, "open", fail_open)
+        return prepared
+
+    monkeypatch.setattr(runtime, "_provider_prepare_fn", prepare)
+    record = _running_record(root, session_id=source_id, session_keep_alive=True)
+    with pytest.raises(RecoveryDeferred) as deferred:
+        _dispatch(root, record, dispatch_prompt="continue")
+    assert deferred.value.phase == "rehydrate-retry"
+    assert deferred.value.side_effect_state == "not-started"
+    control_id = f"auto-resume:{source_id}"
+    failed = resume_lib.lookup_resume_attempt(root, source_id, control_id)
+    assert failed["error-code"] == "EXT-AGW-118"
+    assert all(not t.turns for t in transports[1:])
+
+    if new_request:
+        record = _running_record(root, session_id=source_id, session_keep_alive=True)
+        with pytest.raises(RecoveryDeferred) as cached:
+            _dispatch(root, record, dispatch_prompt="continue")
+        assert cached.value.phase == "rehydrate-retry"
+        assert cached.value.side_effect_state == "not-started"
+        assert len(resume_refs) == 1  # replay never reopens or sends
+
+    record = store.read_record(root, record["request-id"])
+    record["recovery"] = {"attempt": 1, "outcome": "replay-required", "reason": "unproven-dispatch"}
+    store.write_record(root, record)
+    result = _dispatch(root, record, dispatch_prompt="continue")
+    assert result["state"] == "completed", result
+    assert resume_refs == [source["binding"]["provider-session-ref"]] * 2
+    assert [turn for t in transports[1:] for turn in t.turns] == ["continue"]
+    assert resume_lib.lookup_resume_attempt(root, source_id, control_id) == failed
+    with pytest.raises(AudiaGenticError) as manual:
+        runtime.resume_session(root, source_id, control_id=control_id)
+    assert manual.value.code == "CON-AGW-116"
+    assert manual.value.details["prior-error-code"] == "EXT-AGW-118"
+
+    # Different queue attempts still converge on the same successful owner.
+    later = _running_record(root, session_id=source_id, session_keep_alive=True)
+    later["recovery"] = {"attempt": 2, "outcome": "replay-required", "reason": "unproven-dispatch"}
+    store.write_record(root, later)
+    again = _dispatch(root, later, dispatch_prompt="next")
+    assert again["state"] == "completed", again
+    assert again["session-id"] == result["session-id"]
+    assert len(resume_refs) == 2
+    assert [turn for t in transports[1:] for turn in t.turns] == ["continue", "next"]
+
+
+@pytest.mark.parametrize("prior_code", ["RES-AGW-111", "UNS-AGW-112", "CON-AGW-115", "CFG-AGW-001"])
+def test_auto_resume_cached_definitive_refusal_is_not_retried(resumable_rig, prior_code):
+    from audiagentic.components.agents.gateway.session import resume as resume_lib
+
+    runtime, transports, root = resumable_rig
+    first = _dispatch(root, _running_record(root, session_keep_alive=True), dispatch_prompt="hello")
+    source_id = first["session-id"]
+    runtime.close_session(root, source_id, reason="shutdown")
+    resume_lib.record_resume_attempt(
+        root, source_id, f"auto-resume:{source_id}", outcome="failed",
+        error_code=prior_code, error_message="definitive refusal",
+    )
+    result = _dispatch(
+        root, _running_record(root, session_id=source_id), dispatch_prompt="continue"
+    )
+    assert result["state"] == "failed"
+    assert result["error"]["code"] == "RES-AGW-003"
+    assert len(transports) == 1
+    assert transports[0].turns == ["hello"]
+
+
+@pytest.mark.parametrize("state", ["closed", "expired"])
+@pytest.mark.parametrize("reason", ["client-request", "post-turn-close"])
+@pytest.mark.parametrize("blocked", [None, "binding", "pending", "ambiguous", "checkpoint"])
+def test_new_prompt_reopens_safe_deliberately_closed_session(
+    resumable_rig, monkeypatch, state, reason, blocked
+):
+    runtime, transports, root = resumable_rig
+    first = _dispatch(root, _running_record(root, session_keep_alive=True), dispatch_prompt="hello")
+    source_id = first["session-id"]
+    runtime.close_session(root, source_id, reason=reason)
+    source = sessions_store.read_session_record(root, source_id)
+    native_ref = source["binding"]["provider-session-ref"]
+    source["state"] = state
+    metadata = source["provider"].setdefault("metadata", {})
+    metadata["unresolved-turn-pending"] = blocked == "pending"
+    if blocked == "binding":
+        source["binding"] = None
+    elif blocked == "ambiguous":
+        metadata["submission-ambiguous"] = True
+    elif blocked == "checkpoint":
+        metadata["send-intent-ever"] = True
+    sessions_store.write_session_record(root, source)
+    original_prepare = runtime._provider_prepare_fn
+    resumed_refs = []
+
+    def prepare(*args, **kwargs):
+        resumed_refs.append(kwargs.get("resume_provider_ref"))
+        return original_prepare(*args, **kwargs)
+
+    monkeypatch.setattr(runtime, "_provider_prepare_fn", prepare)
+    result = _dispatch(
+        root, _running_record(root, session_id=source_id, session_keep_alive=True),
+        dispatch_prompt="new request",
+    )
+    if blocked:
+        assert result["state"] == "failed", result
+        assert result["error"]["code"] == "RES-AGW-003"
+        assert resumed_refs == []
+        assert len(transports) == 1
+        return
+    assert result["state"] == "completed", result
+    assert result["session-id"] != source_id
+    assert resumed_refs == [native_ref]
+    assert transports[0].turns == ["hello"]
+    assert transports[1].turns == ["new request"]
+
+
+def test_new_prompt_walks_cached_deliberately_closed_successor_generations(
+    resumable_rig, monkeypatch
+):
+    runtime, transports, root = resumable_rig
+    first = _dispatch(root, _running_record(root, session_keep_alive=True), dispatch_prompt="hello")
+    source_id = first["session-id"]
+    native_ref = sessions_store.read_session_record(root, source_id)["binding"]["provider-session-ref"]
+    original_prepare = runtime._provider_prepare_fn
+    resumed_refs = []
+
+    def prepare(*args, **kwargs):
+        resumed_refs.append(kwargs.get("resume_provider_ref"))
+        return original_prepare(*args, **kwargs)
+
+    monkeypatch.setattr(runtime, "_provider_prepare_fn", prepare)
+    generation = source_id
+    successors = []
+    for index, reason in enumerate(["client-request", "post-turn-close", "client-request"]):
+        runtime.close_session(root, generation, reason=reason)
+        terminal = sessions_store.read_session_record(root, generation)
+        terminal["provider"].setdefault("metadata", {})["unresolved-turn-pending"] = False
+        sessions_store.write_session_record(root, terminal)
+        # Always name the original source to exercise cached successor walking.
+        result = _dispatch(
+            root, _running_record(root, session_id=source_id, session_keep_alive=True),
+            dispatch_prompt=f"new {index}",
+        )
+        assert result["state"] == "completed", result
+        generation = result["session-id"]
+        assert generation not in [source_id, *successors]
+        successors.append(generation)
+    assert resumed_refs == [native_ref] * 3
+    assert [t.turns for t in transports] == [["hello"], ["new 0"], ["new 1"], ["new 2"]]
+
+
+def test_promptless_restart_does_not_walk_deliberately_closed_cached_successor(
+    resumable_rig, monkeypatch
+):
+    runtime, transports, root = resumable_rig
+    first = _dispatch(root, _running_record(root, session_keep_alive=True), dispatch_prompt="hello")
+    source_id = first["session-id"]
+    runtime.close_session(root, source_id, reason="shutdown")
+    successor = runtime.resume_session(
+        root, source_id, control_id=f"auto-resume:{source_id}",
+        execution_context_fingerprint="0" * 64,
+    )
+    runtime.close_session(root, successor["session-id"], reason="client-request")
+    terminal = sessions_store.read_session_record(root, successor["session-id"])
+    terminal["provider"].setdefault("metadata", {})["unresolved-turn-pending"] = False
+    sessions_store.write_session_record(root, terminal)
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.api.complete_execution_from_provider",
+        lambda *_args, **_kwargs: None,
+    )
+    with pytest.raises(RecoveryDeferred) as deferred:
+        _dispatch(
+            root, _running_record(root, session_id=source_id, session_keep_alive=True),
+            dispatch_prompt="", resume_existing=True,
+        )
+    assert deferred.value.phase == "observe-retry"
+    assert len(transports) == 2
+    assert [t.turns for t in transports] == [["hello"], []]
+
+
+@pytest.mark.parametrize("evidence", ["missing", "wrong-code", "succeeded", "wrong-control", "wrong-source"])
+def test_auto_resume_forged_transient_replay_requires_matching_failed_control(
+    resumable_rig, monkeypatch, evidence
+):
+    from audiagentic.components.agents.gateway.session import resume as resume_lib
+
+    runtime, transports, root = resumable_rig
+    first = _dispatch(root, _running_record(root, session_keep_alive=True), dispatch_prompt="hello")
+    source_id = first["session-id"]
+    runtime.close_session(root, source_id, reason="shutdown")
+    if evidence != "missing":
+        resume_lib.record_resume_attempt(
+            root, "ses_other_source" if evidence == "wrong-source" else source_id,
+            "other-control" if evidence == "wrong-control" else f"auto-resume:{source_id}",
+            outcome="succeeded" if evidence == "succeeded" else "failed",
+            error_code="RES-AGW-111" if evidence == "wrong-code" else "EXT-AGW-118",
+        )
+
+    def forged_replay(*_args, **_kwargs):
+        raise AudiaGenticError(
+            code="CON-AGW-116", kind="agents", message="unproven cached failure",
+            details={"prior-error-code": "EXT-AGW-118"},
+        )
+
+    monkeypatch.setattr(runtime, "resume_session", forged_replay)
+    result = _dispatch(
+        root, _running_record(root, session_id=source_id), dispatch_prompt="continue"
+    )
+    assert result["state"] == "failed", result
+    assert result["error"]["code"] == "RES-AGW-003"
+    assert result["error"]["details"]["auto-resume-refusal-code"] == "CON-AGW-116"
+    assert len(transports) == 1
+    assert transports[0].turns == ["hello"]
+
+
+def test_auto_resume_cached_transient_uses_current_successor_control(resumable_rig, monkeypatch):
+    from audiagentic.components.agents.gateway.session import resume as resume_lib
+
+    runtime, transports, root = resumable_rig
+    first = _dispatch(root, _running_record(root, session_keep_alive=True), dispatch_prompt="hello")
+    source_id = first["session-id"]
+    runtime.close_session(root, source_id, reason="shutdown")
+    successor = runtime.resume_session(
+        root, source_id, control_id=f"auto-resume:{source_id}",
+        execution_context_fingerprint="0" * 64,
+    )
+    successor_id = successor["session-id"]
+    runtime.close_session(root, successor_id, reason="shutdown")
+    prepare = runtime._provider_prepare_fn
+
+    def failing_prepare(*args, **kwargs):
+        prepared = prepare(*args, **kwargs)
+        async def fail_open(*_args, **_kwargs):
+            raise RuntimeError("idle conversation changed during reopening")
+        monkeypatch.setattr(prepared.transport, "open", fail_open)
+        return prepared
+
+    monkeypatch.setattr(runtime, "_provider_prepare_fn", failing_prepare)
+    for _ in range(2):  # actual failure, then real runtime replay of that failure
+        with pytest.raises(RecoveryDeferred) as deferred:
+            _dispatch(
+                root, _running_record(root, session_id=source_id),
+                dispatch_prompt="continue",
+            )
+        assert deferred.value.phase == "rehydrate-retry"
+        assert deferred.value.side_effect_state == "not-started"
+    assert resume_lib.lookup_resume_attempt(
+        root, source_id, f"auto-resume:{source_id}"
+    )["outcome"] == "succeeded"
+    assert resume_lib.lookup_resume_attempt(
+        root, successor_id, f"auto-resume:{successor_id}"
+    )["error-code"] == "EXT-AGW-118"
+    assert len(transports) == 3
+    assert [t.turns for t in transports] == [["hello"], [], []]

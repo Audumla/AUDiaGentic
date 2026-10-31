@@ -1,7 +1,7 @@
 """Validated reads for the shared harness configuration document.
 
 This is configuration policy, not runtime orchestration.  Both the generic
-harness runtime and provider materialization need the same validated rig port,
+harness runtime and provider materialization need the same validated model-server URL,
 so keeping it in foundation prevents a provider -> runtime dependency.
 """
 from __future__ import annotations
@@ -22,29 +22,28 @@ def _harness_config_error(code_number: int, message: str, **details: object) -> 
     )
 
 
-def require_harness_rig_port(harness_cfg: dict[str, Any]) -> int:
-    """Return the configured embedded-rig port or raise a stable config error."""
-    rig_cfg = harness_cfg.get("rig")
-    if not isinstance(rig_cfg, dict):
+def require_harness_endpoint(harness_cfg: dict[str, Any]) -> str:
+    """Return the configured model-server URL or raise a stable config error."""
+    endpoint_cfg = harness_cfg.get("endpoint")
+    if not isinstance(endpoint_cfg, dict):
         raise _harness_config_error(
             2,
-            "Harness config missing required 'rig' section. "
-            "Expected config/provisioning/harness/ag.yaml to define rig.port.",
-            field="rig",
+            "Harness config missing required 'endpoint' section. "
+            "Expected config/provisioning/harness/ag.yaml to define endpoint.url.",
+            field="endpoint",
         )
-    raw = rig_cfg.get("port")
+    raw = endpoint_cfg.get("url")
     if raw is None:
         raise _harness_config_error(
             3,
-            "Harness config missing required 'rig.port'. "
+            "Harness config missing required 'endpoint.url'. "
             "Set it in config/provisioning/harness/ag.yaml or override config.",
-            field="rig.port",
+            field="endpoint.url",
         )
-    from audiagentic.foundation.config.local_runtime import local_rig_port
-    try:
-        return local_rig_port(raw)
-    except AudiaGenticError as exc:
-        raise _harness_config_error(4, str(exc), value=raw) from exc
+    url = str(raw).strip().rstrip("/")
+    if not url.startswith(("http://", "https://")):
+        raise _harness_config_error(4, "endpoint.url must use http:// or https://", value=raw)
+    return url
 
 
-__all__ = ["require_harness_rig_port"]
+__all__ = ["require_harness_endpoint"]

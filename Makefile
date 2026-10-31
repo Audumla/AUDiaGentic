@@ -48,7 +48,7 @@ DOCKER_MOUNT := $(shell cygpath -m "$(CURDIR)" 2>/dev/null || pwd)
 	@echo "  test-gateway-crash-matrix-docker Run SH07 real-subprocess crash/recovery matrix in docker"
 	@echo "  test-gateway-opencode-docker    Run real npm-CLI-provider gateway dispatch (dynamic discovery) in docker"
 	@echo "  test-gateway-concurrency-docker Run real concurrent gateway load/negative-path suite in docker"
-	@echo "  test-gateway-pi-smoke-docker    Run real Pi CLI + embedded rig gateway dispatch (SH16) in docker"
+	@echo "  test-gateway-pi-smoke-docker    Run real Pi CLI + test model server gateway dispatch (SH16) in docker"
 	@echo "  test-consumer-pipeline-docker   Run AS19/AS30/AS31 consumer pipeline integration tests in docker"
 	@echo "  build-base           Build audia-test-base image"
 	@echo "  build-test           Build audiagentic-test image (requires base)"
@@ -182,7 +182,7 @@ test-gateway-opencode-docker: build-gateway-opencode
 test-gateway-concurrency-docker: build-gateway-concurrency
 	docker run --rm $(GATEWAY_CONCURRENCY_IMAGE)
 
-# SH16: real npm-installed Pi CLI + real embedded llama-server rig + real
+# SH16: real npm-installed Pi CLI + real llama-server (test-only helper) + real
 # local GGUF model, dispatched through the gateway's disposable full-isolation
 # worker subprocess.
 test-gateway-pi-smoke-docker: build-gateway-pi-smoke

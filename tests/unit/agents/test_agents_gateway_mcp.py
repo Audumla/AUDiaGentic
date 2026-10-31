@@ -5,11 +5,15 @@ from __future__ import annotations
 import asyncio
 import json
 from pathlib import Path
+from contextlib import ExitStack
 from unittest.mock import patch
 
-from audiagentic.components.agents.mcp import gateway_mcp as agents_gateway_mcp
+import pytest
 
-_ROOT = Path("C:/fake/root")
+from audiagentic.components.agents.mcp import gateway_mcp as agents_gateway_mcp
+from audiagentic.components.agents.mcp import gateway_ops_mcp as agents_gateway_ops_mcp
+
+_ROOT = Path("/fake/root").resolve()
 
 
 def test_agent_task_list_definitions_is_a_registered_mcp_tool():
@@ -26,9 +30,21 @@ def test_agent_task_list_definitions_is_a_registered_mcp_tool():
 
 
 def _patch_root():
+    stack = ExitStack()
+    for module in ("gateway_mcp", "gateway_ops_mcp", "gateway_mcp_support"):
+        stack.enter_context(
+            patch(f"audiagentic.components.agents.mcp.{module}.project_root_from_env", return_value=_ROOT)
+        )
+    return stack
+
+
+def _patch_definition_client():
+    from audiagentic.components.agents.gateway.client import EmbeddedGatewayClient
+
+    embedded = EmbeddedGatewayClient(application=object())
     return patch(
-        "audiagentic.components.agents.mcp.gateway_mcp.project_root_from_env",
-        return_value=_ROOT,
+        "audiagentic.components.agents.mcp.gateway_mcp.call_gateway_method",
+        side_effect=lambda operation, root: getattr(embedded, operation)(root),
     )
 
 
@@ -54,8 +70,9 @@ def test_agent_task_list_definitions_returns_slim_client_facing_cards():
     ]
     with (
         _patch_root(),
+        _patch_definition_client(),
         patch(
-            "audiagentic.components.agents.configuration.global_catalog.list_global_agent_definitions",
+            "audiagentic.components.agents.configuration.management.list_agent_definitions",
             return_value=raw,
         ),
     ):
@@ -76,8 +93,9 @@ def test_agent_task_list_definitions_returns_slim_client_facing_cards():
 def test_agent_task_list_definitions_delegates():
     with (
         _patch_root(),
+        _patch_definition_client(),
         patch(
-            "audiagentic.components.agents.configuration.global_catalog.list_global_agent_definitions",
+            "audiagentic.components.agents.configuration.management.list_agent_definitions",
             return_value=[{"agent_id": "reviewer-agent"}],
         ) as mock_list,
     ):
@@ -113,6 +131,22 @@ def test_agent_task_status_delegates():
     mock_call.assert_called_once_with("get_execution_request", _ROOT, "req_x")
 
 
+def test_request_status_prefers_durable_record_when_project_slug_is_ambiguous():
+    request_id = "req_example_84c8ae891c30"
+    with (
+        _patch_root(),
+        patch.dict("os.environ", {"AUDIAGENTIC_WORKSPACE_ROOTS": str(_ROOT)}),
+        patch("audiagentic.components.agents.gateway.store.read_record") as read,
+        patch("audiagentic.components.agents.mcp.gateway_mcp.call_gateway_method") as mock_call,
+    ):
+        read.return_value = {"request-id": request_id}
+        mock_call.return_value = {"request_id": request_id, "lifecycle": "pending", "activity_seq": 0}
+        result = agents_gateway_mcp.agent_task_status(request_id)
+    assert result["request_id"] == request_id
+    read.assert_called_once_with(_ROOT, request_id)
+    mock_call.assert_called_once_with("get_execution_request", _ROOT, request_id)
+
+
 def test_status_and_submit_dtos_drop_raw_metadata_and_status_has_session_id():
     with (
         _patch_root(),
@@ -139,20 +173,20 @@ def test_status_and_submit_dtos_drop_raw_metadata_and_status_has_session_id():
     assert submitted == {"request-id": "req_x", "state": "queued", "session-id": "ses_x"}
 def test_agent_task_session_purge_delegates():
     with _patch_root(), patch(
-        "audiagentic.components.agents.mcp.gateway_mcp.call_gateway_method",
+        "audiagentic.components.agents.mcp.gateway_ops_mcp.call_gateway_method",
         return_value={"session-id": "ses_x", "outcome": "purged"},
     ) as mock_call:
-        result = agents_gateway_mcp.agent_task_session_purge("ses_x")
+        result = agents_gateway_ops_mcp.agent_task_session_purge("ses_x")
     assert result == {"session-id": "ses_x", "outcome": "purged"}
     mock_call.assert_called_once_with("purge_execution_session", _ROOT, "ses_x")
 
 
 def test_agent_task_gateway_purge_defaults_to_dry_run():
     with _patch_root(), patch(
-        "audiagentic.components.agents.mcp.gateway_mcp.call_gateway_method",
+        "audiagentic.components.agents.mcp.gateway_ops_mcp.call_gateway_method",
         return_value={"outcome": "dry-run", "dry-run": True},
     ) as mock_call:
-        result = agents_gateway_mcp.agent_task_gateway_purge()
+        result = agents_gateway_ops_mcp.agent_task_gateway_purge()
     assert result == {"outcome": "dry-run", "dry-run": True}
     mock_call.assert_called_once_with(
         "purge_execution_sessions", _ROOT, dry_run=True, session_ids=None
@@ -345,9 +379,10 @@ def test_gateway_mcp_returns_structured_content_without_text_duplicate():
     result = asyncio.run(invoke())
     assert isinstance(result, CallToolResult)
     assert result.content == []
-    assert result.structuredContent == {
-        "result": [{"session-id": "ses_active", "state": "active"}]
-    }
+    # One structured envelope: the tool's result beside the worktree it used.
+    assert set(result.structuredContent) == {"result", "worktree"}
+    assert result.structuredContent["result"] == [{"session-id": "ses_active", "state": "active"}]
+    assert set(result.structuredContent["worktree"]) == {"path", "branch", "head"}
 
 
 def test_agent_task_list_requests_delegates():
@@ -371,7 +406,7 @@ def test_agent_task_list_requests_delegates():
 def test_agent_task_gateway_overview_delegates():
     with (
         _patch_root(),
-        patch("audiagentic.components.agents.mcp.gateway_mcp.call_gateway_method") as mock_call,
+        patch("audiagentic.components.agents.mcp.gateway_ops_mcp.call_gateway_method") as mock_call,
     ):
         mock_call.return_value = {
             "total_requests": 3,
@@ -379,7 +414,7 @@ def test_agent_task_gateway_overview_delegates():
             "recent_failures": [],
             "queues": {},
         }
-        result = agents_gateway_mcp.agent_task_gateway_overview()
+        result = agents_gateway_ops_mcp.agent_task_gateway_overview()
     assert result["total_requests"] == 3
     mock_call.assert_called_once_with("gateway_overview", _ROOT)
 
@@ -403,16 +438,14 @@ def test_agent_task_submit_resolves_agent_and_delegates():
         _ROOT,
         agent_id="reviewer-agent",
         prompt_body="hi",
-        source=None,
         metadata=None,
         session_id=None,
         session_keep_alive=False,
     )
 
 
+@pytest.mark.usefixtures("in_process_gateway")
 def test_agent_task_submit_unknown_agent_propagates_error():
-    import pytest
-
     from audiagentic.foundation.contracts.errors import AudiaGenticError
     from audiagentic.foundation.mcp.component_server import ToolError
 
@@ -485,10 +518,10 @@ def test_agent_task_list_requests_preserves_api_v4_progress_fields():
 
 def test_agent_task_evidence_reapplies_public_allowlist_before_mcp_output():
     with _patch_root(), patch(
-        "audiagentic.components.agents.mcp.gateway_mcp.call_gateway_method",
+        "audiagentic.components.agents.mcp.gateway_ops_mcp.call_gateway_method",
         return_value={"schema_version": "gateway-evidence.v1", "request-id": "req_x", "state": "running", "diagnostics": {"classification": "watchdog", "prompt": "secret"}, "evidence": [{"phase": "running", "raw-dom": "secret"}], "observation-summary": {"count": 1, "latest": {"facts": {"message": "secret"}}}, "latest-transition": {"event": "running", "timestamp": "now"}, "provider-metadata": {"target-id": "secret"}},
     ):
-        result = agents_gateway_mcp.agent_task_evidence("req_x")
+        result = agents_gateway_ops_mcp.agent_task_evidence("req_x")
     encoded = json.dumps(result)
     assert "secret" not in encoded
     assert result["request-id"] == "req_x"

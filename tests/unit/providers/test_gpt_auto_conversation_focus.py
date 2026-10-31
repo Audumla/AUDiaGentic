@@ -1,12 +1,195 @@
 import asyncio
+import sys
+from dataclasses import replace
+from types import SimpleNamespace
+
+import pytest
 
 from audiagentic.components.providers.adapters.gpt_auto import conversation_focus
 from audiagentic.components.providers.adapters.gpt_auto.conversation_focus import select_focus_page
+from audiagentic.components.providers.adapters.gpt_auto.prompt_fingerprint import PromptFingerprint
+from audiagentic.components.providers.adapters.gpt_auto.snapshot import ChatMessageRef, ChatSnapshot
 from audiagentic.components.providers.contracts import ConversationFocusLocator
+from audiagentic.components.providers.contracts.conversation_focus import ConversationCaptureLocator
 
 
 def _locator(url=None, session=None):
     return ConversationFocusLocator(chat_url=url, provider_session_id=session)
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_duplicate_physical_tabs_choose_stable_exact_conversation(reverse):
+    url = "https://chatgpt.com/g/g-p-x/c/s1"
+    pages = [
+        {"pageHandle": "h2", "targetId": "target-b", "url": url},
+        {"pageHandle": "h1", "targetId": "target-a", "url": url},
+    ]
+    page, error = select_focus_page(list(reversed(pages)) if reverse else pages, _locator(url, "s1"))
+    assert error is None
+    assert page["targetId"] == "target-a"
+
+
+@pytest.mark.parametrize("changed_final", [False, True])
+def test_capture_duplicate_tabs_skips_stale_renderer_for_owned_terminal(monkeypatch, tmp_path, changed_final):
+    url = "https://chatgpt.com/g/g-p-x/c/s1"
+    user = ChatMessageRef(role="user", message_id="u1", text="owned", sequence=0)
+    assistant = ChatMessageRef(role="assistant", message_id="a1", text="answer", sequence=1)
+    snapshot = ChatSnapshot(url=url, composer_present=True, composer_editable=True,
+        user_count=1, assistant_count=1, latest_user_id="u1", latest_assistant_id="a1",
+        latest_user_text="owned", latest_assistant_text="answer", generating=False,
+        terminal_witness_assistant_id="a1", error_present=False,
+        dom_signals=frozenset({"completion-control"}), message_refs=(user, assistant))
+
+    class Browser:
+        reads = 0
+        async def page_by_handle(self, handle):
+            return SimpleNamespace(handle=handle, target_id=handle)
+
+        async def snapshot(self, page, **kwargs):
+            self.reads += 1
+            stale = page.handle == "a-stale" or (changed_final and self.reads > 2)
+            return replace(snapshot, latest_user_text="previous", message_refs=(replace(user, text="previous"), assistant)) if stale else snapshot
+
+    class Bridge:
+        async def call(self, method, params=None):
+            assert method == "list_pages", "passive capture must not mutate browser"
+            return [{"pageHandle": handle, "targetId": handle, "url": url} for handle in ("a-stale", "z-complete")]
+
+    class Runtime:
+        bridge, gpt_browser = Bridge(), Browser()
+        config = SimpleNamespace(workflow=SimpleNamespace(bridge_signals=lambda: ()))
+
+        async def connect_existing(self):
+            return True
+
+        def adopt_existing_dedicated_window(self, pages):
+            pass
+
+        def page_belongs_to_dedicated_window(self, page):
+            return True
+
+    monkeypatch.setattr(conversation_focus, "load_provider_config", lambda _: {"providers": {"gpt-auto": {"settings": {"browser": {"executable": sys.executable}}}}})
+    monkeypatch.setattr(conversation_focus, "get_runtime", lambda *_: Runtime())
+    monkeypatch.setattr(conversation_focus.ChatSnapshot, "from_bridge", lambda value: value)
+    result = asyncio.run(conversation_focus.capture_latest_response(tmp_path, provider_id="gpt-auto",
+        locator=ConversationCaptureLocator(chat_url=url, provider_session_id="s1",
+            prompt_text_digest=PromptFingerprint.from_text("owned").digest, baseline_user_count=0), passive=True))
+    if changed_final:
+        assert result == {"outcome": "unavailable", "reason": "duplicate-owned-turn-changed"}
+    else:
+        assert result["outcome"] == "captured"
+        assert result["binding"]["target-id"] == "z-complete"
+
+
+@pytest.mark.parametrize(
+    "case",
+    ["valid", "target-missing", "target-replaced", "wrong-project", "wrong-prompt",
+     "later-user", "duplicate-prompt", "reverse-order", "generating", "missing-witness",
+     "no-send-intent", "no-click-ack", "nonzero-baseline", "invalid-baseline",
+     "target-navigated-during-snapshot"],
+)
+def test_capture_from_exact_checkpoint_target_reproves_turn_without_page_actions(
+    monkeypatch, tmp_path, case
+):
+    project_url = "https://chatgpt.com/g/g-p-x/project"
+    chat_url = "https://chatgpt.com/g/g-p-x/c/s1"
+    locator = ConversationCaptureLocator(
+        project_url=project_url, gateway_session_id="ses-exact",
+        provider_target_id="exact-target", prompt_text_digest=PromptFingerprint.from_text("request").digest,
+        baseline_user_count=0, baseline_assistant_count=0,
+        send_intent_ever=True, submission_stage="send-click-acknowledged",
+    )
+    user = ChatMessageRef(role="user", message_id="user-1", text="request", sequence=0)
+    assistant = ChatMessageRef(role="assistant", message_id="assistant-1", text="answer", sequence=1)
+    snapshot = ChatSnapshot(
+        url=chat_url, composer_present=True, composer_editable=True,
+        user_count=1, assistant_count=1, latest_user_id="user-1", latest_user_text="request",
+        latest_assistant_id="assistant-1", latest_assistant_text="answer",
+        terminal_witness_assistant_id="assistant-1", generating=False,
+        error_present=False, dom_signals=frozenset({"completion-control"}),
+        message_refs=(user, assistant),
+    )
+    pages = [{"pageHandle": "h1", "targetId": "exact-target", "url": chat_url}]
+    current_url = chat_url
+    if case == "target-missing":
+        pages = []
+    elif case == "target-replaced":
+        pages[0]["targetId"] = "different-target"
+    elif case == "wrong-project":
+        pages[0]["url"] = "https://chatgpt.com/g/g-p-other/c/s1"
+    elif case == "wrong-prompt":
+        snapshot = replace(snapshot, message_refs=(replace(user, text="foreign"), assistant))
+    elif case in {"later-user", "duplicate-prompt"}:
+        foreign = replace(user, message_id="user-2", sequence=2,
+                          text="request" if case == "duplicate-prompt" else "foreign")
+        snapshot = replace(snapshot, user_count=2, latest_user_id="user-2",
+                           message_refs=(user, assistant, foreign))
+    elif case == "reverse-order":
+        snapshot = replace(snapshot, message_refs=(replace(assistant, sequence=0), replace(user, sequence=1)))
+    elif case == "generating":
+        snapshot = replace(snapshot, generating=True)
+    elif case == "missing-witness":
+        snapshot = replace(snapshot, terminal_witness_assistant_id=None)
+    elif case == "no-send-intent":
+        locator = replace(locator, send_intent_ever=False)
+    elif case == "no-click-ack":
+        locator = replace(locator, submission_stage="send-intent")
+    elif case == "nonzero-baseline":
+        locator = replace(locator, baseline_user_count=1)
+    elif case == "invalid-baseline":
+        locator = replace(locator, baseline_user_count=False)
+    elif case == "target-navigated-during-snapshot":
+        snapshot = replace(snapshot, url="https://chatgpt.com/g/g-p-x/c/repurposed")
+        current_url = snapshot.url
+
+    class Browser:
+        async def page_by_handle(self, handle):
+            assert handle == "h1"
+            return SimpleNamespace(target_id="exact-target", url=current_url)
+
+        async def snapshot(self, page, *, signals):
+            return snapshot
+
+        async def materialize_latest_assistant_turn(self, page):
+            raise AssertionError("unbound target recovery must be observation-only")
+
+    class Bridge:
+        async def call(self, method, params=None):
+            assert method == "list_pages", f"capture performed page action: {method}"
+            return pages
+
+    class Runtime:
+        bridge = Bridge()
+        gpt_browser = Browser()
+        config = SimpleNamespace(workflow=SimpleNamespace(bridge_signals=lambda: ()))
+
+        async def connect_existing(self):
+            return True
+
+        def adopt_existing_dedicated_window(self, pages):
+            pass
+
+        def page_belongs_to_dedicated_window(self, page):
+            # An exact retained target can be in another browser window.
+            return False
+
+        async def create_chat_page(self):
+            raise AssertionError("missing binding must never create a new page")
+
+    monkeypatch.setattr(conversation_focus, "load_provider_config", lambda _: {"providers": {"gpt-auto": {"settings": {"browser": {"executable": sys.executable}}}}})
+    monkeypatch.setattr(conversation_focus, "get_runtime", lambda *_: Runtime())
+    monkeypatch.setattr(conversation_focus.ChatSnapshot, "from_bridge", lambda value: value)
+    result = asyncio.run(conversation_focus.capture_latest_response(
+        tmp_path, provider_id="gpt-auto", locator=locator,
+    ))
+    if case == "valid":
+        assert result["outcome"] == "captured"
+        assert result["binding"]["chat-url"] == chat_url
+        assert result["binding"]["target-id"] == "exact-target"
+    else:
+        assert result["outcome"] == "unavailable"
+    assert "target" not in str(locator.to_mapping())
+    assert "exact-target" not in repr(locator)
 
 
 def test_focus_selects_exact_url_and_session():
@@ -96,7 +279,7 @@ def test_focus_existing_conversation_activates_target_before_renderer_focus(monk
     monkeypatch.setattr(
         conversation_focus,
         "load_provider_config",
-        lambda project_root: {"providers": {"gpt-auto": {}}},
+        lambda project_root: {"providers": {"gpt-auto": {"settings": {"browser": {"executable": sys.executable}}}}},
     )
     monkeypatch.setattr(conversation_focus, "get_runtime", lambda project_root, config: FakeRuntime())
 
@@ -138,7 +321,7 @@ def test_focus_existing_conversation_falls_back_to_other_window(monkeypatch, tmp
     monkeypatch.setattr(
         conversation_focus,
         "load_provider_config",
-        lambda project_root: {"providers": {"gpt-auto": {}}},
+        lambda project_root: {"providers": {"gpt-auto": {"settings": {"browser": {"executable": sys.executable}}}}},
     )
     monkeypatch.setattr(conversation_focus, "get_runtime", lambda project_root, config: FakeRuntime())
 
@@ -179,7 +362,7 @@ def test_focus_existing_conversation_uses_live_gateway_session_before_url_exists
     monkeypatch.setattr(
         conversation_focus,
         "load_provider_config",
-        lambda project_root: {"providers": {"gpt-auto": {}}},
+        lambda project_root: {"providers": {"gpt-auto": {"settings": {"browser": {"executable": sys.executable}}}}},
     )
     monkeypatch.setattr(conversation_focus, "get_runtime", lambda project_root, config: FakeRuntime())
 
@@ -224,7 +407,7 @@ def test_focus_existing_conversation_opens_retained_url_when_tab_is_missing(monk
     monkeypatch.setattr(
         conversation_focus,
         "load_provider_config",
-        lambda project_root: {"providers": {"gpt-auto": {}}},
+        lambda project_root: {"providers": {"gpt-auto": {"settings": {"browser": {"executable": sys.executable}}}}},
     )
     monkeypatch.setattr(conversation_focus, "get_runtime", lambda project_root, config: FakeRuntime())
 
@@ -306,7 +489,7 @@ def test_capture_reopens_exact_conversation_and_requires_terminal_dom(monkeypatc
             calls.append(("create_chat_page", None))
             return "new-page"
 
-    monkeypatch.setattr(conversation_focus, "load_provider_config", lambda _: {"providers": {"gpt-auto": {}}})
+    monkeypatch.setattr(conversation_focus, "load_provider_config", lambda _: {"providers": {"gpt-auto": {"settings": {"browser": {"executable": sys.executable}}}}})
     monkeypatch.setattr(conversation_focus, "get_runtime", lambda *_: FakeRuntime())
     monkeypatch.setattr(conversation_focus.ChatSnapshot, "from_bridge", lambda value: value)
 
@@ -348,7 +531,7 @@ def test_capture_missing_tab_without_durable_url_never_opens_or_submits(monkeypa
         async def create_chat_page(self):
             raise AssertionError("no durable conversation URL must not create a tab")
 
-    monkeypatch.setattr(conversation_focus, "load_provider_config", lambda _: {"providers": {"gpt-auto": {}}})
+    monkeypatch.setattr(conversation_focus, "load_provider_config", lambda _: {"providers": {"gpt-auto": {"settings": {"browser": {"executable": sys.executable}}}}})
     monkeypatch.setattr(conversation_focus, "get_runtime", lambda *_: FakeRuntime())
 
     result = asyncio.run(
@@ -388,7 +571,7 @@ def test_passive_capture_missing_tab_never_reopens_or_navigates(monkeypatch, tmp
         async def create_chat_page(self):
             raise AssertionError("passive capture must not create a tab")
 
-    monkeypatch.setattr(conversation_focus, "load_provider_config", lambda _: {"providers": {"gpt-auto": {}}})
+    monkeypatch.setattr(conversation_focus, "load_provider_config", lambda _: {"providers": {"gpt-auto": {"settings": {"browser": {"executable": sys.executable}}}}})
     monkeypatch.setattr(conversation_focus, "get_runtime", lambda *_: FakeRuntime())
 
     result = asyncio.run(
@@ -402,3 +585,26 @@ def test_passive_capture_missing_tab_never_reopens_or_navigates(monkeypatch, tmp
 
     assert result == {"outcome": "unavailable", "reason": "conversation-tab-not-found"}
     assert calls == [("list_pages", None)]
+
+
+def test_capture_without_project_gpt_auto_entry_uses_packaged_defaults(monkeypatch, tmp_path):
+    """GA27: a project that never seeded a gpt-auto entry still dispatches on the
+    packaged defaults, so capture must resolve the same config, not refuse."""
+    seen = {}
+
+    class Runtime:
+        async def connect_existing(self):
+            return False
+
+    def fake_runtime(project_root, config):
+        seen["config"] = config
+        return Runtime()
+
+    monkeypatch.setattr(conversation_focus, "load_provider_config", lambda _: {})
+    monkeypatch.setattr(conversation_focus, "get_runtime", fake_runtime)
+    result = asyncio.run(conversation_focus.capture_latest_response(tmp_path, provider_id="gpt-auto",
+        locator=ConversationCaptureLocator(chat_url="https://chatgpt.com/g/g-p-x/c/s1", provider_session_id="s1",
+            prompt_text_digest=PromptFingerprint.from_text("owned").digest, baseline_user_count=0), passive=True))
+
+    assert result == {"outcome": "unavailable", "reason": "cdp-unavailable"}
+    assert seen["config"].cdp.endpoint == "http://127.0.0.1:9222"

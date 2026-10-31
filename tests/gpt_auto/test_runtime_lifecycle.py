@@ -468,6 +468,7 @@ async def test_terminal_checkpoint_clear_retains_submission_proof() -> None:
     assert updates[-1] == {
         "unresolved-turn-pending": False,
         "submission-proven": True,
+        "submission-state": "cleared",
         "prompt-message-id": "prompt-1",
         "assistant-message-id": "assistant-1",
         "assistant-before-message-id": "assistant-0",
@@ -1652,15 +1653,14 @@ async def test_find_conversation_page_restores_window_before_selecting_retained_
     calls: list[str] = []
 
     async def ensure_anchor() -> str:
-        calls.append("anchor")
-        runtime._dedicated_window_id = 7
-        return "anchor"
+        raise AssertionError("conversation discovery must not create an anchor window")
 
     class _Bridge:
         async def call(self, method, params=None):
             assert method == "list_pages"
             calls.append("pages")
             return [
+                {"pageHandle": "anchor", "windowId": 7, "url": gateway_dashboard_anchor_url()},
                 {
                     "pageHandle": "manual-copy",
                     "targetId": "target-manual",
@@ -1683,7 +1683,7 @@ async def test_find_conversation_page_restores_window_before_selecting_retained_
         preferred_target_id="target-retained",
     )
 
-    assert calls == ["anchor", "pages"]
+    assert calls == ["pages"]
     assert page is not None
     assert page["pageHandle"] == "retained"
 
@@ -1766,7 +1766,7 @@ async def test_reconcile_proves_quiescence_before_ready(monkeypatch) -> None:
     page = {
         "pageHandle": "retained",
         "targetId": "target-retained",
-        "url": "https://chatgpt.com/c/provider-session",
+        "url": "https://chatgpt.com/g/g-p-project/c/provider-session",
     }
 
     class _Bridge:
@@ -2035,6 +2035,19 @@ async def test_conversation_load_recovery_budget_survives_chat_reconstruction() 
 
     async def checkpoint(metadata: dict[str, object]) -> None:
         checkpointed.append(dict(metadata))
+
+    budget = (1, 0)
+
+    async def recovery_budget(*, action="read", expected=None, maximum=0):
+        nonlocal budget
+        if action != "read":
+            assert expected == budget
+            assert action != "increment" or budget[0] < maximum
+            budget = (budget[0] + 1 if action == "increment" else 0, budget[1] + 1)
+            checkpointed.append(dict(zip(("conversation-load-recovery-attempts", "conversation-load-recovery-revision"), budget)))
+        return budget
+
+    checkpoint.recovery_budget = recovery_budget
 
     first = PersistentChat(
         ag_session_id="session-load-error-budget",

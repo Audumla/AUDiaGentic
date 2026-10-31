@@ -14,25 +14,6 @@ from ..descriptors.registry import all_descriptors
 logger = logging.getLogger(__name__)
 
 
-def _sync_provider_mcp(project_root: Path, on_progress: ComponentOutputSink | None = None) -> None:
-    """Sync all component MCP servers to provider configs — adds missing, removes stale.
-
-    Delegates to sync_all_provider_mcp_servers, which iterates every installed +
-    enabled component and projects its managed MCP entries to all MCP-capable
-    providers (active or not).
-    """
-    from .lifecycle.lifecycle import _emit
-
-    try:
-        from .mcp.mcp_sync import sync_all_provider_mcp_servers
-
-        sync_all_provider_mcp_servers(project_root)
-        _emit(on_progress, "MCP server configs synced")
-    except Exception:  # noqa: BLE001
-        logger.warning("MCP server config sync failed", exc_info=True)
-        _emit(on_progress, "MCP server config sync failed (non-fatal)", level="warning")
-
-
 def _reconcile_model_projection(
     provider_id: str,
     project_root: Path,
@@ -139,7 +120,7 @@ def reconcile_provider(
 
     Probes the host, reads the current config, then:
     - binary present but not enabled  → enable + apply surfaces
-    - binary absent but still enabled → disable + prune surfaces
+    - binary absent but still enabled → left enabled, reported "unavailable"
     - already in sync                 → no-op, reports current state
 
     fetch_catalog: if True, also fetches the model catalog when enabling a provider.
@@ -147,7 +128,6 @@ def reconcile_provider(
     """
     from .config.provider_config import (
         is_provider_enabled,
-        set_provider_enabled,
     )
     from .lifecycle.lifecycle import (
         _descriptor as _get_descriptor,
@@ -162,7 +142,10 @@ def reconcile_provider(
     descriptor = _get_descriptor(provider_id)
     probe = probe_provider_cli(descriptor)
     cli_available = bool(probe and probe["available"])
-    _emit(on_progress, f"CLI {'available' if cli_available else 'not found'}")
+    _emit(
+        on_progress,
+        "No CLI probe declared" if probe is None else f"CLI {'available' if cli_available else 'not found'}",
+    )
 
     # Enablement is feature state, independent of providers.yaml.
     currently_enabled = is_provider_enabled(project_root, provider_id)
@@ -170,7 +153,11 @@ def reconcile_provider(
     action_taken: str
     surfaces_result: dict[str, Any] | None = None
 
-    if cli_available and not currently_enabled and not _should_auto_enable(project_root, provider_id):
+    if (
+        cli_available
+        and not currently_enabled
+        and not _should_auto_enable(project_root, provider_id)
+    ):
         _emit(
             on_progress,
             f"Skipping {provider_id} — not in reconciliation-policy allowlist",
@@ -189,7 +176,6 @@ def reconcile_provider(
             request=_build_surface_request(project_root, provider_id),
         )
         surfaces_result = surface_result.to_mapping()
-        _sync_provider_mcp(project_root, on_progress)
         _reconcile_model_projection(
             provider_id, project_root, enabled=True, on_progress=on_progress
         )
@@ -214,36 +200,37 @@ def reconcile_provider(
                 on_progress,
                 f"Skipping catalog fetch for {provider_id} — use refresh_provider_catalog to update",
             )
-    elif not cli_available and currently_enabled:
-        _emit(on_progress, f"Disabling {provider_id} — CLI not found")
-        set_provider_enabled(project_root, provider_id, enabled=False)
-        from ..providers_api import operate_provider_surface
-        from .lifecycle.lifecycle import _build_surface_request
-
-        surface_result = operate_provider_surface(
-            project_root,
-            provider_id,
-            mode="prune",
-            request=_build_surface_request(project_root, provider_id),
-        )
-        surfaces_result = surface_result.to_mapping()
-        _reconcile_model_projection(
-            provider_id, project_root, enabled=False, on_progress=on_progress
-        )
-        action_taken = "disabled"
-    else:
+    elif probe is not None and not cli_available and currently_enabled:
+        # Availability is an observation, not policy (CFG06): a missing CLI never
+        # changes enablement or prunes surfaces; `providers.<id>.enabled: false`
+        # or `set_provider_enabled` is the only way a provider becomes disabled.
         _emit(
             on_progress,
-            f"{provider_id} already in sync ({('enabled' if currently_enabled else 'disabled')})",
+            f"{provider_id} is enabled but its CLI was not found; enablement left as configured",
+            level="warning",
         )
-        _sync_provider_mcp(project_root, on_progress)
+        _reconcile_model_projection(
+            provider_id, project_root, enabled=currently_enabled, on_progress=on_progress
+        )
+        action_taken = "unavailable"
+    else:
+        state = "enabled" if currently_enabled else "disabled"
+        _emit(
+            on_progress,
+            # No declared CLI probe (browser- or endpoint-backed providers such
+            # as gpt-auto): a missing binary proves nothing, so the configured
+            # enablement stands.
+            f"{provider_id} has no CLI probe; enablement left as configured ({state})"
+            if probe is None
+            else f"{provider_id} already in sync ({state})",
+        )
         _reconcile_model_projection(
             provider_id, project_root, enabled=currently_enabled, on_progress=on_progress
         )
         _sync_host_extensions(project_root, on_progress)
         action_taken = "ok"
 
-    now_enabled = cli_available and action_taken in ("enabled", "ok")
+    now_enabled = currently_enabled or action_taken == "enabled"
     result: dict[str, Any] = {
         "provider-id": provider_id,
         "action": "reconcile",
@@ -273,8 +260,9 @@ def reconcile_all_providers(
     the VS Code GUI on some platforms.
 
     on_provider(provider_id, status) is called after each provider is reconciled.
-    status is "enabled", "disabled", "skipped" (CLI detected but excluded by the
-    reconciliation-policy allowlist), or "ok".
+    status is "enabled", "unavailable" (enabled but its CLI is missing),
+    "skipped" (CLI detected but excluded by the reconciliation-policy
+    allowlist), or "ok".
     """
     eligible = _eligible_provider_descriptors()
     total = float(len(eligible))

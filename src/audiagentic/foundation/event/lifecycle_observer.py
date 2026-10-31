@@ -16,7 +16,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, TypedDict
 
-from .event_bus import get_bus
+from .event_bus import subscribe_persistent
 
 COMPONENT_INSTALLED = "lifecycle.component.installed"
 COMPONENT_UNINSTALLED = "lifecycle.component.uninstalled"
@@ -39,7 +39,6 @@ class LifecycleEventPayload(TypedDict):
 
 # handler(project_root, payload, metadata)
 LifecycleHandler = Callable[[Path, LifecycleEventPayload, dict[str, Any]], None]
-_DISPATCHERS: list[Callable[[str, dict, dict], None]] = []
 
 
 def subscribe_component_lifecycle(
@@ -84,11 +83,5 @@ def subscribe_component_lifecycle(
             return
         handler(project_root, payload, metadata)  # type: ignore[arg-type]
 
-    _DISPATCHERS.append(_dispatch)
-    get_bus().subscribe("lifecycle.component.*", _dispatch)
+    subscribe_persistent("lifecycle.component.*", _dispatch)
     return _dispatch
-
-
-def _resubscribe_all() -> None:
-    for dispatcher in _DISPATCHERS:
-        get_bus().subscribe("lifecycle.component.*", dispatcher)

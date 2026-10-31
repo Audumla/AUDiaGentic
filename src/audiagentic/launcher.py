@@ -10,11 +10,10 @@ Usage
   audiagentic component enable ID [--project PATH]
   audiagentic component disable ID [--project PATH]
   audiagentic component status ID [--project PATH]
-  audiagentic gateway status                       Query gateway service state (SH10)
-  audiagentic gateway drain                        Begin graceful drain (SH10)
-  audiagentic gateway resume                       Cancel draining; resume running (SH10)
-  audiagentic gateway stop [--force]               Request operator stop (SH10)
-  audiagentic gateway recover [--confirm] [--reason TEXT]  Recover dead owner, record-only (SH10)
+  audiagentic gateway help                         Shared gateway keyword CLI
+  audiagentic gateway serve config FILE            Serve a configured shared gateway
+  audiagentic gateway status config FILE [output json]
+  audiagentic gateway connect config FILE project PATH [dry-run|non-interactive]
   audiagentic [ARGS...]                            Launch agent from current project directory
   audiagentic --project PATH [ARGS]                Launch with explicit project root
 """
@@ -22,62 +21,78 @@ Usage
 from __future__ import annotations
 
 import argparse
+import contextvars
 import logging
+import sys
 from collections.abc import Callable
 from pathlib import Path
 
-from audiagentic.commands.bootstrap import cmd_bootstrap, cmd_cleanup, cmd_config_sync
-from audiagentic.commands.component import _cmd_component
-from audiagentic.commands.gateway import (
-    cmd_gateway,
-    cmd_gateway_drain,
-    cmd_gateway_recover,
-    cmd_gateway_resume,
-    cmd_gateway_status,
-    cmd_gateway_stop,
-)
-from audiagentic.commands.internal import cmd_mcp
-from audiagentic.commands.launch import _cmd_launch
-from audiagentic.commands.update import cmd_update
-from audiagentic.commands.workflow import (
-    cmd_release_bootstrap,
-    cmd_session_input,
-    cmd_work_control,
-)
 from audiagentic.foundation.cli_io import print_error
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 logger = logging.getLogger(__name__)
 
+_capture_parse_error = contextvars.ContextVar("capture_cli_parse_error", default=False)
 
-# SH10 lifecycle command aliases — keyed by gateway sub-command name.
-_GATEWAY_LIFECYCLE_HANDLERS: dict[str, Callable] = {
-    "status": cmd_gateway_status,
-    "drain": cmd_gateway_drain,
-    "resume": cmd_gateway_resume,
-    "stop": cmd_gateway_stop,
-    "recover": cmd_gateway_recover,
-}
 
-_COMMAND_HANDLERS: dict[str, Callable] = {
-    "bootstrap": cmd_bootstrap,
-    "cleanup": cmd_cleanup,
-    "component": _cmd_component,
-    "gateway": cmd_gateway,  # legacy: only 'serve' (argparse dispatch)
-    "update": cmd_update,
-    "config": cmd_config_sync,
-    "session-input": cmd_session_input,
-    "work-control": cmd_work_control,
-    "release-bootstrap": cmd_release_bootstrap,
-    "mcp": cmd_mcp,
-}
+class _IncompletePrefix(Exception):
+    pass
+
+
+class _ArgumentParser(argparse.ArgumentParser):
+    def error(self, message):
+        if _capture_parse_error.get():
+            raise _IncompletePrefix(message)
+        super().error(message)
 
 
 def _main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
+    tokens = list(sys.argv[1:] if argv is None else argv)
+    if tokens and tokens[0] == "gateway":
+        from audiagentic.commands.gateway import dispatch_keyword
+
+        return dispatch_keyword(tokens[1:])
+    if tokens and tokens[0] == "worktree":
+        from audiagentic.commands.worktree import dispatch_keyword as dispatch_worktree
+
+        return dispatch_worktree(tokens[1:])
+
+    from audiagentic.commands.bootstrap import cmd_bootstrap, cmd_cleanup, cmd_config_sync
+    from audiagentic.commands.component import _cmd_component
+    from audiagentic.commands.internal import cmd_mcp
+    from audiagentic.commands.launch import _cmd_launch
+    from audiagentic.commands.update import cmd_update
+    from audiagentic.commands.workflow import (
+        cmd_release_bootstrap,
+        cmd_session_input,
+        cmd_work_control,
+    )
+
+    _COMMAND_HANDLERS: dict[str, Callable] = {
+        "bootstrap": cmd_bootstrap,
+        "cleanup": cmd_cleanup,
+        "component": _cmd_component,
+        "update": cmd_update,
+        "config": cmd_config_sync,
+        "session-input": cmd_session_input,
+        "work-control": cmd_work_control,
+        "release-bootstrap": cmd_release_bootstrap,
+        "mcp": cmd_mcp,
+    }
+
+    parser = _ArgumentParser(
         prog="audiagentic",
         description="AUDiaGentic",
         add_help=True,
+    )
+    from audiagentic.runtime.update.checker import current_version
+
+    parser.add_argument(
+        "--version",
+        "-V",
+        action="version",
+        version=f"audiagentic {current_version()}",
+        help="Print the installed version and exit",
     )
     parser.add_argument(
         "--project",
@@ -149,29 +164,6 @@ def _main(argv: list[str] | None = None) -> int:
                 help="Also delete create-if-missing config files",
             )
 
-    gateway_parser = subparsers.add_parser("gateway", help="Manage the local agent gateway")
-    gateway_sub = gateway_parser.add_subparsers(dest="gateway_cmd", required=True)
-    gateway_serve = gateway_sub.add_parser("serve", help="Run the standalone local gateway")
-    gateway_serve.add_argument("--host", default="127.0.0.1", choices=["127.0.0.1"])
-    gateway_serve.add_argument("--port", type=int, default=0)
-    gateway_serve.add_argument("--token-file", metavar="PATH")
-
-    # SH10 lifecycle sub-commands (no extra flags except where noted)
-    gateway_sub.add_parser("status", help="Query gateway service state")
-    gateway_sub.add_parser("drain", help="Begin graceful drain")
-    gateway_sub.add_parser("resume", help="Cancel draining; resume running")
-    gw_stop = gateway_sub.add_parser("stop", help="Request operator stop")
-    gw_stop.add_argument(
-        "--force", action="store_true", default=False, help="Force stop even if busy"
-    )
-    gw_recover = gateway_sub.add_parser(
-        "recover", help="Recover dead/unprovable owner (record-only)"
-    )
-    gw_recover.add_argument(
-        "--confirm", action="store_true", default=False, help="Confirm mutation of durable record"
-    )
-    gw_recover.add_argument("--reason", metavar="TEXT", default=None, help="Reason for recovery")
-
     subparsers.add_parser("update", help="Check for a new audiagentic version and update")
 
     session_input_parser = subparsers.add_parser("session-input", help="Record live session input")
@@ -209,19 +201,88 @@ def _main(argv: list[str] | None = None) -> int:
         "clean",
         help="Prune AUDiaGentic-owned surfaces and remove generated runtime config",
     )
+    from audiagentic.commands.settings import add_settings_parsers
+
+    add_settings_parsers(config_sub)
+    from audiagentic.commands.agents import add_agent_parsers
+
+    add_agent_parsers(subparsers)
+    from audiagentic.commands.doctor import add_doctor_parsers
+
+    add_doctor_parsers(subparsers)
 
     # Private stdio entrypoint retained for generated MCP configuration.
-    mcp_parser = subparsers.add_parser("mcp", help="Internal MCP stdio entrypoint")
-    mcp_parser.add_argument("module", metavar="MODULE")
-    mcp_parser.add_argument("module_args", nargs=argparse.REMAINDER)
+    mcp_parser = subparsers.add_parser(
+        "mcp", help="Discover and configure MCP servers", add_help=False
+    )
+    mcp_parser.add_argument("-h", "--help", action="store_true", dest="management_help")
+    mcp_parser.add_argument("tail", nargs=argparse.REMAINDER)
+    harness_parser = subparsers.add_parser(
+        "harness", help="Discover harness capabilities", add_help=False
+    )
+    harness_parser.add_argument("-h", "--help", action="store_true", dest="management_help")
+    harness_parser.add_argument("tail", nargs=argparse.REMAINDER)
+    help_parser = subparsers.add_parser("help", help="Show management help")
+    help_parser.set_defaults(tail=[])
 
-    args, remaining = parser.parse_known_args(argv)
+    tokens = list(sys.argv[1:] if argv is None else argv)
+    candidate = None
+    if "--" in tokens:
+        boundary = tokens.index("--")
+        capture = _capture_parse_error.set(True)
+        try:
+            candidate = parser.parse_known_args(tokens[:boundary])
+        except _IncompletePrefix:
+            pass  # The separator may belong to a command requiring more operands.
+        finally:
+            _capture_parse_error.reset(capture)
+    if candidate is not None and candidate[0].command is None:
+        args, remaining = candidate
+        remaining = [*remaining, *tokens[boundary + 1 :]]
+    else:
+        args, remaining = parser.parse_known_args(tokens)
 
     # Registered commands own a closed argument contract. Unknown tokens must
     # not leak through to handlers or be mistaken for harness passthrough args.
     # No-command invocation intentionally retains passthrough for provider CLIs.
     if args.command is not None and remaining:
         parser.error(f"unrecognized arguments: {' '.join(remaining)}")
+
+    # A bare invocation is a configuration CLI, not an agent session. Only an
+    # explicit --prompt or provider passthrough reaches the harness launch, so
+    # plain `audiagentic` never composes the app graph or probes providers.
+    if args.command is None and not args.prompt and not remaining:
+        from audiagentic.commands.mcp import _help
+
+        print(parser.format_help())
+        print(_help("root"))
+        return 0
+
+    # doctor is read-only and setup writes only user settings: neither composes the app graph.
+    if args.command in {"doctor", "setup"}:
+        from audiagentic.commands.doctor import run_doctor_command
+
+        return run_doctor_command(args)
+
+    # Agent file commands touch only agent files and must not compose the application graph.
+    if args.command == "agent":
+        from audiagentic.commands.agents import run_agent_command
+
+        return run_agent_command(args)
+
+    # Settings commands (show, validate, paths, set) must not compose the application graph.
+    if args.command == "config":
+        from audiagentic.commands.settings import SETTINGS_COMMANDS, run_settings_command
+
+        if args.config_cmd in SETTINGS_COMMANDS:
+            return run_settings_command(args)
+
+    if args.command in {"mcp", "harness", "help"}:
+        from audiagentic.commands.mcp import dispatch
+
+        result = dispatch(args, parser)
+        if result is not None:
+            return result
 
     # Propagate --component-profile and --project to env so loader and other
     # modules pick them up (AUDIAGENTIC_REPO_ROOT drives profile resolution,
@@ -248,8 +309,6 @@ def _main(argv: list[str] | None = None) -> int:
             build_runtime_sync,
             default_config_path,
             get_harness_type,
-            load_active_profile,
-            query_rig_server_version,
             refresh_harness_config_if_installed,
             resolve_session_info,
             version_info,
@@ -261,10 +320,8 @@ def _main(argv: list[str] | None = None) -> int:
             "harness_cli_available": harness_cli_available,
             "build_runtime_sync": build_runtime_sync,
             "refresh_harness_config_if_installed": refresh_harness_config_if_installed,
-            "query_rig_server_version": query_rig_server_version,
             "version_info": version_info,
             "default_config_path": default_config_path,
-            "load_active_profile": load_active_profile,
             "resolve_session_info": resolve_session_info,
         }
 
@@ -283,12 +340,6 @@ def _main(argv: list[str] | None = None) -> int:
         command=args.command,
         harness_status_functions=_harness_status_functions,
     )
-
-    # Dispatch to command handler via registry
-    # SH10: gateway lifecycle sub-commands dispatch through a separate
-    # registry keyed by the gateway_cmd value (avoids argparse collision).
-    if args.command == "gateway" and args.gateway_cmd in _GATEWAY_LIFECYCLE_HANDLERS:
-        return _GATEWAY_LIFECYCLE_HANDLERS[args.gateway_cmd](args, project_root)
 
     # Dispatch to command handler via registry
     command_name = args.command or ""

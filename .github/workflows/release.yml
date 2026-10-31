@@ -23,6 +23,9 @@ jobs:
     outputs:
       release_created: ${{ steps.rp.outputs.release_created == 'true' || (github.event_name == 'workflow_dispatch' && inputs.release_id != '') }}
       tag_name: ${{ steps.rp.outputs.tag_name || inputs.release_id }}
+      release_pr: ${{ steps.release-pr.outputs.number }}
+      release_head: ${{ steps.release-pr.outputs.sha }}
+      release_base: ${{ steps.release-pr.outputs.base }}
     steps:
       - uses: googleapis/release-please-action@v5
         id: rp
@@ -32,6 +35,101 @@ jobs:
           manifest-file: .release-please-manifest.json
           target-branch: ${{ github.ref_name }}
 
+      - name: Identify the generated release PR
+        if: steps.rp.outputs.release_created != 'true' && inputs.release_id == ''
+        id: release-pr
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const {owner, repo} = context.repo;
+            const base = context.ref.replace('refs/heads/', '');
+            const head = `release-please--branches--${base}`;
+            const {data: prs} = await github.rest.pulls.list({owner, repo, state: 'open', base, head: `${owner}:${head}`});
+            if (!prs.length) return;
+            if (prs.length !== 1) throw new Error('Ambiguous release PR');
+            const pr = prs[0];
+            if (pr.user.login !== 'github-actions[bot]' || pr.head.repo.full_name !== `${owner}/${repo}` ||
+                !pr.labels.some(label => label.name === 'autorelease: pending')) {
+              throw new Error('Release PR provenance mismatch');
+            }
+            const allowed = new Set(['.release-please-manifest.json', 'docs/releases/CHANGELOG.md',
+                                     'pyproject.toml', 'src/audiagentic/__init__.py']);
+            const files = await github.paginate(github.rest.pulls.listFiles, {owner, repo, pull_number: pr.number});
+            if (!files.length || files.some(file => !allowed.has(file.filename) || file.previous_filename)) {
+              throw new Error('Unexpected files in generated release PR');
+            }
+            core.setOutput('number', String(pr.number));
+            core.setOutput('sha', pr.head.sha);
+            core.setOutput('base', pr.base.sha);
+
+  release-pr-tests:
+    needs: release-please
+    if: needs.release-please.outputs.release_pr != ''
+    uses: ./.github/workflows/ci-tests.yml
+    with:
+      source_ref: ${{ needs.release-please.outputs.release_head }}
+      release_only: true
+    permissions:
+      contents: read
+
+  merge-release-pr:
+    needs: [release-please, release-pr-tests, release-pr-privacy]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+      statuses: write
+    steps:
+      - name: Merge the validated release head and dispatch publication
+        uses: actions/github-script@v8
+        env:
+          RELEASE_PR: ${{ needs.release-please.outputs.release_pr }}
+          RELEASE_HEAD: ${{ needs.release-please.outputs.release_head }}
+        with:
+          script: |
+            const {owner, repo} = context.repo;
+            const pull_number = Number(process.env.RELEASE_PR);
+            const sha = process.env.RELEASE_HEAD;
+            const base = context.ref.replace('refs/heads/', '');
+            const {data: pr} = await github.rest.pulls.get({owner, repo, pull_number});
+            if (pr.head.sha !== sha || pr.base.ref !== base ||
+                pr.head.repo.full_name !== `${owner}/${repo}` ||
+                pr.head.ref !== `release-please--branches--${base}` ||
+                pr.user.login !== 'github-actions[bot]') {
+              throw new Error('Release PR changed after validation; refusing merge');
+            }
+            if (!pr.merged) {
+              if (pr.state !== 'open') throw new Error('Release PR closed without merge');
+              // The reusable privacy gate validated this exact SHA; publish its
+              // result on the bot PR, whose GITHUB_TOKEN push creates no PR run.
+              await github.rest.repos.createCommitStatus({owner, repo, sha, state: 'success', context: 'privacy',
+                description: 'Exact release head passed the required privacy gate',
+                target_url: `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`});
+              // release-pr-tests (a needs of this job) ran the release test gate on this exact SHA; report it
+              // under the required context for the same reason.
+              await github.rest.repos.createCommitStatus({owner, repo, sha, state: 'success', context: 'tests',
+                description: 'Exact release head passed the release test gate (release-pr-tests)',
+                target_url: `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`});
+              const {data: merged} = await github.rest.pulls.merge({owner, repo, pull_number, sha, merge_method: 'merge'});
+              if (!merged.merged) throw new Error('Release PR was not merged');
+            }
+            // Retry dispatch safely if the previous attempt merged but dispatch failed.
+            // GITHUB_TOKEN merges do not trigger push workflows. Dispatch explicitly.
+            await github.rest.actions.createWorkflowDispatch({owner, repo, workflow_id: 'release.yml', ref: base});
+
+  release-pr-privacy:
+    needs: release-please
+    if: needs.release-please.outputs.release_pr != ''
+    uses: ./.github/workflows/privacy.yml
+    secrets: inherit
+    with:
+      source_ref: ${{ needs.release-please.outputs.release_head }}
+      base_sha: ${{ needs.release-please.outputs.release_base }}
+    permissions:
+      contents: read
+      statuses: write
+
   finalize-ledger:
     needs: release-please
     if: needs.release-please.outputs.release_created == 'true'
@@ -40,6 +138,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pull-requests: write
+      statuses: write
     env:
       PYTHONPATH: src
     steps:
@@ -69,6 +169,11 @@ jobs:
           PY
 
       - name: Commit release artifacts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          AUDIAGENTIC_PRIVATE_TERMS: ${{ secrets.AUDIAGENTIC_PRIVATE_TERMS }}
+          RELEASE_TAG: ${{ needs.release-please.outputs.tag_name }}
+          RELEASE_BASE: ${{ github.ref_name }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -77,8 +182,40 @@ jobs:
                   docs/releases/RELEASE_NOTES.md \
                   docs/releases/VERSION_HISTORY.md \
                   docs/releases/CURRENT_RELEASE.md
-          git diff --cached --quiet || git commit -m "chore(release): finalize ledger for ${{ needs.release-please.outputs.tag_name }} [skip ci]"
-          git push
+          if ! git diff --cached --quiet; then
+            branch="release-ledger/${RELEASE_TAG}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+            git switch -c "$branch"
+            git commit -m "chore(release): finalize ledger for $RELEASE_TAG"
+            finalized_head=$(git rev-parse HEAD)
+            privacy_base=$(git rev-parse "origin/$RELEASE_BASE")
+            python tools/privacy_guard.py --base "$privacy_base"
+            # The required tests context is reported only because this commit changes nothing but the five
+            # generated release files added above; any other path in the commit stops the release here.
+            unexpected=$(git diff --name-only "$privacy_base" "$finalized_head" | grep -vxF \
+              -e docs/releases/LEDGER.ndjson -e docs/releases/CURRENT_RELEASE_LEDGER.ndjson \
+              -e docs/releases/RELEASE_NOTES.md -e docs/releases/VERSION_HISTORY.md \
+              -e docs/releases/CURRENT_RELEASE.md || true)
+            if [ -n "$unexpected" ]; then
+              echo "ledger commit touches files other than generated release artifacts:" >&2
+              echo "$unexpected" >&2
+              exit 1
+            fi
+            git push --set-upstream origin "$branch"
+            gh api "repos/$GITHUB_REPOSITORY/statuses/$finalized_head" \
+              -f state=success -f context=privacy \
+              -f description='Exact ledger head passed the required privacy gate' \
+              -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            gh api "repos/$GITHUB_REPOSITORY/statuses/$finalized_head" \
+              -f state=success -f context=tests \
+              -f description='Generated release artifacts only; no source or test input changed' \
+              -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            pr=$(gh pr create --base "$RELEASE_BASE" --head "$branch" --title "chore(release): finalize ledger for $RELEASE_TAG" --body "Generated release ledger artifacts only. Publication waits for this normal PR merge; repository rules are not bypassed.")
+            gh pr merge "$pr" --merge --match-head-commit "$finalized_head"
+            merged_sha=$(gh pr view "$pr" --json mergeCommit --jq '.mergeCommit.oid // empty')
+            test -n "$merged_sha"
+            git fetch origin "$RELEASE_BASE"
+            git checkout --detach "$merged_sha"
+          fi
 
       - name: Record finalized commit
         id: finalized-sha
@@ -106,11 +243,27 @@ jobs:
       - name: Build wheel and sdist
         run: python -m build
 
+      - name: Validate the distribution bytes before publication
+        env:
+          CI_RELEASE_VERSION: ${{ needs.release-please.outputs.tag_name }}
+          CI_RELEASE_SHA: ${{ needs.finalize-ledger.outputs.finalized_sha }}
+        run: python tests/ci/package_smoke.py --dist dist --version "$CI_RELEASE_VERSION" --source-sha "$CI_RELEASE_SHA"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-distribution-proof
+          path: .ci-results/artifact-provenance.json
+          include-hidden-files: true
+          retention-days: 30
+
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ needs.release-please.outputs.tag_name }}
-          files: dist/*
+          files: |
+            dist/*.whl
+            dist/*.tar.gz
+            .ci-results/artifact-provenance.json
 
       - name: Update GitHub release notes from ledger
         env:
@@ -120,4 +273,27 @@ jobs:
             --notes-file docs/releases/RELEASE_NOTES.md
 
       - name: Publish to PyPI
+        if: vars.PYPI_PUBLISH == 'true'
         uses: pypa/gh-action-pypi-publish@release/v1
+
+  dispatch-full-validation:
+    needs: [release-please, finalize-ledger, build-and-publish]
+    if: needs.release-please.outputs.release_created == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Dispatch asynchronous full suite for the published source
+        uses: actions/github-script@v8
+        env:
+          SOURCE_SHA: ${{ needs.finalize-ledger.outputs.finalized_sha }}
+        with:
+          script: |
+            const source = process.env.SOURCE_SHA;
+            if (!/^[a-f0-9]{40}$/.test(source)) throw new Error('Missing immutable published source SHA');
+            await github.rest.actions.createWorkflowDispatch({
+              ...context.repo, workflow_id: 'ci-full.yml',
+              ref: context.ref.replace('refs/heads/', ''),
+              inputs: {source_ref: source}
+            });

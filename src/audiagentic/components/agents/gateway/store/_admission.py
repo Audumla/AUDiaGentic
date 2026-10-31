@@ -12,17 +12,19 @@ import logging
 import re
 import uuid
 from collections.abc import Callable
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
 from audiagentic.components.agents.agents_paths import (
     gateway_idempotency_index_path,
+    gateway_root,
 )
 from audiagentic.components.agents.gateway.queue.work_index import (
     write_work_index_entry,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.foundation.io import atomic_write_json
+from audiagentic.foundation.io import atomic_write_json, read_json_with_retry
 from audiagentic.foundation.time import now_iso_z
 
 from . import _records, _shared
@@ -101,7 +103,6 @@ def _intent_digest(record: dict[str, Any]) -> str:
         "context-fingerprint": record.get("context-fingerprint"),
         "prompt-digest": record.get("prompt-digest"),
         "mode": record["mode"],
-        "timeout-seconds": record.get("timeout-seconds"),
         # Automatically allocated gateway-session IDs group a request but do
         # not alter its execution intent. Only an explicit continuation ID is
         # semantically significant for an idempotency replay.
@@ -111,6 +112,17 @@ def _intent_digest(record: dict[str, Any]) -> str:
         "session-idle-timeout-seconds": record.get("session-idle-timeout-seconds"),
         "session-max-lifetime-seconds": record.get("session-max-lifetime-seconds"),
     }
+    descriptor = record.get("node-admission")
+    if record.get("node-placement") is not None or descriptor is not None:
+        # Ordinary requests keep the historical encoded bytes exactly. A node
+        # target is execution intent, not a second idempotency namespace.
+        intent["node-placement"] = record.get("node-placement")
+        intent["node-admission"] = (
+            {key: descriptor[key] for key in ("version", "server-id", "semantic", "policy")}
+            if descriptor is not None else None
+        )
+        if descriptor is not None and "source-workspace" in descriptor:
+            intent["node-admission"]["source-workspace"] = descriptor["source-workspace"]
     encoded = json.dumps(intent, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
@@ -160,6 +172,7 @@ def admit_record(
     idempotency_key: str,
     service_root: Path | None = None,
     before_write: Callable[[], None] | None = None,
+    on_admitted: Callable[[dict[str, Any]], None] | None = None,
 ) -> tuple[dict[str, Any], bool]:
     """Atomically reserve an idempotency key and persist its request record.
 
@@ -174,10 +187,41 @@ def admit_record(
     the same project-local admission lock is held.
     """
     key_digest = hash_idempotency_key(idempotency_key)
-    candidate = dict(payload)
+    candidate = deepcopy(payload)
+    if candidate.get("node-placement") is not None:
+        from ..node.admission_contract import NodeAdmissionDescriptor
+
+        if candidate.get("contract-version") != _shared._CONTRACT_VERSION:
+            raise AudiaGenticError(code="VAL-AGW-002", kind="agents", message="Fresh node admission requires the current record contract")
+        descriptor = NodeAdmissionDescriptor.from_mapping(candidate.get("node-admission"))
+        if descriptor.source_workspace is None:
+            raise AudiaGenticError(code="VAL-AGW-002", kind="agents", message="Fresh node admission requires caller workspace identity")
+        if descriptor.policy.profile_id != candidate.get("execution-profile-id"):
+            raise AudiaGenticError(code="VAL-AGW-002", kind="agents", message="Node admission profile mismatch")
+        candidate["node-admission"] = descriptor.to_mapping()
+    elif candidate.get("node-admission") is not None:
+        raise AudiaGenticError(code="VAL-AGW-002", kind="agents", message="Node descriptor requires sealed placement")
+    candidate = _records._validate(candidate, code="VAL-AGW-002")
     candidate["idempotency-key"] = key_digest
     intent_digest = _intent_digest(candidate)
     index_path = gateway_idempotency_index_path(project_root, key_digest)
+    sequence_path = gateway_root(project_root) / "enqueue-sequence.json"
+    # A missing sequence file (first provider-session admission, or recovery
+    # from a lost file) forces a full project record scan to reconstruct the
+    # next ordinal. Do that scan before taking the admission lock: it is
+    # read-only, and running it while holding the lock would block every
+    # other admission in the project for as long as the scan takes.
+    # This pre-lock value is only safe to trust under the lock because
+    # nothing in this codebase ever deletes sequence_path once written --
+    # grep for "enqueue-sequence" before weakening that invariant, since a
+    # delete-then-recreate race would let a stale pre-lock scan assign an
+    # already-used ordinal.
+    fallback_ordinal = None
+    if candidate.get("provider-transport-kind") == "provider-session" and not sequence_path.exists():
+        fallback_ordinal = max(
+            (r["enqueue-ordinal"] for r in _records.list_records(project_root)
+             if type(r.get("enqueue-ordinal")) is int), default=0,
+        )
 
     with _admission_lock(project_root):
         index = _read_idempotency_index(index_path)
@@ -239,6 +283,28 @@ def admit_record(
 
         if before_write is not None:
             before_write()
+        if candidate.get("provider-transport-kind") == "provider-session":
+            try:
+                previous = read_json_with_retry(sequence_path)
+                if type(previous) is not int or previous < 0:
+                    raise ValueError("invalid gateway enqueue sequence")
+            except FileNotFoundError:
+                # The pre-lock scan above is only a hint, reused here rather
+                # than rescanning under the lock. It stays correct only
+                # because nothing deletes sequence_path once this function
+                # writes it: a concurrent admitter racing for the same
+                # missing file can only win by acquiring this same lock
+                # first, and doing so always (over)writes sequence_path
+                # before releasing it -- so reaching this branch at all
+                # means no admitter has won that race since our scan ran.
+                previous = fallback_ordinal if fallback_ordinal is not None else max(
+                    (r["enqueue-ordinal"] for r in _records.list_records(project_root)
+                     if type(r.get("enqueue-ordinal")) is int), default=0,
+                )
+            candidate["enqueue-ordinal"] = previous + 1
+            # Persist the counter first. Crash gaps are harmless; reused order
+            # identities are not. The existing admission lock serializes this.
+            atomic_write_json(sequence_path, previous + 1)
         _records.write_record(project_root, candidate)
         atomic_write_json(index_path, {
             "key-digest": key_digest,
@@ -258,6 +324,10 @@ def admit_record(
                     "work-index write failed at admission (non-fatal)",
                     extra={"request-id": candidate["request-id"]},
                 )
+        if on_admitted is not None:
+            # Memory-only registration, before another admission can publish
+            # its successor. Do not dispatch or do provider I/O in this hook.
+            on_admitted(candidate)
         return candidate, True
 
 

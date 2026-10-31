@@ -46,6 +46,7 @@ from audiagentic.foundation.transports.session_surface import (
     ContentChannelCapability,
     ContentStreamCapabilities,
     ControlSupport,
+    JoinedSessionCapabilities,
     LifecycleInstallation,
     LifecycleObservationCapabilities,
     LifecycleSource,
@@ -97,13 +98,15 @@ class _SurfaceResolutionFailure(RuntimeError):
 # Version constraint parsing (local helpers — no YAML/runtime load)
 # ---------------------------------------------------------------------------
 
-_VERSION_RE = re.compile(r"^(\d+(?:.\d+)*)")
+_VERSION_RE = re.compile(r"^(\d+(?:\.\d+)*)")
+# CLIs often print their name first ("codex-cli 0.165.0", "opencode v2.2.0").
+_VERSION_TOKEN_RE = re.compile(r"(?<![\w.])v?(\d+(?:\.\d+){1,3})(?![\w.])")
 
 
 def _parse_version(version_str: str) -> tuple[int, ...] | None:
     """Parse a version string into a tuple of integers for comparison."""
     try:
-        match = _VERSION_RE.match(version_str.strip())
+        match = _VERSION_RE.match(version_str.strip()) or _VERSION_TOKEN_RE.search(version_str)
         if not match:
             return None
         return tuple(int(part) for part in match.group(1).split("."))
@@ -357,12 +360,14 @@ def _build_resolved_surface(
     content_channels: tuple[ContentChannelCapability, ...],
     evidence: ValidationEvidence,
     platforms: tuple[PlatformEvidence, ...],
+    joined_capabilities: JoinedSessionCapabilities,
 ) -> ResolvedSessionSurface:
     """Construct a successful ResolvedSessionSurface from declaration fields.
 
     ``resolved_version`` carries the *actual installed* provider version.
     Adapter refs are intentionally *not* passed into this function; they never
-    appear in the foundation snapshot.
+    appear in the foundation snapshot. Joined-session claims are projected only
+    when the evidence is validated; otherwise they stay unsupported.
     """
     ref = SessionSurfaceRef(
         provider_id=provider_id,
@@ -395,6 +400,7 @@ def _build_resolved_surface(
             ),
             reason="" if evidence.validated else "missing-validation-evidence",
         ),
+        joined_capabilities=joined_capabilities if evidence.validated else JoinedSessionCapabilities(),
     )
 
 
@@ -478,10 +484,10 @@ def resolve_session_surface(
 
     # ── 2. Disabled provider ───────────────────────────────────────
     from ..config.provider_config import (
-        is_provider_enabled,
+        is_provider_usable,
     )
 
-    if not is_provider_enabled(project_root, provider_id):
+    if not is_provider_usable(project_root, provider_id):
         return _unsupported_snapshot(
             provider_id,
             surface_hint.surface_id,
@@ -595,6 +601,7 @@ def resolve_session_surface(
         content_channels=declaration.content_channels,
         evidence=eff_evidence,
         platforms=declaration.platforms,
+        joined_capabilities=declaration.joined_capabilities,
     )
 
 

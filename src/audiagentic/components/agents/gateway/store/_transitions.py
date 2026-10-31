@@ -10,9 +10,10 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 import time
-from contextlib import nullcontext
 from collections.abc import Mapping
+from contextlib import nullcontext
 from pathlib import Path
 from typing import Any
 
@@ -52,6 +53,14 @@ from ._shared import (
 )
 
 logger = logging.getLogger(__name__)
+_recovery_trace_lock = threading.Lock()
+_recovery_trace_failures = 0
+
+
+def recovery_trace_failure_count() -> int:
+    """Process-local diagnostic drops, never request or effect state."""
+    with _recovery_trace_lock:
+        return _recovery_trace_failures
 
 # SH07 crash-matrix test-only hook: widens the terminal-write-to-index-cleanup
 # control-plane window so a real OS process kill can be observed landing
@@ -72,6 +81,107 @@ def _test_stall_terminal_to_cleanup() -> None:
         return
     if ms > 0:
         time.sleep(ms / 1000.0)
+
+
+def _apply_terminal_finalization(
+    project_root: Path,
+    request_id: str,
+    finalization: Mapping[str, Any],
+) -> bool:
+    """Apply idempotent session cleanup after a terminal capture.
+
+    The request record carries the finalization marker, so a process crash
+    between the request write and this cross-record update can be replayed by
+    the next status read.  A newer unresolved turn owns the session and makes
+    this cleanup obsolete; in that case it is safely skipped.
+    """
+    session_id = finalization.get("session-id")
+    if not isinstance(session_id, str) or not session_id:
+        return True
+    from audiagentic.components.agents.gateway.session import sessions_store as session_store
+
+    session_record = session_store.read_session_record(project_root, session_id)
+    metadata = session_store.session_provider_metadata(session_record)
+    unresolved_turn_id = metadata.get("unresolved-turn-id")
+    if unresolved_turn_id not in {None, request_id}:
+        return True
+    expected_checkpoint = finalization.get("pre-clear-checkpoint")
+    if not isinstance(expected_checkpoint, dict):
+        expected_checkpoint = None
+    if "expected-session-binding" in finalization and session_record.get("binding") != finalization["expected-session-binding"]:
+        return False
+    if unresolved_turn_id is None and metadata.get("unresolved-turn-pending") is False:
+        # A crash can occur after session clear but before memory handoff.
+        # Surviving residue must still agree; never overwrite a newer attempt.
+        if expected_checkpoint is not None and any(
+            key in metadata and metadata[key] != expected_checkpoint.get(key)
+            for key in session_store._RECOVERY_CHECKPOINT_KEYS
+            - {"unresolved-turn-pending", "recovery-state"}
+        ):
+            return False
+        return True
+    binding = finalization.get("recovered-binding")
+    if isinstance(binding, dict) and binding and not finalization.get("clear-unresolved-turn"):
+        session_store.update_provider_metadata(
+            project_root,
+            session_id,
+            {str(key): value for key, value in binding.items() if value is not None},
+        )
+    if finalization.get("clear-unresolved-turn"):
+        return session_store._clear_terminal_submission_checkpoint_locked(
+            project_root,
+            session_id,
+            request_id,
+            recovery_state="terminal-captured",
+            expected_metadata=expected_checkpoint,
+            expected_binding=finalization.get("expected-session-binding"),
+            check_binding="expected-session-binding" in finalization,
+            binding_metadata_update=(
+                {str(key): value for key, value in binding.items() if value is not None}
+                if isinstance(binding, dict) else None
+            ),
+            remove_keys=tuple(
+                key for key in session_store.TERMINAL_SUBMISSION_CHECKPOINT_REMOVE_KEYS
+                if key != "recovery-state"
+            ),
+        )
+    return True
+
+
+def repair_pending_terminal_finalization(project_root: Path, request_id: str) -> bool:
+    """Replay a terminal session cleanup marker, if one was left by a crash."""
+    with _request_lock(project_root, request_id):
+        record = _read_record_locked(project_root, request_id)
+        finalization = record.get("terminal-finalization")
+        if record.get("state") != "completed" or not isinstance(finalization, dict):
+            return False
+        try:
+            if not _apply_terminal_finalization(project_root, request_id, finalization):
+                return False
+        except Exception:  # noqa: BLE001 - leave marker for the next status read
+            logger.warning(
+                "terminal session finalization replay deferred",
+                extra={"request-id": request_id},
+                exc_info=True,
+            )
+            return False
+        # A captured private checkpoint remains replayable until the matching
+        # live observer/memory handoff acknowledges it outside these locks.
+        if "pre-clear-checkpoint" not in finalization:
+            updated = dict(record)
+            updated.pop("terminal-finalization", None)
+            updated["updated-at"] = now_iso_z()
+            updated["revision"] = record["revision"] + 1
+            write_record(project_root, updated)
+            record_gateway_timeline(
+                project_root, request_id, "session.finalization-replayed", state="completed",
+                attributes={"source": "status-replay"},
+            )
+            return True
+    # Never call into the live event loop while holding a file mutation lock:
+    # its observer may itself be waiting to publish a fenced checkpoint.
+    from ..session.capture_handoff import reconcile_idle_captured_handoff
+    return reconcile_idle_captured_handoff(project_root, request_id)
 
 
 def ensure_transition(current_state: str, new_state: str) -> None:
@@ -101,6 +211,7 @@ def transition_record(
     expected_dispatch_owner_epoch: str | None = None,
     expected_worker_id: str | None = None,
     expected_attempt_epoch: int | None = None,
+    _request_lock_held: bool = False,
 ) -> dict[str, Any]:
     """Transition a request record to a new state and persist it.
 
@@ -110,6 +221,10 @@ def transition_record(
     profile ID, idempotency key, owner/worker/attempt fencing — is immutable
     through this path (SH review C12); ownership mutation goes through its
     dedicated typed operations. ``error`` is redacted before persisting.
+
+    Internal publication coordinators may pass ``_request_lock_held=True``
+    while holding this exact request lock. They must perform worker-session
+    finalization only after releasing their outer lock.
     """
     illegal = {key.replace("_", "-") for key in (updates or {})} - _shared._MUTABLE_RESULT_FIELDS
     if illegal:
@@ -119,7 +234,7 @@ def transition_record(
             message="request transition may not modify immutable admission/ownership fields",
             details={"request-id": request_id, "rejected-fields": sorted(illegal)},
         )
-    with _request_lock(project_root, request_id):
+    with nullcontext() if _request_lock_held else _request_lock(project_root, request_id):
         record = _read_record_locked(project_root, request_id)
         _check_expected_identity(
             record,
@@ -172,7 +287,8 @@ def transition_record(
                 "updated-keys": sorted((updates or {}).keys()),
             },
         )
-    _finalize_worker_session_if_terminal(project_root, updated)
+    if not _request_lock_held:
+        _finalize_worker_session_if_terminal(project_root, updated)
     return updated
 
 
@@ -629,32 +745,49 @@ def defer_owned_recovery(
     request_id: str,
     *,
     owner_epoch: str,
-    worker_id: str,
+    worker_id: str | None,
     attempt_epoch: int,
     error: BaseException | dict[str, Any] | None,
     phase: str,
     side_effect_state: str,
-    retry_delay_seconds: float,
+    retry_delay_seconds: float | None,
     continuation: Mapping[str, Any] | None = None,
     _allow_queued: bool = False,
+    expected_revision: int | None = None,
 ) -> dict[str, Any]:
-    """Persist a fenced, non-terminal recovery retry.
+    """Persist a fenced, non-terminal recovery deferral.
 
     This mutation changes recovery metadata only.  It intentionally leaves
     the request running, its attempt identity, active-work index, and any
     unresolved provider checkpoint intact so a replacement gateway can adopt
     the same request and conversation.
+
+    A None delay is explicit unscheduled node deferral, not a zero-delay timer.
+    Unclaimed queued nodes require the current owner plus an exact revision;
+    no fictitious worker/attempt is allocated just to describe their waiting.
     """
-    _require_owned_identity(owner_epoch, worker_id, attempt_epoch)
-    if not phase or retry_delay_seconds < 0:
+    unclaimed_node = _allow_queued and worker_id is None and type(attempt_epoch) is int and attempt_epoch == 0
+    if unclaimed_node:
+        if not owner_epoch or type(expected_revision) is not int or expected_revision < 0:
+            raise AudiaGenticError("VAL-AGW-085", "agents", "Unclaimed node deferral requires owner and revision", {})
+    else:
+        _require_owned_identity(owner_epoch, worker_id, attempt_epoch)
+    if not phase or (retry_delay_seconds is not None and retry_delay_seconds < 0):
         raise AudiaGenticError(
             "VAL-AGW-087", "agents", "recovery retry metadata is invalid", {}
         )
     with _request_lock(project_root, request_id):
         record = _read_record_locked(project_root, request_id)
+        if retry_delay_seconds is None and record.get("node-placement") is None:
+            raise AudiaGenticError("VAL-AGW-085", "agents", "Unscheduled deferral requires node placement", {})
+        if unclaimed_node and (
+            record.get("node-placement") is None or record["state"] != "queued"
+            or record.get("worker-id") is not None or record.get("attempt-epoch") != 0
+        ):
+            raise AudiaGenticError("VAL-AGW-085", "agents", "Unclaimed deferral requires a queued node request", {})
         _check_expected_identity(
             record,
-            expected_revision=None,
+            expected_revision=expected_revision,
             expected_dispatch_owner_epoch=owner_epoch,
             expected_worker_id=worker_id,
             expected_attempt_epoch=attempt_epoch,
@@ -670,7 +803,7 @@ def defer_owned_recovery(
         followup_attempt = int(previous.get("followup-attempt") or 0)
         if phase == "followup-reconcile":
             followup_attempt += 1
-        retry_at = add_seconds(timestamp, retry_delay_seconds)
+        retry_at = add_seconds(timestamp, retry_delay_seconds) if retry_delay_seconds is not None else None
         error_message = getattr(error, "message", None)
         if not isinstance(error_message, str) and isinstance(error, Mapping):
             error_message = error.get("message")
@@ -696,7 +829,7 @@ def defer_owned_recovery(
             "phase": phase,
             "side-effect-state": side_effect_state,
             "next-retry-at": retry_at,
-            "retry-delay-seconds": retry_delay_seconds,
+            "retry-delay-seconds": retry_delay_seconds if retry_delay_seconds is not None else 0,
         }
         # A provider follow-up can already have been submitted when the
         # observer loses its handle.  Preserve its bounded continuation
@@ -722,29 +855,37 @@ def defer_owned_recovery(
         updated.update({
             "recovery": recovery,
             "recovery-required": not queued_recovery,
-            "watchdog-state": "not-started" if queued_recovery else "active",
+            "watchdog-state": "not-started" if queued_recovery else (
+                "intervention" if retry_delay_seconds is None else "active"),
             "watchdog-reason": (
-                "queued-recovery-retry" if queued_recovery else "recovery-retry-scheduled"
+                phase if retry_delay_seconds is None else (
+                    "queued-recovery-retry" if queued_recovery else "recovery-retry-scheduled")
             ),
             "updated-at": timestamp,
             "revision": record["revision"] + 1,
         })
         write_record(project_root, updated)
+    try:
         record_gateway_timeline(
-            project_root,
-            request_id,
-            "recovery.retry-scheduled",
-            state=updated["state"],
-            attributes={
-                "phase": phase,
-                "attempt": attempt,
-                "followup-attempt": followup_attempt,
-                "next-retry-at": retry_at,
-                "retry-delay-seconds": retry_delay_seconds,
-                "side-effect-state": side_effect_state,
-            },
-        )
-        return updated
+            project_root, request_id,
+            "recovery.deferred" if retry_delay_seconds is None else "recovery.retry-scheduled",
+            state=updated["state"], attributes={
+                "phase": phase, "attempt": attempt, "followup-attempt": followup_attempt,
+                "next-retry-at": retry_at, "retry-delay-seconds": retry_delay_seconds,
+                "side-effect-state": side_effect_state, "request-revision": updated["revision"],
+                "correlation-id": updated.get("correlation-id"),
+            })
+    except Exception:  # noqa: BLE001 - trace failure cannot reverse committed recovery
+        global _recovery_trace_failures
+        with _recovery_trace_lock:
+            _recovery_trace_failures += 1
+            first = _recovery_trace_failures == 1
+        if first:
+            try:
+                logger.warning("Recovery trace unavailable; canonical state retained")
+            except Exception:  # noqa: BLE001 - do not recurse into a failing log sink
+                pass
+    return updated
 
 
 def defer_owned_queued_recovery(
@@ -752,13 +893,14 @@ def defer_owned_queued_recovery(
     request_id: str,
     *,
     owner_epoch: str,
-    worker_id: str,
+    worker_id: str | None,
     attempt_epoch: int,
     error: BaseException | dict[str, Any] | None,
     phase: str,
     side_effect_state: str,
-    retry_delay_seconds: float,
+    retry_delay_seconds: float | None,
     continuation: Mapping[str, Any] | None = None,
+    expected_revision: int | None = None,
 ) -> dict[str, Any]:
     """Persist a recovery retry before a session turn owns the FIFO lock.
 
@@ -780,6 +922,7 @@ def defer_owned_queued_recovery(
         retry_delay_seconds=retry_delay_seconds,
         continuation=continuation,
         _allow_queued=True,
+        expected_revision=expected_revision,
     )
 
 
@@ -938,6 +1081,11 @@ def claim_dispatch(
         raise AudiaGenticError("VAL-AGW-083", "agents", "dispatch owner epoch is required", {})
     with _request_lock(project_root, request_id):
         record = _read_record_locked(project_root, request_id)
+        if record.get("node-placement") is not None and record["revision"] != expected_revision:
+            # Node recovery validates the complete immutable dispatch before
+            # this CAS. A concurrent change must not bypass that validation
+            # through the generic already-running recovery shortcut.
+            raise AudiaGenticError("CON-AGW-071", "agents", "gateway request revision changed", {})
         if (
             record["state"] == "running"
             and record.get("recovery-required") is True
@@ -964,7 +1112,13 @@ def claim_dispatch(
             raise AudiaGenticError(
                 "CON-AGW-083", "agents", "gateway request dispatch ownership changed", {}
             )
-        if current_owner == owner_epoch:
+        # Already owned by this epoch: a no-op only when the service root is
+        # recorded too. Restart takeover transfers the owner of an admitted,
+        # never-claimed request without one; node receipt and publication
+        # custody require it, so complete the claim instead of returning.
+        if current_owner == owner_epoch and (
+            service_root is None or record.get("dispatch-service-root")
+        ):
             record_active_work(service_root, project_root, request_id, owner_epoch=owner_epoch)
             return record
         updated = dict(record)
@@ -1705,17 +1859,34 @@ def update_owned_running_session(
                 "gateway request is not an active session attempt",
                 {"request-id": request_id, "state": record["state"]},
             )
+        current_metadata = record.get("provider-metadata")
+        current_metadata = current_metadata if isinstance(current_metadata, dict) else {}
+        metadata_unchanged = provider_metadata is None or dict(provider_metadata) == current_metadata
+        current_warnings = record.get("warnings")
+        current_warnings = current_warnings if isinstance(current_warnings, list) else []
+        warnings_unchanged = warnings is None or list(warnings)[-3:] == current_warnings
+        current_request_metadata = record.get("metadata")
+        current_request_metadata = current_request_metadata if isinstance(current_request_metadata, dict) else {}
+        recovery_url_unchanged = (
+            recovery_chat_url is None
+            or current_request_metadata.get("provider-chat-url") == recovery_chat_url
+        )
+        updates_unchanged = not result_updates or all(
+            record.get(key) == value for key, value in result_updates.items()
+        )
         if (
             record.get("session-id") == session_id
-            and provider_metadata is None
-            and warnings is None
-            and not result_updates
+            and metadata_unchanged
+            and warnings_unchanged
+            and recovery_url_unchanged
+            and updates_unchanged
         ):
             return record
         updated = dict(record)
         updated["session-id"] = session_id
-        if warnings is not None:
-            updated["warnings"] = list(warnings)[-3:]
+        if warnings is not None or recovery_chat_url:
+            if warnings is not None:
+                updated["warnings"] = list(warnings)[-3:]
             metadata = dict(updated.get("metadata") or {})
             metadata.pop("provider-chat-url", None)
             if recovery_chat_url:
@@ -1754,8 +1925,13 @@ def transition_owned_terminal(
     updates: dict[str, Any] | None = None,
     expected_revision: int | None = None,
     service_root: Path | None = None,
+    _request_lock_held: bool = False,
 ) -> dict[str, Any]:
-    """Write a terminal result only with dispatch and optional revision fences."""
+    """Write a terminal result only with dispatch and optional revision fences.
+
+    The private lock-held mode reuses the canonical transition implementation;
+    its coordinator owns subsequent session finalization outside the lock.
+    """
     if new_state not in _shared.TERMINAL_STATES:
         raise AudiaGenticError("VAL-AGW-084", "agents", "owned transition must be terminal", {})
     _require_owned_identity(owner_epoch, worker_id, attempt_epoch)
@@ -1781,6 +1957,7 @@ def transition_owned_terminal(
         expected_dispatch_owner_epoch=owner_epoch,
         expected_worker_id=worker_id,
         expected_attempt_epoch=attempt_epoch,
+        _request_lock_held=_request_lock_held,
     )
     service_root_for_cleanup = service_root
     if service_root_for_cleanup is None:
@@ -1807,6 +1984,13 @@ def transition_operator_terminal(
     *,
     expected_revision: int,
     updates: dict[str, Any],
+    recovery_attempt_id: str | None = None,
+    recovery_claim_generation: int | None = None,
+    session_id: str | None = None,
+    expected_session_provider: dict[str, Any] | None = None,
+    expected_session_binding: dict[str, Any] | None = None,
+    recovered_binding: dict[str, Any] | None = None,
+    clear_unresolved_turn: bool = False,
 ) -> dict[str, Any]:
     """Terminalize a request from an operator after a compare-and-swap.
 
@@ -1814,7 +1998,32 @@ def transition_operator_terminal(
     unwinding after the operator captured the already-rendered answer, and its
     later terminal write must be rejected rather than overwrite this result.
     """
+    def assert_current_capture_claim() -> None:
+        # Call only while _request_lock is held. replay's claim preparation,
+        # renewal and result writers use this same request mutation.lock, so
+        # journal identity cannot change between this check and write_record.
+        if recovery_attempt_id is not None:
+            from audiagentic.components.agents.agents_paths import gateway_recovery_action_path
+            from audiagentic.components.agents.gateway.replay import (
+                RecoveryClaimLostError,
+                recovery_claim_state,
+            )
+            from audiagentic.foundation.io import iter_ndjson
+
+            claim = recovery_claim_state(
+                iter_ndjson(gateway_recovery_action_path(project_root, request_id))
+            )
+            if not (
+                claim
+                and claim.get("valid")
+                and claim.get("active") is True
+                and claim.get("result") is None
+                and claim.get("action-attempt-id") == recovery_attempt_id
+                and claim.get("claim-generation") == recovery_claim_generation
+            ):
+                raise RecoveryClaimLostError("recovery claim lost before terminal commit")
     with _request_lock(project_root, request_id):
+        assert_current_capture_claim()
         record = _read_record_locked(project_root, request_id)
         _check_expected_identity(
             record,
@@ -1849,6 +2058,39 @@ def transition_operator_terminal(
         updated["watchdog-state"] = "not-started"
         updated["watchdog-reason"] = None
         updated["recovery-required"] = False
+        diagnostics = updated.get("diagnostics")
+        if isinstance(diagnostics, dict):
+            updated["diagnostics"] = {
+                **diagnostics, "resolution-state": "resolved",
+                "recovery": {"disposition": "none", "allowed-actions": []},
+            }
+        finalization = None
+        if session_id and (recovered_binding or clear_unresolved_turn):
+            finalization = {
+                "session-id": session_id,
+                "recovered-binding": dict(recovered_binding or {}),
+                "clear-unresolved-turn": bool(clear_unresolved_turn),
+            }
+            checkpoint = (expected_session_provider or {}).get("metadata")
+            if (
+                isinstance(checkpoint, dict)
+                and checkpoint.get("unresolved-turn-id") == request_id
+                and checkpoint.get("unresolved-turn-pending") is True
+            ):
+                from audiagentic.components.agents.gateway.session.sessions_store import (
+                    _RECOVERY_CHECKPOINT_KEYS,
+                )
+                finalization["pre-clear-checkpoint"] = {
+                    key: value for key, value in checkpoint.items()
+                    if key in _RECOVERY_CHECKPOINT_KEYS
+                }
+                finalization["expected-session-binding"] = expected_session_binding
+                finalization["capture-owner"] = {
+                    key: record.get(key)
+                    for key in ("dispatch-owner-epoch", "worker-id", "attempt-epoch")
+                }
+            updated["terminal-finalization"] = finalization
+        updates = dict(updates)
         final_response_text = updates.pop("__final-response-text", None)
         if final_response_text is not None:
             from audiagentic.components.agents.gateway.output import persist_final_response
@@ -1866,12 +2108,59 @@ def transition_operator_terminal(
             }
         for key, value in updates.items():
             updated[key.replace("_", "-")] = value
-        write_record(project_root, updated)
+        if session_id and expected_session_provider is not None:
+            from audiagentic.components.agents.gateway.session import sessions_store
+
+            # A successor turn can change only the session checkpoint while
+            # this request's revision stays unchanged. Recheck that checkpoint
+            # under the session lock and hold it through the terminal write.
+            with sessions_store._ordered_session_mutation_lock(project_root, session_id):
+                current_session = sessions_store.read_session_record(project_root, session_id)
+                if (
+                    current_session.get("provider") != expected_session_provider
+                    or current_session.get("binding") != expected_session_binding
+                ):
+                    raise AudiaGenticError(
+                        code="CON-AGW-156", kind="agents",
+                        message="provider session changed during response capture",
+                        details={"request-id": request_id},
+                    )
+                # Session/retention lock acquisition and artifact persistence
+                # can outlive the lease checked at entry. Revision/CAS alone
+                # cannot prove this recovery attempt is still authorized.
+                assert_current_capture_claim()
+                write_record(project_root, updated)
+        else:
+            assert_current_capture_claim()
+            write_record(project_root, updated)
         record_gateway_timeline(
             project_root, request_id, "state.changed", state="completed",
             attributes={"from": record["state"], "to": "completed", "source": "operator-provider-capture"},
         )
+        if finalization is not None:
+            try:
+                applied = _apply_terminal_finalization(project_root, request_id, finalization)
+            except Exception:  # noqa: BLE001 - marker remains replayable
+                logger.warning(
+                    "terminal session finalization deferred",
+                    extra={"request-id": request_id},
+                    exc_info=True,
+                )
+            else:
+                if applied and "pre-clear-checkpoint" not in finalization:
+                    updated = _read_record_locked(project_root, request_id)
+                    updated.pop("terminal-finalization", None)
+                    updated["updated-at"] = now_iso_z()
+                    updated["revision"] = record["revision"] + 2
+                    write_record(project_root, updated)
     _finalize_worker_session_if_terminal(project_root, updated)
+    if finalization is not None and "pre-clear-checkpoint" in finalization:
+        from ..session.capture_handoff import reconcile_idle_captured_handoff
+        try:
+            if reconcile_idle_captured_handoff(project_root, request_id):
+                updated = _read_record_locked(project_root, request_id)
+        except Exception:  # noqa: BLE001 - durable marker remains for the owner/status replay
+            logger.warning("captured memory handoff deferred", exc_info=True)
     return updated
 
 
@@ -2043,3 +2332,322 @@ def _check_expected_identity(
             details={"expected": expected_attempt_epoch, "actual": record["attempt-epoch"]},
         )
 
+
+# Node dispatch writes are local CAS operations, never channel/grant authority.
+# The caller serializes them with current service authorization/revocation.
+def _node_identity(value: Any) -> dict[str, Any]:
+    from audiagentic.components.agents.gateway.node.contracts import CommandIdentity
+
+    return (value if isinstance(value, CommandIdentity)
+            else CommandIdentity.from_mapping(value)).to_mapping()
+
+
+def _node_conflict(message: str) -> AudiaGenticError:
+    from audiagentic.components.agents.gateway.node.contracts import conflict
+
+    return conflict(1, message)
+
+
+def _node_owned_record(
+    project_root: Path, request_id: str, *, owner_epoch: str, worker_id: str,
+    attempt_epoch: int, expected_revision: int,
+) -> dict[str, Any]:
+    if (
+        not owner_epoch or not worker_id or type(attempt_epoch) is not int
+        or attempt_epoch < 1 or type(expected_revision) is not int or expected_revision < 0
+    ):
+        raise _node_conflict("Node mutation requires complete owned attempt fences")
+    record = _read_record_locked(project_root, request_id)
+    _check_expected_identity(
+        record, expected_revision=expected_revision,
+        expected_dispatch_owner_epoch=owner_epoch,
+        expected_worker_id=worker_id, expected_attempt_epoch=attempt_epoch,
+    )
+    return record
+
+
+def _node_matches_record(record: dict[str, Any], identity: dict[str, Any]) -> None:
+    if (
+        identity["request-id"] != record["request-id"]
+        or identity["execution-profile-id"] != record["execution-profile-id"]
+    ):
+        raise _node_conflict("Node command does not match the admitted request")
+    # _read_record_locked has already validated the complete strict placement
+    # tuple. Null is valid for ordinary server admission, never for node work.
+    # Principal/project facts stay sealed here for the outer grant owner;
+    # this local consistency guard does not recreate grant authorization.
+    placement = record.get("node-placement")
+    if not isinstance(placement, dict):
+        raise _node_conflict("Node command requires sealed admission placement")
+    if any(
+        identity[key] != placement[key] for key in ("node-id", "workspace-id", "grant-revision")
+    ):
+        raise _node_conflict("Node command does not match immutable admission placement")
+
+
+def _node_attestation_matches_attempt(record: dict[str, Any], attestation: Any) -> None:
+    # These are canonical execution-owner facts. Provider/model identity is
+    # node-local preparation evidence and must not be inferred from unrelated
+    # or not-yet-populated central provider/model fields.
+    if (
+        attestation.worker_id != record["worker-id"]
+        or type(attestation.attempt_epoch) is not int
+        or attestation.attempt_epoch != record["attempt-epoch"]
+    ):
+        raise _node_conflict("Accepted node attestation does not match the owned worker attempt")
+
+
+def _node_fresh_effect(record: dict[str, Any], identity: dict[str, Any], owner_epoch: str) -> None:
+    _node_matches_record(record, identity)
+    if (
+        record["state"] != "running" or record.get("cancel-requested")
+        or record.get("recovery-required")
+        or identity["gateway-owner-epoch"] != owner_epoch
+    ):
+        raise _node_conflict("Node command is not eligible for fresh effect authorization")
+
+
+def _write_node_dispatch(project_root: Path, record: dict[str, Any], dispatch: dict[str, Any], *,
+                         clear_recovery: bool = False) -> dict[str, Any]:
+    updated = dict(record)
+    updated.update({
+        "node-dispatch": dispatch, "revision": record["revision"] + 1,
+        "updated-at": now_iso_z(),
+    })
+    if clear_recovery:
+        updated.update({"recovery-required": False, "watchdog-state": "active",
+                        "watchdog-reason": "node-recovery-bound"})
+    write_record(project_root, updated)
+    return updated
+
+
+def bind_owned_node_dispatch(
+    project_root: Path, request_id: str, *, identity: Any,
+    command_payload: Mapping[str, Any], accepted_attestation: Any,
+    owner_epoch: str, worker_id: str, attempt_epoch: int, expected_revision: int,
+    resume_unbound: bool = False,
+) -> dict[str, Any]:
+    """Persist one immutable attested command identity; return the full record.
+
+    This is not a grant check or permission to invoke a native effect. A
+    different identity always conflicts, including after an owner reconnect.
+    Rebinding an existing command is prohibited. An explicitly recovered null
+    dispatch may install its first newly attested binding and clear recovery in
+    one write, under the caller's current service/grant/occupancy fences.
+    command_payload is the protected final semantic/raw-prompt/attestation
+    mapping; only its validated identity and accepted attestation digest persist.
+    Supply accepted_attestation from the trusted preparation exchange, never
+    copied from the command. Unknown legacy attestations cannot be rebound.
+    """
+    from audiagentic.components.agents.gateway.node.contracts import CommandIdentity
+    from audiagentic.components.agents.gateway.node.preparation import (
+        validate_final_command_payload,
+    )
+
+    if type(resume_unbound) is not bool:
+        raise _node_conflict("Node recovered binding flag must be boolean")
+    command = _node_identity(identity)
+    attestation = validate_final_command_payload(
+        command_payload, CommandIdentity.from_mapping(command),
+        accepted_attestation=accepted_attestation,
+    )
+    attestation_digest = attestation.digest
+    with _request_lock(project_root, request_id):
+        record = _node_owned_record(
+            project_root, request_id, owner_epoch=owner_epoch, worker_id=worker_id,
+            attempt_epoch=attempt_epoch, expected_revision=expected_revision,
+        )
+        _node_attestation_matches_attempt(record, accepted_attestation)
+        prior = record.get("node-dispatch")
+        if resume_unbound:
+            _node_matches_record(record, command)
+            if (prior is not None or record["state"] != "running"
+                    or record.get("recovery-required") is not True
+                    or record.get("cancel-requested") or command["gateway-owner-epoch"] != owner_epoch):
+                raise _node_conflict("Recovered node binding requires an owned unsent attempt")
+        else:
+            _node_fresh_effect(record, command, owner_epoch)
+        if prior is not None:
+            if prior["identity"] != command or prior.get("attestation-sha256") != attestation_digest:
+                raise _node_conflict("Node dispatch identity collision")
+            return record
+        return _write_node_dispatch(project_root, record, {
+            "identity": command, "attestation-sha256": attestation_digest, "authorization-id": None,
+            "authorization-state": "not-authorized",
+            "receipt-sequence": 0, "receipt-sha256": None,
+            "receipt-stage": None, "output-sha256": None,
+        }, clear_recovery=resume_unbound)
+
+
+def authorize_owned_node_effect(
+    project_root: Path, request_id: str, *, identity: Any, authorization_id: str,
+    accepted_attestation: Any,
+    current_node_epoch: str, current_connection_generation: int,
+    owner_epoch: str, worker_id: str, attempt_epoch: int, expected_revision: int,
+) -> dict[str, Any]:
+    """Durably record caller-validated live authorization; return full record.
+
+    Invoke under the outer service auth lock with the currently validated
+    epoch/generation. Idempotent replay is only a persisted authorization
+    result, never permission for another native call. Uncertain/observed/
+    terminal commands cannot receive fresh authorization here.
+    """
+    from audiagentic.components.agents.gateway.node.contracts import _identifier
+    from audiagentic.components.agents.gateway.node.preparation import PreparationAttestation
+
+    if type(accepted_attestation) is not PreparationAttestation:
+        raise _node_conflict("Node authorization requires a typed accepted preparation attestation")
+    attestation_digest = accepted_attestation.digest
+    command = _node_identity(identity)
+    _identifier(authorization_id)
+    if (
+        type(current_connection_generation) is not int
+        or command["connection-generation"] != current_connection_generation
+        or command["node-epoch"] != current_node_epoch
+    ):
+        raise _node_conflict("Cannot authorize a stale node connection")
+    with _request_lock(project_root, request_id):
+        record = _node_owned_record(
+            project_root, request_id, owner_epoch=owner_epoch, worker_id=worker_id,
+            attempt_epoch=attempt_epoch, expected_revision=expected_revision,
+        )
+        _node_attestation_matches_attempt(record, accepted_attestation)
+        _node_fresh_effect(record, command, owner_epoch)
+        prior = record.get("node-dispatch")
+        if prior is None or prior["identity"] != command:
+            raise _node_conflict("Node authorization identity collision")
+        if prior.get("attestation-sha256") is None or prior["attestation-sha256"] != attestation_digest:
+            raise _node_conflict("Node authorization does not match the bound accepted attestation")
+        if prior["authorization-state"] == "authorized":
+            if prior["authorization-id"] != authorization_id:
+                raise _node_conflict("Node authorization identity changed")
+            return record
+        if prior["authorization-state"] != "not-authorized" or prior["authorization-id"] is not None:
+            raise _node_conflict("Prior node effect requires evidence reconciliation")
+        return _write_node_dispatch(project_root, record, {
+            **prior, "authorization-id": authorization_id, "authorization-state": "authorized",
+        })
+
+
+def fence_node_dispatch_no_effect(
+    project_root: Path, request_id: str, *, identity: Any,
+    owner_epoch: str, worker_id: str, attempt_epoch: int, expected_revision: int,
+    retired_connection_generation: int,
+) -> dict[str, Any]:
+    """Durably prove the original binding never obtained authorization.
+
+    Caller must supply retired_connection_generation from the owning
+    connection authority's own serialized generation counter for this exact
+    node, strictly greater than the original bound connection-generation. A
+    send timeout, reconnect gap or peer absence alone is never sufficient:
+    only a newer connection the owner itself admitted proves the original one
+    is gone, since at most one connection per node is ever live at a time.
+    This never resends, rebinds or clears the original identity, attestation,
+    worker or attempt; it only fences this exact binding against any later
+    authorization and marks it as positively having no effect.
+
+    The generation counter is scoped to one connection-owner-authority
+    instance (one per live gateway owner epoch) and resets across a
+    restart. A caller's generation proof is therefore only meaningful
+    against a binding made under that SAME owner epoch; comparing it
+    against a binding from a prior, retired owner epoch would compare two
+    unrelated counters and can produce a false positive. owner_epoch here
+    is the live caller fence (checked by _node_owned_record below); this
+    additionally requires the historical binding's own recorded epoch to
+    equal it, never extending proof across an owner takeover.
+    """
+    command = _node_identity(identity)
+    if (
+        type(retired_connection_generation) is not int
+        or retired_connection_generation <= command["connection-generation"]
+    ):
+        raise _node_conflict("No-effect fence requires a proven strictly newer connection generation")
+    with _request_lock(project_root, request_id):
+        record = _node_owned_record(
+            project_root, request_id, owner_epoch=owner_epoch, worker_id=worker_id,
+            attempt_epoch=attempt_epoch, expected_revision=expected_revision,
+        )
+        # owner_epoch is now confirmed to be the current live record owner.
+        # The generation proof is only meaningful against a binding made
+        # under that SAME epoch's connection-owner-authority instance.
+        if command["gateway-owner-epoch"] != owner_epoch:
+            raise _node_conflict("No-effect fence requires a proven strictly newer connection generation")
+        _node_matches_record(record, command)
+        prior = record.get("node-dispatch")
+        if (
+            prior is None or prior["identity"] != command
+            or prior["authorization-state"] != "not-authorized"
+            or prior["authorization-id"] is not None
+        ):
+            raise _node_conflict("No-effect fence requires an original unauthorized binding")
+        return _write_node_dispatch(project_root, record, {
+            **prior, "authorization-state": "no-effect",
+        })
+
+
+def apply_owned_node_receipt(
+    project_root: Path, request_id: str, *, receipt: Mapping[str, Any],
+    owner_epoch: str, worker_id: str, attempt_epoch: int, expected_revision: int,
+) -> dict[str, Any]:
+    """Checkpoint a public Receipt.public_payload mapping; return full record.
+
+    Exact latest replay does not write. Older sequences and changed replays
+    conflict. Gaps are valid: the receipt outbox sequence is node-wide, not
+    command-local. A later stage may therefore also arrive as a snapshot.
+    Historical node epochs are evidence for the ORIGINAL bound command only;
+    this never rebinds or authorizes effects or changes request lifecycle.
+    """
+    import hashlib
+    import re
+
+    from audiagentic.components.agents.gateway.node.contracts import canonical_json
+
+    if not isinstance(receipt, Mapping) or set(receipt) != {
+        "identity", "state", "receipt-sequence", "output-sha256",
+    }:
+        raise _node_conflict("Invalid public node receipt fields")
+    command = _node_identity(receipt["identity"])
+    sequence = receipt["receipt-sequence"]
+    stage = receipt["state"]
+    stages = {"prepared": 0, "effect-intent": 1, "native-accepted": 2, "terminal": 3}
+    output = receipt["output-sha256"]
+    if (
+        type(sequence) is not int or not 1 <= sequence <= 2**63 - 1
+        or not isinstance(stage, str) or stage not in stages
+        or (stage == "terminal" and (not isinstance(output, str) or re.fullmatch(r"[0-9a-f]{64}", output) is None))
+        or (stage != "terminal" and output is not None)
+    ):
+        raise _node_conflict("Invalid node receipt sequence, stage or output digest")
+    # Freeze caller-owned input before locking; persist no native ref/text.
+    receipt_digest = hashlib.sha256(canonical_json({
+        "identity": command, "state": stage, "receipt-sequence": sequence, "output-sha256": output,
+    })).hexdigest()
+    with _request_lock(project_root, request_id):
+        record = _node_owned_record(
+            project_root, request_id, owner_epoch=owner_epoch, worker_id=worker_id,
+            attempt_epoch=attempt_epoch, expected_revision=expected_revision,
+        )
+        _node_matches_record(record, command)
+        prior = record.get("node-dispatch")
+        if prior is None or prior["identity"] != command:
+            raise _node_conflict("Node receipt identity collision")
+        if sequence == prior["receipt-sequence"]:
+            if receipt_digest != prior["receipt-sha256"]:
+                raise _node_conflict("Node receipt replay changed")
+            return record
+        if sequence < prior["receipt-sequence"]:
+            raise _node_conflict("Node receipt sequence regressed")
+        previous_stage = prior["receipt-stage"]
+        if previous_stage is not None and (
+            stages[stage] < stages[previous_stage] or previous_stage == "terminal"
+        ):
+            raise _node_conflict("Node receipt stage regressed or terminal evidence changed")
+        if stage != "prepared" and prior["authorization-id"] is None:
+            raise _node_conflict("Node effect receipt has no durable authorization")
+        state = {
+            "effect-intent": "uncertain", "native-accepted": "effect-observed", "terminal": "terminal",
+        }.get(stage, prior["authorization-state"])
+        return _write_node_dispatch(project_root, record, {
+            **prior, "authorization-state": state, "receipt-sequence": sequence,
+            "receipt-sha256": receipt_digest, "receipt-stage": stage, "output-sha256": output,
+        })

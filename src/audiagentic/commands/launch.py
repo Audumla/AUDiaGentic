@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import logging
 import os
-import signal
-import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -53,7 +51,7 @@ def _cmd_launch(project_root: Path, args: list[str], runner_params: RunnerParams
 
     from audiagentic.foundation.paths.home import global_harness_runtime
 
-    # AUDiaGentic runtime home — hosts the rig backend and materialized agent
+    # AUDiaGentic runtime home — hosts the materialized agent
     # config. It no longer bundles a harness CLI; the harness is whichever
     # supported one is installed on the system (config-driven order).
     harness_runtime = global_harness_runtime()
@@ -106,7 +104,7 @@ def _cmd_launch(project_root: Path, args: list[str], runner_params: RunnerParams
             _status("reconciling providers...")
 
             def _on_provider(provider_id: str, status: str) -> None:
-                if status in ("enabled", "disabled", "skipped"):
+                if status in ("enabled", "unavailable", "skipped"):
                     _status(f"  {provider_id}: {status}")
 
             reconcile_all_providers(project_root=project_root, on_provider=_on_provider)
@@ -155,29 +153,7 @@ def _cmd_launch(project_root: Path, args: list[str], runner_params: RunnerParams
 
             shutil.rmtree(launch_root, ignore_errors=True)
 
-    if ctx.embedded_rig:
-        from audiagentic.runtime.rig.service import release_embedded_rig
-
-        attachment = ctx.rig_attachment
-
-        def _sigterm_handler(sig: int, frame: object) -> None:
-            if attachment is not None:
-                release_embedded_rig(attachment)
-            sys.exit(0)
-
-        try:
-            signal.signal(signal.SIGTERM, _sigterm_handler)
-        except (OSError, ValueError):
-            logger.debug("Could not register SIGTERM handler (non-Linux or signal already set)")
-
-        try:
-            return run_agent(ctx, args, smoke=False)  # type: ignore[arg-type]
-        finally:
-            if attachment is not None:
-                release_embedded_rig(attachment)
-            _cleanup_launch_surface()
-    else:
-        try:
-            return run_agent(ctx, args, smoke=False)  # type: ignore[arg-type]
-        finally:
-            _cleanup_launch_surface()
+    try:
+        return run_agent(ctx, args, smoke=False)  # type: ignore[arg-type]
+    finally:
+        _cleanup_launch_surface()

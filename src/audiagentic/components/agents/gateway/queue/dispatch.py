@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from audiagentic.components.agents.gateway import store as store
+from audiagentic.components.agents.gateway.admission.packet import build_provider_packet
 from audiagentic.components.agents.gateway.mapping import first_present
 from audiagentic.components.agents.gateway.session.console_trace import GatewayConsoleTrace
 from audiagentic.components.agents.gateway.session.dispatch import (
@@ -168,29 +169,20 @@ def _build_packet_ctx(
     passed in-memory on the fast path and frozen in a private request-owned
     snapshot for restart/recovery.
     """
-    return {
-        "request-id": record["request-id"],
-        # Streaming provider adapters use this bounded request-owned job key
-        # for their normalized event log.  The disposable worker watches that
-        # log and relays provider progress as authenticated activity frames;
-        # it is never exposed as a filesystem path to callers.
-        "job-id": record["request-id"],
-        "execution-profile-id": profile["profile_id"],
-        "prompt-profile-id": record.get("prompt-profile-id", "default"),
-        "prompt-template-name": record.get("prompt-template-name"),
-        "prompt-template-digest": record.get("prompt-template-digest"),
-        "prompt-definition-fingerprint": record.get("prompt-definition-fingerprint"),
-        "provider-id": profile["provider_id"],
-        "model-id": model.get("model-id") or model.get("resolved"),
-        "model-alias": profile.get("model_alias"),
-        "prompt-body": dispatch_prompt,
-        "params": profile.get("params", {}),
-        "working-root": str(project_root.resolve()),
-        "stream-controls": dict(profile.get("params", {}).get("stream-controls") or {}),
-        "source": record.get("source"),
-        "metadata": record.get("metadata", {}),
-        "template-context": record.get("template-context", {}),
-    }
+    return build_provider_packet(
+        execution_root=project_root,
+        request_id=record["request-id"],
+        profile=profile,
+        prompt_profile_id=record.get("prompt-profile-id", "default"),
+        prompt_template_name=record.get("prompt-template-name"),
+        prompt_template_digest=record.get("prompt-template-digest"),
+        prompt_definition_fingerprint=record.get("prompt-definition-fingerprint"),
+        model_id=model.get("model-id") or model.get("resolved"),
+        dispatch_prompt=dispatch_prompt,
+        source=record.get("source"),
+        metadata=record.get("metadata", {}),
+        template_context=record.get("template-context", {}),
+    )
 
 
 def _dispatch_one_attempt(
@@ -203,7 +195,6 @@ def _dispatch_one_attempt(
     context_fingerprint: str,
     component_profile: str,
     provider_isolation_tier: str,
-    worker_timeout_seconds: float,
     profile: dict[str, Any],
 ) -> dict[str, Any]:
     """Resolve profile/provider/model and call execute_provider once.
@@ -222,7 +213,10 @@ def _dispatch_one_attempt(
     from audiagentic.components.providers import providers_api
 
     provider_id = profile["provider_id"]
-    if not providers_api.get_provider_runtime_config_state(project_root, provider_id)["enabled"]:
+    runtime_state = providers_api.get_provider_runtime_config_state(project_root, provider_id)
+    if not (
+        runtime_state["enabled"] or providers_api.is_provider_enabled_for_launch(project_root, provider_id)
+    ):
         raise AudiaGenticError(
             code="VAL-AGW-031",
             kind="agents",
@@ -333,23 +327,11 @@ def _dispatch_one_attempt(
             logger.debug("worker console trace progress failed", exc_info=True)
 
     try:
-        try:
-            result = execute_isolated_provider_turn(
-                identity=identity,
-                execution_request=provider_request.to_mapping(),
-                timeout_seconds=worker_timeout_seconds,
-                activity_callback=_on_worker_activity,
-            )
-        except TypeError as exc:
-            # Preserve compatibility with test/delivery doubles written against
-            # the pre-SH22 worker seam; real provider TypeErrors still propagate.
-            if "activity_callback" not in str(exc):
-                raise
-            result = execute_isolated_provider_turn(
-                identity=identity,
-                execution_request=provider_request.to_mapping(),
-                timeout_seconds=worker_timeout_seconds,
-            )
+        result = execute_isolated_provider_turn(
+            identity=identity,
+            execution_request=provider_request.to_mapping(),
+            activity_callback=_on_worker_activity,
+        )
     except Exception as exc:
         try:
             trace.failed(
@@ -448,7 +430,6 @@ def _try_profile_with_retries(
     context_fingerprint: str,
     component_profile: str,
     provider_isolation_tier: str,
-    worker_timeout_seconds: float,
 ) -> dict[str, Any]:
     """Try one profile, retrying transient failures up to its retry-count.
 
@@ -510,7 +491,6 @@ def _try_profile_with_retries(
                 context_fingerprint=context_fingerprint,
                 component_profile=component_profile,
                 provider_isolation_tier=provider_isolation_tier,
-                worker_timeout_seconds=worker_timeout_seconds,
                 profile=profile,
             )
         except AudiaGenticError as exc:
@@ -588,7 +568,6 @@ def dispatch_request(
     context_fingerprint: str,
     component_profile: str,
     provider_isolation_tier: str,
-    worker_timeout_seconds: float,
     project_name: str | None = None,
     session_start: Any | None = None,
     resume_existing: bool = False,
@@ -677,7 +656,6 @@ def dispatch_request(
             context_fingerprint=context_fingerprint,
             component_profile=component_profile,
             provider_isolation_tier=provider_isolation_tier,
-            worker_timeout_seconds=worker_timeout_seconds,
         )
     except _CancelledDuringDispatch:
         return _terminal_worker_result(project_root, record, "cancelled")

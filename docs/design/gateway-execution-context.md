@@ -94,8 +94,8 @@ envelope:
                                        # null = base components
 
   # --- execution shaping (existing submit fields) ---
-  mode: async | blocking
-  timeout_seconds: number | null
+  mode: async | blocking               # no execution deadline (SH22); a blocking
+                                       # caller's wait bound is a call argument
   session:                             # AS04/AS08 session semantics, unchanged
     session_id: string | null
     keep_alive: bool
@@ -153,7 +153,6 @@ manifest:
   # --- non-identity resolved fields ---
   session: { ... }                     # as admitted; session semantics stay AS-owned
   mode: async | blocking
-  timeout_seconds: number | null
   prompt_digest: sha256                # §5.2; raw prompt never persisted
 ```
 

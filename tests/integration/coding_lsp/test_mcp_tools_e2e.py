@@ -15,6 +15,7 @@ Tools: lsp_capabilities, lsp_symbols, lsp_doc_symbols, lsp_definition,
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 import time
@@ -650,13 +651,16 @@ def test_lsp_hover_returns_info(e2e_project: Path, language: str) -> None:
     lines = content.split("\n")
 
     target_line = None
+    target_column = None
     for i, line in enumerate(lines, 1):
-        if "class " in line or "pub struct " in line:
+        match = re.search(r"(?:class|pub\s+struct)\s+(\w+)", line)
+        if match:
             target_line = i
+            target_column = match.start(1) + 1
             break
 
     assert target_line is not None
-    result = lsp_api.hover(str(sample), f"{target_line}:8")
+    result = lsp_api.hover(str(sample), f"{target_line}:{target_column}")
     assert result is not None, f"hover returned None for {language}"
     assert "error" not in result, f"hover error for {language}: {result}"
     assert "contents" in result

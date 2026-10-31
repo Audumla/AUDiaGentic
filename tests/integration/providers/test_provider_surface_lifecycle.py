@@ -6,6 +6,7 @@ enable, disable) the provider MCP config files and provider surface files
 
 Skipped unless AUDIAGENTIC_DOCKER_TESTS=1 (enforced by conftest.py).
 """
+
 from __future__ import annotations
 
 import json
@@ -55,11 +56,11 @@ _SURFACE_FILES: list[str] = [
 
 # Provider MCP config paths relative to project root, keyed by format label.
 _MCP_CONFIG_PATHS: dict[str, str] = {
-    "mcp-json-claude":    ".mcp.json",
-    "codex-toml":         ".codex/config.toml",
-    "opencode-mcp":       ".opencode/opencode.json",
-    "mcp-json-gemini":    ".gemini/settings.json",
-    "continue-json":      ".continue/config.json",
+    "mcp-json-claude": ".mcp.json",
+    "codex-toml": ".codex/config.toml",
+    "opencode-mcp": ".opencode/opencode.json",
+    "mcp-json-gemini": ".gemini/settings.json",
+    "continue-json": ".continue/config.json",
 }
 
 # Components under test for parametrized tests
@@ -73,6 +74,7 @@ _SURFACE_COMPONENTS = ["agent-ledger", "agent-planning", "source-control"]
 # ProviderSurfaceHarness helpers
 # --------------------------------------------------------------------------- #
 
+
 def setup_provider_surfaces(project_root: Path) -> None:
     """Create surface files so apply_provider_surfaces has files to write into."""
     for rel in _SURFACE_FILES:
@@ -82,9 +84,7 @@ def setup_provider_surfaces(project_root: Path) -> None:
             target.write_text("", encoding="utf-8")
 
     # Create stub MCP config files so the writer functions have something to update.
-    (project_root / ".mcp.json").write_text(
-        json.dumps({"mcpServers": {}}), encoding="utf-8"
-    )
+    (project_root / ".mcp.json").write_text(json.dumps({"mcpServers": {}}), encoding="utf-8")
     _ensure_dir_and_stub(project_root / ".codex" / "config.toml", "")
     _ensure_dir_and_stub(project_root / ".opencode" / "opencode.json", '{"mcp": {}}')
     _ensure_dir_and_stub(project_root / ".gemini" / "settings.json", '{"mcpServers": {}}')
@@ -102,6 +102,7 @@ def setup_provider_surfaces(project_root: Path) -> None:
     from audiagentic.components.providers.services.config.provider_config import (
         set_provider_enabled,
     )
+
     for provider_id in all_provider_descriptors():
         set_provider_enabled(project_root, provider_id, enabled=True)
 
@@ -124,13 +125,13 @@ def apply_surfaces(project_root: Path) -> None:
     Surface changes may not fire in test isolation (no event bus), so we call
     these explicitly.
     """
-    from audiagentic.components.providers.services.mcp.mcp_sync import sync_all_provider_mcp_servers
+    from audiagentic.components.project import project_api
     from audiagentic.components.providers.surfaces.manager import (
         apply_provider_surfaces,
         prune_provider_surfaces,
     )
 
-    sync_all_provider_mcp_servers(project_root)
+    assert not project_api.reconcile_mcp_bindings(project_root)
     apply_provider_surfaces(project_root)
     prune_provider_surfaces(project_root)
 
@@ -147,6 +148,7 @@ def test_disabling_provider_preserves_claude_shared_mcp_config(tmp_path: Path) -
         install_with_deps("providers", sb.repo)
         setup_provider_surfaces(sb.repo)
         install_with_deps("agent-planning", sb.repo)
+        _select_component_mcp(sb.repo, "agent-planning")
         apply_surfaces(sb.repo)
 
         claude_config = sb.repo / ".mcp.json"
@@ -159,9 +161,9 @@ def test_disabling_provider_preserves_claude_shared_mcp_config(tmp_path: Path) -
                 continue
             set_provider_enabled(sb.repo, provider_id, enabled=False)
             after = json.loads(claude_config.read_text(encoding="utf-8"))
-            assert after == before, (
-                f"disabling {provider_id} changed Claude's shared .mcp.json"
-            )
+            assert after == before, f"disabling {provider_id} changed Claude's shared .mcp.json"
+
+
 def mcp_servers_in(project_root: Path, config_path: str) -> set[str]:
     """Read an MCP config file and return the set of server names present."""
     path = _config_path(project_root, config_path)
@@ -191,9 +193,7 @@ def mcp_servers_in(project_root: Path, config_path: str) -> set[str]:
         if isinstance(extensions, dict):
             return {str(name) for name, ext in extensions.items() if isinstance(ext, dict)}
         return {
-            ext.get("name", "")
-            for ext in extensions
-            if isinstance(ext, dict) and ext.get("name")
+            ext.get("name", "") for ext in extensions if isinstance(ext, dict) and ext.get("name")
         }
 
     # JSON-based configs
@@ -208,7 +208,9 @@ def mcp_servers_in(project_root: Path, config_path: str) -> set[str]:
 
     # Continue: {"mcpServers": [{"name": ...}]}
     if isinstance(data.get("mcpServers"), list):
-        return {s.get("name", "") for s in data["mcpServers"] if isinstance(s, dict) and s.get("name")}
+        return {
+            s.get("name", "") for s in data["mcpServers"] if isinstance(s, dict) and s.get("name")
+        }
 
     # Standard mcp-json: {"mcpServers": {"name": ...}}
     if isinstance(data.get("mcpServers"), dict):
@@ -234,6 +236,7 @@ def managed_blocks_in(file_path: Path) -> set[str]:
     from audiagentic.components.providers.surfaces.contributions import (
         load_surface_contributions,
     )
+
     id_by_title = {c.title.strip(): c.contribution_id for c in load_surface_contributions()}
     return {id_by_title[t.strip()] for t in titles if t.strip() in id_by_title}
 
@@ -244,10 +247,10 @@ def _provider_mcp_server_names(component_id: str) -> set[str]:
     if desc is None:
         return set()
     names: set[str] = set()
-    for ms in (desc.mcp_servers or []):
+    for ms in desc.mcp_servers or []:
         if "providers" in ms.propagate:
             names.add(ms.name)
-    for ms in (desc.external_mcp_servers or []):
+    for ms in desc.external_mcp_servers or []:
         if "providers" in ms.propagate:
             names.add(ms.name)
     return names
@@ -273,9 +276,7 @@ def _provider_mcp_config_paths(project_root: Path) -> list[str]:
 
 
 @contextmanager
-def _installed_component_sandbox(
-    tmp_path: Path, name: str, component_id: str
-):
+def _installed_component_sandbox(tmp_path: Path, name: str, component_id: str):
     """Create the common provider lifecycle fixture once per test.
 
     Each lifecycle assertion still receives a fresh sandbox because it mutates
@@ -288,13 +289,27 @@ def _installed_component_sandbox(
         install_with_deps("providers", sb.repo)
         setup_provider_surfaces(sb.repo)
         install_with_deps(component_id, sb.repo)
+        _select_component_mcp(sb.repo, component_id)
         apply_surfaces(sb.repo)
         yield sb
+
+
+def _select_component_mcp(root: Path, component_id: str) -> None:
+    """Lifecycle fixtures explicitly declare the native exposure under test."""
+    path = root / ".audiagentic/config/project.yaml"
+    data = yaml.safe_load(path.read_text(encoding="utf8"))
+    bindings = data.setdefault("mcp-onboarding", {"contract-version": "v1", "bindings": {}})[
+        "bindings"
+    ]
+    for name in _provider_mcp_server_names(component_id):
+        bindings[name] = ["claude", "codex", "opencode", "gemini", "continue"]
+    path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf8")
 
 
 # --------------------------------------------------------------------------- #
 # Consolidated component lifecycle tests
 # --------------------------------------------------------------------------- #
+
 
 @pytest.mark.parametrize("component_id", _PROPAGATION_COMPONENTS)
 def test_component_lifecycle_matrix(component_id: str, tmp_path: Path) -> None:
@@ -411,6 +426,5 @@ def test_agent_jobs_tag_contributions_reappear_after_reenable(
         after_enable = managed_blocks_in(claude_md)
         missing = _AGENT_JOBS_BLOCKS - after_enable
         assert not missing, (
-            f"Agent-jobs blocks {missing} not reinjected after re-enable. "
-            f"Present: {after_enable}"
+            f"Agent-jobs blocks {missing} not reinjected after re-enable. Present: {after_enable}"
         )

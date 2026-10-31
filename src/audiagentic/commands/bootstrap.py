@@ -1,4 +1,5 @@
 """Bootstrap and repair commands for AUDiaGentic-owned state."""
+
 from __future__ import annotations
 
 import argparse
@@ -7,12 +8,6 @@ from pathlib import Path
 
 from audiagentic.foundation.cli_io import print_error, print_json, print_message
 from audiagentic.foundation.paths.home import global_harness_runtime
-from audiagentic.runtime.harness import (
-    cleanup_runtime,
-    install_to,
-    refresh_materialized_agent_config,
-    request_runtime_reload,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +38,8 @@ def _install_core_components(project_root: Path) -> list[str]:
 
 
 def _cmd_bootstrap(target: Path, project_root: Path) -> int:
+    from audiagentic.runtime.harness import install_to
+
     print_message(f"Bootstrapping AUDiaGentic into {target}")
     rc = install_to(target, project_root=project_root)
     if rc:
@@ -65,6 +62,8 @@ def cmd_bootstrap(args: argparse.Namespace, project_root: Path) -> int:
 
 
 def cmd_cleanup(args: argparse.Namespace, project_root: Path) -> int:
+    from audiagentic.runtime.harness import cleanup_runtime
+
     del project_root
     target = Path(args.target).resolve() if args.target else global_harness_runtime()
     print_message(f"Removing AUDiaGentic-generated runtime files from {target}")
@@ -108,18 +107,22 @@ def _config_summary(
     surface_results: list[dict[str, object]],
     provider_errors: list[dict[str, object]],
 ) -> dict[str, object]:
-    written = sorted({
-        path
-        for result in surface_results
-        for path in result.get("written_paths", [])
-        if isinstance(path, str)
-    })
-    removed = sorted({
-        path
-        for result in surface_results
-        for path in result.get("removed_paths", [])
-        if isinstance(path, str)
-    })
+    written = sorted(
+        {
+            path
+            for result in surface_results
+            for path in result.get("written_paths", [])
+            if isinstance(path, str)
+        }
+    )
+    removed = sorted(
+        {
+            path
+            for result in surface_results
+            for path in result.get("removed_paths", [])
+            if isinstance(path, str)
+        }
+    )
     surface_errors = [
         result
         for result in surface_results
@@ -153,18 +156,22 @@ def _config_summary(
 
 def _config_operation(project_root: Path, *, mode: str, clean_runtime: bool) -> int:
     """Run an ownership-aware config operation and report partial failures."""
-    target = global_harness_runtime()
-    from audiagentic.components.providers import providers_api
-    from audiagentic.components.providers.services.mcp.mcp_sync import (
-        sync_all_provider_mcp_servers,
+    from audiagentic.runtime.harness import (
+        cleanup_runtime,
+        refresh_materialized_agent_config,
+        request_runtime_reload,
     )
+
+    target = global_harness_runtime()
+    from audiagentic.components.project import project_api
+    from audiagentic.components.providers import providers_api
 
     output: dict[str, object] = {"ok": True, "mode": mode, "project_root": str(project_root)}
     try:
         surface_results = _surface_results_to_json(
             providers_api.operate_provider_surfaces(project_root, mode=mode)
         )
-        provider_errors = sync_all_provider_mcp_servers(project_root)
+        provider_errors = project_api.reconcile_mcp_bindings(project_root)
         if clean_runtime:
             cleanup_runtime(target)
         else:

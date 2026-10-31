@@ -19,6 +19,8 @@ from audiagentic.foundation.event.event_bus import DeliveryMode
 from audiagentic.foundation.features.base import ImplementationState
 from audiagentic.foundation.features.state import set_implementation_state
 
+pytestmark = pytest.mark.usefixtures("in_process_gateway")
+
 
 @pytest.fixture(autouse=True)
 def _fresh_event_bus():

@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://audiagentic.dev/schemas/settings.schema.json",
+  "title": "AUDiaGentic settings envelope",
+  "description": "One settings file per scope (docs/design/configuration-model.md). Foundation owns only the envelope; each top-level section is contributed by its owning component as config/components/<component>/settings/<section>.schema.json and composed at load time. Unknown sections are rejected.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    }
+  }
+}

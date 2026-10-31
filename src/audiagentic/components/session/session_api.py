@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 import platform
 import sys
-from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -13,18 +12,13 @@ from audiagentic.components.providers.contracts.session_status import (
     ProviderSessionInfo,
 )
 
-from . import session_embedded_rig, session_runtime_status
-
-_UPDATE_SCOPE_REGISTRY: dict[str, Callable[..., Any]] = {
-    "local": session_embedded_rig.update_embedded_rig,
-    "global": session_embedded_rig.update_global_embedded_rig,
-}
+from . import session_runtime_status
 
 
 def _resolve_session_info(project_root: Path) -> ProviderSessionInfo:
     """Resolve provider session info from runtime capability.
 
-    RU02: runtime resolves, session consumes — no rig queries in product components.
+    RU02: runtime resolves, session consumes.
     """
     from audiagentic.foundation.capabilities import get_harness_status
 
@@ -109,29 +103,6 @@ def refresh_harness_config(project_root: Path) -> dict[str, Any]:
         "refreshed": refreshed,
         "sync": hs["build_runtime_sync"](reason="mcp-refresh-tool"),
     }
-
-
-async def update_rig(*, scope: str = "local") -> dict[str, Any]:
-    """Update rig binaries for the requested scope."""
-    if os.environ.get("AUDIAGENTIC_MCP_SMOKE_ONLY") == "1":
-        return {
-            "ok": True,
-            "output": "smoke-only: rig update skipped",
-            "scope": scope,
-        }
-    handler = _UPDATE_SCOPE_REGISTRY.get(scope)
-    if handler is None:
-        return {
-            "ok": False,
-            "error": "scope must be 'local' or 'global'",
-            "scope": scope,
-        }
-    return await handler()
-
-
-def rig_upgrade_status(*, scope: str = "local") -> dict[str, Any]:
-    """Expose the local recipe's read-only upgrade decision."""
-    return session_embedded_rig.embedded_rig_upgrade_status(scope=scope)
 
 
 def _auto_update_status() -> dict[str, Any]:

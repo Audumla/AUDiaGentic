@@ -66,9 +66,9 @@ services/
 │
 ├── mcp/                                # MCP server management
 │   ├── mcp.py
-│   ├── mcp_projection.py
-│   ├── mcp_sync.py
-│   └── managed_mcp_registry.py
+│   ├── onboarding.py                    # guarded native preflight/apply and recovery
+│   ├── fence.py                         # cooperating native writer fence
+│   └── managed_mcp_registry.py           # durable ownership and raw-entry proofs
 │
 ├── session/                            # session surface resolution
 │   ├── session_surface_resolution.py

@@ -41,7 +41,7 @@ def materialize_provider_config(
 
     Called at install and refresh time. Writes:
       - <project_root>/AGENTS.md             — provider-owned template
-      - <project_root>/.opencode/config.json — rig provider entry
+      - <project_root>/.opencode/config.json — harness endpoint provider entry
 
     No .mcp.json is written: stock opencode never reads bare .mcp.json, and that
     path collides with Pi's PROVIDER mcp_config target. The AUDiaGentic-curated
@@ -50,7 +50,7 @@ def materialize_provider_config(
 
     Args:
         project_root: Project root (all files are written relative to this).
-        harness_cfg: Harness config dict (rig.model, rig.port, rig.provider).
+        harness_cfg: Harness config dict (endpoint.url, endpoint.model, endpoint.provider).
     """
     del agent_runtime  # OpenCode's durable config is project-scoped.
     # AGENTS.md — template + injections.

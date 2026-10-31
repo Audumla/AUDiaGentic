@@ -5,7 +5,9 @@ import time
 from urllib.error import URLError
 
 import pytest
+from tests.helpers.gateway_settings import use_gateway_settings
 
+from audiagentic.components.agents.gateway import client as client_module
 from audiagentic.components.agents.gateway import remote_client as agents_gateway_remote_client
 from audiagentic.components.agents.gateway.client import (
     get_gateway_client,
@@ -40,9 +42,9 @@ def test_protocol_mismatch_is_rejected_before_lease_acquisition(monkeypatch) -> 
         client.connect()
 
 
-def test_standalone_mode_requires_explicit_endpoint_and_token_file(monkeypatch) -> None:
+def test_standalone_mode_requires_explicit_endpoint_and_token_file(monkeypatch, tmp_path) -> None:
     reset_gateway_client()
-    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_MODE", "standalone")
+    use_gateway_settings(monkeypatch, tmp_path, implementation="standalone")
     monkeypatch.delenv("AUDIAGENTIC_GATEWAY_ENDPOINT", raising=False)
     monkeypatch.delenv("AUDIAGENTIC_GATEWAY_TOKEN_FILE", raising=False)
 
@@ -53,18 +55,18 @@ def test_standalone_mode_requires_explicit_endpoint_and_token_file(monkeypatch) 
 
 def test_unknown_gateway_mode_has_no_silent_fallback(monkeypatch) -> None:
     reset_gateway_client()
-    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_MODE", "future")
+    monkeypatch.setattr(client_module, "_resolve_implementation_id", lambda project_root: ("future", "component-config"))
 
     with pytest.raises(AudiaGenticError, match="CFG-AGSV-002"):
         get_gateway_client()
     reset_gateway_client()
 
 
-def test_automatic_mode_uses_gateway_bootstrap(monkeypatch) -> None:
+def test_automatic_mode_uses_gateway_bootstrap(monkeypatch, tmp_path) -> None:
 
     marker = object()
     reset_gateway_client()
-    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_MODE", "automatic")
+    use_gateway_settings(monkeypatch, tmp_path, implementation="automatic")
     monkeypatch.setattr(agents_gateway_bootstrap, "start_or_attach_gateway", lambda: marker)
 
     assert get_gateway_client() is marker
@@ -153,6 +155,24 @@ def test_submit_forwards_calling_component_profile(monkeypatch, tmp_path) -> Non
     assert client.submit_execution_request(tmp_path, prompt_body="hello") == {"state": "queued"}
     assert captured["params"]["component_profile"] == "calling-profile"
     assert captured["params"]["logical_client_id"] == client._logical_client_id
+
+
+def test_recovery_uses_extended_transport_timeout(monkeypatch, tmp_path) -> None:
+    client = StandaloneGatewayClient("http://127.0.0.1:9000", "token")
+    captured: dict = {}
+    monkeypatch.setattr(
+        client,
+        "_call",
+        lambda operation, root, params, **kwargs: captured.update(
+            operation=operation, root=root, params=params, kwargs=kwargs
+        ) or {"state": "failed"},
+    )
+
+    assert client.recover_execution_request(tmp_path, "req-1", action="reconcile") == {
+        "state": "failed"
+    }
+    assert captured["operation"] == "recover_execution_request"
+    assert captured["kwargs"]["transport_timeout"] == 90.0
 
 
 def test_standalone_logical_client_identity_can_be_explicit(monkeypatch, tmp_path) -> None:

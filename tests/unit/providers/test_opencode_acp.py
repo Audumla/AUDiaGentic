@@ -188,8 +188,10 @@ class TestProviderNeutral:
 
             launch = build_acp_launch(tmp_path)
 
-        # AcpLaunch only has: executable, args, environment
+        # AcpLaunch only has provider-neutral launch data; initial_config_options
+        # carries ACP session config (for example a model) and is empty here.
         fields = set(launch.__dataclass_fields__)
-        assert fields == {"executable", "args", "environment"}, (
+        assert fields == {"executable", "args", "environment", "initial_config_options"}, (
             f"AcpLaunch has unexpected fields: {fields}"
         )
+        assert launch.initial_config_options == ()

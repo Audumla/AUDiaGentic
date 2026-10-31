@@ -21,7 +21,11 @@ def resolve_conversation_owner(project_root: Path, chat_url: str, session_id: st
             owners.append(record)
     # Closed predecessors must not compete with their live successor.
     live = [record for record in owners if record.get("state") not in {"closed", "expired", "failed"}]
-    candidates = live or owners
+    # A provider URL is durable, but a gateway session is not.  Terminal
+    # predecessors must not be returned as the owner: doing so reattaches a
+    # new prompt to a session that cannot admit turns.  The caller will create
+    # a successor session while retaining the URL for provider-side recovery.
+    candidates = live
     if session_id and any(record["session-id"] == session_id for record in candidates):
         return session_id
     if len(candidates) > 1 or (session_id and candidates):

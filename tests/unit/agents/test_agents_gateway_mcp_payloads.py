@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from audiagentic.components.agents.mcp.gateway_mcp import _sparse
+from audiagentic.components.agents.mcp.gateway_mcp_support import _sparse
 
 
 def test_gateway_mcp_payloads_omit_absent_values_and_keep_false_zero() -> None:

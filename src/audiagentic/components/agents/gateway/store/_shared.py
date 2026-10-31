@@ -25,7 +25,7 @@ from audiagentic.foundation.workflow import (
 )
 
 _SCHEMA_STEM = "agent-execution-record"
-_CONTRACT_VERSION = "v8"
+_CONTRACT_VERSION = "v11"
 _WORKFLOW = load_workflow(Path(__file__).parent.parent.parent / "workflows.yaml", "gateway-request")
 TERMINAL_STATES: set[str] = set(states_in_set(_WORKFLOW, "terminal"))
 
@@ -57,6 +57,7 @@ _MUTABLE_RESULT_FIELDS = {
     "replay-reason",
     "replayed-by-request-id",
     "terminal-classification",
+    "terminal-finalization",
     "diagnostics",
     "diagnostic-evidence",
     "recovery-required",
@@ -106,6 +107,8 @@ def record_gateway_timeline(
     state: str | None = None,
     attributes: dict | None = None,
 ) -> dict:
+    from ..retention import journal_max_bytes
+
     result = record_timeline_event(
         gateway_timeline_path(project_root, request_id),
         component=_COMPONENT_ID,
@@ -114,15 +117,21 @@ def record_gateway_timeline(
         event=event,
         state=state,
         attributes=attributes,
+        segment_max_bytes=journal_max_bytes("timeline"),
         correlation_id=(attributes or {}).get("correlation_id")
         or (attributes or {}).get("correlation-id"),
     )
     if state in TERMINAL_STATES:
         try:
-            from ..retention import enforce_request_retention
-            enforce_request_retention(project_root, exclude_request_id=request_id)
+            from ..retention import schedule_request_retention
+
+            schedule_request_retention(project_root, trigger_request_id=request_id)
         except Exception:  # noqa: BLE001 - retention must not break lifecycle writes
-            logger.warning("gateway rolling retention pass failed", extra={"request-id": request_id}, exc_info=True)
+            logger.warning(
+                "gateway request-retention scheduling failed",
+                extra={"request-id": request_id},
+                exc_info=True,
+            )
     return result
 
 

@@ -31,9 +31,12 @@ def _claim_thread_lock(path: Path) -> threading.Lock:
     return lock
 
 
-def _release_thread_lock(path: Path, lock: threading.Lock) -> None:
+def _release_thread_lock(
+    path: Path, lock: threading.Lock, *, acquired: bool = True
+) -> None:
     key = os.path.normcase(os.path.abspath(path))
-    lock.release()
+    if acquired:
+        lock.release()
     with _thread_lock_guard:
         current, users = _thread_locks[key]
         if users == 1:
@@ -122,6 +125,43 @@ def pid_alive(pid: int) -> bool:
     return True
 
 
+def pids_referencing_path(path: Path) -> list[int] | None:
+    """PIDs whose working directory or open files lie under ``path``.
+
+    Linux only, through ``/proc``. ``None`` means this platform cannot answer
+    (or ``/proc`` is unreadable), which callers must treat as "unknown", never
+    as "nothing uses it". Processes owned by other users that cannot be
+    inspected are skipped, so a list is a lower bound.
+    """
+    proc = Path("/proc")
+    if os.name == "nt" or not proc.is_dir():
+        return None
+    root = str(path.resolve())
+    prefix = root.rstrip(os.sep) + os.sep
+    me = os.getpid()
+    found: list[int] = []
+    for entry in proc.iterdir():
+        if not entry.name.isdigit() or int(entry.name) == me:
+            continue
+        references = [entry / "cwd", *_open_file_links(entry)]
+        for link in references:
+            try:
+                target = os.readlink(link)
+            except OSError:
+                continue
+            if target == root or target.startswith(prefix):
+                found.append(int(entry.name))
+                break
+    return sorted(found)
+
+
+def _open_file_links(process: Path) -> list[Path]:
+    try:
+        return [process / "fd" / name for name in os.listdir(process / "fd")]
+    except OSError:
+        return []
+
+
 def _windows_pid_alive(pid: int) -> bool:
     """Query process exit state instead of treating a retained handle as live."""
     import ctypes
@@ -154,8 +194,9 @@ def _windows_pid_alive(pid: int) -> bool:
 class StartupLock:
     """Exclusive startup lock backed by an atomic file.
 
-    Uses ``O_CREAT|O_EXCL`` which is atomic on NTFS and POSIX.  Stale locks
-    (holder PID dead) are automatically cleared and retried.
+    Uses ``O_CREAT|O_EXCL`` with a stable OS-backed companion fence around
+    claim publication and reaping. Stale PID claims are cleared only while
+    holding that fence; the OS releases the fence on process death.
 
     Parameters
     ----------
@@ -170,13 +211,34 @@ class StartupLock:
         self._timeout = timeout
         self._fd: int | None = None
         self._thread_lock: threading.Lock | None = None
+        self._claim_fence = None
 
     def __enter__(self) -> StartupLock:
-        self._path.parent.mkdir(parents=True, exist_ok=True)
+        from .advisory_lock import AdvisoryLock
+
         deadline = time.monotonic() + self._timeout
+        # PID publication and stale-claim cleanup must themselves be exclusive.
+        # Otherwise a contender can see the freshly created but still empty
+        # PID file, unlink a live claim and enter the same critical section.
+        # Keep this OS-backed companion inode stable; never unlink it on exit.
+        self._claim_fence = AdvisoryLock(
+            self._path.with_name(self._path.name + ".guard"), timeout=self._timeout
+        )
+        self._claim_fence.__enter__()
+        try:
+            return self._enter_pid_claim(deadline)
+        except BaseException:
+            self._claim_fence.__exit__(*sys.exc_info())
+            self._claim_fence = None
+            raise
+
+    def _enter_pid_claim(self, deadline: float) -> StartupLock:
+        self._path.parent.mkdir(parents=True, exist_ok=True)
         self._thread_lock = _claim_thread_lock(self._path)
         if not self._thread_lock.acquire(timeout=max(0.0, deadline - time.monotonic())):
-            _release_thread_lock(self._path, self._thread_lock)
+            # This reference never acquired the mutex. Releasing it here
+            # unlocks another thread's critical section and breaks exclusion.
+            _release_thread_lock(self._path, self._thread_lock, acquired=False)
             self._thread_lock = None
             raise self._timeout_error()
         try:
@@ -231,16 +293,26 @@ class StartupLock:
                 time.sleep(0.01)
 
     def __exit__(self, *_: object) -> None:
+        try:
+            self._exit_pid_claim()
+        finally:
+            if self._claim_fence is not None:
+                self._claim_fence.__exit__(None, None, None)
+                self._claim_fence = None
+
+    def _exit_pid_claim(self) -> None:
         if self._fd is not None:
             try:
                 os.close(self._fd)
             except OSError:
                 pass
             self._fd = None
-        self._unlink()
-        if self._thread_lock is not None:
-            _release_thread_lock(self._path, self._thread_lock)
-            self._thread_lock = None
+        try:
+            self._unlink()
+        finally:
+            if self._thread_lock is not None:
+                _release_thread_lock(self._path, self._thread_lock)
+                self._thread_lock = None
 
 
 def find_pid_on_port(port: int) -> int | None:

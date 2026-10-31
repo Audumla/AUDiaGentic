@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import inspect
 import logging
 import time
+import uuid
 from collections.abc import Callable
 from dataclasses import replace
 from enum import StrEnum
@@ -27,14 +29,36 @@ from .snapshot import ChatSnapshot
 from .urls import (
     canonical_chat_url,
     canonical_project_url,
+    normalize_chat_title,
     parse_project_id,
     parse_provider_session_id,
-    normalize_chat_title,
     same_chat_identity,
     url_matches_provider_session,
 )
 
 logger = logging.getLogger(__name__)
+
+_TERMINAL_CHECKPOINT_METADATA_KEYS = frozenset(
+    {
+        "unresolved-turn-pending",
+        "unresolved-turn-id",
+        "submission-state",
+        "submission-attempt-id",
+        "submission-stage",
+        "send-intent-ever",
+        "submission-proven",
+        "submission-proof-source",
+        "submission-recovery-claim",
+        "submission-recovery-generation",
+        "recovery-state",
+        "prompt-text-digest",
+        "unresolved-baseline-user-id",
+        "unresolved-baseline-assistant-id",
+        "unresolved-baseline-user-count",
+        "unresolved-baseline-assistant-count",
+        "unresolved-baseline-error-alert-occurrences",
+    }
+)
 
 
 class ProviderBindingIntegrityError(RuntimeError):
@@ -121,6 +145,7 @@ class PersistentChat:
         self.config = config
         self.binding_sink = binding_sink
         self._session_checkpoint_sink = checkpoint_sink
+        self._turn_session_checkpoint_sink = None
         self._request_checkpoint_sink = None
         self._lost_during_turn = False
         self._last_url: str | None = None
@@ -139,6 +164,9 @@ class PersistentChat:
         # unresolved-turn reconciler must never navigate the same physical
         # tab concurrently or allow a stale page handle to win.
         self._page_mutation_lock = asyncio.Lock()
+        self._reconcile_lock = asyncio.Lock()
+        self._replacement_target_pending = False
+        self._browser_generation_recovery = False
         self._page_mutation_owner_probe: Callable[[], bool] | None = None
         self._physical_idle_closed = False
         self._idle_closed_turn_id: str | None = None
@@ -171,6 +199,7 @@ class PersistentChat:
         self._unresolved_recovery_details: dict[str, object] = {}
         self._reconciliation_refresh_attempted = False
         self._reconciliation_delivery_retry_attempted = False
+        self._reconciliation_prompt_expansion_key: tuple[object, ...] | None = None
         self._defer_unresolved_reconciliation = False
         self._defer_page_creation_on_recovery = False
         # A retained exact-URL tab can survive a gateway restart while its
@@ -182,10 +211,21 @@ class PersistentChat:
         self._conversation_load_recovery_attempts = _metadata_int(
             metadata, "conversation-load-recovery-attempts"
         )
+        self._conversation_load_recovery_revision = _metadata_int(
+            metadata, "conversation-load-recovery-revision"
+        )
+        self._load_budget_observation = None
         self._checkpoint_metadata: dict[str, object] = {
             key: metadata[key]
             for key in (
                 "recovery-state",
+                "submission-state",
+                "submission-attempt-id",
+                "submission-stage",
+                "send-intent-ever",
+                "submission-proof-source",
+                "submission-recovery-claim",
+                "submission-recovery-generation",
                 "unresolved-turn-id",
                 "unresolved-baseline-user-id",
                 "unresolved-baseline-assistant-id",
@@ -197,6 +237,7 @@ class PersistentChat:
             )
             if key in metadata and metadata[key] not in (None, "")
         }
+        self._terminal_checkpoint_finalization: dict[str, object] = {}
         self._recovery_ready = asyncio.Event()
         self._recovery_ready.set()
 
@@ -206,13 +247,44 @@ class PersistentChat:
         turn_id: str,
         baseline: ChatSnapshot | None,
     ) -> None:
-        """Write the side-effect checkpoint before browser Send is invoked."""
+        """Persist a prepared checkpoint before any browser submission action."""
         self._reconciliation_delivery_retry_attempted = False
         load_recovery_attempts = self._conversation_load_recovery_attempts
+        same_turn = self._checkpoint_metadata.get("unresolved-turn-id") == turn_id
+        submission_attempt_id = self._checkpoint_metadata.get("submission-attempt-id") if same_turn else None
+        attempt_metadata = {
+            key: copy.deepcopy(self._checkpoint_metadata[key])
+            for key in (
+                "submission-stage", "send-intent-ever",
+            )
+            if same_turn and key in self._checkpoint_metadata
+        }
+        submission_state = "proven" if self._submission_proven else "prepared"
         self._checkpoint_metadata = {
-            "recovery-state": "side-effect-may-have-started",
+            **attempt_metadata,
+            "recovery-state": (
+                "submission-proven" if self._submission_proven else "submission-prepared"
+            ),
+            "submission-state": submission_state,
             "unresolved-turn-id": turn_id,
         }
+        # Proof is persisted after the dispatch-stage checkpoint. Preserve its
+        # immutable attempt identity when rebuilding the provider metadata; the
+        # gateway compares that identity under the session lock before it
+        # accepts the transition from dispatching to proven.
+        if isinstance(submission_attempt_id, str) and submission_attempt_id:
+            self._checkpoint_metadata["submission-attempt-id"] = submission_attempt_id
+        if self.unresolved_prompt_text_digest:
+            self._checkpoint_metadata["prompt-text-digest"] = (
+                self.unresolved_prompt_text_digest
+            )
+        if self._submission_proven:
+            # The source is part of the proof contract consumed by the
+            # request-owned checkpoint CAS. Rebuilding this metadata dict must
+            # not drop the evidence that mark_prompt_submitted established.
+            self._checkpoint_metadata["submission-proof-source"] = (
+                "provider-user-message"
+            )
         if load_recovery_attempts:
             self._checkpoint_metadata[
                 "conversation-load-recovery-attempts"
@@ -238,8 +310,65 @@ class PersistentChat:
                     self._checkpoint_metadata[key] = value
         await self._persist_checkpoint({**self.unresolved_metadata(), **self._checkpoint_metadata})
 
+    async def mark_submission_dispatching(self, *, turn_id: str) -> None:
+        """Persist the attempt identity before touching the browser composer.
+
+        This is deliberately not evidence that Send was invoked. The durable
+        ``send-intent-ever`` latch is advanced separately at the exact browser
+        click boundary by ``persist_submission_stage``.
+        """
+        self._checkpoint_metadata.update(
+            {
+                "recovery-state": "side-effect-may-have-started",
+                "submission-state": "dispatching",
+                "submission-attempt-id": uuid.uuid4().hex,
+                "submission-stage": "dispatching",
+                "send-intent-ever": bool(
+                    self._checkpoint_metadata.get("send-intent-ever", False)
+                ),
+                "unresolved-turn-id": turn_id,
+            }
+        )
+        await self._persist_checkpoint({**self.unresolved_metadata(), **self._checkpoint_metadata})
+
+    async def persist_submission_stage(self, *, turn_id: str, stage: str) -> str:
+        """Durably record one monotonic, content-free browser-submit stage."""
+        stage_order = {
+            "dispatching": 0,
+            "composer-focused": 1,
+            "composer-filled": 2,
+            "composer-validated": 3,
+            "send-intent": 4,
+            "send-click-acknowledged": 5,
+        }
+        if stage not in stage_order:
+            raise ValueError("unknown gpt-auto submission stage")
+        if self._checkpoint_metadata.get("unresolved-turn-id") != turn_id:
+            raise RuntimeError("submission stage does not match the unresolved turn")
+        attempt_id = self._checkpoint_metadata.get("submission-attempt-id")
+        if not isinstance(attempt_id, str) or not attempt_id:
+            raise RuntimeError("submission stage has no durable attempt identity")
+        current_stage = self._checkpoint_metadata.get("submission-stage")
+        if (
+            isinstance(current_stage, str)
+            and current_stage in stage_order
+            and stage_order[stage] < stage_order[current_stage]
+        ):
+            raise RuntimeError("submission stage cannot move backwards")
+        updated = dict(self._checkpoint_metadata)
+        updated["submission-stage"] = stage
+        if stage == "send-intent":
+            # Sticky for the lifetime of this request/attempt. A click
+            # acknowledgement is not provider acceptance, but once intent is
+            # durable a restart must treat the outcome as ambiguous.
+            updated["send-intent-ever"] = True
+        await self._persist_checkpoint({**self.unresolved_metadata(), **updated})
+        self._checkpoint_metadata = updated
+        return attempt_id
+
     async def _persist_checkpoint(self, metadata: dict[str, object]) -> None:
-        sinks = (self._session_checkpoint_sink, self._request_checkpoint_sink)
+        session_sink = self._turn_session_checkpoint_sink or self._session_checkpoint_sink
+        sinks = (session_sink, self._request_checkpoint_sink)
         seen: set[int] = set()
         for sink in sinks:
             if sink is None or id(sink) in seen:
@@ -262,6 +391,16 @@ class PersistentChat:
         """Bind only the request leg; retain the durable session leg."""
         self._request_checkpoint_sink = sink
 
+    def set_turn_session_checkpoint_sink(self, sink) -> None:
+        """Use the FIFO owner's session writer instead of the opening writer."""
+        self._turn_session_checkpoint_sink = sink
+
+    def clear_turn_session_checkpoint_sink(self, expected_sink) -> bool:
+        if self._turn_session_checkpoint_sink is not expected_sink:
+            return False
+        self._turn_session_checkpoint_sink = None
+        return True
+
     async def persist_request_metadata(self, metadata: dict[str, object]) -> None:
         """Persist provider identity only to the current request leg."""
         sink = self._request_checkpoint_sink
@@ -275,24 +414,46 @@ class PersistentChat:
         """Persist prompt identity without rewriting the pre-send baseline."""
         await self._persist_checkpoint(self.unresolved_metadata())
 
+    async def persist_proven_unsent_clear(self) -> None:
+        """Retire this exact no-Send attempt after independent DOM reconciliation."""
+        checkpoint = self._checkpoint_metadata
+        if (
+            self._submission_proven
+            or checkpoint.get("send-intent-ever") is not False
+            or checkpoint.get("submission-stage") not in {
+                "dispatching", "composer-focused", "composer-filled", "composer-validated",
+            }
+            or not checkpoint.get("submission-attempt-id")
+        ):
+            raise RuntimeError("unsent retirement requires an exact pre-Send attempt")
+        await self._persist_checkpoint({
+            "unresolved-turn-pending": False,
+            "submission-state": "not_started",
+            "submission-proven": False,
+            "submission-attempt-id": checkpoint["submission-attempt-id"],
+            "unresolved-turn-id": checkpoint["unresolved-turn-id"],
+        })
+        self._checkpoint_metadata = {}
+
     async def persist_unresolved_clear(self) -> None:
         """Durably clear the checkpoint only after terminal proof."""
-        if self._session_checkpoint_sink is None and self._request_checkpoint_sink is None:
+        if (
+            self._session_checkpoint_sink is None
+            and self._turn_session_checkpoint_sink is None
+            and self._request_checkpoint_sink is None
+        ):
             self._checkpoint_metadata = {}
             return
         # Emit the intended durable state explicitly.  Callers may persist
         # before mutating the in-memory marker so a failed write cannot expose
         # READY and then resurrect an unresolved lock after restart.
-        metadata: dict[str, object] = {"unresolved-turn-pending": False}
-        # Explicit terminal cleanup only when this session actually carried a
-        # recovery budget.  The retry budget is intentionally not part of the
-        # generic pending=false removal set because idle session recovery can
-        # consume it without an unresolved turn.
-        if (
-            self._conversation_load_recovery_attempts
-            or "conversation-load-recovery-attempts" in self._checkpoint_metadata
-        ):
-            metadata["conversation-load-recovery-attempts"] = 0
+        metadata: dict[str, object] = {
+            "unresolved-turn-pending": False,
+            "submission-state": "cleared",
+        }
+        # Budget authority is separate from submission-checkpoint cleanup.
+        if self._conversation_load_recovery_attempts and self._last_snapshot is not None:
+            await self._reset_load_recovery_budget_after_positive_snapshot(self._last_snapshot)
         if self._submission_proven:
             metadata["submission-proven"] = True
             for key, value in (
@@ -305,7 +466,6 @@ class PersistentChat:
                     metadata[key] = value
         await self._persist_checkpoint(metadata)
         self._checkpoint_metadata = {}
-        self._conversation_load_recovery_attempts = 0
 
     def _claim_page(self, page_handle: str) -> bool:
         """Claim a page when the runtime exposes ownership tracking.
@@ -356,6 +516,54 @@ class PersistentChat:
         except Exception:
             return False
 
+    def _turn_requires_recovery_proof(self) -> bool:
+        """Distinguish an unfinished send from retained terminal provenance."""
+        # Terminal checkpoint clearing deliberately retains submission/message
+        # evidence. That history must not require an active response observer
+        # merely to reopen an idle conversation for its next admission.
+        return self.unresolved_turn_pending or self.active_turn_id is not None
+
+    async def _recovery_page_is_current(self, page: dict) -> bool:
+        """Check exact conversation and live physical identity before admission."""
+        url = str(page.get("url") or "")
+        expected_project = parse_project_id(self.project_url or "")
+        observed_project = parse_project_id(url)
+        if (
+            not self._page_mutation_owner_is_live()
+            or not url_matches_provider_session(url, self.provider_session_id)
+            or (self.chat_url and not same_chat_identity(url, self.chat_url))
+            or (not self.chat_url and expected_project and observed_project and expected_project != observed_project)
+        ):
+            return False
+        lookup = getattr(self.runtime, "page_record", None)
+        if callable(lookup):
+            current = await lookup(str(page.get("pageHandle") or ""))
+            if (
+                current is None
+                or current.get("targetId") != page.get("targetId")
+                or not same_chat_identity(str(current.get("url") or ""), url)
+            ):
+                return False
+        return self._page_mutation_owner_is_live()
+
+    async def _reopen_idle_conversation(self) -> dict | None:
+        """Lazily reopen the exact saved conversation without foreground work."""
+        reopen = getattr(self.runtime, "reopen_conversation_page", None)
+        if (
+            self._turn_requires_recovery_proof()
+            or not self.chat_url
+            or not callable(reopen)
+            or self._conversation_load_recovery_exhausted()
+            or not self._page_mutation_owner_is_live()
+        ):
+            return None
+        page = await reopen(
+            self.chat_url, owner_is_live=self._page_mutation_owner_is_live
+        )
+        if not await self._recovery_page_is_current(page):
+            raise ProviderBindingIntegrityError("idle conversation changed during reopening")
+        return page
+
     async def open(self) -> None:
         """Open transactionally; release every resource on partial failure."""
         try:
@@ -368,6 +576,14 @@ class PersistentChat:
             raise
 
     async def _open_impl(self) -> None:
+        recover_chat = getattr(self.runtime, "recover_chat", None)
+        if (
+            self.provider_session_id and self.chat_url and self.unresolved_turn_pending
+            and self._defer_unresolved_reconciliation and callable(recover_chat)
+        ):
+            self._move(ChatState.RECOVERING)
+            await recover_chat(self)
+            return
         await self.runtime.ensure_available()
         await self.runtime.register_chat(self)
         if not self._page_mutation_owner_is_live():
@@ -428,7 +644,7 @@ class PersistentChat:
             if (
                 page is not None
                 and self.target_id
-                and (self.unresolved_turn_pending or self._submission_proven)
+                and self._turn_requires_recovery_proof()
                 and str(page.get("targetId") or "") != self.target_id
             ):
                 self._set_unresolved_recovery(
@@ -442,7 +658,13 @@ class PersistentChat:
                 raise RuntimeError(
                     "gpt-auto unresolved provider conversation is attached to a replacement target"
                 )
+            if page is None:
+                page = await self._reopen_idle_conversation()
+                if page is None and self._conversation_load_recovery_exhausted():
+                    raise self._conversation_load_failure_error()
             if page is not None:
+                if not await self._recovery_page_is_current(page):
+                    raise ProviderBindingIntegrityError("retained conversation changed before binding")
                 if not self._claim_page(str(page["pageHandle"])):
                     raise RuntimeError("gpt-auto retained conversation page is already owned")
                 self._bind_page(page)
@@ -454,9 +676,7 @@ class PersistentChat:
                         # the turn failed; the request observer retains the
                         # exact conversation until its outer timeout.
                         if (
-                            self.unresolved_turn_pending
-                            or self._submission_proven
-                            or self.active_turn_id is not None
+                            self._turn_requires_recovery_proof()
                         ):
                             self._set_unresolved_recovery(
                                 "conversation-load-observation-deferred",
@@ -481,7 +701,7 @@ class PersistentChat:
         if (
             self.page_handle is None
             and self.provider_session_id
-            and (self.unresolved_turn_pending or self._submission_proven)
+            and self._turn_requires_recovery_proof()
         ):
             # The durable unresolved-turn fence is authoritative across a
             # gateway restart.  A reconstructed chat may not have the
@@ -499,7 +719,11 @@ class PersistentChat:
                 "gpt-auto unresolved provider conversation is detached; "
                 "recovery requires explicit exact-tab reattachment"
             )
-        if self.page_handle is None and self.provider_session_id and self._defer_page_creation_on_recovery:
+        if (
+            self.page_handle is None and self.provider_session_id
+            and self._defer_page_creation_on_recovery
+            and self._turn_requires_recovery_proof()
+        ):
             self._move(ChatState.RECOVERING)
             raise RuntimeError("gpt-auto restart recovery deferred because the exact provider conversation tab is not attached")
         if (
@@ -578,6 +802,8 @@ class PersistentChat:
         # a signal nothing in this flow ever sets, before eventually failing
         # anyway -- a needless hang on the way to the same outcome.
         snap = await self.snapshot(allow_recovering=True)
+        if self.provider_session_id and page is not None and not await self._recovery_page_is_current(page):
+            raise ProviderBindingIntegrityError("retained conversation changed during readiness")
         if self.provider_session_id and not url_matches_provider_session(
             snap.url, self.provider_session_id
         ):
@@ -628,6 +854,13 @@ class PersistentChat:
             # Only a new admission can reopen an intentionally reaped tab.
             self._physical_idle_closed = False
             self._idle_closed_turn_id = None
+        # Idle disconnect recovery deliberately leaves the runtime offline.
+        # A retained chat must drive the same lazy reconnect as open() before
+        # touching bridge-local handles. This only restores transport; existing
+        # conversation/turn reconciliation still owns any page recovery.
+        ensure_available = getattr(self.runtime, "ensure_available", None)
+        if callable(ensure_available):
+            await ensure_available()
         # Bridge page handles are local to one CDP connection and can be
         # invalidated without the runtime seeing a Target event (for example,
         # an operator closes a tab through a second CDP client).  A handle can
@@ -659,9 +892,7 @@ class PersistentChat:
                     raise self._conversation_load_failure_error(exc.snapshot) from exc
                 if not replaced:
                     if (
-                        self.unresolved_turn_pending
-                        or self._submission_proven
-                        or self.active_turn_id is not None
+                        self._turn_requires_recovery_proof()
                     ):
                         self._set_unresolved_recovery(
                             "conversation-load-observation-deferred",
@@ -953,7 +1184,7 @@ class PersistentChat:
 
     def _replacement_snapshot_is_positive(self, snapshot: ChatSnapshot | None) -> bool:
         """Require exact, positive DOM evidence before clearing recovery budget."""
-        if snapshot is None or "conversation-load-failed" in snapshot.dom_signals:
+        if snapshot is None or snapshot.error_present or "conversation-load-failed" in snapshot.dom_signals:
             return False
         if self.provider_session_id and not url_matches_provider_session(
             snapshot.url, self.provider_session_id
@@ -998,9 +1229,58 @@ class PersistentChat:
         """Clear replacement budget only after positive conversation proof."""
         if self.unresolved_turn_pending and self._defer_unresolved_reconciliation:
             return
-        self._conversation_load_recovery_attempts = 0
-        self._checkpoint_metadata["conversation-load-recovery-attempts"] = 0
-        await self._persist_checkpoint(self.unresolved_metadata())
+        observation = self._load_budget_observation
+        if (
+            not self._replacement_snapshot_is_positive(snapshot)
+            or observation is None or observation[0] is not snapshot
+            or observation[2] != self._binding_token(snapshot)
+            or observation[1] != (
+                self._conversation_load_recovery_attempts,
+                self._conversation_load_recovery_revision,
+            )
+            or not self._conversation_load_recovery_attempts
+        ):
+            return
+        if (
+            not await self._binding_token_is_current(observation[2])
+            or observation[2] != self._binding_token(snapshot)
+        ):
+            return
+        await self._persist_load_recovery_budget("reset", expected=observation[1])
+
+    async def _persist_load_recovery_budget(
+        self, action: str, *, expected: tuple[int, int] | None = None,
+    ) -> tuple[int, int]:
+        """Commit session authority before navigation; request copy is advisory."""
+        maximum = self.config.workflow.recovery.conversation_load_failure_max_attempts
+        if type(maximum) is not int or not 0 <= maximum <= 1_000_000:
+            raise ValueError("invalid conversation load replacement budget")
+        sink = self._turn_session_checkpoint_sink or self._session_checkpoint_sink
+        budget_sink = getattr(sink, "recovery_budget", None)
+        if sink is not None and not callable(budget_sink):
+            raise RuntimeError("durable checkpoint sink has no recovery budget capability")
+        if callable(budget_sink):
+            result = await budget_sink(action=action, expected=expected, maximum=maximum)
+        else:
+            # Standalone provider use has no durable gateway or request owner.
+            current = (self._conversation_load_recovery_attempts, self._conversation_load_recovery_revision)
+            if action == "read":
+                return current
+            if expected != current or (action == "increment" and current[0] >= maximum):
+                raise RuntimeError("conversation load budget compare-and-swap rejected")
+            result = (current[0] + 1 if action == "increment" else 0, current[1] + 1)
+        self._conversation_load_recovery_attempts, self._conversation_load_recovery_revision = result
+        if action != "read":
+            projection = dict(zip(("conversation-load-recovery-attempts", "conversation-load-recovery-revision"), result))
+            self._checkpoint_metadata.update(projection)
+            try:
+                await self.persist_request_metadata(projection)
+            except Exception:  # noqa: BLE001 - session commit is authoritative
+                logger.warning("request recovery budget projection failed; session authority retained", exc_info=True)
+            if callable(budget_sink):
+                # Projection failure must not hide owner retirement before a side effect.
+                await budget_sink(action="read", maximum=maximum)
+        return result
 
     def _conversation_load_recovery_allowed(self) -> bool:
         workflow = getattr(self.config, "workflow", None)
@@ -1039,9 +1319,7 @@ class PersistentChat:
     def _load_failure_requires_retained_observation(self) -> bool:
         """Return whether load recovery must stay on the exact conversation."""
         return bool(
-            getattr(self, "unresolved_turn_pending", False)
-            or getattr(self, "_submission_proven", False)
-            or getattr(self, "active_turn_id", None) is not None
+            self._turn_requires_recovery_proof()
         )
 
     def _conversation_load_failure_error(
@@ -1143,7 +1421,8 @@ class PersistentChat:
         # submission boundary. Once a turn is submitted or ambiguous, even an
         # exact-URL alternate can be a stale renderer and must not displace
         # the provider conversation being observed.
-        if remaining > 0 and not self._load_failure_requires_retained_observation():
+        browser_network_error = "browser-network-error" in snapshot.dom_signals
+        if remaining > 0 and not browser_network_error and not self._load_failure_requires_retained_observation():
             try:
                 async with asyncio.timeout(remaining):
                     await self._prefer_active_conversation_page()
@@ -1251,7 +1530,7 @@ class PersistentChat:
         # Replacement is unsafe once a turn was submitted or is ambiguous:
         # the provider may still own the original work. Keep this exact tab
         # bound and let the request observer retry its visible control.
-        if self.unresolved_turn_pending or self._submission_proven:
+        if self._turn_requires_recovery_proof():
             self._set_unresolved_recovery(
                 "conversation-load-observation-deferred",
                 attempts=retry_attempts,
@@ -1259,7 +1538,13 @@ class PersistentChat:
                 dom_signals=sorted(snapshot.dom_signals),
             )
             return True
-        if not self._conversation_load_recovery_allowed():
+        if browser_network_error:
+            # A network outage is not repaired by multiplying tabs. Keep the
+            # exact retained conversation; admission owns the outer deadline.
+            self._set_unresolved_recovery(
+                "conversation-load-retry-deadline", attempts=retry_attempts,
+                dom_signals=sorted(snapshot.dom_signals),
+            )
             return False
         if not self._page_mutation_owner_is_live():
             self._set_unresolved_recovery(
@@ -1267,18 +1552,16 @@ class PersistentChat:
                 attempts=retry_attempts,
             )
             return False
+        current_budget = await self._persist_load_recovery_budget("read")
+        if not self._conversation_load_recovery_allowed():
+            return False
         old_handle = self.page_handle
+        await self._persist_load_recovery_budget("increment", expected=current_budget)
+        if not self._page_mutation_owner_is_live():
+            return False
         if old_handle:
             self.page_handle = None
             self.runtime.release_page(self, old_handle)
-        self._conversation_load_recovery_attempts += 1
-        self._checkpoint_metadata[
-            "conversation-load-recovery-attempts"
-        ] = self._conversation_load_recovery_attempts
-        # Fence the increment before creating a replacement tab.  If the
-        # gateway dies during navigation, the next chat instance inherits the
-        # consumed budget instead of starting over.
-        await self._persist_checkpoint(self.unresolved_metadata())
         replacement_handle: str | None = None
         try:
             replacement_handle = await self._create_recovery_page()
@@ -1323,9 +1606,7 @@ class PersistentChat:
             if stable_replacement and not (
                 self.unresolved_turn_pending and self._defer_unresolved_reconciliation
             ):
-                self._conversation_load_recovery_attempts = 0
-                self._checkpoint_metadata["conversation-load-recovery-attempts"] = 0
-                await self._persist_checkpoint(self.unresolved_metadata())
+                await self._reset_load_recovery_budget_after_positive_snapshot(ready_snapshot)
             return True
         except Exception:
             if replacement_handle:
@@ -1388,21 +1669,27 @@ class PersistentChat:
                     raise RuntimeError("gpt-auto chat recovery timed out") from exc
         if not self.page_handle:
             raise RuntimeError("chat page is not bound")
-        page = await self._gpt_browser().page_by_handle(self.page_handle)
+        observed_binding = (
+            self._page_generation, self.page_handle, self.target_id,
+            self.provider_session_id, canonical_chat_url(self.chat_url or ""),
+        )
+        page = await self._gpt_browser().page_by_handle(str(observed_binding[1]))
         target_id = str(getattr(page, "target_id", "") or "")
         if target_id:
             self.target_id = target_id
+        budget_observed = (self._conversation_load_recovery_attempts, self._conversation_load_recovery_revision)
         snapshot = ChatSnapshot.from_bridge(
             await self._gpt_browser().snapshot(page, signals=self.config.workflow.bridge_signals())
         )
         self._last_url = snapshot.url
         self._last_snapshot = snapshot
+        self._load_budget_observation = (snapshot, budget_observed, observed_binding)
         remember = getattr(self.runtime, "remember_tab_activity", None)
-        if callable(remember):
+        if callable(remember) and not self._replacement_target_pending:
             remember(self)
         # Capture labels during recovery/baseline observations too, not only
         # the normal response loop. Never relay a label from a different tab.
-        if snapshot.conversation_title and (
+        if not self._replacement_target_pending and snapshot.conversation_title and (
             not self.provider_session_id
             or url_matches_provider_session(snapshot.url, self.provider_session_id)
         ):
@@ -1451,7 +1738,7 @@ class PersistentChat:
             return bool(await retry(page))
 
     async def retry_conversation_load(self) -> bool:
-        """Click the same-conversation load Retry control; never resubmit."""
+        """Retry a load error or reload a native network page; never Send."""
         lock = getattr(self, "_page_mutation_lock", None)
         if lock is None:
             lock = self._page_mutation_lock = asyncio.Lock()
@@ -1481,6 +1768,82 @@ class PersistentChat:
             return
         page = await browser.page_by_handle(self.page_handle)
         await release(page)
+
+    async def _expand_unresolved_prompt_once(self, snapshot: ChatSnapshot) -> ChatSnapshot | None:
+        """Materialize one uniquely fresh prompt, never infer submission from it."""
+        def current_key() -> tuple[object, ...]:
+            metadata = self._checkpoint_metadata
+            return (metadata.get("unresolved-turn-id"), metadata.get("submission-attempt-id"),
+                    self.unresolved_prompt_text_digest, metadata.get("unresolved-baseline-user-id"))
+
+        key = current_key()
+        if (not all(isinstance(value, str) and value for value in key)
+                or self._reconciliation_prompt_expansion_key == key
+                or _unresolved_prompt_match_diagnostics(self, snapshot)[0] is not None
+                or snapshot.generating or not snapshot.latest_assistant_text
+                or not _reconciliation_evidence_clear(snapshot)):
+            return snapshot
+
+        def sole_fresh_prompt(observed: ChatSnapshot) -> str | None:
+            # Counts can stay unchanged under virtualization. Require the
+            # retained baseline anchor and exactly one subsequent user node;
+            # missing anchors or several fresh prompts are not ownership proof.
+            users = observed.user_prompt_refs()
+            anchors = [i for i, ref in enumerate(users) if ref.message_id == key[3]]
+            if len(anchors) != 1:
+                return None
+            tail = users[anchors[0] + 1:]
+            if (len(tail) != 1 or not tail[0].message_id
+                    or tail[0].message_id == key[3]
+                    or tail[0].message_id != observed.latest_user_id
+                    or tail[0].message_id.startswith(("fallback-", "virtualized-prompt-for-"))):
+                return None
+            return tail[0].message_id
+
+        prompt_id = sole_fresh_prompt(snapshot)
+        token = self._binding_token(snapshot)
+        if (not prompt_id or not self.target_id or not self.provider_session_id
+                or not self.chat_url or canonical_chat_url(snapshot.url) != canonical_chat_url(self.chat_url)
+                or not url_matches_provider_session(snapshot.url, self.provider_session_id)):
+            return snapshot
+        browser = self._gpt_browser()
+        expand = getattr(browser, "expand_user_prompt", None)
+        if not callable(expand):
+            return snapshot
+        try:
+            async with self._page_mutation_lock:
+                if (not self._page_mutation_owner_is_live()
+                        or not await self._binding_token_is_current(token)):
+                    return snapshot
+                page = await browser.page_by_handle(self.page_handle)
+                if (page.target_id != self.target_id or canonical_chat_url(page.url) != token[-1]
+                        or self._binding_token(snapshot) != token
+                        or current_key() != key
+                        or not self._page_mutation_owner_is_live()):
+                    return snapshot
+                # Reserve before the UI call: exceptions/false ACKs cannot cause
+                # repeated clicks on subsequent recovery polls for this attempt.
+                self._reconciliation_prompt_expansion_key = key
+                if not await expand(page, prompt_id):
+                    return snapshot
+            expanded = await self.snapshot(allow_recovering=True)
+            binding_current = await self._binding_token_is_current(token)
+            if (not binding_current or self._binding_token(expanded) != token
+                    or current_key() != key
+                    or not self._page_mutation_owner_is_live()
+                    or sole_fresh_prompt(expanded) != prompt_id
+                    or expanded.latest_assistant_id != snapshot.latest_assistant_id
+                    or not _reconciliation_evidence_clear(expanded)
+                    or expanded.generating
+                    or PromptFingerprint.from_text(expanded.latest_user_correlation_text() or "").digest != key[2]):
+                self._reset_unresolved_match_candidate()
+                self._set_unresolved_recovery("prompt-expansion-correlation-not-proven")
+                return None
+            return expanded
+        except Exception:  # noqa: BLE001 - no prompt/DOM/exception text in recovery facts
+            self._reset_unresolved_match_candidate()
+            self._set_unresolved_recovery("prompt-expansion-observation-failed")
+            return None
 
     async def _reconcile_unresolved_turn(self) -> bool:
         """Prove the retained prompt reached a terminal provider outcome."""
@@ -1514,12 +1877,15 @@ class PersistentChat:
         # unresolved even though the conversation is still recoverable. Use
         # the exact Retry control once, without resubmitting the prompt, then
         # re-read the same conversation before applying failure evidence.
-        completion_candidate = _reconciliation_completion_candidate(self, snapshot)
         # Authentication is a hard veto and must never be followed by a
         # provider-side click, even when a stale Retry control is visible.
         if "auth-required" in snapshot.dom_signals:
             self._set_unresolved_recovery("authentication-required")
             return False
+        snapshot = await self._expand_unresolved_prompt_once(snapshot)
+        if snapshot is None:
+            return False
+        completion_candidate = _reconciliation_completion_candidate(self, snapshot)
         # See turn.py's mirrored delivery_timeout_signal_now: two independent
         # detections of the same recovery opportunity, either sufficient.
         delivery_timeout_signal = (
@@ -1884,6 +2250,60 @@ class PersistentChat:
         values.update(self._checkpoint_metadata)
         return values
 
+    def terminal_checkpoint_metadata(self, turn_id: str) -> dict[str, object]:
+        """Return private checkpoint proof for gateway-owned finalization only.
+
+        These values are deliberately not part of SessionTurnResult.metadata:
+        they contain provider message identity and a prompt fingerprint. The
+        gateway uses this envelope to compare-and-clear the same durable turn.
+        """
+        if not isinstance(turn_id, str) or not turn_id:
+            return {}
+        retained = self._terminal_checkpoint_finalization
+        if retained.get("unresolved-turn-id") == turn_id:
+            return copy.deepcopy(retained)
+        if (
+            self._checkpoint_metadata.get("unresolved-turn-id") != turn_id
+            or not self.unresolved_turn_pending
+        ):
+            return {}
+        return self._private_terminal_checkpoint_projection()
+
+    def capture_terminal_checkpoint_metadata(self, turn_id: str) -> dict[str, object]:
+        """Retain the exact private checkpoint before provider-local clear.
+
+        The provider turn clears its live recovery state after terminal DOM
+        proof, while the gateway still has to durably finalize the request
+        and session. Keep one turn-scoped copy across that boundary; the
+        gateway acknowledges and releases it only after its compare-and-clear
+        succeeds.
+        """
+        if (
+            not isinstance(turn_id, str)
+            or not turn_id
+            or self._checkpoint_metadata.get("unresolved-turn-id") != turn_id
+            or not self.unresolved_turn_pending
+            or not self._submission_proven
+        ):
+            return {}
+        self._terminal_checkpoint_finalization = (
+            self._private_terminal_checkpoint_projection()
+        )
+        return copy.deepcopy(self._terminal_checkpoint_finalization)
+
+    def _private_terminal_checkpoint_projection(self) -> dict[str, object]:
+        # Some frozen identity fields are represented by dedicated in-memory
+        # attributes rather than _checkpoint_metadata (notably prompt-text-
+        # digest and submission-proven). Build from the complete private
+        # projection, then allowlist the fields required by the gateway CAS.
+        # Copy nested baseline data so a finalizer cannot mutate live state.
+        private_projection = self.unresolved_metadata()
+        return {
+            key: copy.deepcopy(private_projection[key])
+            for key in _TERMINAL_CHECKPOINT_METADATA_KEYS
+            if key in private_projection
+        }
+
     def mark_submission_unresolved(self, prompt_text: str | None = None) -> None:
         """Record that a send command completed but its provider identity is unknown."""
         self.unresolved_turn_pending = True
@@ -1897,6 +2317,8 @@ class PersistentChat:
         self.unresolved_prompt_text_digest = None
         self._unresolved_recovery_reason = None
         self._unresolved_recovery_details = {}
+        self._checkpoint_metadata = {}
+        self._terminal_checkpoint_finalization = {}
         self._reconciliation_refresh_attempted = False
         if prompt_text:
             self.unresolved_prompt_text_digest = PromptFingerprint.from_text(prompt_text).digest
@@ -1909,6 +2331,13 @@ class PersistentChat:
     ) -> None:
         self.unresolved_turn_pending = True
         self._submission_proven = True
+        self._checkpoint_metadata.update(
+            {
+                "recovery-state": "submission-proven",
+                "submission-state": "proven",
+                "submission-proof-source": "provider-user-message",
+            }
+        )
         self._unresolved_recovery_reason = None
         self._unresolved_recovery_details = {}
         self._reconciliation_refresh_attempted = False
@@ -1944,6 +2373,124 @@ class PersistentChat:
         self._unresolved_match_fingerprint_at = None
         self._unresolved_recovery_reason = None
         self._unresolved_recovery_details = {}
+
+    def acknowledge_terminal_checkpoint_finalization(
+        self,
+        *,
+        turn_id: str,
+        terminal_metadata: dict[str, object],
+        persisted_session_metadata: dict[str, object],
+    ) -> bool:
+        """Clear live recovery state after the gateway durably finalized a turn.
+
+        The provider cannot clear its checkpoint while its request is still
+        running. The gateway therefore owns the terminal write and invokes
+        this acknowledgement only after its session record confirms that the
+        exact request's terminal evidence cleared the durable fence.
+        """
+        evidence = terminal_metadata.get("terminal-evidence")
+        observed = evidence.get("verification-evidence") if isinstance(evidence, dict) else None
+        observed_set = set(observed) if isinstance(observed, (list, tuple, set)) else set()
+        checkpoint = self._terminal_checkpoint_finalization
+        checkpoint_turn_id = checkpoint.get("unresolved-turn-id")
+        identity_keys = (
+            "unresolved-turn-id",
+            "submission-attempt-id",
+            "submission-recovery-generation",
+            "submission-recovery-claim",
+            "unresolved-baseline-user-id",
+            "unresolved-baseline-assistant-id",
+            "unresolved-baseline-user-count",
+            "unresolved-baseline-assistant-count",
+            "unresolved-baseline-error-alert-occurrences",
+            "prompt-text-digest",
+        )
+        identity_matches = all(
+            (key in terminal_metadata) == (key in checkpoint)
+            and (
+                key not in checkpoint
+                or terminal_metadata.get(key) == checkpoint.get(key)
+            )
+            for key in identity_keys
+        )
+        if not (
+            isinstance(turn_id, str)
+            and turn_id
+            and checkpoint.get("unresolved-turn-pending") is True
+            and checkpoint_turn_id == turn_id
+            and isinstance(evidence, dict)
+            and evidence.get("turn-id") == turn_id
+            and evidence.get("policy") == "response-complete"
+            and terminal_metadata.get("submission-proven") is True
+            and terminal_metadata.get("submission-proof-source")
+            == "provider-user-message"
+            and identity_matches
+            and {"not-generating", "text-present"}.issubset(observed_set)
+            and observed_set.intersection({"completion-control", "response-complete-status"})
+            and persisted_session_metadata.get("unresolved-turn-pending") is False
+            and not persisted_session_metadata.get("unresolved-turn-id")
+        ):
+            return False
+
+        self.clear_unresolved_turn()
+        self._checkpoint_metadata = {}
+        self._submission_proven = False
+        self._terminal_checkpoint_finalization = {}
+        if self.state is ChatState.RECOVERING and self.page_handle:
+            self._move(ChatState.READY)
+        return True
+
+    def synchronize_cleared_predecessor_checkpoint(
+        self, predecessor_id: str, expected_metadata: dict[str, object],
+        persisted_session_metadata: dict[str, object],
+    ) -> bool:
+        """Mirror a gateway-verified terminal predecessor clear in idle memory.
+
+        The gateway has verified the terminal artifact and compared/cleared
+        this exact durable checkpoint. This only releases the matching local
+        fence; it never upgrades submission proof or writes a checkpoint.
+        """
+        current = self._private_terminal_checkpoint_projection()
+        identity_keys = _TERMINAL_CHECKPOINT_METADATA_KEYS - {"recovery-state"}
+        if (
+            self.state in {ChatState.READY, ChatState.RECOVERING}
+            and not self.active_turn_id
+            and not self.unresolved_turn_pending
+            and not self._submission_proven
+            and not current.get("unresolved-turn-id")
+            and expected_metadata.get("unresolved-turn-id") == predecessor_id
+            and expected_metadata.get("submission-attempt-id")
+            and expected_metadata.get("prompt-text-digest")
+            and persisted_session_metadata.get("unresolved-turn-pending") is False
+            and not persisted_session_metadata.get("unresolved-turn-id")
+            and same_chat_identity(self.chat_url or "", str(persisted_session_metadata.get("chat-url") or ""))
+        ):
+            # The exact clear already reached idle memory before a crash or
+            # duplicate acknowledgment. No mutation is needed to retire its marker.
+            return True
+        if (
+            self.state not in {ChatState.READY, ChatState.RECOVERING}
+            or current.get("unresolved-turn-id") != predecessor_id
+            or expected_metadata.get("unresolved-turn-id") != predecessor_id
+            or not expected_metadata.get("submission-attempt-id")
+            or not expected_metadata.get("prompt-text-digest")
+            or persisted_session_metadata.get("unresolved-turn-pending") is not False
+            or persisted_session_metadata.get("unresolved-turn-id")
+            or not same_chat_identity(self.chat_url or "", str(persisted_session_metadata.get("chat-url") or ""))
+            or any(
+                (key in current) != (key in expected_metadata)
+                or current.get(key) != expected_metadata.get(key)
+                for key in identity_keys
+            )
+        ):
+            return False
+        self.clear_unresolved_turn()
+        self._checkpoint_metadata = {}
+        self._terminal_checkpoint_finalization = {}
+        self._submission_proven = False
+        if self.state is ChatState.RECOVERING and self.page_handle:
+            self._move(ChatState.READY)
+        return True
 
     async def refresh_bound_conversation(
         self,
@@ -2347,7 +2894,7 @@ class PersistentChat:
         self._page_generation += 1
         self.runtime.release_page(self, handle)
         self._lost_during_turn = self.active_turn_id is not None
-        if self.unresolved_turn_pending or self._submission_proven:
+        if self._turn_requires_recovery_proof():
             # A provider load-error tab that an operator closes is not an
             # invitation to open another exact-URL tab.  Preserve the
             # unresolved fence so the next recovery/open attempt pauses until
@@ -2368,10 +2915,12 @@ class PersistentChat:
         try:
             pages = await self.runtime.bridge.call("list_pages")
             await self.reconcile(pages)
-        except BaseException:
-            if self.state is ChatState.RECOVERING:
-                self._move(ChatState.FAILED)
+        except asyncio.CancelledError:
             raise
+        except Exception:
+            # Target loss commonly precedes the shared socket-loss event.
+            # Retain the owned checkpoint for that coordinator, not FAILED.
+            logger.info("gpt-auto page lost; awaiting conversation reconciliation", exc_info=True)
 
     async def retain_after_turn_failure(self, error: BaseException) -> bool:
         """Return to READY when a failed turn left this browser chat usable.
@@ -2383,6 +2932,35 @@ class PersistentChat:
         """
         if not _recoverable_turn_failure(error) or self.state is ChatState.CLOSED:
             return False
+        details = error.details if isinstance(error, AudiaGenticError) else {}
+        if (
+            self.state is ChatState.RECOVERING
+            and isinstance(error, AudiaGenticError)
+            and error.code == "EXT-GPTAUTO-004"
+            and isinstance(details, dict)
+            and details.get("failure-stage") == "readiness"
+            and details.get("submission-state") == "not_started"
+            and details.get("submission-attempted") is False
+            and details.get("submission-proven") is False
+            and details.get("submission-ambiguous") is False
+            and details.get("previous-turn-unresolved") is False
+            and not self._turn_requires_recovery_proof()
+            and url_matches_provider_session(self.chat_url or "", self.provider_session_id)
+            and self._page_mutation_owner_is_live()
+            and details.get("cause-type") != "ProviderBindingIntegrityError"
+            and self._unresolved_recovery_reason not in {
+                "provider-binding-invalid", "provider-conversation-not-found",
+            }
+            and not (
+                self._last_snapshot is not None
+                and "auth-required" in self._last_snapshot.dom_signals
+            )
+        ):
+            # A missing/unready renderer does not invalidate its saved GPT
+            # conversation. Keep admission closed in RECOVERING and let the
+            # existing queue retry readiness under its outer deadline. This
+            # path neither promotes READY nor replays a possibly sent turn.
+            return True
         try:
             if self.state is not ChatState.RECOVERING:
                 self._move(ChatState.RECOVERING)
@@ -2517,9 +3095,12 @@ class PersistentChat:
 
     def bridge_replaced(self) -> None:
         """Invalidate bridge-local binding before runtime-level recovery."""
+        if self.state is ChatState.CLOSED:
+            return
         if self.page_handle is not None:
             self._page_generation += 1
         self.page_handle = None
+        self._browser_generation_recovery = True
         if self.state is not ChatState.RECOVERING:
             self._move(ChatState.RECOVERING)
 
@@ -2529,6 +3110,94 @@ class PersistentChat:
             self._move(ChatState.FAILED)
 
     async def reconcile(self, pages: list[dict]) -> None:
+        # Event recovery, admission and response observation may all notice a
+        # lost target. Only one actor may rebind/reopen this conversation.
+        async with self._reconcile_lock:
+            await self._reconcile_page(pages)
+
+    async def _adopt_recovery_page(self, page: dict) -> bool:
+        """Rebind a physical tab only after reobserving the owned prompt."""
+        if not self._page_mutation_owner_is_live():
+            return False
+        expected_url = self.chat_url or ""
+        if not same_chat_identity(str(page.get("url") or ""), expected_url):
+            return False
+        handle = str(page.get("pageHandle") or "")
+        previous = (self.page_handle, self.target_id, self._page_generation)
+        previous_observation = (self._last_snapshot, self._last_url, self._load_budget_observation)
+        if not self._claim_page(handle):
+            return False
+        self._replacement_target_pending = True
+        self._bind_page(page)
+        adopted = False
+        try:
+            adopted = await self._prove_recovery_page(expected_url)
+            return adopted
+        finally:
+            release = getattr(self.runtime, "release_page", None)
+            if adopted and callable(release) and handle != previous[0]:
+                release(self, previous[0])
+            if not adopted:
+                if callable(release) and handle != previous[0]:
+                    release(self, handle)
+                self.page_handle, self.target_id, self._page_generation = previous
+                self._last_snapshot, self._last_url, self._load_budget_observation = previous_observation
+                self._replacement_target_pending = False
+
+    async def _prove_recovery_page(self, expected_url: str) -> bool:
+        snapshot = await self.snapshot(allow_recovering=True)
+        if (
+            not self._page_mutation_owner_is_live()
+            or not same_chat_identity(snapshot.url, expected_url)
+            or snapshot.error_present
+            or "auth-required" in snapshot.dom_signals
+            or not _unresolved_prompt_match_diagnostics(self, snapshot)[0]
+        ):
+            self._set_unresolved_recovery("replacement-target-turn-not-proven")
+            self._move(ChatState.RECOVERING)
+            return False
+        update = self.binding_sink(ProviderSessionBindingUpdate(
+            provider_session_ref=ProviderSessionRef(self.provider_session_id),
+            metadata={"chat-url": self.chat_url, "target-id": self.target_id},
+        ))
+        if asyncio.iscoroutine(update):
+            await update
+        if not self._page_mutation_owner_is_live():
+            raise ProviderBindingIntegrityError("recovery owner expired during binding persistence")
+        self._replacement_target_pending = False
+        self._browser_generation_recovery = False
+        if self.active_turn_id:
+            self._move(ChatState.BUSY)
+        elif getattr(self, "_restart_recovery_pending", False):
+            self._move(ChatState.READY)
+        return True
+
+    async def _rank_recovery_pages(self, pages: list[dict]) -> list[dict]:
+        """Prefer an owned completed reply over a stale duplicate renderer."""
+        ranked = []
+        browser = self._gpt_browser()
+        for index, page in enumerate(pages):
+            rank = -1
+            try:
+                ref = await browser.page_by_handle(str(page["pageHandle"]))
+                snapshot = ChatSnapshot.from_bridge(await asyncio.wait_for(
+                    browser.snapshot(ref, signals=self.config.workflow.bridge_signals()),
+                    timeout=self.config.cdp.protocol_timeout_seconds,
+                ))
+                if same_chat_identity(snapshot.url, self.chat_url or "") and _unresolved_prompt_match_diagnostics(self, snapshot)[0]:
+                    terminal = (
+                        not snapshot.generating and not snapshot.error_present
+                        and snapshot.latest_assistant_id
+                        and snapshot.terminal_witness_assistant_id == snapshot.latest_assistant_id
+                        and snapshot.dom_signals.intersection({"completion-control", "response-complete-status"})
+                    )
+                    rank = 2 if terminal else int(snapshot.generating)
+            except Exception:
+                pass  # Candidate proof is retried by adoption/coordinator.
+            ranked.append((rank, -index, page))
+        return [page for _, _, page in sorted(ranked, key=lambda row: row[:2], reverse=True)]
+
+    async def _reconcile_page(self, pages: list[dict]) -> None:
         if self._physical_idle_closed:
             return
         if self.state is ChatState.CLOSED:
@@ -2555,24 +3224,43 @@ class PersistentChat:
             )
             if (
                 page is not None
-                and self.target_id
-                and (self.unresolved_turn_pending or self._submission_proven)
-                and str(page.get("targetId") or "") != self.target_id
-            ):
-                # A matching conversation URL on a new CDP target is not proof
-                # that the unresolved Send survived. Require explicit
-                # reattachment rather than reviving the stale observer.
-                self._set_unresolved_recovery(
-                    "conversation-load-observation-deferred",
-                    provider_session_id=self.provider_session_id,
-                    chat_url=self.chat_url,
-                    defer_reason="replacement-target-requires-explicit-reattach",
-                    observed_target_id=str(page.get("targetId") or ""),
-                    expected_target_id=self.target_id,
+                and self._turn_requires_recovery_proof()
+                and (
+                    (bool(self.target_id) and str(page.get("targetId") or "") != self.target_id)
+                    or self._replacement_target_pending
+                    or self._browser_generation_recovery
+                    or getattr(self, "_restart_recovery_pending", False)
+                    or sum(same_chat_identity(str(p.get("url") or ""), self.chat_url or "") for p in pages) > 1
                 )
-                self._move(ChatState.RECOVERING)
-                return
+            ):
+                # A target id belongs to a browser generation, not the turn.
+                # Reobserve the exact prompt before continuing read-only
+                # observation. This path never sends a provider prompt.
+                if (self.active_turn_id or getattr(self, "_restart_recovery_pending", False)) and self._page_mutation_owner_is_live():
+                    candidates = [page] + [p for p in pages if p.get("pageHandle") != page.get("pageHandle") and same_chat_identity(str(p.get("url") or ""), self.chat_url or "")]
+                    if len(candidates) > 1:
+                        candidates = await self._rank_recovery_pages(candidates)
+                    for candidate in candidates:
+                        try:
+                            if await self._adopt_recovery_page(candidate):
+                                return
+                        except asyncio.CancelledError:
+                            raise
+                        except Exception:
+                            logger.debug("gpt-auto candidate proof pending", exc_info=True)
+                    self._move(ChatState.RECOVERING)
+                    return
+                else:
+                    self._set_unresolved_recovery("replacement-target-requires-owned-observer")
+                    self._move(ChatState.RECOVERING)
+                    return
+            if page is None:
+                page = await self._reopen_idle_conversation()
             if page is not None and self._claim_page(str(page["pageHandle"])):
+                if not await self._recovery_page_is_current(page):
+                    self.runtime.release_page(self, str(page["pageHandle"]))
+                    self._move(ChatState.RECOVERING)
+                    return
                 self._bind_page(page)
                 retained = await self._retained_page_snapshot()
                 if not await self._replace_load_failed_page(retained):
@@ -2583,11 +3271,16 @@ class PersistentChat:
                     if self.unresolved_turn_pending and not await self._reconcile_unresolved_turn():
                         return
                     await self.wait_quiescent(allow_recovering=True)
+                    if not await self._recovery_page_is_current(page):
+                        self._move(ChatState.RECOVERING)
+                        return
                     self._move(ChatState.READY)
                 return
             if (
                 self._defer_page_creation_on_recovery
                 and self.provider_session_id
+                and self._turn_requires_recovery_proof()
+                and not self._browser_generation_recovery
             ):
                 self._move(ChatState.RECOVERING)
                 raise RuntimeError('gpt-auto restart recovery deferred: exact provider conversation tab is not attached')
@@ -2603,7 +3296,12 @@ class PersistentChat:
             if not self._page_mutation_owner_is_live():
                 self._set_unresolved_recovery("reconcile-owner-not-live")
                 return
-            if self.unresolved_turn_pending or self._submission_proven:
+            if self._turn_requires_recovery_proof():
+                reopen = getattr(self.runtime, "reopen_conversation_page", None)
+                if (self.active_turn_id or getattr(self, "_restart_recovery_pending", False)) and callable(reopen):
+                    page = await reopen(self.chat_url, owner_is_live=self._page_mutation_owner_is_live)
+                    await self._adopt_recovery_page(page)
+                    return
                 self._set_unresolved_recovery(
                     "conversation-load-observation-deferred",
                     provider_session_id=self.provider_session_id,

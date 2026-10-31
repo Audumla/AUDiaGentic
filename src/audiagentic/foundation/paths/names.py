@@ -112,12 +112,39 @@ def project_logs_dir(project_root: Path) -> Path:
 
 
 def home_directory() -> Path:
-    """Return the user's ~/.audiagentic/ home directory.
-    Replaces inline Path.home() / '.audiagentic' patterns."""
+    """Return the AUDiaGentic home directory and nothing else about where it came from.
+
+    Precedence: the ``AUDIAGENTIC_HOME`` environment variable (deployment wiring, and
+    what a service passes to its children), then the ``home`` setting from the machine
+    scopes (user settings or an explicit file), then ``~/.audiagentic``. The setting
+    lets every process on a machine, including MCP servers a harness starts without any
+    environment, agree on one home. An invalid settings file raises, because a silently
+    different home would split the machine's state.
+    """
+    return home_source()[0]
+
+
+def home_source(config_file: Path | str | None = None) -> tuple[Path, str]:
+    """The home directory and where it came from: ``environment``, ``settings`` or ``default``.
+
+    ``config_file`` is an explicit settings file (``--config``); without it the
+    environment's ``AUDIAGENTIC_CONFIG`` applies, as everywhere else.
+    """
     custom = os.environ.get("AUDIAGENTIC_HOME")
     if custom:
-        return Path(custom)
-    return Path.home() / PROJECT_MARKER_NAME
+        return Path(custom), "environment"
+    # Imported here: the settings resolver imports this module for the package paths.
+    from audiagentic.foundation.config import settings
+
+    resolved = (
+        settings.resolve_settings(config_file=config_file, machine_only=True)
+        if config_file is not None
+        else settings.resolve_settings_cached(machine_only=True)
+    )
+    configured = resolved.get("home")
+    if isinstance(configured, str) and configured:
+        return Path(configured).expanduser(), "settings"
+    return Path.home() / PROJECT_MARKER_NAME, "default"
 
 
 # ── Component config directory resolution ─────────────────────────────────

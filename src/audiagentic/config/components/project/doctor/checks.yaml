@@ -1,0 +1,10 @@
+# Doctor checks owned by the project component (read-only). Each ref is module:attr.
+checks:
+  - id: project.identity
+    ref: audiagentic.components.project.doctor_checks:check_identity
+  - id: mcp.onboarding
+    ref: audiagentic.components.project.doctor_checks:check_mcp_onboarding
+  - id: mcp.user
+    ref: audiagentic.components.project.doctor_checks:check_user_mcp
+  - id: worktrees.primary
+    ref: audiagentic.components.project.doctor_checks:check_primary_checkout

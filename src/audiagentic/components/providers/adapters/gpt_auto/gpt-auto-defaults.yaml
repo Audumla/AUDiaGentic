@@ -7,14 +7,12 @@
 # inherited from here.
 #
 # This file was extracted from the AUDiaGentic project's own gpt-auto.yaml,
-# which had accumulated the fullest set of hard-won live-debugging comments;
-# gpt-auto-t1.yaml/gpt-auto-t2.yaml were near-identical duplicates of the
-# same content (confirmed via diff, 2026-08-17) modulo project-url and some
-# comment-text drift -- exactly the duplication GP09 was raised about.
+# which had accumulated the fullest set of hard-won live-debugging comments.
+# Per-project differences (project-url) belong in providers.gpt-auto.instances.
 settings:
   contract-version: v3
   browser:
-    executable: 'C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe'
+    executable: auto
     remote-debugging-port: 9222
     existing-browser-policy: fail
     shutdown-timeout-seconds: 10
@@ -25,7 +23,8 @@ settings:
     physical-tab-reaper-interval-seconds: 300
   cdp:
     # CDP target location. For a remote browser use e.g.
-    # http://192.0.2.42:9222 and set up private transport (SSH/VPN).
+    # http://browser.example.test:9222 and set up private transport (SSH/VPN).
+    # Set the real endpoint in an ignored project provider overlay, not here.
     endpoint: http://127.0.0.1:9222
     connect-timeout-seconds: 15
     protocol-timeout-seconds: 30

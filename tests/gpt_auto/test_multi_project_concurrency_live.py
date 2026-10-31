@@ -150,7 +150,7 @@ def _submit_turn(run: ProjectRun, label: str, prompt: str) -> TurnRecord:
         prompt_body=prompt,
         session_id=run.session_id,
         session_keep_alive=True,
-        timeout_seconds=TURN_TIMEOUT_SECONDS,
+        wait_timeout_seconds=TURN_TIMEOUT_SECONDS,
         source="gpt-auto-multi-project-live-test",
         metadata={"scenario": "multi-project-concurrency", "project": run.name, "label": label},
     )

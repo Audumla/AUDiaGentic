@@ -266,7 +266,9 @@ class GptAutoConfig:
         return self.cdp.endpoint
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> GptAutoConfig:
+    def from_dict(
+        cls, data: dict[str, Any], *, require_local_browser: bool = True
+    ) -> GptAutoConfig:
         settings = data.get("settings", data)
         if not isinstance(settings, dict):
             _invalid("settings must be a mapping")
@@ -328,7 +330,12 @@ class GptAutoConfig:
                 "dedicated-window",
             },
         )
-        executable = Path(_string(browser_data, "executable"))
+        executable_value = _string(browser_data, "executable")
+        if executable_value == "auto":
+            candidates = discover_browser_candidates()
+            executable = candidates[0] if candidates else Path("auto")
+        else:
+            executable = Path(executable_value)
         port = _integer(browser_data, "remote-debugging-port")
         if not 1 <= port <= 65535:
             _invalid("browser.remote-debugging-port must be between 1 and 65535")
@@ -381,7 +388,11 @@ class GptAutoConfig:
             recovery_timeout_seconds=_positive(cdp_data, "recovery-timeout-seconds"),
             devtools_active_port_file=Path(active_port) if active_port else None,
         )
-        if not cdp.is_remote and not executable.is_file():
+        if (
+            not cdp.is_remote
+            and not executable.is_file()
+            and (require_local_browser or executable_value != "auto")
+        ):
             candidates = discover_browser_candidates()
             if candidates:
                 hint = "; detected on this machine: " + ", ".join(str(c) for c in candidates)
@@ -507,10 +518,9 @@ class GptAutoConfig:
 
         GP09/GP20: project config files previously had to restate the full
         settings schema, including the workflow dom-signals/evidence-policies
-        block that is genuinely shared across every project on this machine
-        (confirmed near-identical across gpt-auto.yaml/gpt-auto-t1.yaml/
-        gpt-auto-t2.yaml by diff, 2026-08-17) -- duplicating it risked exactly
-        the schema-drift incident GP09 was raised about. A project overlay may
+        block that is genuinely shared across every project on this machine --
+        duplicating it risked exactly the schema-drift incident GP09 was
+        raised about. A project overlay may
         specify project-url when the profile is intentionally pinned to a
         known ChatGPT project; when it is absent, the admitted project name
         drives discovery. Everything else is inherited from gpt-auto-defaults.yaml.
@@ -634,9 +644,15 @@ def validate_machine_gpt_auto_config() -> None:
     extra being installed -- that would make gpt-auto's dependency mandatory
     for the whole shared gateway. See validate_project_gpt_auto_config for
     the per-project, non-fatal dependency check.
+
+    An implicit browser.executable=auto is an availability requirement of a
+    project using local GPT-auto, not a malformed machine configuration. A
+    headless machine serving other providers must still start. Explicit
+    invalid executable paths and all configuration/schema errors remain fatal.
     """
     GptAutoConfig.from_dict(
-        deep_merge(provider_settings(_load_packaged_defaults()), _load_machine_override())
+        deep_merge(provider_settings(_load_packaged_defaults()), _load_machine_override()),
+        require_local_browser=False,
     )
 
 

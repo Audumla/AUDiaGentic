@@ -9,3 +9,8 @@ RES-PIINST-006: "AudiaGentic agent package not found after npm install. Run: npm
 RES-PIINST-007: "AudiaGentic agent install incomplete — dist/ is empty. Run: npm install --prefix <npm_dir> to retry."
 CFG-PIINST-005: "npm is required to install the AudiaGentic agent. Install Node.js and npm."
 EXT-PIRUN-001: "Direct MCP smoke test failed. Check the MCP server configuration and logs."
+EXT-HRNEP-001: "The model server's /models endpoint answered with an unexpected status. Check that the server is healthy and that the endpoint (AUDIAGENTIC_AG_BASE_URL or the harness endpoint.url) is an OpenAI-compatible /v1 URL."
+EXT-HRNEP-002: "The model server is up but not ready (for example still loading a model). Wait for it to finish loading and retry."
+NET-HRNEP-003: "The model server could not be reached. Start it, or point AUDIAGENTIC_AG_BASE_URL (or the harness endpoint.url) at one that is running. AUDiaGentic does not launch model servers."
+EXT-HRNEP-004: "The model server's /models answer was not valid JSON. Check that the endpoint is an OpenAI-compatible /v1 URL."
+EXT-HRNEP-005: "The model server reported no models. Load a model on the server and retry."

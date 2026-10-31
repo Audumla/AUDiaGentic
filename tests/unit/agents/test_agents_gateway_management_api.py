@@ -8,6 +8,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from tests.helpers.gateway_settings import use_gateway_settings
 
 from audiagentic.components.agents.gateway.management_api import (
     gateway_get_config,
@@ -41,18 +42,18 @@ def _force_feature_registry_repopulation():
     yield
 
 
-def test_status_with_no_explicit_selection_reports_embedded_default(tmp_path: Path) -> None:
+def test_status_with_no_explicit_selection_reports_automatic_default(tmp_path: Path) -> None:
     status = gateway_status(tmp_path)
-    assert status["implementation"] == "embedded"
+    assert status["implementation"] == "automatic"
     assert status["is_default"] is True
 
 
 def test_list_implementations_includes_all_three(tmp_path: Path) -> None:
     result = gateway_list_implementations(tmp_path)
     assert set(result["implementations"].keys()) == {"embedded", "standalone", "automatic"}
-    assert result["implementations"]["embedded"]["is_default"] is True
+    assert result["implementations"]["automatic"]["is_default"] is True
     assert result["implementations"]["standalone"]["is_default"] is False
-    assert result["implementations"]["automatic"]["is_default"] is False
+    assert result["implementations"]["embedded"]["is_default"] is False
 
 
 def test_select_implementation_persists_and_is_reflected_in_status(tmp_path: Path) -> None:
@@ -81,7 +82,7 @@ def test_get_config_exposes_option_schema_for_automatic(tmp_path: Path) -> None:
 
 def test_get_config_exposes_option_schema_for_standalone(tmp_path: Path) -> None:
     config = gateway_get_config(tmp_path, "standalone")
-    assert set(config["schema"].keys()) == {"endpoint", "token-file"}
+    assert set(config["schema"].keys()) == {"endpoint", "token-file", "connector-config"}
 
 
 def test_get_config_defaults_to_active_implementation(tmp_path: Path) -> None:
@@ -137,14 +138,10 @@ def test_set_config_never_adds_implementation_specific_tools() -> None:
 def test_retention_policy_projection_is_machine_owned_and_redacted(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    policy_path = tmp_path / "machine-retention.json"
-    policy_path.write_text(
-        '{"policy-id":"ops","purge-enabled":true,'
-        '"minimum-archive-age-seconds":3600,"max-batch-size":7,'
-        '"secret-path":"must-not-leak"}',
-        encoding="utf-8",
+    policy_path = use_gateway_settings(
+        monkeypatch, tmp_path,
+        retention={"policy_id": "ops", "purge_enabled": True, "minimum_archive_age_seconds": 3600, "max_batch_size": 7},
     )
-    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_RETENTION_POLICY", str(policy_path))
 
     projection = gateway_get_retention_policy(tmp_path / "project")
 
@@ -153,7 +150,6 @@ def test_retention_policy_projection_is_machine_owned_and_redacted(
     assert projection["minimum-archive-age-seconds"] == 3600.0
     assert projection["max-batch-size"] == 7
     assert projection["policy-id"] == "ops"
-    assert "secret-path" not in projection
     assert str(policy_path) not in str(projection)
 
 
@@ -236,7 +232,7 @@ def test_gateway_restart_waits_for_draining_owner_to_retire(tmp_path: Path, monk
         "audiagentic.components.agents.gateway.service.bootstrap.attach_existing_gateway",
         attach,
     )
-    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_RESTART_WAIT_SECONDS", "2")
+    use_gateway_settings(monkeypatch, tmp_path, restart_wait_seconds=2)
     monkeypatch.setattr("audiagentic.components.agents.gateway.management_api.time.sleep", lambda _: None)
 
     result = gateway_restart(tmp_path)

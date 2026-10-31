@@ -3,7 +3,30 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import platformdirs
+
 from audiagentic.foundation.paths.names import PROJECT_MARKER_NAME, home_directory
+
+APP_NAME = "audiagentic"
+
+
+def user_config_dir() -> Path:
+    """Platform-standard per-user configuration directory (XDG on Linux).
+
+    The settings model's user scope (docs/design/configuration-model.md).
+    Pure path computation: nothing is created.
+    """
+    return platformdirs.user_config_path(APP_NAME, appauthor=False)
+
+
+def user_state_dir() -> Path:
+    """Platform-standard per-user state directory; nothing is created."""
+    return platformdirs.user_state_path(APP_NAME, appauthor=False)
+
+
+def user_cache_dir() -> Path:
+    """Platform-standard per-user cache directory; nothing is created."""
+    return platformdirs.user_cache_path(APP_NAME, appauthor=False)
 
 
 def audiagentic_home() -> Path:

@@ -177,6 +177,33 @@ def list_agent_definitions(project_root: Path) -> list[dict[str, Any]]:
     return _crud(project_root, collection="agents", identifier="agent_id", parser=agent_definition_from_dict, encoder=agent_definition_to_dict, store_factory=AgentDefinitionStore, operation="list")
 
 
+def _agent_card(definition: dict[str, Any]) -> dict[str, Any]:
+    """Client-facing summary of one Agent Definition (A2A AgentCard-style
+    projection — see protocols/a2a/agent_card.py's build_agent_card for the
+    sibling used on the A2A-publication path). Deliberately excludes
+    implementation/harness details a calling agent has no use for and must
+    not couple to: execution_profile_id, role_ids, prompt_id. What backs an
+    agent is free to change without being part of its public contract."""
+    return {
+        "agent_id": definition["agent_id"],
+        "name": definition.get("name"),
+        "description": definition.get("description"),
+        "skills": [
+            {"id": skill, "name": skill} for skill in definition.get("advertised_skills") or []
+        ],
+    }
+
+
+def list_agent_definition_cards(project_root: Path) -> list[dict[str, Any]]:
+    """Return only compact, public discovery cards from the owning catalog."""
+    cards = []
+    for definition in list_agent_definitions(project_root):
+        card = _agent_card(definition)
+        cards.append({key: value for key, value in card.items()
+                      if value is not None and value != "" and value != []})
+    return cards
+
+
 def get_agent_definition(project_root: Path, agent_id: str) -> dict[str, Any]:
     return _crud(project_root, collection="agents", identifier="agent_id", parser=agent_definition_from_dict, encoder=agent_definition_to_dict, store_factory=AgentDefinitionStore, item_id=agent_id, operation="get")
 

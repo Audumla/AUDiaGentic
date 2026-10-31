@@ -26,12 +26,22 @@ capabilities:
   mcp:
     mechanism:
       config_path: "audiagentic.components.providers.adapters.claude.config:resolve_claude_mcp_config_path"
+      project_scoped: true
       reader: "audiagentic.foundation.mcp.json_format:read_mcp_json"
+      raw_reader: "audiagentic.foundation.mcp.json_format:read_raw_mcp_json"
       writer: "audiagentic.foundation.mcp.json_format:write_mcp_json"
       remover: "audiagentic.foundation.mcp.json_format:remove_mcp_json"
       transports: [stdio, http] # json_format.py:84-87 emits {type, url, headers} when entry.is_remote
       format: "mcp-json"
       refresh_mode: "file-watch"
+      # Claude's user scope: mcpServers in its live state file, written only
+      # through the claude CLI (Claude rewrites that file itself).
+      user_scope:
+        config_path: "audiagentic.components.providers.adapters.claude.config:resolve_claude_user_config_path"
+        reader: "audiagentic.foundation.mcp.json_format:read_mcp_json"
+        writer: "audiagentic.components.providers.adapters.claude.user_mcp:write_user_mcp"
+        remover: "audiagentic.components.providers.adapters.claude.user_mcp:remove_user_mcp"
+        format: "mcp-json"
 
   models:
     mechanism:

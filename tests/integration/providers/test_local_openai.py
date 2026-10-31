@@ -31,12 +31,12 @@ def _fake_urlopen(*args, **kwargs):
 
 @patch("audiagentic.components.providers.adapters.local_openai.adapter.urllib.request.urlopen", _fake_urlopen)
 def test_local_openai_adapter_contract() -> None:
-    result = local_openai.run({"provider-id": "local-openai"}, {"default-model": "gpt-oss"})
+    result = local_openai.run({"prompt-body": "Reply with ok.", "provider-id": "local-openai"}, {"default-model": "gpt-oss"})
     assert result["provider-id"] == "local-openai"
     assert result["status"] == "ok"
 
 
 @patch("audiagentic.components.providers.adapters.local_openai.adapter.urllib.request.urlopen", _fake_urlopen)
 def test_local_openai_adapter_allows_qwen_alias() -> None:
-    result = local_openai.run({"provider-id": "qwen"}, {"default-model": "qwen-coder"})
+    result = local_openai.run({"prompt-body": "Reply with ok.", "provider-id": "qwen"}, {"default-model": "qwen-coder"})
     assert result["provider-id"] == "qwen"

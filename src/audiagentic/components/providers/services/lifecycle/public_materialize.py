@@ -14,37 +14,32 @@ from __future__ import annotations
 from pathlib import Path
 
 
-def _upsert_ag_rig_source(project_root: Path, harness_cfg: dict) -> None:
-    """Persist the rig as the ordinary local OpenAI-compatible endpoint.
+def _upsert_harness_endpoint_source(project_root: Path, harness_cfg: dict) -> None:
+    """Persist the harness model server as the ordinary local OpenAI-compatible endpoint.
 
-    The port/model are runtime-derived facts, but the source remains normal
-    project desired state consumed by ``build_model_projection_request``.
+    The url/model come from the harness ``endpoint`` section, but the source
+    remains normal project desired state consumed by ``build_model_projection_request``.
     """
     from audiagentic.components.providers.services.config.model_source_config import (
         load_model_sources,
         write_model_sources,
     )
-    from audiagentic.foundation.config.local_runtime import local_rig_port
+    from audiagentic.foundation.config.harness import require_harness_endpoint
 
-    rig_section = harness_cfg.get("rig", {})
-    model_name = rig_section.get("model") or "qwen3.5-0.8b"
-    # Persist only portable defaults. Machine overrides are resolved by the
-    # projection builder through base-url-env and must never be serialized.
-    port = local_rig_port(rig_section.get("port", 42001), use_env=False)
+    endpoint_section = harness_cfg.get("endpoint", {})
     document = load_model_sources(project_root)
     sources = document.setdefault("sources", {})
     desired = {
         "source-class": "local-endpoint",
-        "display-name": "AUDiaGentic Embedded Rig",
+        "display-name": "AUDiaGentic harness endpoint",
         "connector": "openai-compatible",
-        "model-id": str(model_name),
-        "base-url": f"http://127.0.0.1:{port}/v1",
-        "base-url-env": "AUDIAGENTIC_RIG_BASE_URL",
-        "provider-overrides": {"provider-id": rig_section.get("provider", "audiagentic")},
+        "model-id": str(endpoint_section.get("model") or "qwen3.5-0.8b"),
+        "base-url": require_harness_endpoint(harness_cfg),
+        "provider-overrides": {"provider-id": endpoint_section.get("provider", "audiagentic")},
         "enabled": True,
     }
-    if sources.get("ag-rig") != desired:
-        sources["ag-rig"] = desired
+    if sources.get("ag-endpoint") != desired:
+        sources["ag-endpoint"] = desired
         write_model_sources(project_root, document)
 
 
@@ -84,7 +79,7 @@ def materialize_provider_config(
 
     descriptor = get_descriptor(provider_id)
     if descriptor is not None and descriptor.model_config is not None:
-        _upsert_ag_rig_source(project_root, harness_cfg)
+        _upsert_harness_endpoint_source(project_root, harness_cfg)
         from audiagentic.components.providers.services.catalog.models import (
             build_model_projection_request,
         )

@@ -6,6 +6,7 @@ import time
 from pathlib import Path
 
 import pytest
+from tests.helpers.gateway_settings import use_gateway_settings
 
 from audiagentic.components.agents.gateway import store as request_store
 from audiagentic.components.agents.gateway.application import InProcessGatewayApplication
@@ -318,6 +319,26 @@ def test_archive_is_integrity_manifest_and_purge_fails_closed_without_policy(tmp
     assert request_dir.exists()
 
 
+def test_archive_excludes_only_owned_trace_fences(tmp_path: Path) -> None:
+    from audiagentic.components.agents.gateway.operations.archive import _digest_tree
+    root = tmp_path / ".audiagentic" / "runtime" / "agent-execution-gateway"
+    request = root / "req_trace_archive"
+    request.mkdir(parents=True)
+    (request / "record.json").write_text('{"state":"completed"}', encoding="utf-8")
+    before = _digest_tree(request)
+    (request / "timeline.ndjson.journal.lock").write_bytes(b"\0")
+    assert _digest_tree(request) == before
+    runtime = request / "runtime"
+    runtime.mkdir()
+    (runtime / "timeline.ndjson.journal.lock").write_text("provider-owned", encoding="utf-8")
+    archived = GatewayArchiveExecutor(_ArchiveRequests({"state": "completed"})).execute(
+        {"scope": {"project-root": str(tmp_path), "request-ids": [request.name]}})
+    assert archived["changed"] == 1
+    destination = root / "archive" / request.name
+    assert not (destination / "timeline.ndjson.journal.lock").exists()
+    assert (destination / "runtime" / "timeline.ndjson.journal.lock").read_text() == "provider-owned"
+
+
 def test_archive_preserves_durable_runtime_lineage_for_resume(tmp_path: Path) -> None:
     request_id = "req_archive_resume"
     request_dir = tmp_path / ".audiagentic" / "runtime" / "agent-execution-gateway" / request_id
@@ -351,9 +372,7 @@ def test_archive_replay_is_idempotent_and_preserves_manifest(tmp_path: Path) -> 
 
 
 def test_purge_revalidates_policy_and_manifest(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    policy_path = tmp_path / "machine-policy.json"
-    policy_path.write_text('{"policy-id":"p1","purge-enabled":true,"minimum-archive-age-seconds":0.01,"max-batch-size":2}', encoding="utf-8")
-    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_RETENTION_POLICY", str(policy_path))
+    _retention_settings(monkeypatch, tmp_path)
     request_id = "req_archive_2"
     request_dir = tmp_path / ".audiagentic" / "runtime" / "agent-execution-gateway" / request_id
     request_dir.mkdir(parents=True)
@@ -368,12 +387,7 @@ def test_purge_revalidates_policy_and_manifest(tmp_path: Path, monkeypatch: pyte
 
 
 def test_purge_replay_is_idempotent_after_archive_removal(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    policy_path = tmp_path / "machine-policy.json"
-    policy_path.write_text(
-        '{"policy-id":"p1","purge-enabled":true,"minimum-archive-age-seconds":0.01,"max-batch-size":2}',
-        encoding="utf-8",
-    )
-    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_RETENTION_POLICY", str(policy_path))
+    _retention_settings(monkeypatch, tmp_path)
     request_id = "req_purge_idempotent"
     request_dir = tmp_path / ".audiagentic" / "runtime" / "agent-execution-gateway" / request_id
     request_dir.mkdir(parents=True)
@@ -396,9 +410,7 @@ def test_purge_replay_is_idempotent_after_archive_removal(tmp_path: Path, monkey
 
 
 def test_purge_blocks_changed_attempt_fence_after_archive(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    policy_path = tmp_path / "machine-policy.json"
-    policy_path.write_text('{"policy-id":"p1","purge-enabled":true,"minimum-archive-age-seconds":0.01,"max-batch-size":2}', encoding="utf-8")
-    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_RETENTION_POLICY", str(policy_path))
+    _retention_settings(monkeypatch, tmp_path)
     request_id = "req_archive_3"
     request_dir = tmp_path / ".audiagentic" / "runtime" / "agent-execution-gateway" / request_id
     request_dir.mkdir(parents=True)
@@ -414,9 +426,7 @@ def test_purge_blocks_changed_attempt_fence_after_archive(tmp_path: Path, monkey
 
 
 def test_purge_final_pin_recheck_wins_race(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    policy_path = tmp_path / "machine-policy.json"
-    policy_path.write_text('{"policy-id":"p1","purge-enabled":true,"minimum-archive-age-seconds":0.01,"max-batch-size":2}', encoding="utf-8")
-    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_RETENTION_POLICY", str(policy_path))
+    _retention_settings(monkeypatch, tmp_path)
     request_id = "req_archive_4"
     request_dir = tmp_path / ".audiagentic" / "runtime" / "agent-execution-gateway" / request_id
     request_dir.mkdir(parents=True)
@@ -437,10 +447,10 @@ def test_purge_final_pin_recheck_wins_race(tmp_path: Path, monkeypatch: pytest.M
     assert request_dir.exists()
 
 
-def _enabled_retention_policy(path: Path) -> None:
-    path.write_text(
-        '{"policy-id":"p1","purge-enabled":true,"minimum-archive-age-seconds":0.01,"max-batch-size":2}',
-        encoding="utf-8",
+def _retention_settings(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, *, purge_enabled: bool = True) -> Path:
+    return use_gateway_settings(
+        monkeypatch, tmp_path,
+        retention={"policy_id": "p1", "purge_enabled": purge_enabled, "minimum_archive_age_seconds": 0.01, "max_batch_size": 2},
     )
 
 
@@ -458,9 +468,7 @@ def _archive_completed_request(tmp_path: Path, request_id: str, fake: _ArchiveRe
 def test_purge_final_fence_blocks_changed_request_record_after_archive(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    policy_path = tmp_path / "machine-policy.json"
-    _enabled_retention_policy(policy_path)
-    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_RETENTION_POLICY", str(policy_path))
+    _retention_settings(monkeypatch, tmp_path)
     request_id = "req_changed_fence"
 
     class ChangingRequests(_ArchiveRequests):
@@ -484,9 +492,7 @@ def test_purge_final_fence_blocks_changed_request_record_after_archive(
 def test_purge_final_fence_blocks_machine_policy_change(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    policy_path = tmp_path / "machine-policy.json"
-    _enabled_retention_policy(policy_path)
-    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_RETENTION_POLICY", str(policy_path))
+    _retention_settings(monkeypatch, tmp_path)
     request_id = "req_policy_fence"
 
     class PolicyChangingRequests(_ArchiveRequests):
@@ -497,10 +503,7 @@ def test_purge_final_fence_blocks_machine_policy_change(
             # The first purge read happens after the policy snapshot check;
             # change policy here to exercise the immediate pre-delete fence.
             if self.calls == 2:
-                policy_path.write_text(
-                    '{"policy-id":"p1","purge-enabled":false,"minimum-archive-age-seconds":0.01,"max-batch-size":2}',
-                    encoding="utf-8",
-                )
+                _retention_settings(monkeypatch, tmp_path, purge_enabled=False)
             return super().get_execution_request(root, request)
 
     fake = PolicyChangingRequests({"state": "completed"})
@@ -515,9 +518,7 @@ def test_purge_final_fence_blocks_machine_policy_change(
 def test_purge_final_fence_blocks_archive_mutation(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    policy_path = tmp_path / "machine-policy.json"
-    _enabled_retention_policy(policy_path)
-    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_RETENTION_POLICY", str(policy_path))
+    _retention_settings(monkeypatch, tmp_path)
     request_id = "req_archive_content_fence"
     archive_path: Path | None = None
 
@@ -546,9 +547,7 @@ def test_purge_final_fence_blocks_archive_mutation(
 def test_purge_final_fence_blocks_policy_withdrawal_at_delete_boundary(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    policy_path = tmp_path / "machine-policy.json"
-    _enabled_retention_policy(policy_path)
-    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_RETENTION_POLICY", str(policy_path))
+    _retention_settings(monkeypatch, tmp_path)
     request_id = "req_policy_final_boundary"
 
     class FinalPolicyChangingRequests(_ArchiveRequests):
@@ -557,10 +556,7 @@ def test_purge_final_fence_blocks_policy_withdrawal_at_delete_boundary(
         def get_execution_request(self, root: Path, request: str) -> dict[str, object]:
             self.calls += 1
             if self.calls == 2:
-                policy_path.write_text(
-                    '{"policy-id":"p1","purge-enabled":false,"minimum-archive-age-seconds":0.01,"max-batch-size":2}',
-                    encoding="utf-8",
-                )
+                _retention_settings(monkeypatch, tmp_path, purge_enabled=False)
             return super().get_execution_request(root, request)
 
     fake = FinalPolicyChangingRequests({"state": "completed"})
@@ -575,9 +571,7 @@ def test_purge_final_fence_blocks_policy_withdrawal_at_delete_boundary(
 def test_purge_final_fence_blocks_attempt_epoch_change_during_census(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    policy_path = tmp_path / "machine-policy.json"
-    _enabled_retention_policy(policy_path)
-    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_RETENTION_POLICY", str(policy_path))
+    _retention_settings(monkeypatch, tmp_path)
     request_id = "req_attempt_final_boundary"
 
     class FinalAttemptChangingRequests(_ArchiveRequests):
@@ -601,9 +595,7 @@ def test_purge_final_fence_blocks_attempt_epoch_change_during_census(
 def test_purge_final_fence_blocks_session_lineage_created_during_census(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    policy_path = tmp_path / "machine-policy.json"
-    _enabled_retention_policy(policy_path)
-    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_RETENTION_POLICY", str(policy_path))
+    _retention_settings(monkeypatch, tmp_path)
     request_id = "req_lineage_final_boundary"
     session = build_session_record(session_id="ses_lineage_boundary", execution_profile_id="review")
     write_session_record(tmp_path, session)
@@ -629,9 +621,7 @@ def test_purge_final_fence_blocks_session_lineage_created_during_census(
 def test_purge_blocks_session_lineage_pin_created_after_archive(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    policy_path = tmp_path / "machine-policy.json"
-    _enabled_retention_policy(policy_path)
-    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_RETENTION_POLICY", str(policy_path))
+    _retention_settings(monkeypatch, tmp_path)
     request_id = "req_pinned_after_archive"
     fake = _ArchiveRequests({"state": "completed"})
     request_dir = _archive_completed_request(tmp_path, request_id, fake)
@@ -734,9 +724,7 @@ def test_archive_is_provider_neutral_across_execution_profiles(tmp_path: Path) -
 def test_purge_is_provider_neutral_across_execution_profiles(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    policy_path = tmp_path / "machine-policy.json"
-    _enabled_retention_policy(policy_path)
-    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_RETENTION_POLICY", str(policy_path))
+    _retention_settings(monkeypatch, tmp_path)
     for profile_id in ("fake", "acp", "mcp-a2a"):
         request_id = f"req_purge_profile_{profile_id}"
         request_dir = tmp_path / ".audiagentic" / "runtime" / "agent-execution-gateway" / request_id
@@ -758,9 +746,7 @@ def test_purge_is_provider_neutral_across_execution_profiles(
 def test_purge_blocks_linked_lineage_across_provider_profiles(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    policy_path = tmp_path / "machine-policy.json"
-    _enabled_retention_policy(policy_path)
-    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_RETENTION_POLICY", str(policy_path))
+    _retention_settings(monkeypatch, tmp_path)
     for profile_id in ("fake", "acp", "mcp-a2a"):
         request_id = f"req_purge_linked_{profile_id}"
         session_id = f"ses_purge_linked_{profile_id}"
@@ -800,9 +786,7 @@ def test_lineage_mutation_fence_is_provider_neutral(tmp_path: Path) -> None:
 
 
 def test_purge_after_explicit_lineage_release_is_allowed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    policy_path = tmp_path / "machine-policy.json"
-    _enabled_retention_policy(policy_path)
-    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_RETENTION_POLICY", str(policy_path))
+    _retention_settings(monkeypatch, tmp_path)
     request_id = "req_purge_after_release"
     session_id = "ses_purge_after_release"
     session = build_session_record(session_id=session_id, execution_profile_id="acp")

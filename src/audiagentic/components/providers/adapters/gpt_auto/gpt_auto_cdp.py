@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+from collections.abc import Awaitable, Callable
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -28,6 +29,28 @@ def _selection_project_id(selection: object, expected_project_id: str | None) ->
     return None
 
 logger = logging.getLogger(__name__)
+
+_EXPAND_USER_PROMPT_FN = r"""({messageId}) => {
+  if (!messageId || /^(fallback-|virtualized-prompt-for-)/.test(messageId)) return false;
+  const roots = [];
+  for (const node of document.querySelectorAll('[data-message-id], [data-chatgpt-search-message-ids]')) {
+    const standard = node.getAttribute('data-message-id') === messageId
+      && node.getAttribute('data-message-author-role') === 'user';
+    const ids = [...new Set((node.getAttribute('data-chatgpt-search-message-ids') || '').trim().split(/\s+/))];
+    const block = node.closest('.block-BQZwFn');
+    const fallback = ids.length === 1 && ids[0] === messageId
+      && block && block.querySelector('[data-user-message-bubble="true"]');
+    if (!standard && !fallback) continue;
+    const root = standard ? (node.closest('article') || node) : block;
+    if (!roots.includes(root)) roots.push(root);
+  }
+  const controls = roots.flatMap(root => Array.from(root.querySelectorAll('button,[role="button"]')))
+    .filter(button => button.getAttribute('aria-expanded') === 'false'
+      && (button.innerText || button.getAttribute('aria-label') || '').trim().toLowerCase() === 'show more');
+  if (controls.length !== 1) return false;
+  controls[0].click();
+  return true;
+}"""
 
 class ProjectReadinessError(RuntimeError):
     pass
@@ -230,6 +253,53 @@ _COMPOSER_READY_FN = r"""() => {
       && style.display !== "none" && style.opacity !== "0"
   };
 }"""
+_COMPOSER_VALIDATE_FN = r"""(text) => {
+  text = String(text || '');
+  const editor = document.querySelector('#prompt-textarea') || Array.from(
+    document.querySelectorAll('[contenteditable="true"]')
+  ).find(el => /^(new chat in\b|ask chatgpt$|message chatgpt$)/i.test(String(el.getAttribute('aria-label') || '').trim()));
+  if (!editor || !editor.isContentEditable) {
+    return {validated: false, ready: false, clicked: false, reason: 'composer-unavailable'};
+  }
+  const renderedText = root => {
+    const blockTags = new Set([
+      'ADDRESS', 'ARTICLE', 'ASIDE', 'BLOCKQUOTE', 'DD', 'DIV', 'DL', 'DT', 'FIELDSET', 'FIGURE', 'FOOTER', 'FORM',
+      'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'HEADER', 'LI', 'MAIN', 'NAV', 'OL', 'P', 'PRE', 'SECTION', 'TABLE', 'TR', 'UL'
+    ]);
+    const walk = node => {
+      if (node.nodeType === Node.TEXT_NODE) return node.nodeValue || '';
+      if (node.nodeType !== Node.ELEMENT_NODE) return '';
+      const element = node;
+      const link = element.getAttribute('text-link-href');
+      if (link) return link;
+      if (element.getAttribute('data-markdown-copy') === 'exclude') return '';
+      if (element.matches('button, [role=button]')) return '';
+      if (element.tagName === 'BR') return '\n';
+      let value = '';
+      for (const child of element.childNodes) value += walk(child);
+      if (element.tagName === 'DIV' && value === '\n') return '\n\n';
+      if (blockTags.has(element.tagName) && !value.endsWith('\n')) value += '\n';
+      return value;
+    };
+    return walk(root)
+      .replace(/\u00a0/g, ' ')
+      .replace(/([`])\s+(https?:\/\/)/g, '$1$2')
+      .replace(/(https?:\/\/[^\s`]+)\s+([`])/g, '$1$2')
+      .replace(/\n+$/, '');
+  };
+  const sourceText = value => String(value || '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .replace(/\n+$/, '');
+  if (renderedText(editor) !== sourceText(text)) {
+    return {validated: false, ready: false, clicked: false, reason: 'composer-text-mismatch'};
+  }
+  const button = document.querySelector('[data-testid="send-button"], button[aria-label*="Send" i]');
+  if (!button || button.disabled || button.getAttribute('aria-disabled') === 'true' || !button.getClientRects().length) {
+    return {validated: true, ready: false, clicked: false, reason: 'send-unavailable'};
+  }
+  return {validated: true, ready: true};
+}"""
 
 
 class ComposerSubmissionTimeout(TimeoutError):
@@ -319,6 +389,47 @@ _SNAPSHOT_FN = r"""
     const value = owner?.getAttribute('data-content-search-turn-key');
     return value ? String(value) : null;
   };
+  const fallbackBlockMessageId = block => {
+    const carriers = block.hasAttribute('data-chatgpt-search-message-ids')
+      ? [block, ...block.querySelectorAll('[data-chatgpt-search-message-ids]')]
+      : Array.from(block.querySelectorAll('[data-chatgpt-search-message-ids]'));
+    const owned = carriers.filter(carrier => carrier.closest('.block-BQZwFn') === block);
+    const ids = new Set();
+    for (const carrier of owned) {
+      const raw = (carrier.getAttribute('data-chatgpt-search-message-ids') || '').trim();
+      if (!raw) continue;
+      // The current renderer repeats the same UUID in one attribute. A
+      // repeated identical token is one proven identity; genuinely different
+      // tokens are ambiguous and must not be guessed.
+      const tokens = [...new Set(raw.split(/\s+/))];
+      if (tokens.length !== 1) return null;
+      ids.add(tokens[0]);
+    }
+    return ids.size === 1 ? [...ids][0] : null;
+  };
+  // Normalize duplicate renderer copies before deriving latest-turn,
+  // unanswered-prompt, activity-owner, or completion state below. Doing this
+  // later fixes messageRefs/counts but leaves those earlier decisions based
+  // on the duplicated raw order. Preserve logical position and use a painted
+  // copy when the first copy is hidden/virtualized. Do not infer identity
+  // from text or synthetic ordinal IDs.
+  const uniqueFallbackBlocks = [];
+  const durableFallbackBlockIndexes = new Map();
+  for (const block of fallbackBlocks) {
+    const role = fallbackBlockRole(block);
+    const messageId = role ? fallbackBlockMessageId(block) : null;
+    const key = messageId ? `${role}:${messageId}` : null;
+    const priorIndex = key ? durableFallbackBlockIndexes.get(key) : undefined;
+    if (priorIndex === undefined) {
+      if (key) durableFallbackBlockIndexes.set(key, uniqueFallbackBlocks.length);
+      uniqueFallbackBlocks.push(block);
+      continue;
+    }
+    if (!shown(uniqueFallbackBlocks[priorIndex]) && shown(block)) {
+      uniqueFallbackBlocks[priorIndex] = block;
+    }
+  }
+  fallbackBlocks = uniqueFallbackBlocks;
   // The virtualized renderer can expose both completed blocks with zero
   // geometry and newest-first DOM order. In that black-and-white case the
   // provider's shared content-turn key is stronger than either layout or DOM
@@ -394,39 +505,6 @@ _SNAPSHOT_FN = r"""
     // renderer does not expose message UUIDs.
     let userIndex = 0;
     let assistantIndex = 0;
-    // The real ChatGPT message UUID rides in `data-chatgpt-search-message-ids`
-    // on a descendant of the labelled block, not on the block itself and not
-    // on `[data-user-message-bubble="true"]` (that attribute is no longer
-    // rendered by the current renderer). Read it from whichever element in
-    // the block actually carries it before falling back to a synthetic id.
-    // Collect every candidate carrier (self plus all descendants), keep only
-    // the ones actually owned by this block (nearest `.block-BQZwFn`
-    // ancestor is this block, not a nested/foreign one -- a querySelector
-    // that stopped at the first match could silently shadow a later owned
-    // carrier with an earlier foreign one, or pick an arbitrary one of two
-    // disagreeing owned carriers), and fail closed to null (never guess)
-    // unless every owned carrier resolves to exactly one single-id value.
-    const realMessageId = block => {
-      const carriers = block.hasAttribute('data-chatgpt-search-message-ids')
-        ? [block, ...block.querySelectorAll('[data-chatgpt-search-message-ids]')]
-        : Array.from(block.querySelectorAll('[data-chatgpt-search-message-ids]'));
-      const owned = carriers.filter(carrier => carrier.closest('.block-BQZwFn') === block);
-      const ids = new Set();
-      for (const carrier of owned) {
-        const raw = (carrier.getAttribute('data-chatgpt-search-message-ids') || '').trim();
-        if (!raw) continue;
-        // The current renderer repeats the same UUID in one attribute.  A
-        // repeated identical token is still one proven identity; only
-        // genuinely different tokens are ambiguous.
-        const tokens = [...new Set(raw.split(/\s+/))];
-        // A carrier's own value is ambiguous (more than one space-separated
-        // id, no proven canonical token) -- fail the whole block closed
-        // rather than silently pick a token from it.
-        if (tokens.length !== 1) return null;
-        ids.add(tokens[0]);
-      }
-      return ids.size === 1 ? [...ids][0] : null;
-    };
     for (const block of fallbackBlocks) {
       const role = fallbackBlockRole(block);
       if (role === 'user') {
@@ -436,13 +514,40 @@ _SNAPSHOT_FN = r"""
         // identity across polls, independent of which blocks happen to
         // expose a real id on a given poll.
         const synthetic = `fallback-user-${userIndex++}`;
-        messageEntries.push({role: 'user', el: content, messageId: realMessageId(block) || synthetic});
+        messageEntries.push({role: 'user', el: content, messageId: fallbackBlockMessageId(block) || synthetic});
       } else if (role === 'assistant') {
         const synthetic = `fallback-assistant-${assistantIndex++}`;
-        messageEntries.push({role: 'assistant', el: block, messageId: realMessageId(block) || synthetic});
+        messageEntries.push({role: 'assistant', el: block, messageId: fallbackBlockMessageId(block) || synthetic});
       }
     }
   }
+  // The live project renderer can mount a second DOM copy of the same user
+  // message after the assistant answer (same durable provider UUID). Treat
+  // those copies as one logical message, otherwise the duplicate looks like
+  // a later user turn and makes a valid terminal assistant response
+  // uncorrelatable. Keep the first DOM position for ordering, but prefer a
+  // painted duplicate when the original copy is virtualized/hidden. Synthetic
+  // ordinal IDs are deliberately not deduplicated: without a durable provider
+  // identity, equal role/text is not enough to prove two nodes are one turn.
+  const uniqueMessageEntries = [];
+  const durableMessageEntryIndexes = new Map();
+  for (const entry of messageEntries) {
+    const messageId = entry.messageId;
+    const durableId = typeof messageId === "string" && messageId &&
+      !messageId.startsWith("fallback-");
+    const key = durableId ? `${entry.role}:${messageId}` : null;
+    const priorIndex = key ? durableMessageEntryIndexes.get(key) : undefined;
+    if (priorIndex === undefined) {
+      if (key) durableMessageEntryIndexes.set(key, uniqueMessageEntries.length);
+      uniqueMessageEntries.push(entry);
+      continue;
+    }
+    const prior = uniqueMessageEntries[priorIndex];
+    if (!shown(prior.el) && shown(entry.el)) {
+      uniqueMessageEntries[priorIndex] = entry;
+    }
+  }
+  messageEntries.splice(0, messageEntries.length, ...uniqueMessageEntries);
   let fallbackActivityOwnerPromptMessageId = null;
   const userMessageEntries = messageEntries.filter(m => m.role === "user");
   const assistantMessageEntries = messageEntries.filter(m => m.role === "assistant");
@@ -855,7 +960,22 @@ _SNAPSHOT_FN = r"""
       ? fallbackActivityOwnerPromptMessageId
       : null;
   };
+  const structuralActivityOwnerFor = node => {
+    const element = node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
+    const turn = element?.closest('[data-content-search-turn-key], [data-turn-key]');
+    if (!turn) return undefined;
+    // Activity roots can wrap both the user node and its streamed response.
+    // Document order alone then attributes the root to the preceding user.
+    // Require one durable/logical user identity inside this exact turn scope;
+    // a missing or ambiguous scoped owner must not fall back to another turn.
+    const ids = new Set(progressUserEntries
+      .filter(entry => turn.contains(entry.el))
+      .map(entry => entry.messageId));
+    return ids.size === 1 ? [...ids][0] : null;
+  };
   const ownerPromptFor = node => {
+    const structuralOwner = structuralActivityOwnerFor(node);
+    if (structuralOwner !== undefined) return structuralOwner;
     const fallbackOwner = fallbackActivityOwnerFor(node);
     if (fallbackOwner) return fallbackOwner;
     while (ownerUserIndex >= 0) {
@@ -873,6 +993,8 @@ _SNAPSHOT_FN = r"""
   };
   const ownerPromptIdFor = node => {
     if (!node) return null;
+    const structuralOwner = structuralActivityOwnerFor(node);
+    if (structuralOwner !== undefined) return structuralOwner;
     const fallbackOwner = fallbackActivityOwnerFor(node);
     if (fallbackOwner) return fallbackOwner;
     for (let index = progressUserEntries.length - 1; index >= 0; index--) {
@@ -1079,6 +1201,13 @@ _SNAPSHOT_FN = r"""
     if (kind) toolActivityCounts[kind] = (toolActivityCounts[kind] || 0) + 1;
   }
   const domSignals = {};
+  // Chrome can retain its net-error document until the background tab is
+  // navigated again. Do not confuse quoted error codes in a chat with it.
+  const networkError = document.querySelector('#main-frame-error .error-code');
+  const browserNetworkError = !!networkError
+    && /^(?:DNS_PROBE_|ERR_)[A-Z0-9_]+$/.test(networkError.textContent.trim())
+    && !document.querySelector('[data-message-author-role], [contenteditable="true"], textarea');
+  if (browserNetworkError) domSignals['browser-network-error'] = true;
   // The labelled renderer places its response action bar next to the
   // block-list, not inside the assistant block. Admit only a direct sibling
   // toolbar whose bounded wrapper ends with this exact latest assistant.
@@ -1125,7 +1254,12 @@ _SNAPSHOT_FN = r"""
     return fragments.some(fragment => lowered.includes(String(fragment).toLowerCase()));
   };
   const outsideMessageTextMatches = (spec, selectors) => {
-    const messageNodes = messageEntries.map(entry => entry.el);
+    const messageNodes = [
+      ...messageEntries.map(entry => entry.el),
+      // Unsent source code can quote provider error messages. It is caller
+      // input, not a load-error banner, including while insertion settles.
+      ...document.querySelectorAll('[contenteditable="true"], textarea, input')
+    ];
     const candidates = new Set();
     for (const selector of selectors) {
       for (const root of document.querySelectorAll(selector)) {
@@ -1162,6 +1296,8 @@ _SNAPSHOT_FN = r"""
           })
         );
   }
+  // Reuse bounded same-conversation observation recovery for native errors.
+  if (browserNetworkError) domSignals['conversation-load-failed'] = true;
   // Bind structural completion evidence to the assistant turn whose action
   // bar was inspected. A later unrelated turn must not complete an earlier
   // request merely because its controls are document-global.
@@ -1209,7 +1345,12 @@ _SNAPSHOT_FN = r"""
       "SECTION", "TABLE", "TR", "UL"
     ]);
     const walk = (node) => {
-      if (node.nodeType === Node.TEXT_NODE) return node.nodeValue || "";
+      if (node.nodeType === Node.TEXT_NODE) {
+        const value = node.nodeValue || "";
+        // Whitespace-only nodes between HTML blocks are layout padding;
+        // indentation within source text belongs to prompt correlation.
+        return !value.trim() && value.includes("\n") ? "\n" : value;
+      }
       if (node.nodeType !== Node.ELEMENT_NODE) return "";
       const element = /** @type {Element} */ (node);
       if (element.getAttribute("data-markdown-copy") === "exclude") return "";
@@ -1222,7 +1363,7 @@ _SNAPSHOT_FN = r"""
     };
     return walk(root)
       .replace(/[ \t\f\v]+/g, " ")
-      .replace(/[ ]*\n[ ]*/g, "\n")
+      .replace(/[ ]*\n/g, "\n")
       .replace(/\n+/g, "\n")
       .replace(/\n+$/, "")
       .trim();
@@ -1236,6 +1377,16 @@ _SNAPSHOT_FN = r"""
     // than stripping their labels from the resulting string: a real prompt is
     // allowed to contain words such as "Show more".
     clone.querySelectorAll('button, [role="button"], [aria-label*="show more" i], [aria-label*="show less" i]').forEach(el => el.remove());
+    // The user renderer exports fenced language in data-language without
+    // painting a label. Restore that semantic source field, not arbitrary
+    // text, so the existing durable fingerprint remains unchanged.
+    clone.querySelectorAll('pre[data-markdown-copy="code-block"] > code[data-language][data-markdown-copy-content="true"]').forEach(code => {
+      const pre = code.parentElement;
+      const language = String(code.getAttribute('data-language') || '').trim();
+      if (language && pre.childElementCount === 1 && pre.firstElementChild === code) {
+        code.before(document.createTextNode(language + '\n'));
+      }
+    });
     clone.querySelectorAll('[aria-hidden="true"]').forEach(el => {
       if (String(el.innerText || el.textContent || "").trim() === "…") el.remove();
     });
@@ -1408,6 +1559,24 @@ _SNAPSHOT_FN = r"""
   const messageRefs = messageEntries.map((m, sequence) => ({
     role: m.role,
     messageId: m.messageId,
+    rendererTurnId: fallbackTurnIdentity(m.el),
+    rendererUnitId: (() => {
+      const owner = m.el.closest('[data-content-search-unit-key]');
+      if (owner) return owner.getAttribute('data-content-search-unit-key');
+      const keys = [...new Set(Array.from(m.el.querySelectorAll('[data-content-search-unit-key]'))
+        .map(el => el.getAttribute('data-content-search-unit-key')).filter(Boolean))];
+      if (keys.length === 1) return keys[0];
+      // Thinking/intermediate blocks may sit beside, not inside, the one
+      // active assistant unit. Never infer a unit if the turn renders more
+      // than one branch. Exact prompt and turn checks remain in Python.
+      const turn = m.el.closest('[data-content-search-turn-key]');
+      const active = turn && m.role === 'assistant' ? [...new Set(
+        Array.from(turn.querySelectorAll('[data-content-search-unit-key]'))
+          .filter(el => el.closest('[data-content-search-turn-key]') === turn)
+          .map(el => el.getAttribute('data-content-search-unit-key'))
+          .filter(key => key && key.endsWith(':assistant')))] : [];
+      return active.length === 1 ? active[0] : null;
+    })(),
     text: m.role === "user" ? userText(m.el) : assistantText(m.el),
     ...(m.role === "assistant" ? {markdown: assistantMarkdown(m.el)} : {}),
     ...(m.role === "user" ? (() => {
@@ -1450,7 +1619,7 @@ _SNAPSHOT_FN = r"""
     domActivityDigest,
     domActivityOwnerPromptMessageId,
     errorAlertOccurrences,
-    errorPresent: !!document.querySelector('.error-page, [data-testid*="error"]')
+    errorPresent: browserNetworkError || !!document.querySelector('.error-page, [data-testid*="error"]')
   };
 }
 """
@@ -1505,6 +1674,22 @@ _RETRY_CONVERSATION_LOAD_FN = r"""(input = {}) => {
   const currentPath = normalize(new URL(location.href).pathname).replace(/\/$/, '');
   // Revalidate the durable conversation in the same CDP evaluation as the
   // click. A page handle can be reused after navigation between snapshots.
+  const networkError = document.querySelector('#main-frame-error .error-code');
+  const targetUrl = input.browserTargetUrl ? new URL(input.browserTargetUrl) : null;
+  const nativeErrorDocument = location.href.startsWith('chrome-error://');
+  const exactNetworkRoute = location.origin === 'https://chatgpt.com' && currentPath === expectedPath;
+  const exactFailedTarget = nativeErrorDocument && targetUrl
+    && targetUrl.origin === 'https://chatgpt.com'
+    && normalize(targetUrl.pathname).replace(/\/$/, '') === expectedPath;
+  if (expectedPath && (exactNetworkRoute || exactFailedTarget) && networkError
+      && /^(?:DNS_PROBE_|ERR_)[A-Z0-9_]+$/.test(networkError.textContent.trim())
+      && !document.querySelector('[data-message-author-role], [contenteditable="true"], textarea')) {
+    // Same exact conversation, same tab, no activation and no Send. The
+    // caller owns deadline/backoff and durable mutation-owner validation.
+    if (exactFailedTarget) location.replace(targetUrl.href);
+    else location.reload();
+    return true;
+  }
   if (expectedPath && currentPath !== expectedPath) return false;
   const loadText = 'could not load this chatgpt conversation';
   const bodyText = normalize(document.body && (document.body.innerText || document.body.textContent));
@@ -1635,13 +1820,23 @@ class GptAutoCdpBrowserController(CdpBrowserController):
     async def retry_conversation_load(
         self, page: CdpPageRef, *, expected_path: str | None = None
     ) -> bool:
-        """Click the provider conversation-load Retry control only."""
+        """Retry the exact conversation, including Chrome's net-error page."""
+        # A net-error document reports chrome-error:// internally, whereas
+        # Target.getTargetInfo retains the failed destination. Resolve that
+        # exact target again rather than trusting a cached route.
+        current = await self.page_by_handle(page.handle)
+        if current.target_id != page.target_id:
+            return False
         result = await self.evaluate(
-            page,
+            current,
             _RETRY_CONVERSATION_LOAD_FN,
-            {"expectedPath": expected_path or ""},
+            {"expectedPath": expected_path or "", "browserTargetUrl": current.url},
         )
         return bool(result)
+
+    async def expand_user_prompt(self, page: CdpPageRef, message_id: str) -> bool:
+        """Expand only the exact submitted user message without foregrounding."""
+        return bool(await self.evaluate(page, _EXPAND_USER_PROMPT_FN, {"messageId": message_id}))
 
     async def materialize_latest_assistant_turn(self, page: CdpPageRef) -> bool:
         """Bring the current assistant turn into the rendered viewport.
@@ -1758,16 +1953,27 @@ class GptAutoCdpBrowserController(CdpBrowserController):
     # the turn-scale submission timeout: the caller must reconcile the now
     # ambiguous send against authoritative DOM state without clicking again.
     _SEND_CLICK_ACK_TIMEOUT_SECONDS = 3.0
+    _INSERT_TEXT_ACK_TIMEOUT_SECONDS = 3.0
     # Give React's controlled composer a realistic render/input turn between
     # insertion and the synthetic Send click.  Keeping this outside the DOM
     # evaluator avoids batching both browser actions into one CDP task.
     _SUBMIT_DEFAULT_TIMEOUT_SECONDS = 15.0
 
     async def submit(
-        self, page: CdpPageRef, text: str, *, timeout: float | None = None
+        self,
+        page: CdpPageRef,
+        text: str,
+        *,
+        timeout: float | None = None,
+        stage_callback: Callable[[str], Awaitable[None]] | None = None,
     ) -> dict[str, Any]:
         if not isinstance(text, str) or not text.strip():
             raise ValueError("text must be a non-empty string")
+
+        async def notify_stage(stage: str) -> None:
+            if stage_callback is not None:
+                await stage_callback(stage)
+
         send_attempted = False
         stage = "composer-insertion"
         try:
@@ -1778,6 +1984,12 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                 stage = "composer-readiness"
                 await asyncio.sleep(self._PAGE_READY_PAUSE_SECONDS)
                 stage = "composer-insertion"
+                # A prior proven-unsent attempt may already have populated
+                # this exact composer. Avoid re-triggering expensive rich-text
+                # rendering; this read never authorizes Send on its own.
+                async with asyncio.timeout(self._SEND_CLICK_ACK_TIMEOUT_SECONDS):
+                    existing = await self.evaluate(page, _COMPOSER_VALIDATE_FN, text)
+                draft_present = isinstance(existing, dict) and existing.get("validated") is True
                 await self.evaluate(
                     page,
                     r"""(text) => {
@@ -1792,23 +2004,67 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                     }""",
                     text,
                 )
-                await self.insert_text(page, text)
+                await notify_stage("composer-focused")
+                if not draft_present:
+                    try:
+                        async with asyncio.timeout(self._INSERT_TEXT_ACK_TIMEOUT_SECONDS):
+                            await self.insert_text(page, text)
+                    except TimeoutError:
+                        # Input.insertText can apply before its CDP reply is lost.
+                        # Never insert again: only an exact semantic draft match
+                        # permits this same submission attempt to continue.
+                        async with asyncio.timeout(self._SEND_CLICK_ACK_TIMEOUT_SECONDS):
+                            inserted = await self.evaluate(page, _COMPOSER_VALIDATE_FN, text)
+                        if not (
+                            isinstance(inserted, dict)
+                            and inserted.get("validated") is True
+                        ):
+                            raise
+                await asyncio.sleep(self._TYPED_PAUSE_SECONDS)
+                await notify_stage("composer-filled")
                 # Let controlled-editor input settle before the Send control
                 # is queried or clicked. This is deliberately independent of
                 # the shorter generic browser-action pause.
-                await asyncio.sleep(self._TYPED_PAUSE_SECONDS)
                 # The send-side DOM check below re-reads and compares the
                 # composer text.  Input.insertText has already delivered the
                 # exact caller text to the focused editor, so a second read
                 # here only adds another CDP race window.
                 typed = text
+                composer_validation_recorded = False
                 while True:
                     # One synchronous DOM operation verifies both readiness
                     # conditions and clicks once. No browser-side timer survives
                     # a React navigation, and no Enter bypasses a disabled Send.
                     stage = "send-button"
-                    send_attempted = True
                     await asyncio.sleep(self._action_pause_seconds)
+                    async with asyncio.timeout(self._SEND_CLICK_ACK_TIMEOUT_SECONDS):
+                        validation = await self.evaluate(
+                            page,
+                            _COMPOSER_VALIDATE_FN,
+                            text,
+                        )
+                    if not (
+                        isinstance(validation, dict)
+                        and validation.get("validated") is True
+                        and validation.get("ready") is True
+                    ):
+                        send_attempted = False
+                        stage = "composer-readiness"
+                        await asyncio.sleep(self._SUBMIT_POLL_SECONDS)
+                        continue
+                    if not composer_validation_recorded:
+                        await notify_stage("composer-validated")
+                        composer_validation_recorded = True
+                    # This awaited callback must durably record intent before
+                    # the external browser click. If persistence fails, the
+                    # click does not happen. A later crash after this point is
+                    # ambiguous even when the provider's acknowledgement is
+                    # lost; the marker never claims provider acceptance.
+                    await notify_stage("send-intent")
+                    # A timeout while recording intent cannot mean the
+                    # browser click happened. Mark dispatch only after the
+                    # durable pre-click checkpoint has returned.
+                    send_attempted = True
                     async with asyncio.timeout(self._SEND_CLICK_ACK_TIMEOUT_SECONDS):
                         sent = await self.evaluate(
                             page,
@@ -1870,6 +2126,7 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                         # click has already happened, and the next DOM read
                         # must not race React's route/message insertion.
                         await asyncio.sleep(self._action_pause_seconds)
+                        await notify_stage("send-click-acknowledged")
                         return {"actionComplete": True, "typedText": typed,
                                 "sendButtonClicked": True, "enterDispatched": False}
                     send_attempted = False

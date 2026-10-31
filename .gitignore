@@ -11,7 +11,14 @@
 *~
 
 # --- Agent / tool working directories ---
-/.audiagentic/
+/.agents/mcp_config.json
+/.qwen/settings.json
+/.qwen/settings.json.orig
+# Tracked project settings (docs/guides/PROJECT_SETTINGS.md); everything else is local.
+/.audiagentic/*
+!/.audiagentic/settings.yaml
+!/.audiagentic/agents/
+!/.audiagentic/templates/
 /.pi-subagents/
 /.claude/
 /.cline/
@@ -48,6 +55,16 @@
 /COPILOT.md
 /GEMINI.md
 /QWEN.md
+/SYSTEM.md
+
+# Generated backups, root experiments and retired browser-debug dependencies.
+/_gp14_review_output.txt
+/test_section_parser.py
+/package.json
+/package-lock.json
+/.uv-cache*/
+/.ruff_cache/
+/tmp/
 
 # --- AUDiaGentic runtime / private state ---
 /.audiagentic/components/
@@ -142,3 +159,10 @@ crash-*.txt
 
 # Windows system drive placeholder
 %SystemDrive%/
+
+# Per-run CI evidence is uploaded with bounded retention, not committed.
+.ci-results/
+.ci-plan/
+.ci-audit/
+# Durable local ownership/recovery evidence is never source data.
+.audiagentic/state/

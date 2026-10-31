@@ -34,7 +34,7 @@ def test_build_record_defaults(tmp_path: Path) -> None:
 
 
 def test_generate_request_id_includes_safe_project_slug() -> None:
-    request_id = store.generate_request_id(Path(r"C:\example-dev-root\Big Cherry"))
+    request_id = store.generate_request_id(Path("projects") / "Big Cherry")
     assert request_id.startswith("req_big-cherry_")
     assert len(request_id.rsplit("_", 1)[-1]) == 12
 
@@ -78,14 +78,21 @@ def test_build_record_rejects_empty_prompt_body() -> None:
     assert exc_info.value.code == "VAL-AGW-007"
 
 
-def test_build_record_rejects_non_positive_timeout(tmp_path: Path) -> None:
-    with pytest.raises(AudiaGenticError) as exc_info:
-        store.build_record(execution_profile_id="default", prompt_body="x", timeout_seconds=0)
-    assert exc_info.value.code == "VAL-AGW-008"
+def test_records_carry_no_execution_timeout_and_migrate_it_out(tmp_path: Path) -> None:
+    """SH22: the caller's wait window is not execution policy; old records drop it."""
+    record = store.build_record(execution_profile_id="default", prompt_body="x")
+    assert "timeout-seconds" not in record
+    store.write_record(tmp_path, record)
+    import json
 
-    with pytest.raises(AudiaGenticError) as exc_info:
-        store.build_record(execution_profile_id="default", prompt_body="x", timeout_seconds=-5)
-    assert exc_info.value.code == "VAL-AGW-008"
+    from audiagentic.components.agents.agents_paths import gateway_request_path
+
+    path = gateway_request_path(tmp_path, record["request-id"])
+
+    persisted = json.loads(path.read_text(encoding="utf-8"))
+    persisted["timeout-seconds"] = 120
+    path.write_text(json.dumps(persisted), encoding="utf-8")
+    assert "timeout-seconds" not in store.read_record(tmp_path, record["request-id"])
 
 
 def test_write_and_read_round_trip(tmp_path: Path) -> None:
@@ -242,6 +249,38 @@ def test_concurrent_admission_creates_one_record_for_one_key(tmp_path: Path) -> 
     assert len({request_id for request_id, _ in results}) == 1
     assert sum(created for _, created in results) == 1
     assert len(store.list_records(tmp_path)) == 1
+
+
+def test_concurrent_provider_session_admission_assigns_distinct_ordinals(tmp_path: Path) -> None:
+    """RV1259 follow-up: the enqueue-ordinal fallback runs before the lock is
+    taken (store/_admission.py) when enqueue-sequence.json is missing. Several
+    distinct provider-session records racing that missing file must still get
+    unique, gapless ordinals -- none may reuse a stale pre-lock scan result."""
+    barrier = threading.Barrier(8)
+    results: list[int] = []
+    errors: list[BaseException] = []
+
+    def submit(index: int) -> None:
+        try:
+            candidate = store.build_record(
+                execution_profile_id="default", prompt_body="private", prompt_digest="a" * 64,
+                context_fingerprint="b" * 64, provider_transport_kind="provider-session",
+                session_id=f"ses_{index}",
+            )
+            barrier.wait(timeout=5)
+            record, _ = store.admit_record(tmp_path, candidate, idempotency_key=f"key-{index}")
+            results.append(record["enqueue-ordinal"])
+        except BaseException as exc:  # pragma: no cover - asserted below
+            errors.append(exc)
+
+    threads = [threading.Thread(target=submit, args=(i,)) for i in range(8)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=10)
+
+    assert not errors, errors
+    assert sorted(results) == list(range(1, 9))
 
 
 @pytest.mark.no_parallel
@@ -1568,3 +1607,116 @@ def test_bounded_recovery_error_handles_plain_and_mapping_errors() -> None:
     assert bounded["kind"] == "agents"
     assert bounded["details"]["blob"] == "y" * 256
     assert store.bounded_recovery_error(None) is None
+
+
+def test_list_records_ignores_infrastructure_and_unadmitted_candidates(tmp_path, caplog):
+    from audiagentic.components.agents.agents_paths import gateway_root
+
+    root = gateway_root(tmp_path)
+    for name in ("archive", "runtime", "sessions", "idempotency", "maintenance-locks", "infrastructure", "not-a-request"):
+        directory = root / name
+        directory.mkdir(parents=True)
+        if name in {"sessions", "idempotency"}:
+            # Preserve these two existing exclusions even with a record file.
+            (directory / "record.json").write_text("{not request json", encoding="utf-8")
+        else:
+            (directory / "infrastructure.bin").write_bytes(b"not a canonical request")
+    candidate = root / "req_preparation_candidate"
+    candidate.mkdir()
+    (candidate / "private-preparation.bin").write_bytes(b"protected preparation bytes")
+    non_file = root / "req_record_is_directory"
+    (non_file / "record.json").mkdir(parents=True)
+    (root / "req_not_a_directory").write_text("infrastructure file", encoding="utf-8")
+    valid = store.build_record(execution_profile_id="default", prompt_body="valid")
+    historical_id = store.build_record(request_id="req_old", execution_profile_id="default", prompt_body="old")
+    store.write_record(tmp_path, valid)
+    store.write_record(tmp_path, historical_id)
+    before = {path.relative_to(root): path.read_bytes() for path in root.rglob("*") if path.is_file()}
+    with caplog.at_level("WARNING"):
+        listed = store.list_records(tmp_path)
+    assert {record["request-id"] for record in listed} == {valid["request-id"], "req_old"}
+    assert not caplog.records
+    assert {path.relative_to(root): path.read_bytes() for path in root.rglob("*") if path.is_file()} == before
+    assert not (candidate / "mutation.lock").exists()
+
+
+@pytest.mark.parametrize("request_id", ["req_corrupt", "nonstandard-corrupt"])
+@pytest.mark.parametrize("malformed", ["{invalid json", "[]", '{"unexpected": true}'])
+def test_list_records_warns_for_malformed_present_request(tmp_path, caplog, malformed, request_id):
+    path = gateway_request_path(tmp_path, request_id)
+    path.parent.mkdir(parents=True)
+    path.write_text(malformed, encoding="utf-8")
+    before = path.read_bytes()
+    with caplog.at_level("WARNING"):
+        assert store.list_records(tmp_path) == []
+    warnings = [
+        entry for entry in caplog.records
+        if entry.levelname == "WARNING" and getattr(entry, "request-id", None) == request_id
+    ]
+    assert any(entry.getMessage() == "skipping unreadable gateway request" for entry in warnings)
+    assert any(entry.exc_info for entry in warnings)
+    assert path.read_bytes() == before
+
+
+def test_list_records_silently_skips_record_removed_after_discovery(tmp_path, monkeypatch, caplog):
+    from audiagentic.components.agents.gateway.store import _records
+
+    disappearing = store.build_record(execution_profile_id="default", prompt_body="removed concurrently")
+    retained = store.build_record(execution_profile_id="default", prompt_body="retained")
+    store.write_record(tmp_path, disappearing)
+    store.write_record(tmp_path, retained)
+    original = _records.read_record
+
+    def remove_then_read(root, request_id, **kwargs):
+        if request_id == disappearing["request-id"]:
+            # Test-only simulation of concurrent retention after is_file().
+            gateway_request_path(root, request_id).unlink()
+        return original(root, request_id, **kwargs)
+
+    monkeypatch.setattr(_records, "read_record", remove_then_read)
+    with caplog.at_level("WARNING"):
+        listed = store.list_records(tmp_path)
+    assert [record["request-id"] for record in listed] == [retained["request-id"]]
+    assert not caplog.records
+
+
+def test_list_records_still_warns_when_present_record_cannot_be_read(tmp_path, monkeypatch, caplog):
+    from audiagentic.components.agents.gateway.store import _records
+
+    record = store.build_record(execution_profile_id="default", prompt_body="present")
+    path = store.write_record(tmp_path, record)
+    before = path.read_bytes()
+
+    def unreadable(*args, **kwargs):
+        raise AudiaGenticError("RES-AGW-001", "agents", "read failed", {})
+
+    monkeypatch.setattr(_records, "read_record", unreadable)
+    with caplog.at_level("WARNING"):
+        assert store.list_records(tmp_path) == []
+    assert any(entry.getMessage() == "skipping unreadable gateway request" for entry in caplog.records)
+    assert path.read_bytes() == before
+
+
+@pytest.mark.parametrize("request_id", ["external-work-42", "archive"])
+def test_list_records_preserves_valid_explicit_non_req_id(tmp_path, caplog, request_id):
+    record = store.build_record(
+        request_id=request_id, execution_profile_id="default", prompt_body="explicit ID",
+    )
+    path = store.write_record(tmp_path, record)
+    before = path.read_bytes()
+    with caplog.at_level("WARNING"):
+        listed = store.list_records(tmp_path)
+    assert [item["request-id"] for item in listed] == [request_id]
+    assert not caplog.records
+    assert path.read_bytes() == before
+
+
+@pytest.mark.parametrize("reserved", ["sessions", "idempotency"])
+def test_list_records_keeps_existing_reserved_directory_exclusions(tmp_path, caplog, reserved):
+    record = store.build_record(request_id=reserved, execution_profile_id="default", prompt_body="reserved")
+    path = store.write_record(tmp_path, record)
+    before = path.read_bytes()
+    with caplog.at_level("WARNING"):
+        assert store.list_records(tmp_path) == []
+    assert not caplog.records
+    assert path.read_bytes() == before

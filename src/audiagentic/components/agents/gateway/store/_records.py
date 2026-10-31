@@ -15,11 +15,18 @@ from typing import Any
 from audiagentic.components.agents.agents_paths import (
     gateway_request_path,
     gateway_root,
-    gateway_timeline_path,
     gateway_timeline_index_path,
+    gateway_timeline_path,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError, redact_details
-from audiagentic.foundation.io import atomic_write_json, iter_ndjson, last_ndjson, load_ndjson, read_text_with_retry, tail_ndjson
+from audiagentic.foundation.io import (
+    atomic_write_json,
+    iter_ndjson,
+    last_ndjson,
+    read_text_with_retry,
+    tail_ndjson,
+)
+from audiagentic.foundation.observability.journal_segments import has_segments, head_read_lock
 from audiagentic.foundation.time import now_iso_z
 
 from . import _shared
@@ -64,6 +71,10 @@ def _redact_error(error: BaseException | dict[str, Any] | None) -> dict[str, Any
             details = _project_bounded_recovery_error_details(error.details)
             if details:
                 projected["details"] = details
+        elif error.code == "INT-AGW-098" and isinstance(error.details, dict):
+            details = _project_internal_error_details(error.details)
+            if details:
+                projected["details"] = details
         return projected
     if isinstance(error, BaseException):
         # Preserve ordinary validation/configuration detail so operators can
@@ -73,8 +84,20 @@ def _redact_error(error: BaseException | dict[str, Any] | None) -> dict[str, Any
             return {"code": "VAL-AGW-999", "message": str(error), "kind": type(error).__name__}
         return {"code": "UNKNOWN", "message": "unexpected error (see server logs)", "kind": type(error).__name__}
     projected = {k: v for k, v in error.items() if k in _shared._REDACTED_ERROR_KEYS}
-    if error.get("code") == "CON-AGW-084" and isinstance(error.get("details"), dict):
+    if (
+        isinstance(error.get("code"), str)
+        and error["code"].startswith("EXT-GPTAUTO-")
+        and isinstance(error.get("details"), dict)
+    ):
+        details = _project_gpt_auto_error_details(error["details"])
+        if details:
+            projected["details"] = details
+    elif error.get("code") == "CON-AGW-084" and isinstance(error.get("details"), dict):
         details = _project_bounded_recovery_error_details(error["details"])
+        if details:
+            projected["details"] = details
+    elif error.get("code") == "INT-AGW-098" and isinstance(error.get("details"), dict):
+        details = _project_internal_error_details(error["details"])
         if details:
             projected["details"] = details
     return projected
@@ -253,6 +276,13 @@ _GPT_AUTO_DETAIL_KEYS = frozenset(
         "timeout-policy",
         "submission-confirmed",
         "submission-ambiguous",
+        "submission-attempted",
+        "submission-proven",
+        "submission-state",
+        "failure-stage",
+        "retryable-same-session",
+        "previous-turn-unresolved",
+        "send-intent-ever",
         "submission-stage",
         "action-complete",
         "send-button-clicked",
@@ -350,6 +380,18 @@ def _project_session_error_details(details: dict[str, Any]) -> dict[str, Any]:
     return projected
 
 
+def _project_internal_error_details(details: dict[str, Any]) -> dict[str, Any]:
+    """Expose only the bare original exception classname for INT-AGW-098.
+
+    The classname alone (e.g. "TimeoutError") is never sensitive and is
+    exactly what SH31's investigation needed to avoid a dead end; the
+    sibling "original-repr" field is not projected here since an exception's
+    repr can embed the same sensitive content str() can (Standard 8).
+    """
+    value = details.get("original-type")
+    return {"original-type": value[:128]} if isinstance(value, str) and value else {}
+
+
 def _project_acp_error_details(details: dict[str, Any]) -> dict[str, Any]:
     """Project bounded ACP provider-failure evidence without tool payloads."""
     projected: dict[str, Any] = {}
@@ -377,10 +419,11 @@ def build_record(
     output_truncated: bool = False,
     prompt_body: str | None,
     mode: str = "async",
-    timeout_seconds: float | None = None,
     source: str | None = None,
     metadata: dict[str, Any] | None = None,
     client_default_session: dict[str, Any] | None = None,
+    node_placement: dict[str, Any] | None = None,
+    node_admission: Mapping[str, Any] | None = None,
     warnings: list[dict[str, Any]] | None = None,
     template_context: dict[str, Any] | None = None,
     session_id: str | None = None,
@@ -437,13 +480,6 @@ def build_record(
             message="prompt_body is required and must not be empty",
             details={},
         )
-    if timeout_seconds is not None and timeout_seconds <= 0:
-        raise AudiaGenticError(
-            code="VAL-AGW-008",
-            kind="agents",
-            message="timeout_seconds must be positive",
-            details={"timeout_seconds": timeout_seconds},
-        )
     # Durable-session ownership is enforced by submit_execution_request(),
     # the public admission boundary. This low-level constructor remains able
     # to model historical records for migration and isolated storage tests.
@@ -492,6 +528,9 @@ def build_record(
     timestamp = now_iso_z()
     payload: dict[str, Any] = {
         "contract-version": _shared._CONTRACT_VERSION,
+        "node-dispatch": None,
+        "node-placement": dict(node_placement) if isinstance(node_placement, dict) else node_placement,
+        "node-admission": node_admission,
         "request-id": request_id or generate_request_id(),
         "agent-id": agent_id,
         "execution-profile-id": execution_profile_id,
@@ -538,7 +577,6 @@ def build_record(
         "diagnostic-evidence": [],
         "resolved-instance-ids": resolved_instance_ids,
         "mode": mode,
-        "timeout-seconds": timeout_seconds,
         "source": source,
         "session-id": session_id,
         "provider-transport-kind": provider_transport_kind,
@@ -588,6 +626,13 @@ def generate_request_id() -> str:
 
 
 def _validate(payload: dict[str, Any], *, code: str) -> dict[str, Any]:
+    if payload.get("node-admission") is not None:
+        from ..node.admission_contract import NodeAdmissionDescriptor
+
+        descriptor = NodeAdmissionDescriptor.from_mapping(payload["node-admission"])
+        if descriptor.policy.profile_id != payload.get("execution-profile-id") or payload.get("node-placement") is None:
+            raise AudiaGenticError(code=code, kind="agents", message="Node admission requires matching placement and profile")
+        payload = {**payload, "node-admission": descriptor.to_mapping()}
     issues = _shared.validate_with_schema_fn(payload)
     if issues:
         raise AudiaGenticError(
@@ -623,8 +668,13 @@ def write_record(project_root: Path, payload: dict[str, Any]) -> Path:
             message="gateway request record missing request-id",
             details={},
         )
-    _validate(payload, code="VAL-AGW-004")
+    payload = _validate(payload, code="VAL-AGW-004")
     target = gateway_request_path(project_root, request_id)
+    if target.exists():
+        previous = _read_record_payload(project_root, request_id)
+        if previous.get("node-admission") != payload.get("node-admission"):
+            raise AudiaGenticError(code="VAL-AGW-098", kind="agents",
+                                  message="Node admission descriptor is immutable after record creation")
     # Redact raw prompt-body before public persistence; dispatch gets the
     # in-memory value or the admission-owned snapshot during recovery.
     redacted = _redact_for_persistence(payload)
@@ -662,7 +712,6 @@ def _read_record_payload(project_root: Path, request_id: str) -> dict[str, Any]:
     return payload
 
 
-import json  # noqa: E402
 
 
 def _migrate_v1_payload(payload: dict[str, Any]) -> dict[str, Any]:
@@ -674,6 +723,29 @@ def _migrate_v1_payload(payload: dict[str, Any]) -> dict[str, Any]:
     treatment of an already-dispatched record with no durable binding.
     """
     migrated = dict(payload)
+    # SH22: a request carries no execution timeout; the caller's wait window
+    # was never execution policy. Records written before that drop the field.
+    migrated.pop("timeout-seconds", None)
+    migrated.setdefault("node-admission", None)
+    if payload.get("contract-version") == "v10":
+        # Preserve every modern ownership/session/recovery/receipt fact exactly.
+        migrated["contract-version"] = _shared._CONTRACT_VERSION
+        return _validate(migrated, code="VAL-AGW-005")
+    if payload.get("contract-version") in {"v8", "v9"}:
+        # Modern ownership/recovery/session facts are authoritative. Upgrade
+        # only the envelope; never run v8 through historical fence clearing.
+        migrated["contract-version"] = _shared._CONTRACT_VERSION
+        migrated.setdefault("node-dispatch", None)
+        migrated.setdefault("node-placement", None)
+        dispatch = migrated.get("node-dispatch")
+        if isinstance(dispatch, dict):
+            # Pre-attestation command identity is historical evidence only.
+            # Do not infer an accepted attestation from old payload/receipts.
+            migrated["node-dispatch"] = {**dispatch, "attestation-sha256": None}
+        return _validate(migrated, code="VAL-AGW-005")
+    if payload.get("contract-version") == _shared._CONTRACT_VERSION:
+        migrated.setdefault("node-dispatch", None)
+        migrated.setdefault("node-placement", None)
     for retired_key in ("gateway-execution-lane-key", "resolved-queue-limits", "admission-policy-digest"):
         migrated.pop(retired_key, None)
     migrated.setdefault("cancel-acknowledged-at", None)
@@ -687,7 +759,7 @@ def _migrate_v1_payload(payload: dict[str, Any]) -> dict[str, Any]:
     # A briefly deployed v4 writer could have persisted the version before
     # adding all activity fields. Treat that shape as migratable too; never
     # strand a durable request merely because a process restarted mid-cutover.
-    if contract_version not in {"v1", "v2", "v3", "v4", "v5", "v6", "v7", _shared._CONTRACT_VERSION}:
+    if contract_version not in {"v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8", "v9", _shared._CONTRACT_VERSION}:
         return _validate(migrated, code="VAL-AGW-005")
     # v7 is the first record contract with nested provider/owner activity.
     # Keep the historical v5 migration target for pre-v6 records, while
@@ -696,19 +768,22 @@ def _migrate_v1_payload(payload: dict[str, Any]) -> dict[str, Any]:
     # v8 introduces durable request sessions.  Existing v7 records remain
     # readable as v7: a historic sessionless record cannot honestly be
     # re-labelled v8 without first creating its companion session record.
-    # New admissions are always v8; dispatch never relies on this migration
+    # New admissions are always v11; dispatch never relies on this migration
     # to invent a session for an in-flight legacy request.
     migrated["contract-version"] = (
         _shared._CONTRACT_VERSION
-        if contract_version in {"v6", _shared._CONTRACT_VERSION}
+        if contract_version in {"v6", "v8", "v9", _shared._CONTRACT_VERSION}
         else ("v7" if contract_version == "v7" else "v5")
     )
+    if migrated["contract-version"] == _shared._CONTRACT_VERSION:
+        migrated.setdefault("node-dispatch", None)
+        migrated.setdefault("node-placement", None)
     migrated.setdefault(
         "provider-transport-kind",
         "provider-session" if migrated.get("session-id") else "worker",
     )
     migrated.setdefault("continuation-session-id", migrated.get("session-id"))
-    if contract_version != _shared._CONTRACT_VERSION:
+    if contract_version not in {"v8", "v9", _shared._CONTRACT_VERSION}:
         migrated.update({
             "dispatch-owner-epoch": None,
             "dispatch-claimed-at": None,
@@ -799,6 +874,10 @@ def read_record(
     payload = _read_record_payload(project_root, request_id)
     if (
         payload.get("contract-version") == _shared._CONTRACT_VERSION
+        and "node-dispatch" in payload
+        and "node-placement" in payload
+        and "node-admission" in payload
+        and "timeout-seconds" not in payload
         and "cancel-acknowledged-at" in payload
         and "cancel-acknowledged-by" in payload
         and "resolved-source-id" in payload
@@ -834,18 +913,19 @@ def latest_transition_projection(project_root: Path, request_id: str) -> dict[st
     identity, state, and timestamp, so it must never copy that free-form
     mapping into a public projection.
     """
-    try:
-        entry = last_ndjson(gateway_timeline_path(project_root, request_id))
-    except (OSError, ValueError):
-        logger.warning("failed to read gateway request timeline", extra={"request-id": request_id})
+    with head_read_lock(gateway_timeline_path(project_root, request_id)):
+        try:
+            entry = last_ndjson(gateway_timeline_path(project_root, request_id))
+        except (OSError, ValueError):
+            logger.warning("failed to read gateway request timeline", extra={"request-id": request_id})
+            return None
+        if entry:
+            event = entry.get("event")
+            timestamp = entry.get("timestamp")
+            state = entry.get("state")
+            if isinstance(event, str) and isinstance(timestamp, str) and (state is None or isinstance(state, str)):
+                return {"event": event, "state": state, "timestamp": timestamp}
         return None
-    if entry:
-        event = entry.get("event")
-        timestamp = entry.get("timestamp")
-        state = entry.get("state")
-        if isinstance(event, str) and isinstance(timestamp, str) and (state is None or isinstance(state, str)):
-            return {"event": event, "state": state, "timestamp": timestamp}
-    return None
 
 
 def transition_history_projection(
@@ -855,34 +935,35 @@ def transition_history_projection(
     limit: int = 100,
 ) -> list[dict[str, str | None]]:
     """Return bounded safe transition milestones for explicit evidence reads."""
-    if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
-        raise ValueError("transition history limit must be between 1 and 100")
-    try:
-        journal = gateway_timeline_path(project_root, request_id)
-        index_path = gateway_timeline_index_path(project_root, request_id)
-        entries: list[dict[str, str | None]] = []
-        if journal.exists() and index_path.exists():
-            offsets = tail_ndjson(index_path, limit)
-            with journal.open("rb") as journal_handle:
-                for metadata in offsets:
-                    journal_handle.seek(int(metadata["offset"]))
-                    entry = json.loads(journal_handle.readline().decode("utf-8"))
+    with head_read_lock(gateway_timeline_path(project_root, request_id)):
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
+            raise ValueError("transition history limit must be between 1 and 100")
+        try:
+            journal = gateway_timeline_path(project_root, request_id)
+            index_path = gateway_timeline_index_path(project_root, request_id)
+            entries: list[dict[str, str | None]] = []
+            if journal.exists() and index_path.exists() and not has_segments(journal):
+                offsets = tail_ndjson(index_path, limit)
+                with journal.open("rb") as journal_handle:
+                    for metadata in offsets:
+                        journal_handle.seek(int(metadata["offset"]))
+                        entry = json.loads(journal_handle.readline().decode("utf-8"))
+                        event = entry.get("event")
+                        timestamp = entry.get("timestamp")
+                        state = entry.get("state")
+                        if isinstance(event, str) and isinstance(timestamp, str) and (state is None or isinstance(state, str)):
+                            entries.append({"event": event, "state": state, "timestamp": timestamp})
+            else:
+                for entry in tail_ndjson(journal, limit):
                     event = entry.get("event")
                     timestamp = entry.get("timestamp")
                     state = entry.get("state")
                     if isinstance(event, str) and isinstance(timestamp, str) and (state is None or isinstance(state, str)):
                         entries.append({"event": event, "state": state, "timestamp": timestamp})
-        else:
-            for entry in tail_ndjson(journal, limit):
-                event = entry.get("event")
-                timestamp = entry.get("timestamp")
-                state = entry.get("state")
-                if isinstance(event, str) and isinstance(timestamp, str) and (state is None or isinstance(state, str)):
-                    entries.append({"event": event, "state": state, "timestamp": timestamp})
-    except (OSError, ValueError):
-        logger.warning("failed to read gateway request timeline", extra={"request-id": request_id})
-        return []
-    return entries
+        except (OSError, ValueError):
+            logger.warning("failed to read gateway request timeline", extra={"request-id": request_id})
+            return []
+        return entries
 
 
 def transition_history_page(
@@ -893,81 +974,82 @@ def transition_history_page(
     cursor: str | None = None,
 ) -> dict[str, Any]:
     """Return a deterministic, independently-cursorable history page."""
-    if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
-        raise ValueError("transition history limit must be between 1 and 100")
-    offset = 0
-    index_offset: int | None = None
-    if cursor:
+    with head_read_lock(gateway_timeline_path(project_root, request_id)):
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
+            raise ValueError("transition history limit must be between 1 and 100")
+        offset = 0
+        index_offset: int | None = None
+        if cursor:
+            try:
+                padded = cursor + "=" * (-len(cursor) % 4)
+                decoded = json.loads(base64.urlsafe_b64decode(padded.encode()).decode())
+                offset = decoded["offset"]
+                if decoded.get("v") != 1 or isinstance(offset, bool) or not isinstance(offset, int) or offset < 0:
+                    raise ValueError
+                index_offset = decoded.get("index-offset")
+                if index_offset is not None and (isinstance(index_offset, bool) or not isinstance(index_offset, int) or index_offset < 0):
+                    raise ValueError
+            except (ValueError, KeyError, TypeError, UnicodeError, json.JSONDecodeError):
+                raise ValueError("invalid history cursor") from None
+        items: list[dict[str, str | None]] = []
+        has_more = False
+        next_index_offset: int | None = None
+        journal = gateway_timeline_path(project_root, request_id)
+        index_path = gateway_timeline_index_path(project_root, request_id)
         try:
-            padded = cursor + "=" * (-len(cursor) % 4)
-            decoded = json.loads(base64.urlsafe_b64decode(padded.encode()).decode())
-            offset = decoded["offset"]
-            if decoded.get("v") != 1 or isinstance(offset, bool) or not isinstance(offset, int) or offset < 0:
-                raise ValueError
-            index_offset = decoded.get("index-offset")
-            if index_offset is not None and (isinstance(index_offset, bool) or not isinstance(index_offset, int) or index_offset < 0):
-                raise ValueError
-        except (ValueError, KeyError, TypeError, UnicodeError, json.JSONDecodeError):
-            raise ValueError("invalid history cursor") from None
-    items: list[dict[str, str | None]] = []
-    has_more = False
-    next_index_offset: int | None = None
-    journal = gateway_timeline_path(project_root, request_id)
-    index_path = gateway_timeline_index_path(project_root, request_id)
-    try:
-        if journal.exists() and index_path.exists():
-            with index_path.open("rb") as index_handle, journal.open("rb") as journal_handle:
-                if index_offset is not None:
-                    index_handle.seek(index_offset)
-                index = 0
-                while True:
-                    current_index_offset = index_handle.tell()
-                    raw_index = index_handle.readline()
-                    if not raw_index:
-                        break
-                    if index_offset is None and index < offset:
+            if journal.exists() and index_path.exists() and not has_segments(journal):
+                with index_path.open("rb") as index_handle, journal.open("rb") as journal_handle:
+                    if index_offset is not None:
+                        index_handle.seek(index_offset)
+                    index = 0
+                    while True:
+                        current_index_offset = index_handle.tell()
+                        raw_index = index_handle.readline()
+                        if not raw_index:
+                            break
+                        if index_offset is None and index < offset:
+                            index += 1
+                            continue
+                        if len(items) >= limit:
+                            has_more = True
+                            next_index_offset = current_index_offset
+                            break
+                        metadata = json.loads(raw_index)
+                        journal_handle.seek(int(metadata["offset"]))
+                        entry = json.loads(journal_handle.readline().decode("utf-8"))
+                        event = entry.get("event")
+                        timestamp = entry.get("timestamp")
+                        state = entry.get("state")
+                        if isinstance(event, str) and isinstance(timestamp, str) and (state is None or isinstance(state, str)):
+                            items.append({"event": event, "state": state, "timestamp": timestamp})
                         index += 1
+            else:
+                for index, entry in enumerate(iter_ndjson(journal)):
+                    if index < offset:
                         continue
                     if len(items) >= limit:
                         has_more = True
-                        next_index_offset = current_index_offset
                         break
-                    metadata = json.loads(raw_index)
-                    journal_handle.seek(int(metadata["offset"]))
-                    entry = json.loads(journal_handle.readline().decode("utf-8"))
                     event = entry.get("event")
                     timestamp = entry.get("timestamp")
                     state = entry.get("state")
                     if isinstance(event, str) and isinstance(timestamp, str) and (state is None or isinstance(state, str)):
                         items.append({"event": event, "state": state, "timestamp": timestamp})
-                    index += 1
-        else:
-            for index, entry in enumerate(iter_ndjson(journal)):
-                if index < offset:
-                    continue
-                if len(items) >= limit:
-                    has_more = True
-                    break
-                event = entry.get("event")
-                timestamp = entry.get("timestamp")
-                state = entry.get("state")
-                if isinstance(event, str) and isinstance(timestamp, str) and (state is None or isinstance(state, str)):
-                    items.append({"event": event, "state": state, "timestamp": timestamp})
-    except (OSError, ValueError, TypeError, UnicodeDecodeError, json.JSONDecodeError):
-        items = []
-        has_more = False
-    result: dict[str, Any] = {
-        "schema-version": "gateway-history.v1",
-        "request-id": request_id,
-        "items": items,
-        "returned": len(items),
-        "has-more": has_more,
-    }
-    if has_more:
-        result["next-cursor"] = base64.urlsafe_b64encode(
-            json.dumps({"v": 1, "offset": offset + len(items), "index-offset": next_index_offset}, separators=(",", ":")).encode()
-        ).decode().rstrip("=")
-    return result
+        except (OSError, ValueError, TypeError, UnicodeDecodeError, json.JSONDecodeError):
+            items = []
+            has_more = False
+        result: dict[str, Any] = {
+            "schema-version": "gateway-history.v1",
+            "request-id": request_id,
+            "items": items,
+            "returned": len(items),
+            "has-more": has_more,
+        }
+        if has_more:
+            result["next-cursor"] = base64.urlsafe_b64encode(
+                json.dumps({"v": 1, "offset": offset + len(items), "index-offset": next_index_offset}, separators=(",", ":")).encode()
+            ).decode().rstrip("=")
+        return result
 
 def project_public_status(
     record: dict[str, Any],
@@ -1068,16 +1150,22 @@ def list_records(
     if limit is not None and (isinstance(limit, bool) or not isinstance(limit, int) or limit < 1):
         raise ValueError("request list limit must be a positive integer")
     records = []
-    entries = [
-        entry for entry in root.iterdir()
-        if entry.is_dir() and entry.name not in {"idempotency", "sessions"}
-    ]
-    for entry in entries:
-        if not entry.is_dir() or entry.name in {"idempotency", "sessions"}:
+    for entry in root.iterdir():
+        # Explicit request IDs are not constrained to the generated req_
+        # prefix. Preserve discovery parity and the existing reserved dirs.
+        if entry.name in {"idempotency", "sessions"} or not entry.is_dir():
+            continue
+        record_path = entry / "record.json"
+        # Preparation may reserve a request directory before admission writes
+        # its canonical record. Listing must leave that private work alone.
+        if not record_path.is_file():
             continue
         try:
             records.append(read_record(project_root, entry.name, include_output=include_output))
-        except AudiaGenticError:
+        except AudiaGenticError as exc:
+            if exc.code == "RES-AGW-001" and not record_path.exists():
+                # Retention/purge may remove a record after discovery.
+                continue
             logger.warning("skipping unreadable gateway request", extra={"request-id": entry.name}, exc_info=True)
     records.sort(key=lambda record: str(record.get("created-at") or ""), reverse=True)
     if limit is not None:

@@ -36,6 +36,9 @@ composition CRUD. Privileged Gateway administration is isolated on
 `ag-agents-admin`.
 Operational (`ag-agents-gateway`, propagate: `providers`) exposes `agent_task_submit`
 and status/cancel/session management to provider CLIs during job execution.
+Operator tools (diagnostics, evidence, recovery, purge, overview) are on
+`ag-agents-gateway-ops` (propagate: `none`); install it explicitly with
+`audiagentic mcp install ag-agents-gateway-ops harness ID`.
 
 ## Error codes
 
@@ -48,6 +51,16 @@ and status/cancel/session management to provider CLIs during job execution.
 - `IO-EXP-002` — Failed to write profiles file
 
 ## Agent Execution Gateway
+
+Shared standalone deployment uses the existing service host and client. See
+[the stage-1 deployment guide](../../../../docs/guides/shared-gateway.md) for
+`audiagentic gateway serve config FILE`, HTTPS connector configuration and
+`audiagentic gateway connect config FILE project PATH non-interactive`.
+The configured server project owns execution files and agent definitions;
+local client directories store only the selected connector reference. Remote
+project/action grants are collaborative. Shared ingress excludes local
+dashboard/operator controls and does not enable execution nodes, joined
+harnesses or external A2A/ACP transports.
 
 A queued, concurrency-limited dispatch layer that resolves an execution profile
 to a provider/model and executes provider work through
@@ -159,11 +172,11 @@ Start a local service explicitly:
 audiagentic gateway serve --host 127.0.0.1 --port 8765 --token-file <private-path>
 ```
 
-Clients opt in with all three settings; there is no discovery or in-process
-fallback in this phase:
+Clients opt in with `gateway.implementation: standalone` in the user settings
+plus the endpoint and token file; there is no discovery or in-process fallback
+in this phase:
 
 ```text
-AUDIAGENTIC_GATEWAY_MODE=standalone
 AUDIAGENTIC_GATEWAY_ENDPOINT=http://127.0.0.1:8765
 AUDIAGENTIC_GATEWAY_TOKEN_FILE=<private-path>
 ```
@@ -173,16 +186,16 @@ version mismatches, stale owner epochs, inactive leases, and non-canonical
 project roots before domain work. Health may retry one transient network
 failure. Domain mutations are never network-retried; the client can reattach
 once only after the service proves the previous lease was stale before
-invocation. Select `AUDIAGENTIC_GATEWAY_MODE=in-process` to roll back during
-the migration.
+invocation. The deprecated in-process gateway is the `embedded` implementation
+(`gateway.implementation: embedded` in the user settings).
 
 ### Self-managed automatic mode (SH05)
 
-Set `AUDIAGENTIC_GATEWAY_MODE=automatic` to request the compatible machine-wide
-gateway. The public gateway client delegates the single-winner start-or-attach
+`automatic` is the default implementation (`gateway.implementation`): it
+requests the compatible machine-wide gateway. The public gateway client delegates the single-winner start-or-attach
 race, detached process ownership, stale-record recovery, readiness, and initial
 client lease to the foundation managed-service lifecycle. The optional
-`AUDIAGENTIC_GATEWAY_PORT` selects the loopback port (default `8765`).
+`gateway.port` setting selects the loopback port (default `8765`).
 
 Health reports `lifetime-scope`, and the automatic client exposes the same
 foundation evidence as `service_lifetime_scope`. `shared-service-host` means
@@ -194,14 +207,13 @@ fully detached owner.
 
 Automatic mode does not fall back to the in-process gateway. An incompatible
 live protocol, unprovable process owner, or unhealthy startup is reported as a
-managed-service error; an unrelated live process is never terminated. This
-mode remains opt-in until the SH11 consumer cutover.
+managed-service error; an unrelated live process is never terminated.
 
 ### Dashboard recent window
 
 The loopback dashboard serves only records in the configured recent activity
-window. Set `AUDIAGENTIC_GATEWAY_DASHBOARD_RECENT_SECONDS` in the gateway
-process to change the default (12 hours; maximum 30 days). Active requests and
+window. Set `gateway.dashboard.recent_seconds` in the user settings to change the
+default (12 hours; maximum 30 days). Active requests and
 live sessions remain visible even when idle beyond that window. The dashboard
 can temporarily override the gateway default with `?recent-seconds=<n>` or its
 Recent window control; the override affects only that dashboard view.
@@ -221,7 +233,7 @@ a bounded attempt budget.
 
 ### Self-managed lifecycle (SH10)
 
-`AUDIAGENTIC_GATEWAY_IDLE_GRACE_SECONDS` (unset/0 = keep-warm forever)
+`gateway.idle_grace_seconds` (unset/0 = keep-warm forever)
 enables idle self-shutdown: a running service with no active client leases,
 no queued/running work, no live sessions, and an empty ingress spool for one
 full grace window drains and exits through the PR06 guarded transitions

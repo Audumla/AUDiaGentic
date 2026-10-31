@@ -77,6 +77,31 @@ def _authorization(service: GatewayServiceApplication) -> dict[str, str]:
     }
 
 
+@pytest.mark.parametrize("lease_principal", [None, "other-principal"])
+def test_node_context_cannot_cross_local_or_other_principal_lease(tmp_path, lease_principal):
+    from audiagentic.components.agents.gateway.node.admission_contract import (
+        NodeSubmissionContext,
+        SourceWorkspaceIdentity,
+    )
+
+    service = _service(tmp_path)
+    lease = service.acquire_client("client-a", ttl_seconds=60, protocol_version=PROTOCOL_VERSION,
+        facts={} if lease_principal is None else {"shared-principal-id": lease_principal})
+    context = NodeSubmissionContext("alice", "server", "project", "node", "workspace",
+        SourceWorkspaceIdentity(1, "node", "workspace", "read-write", "a" * 64),
+        "/caller-root", "private-source-credential")
+
+    class UnexpectedAdmission:
+        def submit(self, *args, **kwargs):
+            pytest.fail("lease rejection must precede node admission")
+
+    service._node_admission = UnexpectedAdmission()
+    with pytest.raises(AudiaGenticError, match="authenticated lease"):
+        service.invoke("submit_execution_request", str(tmp_path), {"prompt_body": "hello"},
+            protocol_version=PROTOCOL_VERSION, owner_epoch=lease["owner-epoch"],
+            lease_id=lease["lease-id"], node_context=context)
+
+
 def test_dashboard_action_token_survives_service_application_restart(tmp_path: Path) -> None:
     first = _service(tmp_path)
     token = first.dashboard_action_token
@@ -239,25 +264,25 @@ def test_closed_operation_router_rejects_unknown_or_missing_parameters(tmp_path:
         )
 
 
-def test_submission_discards_retired_null_timeout_fields(tmp_path: Path) -> None:
+@pytest.mark.parametrize("field", ["timeout_seconds", "session_idle_timeout_seconds", "session_max_lifetime_seconds"])
+def test_submission_rejects_retired_fields_even_when_null(tmp_path: Path, field: str) -> None:
     service = _service(tmp_path)
     authorization = _authorization(service)
 
-    result = service.invoke(
-        "submit_execution_request",
-        str(tmp_path),
-        {
-            "prompt_body": "hello",
-            "timeout_seconds": None,
-            "session_idle_timeout_seconds": None,
-            "session_max_lifetime_seconds": None,
-        },
-        **authorization,
-    )
+    with pytest.raises(AudiaGenticError, match="VAL-AGSV-022"):
+        service.invoke(
+            "submit_execution_request", str(tmp_path), {"prompt_body": "hello", field: None}, **authorization,
+        )
 
-    assert "timeout_seconds" not in result
-    assert "session_idle_timeout_seconds" not in result
-    assert "session_max_lifetime_seconds" not in result
+
+@pytest.mark.parametrize("value", [0, -1, True, "soon", float("inf")])
+def test_submission_wait_timeout_must_be_a_positive_number(tmp_path: Path, value) -> None:
+    service = _service(tmp_path)
+    with pytest.raises(AudiaGenticError, match="VAL-AGSV-022"):
+        service.invoke(
+            "run_execution_request", str(tmp_path), {"prompt_body": "hello", "wait_timeout_seconds": value},
+            **_authorization(service),
+        )
 
 
 def test_submission_rejects_non_null_retired_timeout_fields(tmp_path: Path) -> None:

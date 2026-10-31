@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 import logging
 from collections.abc import Mapping
@@ -83,6 +84,8 @@ async def capture_latest_response(
     provider_id: str,
     locator: ConversationFocusLocator,
     passive: bool = False,
+    timeout_seconds: float = 20.0,
+    deadline_monotonic: float | None = None,
 ) -> dict[str, Any]:
     """Read-only provider capability for operator response recovery."""
     from .execution import load_conversation_capture_capability
@@ -92,7 +95,15 @@ async def capture_latest_response(
         return {"outcome": "unsupported", "reason": "provider-capability-unavailable"}
     value = hook(project_root, provider_id=provider_id, locator=locator, passive=passive)
     if inspect.isawaitable(value):
-        value = await value
+        try:
+            timeout = max(0.1, float(timeout_seconds))
+            if deadline_monotonic is not None:
+                timeout = min(timeout, deadline_monotonic - asyncio.get_running_loop().time())
+                if timeout <= 0:
+                    return {"outcome": "unavailable", "reason": "provider-capture-timeout"}
+            value = await asyncio.wait_for(value, timeout=timeout)
+        except asyncio.TimeoutError:
+            return {"outcome": "unavailable", "reason": "provider-capture-timeout"}
     return value if isinstance(value, dict) else {"outcome": "unavailable", "reason": "invalid-provider-capability-result"}
 
 #: Preparation failed with an exception that was not a classified
@@ -149,18 +160,31 @@ def get_provider_runtime_config_state(
     not need unrelated provider configuration and must not read provider
     internals directly.
     """
+    from ...descriptors.target import ProviderTarget
     from ..config.provider_config import (
         is_provider_enabled,
         load_provider_config,
+        provider_instance_config,
     )
 
+    target = ProviderTarget.parse(provider_id)
     document = load_provider_config(project_root)
-    configured = (document.get("providers") or {}).get(provider_id, {})
+    configured = (document.get("providers") or {}).get(target.provider_id, {})
+    config = dict(configured) if isinstance(configured, dict) else configured
     return {
-        "provider-id": provider_id,
-        "enabled": is_provider_enabled(project_root, provider_id),
-        "config": dict(configured) if isinstance(configured, dict) else configured,
+        "provider-id": target.key,
+        "enabled": is_provider_enabled(project_root, target.provider_id),
+        "config": provider_instance_config(project_root, target, config),
     }
+
+
+def _provider_usable(project_root: Path, provider_id: str, runtime: dict[str, Any]) -> bool:
+    """Runtime gate: enabled by state or policy, else observed available (CFG06)."""
+    if runtime["enabled"]:
+        return True
+    from ..config.provider_config import is_provider_usable
+
+    return is_provider_usable(project_root, provider_id)
 
 
 def execute_provider_turn(request: ProviderExecutionRequest) -> ProviderExecutionResult:
@@ -169,7 +193,7 @@ def execute_provider_turn(request: ProviderExecutionRequest) -> ProviderExecutio
     from .execution import execute_provider
 
     runtime = get_provider_runtime_config_state(request.project_root, request.provider_id)
-    if not runtime["enabled"]:
+    if not _provider_usable(request.project_root, request.provider_id, runtime):
         raise AudiaGenticError(
             code="CFG-PEXE-001",
             kind="providers",
@@ -294,7 +318,7 @@ def prepare_provider_acp_launch(
     from .execution import load_acp_launch_builder
 
     runtime = get_provider_runtime_config_state(project_root, provider_id)
-    if not runtime["enabled"]:
+    if not _provider_usable(project_root, provider_id, runtime):
         raise AudiaGenticError(
             code="CFG-PEXE-001",
             kind="providers",
@@ -701,9 +725,8 @@ def prepare_provider_session_transport(
     # capability probe on provider_id's own adapter package, never a
     # surface_id or provider_id literal here. Any provider_id whose adapter
     # package exposes session_transport.build_session_transport gets routed
-    # through it, including same-implementation alias packages such as
-    # gpt-auto-t1/t2 (dedicated GP05 test projects) -- no dispatcher edit
-    # needed to add one, only the adapter package plus provider settings.
+    # through it, including provider instances (``<id>@<name>``) -- no
+    # dispatcher edit needed to add one, only provider settings.
     from .execution import load_session_transport_builder
 
     session_transport_builder = load_session_transport_builder(provider_id)

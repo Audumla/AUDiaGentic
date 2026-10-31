@@ -31,7 +31,7 @@ A harness spans **two** trees, split by what each owns:
 
 ```text
 src/audiagentic/
-  runtime/harness/<type>/            # RUNTIME ORCHESTRATION: drives a launch
+  runtime/harness/                   # shared runtime orchestration; no new per-client runtime
     install/
       __init__.py                    # install_to, cleanup_runtime, refresh_*
       config.py                      # materialize_agent_config (rig, models, settings)
@@ -45,7 +45,7 @@ src/audiagentic/
     mcp_surface.py                   # optional: prepare_mcp_surface (launch-time MCP curation)
 ```
 
-`runtime/harness/<type>/` is **data-thin, orchestration-heavy**: it decides
+`runtime/harness/` is **data-thin, orchestration-heavy**: it decides
 *when* to launch and which model/rig/process lifecycle applies. Generic
 provider services collect and translate standard MCP projections; a harness
 runner must not repeat that mapping. Runtime orchestration must never durably

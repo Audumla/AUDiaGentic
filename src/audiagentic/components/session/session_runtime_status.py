@@ -106,8 +106,6 @@ def endpoint_info(ctx: ProviderSessionInfo) -> dict[str, Any]:
 
     info: dict[str, Any] = {
         "base_url": base_url,
-        "rig_type": os.environ.get("AUDIAGENTIC_RIG_TYPE", "unknown"),
-        "rig_profile": os.environ.get("AUDIAGENTIC_RIG_PROFILE"),
     }
 
     try:

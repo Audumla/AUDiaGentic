@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import threading
-import time
 from pathlib import Path
 
 import pytest
@@ -20,6 +19,7 @@ from audiagentic.components.agents.contracts.worker_protocol import (
     encode_worker_message,
 )
 from audiagentic.components.agents.gateway.queue.worker_host import (
+    _provider_activity_offset,
     _provider_activity_path,
     _watch_provider_activity,
 )
@@ -140,25 +140,80 @@ def test_handshake_carries_complete_process_and_context_evidence(tmp_path: Path)
     }
 
 
-def test_worker_relays_normalized_provider_events_as_bounded_activity(tmp_path: Path) -> None:
+@pytest.mark.parametrize("preexisting", [False, True])
+@pytest.mark.parametrize("delayed_start", [False, True])
+def test_worker_relays_normalized_provider_events_as_bounded_activity(tmp_path: Path, preexisting: bool, delayed_start: bool) -> None:
     request = _execution_request(tmp_path)
     request["packet-data"] = {"request-id": "req_activity", "job-id": "req_activity"}
     path = _provider_activity_path(request)
     assert path == (tmp_path / ".audiagentic" / "runtime" / "jobs" / "req_activity" / "events.ndjson").resolve()
 
     path.parent.mkdir(parents=True)
+    if preexisting:
+        path.write_text(json.dumps({"event-kind": "old-attempt"}) + "\n", encoding="utf-8")
+    offset = _provider_activity_offset(path)
     stop = threading.Event()
+    delivered = threading.Event()
     observed: list[str] = []
-    thread = threading.Thread(target=_watch_provider_activity, args=(path, stop, observed.append), daemon=True)
-    thread.start()
-    path.write_text(json.dumps({"event-kind": "task-progress", "message": "redacted"}) + "\n", encoding="utf-8")
-    deadline = time.monotonic() + 2
-    while not observed and time.monotonic() < deadline:
-        time.sleep(0.02)
-    stop.set()
-    thread.join(timeout=1)
 
+    def emit(source: str) -> None:
+        observed.append(source)
+        delivered.set()
+
+    def append() -> None:
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps({"event-kind": "task-progress", "message": "redacted"}) + "\n")
+
+    thread = threading.Thread(target=_watch_provider_activity, args=(path, stop, emit, offset), daemon=True)
+    if delayed_start:
+        append()  # deterministically reproduce a provider outrunning the watcher
+    thread.start()
+    try:
+        if not delayed_start:
+            append()
+        assert delivered.wait(timeout=2)
+    finally:
+        stop.set()
+        thread.join(timeout=1)
+
+    assert not thread.is_alive()
     assert observed == ["provider-progress"]
+
+
+def test_worker_activity_does_not_replay_previous_attempt_events(tmp_path: Path) -> None:
+    from unittest.mock import Mock
+
+    path = tmp_path / "events.ndjson"
+    path.write_text(json.dumps({"event-kind": "old-attempt"}) + "\n", encoding="utf-8")
+    stop = Mock(spec=threading.Event)
+    stop.wait.side_effect = [False, True]
+    stop.is_set.return_value = False
+    emit = Mock()
+    _watch_provider_activity(path, stop, emit, _provider_activity_offset(path))
+    emit.assert_not_called()
+
+
+def test_worker_activity_coalesces_new_events_without_payloads(tmp_path: Path) -> None:
+    from unittest.mock import Mock
+
+    path = tmp_path / "events.ndjson"
+    offset = _provider_activity_offset(path)
+    path.write_text((json.dumps({"event-kind": "task-progress", "message": "private"}) + "\n") * 1000, encoding="utf-8")
+    stop = Mock(spec=threading.Event)
+    stop.wait.side_effect = [False, True]
+    stop.is_set.return_value = False
+    emit = Mock()
+    _watch_provider_activity(path, stop, emit, offset)
+    emit.assert_called_once_with("provider-progress")
+
+
+def test_worker_activity_disabled_path_has_no_progress() -> None:
+    from unittest.mock import Mock
+
+    assert _provider_activity_offset(None) == 0
+    emit = Mock()
+    _watch_provider_activity(None, threading.Event(), emit, 0)
+    emit.assert_not_called()
 
 
 def test_runtime_payloads_are_excluded_from_repr(tmp_path: Path) -> None:

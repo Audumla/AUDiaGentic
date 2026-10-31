@@ -960,3 +960,690 @@
 - Added clear cross-machine installation and automatic upgrade instructions for released AUDiaGentic packages.
 - Release automation now publishes AUDiaGentic to PyPI without storing a PyPI API token.
 - AS129 is complete: GPT accepted the implementation and a live long-running gateway request remained active through typed progress signals before completing successfully.
+
+## v0.3.0
+
+### Audits
+- Documentation work now records both its passing validation evidence and the unrelated repository failures that prevent claiming a clean full contract suite.
+- The documentation audit now proves filenames are Windows-safe and records corrected repository-wide link metrics.
+- The provider reference package is structurally complete; its open documentation work is keeping evidence current.
+- The current-facing examples and reference docs contain no remaining removed-layout paths, and all JSON fixtures parse and validate.
+- Historical evidence dates are preserved deliberately and separated from current validation metadata.
+- Documented examples and contract fixtures pass their consumer and schema validation tests.
+- The docs hub now records that examples pass both scaffold and schema validation.
+- Recorded the restart-recovery audit state and kept the live gateway restart gated until GPT independently approves the pushed implementation.
+
+### Configuration
+- Disabled commit-triggered ledger stamping by default to prevent release/ledger feedback loops.
+
+### Documentation
+- Documentation now has a working entry point, no longer advertises missing docs trees, and accurately labels the gateway execution-context contract.
+- Core documentation now reflects the actual component layout, current gateway migration state, and evidence-based freshness of provider references.
+- Historical research no longer looks like live gateway status.
+- Agents now have an explicit guide to which docs are authoritative, which are historical, and how documentation changes must be validated.
+- Example fixtures now explain which files are executable contract evidence, which are rejection cases, and which are historical or illustrative.
+- Agents following architecture standards can now reach the authoritative gateway contracts and documentation rules directly.
+- Agents can now enter the design or standards corpus through curated indexes that distinguish normative guidance from bounded audit/design records.
+- All current-facing documentation areas now have curated entry points from docs/README.md.
+- The large planning corpus now has a clear entry point and explicit rules for interpreting current versus historical work.
+- Release documentation now explains which files are generated, which are historical, and how to update them without bypassing the authoritative ledger.
+- Stale reference reports now clearly identify themselves as historical evidence instead of presenting old paths or dates as current contracts.
+- The documentation maintenance record now includes measurable link-audit evidence and explains the single false-positive result.
+- The valid change-event example now matches the current schema and passes contract validation.
+- Research documentation now clearly distinguishes dated evidence from live implementation and planning state.
+- Agents now reach the actual maintained testing guide from the documentation hub.
+- An old Pi probe can no longer be mistaken for current capability evidence.
+- Provider-reference counts and runtime provider counts are now explicitly distinguished to prevent incorrect synchronization.
+- The sample ledger fragment now uses a current repository path.
+- Provider validation artifacts now clearly communicate their age and do not overclaim current capability.
+- The provider capability reference now has a clear map for navigating its evidence and contract sections.
+- Telemetry and endpoint references no longer overclaim current authority.
+- The docs hub now directs agents to the actual release workflow entry point.
+- The docs hub now has a single clear release entry point.
+- The gateway execution-context design now distinguishes completed consumers from future schema additions.
+- The lifecycle design no longer presents completed PR06/PR07 implementation as future work.
+- The recipe upgrade inventory now accurately states its completed audit status and non-authoritative runtime boundary.
+- Harness observability documentation no longer overclaims current authority.
+- Transport evidence now clearly communicates its age and validation boundary.
+- The provider reference architecture now clearly states what it defines and what remains runtime-owned.
+- Cleaned up the documentation structure and clarified which pages are current, generated, historical, or evidence snapshots; corrected examples and synchronized the provider reference manifest.
+- Clarified how provider-reference integrity metadata is maintained and dated the synchronized manifest.
+- Repaired malformed code examples in completed planning records and cleared the repository-wide Markdown-link audit.
+- Cleared the final Markdown-link audit collision in a historical planning example.
+- Cleaned up the documentation plan itself and aligned its recorded audit metrics with the latest scan.
+- Updated component, harness, recipe, observability, and architecture guidance to use the repository's actual configuration paths.
+- Fixed remaining provider-reference links to the actual descriptor tree and kept its integrity manifest synchronized.
+- Clarified the integration guide's status and that documented steps do not alone grant runtime support.
+- Clarified that generated active implementation plans must be revalidated before implementation and are not runtime contracts.
+- Made ACP support documentation honest about its snapshot status and synchronized the provider-reference manifest.
+- Fixed the Docker secrets setup command in the secrets-management guide.
+- Removed local workspace and machine-specific environment details from documentation and documented the scrub policy.
+- Completed formatting cleanup after the documentation environment-information scrub.
+- Clarified which generic vendor configuration examples are safe to retain and which local environment details are prohibited.
+- Verified and documented that the docs contain no private-network addresses or local hostnames.
+- Added heading-anchor verification to the documentation maintenance checklist.
+- Added a contributor rule preventing local workspace and environment information from returning to docs.
+- Removed local environment details from the generated current release ledger while preserving its release history.
+- Corrected stale documentation audit counts to include the newly present GP51 planning document.
+- Updated the documentation cleanup plan with the latest verified corpus and privacy-audit results.
+- Added privacy sanitization guidance for research and review records.
+- Clarified the snapshot status of an unimplemented observability capability and repaired the provider manifest metadata.
+- Removed remaining local-machine wording from current documentation and planning notes.
+- Kept the provider documentation integrity manifest current after the latest cleanup.
+- Scrubbed the remaining documentation references that tied findings to a particular local workspace, machine, or operator environment.
+- Corrected the documentation audit metrics so the recorded local-link count matches the current scan.
+- Updated the root README so its component list and testing link match the repository today.
+- Removed the last detailed operator-environment incident data from the documentation while keeping its reusable test-isolation guidance.
+- Added the final repository-wide documentation audit evidence to DOC01.
+- Made the provider reference freshness statement precise and updated its integrity manifest.
+- Cleaned up the documentation work item itself before its completion review.
+- MCP tools now advertise concise, agent-friendly usage guidance with less redundant token overhead, and the gateway can start cleanly for GPT requests.
+- Documents which GPT-auto progress signals keep long-running requests alive, making the activity contract explicit.
+- Record gateway regression fixes, live evidence and remaining review gates.
+
+### Features
+- Local provider and embedded rig settings can now be supplied per machine through environment variables without committing local IPs, ports, endpoints, or credentials.
+- Gateway restarts now preserve request IDs and active sessions, recover queued/running work under a new owner, and keep GPT-auto from resending an already-submitted prompt. Historical dashboard records survive the schema change.
+- Operators can capture a stuck request's current GPT response and mark it completed when the provider DOM proves that response belongs to the request.
+- BigCherry GPT-auto requests now distinguish legitimate provider errors from observation regressions, preserve partial DOM responses as diagnostic evidence, and continue the original request after a network error with a bounded same-session follow-up instead of terminalizing it.
+- Prevent stale BigCherry requests from remaining running behind dead sessions and restore completion detection for the current ChatGPT DOM without weakening fail-closed recovery.
+- Gateway purge is now available through the API and MCP tooling with a safe dry-run default and fail-closed protection for live or incomplete work.
+- Gateway requests now expose compact, redacted observability and recovery evidence through the API and MCP tools while preserving duplicate-prompt safety; GA03-GA05 are implemented and validated.
+- Gateway observability now keeps request journals and the operator trace bounded while preserving terminal evidence and protected request histories.
+- Add durable redacted gateway observations, fail-closed recovery replay, and compact explicit MCP evidence tools.
+
+### Fixes
+- Fixed the release workflow and added a safe way to finish publishing an already-created release.
+- GPT-auto can now be pointed at a configured remote browser/CDP endpoint without attempting to launch or manage a local browser.
+- Repaired malformed historical release-ledger data that blocked publishing.
+- Prevented completed GPT-auto requests from being falsely failed when ChatGPT remounts the same assistant response under a new DOM ID.
+- Ledger-backed release finalization now rejects conflicting event history, uses one canonical archive path, and builds grouped release notes without commit-stamp feedback loops.
+- Hardened GPT-auto response recovery so renderer ID churn cannot bypass recovery or reject valid long-chat/project-rename cases.
+- Completed the GPT-auto correlation fix so proven renderer replacements recover normally without bypassing safety or completion accounting.
+- GitHub releases now receive the consolidated ledger-generated release notes, including safe retry behavior without duplicate release entries.
+- Finished hardening GPT-auto remount recovery so stale error markers cannot fail an otherwise completed response.
+- Release retries can no longer absorb next-release changes, malformed ledger records fail closed, and release notes are rendered from the exact archived event snapshot.
+- Release retries can no longer capture next-release changes, and malformed lifecycle placement in current or historical ledger storage now fails closed.
+- Restored gateway startup and request-record validation needed for GPT gateway submissions.
+- Gateway restart requests now use the correct authenticated service path and no longer fail with a dashboard-action 401.
+- Foreground gateway restarts now re-execute safely after durable handoff cleanup, so the direct development/live host follows the same in-place recovery path as the managed host.
+- Gateway recovery now keeps ambiguous work alive without replaying side effects, consumes completed GPT responses only through the owning request, repairs takeover markers, and waits for the replacement generation to become ready.
+- Historical gateway requests from every supported record version now remain readable after restart recovery metadata was introduced.
+- Restart recovery now handles the pre-checkpoint and checkpoint-before-prompt-ID windows without falsely failing or duplicating a request.
+- Startup recovery can now actually construct recovered runners and correctly distinguish pending GPT observations from proven-unsent requests.
+- Gateway restart recovery now has one launch authority, preserves the active-request handoff, and cannot strand the retiring host behind the caller lease.
+- Active requests now recover from the retained GPT conversation without a second send, while renderer delay and stale metadata no longer cause premature failure or duplicate dispatch.
+- A restart will not replay a stale provider-session prompt when checkpoint evidence is incomplete; it keeps the request recoverable while retaining exact-session observation and correlation.
+- A gateway restart no longer risks taking down the replacement process or replaying provider work when session checkpoint metadata is temporarily unavailable.
+- Restart recovery now stays on the original session path and defers safely when provider identity is incomplete, preventing duplicate GPT prompts and dropped requests.
+- Gateway restart recovery now keeps an active GPT request alive after an ambiguous reattach failure and retries the same request and conversation without creating a replacement session.
+- Restart recovery now keeps the same request and GPT conversation alive across reattach failures after reconnect, profile drift, and retry scheduling races while preserving the durable retry deadline.
+- Cancelling an interrupted gateway request no longer loses its recovery worker; it reconnects to the same GPT turn and waits for provider cancellation evidence.
+- Keep active GPT-auto requests recoverable across a gateway handoff without changing request or session identity; retain ambiguous outcomes for retry, honor cancellation after rehydration, and fail only on definitive provider evidence.
+- Prevent GPT-auto readiness failures from incorrectly rotating healthy client sessions or terminalizing follow-up requests before provider submission; retain the session and retry only when the provider state is demonstrably safe.
+- Detect finer-grained GPT activity such as status updates, tool-result changes, connector work, citations, tables, and non-text materialization without treating unchanged DOM or foreign activity as progress.
+- Prevent hidden DOM from falsely renewing GPT activity, ensure late result changes are detected in large regions, and bound historical DOM monitoring cost.
+- Prevent remaining false activity from hidden DOM, guarantee large-result tail changes are detected, bound monitoring cost, and verify strict request ownership.
+- Eliminate remaining hidden-DOM false activity, guarantee late semantic changes are observable, cap monitoring work, and prevent duplicate wrapper signals.
+- Prevent invisible or oversized DOM content from generating false GPT activity and ensure nested progress wrappers produce one reliable activity signal.
+- GPT activity monitoring now keeps structural tool/status changes visible alongside nested lexical labels and fails closed on oversized DOM regions without unbounded text processing.
+- Completed GP52 activity-monitoring hardening with explicit fixed-size digest channels, structural/lexical separation, bounded ownership and visibility work, and end-to-end browser regressions.
+- GPT DOM activity monitoring now has explicit structural-versus-lexical digest isolation and bounded work across text, ownership, visibility, and candidate scanning.
+- GPT structural activity no longer gains false liveness from removing and remounting lexical progress wrappers.
+- Post-restart GPT session rehydration failures now remain running and retry the same request/session instead of being rejected immediately.
+- Prevented cross-client GPT default-session collisions and removed the long rehydration lock that could strand queued requests before monitoring began.
+- Fixes false stale failures during GPT-auto work: DOM progress now renews the request activity counter and lease, with focused regression tests.
+- AS122 live validation fix: GPT-auto DOM progress now keeps the request activity counter and lease current during long reviews.
+- Completes the activity-plane fix: interruption refresh ticks now keep the gateway lease alive without falsely resetting recovery timing.
+- Planning placement errors now explain exactly what is wrong and how to retry; state transitions repair misplaced records, and item IDs are auto-generated by default.
+- Prevented provider-less gateway requests from remaining stuck in running state and consuming capacity forever; preserved no-resubmit behavior for ambiguous ChatGPT turns.
+- GPT-auto can create new chats in both AUDiaGentic and BigCherry through the authenticated ChatGPT sidebar again; live CDP validation also proved normal GPT responses complete.
+- Fixed GPT-auto new-chat submission after the ChatGPT UI change: native CDP text input now activates the project composer and allows the gateway to create new requests again.
+- Fixed live GPT project requests that were typed successfully but never sent after ChatGPT began autolinking repository URLs.
+- Repair the GPT-auto completion-registration failure caused by ChatGPT's current project-chat renderer dropping paragraph boundaries during CDP correlation, while keeping the send guard fail-closed for unrelated whitespace changes.
+- Handle the remaining provider-owned truncation marker so completed GPT reviews register as terminal, with a regression test for the current ChatGPT fallback DOM.
+- Fix delayed GPT-auto gateway activity monitoring so slow CDP/project readiness is visible immediately, and make project-admission failures actionable.
+- Complete the activity-monitoring fix by making early GPT-auto lifecycle signals durable and verifying them through the real gateway relay path.
+- GPT tabs now close only after the configured physical-tab inactivity period (default two hours) based on real session activity, independently of response failures and other timeout policies; retained tabs remain eligible for later idle cleanup.
+- GPT-auto now creates new project chats through ChatGPT's Explore > Projects UI and correctly selects BigCherry from the project page.
+- Fix GPT-auto project submission, long-response activity/completion detection, and same-session FIFO queue timeout behavior.
+- Fixed GPT-auto activity correlation for the current ChatGPT fallback DOM: live Thinking/inspection/analyzing changes now belong to the current request instead of the previous assistant turn, and stale completion controls cannot close an unanswered request.
+- Fix GPT recovery refusing to refresh a conversation when its saved project URL omits the display title.
+- Detect response DOM changes missed by sampled activity monitoring without counting shimmer animations as progress.
+- Wait for a newly submitted conversation to acquire its project route before judging project ownership.
+- Recognize completed GPT replies whose action controls sit outside the assistant message block.
+- Do not save temporary ChatGPT conversation IDs that break session follow-ups.
+- Keep retained GPT conversation tabs tracked across gateway restarts and check for continued activity before cleanup.
+- Prevent cleanup storage errors from breaking requests and avoid adopting unrelated newly opened browser tabs.
+- Apply physical-tab inactivity cleanup independently of request and queue state without automatic reopen loops.
+- Show ongoing provider-busy liveness separately from real response progress, without extending inactivity cleanup.
+- Release cleanup database handles reliably and verify owned-tab reclamation against a live browser.
+- Release cancelled queued session requests promptly without waiting for or interrupting the active request.
+- Preserve tab inactivity age across session reattachment and clean up queued-cancellation signals.
+- Fixed gpt-auto message correlation so real ChatGPT conversation/message ids are used instead of synthetic placeholders, closing a gap that degraded turn/session tracking on every gpt-auto request.
+- gpt-auto now detects and automatically retries the current ChatGPT stream-recovery-timeout error banner, which previously went unrecognized and left turns to time out.
+- Closed two remaining correctness gaps in gpt-auto's message-id extraction (ownership-scoped carrier/label selection) found by a follow-up automated code review, with expanded regression coverage.
+- Fixed a false-positive risk in gpt-auto's automatic stream-recovery-timeout retry that could have permanently blocked a genuine retry after an unrelated alert briefly appeared.
+- Closed a race condition where gpt-auto could incorrectly fail a turn immediately after a failed automatic retry attempt, instead of giving the page one more chance to recover.
+- Prevented synthetic GPT busy heartbeats and non-meaningful session events from making stalled requests appear active; dashboard progress now reflects gateway-filtered work while real DOM/progress activity remains visible.
+- Fix GPT-auto completion detection for the current ChatGPT project DOM and document the remaining post-restart terminalization gap found by live E2E testing.
+- Corrected live DOM completion detection and prevented failed GPT-auto sessions from holding requests in running recovery indefinitely.
+- Fixed resumed-session checkpoint persistence and restored independent physical-tab inactivity cleanup; focused GPT-auto gateway tests pass.
+- Prevented repeated resume attempts from creating duplicate owned bindings for the same provider conversation. Live verification showed resume succeeds after restart; a separate completed-DOM turn still exposed an unresolved terminal-correlation defect.
+- Added a renderer-compatibility fix for ChatGPT’s reused fallback message slots. Live CDP still exposes a separate terminalization gap that needs one more instrumented pass.
+- The reusable f314 session now passes live terminal and FIFO queue tests. GPT review findings about provider-busy and arbitrary session timestamps were verified against current code as already fixed; remote review remains blocked because the Git HTTPS helper is unavailable.
+- Cancelled recovery attempts now leave the running backlog cleanly; the final post-restart f314 reuse test completed successfully after the cleanup.
+- The manual capture action now successfully converts a live GPT response into a completed gateway request, including exact response retrieval, while preserving strict request correlation and clear fail-closed errors.
+- The capture action now refuses queued or cross-turn recovery, verifies the same completed response twice, and protects the captured response artifact from late worker races.
+- Operator recovery now refuses to capture a previous turn or an unsubmitted continuation, preventing false completion of queued or stale requests.
+- Post-restart and queued GPT requests now publish their own submission proof, so operator capture can identify the current request instead of incorrectly rejecting or attributing it to an earlier turn.
+- A new continuation can no longer inherit an earlier request's submission proof, while a completed response remains recoverable if the gateway fails during final checkpoint cleanup.
+- Per-request submission proof is now recorded both on the request and in the durable session, preserving safe restart recovery while keeping queued requests isolated.
+- A valid submitted prompt no longer loses completion/capture eligibility merely because ChatGPT omitted a DOM message id; the gateway keeps the proof tied to the current request.
+- Queued continuations no longer write through the first request's checkpoint path; each request receives its own proof while the shared session retains its recovery fence.
+- Queued request B can no longer route its proof through request A's binding path; session recovery and request ownership are kept separate.
+- The gateway now recognizes meaningful renderer class-state changes as DOM activity while ignoring animation shimmer noise.
+- Fixed a gateway activity gap where real GPT-auto DOM/recovery progress labels were being discarded, and added regression coverage proving both labels advance the durable activity count.
+- Fixed a false activity bump where an unsuccessful GPT retry probe could make a request look active and postpone inactivity handling.
+- Prevent stale or foreign ChatGPT error banners from failing new gateway requests, while preserving genuine provider failures and recovery across restart.
+- Prevented structured alert-correlation checkpoints from being rejected by the scalar provider binding contract, while preserving full request metadata and strict failure semantics.
+- Provider requests can no longer remain running forever after their live session disappears; bounded recovery ends safely and the dashboard can still capture a verified GPT response manually.
+- Prevent a stalled browser/CDP read from leaving a GPT request permanently running with no further activity or completion signal.
+- Ensure stuck CDP reads cannot prevent provider recovery from reaching its bounded retry and interruption behavior.
+- Keep stale live requests recoverable after an operator requests reconciliation.
+- Prevent orphan-timeout recovery from cancelling work that becomes live during the watchdog check.
+- Prevent stale GPT-auto requests from remaining in cancelling forever when provider stop control hangs.
+- Make cancellation reliable even when a request is recovered after a gateway restart.
+- Prevent long GPT responses from being marked stale while the gateway is still actively observing the request, including periods where ChatGPT temporarily drops its generating flag.
+- Improved GPT gateway queue cancellation, FIFO waiting, tab inactivity retention, and DOM completion/activity coverage.
+- GPT-auto now recovers the missing first-render prompt DOM with one safe same-conversation refresh instead of stalling or resubmitting.
+- GPT-auto now reports real first-render DOM progress while still refusing to complete until the submitted prompt is correlated.
+- Restore activity renewal during the renderer gap before GPT assigns message roles or labels, without weakening request ownership or terminal-state safety.
+- Prevent provider-less cancelled requests from blocking the GPT queue after a gateway restart.
+- Fix GPT-auto project-tab creation by simulating the real Projects-page new-chat button press, matching the current ChatGPT UI behavior.
+- Make provider startup failures actionable instead of reporting an empty generic gateway error.
+- Fix project request creation when the Projects tab is open in the background by activating it before pressing Start new chat in project.
+- Make new project requests reliable from a background CDP tab by activating the target before navigating through ChatGPT Projects.
+- Prevent project startup from timing out while ChatGPT already shows a usable project composer.
+- Prevent a stuck dashboard CDP anchor from blocking new project requests for the full gateway timeout.
+- Queued requests now keep their session tab alive until FIFO admission can proceed, even when the tab’s last validated activity is old.
+- Fix queued-session tab retention, prevent duplicate tabs after anchor timeout, and recognize completion controls in the current ChatGPT DOM.
+- GPT validation found and the patch closes the remaining FIFO reaper race, safer timed-out opener cleanup, and the missing dashboard capture-button eligibility signal.
+- Manual GPT response capture now accepts governed agent requests whose admitted prompt includes system-owned instructions.
+- Manual completion now works for stuck requests whose provider DOM completed but submission metadata was not persisted.
+- Manual recovery now requires proof that the current request produced a new user turn and assistant response beyond its saved baseline.
+- Long-running GPT requests now emit lease activity independently of DOM polling, reducing false client-side stall detection.
+- Healthy long-running GPT turns no longer fail solely because the bounded inactivity-recovery attempts were exhausted; activity remains observable while genuine terminal errors still decide the request.
+- Healthy GPT inactivity remains nonterminal, while a request bound to a recycled or wrong provider tab now fails promptly as an unrecoverable session error.
+- Completed GPT response detection now cannot remain stuck when the provider tab is visibly complete, and proven wrong-tab/session binding now fails closed across every recovery path.
+- Prevent completed GPT-auto responses from being misclassified as submission failures when ChatGPT unmounts the user message from the live DOM after a long run.
+- Prevent the completion fallback from adopting an unrelated retained-session response, while correctly accepting a completed response after a new project session transitions to its conversation URL.
+- Fix the remaining live regression where a visibly completed GPT response stayed running by preserving the request-owned assistant identity through completion detection.
+- Prevent completed GPT requests from being mis-correlated to a later conversation or assistant after the renderer virtualizes the DOM.
+- Ensure completed GPT requests cannot remain active indefinitely after DOM identity or conversation-route changes.
+- Prevent assistant remounts from being silently ignored while a completed GPT request remains active.
+- Prevent retained GPT completion controls from being accepted after the tab leaves its request-owned conversation.
+- Prevent regenerated or remounted assistant responses from being mistaken for the original completed GPT request.
+- Prevent an assistant remount from becoming accepted later just because completion controls appear after the identity changed.
+- Close the final delayed virtualized assistant remount gap so identity changes cannot later become accepted completions.
+- Ensure route and identity integrity failures remain terminal even during completion-control materialization.
+- Close the final ambiguous assistant identity path so no changed response can be recovered and later terminalized as the original request.
+- Prevent completed or in-flight GPT requests from being silently masked by a later conversation turn.
+- Prevent later GPT turns from being mistaken for the current request when the renderer virtualizes the original prompt or assistant.
+- Prevent a later GPT answer from being accepted after the original prompt is virtualized away without a durable assistant identity.
+- Keep completion detection correlated after virtualization and prevent reused fallback DOM ordinals from authenticating a different GPT response.
+- Fix GPT-auto completion correlation when ChatGPT replaces synthetic prompt IDs with real DOM IDs.
+- Keep provider tabs attached while a request is actively running, preventing a long BigCherry request from losing its tab before completion or exact-session recovery.
+- The dashboard capture action now accepts the current completed BigCherry response DOM instead of rejecting it because ChatGPT removed the older More actions control.
+- Fixed the automatic completion rule for the current ChatGPT DOM and added regression coverage; the live gateway still needs a safe reload before this code can be validated against the active request.
+- Reduced gateway MCP session-list noise and client processing: active sessions are the default, state/all overrides are explicit, and gateway tools now return one structured result channel instead of duplicating the payload as text.
+- Failed or cancelled gateway requests can now be recovered as completed when their provider tab still contains a verified current response; the live failed BigCherry request was recovered and its response artifact persisted.
+- Recovery now persists the captured response bytes as well as changing the status; the previously recovered BigCherry response artifact was repaired and verified readable with its recorded checksum.
+- Session listing now defaults to active sessions across the gateway API, with all historical sessions available only through an explicit state=all override.
+- Fixed the gateway so a queued follow-up request is not incorrectly interrupted while the previous request in the same GPT session is being reconciled. The follow-up remains waiting and is only submitted after the session is safe; ambiguous requests are still protected from replay.
+- Fixed the gateway recovery loop that kept queued BigCherry requests blocked after the previous turn had already completed and cleared its durable checkpoint.
+- Prevented old completion evidence from incorrectly clearing a later unresolved request.
+- Closed the remaining stale-evidence and live-tab recovery review findings for the gateway regression.
+- Older GPT-auto configurations continue to load while AS138 recovery remains workflow-configurable.
+- Gateway restart recovery now preserves GPT-backed work while reconnecting. It reuses the exact existing conversation tab when available, including tabs in the prior browser window, and does not interrupt the request just because reattachment takes longer than the generic retry bound.
+- Gateway restart recovery now keeps an in-flight GPT session alive, finds its existing conversation tab even after browser-window changes, and avoids resubmitting an ambiguous prompt.
+- Generic ChatGPT request errors now recover by preserving the failed attempt and asking the same session to complete the prior request once, without duplicating completed work.
+- Prevented BigCherry restart recovery from leaving requests in an endless 15-second reconnect loop, while allowing exact-provider observation recovery after local session loss without resubmitting prompts.
+- Fixed restart reconnect looping caused by synthetic inspection activity and the wrong reconciliation gate. Exact provider turns now resume observation without replay, while unchanged recovery checks no longer look like provider progress.
+- Recovery inspection no longer keeps the browser tab alive or resets inactivity timing when the DOM has not changed.
+- Restart reconnect can reattach to the exact provider conversation and observe it to completion without replaying the original prompt, even when the private prompt snapshot is unavailable.
+- GPT-auto now distinguishes a provider page that failed before the composer existed from an ambiguous submission: it can safely retry the same session without falsely failing the request or duplicating the prompt.
+- GPT-auto now recognizes the current ChatGPT conversation-load error text and will not keep a failed provider page alive as apparent progress.
+- Keep requests running while an in-session recovery prompt is still processing after a provider error; preserve partial failure evidence instead of falsely failing the request.
+- Provider follow-ups now remain observable and recoverable across queue retries and gateway restarts without replaying the original prompt or creating duplicate successor sessions.
+- GPT gateway provider sessions now reattach safely after restart, preserve request ownership and activity semantics, and recover from the live Stream cache expired error without silently replaying an admitted prompt.
+- Prevent a stale or unrelated Stream cache expired message from failing the wrong gateway request; preserve provider failure recovery for the request that actually owns the error.
+- A request that mentions a provider error phrase no longer fails itself; only the actual provider error UI outside conversation messages can trigger recovery.
+- Prompt submission now gives ChatGPT one small configured render turn after Send before proof monitoring begins, with focused timing coverage; the live probe also separated a gateway pre-dispatch failure from browser submission behavior.
+- GPT-auto now recognizes live ChatGPT activity when the current renderer mounts progress before the prompt, preventing healthy requests from appearing stalled while retaining fail-closed ownership when no live-generation witness exists.
+- Provider conversation-load failures no longer replay a prompt that may already have been submitted; the gateway preserves the original session and its failure evidence, while fresh-session recovery remains limited to proven-unsent work.
+- Hardened GPT-auto recovery so restart and conversation-load failures do not replay prompts or prematurely fail live provider work, while preserving CDP activity and target correlation.
+- Provider-session recovery no longer converts transient rehydration or untyped CDP observation loss into a failed/interrupted request when the same provider turn is still recoverable.
+- Gateway recovery now keeps the original session lifetime across restarts, stops retrying sessions that have truly exceeded that lifetime, and distinguishes recoverable CDP observation loss from unexpected implementation failures.
+- Restart recovery can move off a broken ChatGPT conversation tab and continue observing the original request without sending it twice.
+- Long-running GPT responses can now be reattached after a gateway restart while still generating, so monitoring resumes instead of timing out during recovery.
+- Made restart recovery fail closed on repeated conversation-load tabs and select a healthy exact session even when the managed window contains a failed duplicate.
+- Closed the remaining restart-recovery loophole where a transient non-error DOM snapshot could reset the provider-tab retry budget.
+- Fixed the remaining GPT-audited restart-recovery defects and added coverage for durable checkpoint persistence, unknown CDP health, and preferred tabs across recreated windows.
+- Hardened GPT-auto restart recovery so delayed provider load failures cannot reset the replacement budget and healthy retained tabs are not displaced by duplicate or foreign-owned tabs.
+- Synthetic response polling no longer makes stalled gateway work look active, and provider-tab recovery now keeps its safety budget until the replacement is positively verified.
+- Fixed a gateway recovery race that could attach a live successor session but leave its request stuck queued and invisible to activity monitoring.
+- Fixed a restart-recovery catalogue gap that could stop BigCherry requests after a gateway restart; the intended recovery error is now preserved and test-covered.
+- Gateway restarts no longer turn a still-recoverable provider conversation into an interrupted request just because its local observer failed; the request remains recoverable without replaying the prompt.
+- Restart recovery now attaches to an in-flight BigCherry conversation in observation-only mode before reconciling it, allowing the existing response to finish without replaying the prompt.
+- A transient failed recovery attempt no longer permanently blocks a still-running BigCherry request; later retries can reattach to the live provider conversation without replaying the prompt.
+- BigCherry requests can now carry their admitted project identity through gateway restart recovery, so completed browser responses are no longer left running because reattachment fails before DOM observation.
+- BigCherry completion detection now understands the current ChatGPT DOM shape instead of treating a completed response as uncorrelated stale content.
+- Prevent BigCherry requests from appearing active forever when ChatGPT has replaced their conversation with a load-error page; failed recovery now becomes visible and bounded without resubmitting the original prompt.
+- Conversation-load failures now retry the request in a new provider session only when Send was proven not to occur; submitted or ambiguous turns remain observation-only and are never duplicated.
+- A second failed conversation-load attempt now retains the actual DOM error and reaches the same guarded fresh-session retry path when the request was never submitted.
+- BigCherry requests now recover from ChatGPT's new Resume stream unavailable notice instead of waiting and failing.
+- BigCherry recovery no longer leaves cancelled requests running after their session closes, and conversation-load recovery reuses a healthy matching ChatGPT tab instead of multiplying failed duplicates.
+- Interrupted BigCherry responses now continue recovery even when ChatGPT exposes completion-looking controls around a partial answer, preventing false stale progress and allowing the same response to resume without prompt replay.
+- Fixed old ChatGPT tabs and stale gateway sessions surviving indefinitely after gateway restarts.
+- Prevented session cleanup from closing sessions that still own queued or running requests.
+- The dashboard now shows one Open/Focus GPT conversation button per session, including closed sessions that retain a ChatGPT conversation, instead of duplicating the action on every request.
+- New GPT requests now select visible sidebar projects without repeatedly toggling them, fall back to the full Projects page when needed, and pause long enough for ChatGPT to render and accept the prompt reliably.
+- Fixed GPT requests remaining active after ChatGPT had completed by adapting completion ownership detection to the current reversed DOM layout.
+- Fixed completed ChatGPT requests remaining marked running; live acceptance improved from 123.3 seconds to 4.0 seconds while retaining project and conversation safety fences.
+- Fixed fresh project requests that visibly completed in ChatGPT but remained running until refresh; live validation now completes automatically.
+- Fixed restart/resume failures that left requests looking active but non-live or blocked valid BigCherry conversations as already owned. A real BigCherry conversation resumed successfully after gateway restart, returned its verified completed response, and the temporary resumed session was closed cleanly.
+- Fixed the dashboard session bar so the trash button no longer wraps onto a second line.
+- Failed and cancelled requests now keep the capture-current-response control, so they can be reconciled whenever the provider session still contains a verifiable completed response.
+- Long-running BigCherry requests now show live observed activity counts on the dashboard instead of appearing stuck at the last meaningful provider event.
+- Prevented active or unresolved BigCherry sessions from losing their only recovery tab, and fixed cancelled requests remaining stuck in running state after provider/runtime detachment.
+- Prevent stale failed requests from blocking later requests and make recovery-only running states visible to clients.
+- Detect BigCherry connection interruptions reliably instead of treating them as ordinary soft liveness.
+- Terminalize stale BigCherry recovery states correctly and prevent empty-prompt retries from appearing as unknown provider errors.
+- Fixed the stuck-session path: completed DOM turns are captured automatically when possible, and unresolved restart recovery now ends with an explicit interrupted state plus stale-fence release instead of blocking later requests forever.
+- Implemented the GP14 contract-boundary fix so terminal request status remains compact and does not gain internal retry fields.
+- Plan item reads no longer return the change log by default, reducing unnecessary agent tokens while preserving explicit history retrieval.
+- GPT-auto responses now preserve verified rich formatting as bounded Markdown when the DOM proves it belongs to the current turn, while safely falling back to plain text. Gateway and MCP clients can retrieve one structured response payload with format/media type, and unsupported media types fail closed.
+- Requests that have not proven submission no longer receive readiness activity that can mask failure, and cancellations during recovery retain the original failure diagnosis needed to choose safe retry versus reconciliation.
+- Prevented ambiguous BigCherry/GPT-auto failures from silently sending duplicate prompts, preserved recovery diagnosis during cancellation races, and kept synthetic owner heartbeats from masking provider inactivity.
+- Prevent BigCherry requests from silently opening in the gpt-t1 ChatGPT project when project discovery falls back to the full Projects page.
+- Make BigCherry project routing fail closed instead of silently binding requests to gpt-t1 or another ChatGPT conversation.
+- Hardened gateway recovery so ambiguous sends fail closed and exhausted provider error paths keep observing the live session without masking failure or issuing duplicate prompts.
+- Synthetic activity can no longer mask a fresh BigCherry submission failure or repeatedly renew provider progress without new DOM evidence. Live CDP testing after gateway restart confirmed a resumed BigCherry request completed with advancing activity and a visible Response complete state.
+- Prompt-unmounted BigCherry responses retain their verified Markdown, and the regression suite now covers current Copy message completion and fresh provider failures without hanging.
+- Hardened gateway restart recovery so active provider turns can reattach without replaying prompts, while visible provider errors can no longer be masked by synthetic soft-liveness.
+- Provider failures remain visible, stale durable sessions cannot run forever, and synthetic liveness markers no longer hide provider inactivity.
+- Active durable sessions no longer retry reattachment forever after real provider inactivity; they fail through the bounded outer recovery path.
+- Restart recovery now reattaches eligible resource-policy-closed sessions without resubmitting prompts, while bounded interruptions retain the underlying provider error for diagnosis.
+- Promptful continuation requests no longer silently reopen a recovery session, and diagnostics now identify the underlying provider rehydration error.
+- Automatic recovery can no longer complete a later foreign conversation turn, and pre-ID prompt identity survives restart checkpoints.
+- Transient scheduler errors no longer strand recovery requests without a retry timer.
+- The dashboard/runtime status no longer presents known unreattachable work as actively running.
+- Restart recovery now checks the durable session checkpoint instead of a stale request copy, and follow-up recovery cannot silently inherit the generic retry limit.
+- Ambiguous follow-up recovery now stops at its own limit even when the provider session remains reachable, and the resulting request clearly reports that manual reconciliation is required without clearing the safety fence.
+- Follow-up recovery now has a genuinely independent retry budget, and ambiguous failure keeps the safety fence while exposing a durable manual-reconciliation state.
+- Explicitly abandoned requests no longer remain stuck in cancelling when their provider session has already failed or closed; the gateway records the terminal cancellation and recovery reason.
+- Requests that cannot be reattached after a gateway restart no longer remain falsely active. They are marked interrupted with evidence for manual reconciliation, while provider conversations retain safe observation-only recovery and clients receive explicit recovery/orphaned status.
+- Prevent one gateway monitoring error from silently stopping activity and recovery checks for all requests.
+- Fix GPT project submissions failing even though the project and new-chat control are visible in the browser.
+- Make gateway monitoring survive startup failures and make project discovery both reliable and fail-closed against ambiguous DOM identity.
+- Gateway restart recovery now resumes requests that had not been sent while preserving fail-closed handling for ambiguous provider turns.
+- Prevent gateway restarts from duplicating prompts or masking unresolved BigCherry work by requiring positive checkpoint evidence before replay.
+- Do not replay a gateway request after restart merely because no contradiction was found; replay now requires positive proof that the current prompt was never submitted.
+- Allow safe queued requests to resume after a predecessor while still preventing duplicate sends when the current request crossed the provider boundary.
+- Prevent uncorrelated provider-side effects from authorizing a duplicate prompt after restart, while preserving safe successor recovery.
+- Allow an actively generating request to survive a gateway restart without being repeatedly retried and interrupted by an invalid internal turn transition.
+- Restarted provider sessions remain watchdog-visible, use the correct frozen inactivity lease, cannot be hidden by one bad watchdog record, and proven-unsent submission failures now clear recovery state safely without masking ambiguous provider effects.
+- Gateway restart recovery now preserves ambiguous active work, keeps recovered sessions supervised during backoff, isolates one bad watchdog record from later requests, and refuses to silently change lease policy for legacy or malformed records.
+- Ambiguous provider-session cancellations now stay truthful and recoverable instead of being falsely marked cancelled, and invalid watchdog leases fail closed rather than changing behavior silently.
+- Hardened project-scoped GPT request startup so slow sidebar rendering and compact fallback windows do not become false project-not-found failures, with clearer pre-submission diagnostics.
+- Hardened project-scoped GPT startup and recovery so provider identity is proven from the resulting URL, occluded clicks fail closed, startup timeouts share one budget, diagnostics retain the real route and branch reason, and cancelled recovery retries cannot re-enter the provider.
+- Synthetic activity can no longer hide a stalled provider turn: clients still see activity bumps, while internal timeout and failure detection use only actual provider progress.
+- Synthetic activity can no longer mask a non-started or stalled provider request; the BigCherry fallback assistant-ID remount path now recovers only when the DOM proves it is the same prompt-owned response slot.
+- Strengthened failure truthfulness and restart recovery so synthetic activity cannot hide a request that never started or stalled, while safe provider activity and recoverable GPT turns continue to be observed.
+- Closed the remaining paths where legacy synthetic activity or ambiguous fallback DOM ordinals could keep a failed request looking active, while preserving safe restart observation for the same prompt.
+- GPT-auto conversation-load failures now retry the existing ChatGPT conversation before opening replacement tabs, without replaying prompts or letting synthetic activity mask failure.
+- Provider Retry recovery remains available independently of replacement-tab limits, while replacement creation stays bounded and durable.
+- GPT review findings are incorporated: load retries cannot target transcript controls, cannot treat a blank page as recovered, cannot exhaust unrelated recovery budgets, and cannot overrun the normal readiness deadline.
+- Final GPT audit fixes are implemented: duplicate tabs cannot mask an unproven load, direct-body Retry remains compatible with the current renderer, and all recovery work is bounded by the normal readiness deadline.
+- The final provider-recovery edge cases are closed: transcript text cannot trigger a foreign Retry, and blank duplicate tabs cannot displace the real failed conversation.
+- The last GPT-identified failure paths are closed: foreign Retry buttons cannot be clicked, and an unproven duplicate tab cannot steal recovery from the original failed conversation.
+- Recovery now recognizes durable evidence after a restart and can reconcile a completed provider turn without replaying an ambiguous prompt or fabricating completion.
+- Conversation load failures now wait and recover in the existing ChatGPT conversation instead of prematurely failing or replaying a request. Proven-unsent requests retain their safe replacement path.
+- Project requests no longer fail just because ChatGPT opens the new project conversation directly instead of first showing the project landing page.
+- The gateway now waits through transient ChatGPT load failures without masking real failures, preserves retry evidence, and avoids falsely failing responses during normal DOM identity hydration.
+- Project selection timeouts now report as structured provider-readiness failures instead of opaque internal gateway errors, with enough route evidence to diagnose them without replaying a prompt.
+- Recognize the real conversation Retry button in the current ChatGPT renderer without clicking unrelated sidebar retries.
+- Handle the current ChatGPT error-panel layout without confusing it with transcript or sidebar retries.
+- Prevent readiness failures from being mislabeled as internal errors and prevent Retry from acting on a different conversation after navigation.
+- Keep Retry recovery fail-closed when the provider/CDP call itself errors.
+- GPT-auto pinned profiles now select their configured ChatGPT Project instead of accidentally searching by the repository name, fixing gpt-t2 startup failures.
+- Stopped gateway-driven tab cycling by preventing restart recovery from opening replacement ChatGPT tabs when the exact conversation tab is missing.
+- Prevented the remaining recovery path from creating replacement tabs and restarting the tab cycle.
+- Stopped cancelled provider sessions from being resurrected during gateway restart recovery, preventing stale browser tabs from being driven by the recovery loop.
+- Fixed recurring BigCherry project-readiness failures caused by background-created tabs not receiving initial activation before project navigation. Verified with focused tests and a live BigCherry request.
+- Removed the false early watchdog warning that appeared before BigCherry had a chance to emit its first provider activity. Verified with regression tests and a live BigCherry request that completed without watchdog diagnostics.
+- Fixed false GPT-auto submission failures when ChatGPT virtualizes the user prompt after the answer has completed. Focused tests pass and a live BigCherry smoke request completed successfully with no diagnostics.
+- Gateway tab creation now repairs wrong-window placement instead of failing before dispatch. Bridge regression suites pass and a live BigCherry CDP create/close check confirmed matching window placement.
+- Fixed BigCherry readiness failures caused by the fallback timer being consumed before the Projects page could select the project.
+- Fixed the remaining BigCherry browser-control failure: an exact project selection could be acknowledged but fail to open the project route, so the gateway now safely recovers and verifies BigCherry before continuing.
+- Fixed normal name-based BigCherry requests: when the sidebar button is covered, the gateway now retains the proven BigCherry identity through fallback and opens the correct project route.
+- Prevent retained or orphaned provider workers from continuing browser focus mutations after their gateway session is terminal.
+- Stopped background BigCherry request/recovery paths from stealing the selected browser tab, while preserving explicit dashboard focus and terminal-session cleanup.
+- Stopped watchdog response capture from stealing browser focus and fixed restart handoff so only one gateway process remains attached to CDP.
+- Prevented repeated BigCherry tab creation when ChatGPT returns 'Could not load this ChatGPT conversation'. Recovery now stops opening replacement tabs after the bounded load-recovery budget and waits for explicit reattach or the normal outer timeout.
+- Stopped unresolved BigCherry conversations from reopening a failed ChatGPT tab after it is closed. They now pause safely until the exact conversation is explicitly reattached or the normal outer timeout resolves them.
+- Closed the final bypass that could reopen a failed BigCherry conversation: unresolved sessions can no longer create a replacement tab through the session-open path after their exact tab is closed.
+- Made manual closure of an unresolved failed conversation pause the session instead of triggering another tab, while preserving recovery for genuinely active turns.
+- Repeated ChatGPT conversation-load failures now fail the request and stop session recovery, preventing the same failed tab from being reopened indefinitely.
+- Prevent stale BigCherry requests from endlessly reopening tabs when ChatGPT shows a terminal response that cannot be proven to belong to the request.
+- Prevent a gateway restart from recreating a BigCherry conversation tab when its previous request is unresolved and the exact tab has been detached.
+- Stop unresolved BigCherry requests from reattaching to a new CDP tab that merely has the same chat URL.
+- Make stale-session cleanup all-or-nothing at the eligibility stage so one live request cannot leave a session half-reconciled.
+- Prevented watchdog recovery from reopening or cycling missing GPT tabs, restored completion commits for status-only finished responses, and made stale-session cleanup fail closed on mismatched provider bindings without synthetic activity masking expiry.
+- Prevented expiry cleanup from acting on records whose provider ownership cannot be proven exactly.
+- Fixed completed GPT responses being rejected when ChatGPT virtualized the user message out of the DOM.
+- Closed the expiry race window and made completed virtualized GPT turns recoverable without weakening request ownership checks.
+- Closed the remaining provider-binding gaps identified by GPT review so continuations cannot become untraceable during stale-session cleanup.
+- Closed the final GPT-identified completion-correlation and expiry-race gaps without weakening fail-closed request ownership.
+- Removed the last identified completion-correlation and session-expiry race windows.
+- Preserved cleanup of empty stale sessions while keeping exact binding checks for sessions that still own requests.
+- Removed the last gateway session lock-order deadlock risk.
+- Stopped synthetic activity from hiding completed GPT turns and restored automatic completion detection without tab reopening or prompt resubmission.
+- Fixed the watchdog regression where synthetic activity kept a completed GPT turn running and could trigger active tab reconciliation. Completion probing is now passive and independent of synthetic activity, with regression tests.
+- Updated PR #27 with production-seam gateway observability, recovery fencing, bounded evidence, compatibility, and replay-pagination fixes; focused validation passes.
+- Completed the GA03-GA05 gateway observability and recovery hardening pass with bounded shared evidence, witness-backed replay, identity-fenced recovery, compact MCP DTOs, indexed history, and regression coverage.
+- Fixed the remaining production observability and recovery audit findings, added real API/MCP regressions, and validated the complete agent test aggregate through 100%.
+- Gateway observability and recovery now retain the diagnostics needed to explain completion decisions, close the session-expiry race, classify replay from cumulative evidence, and keep bounded history and artifact retention operations safe.
+- The gateway's evidence and history reads now stay bounded even for large journals, while request lists return the correct state-filtered newest records before applying limits.
+- Deep gateway history and recovery pages now continue from their indexed byte position instead of rescanning all earlier rows, preserving bounded pagination for long journals.
+- Closed the second Dev-GPT review gaps around native recovery fencing, evidence retention, bounded replay, artifact privacy, and compact-status compatibility; the focused gateway suite passes.
+- Applied the Dev-GPT review fixes across observability, recovery evidence, and MCP compactness, added regression coverage, and verified the focused gateway suite.
+- Fixed multi-request session continuation so a failed local gateway handle can resume the same durable provider conversation for the next request instead of immediately returning RES-AGW-003, while still blocking ambiguous or intentionally closed sessions.
+- Fixed new-session startup failures that were being terminalized without retry and left active orphan sessions behind.
+- Gateway failures now perform one safe provider recheck before becoming terminal, recovering a verified completed GPT response without replaying ambiguous prompts.
+- New gateway requests now carry a compact project name in their ID, making BigCherry and other project requests easier to identify without opening records.
+- BigCherry requests now route to the BigCherry checkout and their later status/recovery operations can find the same project-owned request record.
+- Fixed BigCherry recovery routing so a failed request can resume against the correct project session; verified the exact durable conversation and resumed its provider session without replaying the prompt.
+- Fixed false failed BigCherry completions caused by ChatGPT remounting a completed assistant DOM node with a new message ID. The gateway now safely adopts only a proven same-turn terminal remount and continues to reject ambiguous or streaming identity changes.
+- Fixed the gateway alive-but-unreachable failure. A server or teardown failure can no longer leave the process and registry looking healthy while MCP cannot connect; the wrapper now fences and replaces the stale owner.
+- GPT continuations now defer exact-chat reattachment instead of silently forking a fresh conversation, and completed operator captures release the stale fence that blocked later prompts.
+- Same-session GPT conversations now silently retry exact-chat reattachment after timeout and continue past stale completed-turn fences.
+- Prevented successful GPT turns from being recorded as unresolved after completion, so durable BigCherry conversations can continue and resume cleanly after gateway restarts.
+- Stopped the watchdog from racing active GPT turns, removing the long gap between request completion and session bookkeeping.
+- Prevent gateway requests from being failed when ChatGPT remounts a completed same-turn assistant response, while retaining fail-closed protection against later turns.
+- Status polling now performs the same safe response-capture recovery as the dashboard button for eligible failed requests, without replaying prompts or hammering the provider.
+- Fixed the false-negative GPT completion path where a submitted review finished in the tab but prompt virtualization removed the user anchor before the gateway pinned the assistant ID. The gateway now safely captures that response only with strong same-turn terminal evidence.
+- Improved gateway recovery so status reads no longer wait on provider capture, ambiguous submissions are not auto-adopted, recovery claims cannot remain active forever, and denied recovery dispositions cannot proceed into provider capture or state mutation.
+- Gateway recovery workers can no longer commit stale reconciliation results after takeover, and long provider captures renew their durable ownership lease.
+- Prevented transient completion races from becoming immediate failures, removed redundant session-attached churn, and hardened prompt-virtualized GPT completion detection without allowing synthetic activity or later turns to masquerade as success.
+- Closed the remaining recovery races and false-adoption paths GPT identified, added capture deadlines and invalid-lease protection, and preserved safe request/session metadata updates.
+- Recovery ownership now fences the whole terminal/session cleanup path, long-lived leases renew correctly, and completion reconciliation cannot exceed its configured wall-clock budget.
+- Terminal recovery cleanup now survives process interruption and cannot overwrite a newer session turn; provider reconciliation also respects one end-to-end deadline.
+- Fixed BigCherry request admission failures caused by reusing a gateway session that had already failed or closed. The provider chat is now retained for silent successor-session recovery, and terminal-session reuse is covered by tests.
+- Resolved workspace ambiguity caused by duplicate AUDiaGentic worktrees and hardened silent GPT-session recovery against terminal-session reuse and concurrent successor creation.
+- Fixed MCP status routing so a request created in an explicitly selected workspace can still be polled even when duplicate worktrees share the same project name.
+- Prevent gateway requests from appearing active forever when a previous GPT turn is unresolved but the new prompt was never submitted.
+- Point GPT-auto CDP at the remote browser on 10.10.100.10.
+- Prevent completed BigCherry responses from being marked failed when ChatGPT remounts the assistant DOM node, and make recovery wait long enough for remote CDP capture.
+- Fixed the blocked 0.3.0 release archive by preserving legacy event IDs and safely ignoring already-released duplicates during retry.
+
+### Improvements
+- AS138 recovery behavior is now workflow-configurable instead of being embedded in dispatch and browser code. Focused parser, CDP, and gateway tests pass.
+
+### Testing
+- The recovery tests now enforce that restart never replays an unreattachable worker side effect while keeping its request visible and nonterminal.
+- GPT tab cleanup is verified to use session inactivity rather than tab age.
+- Added regression coverage for queued gateway requests so continuation metadata cannot be attributed to the preceding request.
+- Restarted the gateway and verified live that a new GPT request and its same-session follow-up both show progress, complete normally, and persist exact responses.
+- Cover the project-discovery failure cases that the independent GPT review identified.
+- Ensure the project-discovery regression test is part of the normal CI gate rather than only a local auxiliary test.
+- Added a regression test so project-selection readiness failures cannot regress into opaque internal gateway errors.
+- Record same-session ChatGPT conversation-load retries without masking real failure or silently dropping diagnostics.
+- Updated stale GPT-auto test fixtures; the full affected test module now passes.
+- Kept fail-closed request reconciliation while preserving normal cleanup for empty stale sessions.
+- Repaired and validated the guarded live CDP test harness; real gateway-project monitoring remains blocked pending explicit approval to send its three prompts.
+
+### Workflow
+- The documentation cleanup now has concrete, auditable completion gates.
+- Release templates are now language-neutral and ledger-driven; the AUDiaGentic repository keeps its dedicated OIDC-PyPI workflow, while release retries and stale commit hooks are fail-safe.
+
+## v0.3.1
+
+### Audits
+- Confirmed the deduplication fix through exact-head GPT review and a live same-session gateway/CDP test; completion was detected automatically.
+
+### Documentation
+- Document reviewed and live-tested gateway recovery fixes and retained conversation continuity after restart.
+- Reconcile stale gateway review records with deployed fixes and preserve explicit deferred hardening.
+- Document reviewed and live-validated completion recovery and startup trace changes, with remaining latency investigation explicit.
+
+### Features
+- Expose where request startup spends time without treating preparation diagnostics as GPT progress.
+
+### Fixes
+- Prevented a gateway restart during preflight from repeatedly interrupting a request: only a durable, request-matched proof that browser Send was never dispatched can resume the frozen prompt; all ambiguous cases still fail closed.
+- Gateway restart recovery no longer discards proof that a prompt was definitely unsent when opening a replacement provider surface fails; only the matching request owner can advance it to dispatching. Completed GPT review response finalization is also schema-compatible.
+- Prevent stale gateway workers from overwriting or stranding prepared BigCherry requests during restart recovery, and reject project/surface mismatches before submission.
+- Prevent recovery checkpoint corruption and ensure a crash during provider-binding registration can be repaired safely without losing the admitted request.
+- Prevent recovery code from erasing the evidence needed to safely resume a BigCherry request before submission or completion is proven.
+- Close the remaining recovery-checkpoint cleanup bypasses identified by GPT by enforcing request ownership for checkpoint writes and durable terminal state for cleanup.
+- Fixed a GPT-auto startup path where a fresh session could reject its first durable submission checkpoint, and added regression coverage for pre-Send persistence, restart safety, exact project identity, and terminal cleanup.
+- Closed the restart gap in GPT-auto submission recovery: a prepared turn can advance after a restart only after the successor acquires the durable recovery claim.
+- Prevented watchdog recovery from completing a queued request with its predecessor’s GPT response. The trace now records when capture is skipped for a foreign turn, and recovery failures remain typed and diagnosable.
+- Prevented stale request metadata from capturing another turn, added safe rematerialization for completed responses hidden by ChatGPT virtualization, and improved trace evidence for assistant-ID changes and prompt-to-response ordering.
+- Fixed false GPT request failures caused by ChatGPT mounting the same user message twice in the DOM; distinct later prompts are still recognized as separate turns.
+- Fixed the follow-on completion bug: duplicate DOM copies are collapsed before the gateway derives whether a prompt is unanswered or an assistant response is terminal.
+- Fixed a trace-proven GPT completion miss and fresh-session checkpoint rejection without weakening turn identity or no-replay safety. Added bounded diagnostics for future checkpoint mismatches and tracked the separate live-turn handoff gap after manual capture.
+- Prevented false submission proof and false trace error reports; added tests that keep real transport errors visible and ensure a completed answer does not fabricate prompt-submission identity.
+- Prevented malformed/future reconciliation leases from blocking recovery indefinitely without allowing stale workers or prompt replay.
+- Gateway traces now distinguish how far GPT-auto got through prompt submission without recording prompt content, while preserving the no-duplicate-send rule for ambiguous requests.
+- A timeout writing the Send-intent checkpoint can no longer be mistaken for a Send click; the gateway records it as pre-click and does not click.
+- Fixed same-session gateway follow-up failures by safely clearing verified terminal checkpoint residue, preventing provider binding from creating partial checkpoints, and preserving useful owner-fence facts in request traces.
+- Prevent stale or orphaned gateway checkpoints from erasing a successor request by proving terminal turn ownership, preserving ambiguous BigCherry drafts, and improving missing-binding trace diagnostics.
+- Terminal request completion no longer waits for whole-project history compaction, and session expiry follows a consistent lock order to prevent retention/request deadlocks.
+- Repair lock contention and same-session follow-ups, and recover completed responses when conversation URL publication was lost.
+- Prevent new prompts from failing against stale checkpoints in failed sessions that never acquired a ChatGPT conversation.
+- Keep the queued-to-running ownership handoff intact when retrying session initialization.
+- Fence failed session replacement safely and preserve automatic completion across same-conversation follow-ups.
+- Prevent expired recovery attempts or stale captures from publishing a completed request after ownership changes.
+- Verify that concurrent recovery-result writers cannot invalidate a capture claim inside terminal commit.
+- Allow a manually captured predecessor's verified checkpoint to release matching idle session memory without clearing another turn.
+- Fence idle manual-capture memory reconciliation with artifact, checkpoint and conversation identity checks.
+- Attribute streamed response and thinking activity to the correct current prompt instead of silently discarding it as an older turn.
+- Preserve exact captured-turn recovery identity across cleanup failures and restarts instead of losing the live-session handoff marker.
+- Provide an observation-only completion signal for captured GPT turns without stopping provider generation or destroying recovery identity.
+- Let a manually captured completed GPT turn release its observer and unblock the same conversation safely, including capture from another process.
+- Keep the validated submission attempt on captured results so the next prompt can reuse the conversation even when request metadata publication lagged.
+- Keep queued follow-ups waiting safely when captured-turn memory cleanup is incomplete instead of dispatching them into a stale session.
+- Recognize long submitted prompts despite a lost Send acknowledgment or rotating DOM window, without sending them again.
+- Treat an already-completed capture race as success when its stored response is valid, rather than showing a misleading dashboard error.
+- Keep queued requests fenced when capture acknowledgment loses its CAS, even if local memory cleanup already succeeded.
+- Let manual capture tolerate normal activity revision updates without weakening turn ownership or checkpoint safety.
+- Preserve session checkpoint identity so captured completed turns do not block follow-up requests.
+- Allow a cleared reusable GPT conversation to accept its next request instead of rejecting informational recovery state.
+- Silently reopen a retained GPT conversation when its prior automatic-resume generation has failed safely.
+- Reattach retained conversation handles after restart and reject ambiguous failed-session reuse safely.
+- Fully clear captured-turn submission checkpoints so subsequent requests can reuse the conversation.
+- Allow safe cleanup of completed-turn residue on failed local sessions before reopening the retained chat.
+- Prevent a newly prepared request from inheriting an older turn's submission attempt.
+- Preserve submission order for queued requests in the same session without blocking unrelated conversations.
+- Avoid failing an unsent request when its draft reached ChatGPT but the insertion acknowledgement was lost.
+- Prevent cancelled queued work bypassing session ordering.
+- Reuse an already exact unsent draft rather than repeatedly typing it.
+- Correctly distinguish proven-unsent composer timeouts from uncertain provider submissions.
+- Automatically recover verified pre-Send composer timeouts in the same conversation instead of immediately failing.
+- Allow verified-unsent retries to start a fresh attempt in the same conversation without checkpoint-stage conflicts.
+- Do not attach an earlier answer as partial output of an unsent request.
+- Preserve pre-Send recovery classification in stored request errors.
+- Recognize completed code-heavy requests when ChatGPT stores the fence language as a hidden semantic attribute.
+- Recover completed responses even when ChatGPT keeps visible message counts constant.
+- Avoid unnecessary locked session scans for request histories already protected by saved runtime data.
+- Reduce retention lock pressure while preserving all existing protected histories.
+- Do not mistake error messages quoted in an unsent prompt for real ChatGPT failures.
+- Persist exhausted-recovery diagnostics without attempting an invalid submission-stage transition.
+- Prevent genuine conversation-load recovery from failing on an unrelated submission-stage checkpoint while preserving bounded retry protection.
+- Keep observing an active GPT request when renderer message IDs change instead of incorrectly failing it.
+- Prevent completed multi-node GPT replies from remaining stuck on an obsolete assistant node ID.
+- Recover completed thinking-plus-answer turns silently while rejecting ambiguous or still-changing replies.
+- Align manual response recovery with automatic completion for proven thinking-plus-final remounts.
+
+### Improvements
+- Remove competing completion recovery paths and keep one shared terminal replacement policy.
+
+## v0.4.0
+
+### Configuration
+- Avoid duplicate full CI runs for feature-branch PR updates while retaining main/release and manual branch validation.
+
+### Features
+- Rotate gateway traces daily, compress closed segments and expire eligible raw traces after five days without deleting results or protected recovery evidence.
+
+### Fixes
+- Repair CI contract validation and clean-room build/test assumptions without weakening production contracts.
+- Prevent CI plugin startup errors and false Pi RPC EOF failures during active long streaming turns.
+- Repair CI dependency and stale integration-contract failures while preserving fail-closed gateway routing.
+- Prevent bounded journal compaction from repeatedly blocking active streaming sessions and stop duplicate CI runs consuming runner capacity.
+- Prevent fast provider progress from being missed when the worker activity watcher starts late.
+- Allow release ledger finalization to respect pull-request-only main branch rules.
+
+### Testing
+- Bring planning and Pi isolation test fixtures and generated capability reference in line with current contracts.
+- Repair Linux CI portability, startup prerequisites, deterministic crash/lease tests, and planning integrity while retaining diagnostic evidence.
+- Make real-model smoke prompts and model choice consistent with the working RPC baseline and preserve Windows CLI diagnostics.
+- Repair CI test composition for persistent GPT sessions and bound real-model Pi smoke behavior without skipping checks.
+- Remove a flaky session-reaper test race while preserving real background cleanup and exact-once assertions.
+- Stabilize the real Pi resume smoke test and expose stage timings instead of an opaque fifteen-minute wait.
+
+## v0.4.1
+
+### Configuration
+- Reduce routine CI latency while preserving full background coverage and adding release artifact verification.
+
+### Fixes
+- Prevent snapshot cancellation from leaving observation running and retain CI diagnostic artifacts.
+- Prevent concurrent startup-lock claims from losing gateway session updates.
+
+### Testing
+- Allow full CI test inventory without weakening empty-execution failure checks.
+- Make CI source-provenance checks reliable inside browser containers.
+
+## v0.4.2
+
+### Configuration
+- Clean up generated root artifacts without disrupting local agent setup; prevent their return to Git and Docker builds.
+
+### Workflow
+- Release version bumps now validate and merge automatically, then continue to build and PyPI publication without a manual release-PR merge.
+
+## v0.4.3
+
+### Configuration
+- Replace private operational metadata with public placeholders and reject future disclosures before commits merge.
+
+### Documentation
+- Clarify what must never be published, how to review credentials and private diagnostic metadata, and the limits of the repository security audit.
+
+### Fixes
+- Public browser defaults no longer depend on a developer Windows installation, and related unit fixtures remain isolated across CI platforms.
+
+## v0.5.0
+
+### Features
+- Build and test standalone MCP bundles without shipping a repository checkout; planning and ledger support isolated functional round trips. Minimal co-installable component packages remain separate follow-up work.
+
+## v0.5.1
+
+### Fixes
+- Restore full-suite test collection and allow headless gateways serving non-browser providers to start without requiring a local browser.
+- Ensure hermetic full-suite Docker builds receive the tool scripts required by contract-test collection.
+
+### Testing
+- Make full-suite configuration and Docker-policy checks portable on clean headless test machines.
+
+## v0.5.2
+
+### Testing
+- Allow safe timing comparisons of focused release checks without creating a release.
+
+### Workflow
+- Speed up release by running focused release checks before publication and full tests asynchronously afterward.
+
+## v0.5.3
+
+### Documentation
+- Audited every GA gateway-reliability plan with terminal Dev-GPT evidence and updated the planning records: completed items are marked completed, unsupported completion claims are active again, and pending recovery work now has explicit safety, dependency, and validation gates.
+- Document how gateway requests recover when the browser disconnects or restarts.
+- Complete the admission diagnostics and browser restart recovery plans with code review, simulated production E2E and live restart evidence.
+
+### Fixes
+- Distinguish proven-unsent gateway admission failures from ambiguous submissions without weakening duplicate-send protection.
+- Keep uncertain admission evidence conservative and preserve safe diagnostic proof across repeated storage.
+- Keep active GPT requests recoverable across browser outages without replaying prompts or stealing tab focus.
+- Recover submitted requests safely across browser and gateway restarts without duplicate prompts or foreground tab cycling.
+- Close recovery ownership and capture races and validate browser-offline restart through the production response observer.
+- Complete restart recovery through durable response delivery and checkpoint cleanup instead of leaving completed GPT replies stuck as running.
+- Recover completed responses even if the gateway restarted before the prompt ID was saved, without allowing duplicate sends or telemetry-only failures.
+
+### Testing
+- Run browser restart and recovery regressions automatically in required CI gates.
+- Ensure required CI actually runs the browser recovery tests instead of failing collection on a missing optional socket package.
+
+## v0.6.0
+
+### Documentation
+- Plan MCP installation into selected harnesses with consistent keyword commands and detailed contextual help.
+- Detail a component-contained MCP installation CLI design with safe selection, recovery and consistent help.
+- Plan complete MCP onboarding tools, descriptions, instructions and managed fragments with compatible outputs and package validation.
+- Complete reviewed MCP keyword onboarding with Windows/Linux installed-package validation and documented recovery limits.
+- Plan a shared gateway server with keyword commands, explicit remote project connections and complete deployment/tool documentation.
+- Map caller-local execution scenarios and defer implementation until the current feature release succeeds.
+
+### Features
+- Install selected MCPs into chosen harnesses using keyword commands, detailed help and recoverable native configuration updates.
+
+### Fixes
+- Prevent background MCP refresh from replaying an older target selection after an installation.
+- Keep installed MCP servers on the component profile selected during setup.
+- Keep detailed MCP help free of runtime registration side effects.
+- Safely prune and restore native MCP access when providers are disabled or enabled, preserving shared user configuration.
+- Keep repeated configuration installs unchanged and verify native MCP connection outcomes more precisely.
+- Let MCP installation retries discover interrupted targets before guarded recovery.
+- Recover interrupted native MCP writes safely without claiming foreign entries or losing multi-target installation progress.
+- Restore gateway MCP initialization by aligning resume parameter documentation with its actual signature.
+
+## v0.6.1
+
+### Documentation
+- Validate and complete silent GPT conversation restoration after browser tab changes, with deployed same-session live tests.
+
+### Fixes
+- Resume idle GPT conversations after browser restart without failing on expired physical tab IDs or replaying earlier prompts.
+- Harden silent GPT conversation restoration against stale browser targets and recovery races.
+
+## v0.6.2
+
+### Fixes
+- Recover temporarily unavailable ChatGPT tabs in the background without focus switching or duplicate prompt submission.
+
+### Testing
+- Keep background network recovery small and strengthen its targeted identity and timeout checks.
+
+## v0.46.0
+
+### Features
+- Task worktrees now have one command set for starting, publishing, merging, syncing and cleaning up.
+- Agents are told the worktree workflow by the project instructions.
+- The gateway can be restarted from the audiagentic command line.
+- Doctor now reports a gateway running old code or a port held by another install.
+- Settings can be written with config set; providers are configured as named instances.
+
+### Fixes
+- Gateway restarts no longer fail because the old process still holds the port.
+- Release pull requests merge again under the required-checks rule; PyPI publishing waits for an explicit switch.
+
+### Improvements
+- Agent tool descriptions are much smaller, with operator tools opt-in.
+
+### Testing
+- More tests cover the gateway activity lease.

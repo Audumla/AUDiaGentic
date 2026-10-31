@@ -48,16 +48,6 @@ def build_server() -> FastMCP:
     def refresh_harness_config() -> dict[str, Any]:
         return session_api.refresh_harness_config(project_root_from_env())
 
-    @mcp.tool()
-    @tool_boundary
-    async def update_rig(scope: str = "local") -> dict[str, Any]:
-        return await session_api.update_rig(scope=scope)
-
-    @mcp.tool()
-    @tool_boundary
-    def rig_upgrade_status(scope: str = "local") -> dict[str, Any]:
-        return session_api.rig_upgrade_status(scope=scope)
-
     return mcp
 
 

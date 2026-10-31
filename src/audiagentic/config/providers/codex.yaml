@@ -20,6 +20,8 @@ capabilities:
       package: "@openai/codex"
       executable: codex
       probe: [codex, "--version"]
+      # codex on PATH is a Node launcher; the native binary is in a platform package.
+      native_executable: "audiagentic.components.providers.adapters.codex.native:locate_native_codex"
 
   host-extensions:
     mechanism:
@@ -31,6 +33,7 @@ capabilities:
     mechanism:
       config_path: ".codex/config.toml"
       reader: "audiagentic.components.providers.adapters.codex.mcp_format:read_codex_toml"
+      raw_reader: "audiagentic.components.providers.adapters.codex.mcp_format:read_raw_codex_mcp"
       writer: "audiagentic.components.providers.adapters.codex.mcp_format:write_codex_toml"
       remover: "audiagentic.components.providers.adapters.codex.mcp_format:remove_codex_toml"
       transports: [stdio] # codex-toml writer emits command/args entries only

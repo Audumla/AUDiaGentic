@@ -29,17 +29,11 @@ def build_global_context(
     """
     from audiagentic.runtime.harness.config import (
         load_harness_config,
+        require_harness_endpoint,
         require_harness_provider,
-        require_harness_rig_port,
     )
+    from audiagentic.runtime.harness.endpoint import query_server_model
     from audiagentic.runtime.harness.resolution import harness_cli_available
-    from audiagentic.runtime.harness.rig import launch_rig_if_needed
-    from audiagentic.runtime.rig.embedded.config import load_rig_model
-    from audiagentic.runtime.rig.models import (
-        load_model_profile,
-        query_server_model,
-        query_server_version,
-    )
 
     if harness_cli_available(harness_type) is None:
         raise make_error(
@@ -55,7 +49,7 @@ def build_global_context(
         )
 
     harness_cfg = load_harness_config(project_root=project_root)
-    requested_model = os.environ.get("AUDIAGENTIC_AG_MODEL") or harness_cfg.get("rig", {}).get(
+    requested_model = os.environ.get("AUDIAGENTIC_AG_MODEL") or harness_cfg.get("endpoint", {}).get(
         "model"
     )
     if not requested_model:
@@ -68,20 +62,12 @@ def build_global_context(
                 "No model configured. Set AUDIAGENTIC_AG_MODEL environment variable "
                 "or set 'model' in harness config."
             ),
-            details={"field": "rig.model"},
+            details={"field": "endpoint.model"},
         )
 
-    profile_name, model_profile = load_model_profile(None, requested_model)
-    rig_port = require_harness_rig_port(harness_cfg)
-    _, model_id = load_rig_model()
-    rig_connection = launch_rig_if_needed(
-        requested_model, profile_name, model_profile, rig_port=rig_port, model_id=model_id
-    )
-    if not rig_connection.embedded:
-        model = query_server_model(rig_connection.endpoint) or rig_connection.model
-
-    rig_bin_dir = agent_runtime / "rig" / "bin"
-    server_version = query_server_version(rig_bin_dir)
+    # The model server is one that already runs; AUDiaGentic does not host it.
+    endpoint = os.environ.get("AUDIAGENTIC_AG_BASE_URL") or require_harness_endpoint(harness_cfg)
+    model = query_server_model(endpoint) or requested_model
     provider = os.environ.get("AUDIAGENTIC_AG_PROVIDER") or require_harness_provider(harness_cfg)
     resolved_enable_mcp = enable_mcp or bool(harness_cfg.get("mcp", {}).get("enabled", False))
 
@@ -90,15 +76,10 @@ def build_global_context(
         agent_runtime=agent_runtime,
         agent_work=project_root,
         agent_log_dir=project_root / ".audiagentic" / "logs" / "cli",
-        endpoint=rig_connection.endpoint,
-        model=rig_connection.model if rig_connection.embedded else model,
-        model_profile=model_profile,
-        profile_name=profile_name,
+        endpoint=endpoint,
+        model=model,
         provider=provider,
-        embedded_rig=rig_connection.embedded,
         enable_mcp=resolved_enable_mcp,
-        rig_attachment=rig_connection.attachment,
-        server_version=server_version,
         harness_cfg=harness_cfg,
         launch_runtime_root=new_launch_runtime_root(agent_runtime),
     )
@@ -111,8 +92,6 @@ def build_base_run_env(ctx: AgentContext) -> dict[str, str]:
     env["AUDIAGENTIC_REPO_ROOT"] = str(ctx.project_root)
     env["AUDIAGENTIC_AG_BASE_URL"] = ctx.endpoint
     env["AUDIAGENTIC_AG_MODEL"] = ctx.model
-    env["AUDIAGENTIC_RIG_TYPE"] = "embedded" if ctx.embedded_rig else "external"
-    env["AUDIAGENTIC_RIG_PROFILE"] = ctx.profile_name
     env["OPENAI_API_BASE"] = ctx.endpoint
     env["OPENAI_BASE_URL"] = ctx.endpoint
     env["OPENAI_API_KEY"] = "dummy"
@@ -169,8 +148,6 @@ def print_startup_info(
     print_message(f"  Provider: {ctx.provider}")
     print_message(f"  Model:    {ctx.model}")
     print_message(f"  Endpoint: {ctx.endpoint}")
-    if ctx.server_version:
-        print_message(f"  Server:   {ctx.server_version}")
     print_message(f"  MCP:      {'enabled' if ctx.enable_mcp else 'disabled'}")
     for line in extra_lines or []:
         print_message(line)
@@ -201,7 +178,7 @@ def run_provider_agent(
     """
     from audiagentic.components.providers import providers_api
     from audiagentic.runtime.harness.config import require_smoke_timeout
-    from audiagentic.runtime.rig.http import require_models_endpoint
+    from audiagentic.runtime.harness.endpoint import require_models_endpoint
 
     if not smoke:
         print_message("\033[2J\033[H", flush=False)

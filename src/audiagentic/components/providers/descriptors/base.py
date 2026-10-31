@@ -204,6 +204,10 @@ class CliInstallRecipe:
     uninstall_name: str | None = None
     probe: list[str] | None = None
     probe_fn: Callable[[Any], dict[str, Any] | None] | None = None
+    # For a CLI whose PATH executable is a launcher (e.g. a Node wrapper):
+    # locate(launcher_path) -> the native implementation it runs, or None.
+    # Qualification evidence binds the native implementation (SH53).
+    native_executable_fn: Callable[[Path], Path | None] | None = None
 
 
 def cli_recipe(

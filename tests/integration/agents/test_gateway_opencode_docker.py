@@ -41,6 +41,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from tests.helpers.gateway_settings import use_gateway_settings
 from tests.integration.agents.gateway_docker_harness import (
     gateway_rig_compatible_npm_provider_ids,
     install_provider,
@@ -180,7 +181,7 @@ def _write_harness_config(project_root: Path, provider_id: str) -> None:
         yaml.safe_dump(
             {
                 "harness": {"type": provider_id},
-                "rig": {"port": _RIG_PORT, "model": _MODEL_ID, "provider": _VENDOR_ID},
+                "endpoint": {"url": f"http://127.0.0.1:{_RIG_PORT}/v1", "model": _MODEL_ID, "provider": _VENDOR_ID},
                 "mcp": {"enabled": False},
                 "smoke": {"timeout": 60},
             },
@@ -200,7 +201,7 @@ def _provision_provider_project(tmp_path: Path, provider_id: str, monkeypatch) -
     from audiagentic.launcher import _main
 
     monkeypatch.setenv("AUDIAGENTIC_REPO_ROOT", str(tmp_path))
-    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_MODE", "in-process")
+    use_gateway_settings(monkeypatch, tmp_path, implementation="embedded")
     monkeypatch.setenv("AUDIAGENTIC_RIG_API_KEY", "dummy")
 
     write_execution_profile(
@@ -314,7 +315,6 @@ def test_gateway_runs_real_cli_provider_against_local_rig(
             tmp_path,
             execution_profile_id="docker-harness-rig",
             prompt_body="Reply exactly GATEWAY_HARNESS_OK",
-            timeout_seconds=90,
         )
     finally:
         reset_gateway_client()
@@ -356,7 +356,7 @@ def test_gateway_cancel_of_real_provider_request_reaches_terminal_state(
         request_id = submitted["request-id"]
 
         wait_for(
-            lambda: client.get_execution_request(tmp_path, request_id)["state"] == "running",
+            lambda: client.get_execution_request(tmp_path, request_id)["lifecycle"] == "active",
             timeout=30, what=f"{provider_id} request to start running",
         )
 
@@ -365,7 +365,6 @@ def test_gateway_cancel_of_real_provider_request_reaches_terminal_state(
 
         final = client.wait_execution_request(tmp_path, request_id, timeout_seconds=30)
         assert final["state"] in {"cancelled", "failed", "completed"}, final
-        assert final["state"] != "running"
     finally:
         reset_gateway_client()
 
@@ -392,6 +391,7 @@ def test_gateway_rejects_unresolvable_profile_without_touching_provider(
     reset_gateway_client()
     client = get_gateway_client()
     try:
+        requests_before = list(_RigHandler.requests)
         with pytest.raises(AudiaGenticError):
             client.submit_execution_request(
                 tmp_path,
@@ -399,6 +399,6 @@ def test_gateway_rejects_unresolvable_profile_without_touching_provider(
                 prompt_body="should never reach the provider",
                 mode="async",
             )
-        assert _RigHandler.requests == []
+        assert _RigHandler.requests == requests_before
     finally:
         reset_gateway_client()

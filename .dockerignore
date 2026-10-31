@@ -6,9 +6,7 @@
 !release-please-config.json
 !README.md
 !.gitignore
-!AGENTS.md
-!CLAUDE.md
-!GEMINI.md
+!.dockerignore
 !.tmp/
 !.tmp/wheels/
 !.tmp/wheels/mcp-1.27.0-py3-none-any.whl
@@ -20,6 +18,8 @@
 !src/**
 !tests/
 !tests/**
+!tools/
+!tools/**
 tests/**/__pycache__
 tests/**/__pycache__/**
 tests/unit/runtime/Qwen3.5-0.8B-UD-Q5_K_XL.gguf
@@ -29,6 +29,8 @@ tests/unit/runtime/Qwen3.5-0.8B-UD-Q5_K_XL.gguf
 !docs/examples/**
 !docs/planning/
 !docs/planning/**
+!docs/reference/
+!docs/reference/**
 
 !.audiagentic/
 !.audiagentic/config/
@@ -54,6 +56,8 @@ tests/unit/runtime/Qwen3.5-0.8B-UD-Q5_K_XL.gguf
 !.github/
 !.github/workflows/
 !.github/workflows/**
+!.github/prompts/
+!.github/prompts/**
 !.opencode/
 !.opencode/**
 .opencode/node_modules
@@ -85,3 +89,8 @@ tests/unit/runtime/Qwen3.5-0.8B-UD-Q5_K_XL.gguf
 .audiagentic/logs/**
 .pi/sessions
 .pi/sessions/**
+
+# Generated CI manifests/JUnit reports are not build inputs.
+.ci-results/
+.ci-plan/
+.ci-audit/

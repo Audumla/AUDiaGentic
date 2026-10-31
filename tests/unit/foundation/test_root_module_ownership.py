@@ -14,6 +14,7 @@ def test_foundation_root_contains_only_declared_cross_cutting_modules() -> None:
 
     assert actual == {
         "cli_io.py",
+        "digest.py",
         "i18n.py",
         "io.py",
         "registry_utils.py",

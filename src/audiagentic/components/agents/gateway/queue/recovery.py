@@ -80,7 +80,11 @@ def _takeover_stale_request(
 
     if record["state"] not in {"queued", "running"}:
         return None, None
-    if record.get("cancel-requested") is True:
+    # read_record has validated this immutable placement against the canonical
+    # schema. A remote node is not the server's disposable worker transport:
+    # owner loss/cancellation cannot prove its effect never started or ended.
+    node_placement = isinstance(record.get("node-placement"), dict)
+    if not node_placement and record.get("cancel-requested") is True:
         # A cancellation persisted before a gateway restart is authoritative.
         # Do not rehydrate or re-enqueue the provider session: doing so can
         # restart its recovery loop and keep driving browser tabs forever.
@@ -128,6 +132,7 @@ def _takeover_stale_request(
     if (
         record["state"] == "running"
         and record.get("provider-transport-kind") != "provider-session"
+        and not node_placement
     ):
         # An isolated worker has no attach/resume seam. Once its owning
         # gateway generation is gone, keeping the durable request in
@@ -184,7 +189,10 @@ def _takeover_stale_request(
             extra={"request-id": request_id},
         )
         return "interrupted", (project_root, request_id)
-    worker_id = f"recovery_{uuid.uuid4().hex[:16]}" if record["state"] == "running" else None
+    worker_id = (
+        f"recovery_{uuid.uuid4().hex[:16]}"
+        if record["state"] == "running" and not node_placement else None
+    )
     try:
         updated = store.takeover_nonterminal_owner(
             project_root,
@@ -258,6 +266,7 @@ _RECOVERABLE_SIDE_EFFECTS = {
 def resolve_effective_turn_evidence(
     record: dict[str, Any],
     session_metadata: dict[str, Any] | None,
+    *, include_checkpoint_identity: bool = False,
 ) -> dict[str, Any]:
     """Use session turn evidence only when it explicitly owns this request."""
     effective = dict(record.get("provider-metadata") or {})
@@ -266,9 +275,13 @@ def resolve_effective_turn_evidence(
         or session_metadata.get("unresolved-turn-id") != record.get("request-id")
     ):
         return effective
-    for key in _TURN_EVIDENCE_KEYS:
+    keys = _TURN_EVIDENCE_KEYS
+    if include_checkpoint_identity:
+        from ..session.sessions_store import _RECOVERY_CHECKPOINT_KEYS
+        keys = tuple(_RECOVERY_CHECKPOINT_KEYS)
+    for key in keys:
         effective.pop(key, None)
-    for key in _TURN_EVIDENCE_KEYS:
+    for key in keys:
         if key in session_metadata:
             effective[key] = session_metadata[key]
     return effective
@@ -351,6 +364,10 @@ def recoverable_reconcile_diagnostics(
 
 def recovery_runner(record: dict[str, Any], *, project_root: Path | None = None):
     """Rebuild the immutable runner from admission-time record facts."""
+    if record.get("node-placement") is not None:
+        from audiagentic.components.agents.gateway.node.contracts import conflict
+
+        raise conflict(1, "Node placement requires dedicated node reconciliation, never ordinary provider recovery")
     import functools
 
     from audiagentic.components.agents.gateway.api import _resolve_provider_isolation_tier
@@ -424,6 +441,15 @@ def recovery_runner(record: dict[str, Any], *, project_root: Path | None = None)
         isinstance(session_metadata, dict)
         and session_metadata.get("unresolved-turn-id") == record.get("request-id")
     )
+    checkpoint_proves_current_turn_prepared = (
+        provider_session
+        and session_checkpoint_available
+        and checkpoint_has_current_turn
+        and isinstance(session_metadata, dict)
+        and session_metadata.get("unresolved-turn-pending") is True
+        and session_metadata.get("submission-proven") is False
+        and session_metadata.get("submission-state") == "prepared"
+    )
     checkpoint_has_uncorrelated_pending_turn = (
         isinstance(session_metadata, dict)
         and session_metadata.get("unresolved-turn-pending") is True
@@ -483,21 +509,24 @@ def recovery_runner(record: dict[str, Any], *, project_root: Path | None = None)
         context_fingerprint=str(record.get("context-fingerprint") or ""),
         component_profile="",
         provider_isolation_tier=_resolve_provider_isolation_tier(provider_id),
-        worker_timeout_seconds=float(record.get("timeout-seconds") or 300.0),
         project_name=project_name,
         # A submitted/ambiguous provider-session turn is observation-only.
-        # The one exception is a durable presubmit reconciliation whose
+        # One exception is a durable presubmit reconciliation whose
         # side-effect fence proves Send was not reached and whose authoritative
         # session checkpoint explicitly clears pending work or names a different
-        # predecessor. Missing/empty/unreadable checkpoint evidence stays
-        # observation-only; it must never authorize prompt replay.
+        # predecessor. Another is this request's explicit prepared checkpoint,
+        # which proves the browser Send action was never dispatched. Missing,
+        # empty, legacy, or ambiguous checkpoint evidence stays observation-only.
         # Worker-backed work is deferred above.
         resume_existing=(
             bool(record.get("recovery-required"))
             and provider_session
             and (
                 not session_checkpoint_available
-                or not safe_presubmit_recovery
+                or not (
+                    safe_presubmit_recovery
+                    or checkpoint_proves_current_turn_prepared
+                )
             )
         ),
     )

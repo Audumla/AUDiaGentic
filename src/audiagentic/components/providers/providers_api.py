@@ -87,6 +87,7 @@ from audiagentic.components.providers.contracts.session_surface import (
     ResolvedSessionSurface,
     SurfaceHint,
 )
+from audiagentic.components.providers.events import PROVIDER_STATE_CHANGED
 from audiagentic.foundation.transports import ProviderLaunch
 from audiagentic.foundation.transports.harness_status_observer import (
     StatusObserverLease,
@@ -96,6 +97,81 @@ from audiagentic.foundation.transports.harness_status_observer import (
 from audiagentic.foundation.transports.session_surface import PreparedSessionTransport
 
 logger = logging.getLogger(__name__)
+
+
+def list_harness_mcp_targets():
+    """Read static native MCP registration metadata without adapter initialization."""
+    from .onboarding_metadata import list_targets
+
+    return list_targets()
+
+
+def is_native_mcp_target_enabled(project_root: Path, provider_id: str) -> bool:
+    """Read effective native eligibility from canonical provider feature state."""
+    from .services.config.provider_config import is_native_mcp_target_enabled as _enabled
+
+    return _enabled(project_root, provider_id)
+
+
+def preflight_managed_mcp(
+    project_root: Path,
+    provider_id: str,
+    *,
+    request: ManagedMcpRequest,
+    adopt_entries: tuple[ManagedMcpEntry, ...] = (),
+) -> dict:
+    """Read native ownership/revisions without mutation; return an opaque apply revision."""
+    from .services.mcp.onboarding import preflight
+
+    return preflight(project_root, provider_id, request, adopt_entries)
+
+
+def apply_managed_mcp(
+    project_root: Path,
+    provider_id: str,
+    *,
+    request: ManagedMcpRequest,
+    expected_revision: str,
+    adopt_entries: tuple[ManagedMcpEntry, ...] = (),
+) -> dict:
+    """Apply provider-native entries only while the preflight revision still matches."""
+    from .services.mcp.onboarding import apply
+
+    return apply(project_root, provider_id, request, expected_revision, adopt_entries)
+
+
+def user_mcp_status(provider_id: str, *, request: ManagedMcpRequest) -> dict:
+    """Read-only state of requested entries at a harness's user-scope MCP registration."""
+    from .services.mcp.user_scope import user_mcp_status as _status
+
+    return _status(provider_id, request)
+
+
+def reconcile_user_mcp(provider_id: str, *, request: ManagedMcpRequest) -> dict:
+    """Register requested entries at a harness's user scope; foreign names are never overwritten."""
+    from .services.mcp.user_scope import reconcile_user_mcp as _reconcile
+
+    return _reconcile(provider_id, request)
+
+
+def discover_component_mcp_bindings(
+    project_root: Path, entries: tuple[ManagedMcpEntry, ...]
+) -> dict:
+    """Read ownership-evidenced exposures for bounded component-selection migration."""
+    from .services.mcp.onboarding import discover_bindings
+
+    return discover_bindings(project_root, entries)
+
+
+def list_component_mcp_targets(project_root: Path) -> tuple[str, ...]:
+    """Read existing/prepared target identities without granting ownership."""
+    from .services.mcp.managed_mcp_registry import mcp_ownership_registry
+
+    document = mcp_ownership_registry(project_root).document()
+    scopes = set(document["providers"]) | set(document.get("prepared", {}))
+    return tuple(
+        sorted({scope.split("/")[0] for scope in scopes if scope.endswith("/component-mcp")})
+    )
 
 
 def build_admitted_agent_prompt(
@@ -109,6 +185,7 @@ def build_admitted_agent_prompt(
 ) -> str:
     """Return the gateway-admitted prompt without consulting config."""
     from audiagentic.components.providers.adapters.base_runner import default_build_prompt
+
     return default_build_prompt(
         packet_ctx,
         provider_cfg,
@@ -137,7 +214,9 @@ def read_provider_capability_evidence(
     from audiagentic.components.providers.descriptors.registry import get_descriptor
 
     descriptor = get_descriptor(provider_id)
-    return ProviderCapabilityEvidenceSnapshot(provider_id, surface_id, tuple(descriptor.capability_facts))
+    return ProviderCapabilityEvidenceSnapshot(
+        provider_id, surface_id, tuple(descriptor.capability_facts)
+    )
 
 
 def get_provider_execution_isolation_tier(provider_id: str) -> ProviderIsolationTier:
@@ -156,6 +235,17 @@ def get_provider_mcp_launch_isolation_tier(provider_id: str) -> McpLaunchIsolati
     )
 
     return _get_tier(provider_id)
+
+
+def provider_target_key(provider_id: str, instance: str | None = None) -> str:
+    """The key that identifies one provider target in sessions, queues and evidence.
+
+    ``gpt-auto`` for the provider itself, ``gpt-auto@name`` for a configured instance.
+    Descriptor, adapter and policy lookups accept either form.
+    """
+    from audiagentic.components.providers.descriptors.target import ProviderTarget
+
+    return ProviderTarget(provider_id, instance).key
 
 
 def provider_declares_session_transport(provider_id: str) -> bool:
@@ -400,7 +490,7 @@ def materialize_provider_config(
     Args:
         project_root: Project root for component discovery and surface apply.
         provider_id: Canonical provider identifier ("pi", "opencode").
-        harness_cfg: Harness config dict (rig.model, rig.port, rig.provider).
+        harness_cfg: Harness config dict (endpoint.url, endpoint.model, endpoint.provider).
         agent_runtime: Target directory for agent files (harness runtime root).
             Used by Pi which writes to a global harness runtime; ignored by
             OpenCode which writes project-local files.
@@ -585,9 +675,14 @@ def manage_mcp_entries_all(
         if descriptor.mcp_config is None:
             continue
         enabled = is_provider_enabled(project_root, descriptor.provider_id)
-        effective_request = request if enabled else ManagedMcpRequest(
-            ownership_scope=request.ownership_scope,
-            entries=(),
+        effective_request = (
+            request
+            if enabled
+            else ManagedMcpRequest(
+                ownership_scope=request.ownership_scope,
+                managed_ids=request.managed_ids,
+                entries=(),
+            )
         )
         result = manage_mcp_entries(
             project_root,
@@ -910,6 +1005,43 @@ def get_provider_status(project_root: Path, provider_id: str) -> dict[str, Any]:
         if isinstance(provider, dict):
             return provider
     return {"provider_id": provider_id, "ok": False, "error": "provider status unavailable"}
+
+
+def check_provider_availability(project_root: Path | None, provider_id: str) -> tuple[bool | None, str]:
+    """Read-only availability observation for one provider (never writes config).
+
+    ``True``/``False`` with a reason, or ``None`` when the provider declares
+    nothing that can be checked here. CLI providers use their declared probe;
+    providers on the gpt-auto CDP surface probe the configured browser.
+    """
+    from audiagentic.components.providers.descriptors import all_descriptors
+    from audiagentic.components.providers.services.lifecycle.lifecycle import probe_provider_cli
+
+    descriptor = all_descriptors().get(provider_id)
+    if descriptor is None:
+        return False, f"unknown provider {provider_id!r}"
+    if "gpt-auto-cdp" in list_session_surface_ids(provider_id):
+        from audiagentic.components.providers.adapters.gpt_auto.availability import cdp_availability
+
+        return cdp_availability(project_root, provider_id)
+    probe = probe_provider_cli(descriptor)
+    if probe is None:
+        return None, "no availability check declared"
+    if probe.get("available"):
+        return True, f"CLI found: {probe.get('executable') or 'on PATH'}"
+    return False, "CLI not found on PATH"
+
+
+def list_session_surface_ids(provider_id: str) -> tuple[str, ...]:
+    """Session surface ids a provider declares, in declaration order.
+
+    Lets callers default a surface only when exactly one exists; an unknown
+    provider yields an empty tuple.
+    """
+    from audiagentic.components.providers.descriptors import all_descriptors
+
+    descriptor = all_descriptors().get(provider_id)
+    return tuple(surface.surface_id for surface in descriptor.session_surfaces) if descriptor else ()
 
 
 def list_provider_descriptors() -> list[dict[str, Any]]:
@@ -1340,8 +1472,10 @@ def resolve_instance_capacity(
         provider_namespace = overrides.get("provider-id") if isinstance(overrides, dict) else None
         selector = (
             f"{provider_namespace}/{model_id}"
-            if isinstance(provider_namespace, str) and provider_namespace
-            and isinstance(model_id, str) and model_id
+            if isinstance(provider_namespace, str)
+            and provider_namespace
+            and isinstance(model_id, str)
+            and model_id
             else None
         )
         result[source_id] = {
@@ -1796,12 +1930,20 @@ async def capture_latest_response(
     provider_id: str,
     locator: ConversationFocusLocator,
     passive: bool = False,
+    timeout_seconds: float = 20.0,
+    deadline_monotonic: float | None = None,
 ) -> dict[str, Any]:
     from audiagentic.components.providers.services.execution.public_execution import (
         capture_latest_response as _capture,
     )
+
     return await _capture(
-        project_root, provider_id=provider_id, locator=locator, passive=passive
+        project_root,
+        provider_id=provider_id,
+        locator=locator,
+        passive=passive,
+        timeout_seconds=timeout_seconds,
+        deadline_monotonic=deadline_monotonic,
     )
 
 
@@ -1833,6 +1975,80 @@ def resolve_session_surface(
     )
 
     return _resolve(project_root, provider_id, surface_hint)
+
+
+def resolve_join_readiness(provider_id: str, surface_id: str, *, state_root: Path | None = None):
+    """Static readiness of a surface to join an existing human session (SH46).
+
+    Read-only: the execution-side inventory, the surface declaration, the join
+    adapter's declared identity and exact qualification evidence. Returns a
+    frozen ``JoinReadiness``; anything unknown is a refusal, never support.
+    """
+    from audiagentic.components.providers.services.session.join_readiness import (
+        resolve_join_readiness as _resolve_join,
+    )
+
+    return _resolve_join(provider_id, surface_id, state_root=state_root)
+
+
+def inspect_join_instance(
+    provider_id: str,
+    surface_id: str,
+    *,
+    endpoint: str,
+    session_ref: str,
+    expected_generation: str | None = None,
+    state_root: Path | None = None,
+):
+    """Passively prove the exact live instance behind a joinable surface (SH47).
+
+    Requires static join readiness (SH46), then has the join adapter observe
+    the instance and compares it with the qualified evidence. Sends no prompt
+    and starts no process; any gap is a refusal. Returns a frozen
+    ``JoinInstanceProof`` carrying the evidence id and observed generation.
+    """
+    from audiagentic.components.providers.services.session.join_proof import (
+        inspect_join_instance as _inspect,
+    )
+
+    return _inspect(provider_id, surface_id, endpoint=endpoint, session_ref=session_ref,
+                    expected_generation=expected_generation, state_root=state_root)
+
+
+def join_matrix(*, state_root: Path | None = None):
+    """Join readiness of every provider surface, from the one Provider authority (SH48)."""
+    from audiagentic.components.providers.services.session.join_authority import (
+        join_matrix as _matrix,
+    )
+
+    return _matrix(state_root=state_root)
+
+
+def register_join(provider_id: str, surface_id: str, *, endpoint: str, session_ref: str,
+                  state_root: Path | None = None):
+    """Prove the requested live instance and return a ``JoinDecision`` with its registration (SH48).
+
+    No registration exists unless the surface is join-ready and the instance is
+    proven. The caller stores the frozen registration; nothing is kept here.
+    """
+    from audiagentic.components.providers.services.session.join_authority import (
+        register_join as _register,
+    )
+
+    return _register(provider_id, surface_id, endpoint=endpoint, session_ref=session_ref, state_root=state_root)
+
+
+def revalidate_join(registration, *, state_root: Path | None = None):
+    """Re-prove a registration immediately before an effect or on reconnect (SH48).
+
+    Refuses when the evidence, executable or instance generation changed or any
+    gate no longer passes; a refused registration must not be routed.
+    """
+    from audiagentic.components.providers.services.session.join_authority import (
+        revalidate_join as _revalidate,
+    )
+
+    return _revalidate(registration, state_root=state_root)
 
 
 def prepare_provider_session_transport(
@@ -2018,7 +2234,34 @@ def _build_transport_lease(binding_id: str) -> StatusObserverLease:
     return lease
 
 
+def validate_gpt_auto_configuration(project_root: Path | None = None) -> None:
+    """Validate machine startup or one project's GPT-auto configuration.
+
+    Validation has no browser side effects and exposes no adapter config types.
+    Machine failures are fatal to the host; the caller owns per-project policy.
+    """
+    from audiagentic.components.providers.adapters.gpt_auto.config import (
+        validate_machine_gpt_auto_config,
+        validate_project_gpt_auto_config,
+    )
+
+    if project_root is None:
+        validate_machine_gpt_auto_config()
+    else:
+        validate_project_gpt_auto_config(project_root)
+
+
 __all__ = [
+    "provider_target_key",
+    "validate_gpt_auto_configuration",
+    "PROVIDER_STATE_CHANGED",
+    "list_harness_mcp_targets",
+    "user_mcp_status",
+    "reconcile_user_mcp",
+    "preflight_managed_mcp",
+    "apply_managed_mcp",
+    "discover_component_mcp_bindings",
+    "list_component_mcp_targets",
     # One-shot provider execution
     "PreparedSessionTransport",
     "ProviderExecutionRequest",
@@ -2050,6 +2293,7 @@ __all__ = [
     "load_prompt_syntax",
     "get_provider_prompt_settings_profile",
     "is_provider_enabled_for_launch",
+    "is_native_mcp_target_enabled",
     "resolve_launch_model",
     "load_packaged_prompt_template",
     "execute_provider_review_turn",
@@ -2081,6 +2325,11 @@ __all__ = [
     # AS29 slice 5a — session-surface resolution through public boundary
     "ResolvedSessionSurface",
     "SurfaceHint",
+    "inspect_join_instance",
+    "join_matrix",
+    "register_join",
+    "revalidate_join",
+    "resolve_join_readiness",
     "resolve_session_surface",
     # Surfaces
     "operate_provider_surface",

@@ -1,0 +1,14 @@
+# Doctor checks owned by the agents component (read-only). Each ref is module:attr.
+checks:
+  - id: agents.files
+    ref: audiagentic.components.agents.configuration.doctor_checks:check_agent_files
+  - id: agents.providers
+    ref: audiagentic.components.agents.configuration.doctor_checks:check_agent_providers
+  - id: agents.gateway
+    ref: audiagentic.components.agents.configuration.doctor_checks:check_gateway_mode
+  - id: agents.catalog
+    ref: audiagentic.components.agents.configuration.doctor_checks:check_catalog
+  - id: agents.gateway-code
+    ref: audiagentic.components.agents.configuration.doctor_checks:check_gateway_code_drift
+  - id: agents.gateway-port
+    ref: audiagentic.components.agents.configuration.doctor_checks:check_gateway_port

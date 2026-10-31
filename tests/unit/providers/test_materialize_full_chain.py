@@ -8,7 +8,7 @@ import pytest
 from audiagentic.components.providers import providers_api
 
 HARNESS_CFG = {
-    "rig": {"model": "qwen3.5-0.8b", "port": 42001, "provider": "audiagentic"},
+    "endpoint": {"model": "qwen3.5-0.8b", "url": "http://127.0.0.1:42001/v1", "provider": "audiagentic"},
 }
 
 

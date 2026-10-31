@@ -1,0 +1,32 @@
+root: |
+  audiagentic mcp list
+  audiagentic harness list
+  audiagentic mcp install MCP_ID harness ID[,ID...]
+  audiagentic mcp MCP_ID help
+  audiagentic harness ID help
+  audiagentic worktree list [project PATH] [output json]
+  audiagentic worktree start SLUG [item ID] [purpose TEXT] [owner NAME] [project PATH] [output json]
+  Use mcp help, harness help or mcp install help for details.
+  Existing --project, --component-profile, --prompt and --stream options remain available.
+mcp: |
+  audiagentic mcp list [project PATH] [component-profile NAME] [output json]
+  audiagentic mcp MCP_ID help [project PATH] [output json]
+  audiagentic mcp install help
+  Discovery reads metadata only: no installation, account authentication or external probes.
+  For literal Python module execution use: audiagentic mcp -- MODULE [MODULE_ARGS...]
+  Bare install/list/help and ID help select management syntax.
+harness: |
+  audiagentic harness list [output json]
+  audiagentic harness ID help [output json]
+  Displays declared native MCP capability, transports, project scope and refresh policy.
+  Declared support does not prove that a client binary is installed or verified.
+install: |
+  audiagentic mcp install MCP_ID harness ID[,ID...]
+    [project PATH] [component-profile NAME] [config FILE]
+    [dry-run] [non-interactive] [output json]
+  Each clause appears at most once. Values consume one token even when they match a keyword.
+  The nonempty harness list replaces this MCP's complete target selection; other MCPs are preserved.
+  All affected targets preflight before changes. dry-run performs no installation writes.
+  Repeating the same request resumes only proven safe incomplete work.
+  Installation configures existing harnesses; it does not install binaries or authenticate accounts.
+  Configured, reachable and verified are distinct. Results identify partial failures and restart actions.

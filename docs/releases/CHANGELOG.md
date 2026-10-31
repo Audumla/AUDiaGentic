@@ -1,5 +1,856 @@
 # Changelog
 
+## [0.48.0](https://github.com/Audumla/AUDiaGentic/compare/v0.47.0...v0.48.0) (2026-10-31)
+
+
+### Features
+
+* **gateway:** drain, resume, stop and recover join restart as gateway CLI commands (SH63) ([#264](https://github.com/Audumla/AUDiaGentic/issues/264)) ([5b61990](https://github.com/Audumla/AUDiaGentic/commit/5b619900b55ade427919adc0e1eaeba30de8d6c3))
+
+## [0.47.0](https://github.com/Audumla/AUDiaGentic/compare/v0.46.0...v0.47.0) (2026-10-31)
+
+
+### Features
+
+* **cli:** add --version; record CFG08 installed-wheel qualification and complete CFG08 ([#265](https://github.com/Audumla/AUDiaGentic/issues/265)) ([d9d4835](https://github.com/Audumla/AUDiaGentic/commit/d9d4835807453108dcb968db21528a13e8fd1cb9))
+
+## [0.46.0](https://github.com/Audumla/AUDiaGentic/compare/v0.45.0...v0.46.0) (2026-10-31)
+
+
+### Features
+
+* **config:** generic settings writer and 'config set' (CFG06) ([#251](https://github.com/Audumla/AUDiaGentic/issues/251)) ([2dc04e5](https://github.com/Audumla/AUDiaGentic/commit/2dc04e50810a1b6431822b1ed398b0e6e6ab81c5))
+* **doctor:** explain a gateway port held by another home's service (SH64) ([#245](https://github.com/Audumla/AUDiaGentic/issues/245)) ([0c1517f](https://github.com/Audumla/AUDiaGentic/commit/0c1517f3f977600b23a37ff8485d87342ebedb05))
+* **gateway:** audiagentic gateway restart as the operator command (SH63) ([#259](https://github.com/Audumla/AUDiaGentic/issues/259)) ([8d92f2f](https://github.com/Audumla/AUDiaGentic/commit/8d92f2fee209a47f533579901582d61aa89f170d))
+* **project:** agents get the worktree workflow from the project instructions (DW01) ([#257](https://github.com/Audumla/AUDiaGentic/issues/257)) ([a13b4e3](https://github.com/Audumla/AUDiaGentic/commit/a13b4e38f8a03515874f1c44fdb542bfe1941f38))
+* **providers:** provider instances replace gpt-auto-t1/t2 (CFG06) ([#247](https://github.com/Audumla/AUDiaGentic/issues/247)) ([3a2e297](https://github.com/Audumla/AUDiaGentic/commit/3a2e297b9ce8849664a1974fff07bc319e39416f))
+* **worktree:** worktree merge dry-run plans publishing without sending anything (DW01 slice 4a) ([#249](https://github.com/Audumla/AUDiaGentic/issues/249)) ([56ad8f0](https://github.com/Audumla/AUDiaGentic/commit/56ad8f072e6aa0c90bf6509c186b315f75b4ff5f))
+* **worktree:** worktree merge pushes, opens the pull request and requests auto-merge (DW01 4c) ([#253](https://github.com/Audumla/AUDiaGentic/issues/253)) ([93c0d5d](https://github.com/Audumla/AUDiaGentic/commit/93c0d5d5479c29b69d8609378926fc256c6fe398))
+* **worktree:** worktree push runs user-defined checks then pushes the exact checked commit (DW01 slice 4b) ([#252](https://github.com/Audumla/AUDiaGentic/issues/252)) ([93d51fa](https://github.com/Audumla/AUDiaGentic/commit/93d51fa8a1725094fd6ea95149c00a1f81d28109))
+* **worktree:** worktree sync brings a task branch up to date without rewriting it (DW01) ([#254](https://github.com/Audumla/AUDiaGentic/issues/254)) ([239a934](https://github.com/Audumla/AUDiaGentic/commit/239a934798830a673707bb20ad7bbe4bde519a40))
+
+
+### Bug Fixes
+
+* **gateway:** a restart's replacement waits for the port instead of failing to bind (SH63) ([#255](https://github.com/Audumla/AUDiaGentic/issues/255)) ([85b4061](https://github.com/Audumla/AUDiaGentic/commit/85b40617a171f41444d19f512f229f7d7b492eb7))
+
+
+### Documentation
+
+* **planning:** audit SH22 against the tree and correct the stale not-started note ([#256](https://github.com/Audumla/AUDiaGentic/issues/256)) ([6214f5a](https://github.com/Audumla/AUDiaGentic/commit/6214f5af4d23bc005c4f80a5e9ef25355ed56e5d))
+* **planning:** reviewed design for worktree merge (DW01 slice 4) ([#248](https://github.com/Audumla/AUDiaGentic/issues/248)) ([1fc45b6](https://github.com/Audumla/AUDiaGentic/commit/1fc45b6fa41ff930ce41a1231a30ffb32af575b8))
+
+## [0.45.0](https://github.com/Audumla/AUDiaGentic/compare/v0.44.1...v0.45.0) (2026-10-30)
+
+
+### Features
+
+* **doctor:** warn when the running gateway is older than the code it was started from (DW01) ([#243](https://github.com/Audumla/AUDiaGentic/issues/243)) ([fc13f80](https://github.com/Audumla/AUDiaGentic/commit/fc13f80b1c58f78d1d099641062fa2c035585840))
+
+## [0.44.1](https://github.com/Audumla/AUDiaGentic/compare/v0.44.0...v0.44.1) (2026-10-30)
+
+
+### Documentation
+
+* **worktree:** operator guide for start, list, prune, finish and abandon (DW01) ([#241](https://github.com/Audumla/AUDiaGentic/issues/241)) ([720c599](https://github.com/Audumla/AUDiaGentic/commit/720c599355b742de01cc21ade516ff689f176ac1))
+
+## [0.44.0](https://github.com/Audumla/AUDiaGentic/compare/v0.43.0...v0.44.0) (2026-10-30)
+
+
+### Features
+
+* **worktree:** finish can abandon unmerged work after a verified self-contained bundle (DW01 slice 3b-3) ([#239](https://github.com/Audumla/AUDiaGentic/issues/239)) ([5befa94](https://github.com/Audumla/AUDiaGentic/commit/5befa944ca9c47e4ec3b6a5928f067ad616f35c0))
+
+## [0.43.0](https://github.com/Audumla/AUDiaGentic/compare/v0.42.0...v0.43.0) (2026-10-30)
+
+
+### Features
+
+* **worktree:** worktree finish removes a merged worktree after preserving it (DW01 slice 3b-2) ([#237](https://github.com/Audumla/AUDiaGentic/issues/237)) ([3363aff](https://github.com/Audumla/AUDiaGentic/commit/3363aff9e6e141d7e1ca8b345e362ba874ebc503))
+
+## [0.42.0](https://github.com/Audumla/AUDiaGentic/compare/v0.41.0...v0.42.0) (2026-10-30)
+
+
+### Features
+
+* **worktree:** read-only eligibility verdict and worktree prune (DW01 slice 3b-1) ([#235](https://github.com/Audumla/AUDiaGentic/issues/235)) ([ac0cd84](https://github.com/Audumla/AUDiaGentic/commit/ac0cd848bce52a5b76bd579ed18c8859d1b6c6bc))
+
+## [0.41.0](https://github.com/Audumla/AUDiaGentic/compare/v0.40.0...v0.41.0) (2026-10-30)
+
+
+### Features
+
+* **mcp:** drop workspace_name, source and context fingerprint from agent_task_submit (MC09) ([#233](https://github.com/Audumla/AUDiaGentic/issues/233)) ([48ccf55](https://github.com/Audumla/AUDiaGentic/commit/48ccf5503a20e70dfd82c9352baeb7408ed3f644))
+
+## [0.40.0](https://github.com/Audumla/AUDiaGentic/compare/v0.39.0...v0.40.0) (2026-10-30)
+
+
+### Features
+
+* **mcp:** collapse nullable unions, bare worktree arg, clearer guidance (MC08) ([#231](https://github.com/Audumla/AUDiaGentic/issues/231)) ([63e2bf6](https://github.com/Audumla/AUDiaGentic/commit/63e2bf69b43906d027620e233b8509202a6b7811))
+
+## [0.39.0](https://github.com/Audumla/AUDiaGentic/compare/v0.38.0...v0.39.0) (2026-10-30)
+
+
+### Features
+
+* **mcp:** move gateway operator tools to opt-in ag-agents-gateway-ops (MC07) ([#229](https://github.com/Audumla/AUDiaGentic/issues/229)) ([ffbbff0](https://github.com/Audumla/AUDiaGentic/commit/ffbbff001803fba385b5133d0df7a91175c7c06e))
+
+## [0.38.0](https://github.com/Audumla/AUDiaGentic/compare/v0.37.0...v0.38.0) (2026-10-30)
+
+
+### Features
+
+* **mcp:** slim agent-facing tool schemas and deliver server instructions ([#227](https://github.com/Audumla/AUDiaGentic/issues/227)) ([64d713e](https://github.com/Audumla/AUDiaGentic/commit/64d713e9dfc0ab30bcf3433ffff96a08641c2859))
+
+## [0.37.0](https://github.com/Audumla/AUDiaGentic/compare/v0.36.0...v0.37.0) (2026-10-30)
+
+
+### Features
+
+* **project:** drain fence and gateway active-work query for worktree removal (DW01 slice 3a) ([#225](https://github.com/Audumla/AUDiaGentic/issues/225)) ([2c129a8](https://github.com/Audumla/AUDiaGentic/commit/2c129a81347043d4c0364d7493f6dcd7ea683353))
+
+## [0.36.0](https://github.com/Audumla/AUDiaGentic/compare/v0.35.0...v0.36.0) (2026-10-30)
+
+
+### Features
+
+* **project:** `audiagentic worktree start` (DW01 slice 2) ([#223](https://github.com/Audumla/AUDiaGentic/issues/223)) ([db73192](https://github.com/Audumla/AUDiaGentic/commit/db73192cd2ad8aa50b1c9de6ef770311df29afa9))
+
+## [0.35.0](https://github.com/Audumla/AUDiaGentic/compare/v0.34.2...v0.35.0) (2026-10-30)
+
+
+### Features
+
+* **project:** worktree ownership records and `audiagentic worktree list` (DW01 slice 1) ([#221](https://github.com/Audumla/AUDiaGentic/issues/221)) ([5fa7d3c](https://github.com/Audumla/AUDiaGentic/commit/5fa7d3c12c3c6b78c3fe89fa2394b4c834559511))
+
+## [0.34.2](https://github.com/Audumla/AUDiaGentic/compare/v0.34.1...v0.34.2) (2026-10-30)
+
+
+### Documentation
+
+* **planning:** DW01 adds primary-checkout verification, pre-push privacy and archive convention ([#219](https://github.com/Audumla/AUDiaGentic/issues/219)) ([b3c57f9](https://github.com/Audumla/AUDiaGentic/commit/b3c57f99bddbce08d33ea5d61e1827a10c89247c))
+
+## [0.34.1](https://github.com/Audumla/AUDiaGentic/compare/v0.34.0...v0.34.1) (2026-10-30)
+
+
+### Documentation
+
+* **planning:** DW01 project-agnostic worktree lifecycle (reviewed design) ([#217](https://github.com/Audumla/AUDiaGentic/issues/217)) ([530c2c2](https://github.com/Audumla/AUDiaGentic/commit/530c2c2be93d4b3b75c59dd92eec8557425a9da0))
+
+## [0.34.0](https://github.com/Audumla/AUDiaGentic/compare/v0.33.1...v0.34.0) (2026-10-29)
+
+
+### Documentation
+
+* **planning:** SH63 restart port race and runtime-move restart procedure ([#214](https://github.com/Audumla/AUDiaGentic/issues/214)) ([94be4ed](https://github.com/Audumla/AUDiaGentic/commit/94be4ed32395638425e57eae5abab03f2084a438))
+
+## [0.33.1](https://github.com/Audumla/AUDiaGentic/compare/v0.33.0...v0.33.1) (2026-10-29)
+
+
+### Documentation
+
+* **planning:** CFG08 end-to-end criterion verified through the user-scope registration ([#211](https://github.com/Audumla/AUDiaGentic/issues/211)) ([be3a2bc](https://github.com/Audumla/AUDiaGentic/commit/be3a2bce3f8e9d6216fdc0ebdf9630568e567a53))
+
+## [0.33.0](https://github.com/Audumla/AUDiaGentic/compare/v0.32.0...v0.33.0) (2026-10-29)
+
+
+### Features
+
+* **gateway:** session generation fence, retention claims and accepted-turn clock (AS118) ([#203](https://github.com/Audumla/AUDiaGentic/issues/203)) ([1a3b987](https://github.com/Audumla/AUDiaGentic/commit/1a3b9875c6afd78635f07e6aacab757f412ba50d))
+
+## [0.32.0](https://github.com/Audumla/AUDiaGentic/compare/v0.31.4...v0.32.0) (2026-10-29)
+
+
+### Features
+
+* **config:** the AUDiaGentic home can be chosen in the machine-scope settings (CFG08) ([#208](https://github.com/Audumla/AUDiaGentic/issues/208)) ([4cab757](https://github.com/Audumla/AUDiaGentic/commit/4cab757e576c89220be9382a812de390f7c7a705))
+
+## [0.31.4](https://github.com/Audumla/AUDiaGentic/compare/v0.31.3...v0.31.4) (2026-10-29)
+
+
+### Documentation
+
+* **planning:** SH63 correction, a supported restart exists; only the CLI route is missing ([#206](https://github.com/Audumla/AUDiaGentic/issues/206)) ([5be142c](https://github.com/Audumla/AUDiaGentic/commit/5be142cab53a6ec4aa40b43ca38d0f21a8d825ee))
+
+## [0.31.3](https://github.com/Audumla/AUDiaGentic/compare/v0.31.2...v0.31.3) (2026-10-29)
+
+
+### Documentation
+
+* **planning:** SH63 shared service stop/restart, SH64 port collision across homes ([#204](https://github.com/Audumla/AUDiaGentic/issues/204)) ([eed9b74](https://github.com/Audumla/AUDiaGentic/commit/eed9b7442000ea3769cb0b12f44aa50d1355904e))
+
+## [0.31.2](https://github.com/Audumla/AUDiaGentic/compare/v0.31.1...v0.31.2) (2026-10-29)
+
+
+### Documentation
+
+* **planning:** SH22 audit against main ([#199](https://github.com/Audumla/AUDiaGentic/issues/199)) ([9dcee31](https://github.com/Audumla/AUDiaGentic/commit/9dcee31a61933c18ba3f2f3f141229c5506cd290))
+
+## [0.31.1](https://github.com/Audumla/AUDiaGentic/compare/v0.31.0...v0.31.1) (2026-10-29)
+
+
+### Documentation
+
+* **planning:** SH44 records the decision that the simulated run is acceptable for now ([#198](https://github.com/Audumla/AUDiaGentic/issues/198)) ([097bc12](https://github.com/Audumla/AUDiaGentic/commit/097bc1265ec2706206cd5ca4ce05103361b1f674))
+
+## [0.31.0](https://github.com/Audumla/AUDiaGentic/compare/v0.30.1...v0.31.0) (2026-10-29)
+
+
+### Features
+
+* **providers:** qualification evidence binds the native binary behind a CLI launcher (SH53) ([#196](https://github.com/Audumla/AUDiaGentic/issues/196)) ([f88525d](https://github.com/Audumla/AUDiaGentic/commit/f88525de6d03c4203de9182f738dc38df7215828))
+
+## [0.30.1](https://github.com/Audumla/AUDiaGentic/compare/v0.30.0...v0.30.1) (2026-10-29)
+
+
+### Documentation
+
+* **planning:** SH49 re-audit after the node slices of [#70](https://github.com/Audumla/AUDiaGentic/issues/70) ([#194](https://github.com/Audumla/AUDiaGentic/issues/194)) ([5c41bc0](https://github.com/Audumla/AUDiaGentic/commit/5c41bc035aebd90e8e494661cec410716e5a6833))
+
+## [0.30.0](https://github.com/Audumla/AUDiaGentic/compare/v0.29.1...v0.30.0) (2026-10-29)
+
+
+### Features
+
+* **gateway:** wire shared-gateway execution nodes (SH38-SH41, slice P11 of [#70](https://github.com/Audumla/AUDiaGentic/issues/70)) ([#191](https://github.com/Audumla/AUDiaGentic/issues/191)) ([a45f790](https://github.com/Audumla/AUDiaGentic/commit/a45f790b7cb566b40ad1b8652dbd0d155eaa1694))
+
+## [0.29.1](https://github.com/Audumla/AUDiaGentic/compare/v0.29.0...v0.29.1) (2026-10-29)
+
+
+### Bug Fixes
+
+* **event:** import-time subscriptions survive reset_bus ([#188](https://github.com/Audumla/AUDiaGentic/issues/188)) ([ed8a6a2](https://github.com/Audumla/AUDiaGentic/commit/ed8a6a2ce65eacee7efb09dd83f4fbf2fd04e1c4))
+
+## [0.29.0](https://github.com/Audumla/AUDiaGentic/compare/v0.28.0...v0.29.0) (2026-10-29)
+
+
+### Features
+
+* **gateway:** execution-node runner, owners, recipient runtime and host, unwired (SH38-SH41, slice P10 of [#70](https://github.com/Audumla/AUDiaGentic/issues/70)) ([#187](https://github.com/Audumla/AUDiaGentic/issues/187)) ([f55f356](https://github.com/Audumla/AUDiaGentic/commit/f55f3561617b3be332a307ee24714899e4057a25))
+
+## [0.28.0](https://github.com/Audumla/AUDiaGentic/compare/v0.27.0...v0.28.0) (2026-10-29)
+
+
+### Features
+
+* **gateway:** execution-node protocol, connection, transport and drain, unwired (SH38-SH41, slice P9 of [#70](https://github.com/Audumla/AUDiaGentic/issues/70)) ([#185](https://github.com/Audumla/AUDiaGentic/issues/185)) ([a85dfb9](https://github.com/Audumla/AUDiaGentic/commit/a85dfb9c3be02c105b90f6847952af9432aa00ab))
+
+## [0.27.0](https://github.com/Audumla/AUDiaGentic/compare/v0.26.3...v0.27.0) (2026-10-29)
+
+
+### Features
+
+* **gateway:** execution-node core contracts, preparation, authority and receipts, unwired (SH38-SH41, slice P8 of [#70](https://github.com/Audumla/AUDiaGentic/issues/70)) ([#183](https://github.com/Audumla/AUDiaGentic/issues/183)) ([8ca69cc](https://github.com/Audumla/AUDiaGentic/commit/8ca69cc5421e71345c409bc1b2dc682faa9b337d))
+
+## [0.26.3](https://github.com/Audumla/AUDiaGentic/compare/v0.26.2...v0.26.3) (2026-10-29)
+
+
+### Bug Fixes
+
+* **gateway:** a broken settings edit no longer breaks a running gateway; harden the settings cache ([#180](https://github.com/Audumla/AUDiaGentic/issues/180)) ([d82e75e](https://github.com/Audumla/AUDiaGentic/commit/d82e75e0b7f69f0b308b1bdcdcc76fd137d10a62))
+
+## [0.26.2](https://github.com/Audumla/AUDiaGentic/compare/v0.26.1...v0.26.2) (2026-10-29)
+
+
+### Documentation
+
+* **planning:** CFG08 note for user-scope MCP registration ([#174](https://github.com/Audumla/AUDiaGentic/issues/174)) ([#178](https://github.com/Audumla/AUDiaGentic/issues/178)) ([1ac7f4e](https://github.com/Audumla/AUDiaGentic/commit/1ac7f4ebfe2f16011505aa2d11a3fb0b99e1c022))
+
+## [0.26.1](https://github.com/Audumla/AUDiaGentic/compare/v0.26.0...v0.26.1) (2026-10-29)
+
+
+### Bug Fixes
+
+* **gateway:** console trace rotation only touches streams backed by a real file ([#175](https://github.com/Audumla/AUDiaGentic/issues/175)) ([9736282](https://github.com/Audumla/AUDiaGentic/commit/97362825561a79cdb240f23ef6e8b01fee1f1993))
+
+## [0.26.0](https://github.com/Audumla/AUDiaGentic/compare/v0.25.1...v0.26.0) (2026-10-29)
+
+
+### Features
+
+* **setup:** register worktree-scoped MCP servers at a harness's user scope (CFG08) ([#174](https://github.com/Audumla/AUDiaGentic/issues/174)) ([c892cb1](https://github.com/Audumla/AUDiaGentic/commit/c892cb1c74f462fbe8b198545b011d93840a62af))
+
+## [0.25.1](https://github.com/Audumla/AUDiaGentic/compare/v0.25.0...v0.25.1) (2026-10-29)
+
+
+### Documentation
+
+* **planning:** give refactor-round2 items conforming IDs RR01-RR06 ([#170](https://github.com/Audumla/AUDiaGentic/issues/170)) ([85a279b](https://github.com/Audumla/AUDiaGentic/commit/85a279bcd1de32f54af2abe7f736913190d4a1c6))
+
+## [0.25.0](https://github.com/Audumla/AUDiaGentic/compare/v0.24.0...v0.25.0) (2026-10-29)
+
+
+### Features
+
+* **mcp:** per-call git worktree selection for planning, ledger and gateway servers ([#167](https://github.com/Audumla/AUDiaGentic/issues/167)) ([9fcaaa9](https://github.com/Audumla/AUDiaGentic/commit/9fcaaa9ffcefea8eefef44de7cfdc56f3f277951))
+
+## [0.24.0](https://github.com/Audumla/AUDiaGentic/compare/v0.23.2...v0.24.0) (2026-10-29)
+
+
+### Features
+
+* **gateway:** automatic (shared) is the default implementation; embedded is deprecated ([#163](https://github.com/Audumla/AUDiaGentic/issues/163)) ([4858a94](https://github.com/Audumla/AUDiaGentic/commit/4858a9448cd0caf3a1da5c5e2b94fac6f7434914))
+
+## [0.23.2](https://github.com/Audumla/AUDiaGentic/compare/v0.23.1...v0.23.2) (2026-10-29)
+
+
+### Documentation
+
+* **planning:** EV04 is completed (state matched its placement) ([#168](https://github.com/Audumla/AUDiaGentic/issues/168)) ([b9c0c2b](https://github.com/Audumla/AUDiaGentic/commit/b9c0c2bbffc0777e8ff87001fefee167c1d6aaeb))
+
+## [0.23.1](https://github.com/Audumla/AUDiaGentic/compare/v0.23.0...v0.23.1) (2026-10-29)
+
+
+### Bug Fixes
+
+* **foundation:** managed services fail fast on an occupied endpoint or an early exit ([#164](https://github.com/Audumla/AUDiaGentic/issues/164)) ([6e8660c](https://github.com/Audumla/AUDiaGentic/commit/6e8660c05bd5d885230371a2382cee0c52c00d2f))
+
+## [0.23.0](https://github.com/Audumla/AUDiaGentic/compare/v0.22.4...v0.23.0) (2026-10-29)
+
+
+### Features
+
+* **gateway:** config-driven shared standalone service, HTTPS connector and keyword CLI (SH37) ([#160](https://github.com/Audumla/AUDiaGentic/issues/160)) ([ed8dbe1](https://github.com/Audumla/AUDiaGentic/commit/ed8dbe1994b5c806092246c4c7009cf4ad15d639))
+
+## [0.22.4](https://github.com/Audumla/AUDiaGentic/compare/v0.22.3...v0.22.4) (2026-10-29)
+
+
+### Bug Fixes
+
+* **gateway:** request-history, unsent-evidence, worker-terminal and observability hardening ([#156](https://github.com/Audumla/AUDiaGentic/issues/156)) ([d853a2e](https://github.com/Audumla/AUDiaGentic/commit/d853a2e53702cf1c0c873c811b594923f954fbae))
+
+## [0.22.3](https://github.com/Audumla/AUDiaGentic/compare/v0.22.2...v0.22.3) (2026-10-29)
+
+
+### Documentation
+
+* **gateway:** design shared execution nodes, admission recovery and joined harness sessions ([#153](https://github.com/Audumla/AUDiaGentic/issues/153)) ([d8e60d7](https://github.com/Audumla/AUDiaGentic/commit/d8e60d762164e5d6490e92abd83715d1e86dbd21))
+
+## [0.22.2](https://github.com/Audumla/AUDiaGentic/compare/v0.22.1...v0.22.2) (2026-10-29)
+
+
+### Bug Fixes
+
+* **doctor:** agents.gateway states the dashboard-anchor condition it can prove ([#152](https://github.com/Audumla/AUDiaGentic/issues/152)) ([885e54b](https://github.com/Audumla/AUDiaGentic/commit/885e54bf0cad70b1cf6bc3cbe104429229ca2b92))
+
+## [0.22.1](https://github.com/Audumla/AUDiaGentic/compare/v0.22.0...v0.22.1) (2026-10-29)
+
+
+### Bug Fixes
+
+* **gpt-auto:** retained-conversation recovery, idle-transport reconnect and prompt expansion ([#149](https://github.com/Audumla/AUDiaGentic/issues/149)) ([76c660d](https://github.com/Audumla/AUDiaGentic/commit/76c660d65cd0ac326ca18bb97b4a12846d78ecf6))
+
+## [0.22.0](https://github.com/Audumla/AUDiaGentic/compare/v0.21.6...v0.22.0) (2026-10-29)
+
+
+### Features
+
+* **providers:** one joined-session capability type with strict claim rules (SH45) ([#147](https://github.com/Audumla/AUDiaGentic/issues/147)) ([0f82249](https://github.com/Audumla/AUDiaGentic/commit/0f8224978c4215fd4c0ef938d556d59e8e324251))
+
+## [0.21.6](https://github.com/Audumla/AUDiaGentic/compare/v0.21.5...v0.21.6) (2026-10-29)
+
+
+### Documentation
+
+* **planning:** CFG08 status after [#140](https://github.com/Audumla/AUDiaGentic/issues/140) ([#143](https://github.com/Audumla/AUDiaGentic/issues/143)) ([1bf83bd](https://github.com/Audumla/AUDiaGentic/commit/1bf83bda0c5dc530fd695b03c131e4439f42d4e3))
+
+## [0.21.5](https://github.com/Audumla/AUDiaGentic/compare/v0.21.4...v0.21.5) (2026-10-29)
+
+
+### Bug Fixes
+
+* **gateway:** EXTERNAL sessions detach and are never terminated by cleanup (SH49) ([#144](https://github.com/Audumla/AUDiaGentic/issues/144)) ([fc9e5ff](https://github.com/Audumla/AUDiaGentic/commit/fc9e5fff817f95e0957145c25bf52669208347f5))
+
+## [0.21.4](https://github.com/Audumla/AUDiaGentic/compare/v0.21.3...v0.21.4) (2026-10-29)
+
+
+### Bug Fixes
+
+* **mcp:** self-terminate stdio MCP servers on parent death or 12h idle ([#141](https://github.com/Audumla/AUDiaGentic/issues/141)) ([fa70bbc](https://github.com/Audumla/AUDiaGentic/commit/fa70bbcf1dbf95f400e83a7bf22ca087fe784077))
+
+## [0.21.3](https://github.com/Audumla/AUDiaGentic/compare/v0.21.2...v0.21.3) (2026-10-29)
+
+
+### Bug Fixes
+
+* **doctor:** clean-home gaps found by the CFG08 live check ([#140](https://github.com/Audumla/AUDiaGentic/issues/140)) ([64aa61b](https://github.com/Audumla/AUDiaGentic/commit/64aa61b8923645febddaceea6ff90d26fdb01207))
+
+## [0.21.2](https://github.com/Audumla/AUDiaGentic/compare/v0.21.1...v0.21.2) (2026-10-29)
+
+
+### Documentation
+
+* **planning:** CFG08 live check findings (criterion not met; four gaps) ([#136](https://github.com/Audumla/AUDiaGentic/issues/136)) ([3f862d6](https://github.com/Audumla/AUDiaGentic/commit/3f862d64dc8277f57ff0ef65432b6847ee691e65))
+
+## [0.21.1](https://github.com/Audumla/AUDiaGentic/compare/v0.21.0...v0.21.1) (2026-10-29)
+
+
+### Documentation
+
+* **planning:** CFG06 slices 1 and 2 merged ([#133](https://github.com/Audumla/AUDiaGentic/issues/133)) ([339029c](https://github.com/Audumla/AUDiaGentic/commit/339029c1a2c201006c482b3c377d2fa0fab71d01))
+
+## [0.21.0](https://github.com/Audumla/AUDiaGentic/compare/v0.20.1...v0.21.0) (2026-10-29)
+
+
+### Features
+
+* **providers:** a failed CLI probe no longer disables a provider (CFG06 slice 2) ([#131](https://github.com/Audumla/AUDiaGentic/issues/131)) ([e3939a4](https://github.com/Audumla/AUDiaGentic/commit/e3939a4da0f9f075c7ba7842e77f49011cf30e18))
+
+## [0.20.1](https://github.com/Audumla/AUDiaGentic/compare/v0.20.0...v0.20.1) (2026-10-29)
+
+
+### Documentation
+
+* **planning:** sync config-setup and shared-gateway plan state, add configuration model design ([#129](https://github.com/Audumla/AUDiaGentic/issues/129)) ([4b6aead](https://github.com/Audumla/AUDiaGentic/commit/4b6aead6daf87d0324330664425d44c430cdeba8))
+
+## [0.20.0](https://github.com/Audumla/AUDiaGentic/compare/v0.19.0...v0.20.0) (2026-10-29)
+
+
+### Features
+
+* **agents:** owner-epoch fencing and canonical target resolution for external sessions (SH50b) ([#127](https://github.com/Audumla/AUDiaGentic/issues/127)) ([522e60a](https://github.com/Audumla/AUDiaGentic/commit/522e60a2772006f3068b71ffc58f571a12540452))
+* **providers:** providers.&lt;id&gt;.enabled policy and runtime usability (CFG06 slice 1) ([#126](https://github.com/Audumla/AUDiaGentic/issues/126)) ([cb33613](https://github.com/Audumla/AUDiaGentic/commit/cb33613eae75f3e2f097eea8181bcfde123b0540))
+
+## [0.19.0](https://github.com/Audumla/AUDiaGentic/compare/v0.18.0...v0.19.0) (2026-10-29)
+
+
+### Features
+
+* **agents:** external session registry with a generation-fenced single writer claim (SH50a) ([#124](https://github.com/Audumla/AUDiaGentic/issues/124)) ([91de59e](https://github.com/Audumla/AUDiaGentic/commit/91de59e6fb58e0f8507c97349fc7a6a503cb8f66))
+
+## [0.18.0](https://github.com/Audumla/AUDiaGentic/compare/v0.17.0...v0.18.0) (2026-10-29)
+
+
+### Features
+
+* **providers:** one authority for joined-session matrix, registration and revalidation (SH48) ([#122](https://github.com/Audumla/AUDiaGentic/issues/122)) ([c78c211](https://github.com/Audumla/AUDiaGentic/commit/c78c211f998631ad45c6c87fdc9ce8f963822689))
+
+## [0.17.0](https://github.com/Audumla/AUDiaGentic/compare/v0.16.0...v0.17.0) (2026-10-29)
+
+
+### Features
+
+* **providers:** passive proof of the exact live instance before joining (SH47) ([#120](https://github.com/Audumla/AUDiaGentic/issues/120)) ([d70bb69](https://github.com/Audumla/AUDiaGentic/commit/d70bb694f116fa177e1b562daaee37d293997fce))
+
+## [0.16.0](https://github.com/Audumla/AUDiaGentic/compare/v0.15.0...v0.16.0) (2026-10-29)
+
+
+### Features
+
+* **agents:** gateway configuration from the gateway settings section (CFG09 part 2) ([#114](https://github.com/Audumla/AUDiaGentic/issues/114)) ([8d2e90a](https://github.com/Audumla/AUDiaGentic/commit/8d2e90a57a3ba30fca8e837f683d38adad81e326))
+
+## [0.15.0](https://github.com/Audumla/AUDiaGentic/compare/v0.14.0...v0.15.0) (2026-10-29)
+
+
+### Features
+
+* **project:** stable project id and tracked project settings (CFG04 phase 1) ([#113](https://github.com/Audumla/AUDiaGentic/issues/113)) ([8352f87](https://github.com/Audumla/AUDiaGentic/commit/8352f87154afd05f301f82480b9ce676ed090d43))
+
+## [0.14.0](https://github.com/Audumla/AUDiaGentic/compare/v0.13.0...v0.14.0) (2026-10-29)
+
+
+### Features
+
+* **providers:** strict joined-session readiness from exact evidence (SH46) ([#111](https://github.com/Audumla/AUDiaGentic/issues/111)) ([e69afa1](https://github.com/Audumla/AUDiaGentic/commit/e69afa192b8223be51696e41267afc6ab4a14911))
+
+## [0.13.0](https://github.com/Audumla/AUDiaGentic/compare/v0.12.0...v0.13.0) (2026-10-29)
+
+
+### Features
+
+* **agents:** hosted catalog includes compiled agent files (CFG09 part 1) ([#101](https://github.com/Audumla/AUDiaGentic/issues/101)) ([bcf090c](https://github.com/Audumla/AUDiaGentic/commit/bcf090c72bc851763e2bf34519b94547235bdfb2))
+
+## [0.12.0](https://github.com/Audumla/AUDiaGentic/compare/v0.11.1...v0.12.0) (2026-10-29)
+
+
+### Features
+
+* **providers:** typed joined-session capability declarations, unsupported by default (SH45) ([#109](https://github.com/Audumla/AUDiaGentic/issues/109)) ([010a4fb](https://github.com/Audumla/AUDiaGentic/commit/010a4fb57c0f61096d209fcc17bb4eecc19b3595))
+
+## [0.11.1](https://github.com/Audumla/AUDiaGentic/compare/v0.11.0...v0.11.1) (2026-10-29)
+
+
+### Bug Fixes
+
+* **providers:** parse name-prefixed CLI versions so surface constraints evaluate ([#104](https://github.com/Audumla/AUDiaGentic/issues/104)) ([bf260da](https://github.com/Audumla/AUDiaGentic/commit/bf260da636f4fb944ebfc8357c9efe20dbaf4acb))
+
+## [0.11.0](https://github.com/Audumla/AUDiaGentic/compare/v0.10.1...v0.11.0) (2026-10-29)
+
+
+### Features
+
+* **cli:** audiagentic doctor and setup with component-owned checks (CFG08) ([#100](https://github.com/Audumla/AUDiaGentic/issues/100)) ([dc94eb6](https://github.com/Audumla/AUDiaGentic/commit/dc94eb6f5edf02d3e7dc7a4a99caf96849c5ed8c))
+
+## [0.10.1](https://github.com/Audumla/AUDiaGentic/compare/v0.10.0...v0.10.1) (2026-10-29)
+
+
+### Bug Fixes
+
+* **gateway:** let abandon settle requests orphaned by their gateway host (GA27) ([#99](https://github.com/Audumla/AUDiaGentic/issues/99)) ([bb95e9a](https://github.com/Audumla/AUDiaGentic/commit/bb95e9a602964c7345441f75a96dfe3ef0191fd4))
+
+## [0.10.0](https://github.com/Audumla/AUDiaGentic/compare/v0.9.0...v0.10.0) (2026-10-29)
+
+
+### Features
+
+* **providers:** native surface qualification evidence schema and store (SH53) ([#103](https://github.com/Audumla/AUDiaGentic/issues/103)) ([9b2b06d](https://github.com/Audumla/AUDiaGentic/commit/9b2b06d1e57befd9971ef7ff932289c9a73ed8ff))
+
+## [0.9.0](https://github.com/Audumla/AUDiaGentic/compare/v0.8.0...v0.9.0) (2026-10-29)
+
+
+### Features
+
+* **agents:** agent definitions as single validated files with templates (CFG05) ([#98](https://github.com/Audumla/AUDiaGentic/issues/98)) ([53fbfdb](https://github.com/Audumla/AUDiaGentic/commit/53fbfdb0061def4d51aa0eb6b9c9c5f977c72fba))
+
+## [0.8.0](https://github.com/Audumla/AUDiaGentic/compare/v0.7.2...v0.8.0) (2026-10-29)
+
+
+### Features
+
+* **config:** layered settings resolver and read-only config commands (CFG03) ([#90](https://github.com/Audumla/AUDiaGentic/issues/90)) ([59d3386](https://github.com/Audumla/AUDiaGentic/commit/59d338649086acf62d34127d85cd28327dec9182))
+
+## [0.7.2](https://github.com/Audumla/AUDiaGentic/compare/v0.7.1...v0.7.2) (2026-10-28)
+
+
+### Bug Fixes
+
+* **gpt-auto:** capture and focus use packaged defaults without a project entry (GA27) ([#88](https://github.com/Audumla/AUDiaGentic/issues/88)) ([c950917](https://github.com/Audumla/AUDiaGentic/commit/c950917c8f0ae8ede3b4dec82ea0b814b2870f5d))
+
+## [0.7.1](https://github.com/Audumla/AUDiaGentic/compare/v0.7.0...v0.7.1) (2026-10-28)
+
+
+### Bug Fixes
+
+* **providers:** keep configured enablement for providers without a CLI probe ([#84](https://github.com/Audumla/AUDiaGentic/issues/84)) ([f5311e7](https://github.com/Audumla/AUDiaGentic/commit/f5311e723a7f5ab176e6f484aeee0e8b6fd9d11a))
+
+## [0.7.0](https://github.com/Audumla/AUDiaGentic/compare/v0.6.6...v0.7.0) (2026-10-28)
+
+
+### Features
+
+* **gpt-auto:** validate the CDP session surface on linux-amd64 ([#82](https://github.com/Audumla/AUDiaGentic/issues/82)) ([84e74b4](https://github.com/Audumla/AUDiaGentic/commit/84e74b4f2367b2421d2f95f9c7595a3e9cdc82a0))
+
+## [0.6.6](https://github.com/Audumla/AUDiaGentic/compare/v0.6.5...v0.6.6) (2026-10-28)
+
+
+### Bug Fixes
+
+* **project:** name projects by git repository so worktrees agree ([#81](https://github.com/Audumla/AUDiaGentic/issues/81)) ([f9319cc](https://github.com/Audumla/AUDiaGentic/commit/f9319ccf8a980b7e221c259c79fb6c7ccabfa1a8))
+
+## [0.6.5](https://github.com/Audumla/AUDiaGentic/compare/v0.6.4...v0.6.5) (2026-10-28)
+
+
+### Bug Fixes
+
+* **packaging:** ship runtime data files missing from the wheel ([#80](https://github.com/Audumla/AUDiaGentic/issues/80)) ([17137cb](https://github.com/Audumla/AUDiaGentic/commit/17137cb5d05576c65da68a7554fb13c94e996304))
+
+## [0.6.4](https://github.com/Audumla/AUDiaGentic/compare/v0.6.3...v0.6.4) (2026-10-28)
+
+
+### Bug Fixes
+
+* **cli:** bare audiagentic prints management help instead of launching an agent ([#78](https://github.com/Audumla/AUDiaGentic/issues/78)) ([c758c26](https://github.com/Audumla/AUDiaGentic/commit/c758c269e2e21079ebf5725ab2e0457e31208c49))
+
+## [0.6.3](https://github.com/Audumla/AUDiaGentic/compare/v0.6.2...v0.6.3) (2026-10-28)
+
+
+### Bug Fixes
+
+* **planning:** normalize legacy state: done items to completed ([#77](https://github.com/Audumla/AUDiaGentic/issues/77)) ([cb86922](https://github.com/Audumla/AUDiaGentic/commit/cb86922746069dc14df6af33069c74545b34129c))
+
+## [0.6.2](https://github.com/Audumla/AUDiaGentic/compare/v0.6.1...v0.6.2) (2026-10-26)
+
+
+### Bug Fixes
+
+* **gpt-auto:** recover native browser network errors in background ([b539f70](https://github.com/Audumla/AUDiaGentic/commit/b539f70b8129008dc65fa6965bc7257edb090f22))
+* **gpt-auto:** recover native browser network errors in background ([1735cbf](https://github.com/Audumla/AUDiaGentic/commit/1735cbffaba07cc42e1c7c986f9c5218e461156e))
+
+## [0.6.1](https://github.com/Audumla/AUDiaGentic/compare/v0.6.0...v0.6.1) (2026-10-26)
+
+
+### Bug Fixes
+
+* **gpt-auto:** fence restored conversation admission and recovery races ([43a14bc](https://github.com/Audumla/AUDiaGentic/commit/43a14bca721cff3f47b6263dbbba4d1b2a8980a0))
+* **gpt-auto:** reattach idle conversations after browser target changes ([e4cdce5](https://github.com/Audumla/AUDiaGentic/commit/e4cdce5f9874004678da5295396ea6cfe129f07b))
+* **gpt-auto:** reattach idle conversations after browser target changes ([be71370](https://github.com/Audumla/AUDiaGentic/commit/be71370e256e60f00ae2154b2a6def87902e3cde))
+
+
+### Documentation
+
+* **gateway:** record deployed restored-tab recovery qualification ([bf7aef1](https://github.com/Audumla/AUDiaGentic/commit/bf7aef1fc4a8c93ea7897305bf0653beaf92a7cc))
+
+## [0.6.0](https://github.com/Audumla/AUDiaGentic/compare/v0.5.3...v0.6.0) (2026-10-25)
+
+
+### Features
+
+* **mcp:** expose YAML parameter metadata and per-tool structured output ([afe4786](https://github.com/Audumla/AUDiaGentic/commit/afe4786c58f8e4b9bea12891b70777dcacbe590b))
+* **project:** add keyword MCP onboarding with explicit harness selection ([00d3f9c](https://github.com/Audumla/AUDiaGentic/commit/00d3f9c3b7d5331b2cca9dc1f92a4f75e084f659))
+* **project:** implement explicit keyword MCP onboarding (MP03-MP10) ([90f0f9c](https://github.com/Audumla/AUDiaGentic/commit/90f0f9cbb2a3d175700254c50d84d4ca2c2b51e0))
+
+
+### Bug Fixes
+
+* **mcp:** align gateway resume metadata and gate remote execution on release ([b26a3b4](https://github.com/Audumla/AUDiaGentic/commit/b26a3b4295057c3a14dc1fcb9d9b9e00f9f681f1))
+* **mcp:** bound migration authority and validate crash recovery integration ([df11187](https://github.com/Audumla/AUDiaGentic/commit/df11187500d23be2abf87c2d5d995249a43f43a5))
+* **mcp:** discover pending targets before guarded recovery ([f6cbfab](https://github.com/Audumla/AUDiaGentic/commit/f6cbfabdef42af68bb726f6128cd37f7c5173306))
+* **mcp:** parse detailed help without registering implementations ([96a6dba](https://github.com/Audumla/AUDiaGentic/commit/96a6dba5a7b008485ef7fc1479a7a95fc7dc6787))
+* **mcp:** preserve component profile in native server launches ([53dac6d](https://github.com/Audumla/AUDiaGentic/commit/53dac6df0198f5f9bf9e958f07cbdf9fd8bf445a))
+* **mcp:** preserve option no-ops and verify native connection outcomes ([ce7b2f9](https://github.com/Audumla/AUDiaGentic/commit/ce7b2f9ae5844a8f7fb6f9ce1ea72ea01ae98f2a))
+* **mcp:** recover proven native writes with staged atomic ownership commits ([9eeb856](https://github.com/Audumla/AUDiaGentic/commit/9eeb85659b410b7181a084efe2cab35dbacb0d01))
+* **project:** honor provider disablement without deleting shared configuration ([7c2f728](https://github.com/Audumla/AUDiaGentic/commit/7c2f72856c717e5ed951fb5567e42c2181dcf734))
+* **project:** resolve MCP refresh intent inside install fence ([07c4ec9](https://github.com/Audumla/AUDiaGentic/commit/07c4ec946a9ed7b1acc8b36eda177fe23b7d80fa))
+
+
+### Documentation
+
+* **gateway:** distinguish pull request references from plan IDs ([9594d26](https://github.com/Audumla/AUDiaGentic/commit/9594d26b9be997e5238e7c6365dc367de33b725c))
+* **gateway:** plan shared-server keyword CLI and remote admission ([f568088](https://github.com/Audumla/AUDiaGentic/commit/f5680885e3cea21661a3addd9d0bea7a4b3de2ea))
+* **mcp:** complete reviewed onboarding plans and qualification ([0787bdb](https://github.com/Audumla/AUDiaGentic/commit/0787bdb1755b37510db7923e3eb563c8f89d9ca9))
+* **mcp:** plan tool metadata and instruction rollout ([21bad94](https://github.com/Audumla/AUDiaGentic/commit/21bad941540712e734c887dae818db3d1c6920ac))
+* **mcp:** refine onboarding containment and recovery design ([749657b](https://github.com/Audumla/AUDiaGentic/commit/749657b5a8b8e8d4581ce12ee655f07e169aac80))
+
+## [0.5.3](https://github.com/Audumla/AUDiaGentic/compare/v0.5.2...v0.5.3) (2026-10-25)
+
+
+### Bug Fixes
+
+* **gateway:** recover submitted turns across browser outages ([#64](https://github.com/Audumla/AUDiaGentic/issues/64)) ([6571545](https://github.com/Audumla/AUDiaGentic/commit/6571545d56a642c28db0e4655da30a4f790a3af2))
+
+## [0.5.2](https://github.com/Audumla/AUDiaGentic/compare/v0.5.1...v0.5.2) (2026-10-25)
+
+
+### Performance Improvements
+
+* **ci:** move full qualification off release critical path ([e3891dd](https://github.com/Audumla/AUDiaGentic/commit/e3891dd119189c809f93bb228b86ed5a1f6afbd8))
+* **ci:** shorten release gates and qualify asynchronously ([10af496](https://github.com/Audumla/AUDiaGentic/commit/10af496a80da52a815e4c85a59fefdc75dd09507))
+
+## [0.5.1](https://github.com/Audumla/AUDiaGentic/compare/v0.5.0...v0.5.1) (2026-10-25)
+
+
+### Bug Fixes
+
+* **ci:** include tool inputs in the Docker context whitelist ([5096ad6](https://github.com/Audumla/AUDiaGentic/commit/5096ad6a3c7938985247c6514df04976f510e8bc))
+* **ci:** restore full-suite collection and headless gateway startup ([c0f31cb](https://github.com/Audumla/AUDiaGentic/commit/c0f31cbd6ecf16fdf67ebc7a404c5eec58fd3baf))
+* **ci:** restore full-suite collection and headless gateway startup ([363bb48](https://github.com/Audumla/AUDiaGentic/commit/363bb48644f716cbffde7cda77012750b51b17d0))
+
+
+### Documentation
+
+* **ci:** record completed full baseline qualification ([1d2fa30](https://github.com/Audumla/AUDiaGentic/commit/1d2fa30b75ee88d199ac2f89ff9458f51114b9b6))
+
+## [0.5.0](https://github.com/Audumla/AUDiaGentic/compare/v0.4.3...v0.5.0) (2026-10-25)
+
+
+### Features
+
+* **mcp:** extract and validate standalone server bundles ([5b3b2ce](https://github.com/Audumla/AUDiaGentic/commit/5b3b2ce7641741cda298e8514070cbbf85c8b78d))
+* **mcp:** extract and validate standalone server bundles ([3cb5ca2](https://github.com/Audumla/AUDiaGentic/commit/3cb5ca23947803eb0ad656106ed68a7e6fc667ba))
+
+## [0.4.3](https://github.com/Audumla/AUDiaGentic/compare/v0.4.2...v0.4.3) (2026-10-24)
+
+
+### Bug Fixes
+
+* **privacy:** keep browser defaults and CI fixtures portable ([75db1f4](https://github.com/Audumla/AUDiaGentic/commit/75db1f49e3df64776b38a8ad4d99e24a5c4bc9aa))
+* **privacy:** redact private metadata and enforce clean Git content ([d35d1e0](https://github.com/Audumla/AUDiaGentic/commit/d35d1e0ebda525962292f1211e36e567845cca01))
+* **privacy:** redact private metadata and require clean Git content ([691696c](https://github.com/Audumla/AUDiaGentic/commit/691696cb2bfabf7b58a5ddfc703d506f217cbbea))
+
+## [0.4.2](https://github.com/Audumla/AUDiaGentic/compare/v0.4.1...v0.4.2) (2026-10-24)
+
+
+### Bug Fixes
+
+* **release:** validate and merge version bumps automatically ([5eb4275](https://github.com/Audumla/AUDiaGentic/commit/5eb42752245851feb60e1bc0bbf314a3d3224488))
+* **release:** validate and merge version bumps automatically ([9677eb2](https://github.com/Audumla/AUDiaGentic/commit/9677eb26f7c4caddd16c5d8ce54759c99705c3fa))
+
+
+### Documentation
+
+* **hygiene:** close verified cleanup and history purge ([05873da](https://github.com/Audumla/AUDiaGentic/commit/05873daa0a75ff3ff2a189a2a33f0207eb34ae2e))
+* **hygiene:** record verified cleanup and history-purge completion ([1bf83f8](https://github.com/Audumla/AUDiaGentic/commit/1bf83f80c4c54550291d8f3da62b79a6111e2a9f))
+* **planning:** close validated CI and release work ([c5f6caf](https://github.com/Audumla/AUDiaGentic/commit/c5f6caf86fe9bb28a7e51346c1b6b97bf5110a73))
+* **planning:** close validated CI and release work ([d8021b2](https://github.com/Audumla/AUDiaGentic/commit/d8021b22860f81a6d53b923a24482144ee82c7b1))
+
+## [0.4.1](https://github.com/Audumla/AUDiaGentic/compare/v0.4.0...v0.4.1) (2026-10-24)
+
+
+### Bug Fixes
+
+* **ci:** distinguish inventory from Docker test execution ([878bc6a](https://github.com/Audumla/AUDiaGentic/commit/878bc6a7c04d02d7f1af0b638a9143cdf889925a))
+* **ci:** preserve snapshot cancellation and diagnostic evidence ([f7aeb19](https://github.com/Audumla/AUDiaGentic/commit/f7aeb19d7e732b51a6f8893bee4ca1ac3d3629c5))
+* **ci:** verify exact checkout identity in browser containers ([de04777](https://github.com/Audumla/AUDiaGentic/commit/de0477765e66054ccaac171b3b1996755ccab044))
+* **foundation:** fence startup PID claim publication ([fe5901c](https://github.com/Audumla/AUDiaGentic/commit/fe5901cfcb9348247b2fd495567c3a7ee31cdaae))
+* **foundation:** fence startup PID claim publication ([d07988d](https://github.com/Audumla/AUDiaGentic/commit/d07988d71338734bad845f5fba8624ab38d16c6a))
+* **release:** finalize ledger through protected-branch PR ([f906627](https://github.com/Audumla/AUDiaGentic/commit/f906627ece8e98253c2c6daa4751be3f3a98f372))
+* **release:** finalize ledger through protected-branch PR ([c145a9f](https://github.com/Audumla/AUDiaGentic/commit/c145a9fbd318f66010ae87ccfdfb5ddc0f182830))
+
+
+### Performance Improvements
+
+* **ci:** fast gates and audited background full coverage ([5259def](https://github.com/Audumla/AUDiaGentic/commit/5259def0a822da157e1ba1fd9eaf55640ff109f5))
+* **ci:** separate fast gates from audited full validation ([7f82616](https://github.com/Audumla/AUDiaGentic/commit/7f826161d10139eb6c956f92abe5db1de3d1a9ac))
+
+## [0.4.0](https://github.com/Audumla/AUDiaGentic/compare/v0.3.1...v0.4.0) (2026-10-24)
+
+
+### Features
+
+* **gateway:** rotate daily journals with protected five-day trace retention ([83e3dd5](https://github.com/Audumla/AUDiaGentic/commit/83e3dd5393df4c3b413c3f5d267d3aa914792615))
+
+
+### Bug Fixes
+
+* **ci:** align gateway boundaries and integration contracts ([81e8ca4](https://github.com/Audumla/AUDiaGentic/commit/81e8ca426be16db5c4f82ea746d1ef9004b50af4))
+* **ci:** repair contract checks and clean-room test inputs ([abd84de](https://github.com/Audumla/AUDiaGentic/commit/abd84de34b483bf4bcbfab1e9e58690f403a7377))
+* **ci:** repair contract validation and clean-room test baselines ([39a3080](https://github.com/Audumla/AUDiaGentic/commit/39a3080621277ede9f7f6c1c4f9fdbe995516298))
+* **ci:** use declared test dependencies and time-bound ACP responses ([dce4c07](https://github.com/Audumla/AUDiaGentic/commit/dce4c072ec8fb2913854c822a9d5eb73217f2b86))
+* **gateway:** avoid repeated quadratic journal compaction ([38ff048](https://github.com/Audumla/AUDiaGentic/commit/38ff048a57fc305ad3841bf7f86bdc8164b827d4))
+* **gateway:** capture activity boundary before provider execution ([c2664ab](https://github.com/Audumla/AUDiaGentic/commit/c2664ab10ba44f0a4fc1c3bcf3c5f1ab1e9c320d))
+* **gateway:** preserve progress before watcher thread starts ([7a8b831](https://github.com/Audumla/AUDiaGentic/commit/7a8b831f52c3357750f1774407d63789f1b8b782))
+
+
+### Documentation
+
+* **ci:** synchronize repair ledger and validation status ([3d7f8a2](https://github.com/Audumla/AUDiaGentic/commit/3d7f8a2cd5e1041a9da9a41f6d9ba2b632bf1d28))
+* **planning:** disambiguate pull request references from plan IDs ([9dc6882](https://github.com/Audumla/AUDiaGentic/commit/9dc6882893fe37f9a9dd5fca13f517cc7a5e056c))
+
+## [0.3.1](https://github.com/Audumla/AUDiaGentic/compare/v0.3.0...v0.3.1) (2026-10-23)
+
+
+### Bug Fixes
+
+* **gateway:** recover completed turns and trace request startup ([872fef2](https://github.com/Audumla/AUDiaGentic/commit/872fef2f296958d58e24b17a2893a595e965058b))
+* **release:** reconcile legacy ledger before publish ([2d0dd6c](https://github.com/Audumla/AUDiaGentic/commit/2d0dd6c671c87e4733016bff243beb7c3e7485b5))
+
+## [0.3.0](https://github.com/Audumla/AUDiaGentic/compare/v0.2.1...v0.3.0) (2026-10-20)
+
+
+### Features
+
+* add operator GPT response capture ([1687eb6](https://github.com/Audumla/AUDiaGentic/commit/1687eb6f17e339400f39de7688b256f633426068))
+* externalize local runtime settings ([a9fed7a](https://github.com/Audumla/AUDiaGentic/commit/a9fed7a1f2e2e41e758f20a96a26525b4c8584fa))
+* **gateway:** add request observability and compact MCP evidence ([9cf1c9f](https://github.com/Audumla/AUDiaGentic/commit/9cf1c9f47bb7e4dff4450ff18d9da4bf878fc3ad))
+* **gateway:** bound observability retention ([a5b6131](https://github.com/Audumla/AUDiaGentic/commit/a5b6131bb0bbcd0f78b10b2049abc3e5118a99af))
+* **ledger:** make release notes ledger-backed and archival-safe ([0c79cbc](https://github.com/Audumla/AUDiaGentic/commit/0c79cbcc10f3f2a71001049025815e8917d876eb))
+* **release:** make templates language neutral ([4b6c29c](https://github.com/Audumla/AUDiaGentic/commit/4b6c29cb44d67cd380ceb32283878875aca3f34b))
+
+
+### Bug Fixes
+
+* accept ChatGPT rich-link composer rendering ([d69d79e](https://github.com/Audumla/AUDiaGentic/commit/d69d79ea0c191216928890bad1156205370b30a5))
+* accept governed prompts during provider capture ([64cce0a](https://github.com/Audumla/AUDiaGentic/commit/64cce0a4032071ad619678672165834be63067df))
+* activate new project target before navigation ([87cb0fb](https://github.com/Audumla/AUDiaGentic/commit/87cb0fb3037b0f113bad7c558541b09012c9c505))
+* activate project tab before cdp chat click ([f831b79](https://github.com/Audumla/AUDiaGentic/commit/f831b791db98b7c56dd09b5b30891ebfaedd623d))
+* avoid full dom scan during composer readiness ([b0f0134](https://github.com/Audumla/AUDiaGentic/commit/b0f013451d07d9760297158fff1358cdeaba129b))
+* bound dashboard anchor tab creation ([83803af](https://github.com/Audumla/AUDiaGentic/commit/83803af666edaa3ed28875fd65657e144a3d686c))
+* bound gpt-auto cancellation settlement ([6e4f45c](https://github.com/Audumla/AUDiaGentic/commit/6e4f45c5f448a1a1a1e5259f3d5e81e10f5648e0))
+* bound gpt-auto CDP observations ([a96f05e](https://github.com/Audumla/AUDiaGentic/commit/a96f05e7f62490ae8fa51f44037cf6935e0266dc))
+* bound provider reconciliation snapshots ([73c5c71](https://github.com/Audumla/AUDiaGentic/commit/73c5c7151f25e14635bb6f6cd386a5de924d355b))
+* bound stale provider-session recovery ([6ad7ca8](https://github.com/Audumla/AUDiaGentic/commit/6ad7ca85c04c70b7effc53f2ca7d597de9c27d1b))
+* close carrier-ownership and label-ownership gaps in gpt-auto fallback ids ([3517b3b](https://github.com/Audumla/AUDiaGentic/commit/3517b3b711d59db14f74f64db6b4727f7a6e9c78))
+* close GPT-auto lifecycle audit findings ([908c92c](https://github.com/Audumla/AUDiaGentic/commit/908c92c1c64b236d34721b5c4ed09ef28dbf295f))
+* close remaining gpt-auto lifecycle gaps ([da8ac39](https://github.com/Audumla/AUDiaGentic/commit/da8ac393d8dd3f0e2044b37f88061f633fc54fdc))
+* close review findings on gpt-auto fallback message-id extraction ([79ccef8](https://github.com/Audumla/AUDiaGentic/commit/79ccef8572779514c83bd6c7c80412be71e403cb))
+* correlate GPT fallback activity and defer queued turn timeouts ([e74d82a](https://github.com/Audumla/AUDiaGentic/commit/e74d82aff548cf56837e57d5c4cd4b2d94891bf5))
+* correlate GPT-auto provider alerts to requests ([2e98dad](https://github.com/Audumla/AUDiaGentic/commit/2e98dad3a5ce1db51cb65d89c01d9386013280f8))
+* count GPT-auto DOM edge activity ([364b4f9](https://github.com/Audumla/AUDiaGentic/commit/364b4f9c9593489ae37dd99a2004d7e08e2fedf2))
+* detect and click the current plain-text delivery-timeout Retry control ([1285bc3](https://github.com/Audumla/AUDiaGentic/commit/1285bc3323fd2a443fcc67c424c5e03fd32b1f5a))
+* emit gpt-auto activity before readiness ([503fa04](https://github.com/Audumla/AUDiaGentic/commit/503fa049b2ffce0ed616f507dfb6f1a5dee82286))
+* fence orphan watchdog terminalization ([93531ac](https://github.com/Audumla/AUDiaGentic/commit/93531ac0c27624692fe8af18166fc845e68e42ec))
+* fence provider capture recovery ([20af0cb](https://github.com/Audumla/AUDiaGentic/commit/20af0cbe37e3016688175122ead30fd0f0238a14))
+* fence reusable-session submission proof ([0a644ef](https://github.com/Audumla/AUDiaGentic/commit/0a644ef640dffb8f4e330ffbc22010e3741af9ac))
+* fence unresolved provider capture ([3dceb0b](https://github.com/Audumla/AUDiaGentic/commit/3dceb0b31fb8bb8c251abc90e3870f092f22601b))
+* finalize cancelled gateway recovery workers ([2a5ad66](https://github.com/Audumla/AUDiaGentic/commit/2a5ad66308d11fb79a7d872b2d2fb067840278d7))
+* **gateway:** avoid reusing terminal GPT sessions ([605bdf2](https://github.com/Audumla/AUDiaGentic/commit/605bdf2e3735e5167468eba70a3f93458e57e58d))
+* **gateway:** bound evidence and request reads ([3ea4e70](https://github.com/Audumla/AUDiaGentic/commit/3ea4e7022a3b819a7b06bb84f45dc6defbc6c29d))
+* **gateway:** bound presubmit reconciliation waits ([334b300](https://github.com/Audumla/AUDiaGentic/commit/334b30034d6f39eb18ea65a70fa671b24d77dc22))
+* **gateway:** close follow-up audit findings ([9594b2f](https://github.com/Audumla/AUDiaGentic/commit/9594b2f88c61fdbfa389fb85c567d059261ca9cc))
+* **gateway:** close observability and recovery review gaps ([67105cf](https://github.com/Audumla/AUDiaGentic/commit/67105cf7c1f08fd108a5f4f3fa0d0b2291eb93b4))
+* **gateway:** close post-fix observability audit ([3ffd558](https://github.com/Audumla/AUDiaGentic/commit/3ffd5580fb8dba9e2810c6317e15cec2f5a5091e))
+* **gateway:** close recovery race findings ([4b27967](https://github.com/Audumla/AUDiaGentic/commit/4b279672fa7138b747e74df26ef5197a81ed11af))
+* **gateway:** complete GA03-GA05 observability audit ([cd3ecbe](https://github.com/Audumla/AUDiaGentic/commit/cd3ecbed8ce632b7e5702111d7087c7d146b1127))
+* **gateway:** correct observation MCP signature ([23d260e](https://github.com/Audumla/AUDiaGentic/commit/23d260e0897bc2ac511cea10b5bdffd79166f4cf))
+* **gateway:** fence native recovery actions ([4e5f5d5](https://github.com/Audumla/AUDiaGentic/commit/4e5f5d5e119163f37aa13504be9465649aea54a6))
+* **gateway:** fence recovery session finalization ([3b37d24](https://github.com/Audumla/AUDiaGentic/commit/3b37d24e029281ce14458f0fc956f048a7dbc95d))
+* **gateway:** harden observability evidence boundaries ([719721c](https://github.com/Audumla/AUDiaGentic/commit/719721cdc921f65fcd2649e8ba024836bcfd5f5d))
+* **gateway:** harden recovery and completion tracking ([6020163](https://github.com/Audumla/AUDiaGentic/commit/6020163a28db99380b429a9c067ca08c9f3f6143))
+* **gateway:** harden recovery and terminal reconciliation ([8b8c6d6](https://github.com/Audumla/AUDiaGentic/commit/8b8c6d677dfd57a3fca9677c601a8cfa963d4821))
+* **gateway:** reconcile adoptable failures during status ([e644ffb](https://github.com/Audumla/AUDiaGentic/commit/e644ffb2e679ac742dc5138fd4dd7c5c3d2b6b9b))
+* **gateway:** reconcile transient GPT completion races ([11cd1f7](https://github.com/Audumla/AUDiaGentic/commit/11cd1f75f435f495d00ef22c292a1fedbd159be4))
+* **gateway:** replay interrupted session finalization ([cba8969](https://github.com/Audumla/AUDiaGentic/commit/cba8969c917c57998c65b63fa01892e087ed7a70))
+* **gateway:** retry unstarted new sessions ([2abec09](https://github.com/Audumla/AUDiaGentic/commit/2abec09b431d1b8fd38bcdcfb2da1f30485ae894))
+* **gateway:** seek indexed deep cursors ([7b54b02](https://github.com/Audumla/AUDiaGentic/commit/7b54b0258b3cfeded2fcfc85d77388e02e512eb0))
+* **gateway:** serialize GPT session recovery ([a9aeec2](https://github.com/Audumla/AUDiaGentic/commit/a9aeec255dbc8f486ca673c696e6da3a95b63188))
+* give a failed delivery-timeout retry probe one more poll before failing ([8ce3e8d](https://github.com/Audumla/AUDiaGentic/commit/8ce3e8dd90f8590211f39f44cf267c43b62bad3a))
+* **gpt-auto:** accept assistant DOM identity replacement ([b2b86e3](https://github.com/Audumla/AUDiaGentic/commit/b2b86e3d8587a427d5a033ab026dc53a2df56542))
+* **gpt-auto:** admit completed project-root turns ([b302700](https://github.com/Audumla/AUDiaGentic/commit/b302700118d434944fa3a47a14bdd4e760e3f6b7))
+* **gpt-auto:** adopt openerless project tabs ([8110dca](https://github.com/Audumla/AUDiaGentic/commit/8110dca964b8f79a520b9325691d6b7d7d90d608))
+* **gpt-auto:** bound lost send acknowledgements ([5c8459e](https://github.com/Audumla/AUDiaGentic/commit/5c8459e1b996b1e7b51e601b3e7cbe46075acead))
+* **gpt-auto:** harden response identity recovery ([754016c](https://github.com/Audumla/AUDiaGentic/commit/754016c794fabfc264e7685bfbb444d46cd0476c))
+* **gpt-auto:** hover project action before click ([04c71a9](https://github.com/Audumla/AUDiaGentic/commit/04c71a9bde2b3e83144aa3cc2742957afee362a6))
+* **gpt-auto:** keep proven replacement in normal recovery flow ([c8d3f4d](https://github.com/Audumla/AUDiaGentic/commit/c8d3f4d7a494ac276aabc3ba59d282a806f8bc3e))
+* **gpt-auto:** pin first fresh session response ([426f81c](https://github.com/Audumla/AUDiaGentic/commit/426f81c7b68e6931d8bff361ae09b49f05cdebd8))
+* **gpt-auto:** preserve completion over stale remount errors ([d17d080](https://github.com/Audumla/AUDiaGentic/commit/d17d080297ff692feb65573ffda16df0fea2af00))
+* **gpt-auto:** preserve terminal assistant remounts ([f473894](https://github.com/Audumla/AUDiaGentic/commit/f473894e25fee4ff7bc0e410d81cbe492834a329))
+* **gpt-auto:** reconcile reversed DOM turns ([324968e](https://github.com/Audumla/AUDiaGentic/commit/324968e175d2a037c57441f78ba5f4d201d363b0))
+* **gpt-auto:** recover terminal assistant remounts ([26a1fe0](https://github.com/Audumla/AUDiaGentic/commit/26a1fe025c5d0e9694b7781026a17447c9690e55))
+* **gpt-auto:** support configured remote CDP endpoints ([560ed72](https://github.com/Audumla/AUDiaGentic/commit/560ed722f921d2f26a31f3e926565c048f59c4d2))
+* **gpt-auto:** trust decisive completed turns ([18fcbb0](https://github.com/Audumla/AUDiaGentic/commit/18fcbb0388b68c8beeae22a863f918b4caf3b305))
+* **gpt-auto:** use remote CDP endpoint ([2089ed9](https://github.com/Audumla/AUDiaGentic/commit/2089ed93b0078c00bc112d54270df46b6aff2cb8))
+* **gpt-auto:** use trusted project controls ([ab01418](https://github.com/Audumla/AUDiaGentic/commit/ab01418bb9375c956c8ed3de23af4b78c3300e7d))
+* harden gateway FIFO cancellation and GPT activity leases ([4852f5c](https://github.com/Audumla/AUDiaGentic/commit/4852f5cd6300e1eff5aa6e9efc2cc294450f1b78))
+* harden release ledger archival boundaries ([ae380be](https://github.com/Audumla/AUDiaGentic/commit/ae380beb6b4f2cb3a51b46419af83cc6aeda6f94))
+* ignore collapsed GPT prompt markers ([eb64c6a](https://github.com/Audumla/AUDiaGentic/commit/eb64c6a16e9672e5a74e070e43050619af0a22cb))
+* ignore failed delivery retry probes as activity ([3138636](https://github.com/Audumla/AUDiaGentic/commit/3138636f09e31e8a07faab11e892ed93e6391d08))
+* isolate FIFO request checkpoint relays ([e6060fa](https://github.com/Audumla/AUDiaGentic/commit/e6060fa05648f5efa837195ca29c62039672aec6))
+* keep active GPT response observation lease alive ([542920b](https://github.com/Audumla/AUDiaGentic/commit/542920ba0d1a6aca88fc5bd18b528f13077147e8))
+* keep long GPT requests visibly active ([25175ef](https://github.com/Audumla/AUDiaGentic/commit/25175ef58ae5d9a1b92814d91b4a21347db7165e))
+* **ledger:** make release retries snapshot-safe ([cc2811d](https://github.com/Audumla/AUDiaGentic/commit/cc2811d3b80501a182a61370c6c2df78d7a4d766))
+* **mcp:** route requests by durable project ownership ([f303474](https://github.com/Audumla/AUDiaGentic/commit/f3034744b4860184c4f0c49f0c02579d19d7b63c))
+* observe meaningful dom class activity ([3af36b2](https://github.com/Audumla/AUDiaGentic/commit/3af36b2480da119a105b7be4d16877656f60a305))
+* open GPT project chats through Projects UI ([0c7527a](https://github.com/Audumla/AUDiaGentic/commit/0c7527a0bcb173818d146fe1f4edcd6606001271))
+* persist fallback submission proof ([010c41b](https://github.com/Audumla/AUDiaGentic/commit/010c41b016c9621e43e3d4aca754cf187e34c3bb))
+* preserve cancellation through recovery ([d4f7c7b](https://github.com/Audumla/AUDiaGentic/commit/d4f7c7b138163efac74ed51ee82719fe9f43b509))
+* preserve durable session checkpoints ([ff16ce4](https://github.com/Audumla/AUDiaGentic/commit/ff16ce4ac12582be2979486378481492aa2f376b))
+* preserve GPT-auto prompt correlation structure ([89d7ce2](https://github.com/Audumla/AUDiaGentic/commit/89d7ce2c456382a02ea7a83e98704835cd33bf0c))
+* preserve provider startup exception details ([9fe57c9](https://github.com/Audumla/AUDiaGentic/commit/9fe57c9e8ba596e458d367d4ea175f868c5e58c8))
+* prevent synthetic gateway activity from masking stalls ([cd57f1d](https://github.com/Audumla/AUDiaGentic/commit/cd57f1d6eba621ca34ad2f1eebfe796e8399651e))
+* protect queued sessions from idle tab reaping ([e92172b](https://github.com/Audumla/AUDiaGentic/commit/e92172bc5d77b4ce65a24f3becbc86048e7285d2))
+* reap GPT tabs by session inactivity ([92dc4c6](https://github.com/Audumla/AUDiaGentic/commit/92dc4c66a67e3ded36342f887a93742e5abb4dff))
+* recognize early gpt-auto activity phases ([7ea794c](https://github.com/Audumla/AUDiaGentic/commit/7ea794cd96b46e86fbceb92079d7f755e84e2de1))
+* recover missing first-render GPT prompt DOM ([9d9d630](https://github.com/Audumla/AUDiaGentic/commit/9d9d6307628e54548686fdb309a9f3a90946f6c1))
+* recover real ChatGPT message ids in gpt-auto fallback renderer ([64f652b](https://github.com/Audumla/AUDiaGentic/commit/64f652bac71770944c2b0a7ae56a9981c0dc68d0))
+* recover unresolved provider turns manually ([5a82db5](https://github.com/Audumla/AUDiaGentic/commit/5a82db5e18776bb1100360a7e55e076c5a11d61a))
+* relay GPT submission DOM activity ([7ac188e](https://github.com/Audumla/AUDiaGentic/commit/7ac188e3b588d5cb86bbc5fca616b1a540bfd3d1))
+* relay submission proof for resumed turns ([485897f](https://github.com/Audumla/AUDiaGentic/commit/485897f13030c84716ab24ceb3c9265743c3787c))
+* **release:** publish ledger-generated release notes ([6836319](https://github.com/Audumla/AUDiaGentic/commit/68363196e9ce12cfd1bde56771dbef9f0336880f))
+* renew activity for unlabeled GPT fallback turns ([fda58a0](https://github.com/Audumla/AUDiaGentic/commit/fda58a004d36cdcffa03eea8ad60db51131dc192))
+* require request-owned provider submission proof ([7508fc2](https://github.com/Audumla/AUDiaGentic/commit/7508fc2c9c346731beb40fbae1b44123598136d2))
+* restore GPT conversation lifecycle and durable tab cleanup ([993635d](https://github.com/Audumla/AUDiaGentic/commit/993635dec07d44df633f0a2b46181b4790137c3e))
+* resume watchdog reconciliation after operator intent ([b385850](https://github.com/Audumla/AUDiaGentic/commit/b38585071b62ec23d498acd5158bb89eac2a42af))
+* route binding proof through active request ([4371471](https://github.com/Audumla/AUDiaGentic/commit/4371471f443df934744538601197a8258b0ba41f))
+* scope delivery-timeout-alert detection to the known alert text ([38e430b](https://github.com/Audumla/AUDiaGentic/commit/38e430bdbcb5180d3126041b27a86a77ec349170))
+* separate structured request metadata from binding metadata ([96bdbd4](https://github.com/Audumla/AUDiaGentic/commit/96bdbd4dac5ee1e6d5cb343677c5e9ccf96ec02a))
+* use native CDP input for GPT project chats ([4a606c7](https://github.com/Audumla/AUDiaGentic/commit/4a606c72f078132fa37e9ed03bb5ae14788538c0))
+* use trusted CDP click for project chat creation ([56b6a02](https://github.com/Audumla/AUDiaGentic/commit/56b6a02d7ac87e9b87746a784e7e30a05a4fb382))
+
+
+### Documentation
+
+* **gpt-auto:** clarify request-owned response identity ([94c8ac0](https://github.com/Audumla/AUDiaGentic/commit/94c8ac0aff566512a3342f0d2ffdb1fdb2b5143e))
+* **gpt-auto:** close GP50 response identity fix ([22f9409](https://github.com/Audumla/AUDiaGentic/commit/22f940913e9e4edb871ab88e9f2f2bd786958aec))
+* **ledger:** record terminal remount fix ([d809d77](https://github.com/Audumla/AUDiaGentic/commit/d809d77dcf598922afbfa7957dededf276e69b4a))
+* link FIFO cancellation review to AS133 ([254939f](https://github.com/Audumla/AUDiaGentic/commit/254939f6e4eca50c17953d0c248a782d9929fa63))
+* **planning:** close decisive completion review ([90081f9](https://github.com/Audumla/AUDiaGentic/commit/90081f96d9cd9ac8b01696a601e988f7e436025a))
+* **release:** refresh bounded-read audit ([9e1cb13](https://github.com/Audumla/AUDiaGentic/commit/9e1cb1327ca5d49df566c4a0f66d4d009f496b84))
+* **release:** refresh deep-cursor audit ([0427633](https://github.com/Audumla/AUDiaGentic/commit/04276332254988a2954c2c93381239f8f89aa77a))
+* **release:** refresh gateway audit artifacts ([304caa7](https://github.com/Audumla/AUDiaGentic/commit/304caa7b13805d3ab834c14351744bbe665cd60c))
+* streamline MCP tool guidance ([c06d5ab](https://github.com/Audumla/AUDiaGentic/commit/c06d5ab70b0d88913695907a021dea8b201a10d2))
+* track gateway regression validation and remaining review gates ([2365bf4](https://github.com/Audumla/AUDiaGentic/commit/2365bf4b0cd7b2d41fe206f3b430cb97aaeb6ab9))
+
 ## [0.2.1](https://github.com/Audumla/AUDiaGentic/compare/v0.2.0...v0.2.1) (2026-09-13)
 
 

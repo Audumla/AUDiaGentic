@@ -1,7 +1,10 @@
 """Launch helpers for component MCP servers."""
+
 from __future__ import annotations
 
 import sys
+import sysconfig
+from pathlib import Path
 
 
 def mcp_interpreter() -> str:
@@ -25,11 +28,10 @@ def component_mcp_launch(
 
     The canonical launch sequence is::
 
-        <pythonw> -m audiagentic.launcher mcp <module> [extra_args...]
+        <sys.executable> -m audiagentic.launcher mcp <module> [extra_args...]
 
     invoking the launcher module directly rather than the ``audiagentic``
-    console-script stub. See :func:`mcp_interpreter` for why the windowless
-    interpreter is used.
+    console-script stub. The live interpreter preserves the stdio transport.
 
     Parameters
     ----------
@@ -45,3 +47,21 @@ def component_mcp_launch(
     Consumers compose the full argv as ``[command, subcommand, *args]``.
     """
     return (mcp_interpreter(), "-m", ("audiagentic.launcher", "mcp", module, *extra_args))
+
+
+def cli_entrypoint() -> str:
+    """Absolute path of the ``audiagentic`` console script of this installation.
+
+    User-scope registrations launch servers through the CLI entrypoint, never an
+    interpreter path, and name this installation's script explicitly so another
+    ``audiagentic`` earlier on PATH cannot serve them.
+    """
+    from audiagentic.foundation.contracts.errors import make_error_factory
+
+    name = "audiagentic.exe" if sys.platform == "win32" else "audiagentic"
+    script = Path(sysconfig.get_path("scripts")) / name
+    if not script.is_file():
+        raise make_error_factory("CFG", "MCPLAUNCH", "foundation")(
+            1, "This installation has no audiagentic console script", path=str(script)
+        )
+    return str(script)

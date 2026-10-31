@@ -9,10 +9,10 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from audiagentic.foundation.config.harness import require_harness_rig_port
+from audiagentic.foundation.config.harness import require_harness_endpoint
 from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
 
-__all__ = ["require_harness_rig_port"]
+__all__ = ["require_harness_endpoint"]
 
 
 def _harness_config_error(code_number: int, message: str, **details: object) -> AudiaGenticError:
@@ -37,13 +37,13 @@ def load_harness_config(project_root: Path | None = None) -> dict:
 
 
 def require_harness_provider(harness_cfg: dict) -> str:
-    provider = harness_cfg.get("rig", {}).get("provider")
+    provider = harness_cfg.get("endpoint", {}).get("provider")
     if not isinstance(provider, str) or not provider.strip():
         raise _harness_config_error(
             1,
             "Harness config missing required 'provider'. "
             "Set it in config/provisioning/harness/ag.yaml or override config.",
-            field="rig.provider",
+            field="endpoint.provider",
         )
     return provider.strip()
 

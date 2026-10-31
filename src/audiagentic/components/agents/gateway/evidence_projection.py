@@ -12,6 +12,47 @@ from audiagentic.components.agents.status.diagnostics_projection import (
 )
 
 
+def public_gateway_scalar(value: Any) -> Any:
+    if isinstance(value, str):
+        return value[:256] if value else None
+    if isinstance(value, (bool, int, float)):
+        return value
+    return None
+
+
+def project_public_gateway_request(value: Any) -> dict[str, Any]:
+    """Project lifecycle mutations without copying arbitrary record fields."""
+    source = value if isinstance(value, dict) else {}
+    result: dict[str, Any] = {}
+    request_id = source.get("request-id") or source.get("request_id")
+    session_id = source.get("session-id") or source.get("session_id")
+    for key in ("state", "revision", "action", "disposition", "outcome", "error-code", "reason"):
+        raw = public_gateway_scalar(source.get(key))
+        if raw is not None:
+            result[key] = raw
+    warnings = source.get("warnings")
+    if isinstance(warnings, list):
+        result["warnings"] = [item[:256] for item in warnings if isinstance(item, str)][:16]
+    if isinstance(request_id, str) and request_id:
+        result["request-id"] = request_id
+    if isinstance(session_id, str) and session_id:
+        result["session-id"] = session_id
+    return result
+
+
+def project_public_gateway_session(value: Any) -> dict[str, Any]:
+    source = value if isinstance(value, dict) else {}
+    result: dict[str, Any] = {}
+    session_id = source.get("session-id") or source.get("session_id")
+    if isinstance(session_id, str) and session_id:
+        result["session-id"] = session_id
+    for key in ("state", "live", "runtime-state", "created-at", "updated-at", "provider-id", "model-id"):
+        raw = public_gateway_scalar(source.get(key))
+        if raw is not None:
+            result[key] = raw
+    return result
+
+
 def _text(value: Any) -> str | None:
     if value is None:
         return None
@@ -176,4 +217,7 @@ def project_public_gateway_evidence(payload: Mapping[str, Any], *, max_bytes: in
     return result
 
 
-__all__ = ["project_public_gateway_evidence"]
+__all__ = [
+    "project_public_gateway_evidence", "project_public_gateway_request",
+    "project_public_gateway_session", "public_gateway_scalar",
+]

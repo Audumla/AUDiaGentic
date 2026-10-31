@@ -5,18 +5,15 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-import os
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
-
-from audiagentic.foundation.io import read_text_with_retry
 
 DEFAULT_REQUEST_HISTORY_LIMIT = 100
 DEFAULT_TIMELINE_MAX_BYTES = 1 * 1024 * 1024
 DEFAULT_OBSERVATION_MAX_BYTES = 2 * 1024 * 1024
 DEFAULT_RECOVERY_MAX_BYTES = 1 * 1024 * 1024
 DEFAULT_CONSOLE_TRACE_MAX_BYTES = 4 * 1024 * 1024
+DEFAULT_JOURNAL_RETENTION_DAYS = 5
 _MAX_CONFIGURED_BYTES = 256 * 1024 * 1024
 _MAX_REQUEST_HISTORY_LIMIT = 10_000
 
@@ -34,6 +31,7 @@ class RetentionPolicy:
     policy_id: str
     digest: str
     available: bool
+    journal_retention_days: int = DEFAULT_JOURNAL_RETENTION_DAYS
 
     @property
     def snapshot(self) -> dict[str, Any]:
@@ -48,13 +46,9 @@ class RetentionPolicy:
             "observation-max-bytes": self.observation_max_bytes,
             "recovery-max-bytes": self.recovery_max_bytes,
             "console-trace-max-bytes": self.console_trace_max_bytes,
+            "journal-retention-days": self.journal_retention_days,
             "available": self.available,
         }
-
-
-def policy_path() -> Path:
-    override = os.environ.get("AUDIAGENTIC_GATEWAY_RETENTION_POLICY")
-    return Path(override).expanduser() if override else Path.home() / ".audiagentic" / "gateway-retention.json"
 
 
 def _positive_int(raw: Any, default: int, maximum: int) -> int:
@@ -99,8 +93,14 @@ def _policy_values(raw: dict[str, Any]) -> tuple[bool, float, int, int, int, int
 
 
 def load_retention_policy() -> RetentionPolicy:
-    path = policy_path()
-    if not path.is_file():
+    """The ``gateway.retention`` settings as a policy; unavailable when unset, invalid when it fails validation."""
+    from audiagentic.components.agents.gateway.settings import gateway_policy
+
+    try:
+        raw = gateway_policy("retention")
+    except (OSError, ValueError, TypeError):
+        raw = []  # not a mapping: reported as an invalid policy below
+    if raw is None:
         return RetentionPolicy(
             False,
             0.0,
@@ -115,10 +115,12 @@ def load_retention_policy() -> RetentionPolicy:
             False,
         )
     try:
-        raw = json.loads(read_text_with_retry(path))
         if not isinstance(raw, dict):
             raise ValueError
         enabled, minimum, batch, history_limit, timeline_max, observation_max, recovery_max, console_max = _policy_values(raw)
+        retention_days = raw.get("journal-retention-days", DEFAULT_JOURNAL_RETENTION_DAYS)
+        if isinstance(retention_days, bool) or not isinstance(retention_days, int) or not 1 <= retention_days <= 3650:
+            raise ValueError
         canonical = json.dumps(
             {
                 "purge-enabled": enabled,
@@ -129,6 +131,7 @@ def load_retention_policy() -> RetentionPolicy:
                 "observation-max-bytes": observation_max,
                 "recovery-max-bytes": recovery_max,
                 "console-trace-max-bytes": console_max,
+                "journal-retention-days": retention_days,
             },
             sort_keys=True,
             separators=(",", ":"),
@@ -146,6 +149,7 @@ def load_retention_policy() -> RetentionPolicy:
             str(raw.get("policy-id", "machine-default")),
             digest,
             True,
+            retention_days,
         )
     except (OSError, ValueError, TypeError):
         return RetentionPolicy(
@@ -169,6 +173,7 @@ def policy_matches(snapshot: dict[str, Any]) -> bool:
 
 
 __all__ = [
+    "DEFAULT_JOURNAL_RETENTION_DAYS",
     "DEFAULT_CONSOLE_TRACE_MAX_BYTES",
     "DEFAULT_OBSERVATION_MAX_BYTES",
     "DEFAULT_RECOVERY_MAX_BYTES",
@@ -177,5 +182,4 @@ __all__ = [
     "RetentionPolicy",
     "load_retention_policy",
     "policy_matches",
-    "policy_path",
 ]

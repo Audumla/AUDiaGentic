@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import os
 import secrets
 from pathlib import Path
@@ -9,6 +10,7 @@ from typing import Any
 
 from audiagentic.components.agents.contracts.execution_context import SubmissionEnvelope
 from audiagentic.components.agents.gateway.application import GatewayApplication
+from audiagentic.components.agents.gateway.node.admission_contract import NodeSubmissionContext
 from audiagentic.components.agents.gateway.operations import (
     GatewayOperationsApplication,
     ManagementCommand,
@@ -22,6 +24,7 @@ from audiagentic.components.agents.gateway.service.contract import (
 from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error_factory
 from audiagentic.foundation.io import atomic_write_text
 from audiagentic.foundation.system.managed_service import ManagedServiceStore
+from audiagentic.foundation.system.managed_service_contracts import ClientLease
 
 service_validation_error = make_error_factory("VAL", "AGSV", "gateway-service")
 service_conflict_error = make_error_factory("CON", "AGSV", "gateway-service")
@@ -96,6 +99,7 @@ class GatewayServiceApplication:
         *,
         lifecycle: Any = None,
         dashboard_recent_seconds: int | None = None,
+        node_admission: Any = None,
     ) -> None:
         self._application = application
         self._service_store = service_store
@@ -103,6 +107,7 @@ class GatewayServiceApplication:
         # status/drain/resume/stop surface; absent for bare in-process hosting.
         self._lifecycle = lifecycle
         self._dashboard_recent_seconds = dashboard_recent_seconds
+        self._node_admission = node_admission
         self._dashboard_action_token = _load_dashboard_action_token(service_store.root)
         # A distinct durable authority for gateway operator operations.  It
         # deliberately does not own request/session state or the work queue.
@@ -247,6 +252,7 @@ class GatewayServiceApplication:
         ttl_seconds: float,
         protocol_version: str,
         correlation_id: str | None = None,
+        facts: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         _require_protocol(protocol_version)
         _require_ttl(ttl_seconds)
@@ -256,6 +262,7 @@ class GatewayServiceApplication:
             ttl_seconds=ttl_seconds,
             expected_epoch=record.owner_epoch,
             correlation_id=correlation_id,
+            facts=facts,
         )
         from .client_icons import assign_client_icon
 
@@ -266,6 +273,20 @@ class GatewayServiceApplication:
             "expires-at": lease.expires_at,
             "service-revision": updated.revision,
         }
+
+    def _require_active_client_lease(self, lease_id: str, owner_epoch: str) -> ClientLease:
+        """Normalize stale lease failures once for local and shared ingress."""
+        try:
+            return self._service_store.require_active_lease(lease_id, expected_epoch=owner_epoch)
+        except AudiaGenticError as exc:
+            raise service_conflict_error(18, "gateway client lease is stale or inactive") from exc
+
+    def require_client_principal(self, lease_id: str, owner_epoch: str, principal_id: str) -> str:
+        """Fence shared ingress with the existing durable lease authority."""
+        lease = self._require_active_client_lease(lease_id, owner_epoch)
+        if (lease.facts or {}).get("shared-principal-id") != principal_id:
+            raise service_validation_error(5, "gateway client lease principal does not match")
+        return lease.client_instance_id
 
     def renew_client(
         self,
@@ -307,13 +328,11 @@ class GatewayServiceApplication:
         protocol_version: str,
         owner_epoch: str,
         lease_id: str,
+        node_context: NodeSubmissionContext | None = None,
     ) -> Any:
         """Invoke one closed v1 gateway operation without transport concerns."""
         _require_protocol(protocol_version)
-        try:
-            self._service_store.require_active_lease(lease_id, expected_epoch=owner_epoch)
-        except AudiaGenticError as exc:
-            raise service_conflict_error(18, "gateway client lease is stale or inactive") from exc
+        lease = self._require_active_client_lease(lease_id, owner_epoch)
         root = _canonical_root(project_root)
         arguments = dict(params or {})
         if operation in _WORK_PRODUCING_OPERATIONS and self._service_is_draining():
@@ -322,8 +341,26 @@ class GatewayServiceApplication:
                 "gateway is draining and will not admit new agent execution work",
                 operation=operation,
             )
+        if node_context is not None:
+            if (operation != "submit_execution_request" or type(node_context) is not NodeSubmissionContext
+                    or (lease.facts or {}).get("shared-principal-id") != node_context.principal_id):
+                raise service_validation_error(5, "Node submission context does not match its authenticated lease")
+            if self._node_admission is None:
+                raise service_validation_error(22, "Node execution is not enabled on this gateway")
+            result = self._node_admission.submit(
+                root, context=node_context, arguments=arguments, owner_epoch=owner_epoch,
+            )
+            self._record_project_encounter(root)
+            return result
         if operation in _WORK_PRODUCING_OPERATIONS:
             self._record_project_encounter(root)
+        if operation == "list_agent_definition_cards":
+            _reject_unknown(arguments, set())
+            from audiagentic.components.agents.configuration.management import (
+                list_agent_definition_cards,
+            )
+
+            return list_agent_definition_cards(root)
         if operation == "submit_execution_request":
             submitted = _validated_submission_arguments(root, arguments)
             from .client_icons import assign_client_icon
@@ -689,37 +726,25 @@ _SUBMISSION_ARGUMENTS = {
     "component_profile",
     "provider_chat_url",
     "logical_client_id",
+    # How long a blocking caller waits for the terminal result; never an
+    # execution deadline (SH22).
+    "wait_timeout_seconds",
 }
-
-# Older MCP façades may continue to serialize the removed caller-controlled
-# timeout/session-bound fields as explicit ``null`` values until that process
-# is reloaded.  Null carries no authority and is safe to discard at this
-# boundary; a non-null value remains an invalid request rather than silently
-# reintroducing caller-controlled watchdog policy.
-_RETIRED_SUBMISSION_ARGUMENTS = frozenset(
-    {"timeout_seconds", "session_idle_timeout_seconds", "session_max_lifetime_seconds"}
-)
-
 
 def _validated_submission_arguments(
     project_root: Path, arguments: dict[str, Any]
 ) -> dict[str, Any]:
     """Validate the wire submission through SH02's canonical envelope."""
-    for name in _RETIRED_SUBMISSION_ARGUMENTS:
-        if name in arguments:
-            value = arguments.pop(name)
-            if value is not None:
-                raise service_validation_error(
-                    22,
-                    "gateway service operation contains retired parameters",
-                    fields=[name],
-                )
     _reject_unknown(arguments, _SUBMISSION_ARGUMENTS)
     if not isinstance(arguments.get("new_session", False), bool) or (arguments.get("new_session") and (arguments.get("session_id") or arguments.get("provider_chat_url"))):
         raise service_validation_error(22, "new_session must be boolean and cannot be combined with session_id or provider_chat_url")
     metadata = arguments.get("metadata")
     if metadata is not None and not isinstance(metadata, dict):
         raise service_validation_error(21, "gateway submission metadata must be a mapping")
+    wait = arguments.get("wait_timeout_seconds")
+    if wait is not None and (isinstance(wait, bool) or not isinstance(wait, (int, float))
+                             or not math.isfinite(wait) or wait <= 0):
+        raise service_validation_error(22, "wait_timeout_seconds must be a positive number")
     if "workspace_name" in arguments:
         arguments["workspace_name"] = _optional_string(arguments, "workspace_name")
     if "provider_chat_url" in arguments:
@@ -747,10 +772,6 @@ def _validated_submission_arguments(
             "model_id": metadata.get("model_id"),
             "component_profile": arguments.get("component_profile"),
             "mode": arguments.get("mode", "async"),
-            # Submission execution is activity/watchdog governed. The RPC
-            # boundary deliberately has no caller-controlled wall-clock
-            # deadline; passive wait operations remain independent.
-            "timeout_seconds": None,
             "session": {
                 "session_id": arguments.get("session_id"),
                 "keep_alive": arguments.get("session_keep_alive"),

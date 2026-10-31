@@ -58,6 +58,20 @@ def gateway_request_dir(project_root: Path, request_id: str) -> Path:
     return gateway_root(project_root) / request_id
 
 
+def gateway_request_maintenance_lock_path(project_root: Path, request_id: str) -> Path:
+    """Fence late maintenance writes against purge without recreating request dirs."""
+    if not request_id.startswith("req_") or any(c in request_id for c in "/\\:") or ".." in request_id:
+        raise ValueError("invalid request id for maintenance fence")
+    return gateway_root(project_root) / "maintenance-locks" / (request_id + ".lock")
+
+
+def gateway_session_maintenance_lock_path(project_root: Path, session_id: str) -> Path:
+    """Serialize session trace maintenance with explicit session purge."""
+    if not session_id.startswith("ses_") or any(c in session_id for c in "/\\:") or ".." in session_id:
+        raise ValueError("invalid session id for maintenance fence")
+    return gateway_root(project_root) / "maintenance-locks" / (session_id + ".lock")
+
+
 def gateway_request_path(project_root: Path, request_id: str) -> Path:
     """Return the record.json path for a gateway request."""
     return gateway_request_dir(project_root, request_id) / "record.json"
@@ -71,6 +85,27 @@ def gateway_admitted_prompt_path(project_root: Path, request_id: str) -> Path:
     surface; callers receive no filesystem path for it.
     """
     return gateway_request_dir(project_root, request_id) / "runtime" / "admitted-prompt.txt"
+
+
+def gateway_node_admission_path(project_root: Path, request_id: str) -> Path:
+    """Private unrendered caller-node admission; never a public artifact."""
+    gateway_request_maintenance_lock_path(project_root, request_id)
+    return gateway_request_dir(project_root, request_id) / "runtime" / "node-admission.json"
+
+
+def gateway_node_prepared_evidence_path(project_root: Path, identity: object) -> Path:
+    """Private immutable evidence keyed by the complete canonical command SHA.
+
+    A retired, proven-never-authorized command may be replaced on the same
+    request. Its evidence stays separate; no raw command name enters a path.
+    """
+    from audiagentic.components.agents.gateway.node.contracts import CommandIdentity
+
+    if type(identity) is not CommandIdentity:
+        raise ValueError("prepared evidence requires a typed command identity")
+    # Reuse the existing request path-selector validation, including Windows ADS.
+    gateway_request_maintenance_lock_path(project_root, identity.request_id)
+    return gateway_request_dir(project_root, identity.request_id) / "runtime" / f"node-prepared-{identity.digest}.json"
 
 
 def gateway_final_response_path(project_root: Path, request_id: str) -> Path:
@@ -100,7 +135,7 @@ def gateway_timeline_index_path(project_root: Path, request_id: str) -> Path:
 
 
 def gateway_observation_path(project_root: Path, request_id: str) -> Path:
-    """Return the append-only request-owned DOM/activity journal path."""
+    """Return the request-owned DOM/activity/node-stage observation journal path."""
     return gateway_request_dir(project_root, request_id) / "observations.ndjson"
 
 
@@ -130,6 +165,11 @@ def gateway_admission_lock_path(project_root: Path) -> Path:
 def gateway_idempotency_index_path(project_root: Path, key_digest: str) -> Path:
     """Return the opaque, hashed idempotency-index entry for one request key."""
     return gateway_root(project_root) / "idempotency" / f"{key_digest}.json"
+
+
+def gateway_external_sessions_root(project_root: Path) -> Path:
+    """Return the root of external-session registrations (SH50a), beside but not inside sessions/."""
+    return gateway_root(project_root) / "external-sessions"
 
 
 def gateway_sessions_root(project_root: Path) -> Path:
@@ -191,13 +231,21 @@ def gateway_session_resume_lock_path(project_root: Path, session_id: str) -> Pat
     return gateway_session_dir(project_root, session_id) / "resume-idempotency.lock"
 
 
-def gateway_session_resume_concurrency_lock_path(project_root: Path, session_id: str) -> Path:
-    """Return the lock serializing all successor creation for one source session.
+def gateway_session_generation_lock_path(project_root: Path, session_id: str) -> Path:
+    """Return the session generation fence (AS118).
 
-    This is deliberately separate from the idempotency-record lock.  The
-    resume operation holds this lock while it resolves the source and creates
-    the successor, then ``record_resume_attempt`` takes the record lock while
-    persisting the result.  Reusing the record lock here would deadlock.
+    Serializes everything that decides a session's next generation or accepts
+    work onto it: resume/successor creation, continuation-turn admission and
+    destructive retention claims. Lock order: generation fence, then request,
+    then retention, then the session mutation lock; never the reverse.
+
+    It is deliberately separate from the resume idempotency-record lock (the
+    resume holds this fence, then ``record_resume_attempt`` takes the record
+    lock) and from the session mutation lock, which is never held across
+    provider I/O while this fence may be.
+
+    The file keeps its original name (``resume-concurrency.lock``) so a
+    process still running older code serializes on the same lock.
     """
     return gateway_session_dir(project_root, session_id) / "resume-concurrency.lock"
 

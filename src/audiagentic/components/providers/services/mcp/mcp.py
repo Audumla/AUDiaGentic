@@ -3,6 +3,7 @@
 Also provides generic MCP config helpers that wrap foundation ConfigPatcher,
 scoped to provider-specific config paths.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -20,6 +21,7 @@ from audiagentic.foundation.toolchains.config.managed_config import (
 
 from ...descriptors.base import ProviderDescriptor
 from ...descriptors.registry import get_descriptor
+from .fence import native_mcp_fence
 from .managed_mcp_registry import mcp_ownership_registry
 
 
@@ -52,7 +54,11 @@ def add_provider_mcp_server(
     descriptor = _descriptor(provider_id)
     spec = descriptor.mcp_config
     if spec is None:
-        return {"provider_id": provider_id, "ok": False, "error": "no mcp_config defined for this provider"}
+        return {
+            "provider_id": provider_id,
+            "ok": False,
+            "error": "no mcp_config defined for this provider",
+        }
 
     config_path = _resolve_mcp_path(spec, project_root)
     entry = McpServerEntry(name=name, command=command, args=tuple(args), env=dict(env or {}))
@@ -76,7 +82,11 @@ def remove_provider_mcp_server(
     descriptor = _descriptor(provider_id)
     spec = descriptor.mcp_config
     if spec is None:
-        return {"provider_id": provider_id, "ok": False, "error": "no mcp_config defined for this provider"}
+        return {
+            "provider_id": provider_id,
+            "ok": False,
+            "error": "no mcp_config defined for this provider",
+        }
 
     config_path = _resolve_mcp_path(spec, project_root)
     removed = spec.remover(config_path, server_name)
@@ -100,7 +110,12 @@ def list_provider_mcp_servers(
     descriptor = _descriptor(provider_id)
     spec = descriptor.mcp_config
     if spec is None:
-        return {"provider_id": provider_id, "ok": True, "servers": [], "skipped": "no mcp_config defined"}
+        return {
+            "provider_id": provider_id,
+            "ok": True,
+            "servers": [],
+            "skipped": "no mcp_config defined",
+        }
 
     config_path = _resolve_mcp_path(spec, project_root)
     current = spec.reader(config_path)
@@ -112,8 +127,7 @@ def list_provider_mcp_servers(
         "refresh_mode": spec.refresh_mode,
         "config_exists": config_path.exists(),
         "servers": [
-            {"name": e.name, "command": e.command, "args": list(e.args)}
-            for e in current.values()
+            {"name": e.name, "command": e.command, "args": list(e.args)} for e in current.values()
         ],
     }
 
@@ -131,7 +145,11 @@ def reload_provider_mcp(
     descriptor = _descriptor(provider_id)
     spec = descriptor.mcp_config
     if spec is None:
-        return {"provider_id": provider_id, "ok": False, "error": "no mcp_config defined for this provider"}
+        return {
+            "provider_id": provider_id,
+            "ok": False,
+            "error": "no mcp_config defined for this provider",
+        }
 
     result = reload_managed_config(spec, project_root, display_name=descriptor.display_name)
     result["provider_id"] = provider_id
@@ -150,7 +168,7 @@ def _sync_managed_entries(
     Thin MCP binding over the shared ``sync_managed_config`` core (MO06):
     the store is the descriptor's reader/writer/remover trio, the owner
     scope is the provider id, and the ownership registry is the existing
-    managed-mcp-servers.json (format unchanged). When ``managed_ids`` is
+    the durable managed-mcp-servers.json authority. When ``managed_ids`` is
     ``None``, all managed entries for the provider are synced; a non-empty
     set touches only those ids.
     """
@@ -159,14 +177,15 @@ def _sync_managed_entries(
     if spec is None:
         return {"provider_id": provider_id, "ok": True, "skipped": "no mcp_config defined"}
 
-    result = sync_managed_config(
-        spec,
-        project_root,
-        provider_id,
-        desired_entries,
-        registry=mcp_ownership_registry(project_root),
-        managed_ids=managed_ids,
-    )
+    with native_mcp_fence(project_root):
+        result = sync_managed_config(
+            spec,
+            project_root,
+            provider_id,
+            desired_entries,
+            registry=mcp_ownership_registry(project_root),
+            managed_ids=managed_ids,
+        )
     return result.to_dict()
 
 
@@ -215,14 +234,15 @@ def sync_managed_provider_mcp_scope(
     spec = descriptor.mcp_config
     if spec is None:
         return {"ok": False, "supported": False, "reason": "no mcp_config"}
-    result = sync_managed_config(
-        spec,
-        project_root,
-        ownership_scope,
-        desired_entries,
-        registry=mcp_ownership_registry(project_root),
-        managed_ids=managed_ids,
-    )
+    with native_mcp_fence(project_root):
+        result = sync_managed_config(
+            spec,
+            project_root,
+            ownership_scope,
+            desired_entries,
+            registry=mcp_ownership_registry(project_root),
+            managed_ids=managed_ids,
+        )
     return result.to_dict()
 
 

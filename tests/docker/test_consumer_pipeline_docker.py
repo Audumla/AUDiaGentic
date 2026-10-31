@@ -714,7 +714,8 @@ class TestConsumerPipelineFullIntegration:
             # Send output event.
             event = AgentOutputEvent(
                 session_id=session_id, turn_id="turn_full_001", sequence=seq,
-                kind=AgentOutputKind.ASSISTANT_TEXT_DELTA,
+                kind=(AgentOutputKind.ASSISTANT_FINAL if seq == 2
+                      else AgentOutputKind.ASSISTANT_TEXT_DELTA),
                 text=f"chunk {seq} ",
                 observed_at=f"2025-01-01T00:00:{seq:02d}Z",
                 is_final=seq == 2,

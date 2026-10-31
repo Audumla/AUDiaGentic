@@ -1,0 +1,6 @@
+schema_version: 1
+
+worktrees:
+  # Checks that must pass before `audiagentic worktree push` publishes. Each id is mapped to a
+  # command in YOUR user settings (worktrees.checks); a project file cannot define commands.
+  pre-push: [privacy]

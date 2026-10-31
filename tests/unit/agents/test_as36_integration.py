@@ -217,7 +217,7 @@ class TestTerminalQualityInStatus:
     def test_terminal_quality_present_for_completed_request(self, tmp_path: Path, monkeypatch):
         _make_profile(tmp_path, "default", "local-openai")
 
-        def fake_execute_provider(*, identity, execution_request, timeout_seconds):
+        def fake_execute_provider(*, identity, execution_request, activity_callback=None):
             return _result({
                 "provider-id": execution_request["provider-id"],
                 "status": "ok",
@@ -247,7 +247,7 @@ class TestTerminalQualityInStatus:
         _make_profile(tmp_path, "default", "local-openai")
         hold = threading.Event()
 
-        def slow_execute_provider(*, identity, execution_request, timeout_seconds):
+        def slow_execute_provider(*, identity, execution_request, activity_callback=None):
             hold.wait(timeout=5)
             return _result({
                 "provider-id": execution_request["provider-id"],
@@ -275,7 +275,7 @@ class TestTerminalQualityInStatus:
         """SH07 incident shape: completed but output ends mid-progress."""
         _make_profile(tmp_path, "default", "local-openai")
 
-        def fake_execute_provider(*, identity, execution_request, timeout_seconds):
+        def fake_execute_provider(*, identity, execution_request, activity_callback=None):
             return _result({
                 "provider-id": execution_request["provider-id"],
                 "status": "ok",
@@ -307,7 +307,7 @@ class TestTerminalQualityInStatus:
         """Signal evidence must not contain raw prompt/output/tool data."""
         _make_profile(tmp_path, "default", "local-openai")
 
-        def fake_execute_provider(*, identity, execution_request, timeout_seconds):
+        def fake_execute_provider(*, identity, execution_request, activity_callback=None):
             return _result({
                 "provider-id": execution_request["provider-id"],
                 "status": "ok",
@@ -371,7 +371,7 @@ class TestTerminalQualityInWait:
     def test_terminal_quality_in_wait_terminal(self, tmp_path: Path, monkeypatch):
         _make_profile(tmp_path, "default", "local-openai")
 
-        def fake_execute_provider(*, identity, execution_request, timeout_seconds):
+        def fake_execute_provider(*, identity, execution_request, activity_callback=None):
             return _result({
                 "provider-id": execution_request["provider-id"],
                 "status": "ok",
@@ -398,7 +398,7 @@ class TestTerminalQualityInWait:
         _make_profile(tmp_path, "default", "local-openai")
         hold = threading.Event()
 
-        def slow_execute_provider(*, identity, execution_request, timeout_seconds):
+        def slow_execute_provider(*, identity, execution_request, activity_callback=None):
             hold.wait(timeout=5)
             return _result({
                 "provider-id": execution_request["provider-id"],
@@ -427,7 +427,7 @@ class TestTerminalQualityInWait:
         """SH07 shape: completed but output ends mid-progress — should be suspicious."""
         _make_profile(tmp_path, "default", "local-openai")
 
-        def fake_execute_provider(*, identity, execution_request, timeout_seconds):
+        def fake_execute_provider(*, identity, execution_request, activity_callback=None):
             return _result({
                 "provider-id": execution_request["provider-id"],
                 "status": "ok",
@@ -459,7 +459,7 @@ class TestTerminalQualityInWait:
         """Terminal quality should work with session_id present (quality summary available)."""
         _make_profile(tmp_path, "default", "local-openai")
 
-        def fake_execute_provider(*, identity, execution_request, timeout_seconds):
+        def fake_execute_provider(*, identity, execution_request, activity_callback=None):
             return _result({
                 "provider-id": execution_request["provider-id"],
                 "status": "ok",

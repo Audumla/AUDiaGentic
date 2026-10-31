@@ -15,7 +15,7 @@ families:
     supported_modes: [plan, apply, prune, status, upgrade-status, upgrade]
 
   managed-mcp:
-    payload_contract: provider-managed-mcp-payload/v1
+    payload_contract: provider-managed-mcp-payload/v2
     result_contract: provider-managed-mcp-result/v1
     supported_modes: [apply, prune, status]
     ownership_scope_required: true

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 import re
 from collections.abc import Callable
@@ -29,8 +30,8 @@ from audiagentic.foundation.transports.session_binding import (
     ProviderSessionRef,
 )
 
-from .chat import ChatState, PersistentChat
 from .cdp.client import CdpError
+from .chat import ChatState, PersistentChat
 from .config import GptAutoConfig
 from .gpt_auto_cdp import ProjectReadinessError
 from .runtime_registry import get_runtime
@@ -52,6 +53,8 @@ def _bounded_cause_message(error: BaseException) -> str:
 
 
 class GptAutoSessionTransport:
+    supports_external_completion = True
+
     def __init__(self, chat: PersistentChat) -> None:
         self.chat = chat
         self._active_turn: GptAutoTurn | None = None
@@ -71,6 +74,20 @@ class GptAutoSessionTransport:
         """Route checkpoint metadata to the request owning the active turn."""
         self.chat.set_request_metadata_sink(sink)
 
+    def set_turn_session_checkpoint_sink(self, sink: Any | None) -> None:
+        self.chat.set_turn_session_checkpoint_sink(sink)
+
+    def clear_turn_session_checkpoint_sink(self, expected_sink: Any | None) -> bool:
+        return self.chat.clear_turn_session_checkpoint_sink(expected_sink)
+
+    def synchronize_cleared_predecessor_checkpoint(
+        self, predecessor_id: str, expected_metadata: dict[str, object],
+        persisted_session_metadata: dict[str, object],
+    ) -> bool:
+        return self.chat.synchronize_cleared_predecessor_checkpoint(
+            predecessor_id, expected_metadata, persisted_session_metadata,
+        )
+
     def set_durable_owner_probe(
         self, probe: Callable[[str | None], bool] | None
     ) -> None:
@@ -80,6 +97,28 @@ class GptAutoSessionTransport:
     def set_request_owner(self, request_id: str | None) -> None:
         """Bind page mutation authority to the currently executing durable request."""
         self._request_owner_id = request_id
+
+    def acknowledge_terminal_checkpoint_finalization(
+        self,
+        request_id: str,
+        terminal_metadata: dict[str, object],
+        persisted_session_metadata: dict[str, object],
+    ) -> bool:
+        """Release the in-memory recovery fence after gateway terminal cleanup."""
+        return self.chat.acknowledge_terminal_checkpoint_finalization(
+            turn_id=request_id,
+            terminal_metadata=terminal_metadata,
+            persisted_session_metadata=persisted_session_metadata,
+        )
+
+    def terminal_checkpoint_metadata(self, turn_id: str) -> dict[str, object]:
+        """Expose private checkpoint proof to the gateway finalizer only."""
+        active_turn = self._active_turn
+        if active_turn is not None and active_turn._submission_proof_persist_pending:
+            # The in-memory proof was rejected by the durable checkpoint CAS;
+            # it must not be used to clear the persisted recovery fence.
+            return {}
+        return self.chat.terminal_checkpoint_metadata(turn_id)
 
     def _has_live_durable_owner(self) -> bool:
         if self._closed:
@@ -180,7 +219,9 @@ class GptAutoSessionTransport:
         except Exception as exc:
             metadata_fn = getattr(self.chat, "unresolved_metadata", None)
             metadata = metadata_fn() if callable(metadata_fn) else {}
-            unresolved = bool(metadata.get("unresolved-turn-pending"))
+            metadata = metadata if isinstance(metadata, dict) else {}
+            pending = metadata.get("unresolved-turn-pending")
+            unresolved = pending if isinstance(pending, bool) else None
             # Preserve the typed load-error evidence emitted by
             # PersistentChat.  The gateway's dispatch policy uses the
             # explicit unsent/ambiguous fields to decide whether a fresh
@@ -211,10 +252,12 @@ class GptAutoSessionTransport:
                     details={
                         "failure-stage": "readiness",
                         "submission-state": "not_started",
+                        "submission-attempted": False,
                         "submission-proven": False,
                         "submission-ambiguous": False,
                         "retryable-same-session": False,
                         "previous-turn-unresolved": unresolved,
+                        "chat-state": getattr(getattr(self.chat, "state", None), "value", "unknown"),
                         "cause-type": type(exc).__name__,
                         "cause-message": _bounded_cause_message(exc),
                         "request-id": request.turn_id,
@@ -232,14 +275,21 @@ class GptAutoSessionTransport:
             post_retain_metadata = (
                 post_retain_metadata_fn() if callable(post_retain_metadata_fn) else {}
             )
-            post_retain_unresolved = bool(
-                post_retain_metadata.get("unresolved-turn-pending")
+            post_retain_metadata = (
+                post_retain_metadata if isinstance(post_retain_metadata, dict) else {}
             )
+            post_pending = post_retain_metadata.get("unresolved-turn-pending")
+            if unresolved is True or post_pending is True or details.get("previous-turn-unresolved") is True:
+                details["previous-turn-unresolved"] = True
+            elif unresolved is False and post_pending is False:
+                details["previous-turn-unresolved"] = False
+            else:
+                details["previous-turn-unresolved"] = None
             session_state = getattr(self.chat, "state", None)
             session_usable = session_state not in {ChatState.FAILED, ChatState.CLOSED}
             details["retryable-same-session"] = bool(
                 retained
-                and not post_retain_unresolved
+                and details["previous-turn-unresolved"] is False
                 and session_usable
             )
             failure = AudiaGenticError(
@@ -258,7 +308,7 @@ class GptAutoSessionTransport:
         turn = GptAutoTurn(self.chat, request, sink)
         self._active_turn = turn
         try:
-            return await turn.run()
+            return await self._observe_or_captured(turn.run(), request)
         except Exception as exc:
             retained = await self.chat.retain_after_turn_failure(exc)
             self._turn_failure_disposition = (
@@ -269,6 +319,33 @@ class GptAutoSessionTransport:
             raise
         finally:
             self._active_turn = None
+
+    async def _observe_or_captured(self, invocation, request: SessionPrompt) -> SessionTurnResult:
+        """Release only local observation after the gateway's durable capture."""
+        token = request.completion_token
+        if token is None:
+            return await invocation
+        observer = asyncio.create_task(invocation)
+        captured = asyncio.create_task(token.wait())
+        try:
+            await asyncio.wait({observer, captured}, return_when=asyncio.FIRST_COMPLETED)
+            if captured.done() and token.is_set():
+                # Do not call turn.cancel()/transport.cancel(): those may click
+                # Stop. The turn's capture-aware CancelledError path preserves
+                # its private checkpoint for exact post-observer reconciliation.
+                observer.cancel()
+                await asyncio.gather(observer, return_exceptions=True)
+                return SessionTurnResult(
+                    turn_id=request.turn_id, stop_reason="externally-captured",
+                    observations_delivered=0, dropped_observations=0,
+                    correlation_quality=CorrelationQuality.REQUEST_SCOPED,
+                )
+            return await observer
+        finally:
+            for task in (observer, captured):
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(observer, captured, return_exceptions=True)
 
     async def _emit_activity(
         self,
@@ -339,7 +416,7 @@ class GptAutoSessionTransport:
             self._pending_cancel_turn_id = None
             turn.cancel()
         try:
-            return await turn.resume_existing()
+            return await self._observe_or_captured(turn.resume_existing(), request)
         except Exception as exc:
             retained = await self.chat.retain_after_turn_failure(exc)
             details = getattr(exc, "details", {})

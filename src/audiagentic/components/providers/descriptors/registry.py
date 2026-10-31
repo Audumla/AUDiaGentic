@@ -12,6 +12,7 @@ from audiagentic.foundation.registry_utils import Registry
 from ..services.host.host_capabilities import host_extension_statuses
 from .base import ProviderDescriptor
 from .feature_mapping import impl_features_for
+from .target import base_provider_id
 
 _COMPONENT_ID = "providers"
 
@@ -60,7 +61,7 @@ def register(descriptor: ProviderDescriptor) -> None:
 
 def get_descriptor(provider_id: str) -> ProviderDescriptor | None:
     _sync_feature_implementations()
-    return _registry.get(provider_id)
+    return _registry.get(base_provider_id(provider_id))
 
 
 def all_descriptors() -> dict[str, ProviderDescriptor]:

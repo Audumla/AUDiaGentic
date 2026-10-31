@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 
 # Load environment-specific secrets from .audiagentic/secrets/<env>.env.
@@ -30,6 +31,15 @@ for _p in (str(_ROOT), str(_SRC)):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
+@pytest.fixture(scope="session", autouse=True)
+def _cache_provider_descriptor_parsing():
+    """Parse the shipped provider descriptors once per process (see the helper)."""
+    from tests.helpers import provider_descriptor_cache
+
+    provider_descriptor_cache.install()
+    yield
+
+
 _TIER_MARKERS = {
     "/unit/": "unit",
     "/integration/": "integration",
@@ -56,6 +66,38 @@ def _isolate_audiagentic_home(
     if request.node.get_closest_marker("mutates_host") is not None:
         return
     monkeypatch.setenv("AUDIAGENTIC_HOME", str(tmp_path_factory.mktemp("audiagentic-home")))
+
+
+@pytest.fixture(autouse=True)
+def _gateway_test_port(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Never let a test start a gateway service on the real default port.
+
+    The shared gateway owns the default port; a test-started service there blocks
+    every real client on the machine. Each test gets its own free port instead.
+    """
+    import socket
+
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    monkeypatch.setattr("audiagentic.components.agents.gateway.service.bootstrap._DEFAULT_PORT", port)
+
+
+@pytest.fixture(autouse=True)
+def _stop_leaked_gateway_services(
+    _isolate_audiagentic_home, tmp_path_factory: pytest.TempPathFactory,
+) -> Iterator[None]:
+    """Stop any gateway service the test left running under its own temp home.
+
+    Never acts on a home outside pytest's temp tree, so a real or ``mutates_host``
+    home and other sessions' services are untouched.
+    """
+    from tests.helpers.gateway_service_cleanup import stop_gateway_services
+
+    yield
+    home = os.environ.get("AUDIAGENTIC_HOME", "")
+    if home and Path(home).is_relative_to(tmp_path_factory.getbasetemp()):
+        stop_gateway_services(Path(home))
 
 
 @pytest.fixture(autouse=True)
@@ -313,6 +355,8 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     """
     if os.environ.get("AUDIAGENTIC_DOCKER_TESTS") != "1":
         return
+    if session.config.option.collectonly:
+        return  # Inventory proves collection, not execution; execution lanes remain guarded.
     if not session.testscollected:
         return
     terminalreporter = session.config.pluginmanager.get_plugin("terminalreporter")
@@ -322,3 +366,16 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     if passed == 0:
         terminalreporter.write_sep("=", "Docker lane ran no passing tests", red=True, bold=True)
         session.exitstatus = pytest.ExitCode.TESTS_FAILED
+
+
+@pytest.fixture
+def in_process_gateway(tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Run the gateway engine inside the test process.
+
+    ``automatic`` is the default implementation and starts a shared service, which
+    a test must not do implicitly. Selecting ``embedded`` through the explicit settings
+    scope keeps the test in-process without touching the developer's own settings.
+    """
+    path = tmp_path_factory.mktemp("gateway-settings") / "settings.yaml"
+    path.write_text("schema_version: 1\ngateway:\n  implementation: embedded\n", encoding="utf-8")
+    monkeypatch.setenv("AUDIAGENTIC_CONFIG", str(path))

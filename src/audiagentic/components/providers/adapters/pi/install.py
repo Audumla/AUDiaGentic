@@ -76,7 +76,7 @@ def materialize_provider_config(
     """Write all Pi-specific config files.
 
     Called at install and refresh time. Writes:
-      - <agent_runtime>/agent/models.json   — rig provider entry
+      - <agent_runtime>/agent/models.json   — harness endpoint provider entry
       - <agent_runtime>/agent/settings.json — UI settings
       - <agent_runtime>/SYSTEM.md           — provisioning agent prompt (then stale-deleted from agent/)
       - <agent_runtime>/agent/APPEND_SYSTEM.md — enforcement reminders
@@ -84,7 +84,7 @@ def materialize_provider_config(
 
     Args:
         project_root: Project root for component discovery and surface apply.
-        harness_cfg: Harness config dict (rig.model, rig.port, rig.provider).
+        harness_cfg: Harness config dict (endpoint.url, endpoint.model, endpoint.provider).
         agent_runtime: Target directory for agent files (harness runtime root).
             Defaults to the global harness runtime from foundation.paths.home.
     """

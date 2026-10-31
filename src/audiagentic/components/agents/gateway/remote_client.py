@@ -1,8 +1,10 @@
-"""Framework-neutral GatewayClient implementation over authenticated loopback HTTP."""
+"""Framework-neutral GatewayClient implementation over authenticated local HTTP or shared HTTPS."""
 
 from __future__ import annotations
 
 import json
+import re
+import ssl
 import threading
 import time
 import uuid
@@ -10,8 +12,9 @@ from pathlib import Path
 from typing import Any, cast
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_opener, urlopen
 
+from audiagentic.components.agents.gateway.client import validate_node_selectors
 from audiagentic.components.agents.gateway.service.contract import (
     CALL_ROUTE,
     HEALTH_ROUTE,
@@ -26,6 +29,18 @@ from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
 client_validation_error = make_error_factory("VAL", "AGSV", "gateway-service")
 client_network_error = make_error_factory("NET", "AGSV", "gateway-service")
 _DEFAULT_TRANSPORT_TIMEOUT = object()
+# Provider response capture is deliberately bounded in the gateway API, but
+# it may require two CDP snapshots and a remote-browser reconnect.  Do not let
+# the ordinary 30-second control-plane timeout misreport a live recovery as
+# NET-AGSV-002 while the standalone service is still processing it.
+_RECOVERY_TRANSPORT_TIMEOUT_SECONDS = 90.0
+
+
+class _RejectRedirects(HTTPRedirectHandler):
+    """Never forward shared gateway credentials or replay a request elsewhere."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
 
 
 class StandaloneGatewayClient:
@@ -40,8 +55,33 @@ class StandaloneGatewayClient:
         lease_ttl_seconds: float = 120.0,
         client_instance_id: str | None = None,
         logical_client_id: str | None = None,
+        shared_server_id: str | None = None,
+        shared_project_id: str | None = None,
+        shared_source_node_config: Path | None = None,
+        shared_caller_root: Path | None = None,
+        ssl_context: ssl.SSLContext | None = None,
     ) -> None:
-        self._endpoint = _validate_endpoint(endpoint)
+        self._shared = shared_server_id is not None or shared_project_id is not None
+        self._shared_server_id = shared_server_id
+        self._shared_project_id = shared_project_id
+        self._source_node_config = shared_source_node_config
+        self._source_binding = None
+        if (shared_source_node_config is None) != (shared_caller_root is None):
+            raise client_validation_error(22, "source node configuration and caller root must be supplied together")
+        self._shared_opener = None
+        if self._shared:
+            if not all(
+                isinstance(value, str) and re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,63}", value)
+                for value in (shared_server_id, shared_project_id)
+            ):
+                raise client_validation_error(16, "shared gateway requires safe server and project IDs")
+            self._endpoint = _validate_shared_endpoint(endpoint)
+            context = ssl_context if ssl_context is not None else ssl.create_default_context()
+            if context.verify_mode != ssl.CERT_REQUIRED or not context.check_hostname:
+                raise client_validation_error(16, "shared gateway requires certificate and hostname verification")
+            self._shared_opener = build_opener(HTTPSHandler(context=context), _RejectRedirects())
+        else:
+            self._endpoint = _validate_endpoint(endpoint)
         if not auth_token or any(character.isspace() for character in auth_token):
             raise client_validation_error(11, "gateway service auth token is invalid")
         if request_timeout <= 0 or lease_ttl_seconds <= 0:
@@ -53,6 +93,20 @@ class StandaloneGatewayClient:
                 maximum=MAX_LEASE_TTL_SECONDS,
             )
         self._auth_token = auth_token
+        if shared_source_node_config is not None:
+            if not self._shared or not isinstance(shared_caller_root, Path):
+                raise client_validation_error(22, "source node configuration requires a shared connector and caller root")
+            from audiagentic.components.agents.gateway.node.source_workspace import (
+                resolve_caller_workspace,
+            )
+            from audiagentic.components.agents.gateway.service.shared_config import (
+                load_shared_node_config,
+            )
+
+            source_config = load_shared_node_config(shared_source_node_config)
+            if source_config.server_id != shared_server_id:
+                raise client_validation_error(22, "source node belongs to a different gateway server")
+            self._source_binding = resolve_caller_workspace(source_config, shared_caller_root)
         self._request_timeout = request_timeout
         self._lease_ttl_seconds = lease_ttl_seconds
         self._client_instance_id = client_instance_id or f"client_{uuid.uuid4().hex[:16]}"
@@ -146,17 +200,62 @@ class StandaloneGatewayClient:
         self.close()
 
     def health(self) -> dict[str, Any]:
-        return _response_mapping(
+        health = _response_mapping(
             self._request(HEALTH_ROUTE, None, method="GET", retry_network=True)
         )
+        if self._shared:
+            if health.get("protocol-version") != PROTOCOL_VERSION:
+                raise client_validation_error(13, "gateway service protocol version is incompatible")
+            if health.get("server-id") != self._shared_server_id:
+                raise client_validation_error(14, "shared gateway server identity does not match")
+            _response_string(health, "owner-epoch")
+            projects = health.get("projects")
+            if (
+                not isinstance(projects, list)
+                or not all(isinstance(project, str) for project in projects)
+                or self._shared_project_id not in projects
+            ):
+                raise client_validation_error(5, "shared gateway project is not authorized")
+        return health
+
+    def list_agent_definition_cards(self, project_root: Path) -> list[dict[str, Any]]:
+        return cast(list[dict[str, Any]], self._call("list_agent_definition_cards", project_root, {}))
 
     def submit_execution_request(self, project_root: Path, **kwargs: Any) -> dict[str, Any]:
-        if "component_profile" not in kwargs:
-            from audiagentic.foundation.paths.names import get_active_profile
+        if "source_workspace" in kwargs:
+            raise client_validation_error(22, "caller workspace is connector-owned, not a tool parameter")
+        source_token = None
+        target_keys = {"node_id", "workspace_id"}.intersection(kwargs)
+        if self._source_binding is not None:
+            from audiagentic.components.agents.gateway.node.source_workspace import (
+                resolve_caller_workspace,
+            )
+            from audiagentic.components.agents.gateway.service.shared_config import (
+                load_shared_node_config,
+            )
 
-            kwargs["component_profile"] = get_active_profile()
+            config = load_shared_node_config(self._source_node_config)
+            current = resolve_caller_workspace(config, project_root)
+            if config.server_id != self._shared_server_id or current != self._source_binding:
+                raise client_validation_error(22, "caller workspace binding changed; reconnect with explicit context")
+            expected_target = (current.identity.source_node_id, current.identity.workspace_id)
+            if target_keys:
+                if validate_node_selectors(kwargs.get("node_id"), kwargs.get("workspace_id")) != expected_target:
+                    raise client_validation_error(22, "cross-node workspace access is not implemented")
+            else:
+                kwargs.update(zip(("node_id", "workspace_id"), expected_target))
+            kwargs["source_workspace"] = {"identity": current.identity.to_mapping(), "caller-root": str(current.root)}
+            source_token = load_auth_token(config.token_file)
+        elif target_keys:
+            raise client_validation_error(22, "node submission requires configured caller workspace enrollment")
+        if not self._shared:
+            if "component_profile" not in kwargs:
+                from audiagentic.foundation.paths.names import get_active_profile
+
+                kwargs["component_profile"] = get_active_profile()
         kwargs.setdefault("logical_client_id", self._logical_client_id)
-        return cast(dict[str, Any], self._call("submit_execution_request", project_root, kwargs))
+        return cast(dict[str, Any], self._call("submit_execution_request", project_root, kwargs,
+                                             **({"source_node_token": source_token} if source_token is not None else {})))
 
     def get_execution_request(self, project_root: Path, request_id: str, *, include_response: bool = False) -> dict[str, Any]:
         params: dict[str, Any] = {"request_id": request_id, "include_response": include_response}
@@ -180,7 +279,12 @@ class StandaloneGatewayClient:
     def recover_execution_request(self, project_root: Path, request_id: str, **kwargs: Any) -> dict[str, Any]:
         return cast(
             dict[str, Any],
-            self._call("recover_execution_request", project_root, {"request_id": request_id, **kwargs}),
+            self._call(
+                "recover_execution_request",
+                project_root,
+                {"request_id": request_id, **kwargs},
+                transport_timeout=_RECOVERY_TRANSPORT_TIMEOUT_SECONDS,
+            ),
         )
 
     def get_execution_response_payload(self, project_root: Path, request_id: str) -> dict[str, Any]:
@@ -242,11 +346,11 @@ class StandaloneGatewayClient:
         )
 
     def run_execution_request(self, project_root: Path, **kwargs: Any) -> dict[str, Any]:
-        if "component_profile" not in kwargs:
+        if not self._shared and "component_profile" not in kwargs:
             from audiagentic.foundation.paths.names import get_active_profile
 
             kwargs["component_profile"] = get_active_profile()
-        requested = kwargs.get("timeout_seconds")
+        requested = kwargs.get("wait_timeout_seconds")
         timeout = _DEFAULT_TRANSPORT_TIMEOUT if requested is None else float(requested) + 5  # noqa: RUF039
         return cast(
             dict[str, Any],
@@ -410,8 +514,21 @@ class StandaloneGatewayClient:
         params: dict[str, Any],
         *,
         transport_timeout: float | None | object = _DEFAULT_TRANSPORT_TIMEOUT,
+        source_node_token: str | None = None,
     ) -> Any:
-        root = project_root.expanduser().resolve(strict=False)
+        if not self._shared and {"node_id", "workspace_id"}.intersection(params):
+            raise client_validation_error(22, "local loopback transport does not accept node selectors")
+        if self._shared and operation == "submit_execution_request":
+            params = _shared_submission_params(params)
+        if source_node_token is not None and (not self._shared or operation != "submit_execution_request"):
+            raise client_validation_error(22, "source credentials are restricted to shared node submission")
+        if ("source_workspace" in params) != (source_node_token is not None):
+            raise client_validation_error(22, "source workspace requires its enrolled node credential")
+        scope = (
+            {"project-id": self._shared_project_id}
+            if self._shared
+            else {"project-root": str(project_root.expanduser().resolve(strict=False))}
+        )
         self._ensure_lease()
         for attempt in range(2):
             with self._state_lock:
@@ -426,15 +543,32 @@ class StandaloneGatewayClient:
                         "owner-epoch": owner_epoch,
                         "lease-id": lease_id,
                         "operation": operation,
-                        "project-root": str(root),
+                        **scope,
                         "params": params,
                     },
                     timeout=transport_timeout,
+                    **({"source_node_token": source_node_token} if source_node_token is not None else {}),
                 )
             except AudiaGenticError as exc:
-                if attempt > 0 or exc.code != "CON-AGSV-018":
+                if exc.code != "CON-AGSV-018":
                     raise
-                self._clear_lease(lease_id)
+                if self._shared:
+                    # An explicit stale-lease rejection invalidates the cached
+                    # lease even when this operation must never be replayed.
+                    self._clear_lease(lease_id)
+                    from audiagentic.components.agents.gateway.client import (
+                        _READ_ONLY_GATEWAY_METHODS,
+                    )
+
+                    if attempt > 0 or operation not in _READ_ONLY_GATEWAY_METHODS:
+                        raise
+                else:
+                    if attempt > 0:
+                        raise
+                    self._clear_lease(lease_id)
+                # Reattach validates TLS, server identity and project grants
+                # again. Only the reviewed read-only set may retry in shared
+                # mode; mutations and ambiguous transport failures propagate.
                 self.connect()
         raise AssertionError("bounded gateway reattach loop exhausted")
 
@@ -489,7 +623,18 @@ class StandaloneGatewayClient:
         method: str = "POST",
         timeout: float | None | object = _DEFAULT_TRANSPORT_TIMEOUT,
         retry_network: bool = False,
+        source_node_token: str | None = None,
     ) -> Any:
+        source_headers = {}
+        if source_node_token is not None:
+            if (not self._shared or path != CALL_ROUTE or not body
+                    or body.get("operation") != "submit_execution_request"
+                    or not isinstance(source_node_token, str) or not source_node_token
+                    or any(character.isspace() for character in source_node_token)):
+                raise client_validation_error(22, "source credentials are restricted to shared node submission")
+            source_headers["X-AUDiaGentic-Source-Node-Token"] = source_node_token
+        if self._shared:
+            path = "/shared" + path
         encoded = None if body is None else json.dumps(body).encode("utf-8")
         request = Request(
             f"{self._endpoint}{path}",
@@ -498,6 +643,7 @@ class StandaloneGatewayClient:
             headers={
                 "Authorization": f"Bearer {self._auth_token}",
                 "Content-Type": "application/json",
+                **source_headers,
             },
         )
         attempts = 2 if retry_network else 1
@@ -509,9 +655,13 @@ class StandaloneGatewayClient:
                     if timeout is _DEFAULT_TRANSPORT_TIMEOUT
                     else cast(float | None, timeout)
                 )
-                with urlopen(request, timeout=request_timeout) as response:
+                open_request = self._shared_opener.open if self._shared_opener is not None else urlopen
+                with open_request(request, timeout=request_timeout) as response:
                     raw_payload = response.read()
             except HTTPError as exc:
+                if self._shared and 300 <= exc.code < 400:
+                    exc.close()
+                    raise client_network_error(3, "shared gateway redirects are forbidden") from None
                 try:
                     payload = json.loads(exc.read().decode("utf-8"))
                 except (UnicodeDecodeError, json.JSONDecodeError) as decode_error:
@@ -547,6 +697,62 @@ def load_auth_token(path: Path) -> str:
     if not token or len(token) > 1024 or any(character.isspace() for character in token):
         raise client_validation_error(11, "gateway service auth token is invalid")
     return token
+
+
+def _shared_submission_params(params: dict[str, Any]) -> dict[str, Any]:
+    """Validate intent and connector-owned source claims without resolving paths."""
+    allowed = {
+        "agent_id", "execution_profile_id", "prompt_body", "mode", "source", "metadata",
+        "session_id", "session_keep_alive", "new_session", "title", "logical_client_id",
+        "node_id", "workspace_id", "source_workspace",
+    }
+    if params.keys() - allowed:
+        raise client_validation_error(22, "shared submission contains unsupported parameters",
+                                      fields=sorted(params.keys() - allowed))
+    if {"node_id", "workspace_id"}.intersection(params):
+        validate_node_selectors(params.get("node_id"), params.get("workspace_id"))
+    if "source_workspace" in params:
+        from audiagentic.components.agents.gateway.node.admission_contract import (
+            SourceWorkspaceIdentity,
+        )
+
+        source = params["source_workspace"]
+        if (not isinstance(source, dict) or set(source) != {"identity", "caller-root"}
+                or not isinstance(source["caller-root"], str) or not source["caller-root"]):
+            raise client_validation_error(22, "source workspace requires connector-owned private context")
+        SourceWorkspaceIdentity.from_mapping(source["identity"])
+    metadata = params.get("metadata")
+    if metadata is not None and (
+        not isinstance(metadata, dict)
+        or metadata.keys() - {"schema_version", "idempotency_key", "correlation_id"}
+    ):
+        raise client_validation_error(22, "shared submission metadata contains unsupported parameters")
+    # The server namespaces this alias by authenticated principal. Keep the
+    # client identity stable across lease changes without merging all clients.
+    return dict(params)
+
+
+def _validate_shared_endpoint(endpoint: str) -> str:
+    try:
+        parsed = urlparse(endpoint)
+        port = parsed.port
+        valid = (
+            parsed.scheme == "https"
+            and bool(parsed.hostname)
+            and (port is None or 1 <= port <= 65535)
+            and parsed.username is None
+            and parsed.password is None
+            and parsed.path in ("", "/")
+            and not parsed.query
+            and not parsed.fragment
+            and not any(character.isspace() or ord(character) < 32 for character in endpoint)
+            and not any(character in endpoint for character in ("\\", "?", "#"))
+        )
+    except ValueError:
+        valid = False
+    if not valid:
+        raise client_validation_error(16, "shared gateway endpoint must be an HTTPS origin")
+    return endpoint.rstrip("/")
 
 
 def _validate_endpoint(endpoint: str) -> str:

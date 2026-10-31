@@ -34,7 +34,7 @@ from __future__ import annotations
 
 import asyncio
 import atexit
-import inspect
+import hashlib
 import logging
 import threading
 import time
@@ -54,9 +54,6 @@ from audiagentic.components.agents.gateway.event_topics import (
 from audiagentic.components.agents.gateway.session import bindings as binding_store
 from audiagentic.components.agents.gateway.session import orphan as orphan_lib
 from audiagentic.components.agents.gateway.session import sessions_store as session_store
-from audiagentic.components.agents.agents_paths import (
-    gateway_session_resume_concurrency_lock_path,
-)
 from audiagentic.components.agents.gateway.session.console_trace import GatewayConsoleTrace
 from audiagentic.components.agents.gateway.session.turn_events import (
     _make_on_event_callback,
@@ -80,7 +77,6 @@ from audiagentic.components.providers import providers_api
 from audiagentic.components.providers.contracts.conversation_focus import ConversationFocusLocator
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.time import now_iso_z
-from audiagentic.foundation.system.process import StartupLock
 from audiagentic.foundation.transports.agent_session import (
     SessionControlAction,
     SessionControlRequest,
@@ -88,9 +84,65 @@ from audiagentic.foundation.transports.agent_session import (
     SessionPrompt,
     SessionTurnResult,
 )
+from audiagentic.foundation.transports.session_binding import SessionOwnership
 from audiagentic.foundation.transports.session_surface import PreparedSessionTransport
 
 logger = logging.getLogger(__name__)
+
+
+def _observe_missing_provider_session_ref(
+    project_root: Path,
+    *,
+    request_id: str,
+    session_id: str,
+    attempt_epoch: int | None,
+    metadata: dict[str, Any],
+) -> None:
+    """Record why read-only session reattachment cannot find a chat binding."""
+    stage = metadata.get("submission-stage")
+    state = metadata.get("submission-state")
+    recovery_state = metadata.get("recovery-state")
+    facts = {
+        "provider-binding-present": False,
+        "provider-session-ref-present": False,
+        "target-id-present": isinstance(metadata.get("target-id"), str)
+        and bool(metadata.get("target-id")),
+        "unresolved-turn-pending": metadata.get("unresolved-turn-pending") is True,
+        "turn-id-matches-request": metadata.get("unresolved-turn-id") == request_id,
+        "submission-proven": metadata.get("submission-proven") is True,
+        "send-intent-ever": metadata.get("send-intent-ever") is True,
+        "submission-stage": stage if isinstance(stage, str) else "unknown",
+        "submission-state": state if isinstance(state, str) else "unknown",
+        "recovery-state": recovery_state if isinstance(recovery_state, str) else "unknown",
+    }
+    try:
+        from audiagentic.components.agents.gateway.observability import append_observation
+
+        append_observation(
+            project_root,
+            request_id,
+            session_id=session_id,
+            turn_id=request_id,
+            attempt_epoch=max(1, int(attempt_epoch or 1)),
+            source="session-recovery",
+            diagnostic_facts={"provider-binding": facts},
+            error_occurrence={
+                "failure-code": "CON-AGW-124",
+                "classification": "provider-session-ref-unavailable",
+            },
+            action={
+                "event": "provider-session-reattach-deferred",
+                "outcome": "binding-unavailable",
+            },
+            causal_input_ids=[request_id, session_id],
+            force_flush=True,
+        )
+    except Exception:  # noqa: BLE001 - observation failure must not mask recovery
+        logger.warning(
+            "could not persist missing provider-session binding observation",
+            extra={"request-id": request_id, "session-id": session_id},
+            exc_info=True,
+        )
 
 
 async def _close_failed_transport(transport: Any) -> None:
@@ -108,7 +160,255 @@ async def _close_failed_transport(transport: Any) -> None:
         logger.warning("failed to close transport after unsuccessful open", exc_info=True)
 
 
+def _record_submission_checkpoint_rejection(
+    project_root: Path,
+    request_id: str,
+    session_id: str,
+    attempt_epoch: int | None,
+    exc: AudiaGenticError,
+) -> None:
+    """Persist redacted checkpoint-fence facts before the request finalizes.
+
+    Request error records intentionally omit exception details. Keep the
+    checkpoint predicate evidence in the request-owned observation journal so
+    a stage/identity rejection can be diagnosed without logging prompt text,
+    message ids, DOM, or provider handles.
+    """
+    if exc.code != "CON-AGW-125":
+        return
+    details = exc.details if isinstance(exc.details, Mapping) else {}
+    candidate = details.get("checkpoint-diagnostics")
+    candidate = candidate if isinstance(candidate, Mapping) else {}
+    allowed = {
+        "observed-stage",
+        "requested-stage",
+        "unresolved-turn-pending",
+        "turn-id-matches-request",
+        "claim-id-supplied",
+        "claim-present",
+        "claim-generation-present",
+        "submission-proven",
+        "request-recovery-required",
+        "proof-source-valid",
+        "proof-update-keys-safe",
+        "frozen-identity-unchanged",
+        "frozen-identity-mismatch-keys",
+        "provider-anchor-valid",
+        "fingerprint-equal",
+        "baseline-user-count-matches",
+        "baseline-assistant-count-matches",
+        "baseline-user-id-is-new",
+        "request-owner-is-current",
+    }
+    checkpoint_facts = {key: candidate[key] for key in allowed if key in candidate}
+    owner_fence = details.get("request-owner-fence")
+    if isinstance(owner_fence, Mapping):
+        checkpoint_facts["request-owner"] = {
+            key: owner_fence[key]
+            for key in (
+                "request-state-owned", "session-id-matches", "dispatch-owner-epoch-matches",
+                "worker-id-matches", "attempt-epoch-matches", "allow-queued-pre-send", "recovery-required",
+            )
+            if isinstance(owner_fence.get(key), bool)
+        }
+    try:
+        from audiagentic.components.agents.gateway.observability import append_observation
+
+        append_observation(
+            project_root,
+            request_id,
+            session_id=session_id,
+            turn_id=request_id,
+            attempt_epoch=max(1, int(attempt_epoch or 1)),
+            source="session-checkpoint",
+            diagnostic_facts={"checkpoint": checkpoint_facts},
+            error_occurrence={
+                "failure-code": exc.code,
+                "classification": "checkpoint-rejected",
+            },
+            action={
+                "event": "checkpoint-rejected",
+                "kind": "submission-checkpoint",
+                "outcome": exc.code,
+            },
+            causal_input_ids=[request_id, session_id],
+            force_flush=True,
+        )
+    except Exception:  # noqa: BLE001 - observation must not mask the fence error
+        logger.warning(
+            "could not persist submission checkpoint rejection evidence",
+            extra={"request-id": request_id, "session-id": session_id},
+            exc_info=True,
+        )
+
+
 # ── AS28 slice 4a: default provider preparation seam ──────────────
+def _make_submission_checkpoint_sink(
+    project_root: Path,
+    session_id: str,
+    *,
+    request_id: str | None,
+    dispatch_owner_epoch: str | None,
+    worker_id: str | None,
+    attempt_epoch: int | None,
+    prepared_recovery_claim: dict[str, Any] | None = None,
+) -> Any:
+    """Build one checkpoint writer fenced to a single dispatch attempt."""
+    if prepared_recovery_claim:
+        for key, expected in (
+            ("dispatch-owner-epoch", dispatch_owner_epoch),
+            ("worker-id", worker_id), ("attempt-epoch", attempt_epoch),
+        ):
+            if expected is not None and prepared_recovery_claim.get(key) != expected:
+                raise AudiaGenticError(
+                    code="CON-AGW-125", kind="agents",
+                    message="prepared checkpoint writer does not match its dispatch owner",
+                    details={"request-id": request_id, "session-id": session_id},
+                )
+        request_id = request_id or prepared_recovery_claim.get("request-id")
+    prepared_submission_advanced = False
+
+    async def _checkpoint_sink(metadata: dict[str, Any]) -> None:
+        nonlocal prepared_submission_advanced
+        if (
+            metadata.get("submission-state") == "not_started"
+            and metadata.get("unresolved-turn-pending") is False
+            and metadata.get("submission-proven") is False
+        ):
+            session_store.clear_owned_unsent_submission_checkpoint(
+                project_root, session_id, request_id,
+                submission_attempt_id=metadata.get("submission-attempt-id"),
+                dispatch_owner_epoch=dispatch_owner_epoch,
+                worker_id=worker_id, attempt_epoch=attempt_epoch,
+            )
+            prepared_submission_advanced = False
+            return
+        pending = bool(metadata.get("unresolved-turn-pending"))
+        remove = () if pending else (
+            "recovery-state",
+            "submission-state",
+            "submission-attempt-id",
+            "submission-stage",
+            "send-intent-ever",
+            "submission-recovery-generation",
+            "unresolved-turn-id",
+            "unresolved-baseline-user-id",
+            "unresolved-baseline-assistant-id",
+            "unresolved-baseline-user-count",
+            "unresolved-baseline-assistant-count",
+        )
+        if (
+            metadata.get("submission-state") == "prepared"
+            and metadata.get("submission-proven") is False
+        ):
+            remove += (
+                "submission-proven",
+                "prompt-message-id",
+                "assistant-message-id",
+                "assistant-before-message-id",
+                "assistant-before-id",
+                "terminal-evidence",
+            )
+        if (
+            metadata.get("submission-state") == "prepared"
+            and not metadata.get("prompt-text-digest")
+        ):
+            remove += ("prompt-text-digest",)
+        if not pending:
+            # Do not erase the recovery fence until the request's
+            # terminal lifecycle has been persisted by the gateway.
+            metadata = dict(metadata)
+            metadata.pop("unresolved-turn-pending", None)
+            metadata.pop("submission-state", None)
+            metadata.pop("submission-recovery-generation", None)
+            metadata.pop("submission-recovery-claim", None)
+            remove = ()
+        if prepared_recovery_claim and not prepared_submission_advanced:
+            claim_args = {
+                "claim_id": prepared_recovery_claim["claim-id"],
+                "dispatch_owner_epoch": prepared_recovery_claim["dispatch-owner-epoch"],
+                "worker_id": prepared_recovery_claim["worker-id"],
+                "attempt_epoch": prepared_recovery_claim["attempt-epoch"],
+            }
+            if metadata.get("submission-state") == "dispatching":
+                session_store.advance_prepared_submission_to_dispatching(
+                    project_root,
+                    session_id,
+                    request_id,
+                    metadata,
+                    **claim_args,
+                    remove_keys=remove,
+                )
+                prepared_submission_advanced = True
+            else:
+                session_store.update_owned_submission_checkpoint(
+                    project_root,
+                    session_id,
+                    request_id,
+                    metadata,
+                    claim_id=(
+                        prepared_recovery_claim["claim-id"]
+                        if metadata.get("submission-state") == "prepared"
+                        else None
+                    ),
+                    dispatch_owner_epoch=claim_args["dispatch_owner_epoch"],
+                    worker_id=claim_args["worker_id"],
+                    attempt_epoch=claim_args["attempt_epoch"],
+                    remove_keys=remove,
+                )
+        else:
+            if prepared_recovery_claim:
+                session_store.update_owned_submission_checkpoint(
+                    project_root,
+                    session_id,
+                    request_id,
+                    metadata,
+                    dispatch_owner_epoch=prepared_recovery_claim["dispatch-owner-epoch"],
+                    worker_id=prepared_recovery_claim["worker-id"],
+                    attempt_epoch=prepared_recovery_claim["attempt-epoch"],
+                    remove_keys=remove,
+                )
+            else:
+                session_store.update_provider_metadata(
+                    project_root,
+                    session_id,
+                    metadata,
+                    remove_keys=remove,
+                    request_id=request_id,
+                    dispatch_owner_epoch=dispatch_owner_epoch,
+                    worker_id=worker_id,
+                    attempt_epoch=attempt_epoch,
+                )
+
+    async def checkpoint_sink(metadata: dict[str, Any]) -> None:
+        try:
+            await _checkpoint_sink(metadata)
+        except AudiaGenticError as exc:
+            _record_submission_checkpoint_rejection(
+                project_root,
+                request_id,
+                session_id,
+                attempt_epoch,
+                exc,
+            )
+            raise
+
+    class OwnedCheckpointSink:
+        """Separate trusted budget capability from submission metadata writes."""
+
+        async def __call__(self, metadata: dict[str, Any]) -> None:
+            await checkpoint_sink(metadata)
+
+        async def recovery_budget(self, **operation: Any) -> tuple[int, int]:
+            return session_store.owned_conversation_load_budget(
+                project_root, session_id, request_id,
+                dispatch_owner_epoch=dispatch_owner_epoch, worker_id=worker_id,
+                attempt_epoch=attempt_epoch, **operation,
+            )
+
+    return OwnedCheckpointSink()
+
+
 def _default_prepare_fn(
     project_root: Path,
     *,
@@ -233,6 +533,21 @@ def _cleanup_preserving(path: Path, preserve: set[Path]) -> None:
         _cleanup_preserving(child, preserve)
 
 
+def _binding_ownership(record: Any) -> SessionOwnership:
+    """Ownership recorded on a session's durable binding (SH49).
+
+    Records without a binding predate bindings and were always gateway-owned.
+    An unrecognised value fails closed as EXTERNAL: never terminate.
+    """
+    binding = record.get("binding") if isinstance(record, dict) else None
+    if not isinstance(binding, dict):
+        return SessionOwnership.OWNED
+    try:
+        return SessionOwnership(binding.get("ownership", SessionOwnership.OWNED))
+    except ValueError:
+        return SessionOwnership.EXTERNAL
+
+
 class _SessionHandle:
     """Loop-side state for one live session. Touched only on the loop thread."""
 
@@ -252,9 +567,13 @@ class _SessionHandle:
         surface_snapshot: Any = None,
         request_runtime_root: Path | None = None,
         runtime_preserve_relpaths: tuple[str, ...] = (),
+        ownership: SessionOwnership = SessionOwnership.OWNED,
     ) -> None:
         self.session_id = session_id
         self.transport = transport
+        # From the durable binding. EXTERNAL sessions belong to someone else
+        # (a human harness, a browser): cleanup detaches, never terminates.
+        self.ownership = ownership
         self.project_root = project_root
         self.execution_profile_id = execution_profile_id
         self.idle_timeout_seconds = idle_timeout_seconds
@@ -282,6 +601,7 @@ class _SessionHandle:
         # (RV680 silence watchdog); meaningful only while a turn is running.
         self.last_event_clock = created_clock
         self.current_request_id: str | None = None
+        self.capture_handoff_pending: dict[str, Any] | None = None
         # AS91: the task remains the sole owner of its finally-based lock and
         # capacity cleanup. The reaper may only cancel this task after positive
         # foundation process-death evidence.
@@ -524,6 +844,10 @@ class SessionRuntime:
         request_provider_metadata_sink: Any = None,
         resume_provider_ref: str | None = None,
         resume_provider_metadata: dict[str, Any] | None = None,
+        request_id: str | None = None,
+        dispatch_owner_epoch: str | None = None,
+        worker_id: str | None = None,
+        attempt_epoch: int | None = None,
     ) -> dict[str, Any]:
         """Open a live session; returns the persisted session record.
 
@@ -590,6 +914,10 @@ class SessionRuntime:
                 request_provider_metadata_sink=request_provider_metadata_sink,
                 resume_provider_ref=resume_provider_ref,
                 resume_provider_metadata=resume_provider_metadata,
+                request_id=request_id,
+                dispatch_owner_epoch=dispatch_owner_epoch,
+                worker_id=worker_id,
+                attempt_epoch=attempt_epoch,
             ),
             # Opening a provider session is provider work. Do not convert a
             # slow but alive handshake into a terminal request solely because
@@ -610,6 +938,7 @@ class SessionRuntime:
         dispatch_claim: Callable[[], dict[str, Any]] | None = None,
         resume_existing: bool = False,
         request_provider_metadata_sink: Any = None,
+        request_session_checkpoint_sink: Any = None,
     ) -> SessionTurnResult:
         """Run one turn on a live session; refreshes its idle clock."""
         return self._call(
@@ -624,6 +953,7 @@ class SessionRuntime:
                 dispatch_claim=dispatch_claim,
                 resume_existing=resume_existing,
                 request_provider_metadata_sink=request_provider_metadata_sink,
+                request_session_checkpoint_sink=request_session_checkpoint_sink,
             ),
             # Queue wait is deliberately unbounded here.  A caller timeout
             # must not expire while an earlier turn owns the session FIFO
@@ -631,6 +961,114 @@ class SessionRuntime:
             # provider transport below.
             timeout=None,
         )
+
+    def acknowledge_terminal_checkpoint_finalization(
+        self,
+        session_id: str,
+        request_id: str,
+        *,
+        terminal_metadata: dict[str, Any],
+        persisted_session_metadata: dict[str, Any],
+    ) -> bool:
+        """Release provider memory only after the request/session CAS is durable."""
+        return bool(
+            self._call(
+                self._acknowledge_terminal_checkpoint_finalization(
+                    session_id,
+                    request_id,
+                    terminal_metadata=terminal_metadata,
+                    persisted_session_metadata=persisted_session_metadata,
+                ),
+                timeout=5.0,
+            )
+        )
+
+    def synchronize_cleared_predecessor_checkpoint(
+        self, session_id: str, predecessor_id: str, *,
+        expected_metadata: dict[str, Any], persisted_session_metadata: dict[str, Any],
+    ) -> bool:
+        async def synchronize() -> bool:
+            handle = self._handles.get(session_id)
+            if handle is None or handle.current_request_id is not None or handle.turn_lock.locked():
+                return False
+            callback = getattr(handle.transport, "synchronize_cleared_predecessor_checkpoint", None)
+            if not callable(callback):
+                return False
+            return bool(callback(predecessor_id, expected_metadata, persisted_session_metadata))
+
+        return bool(self._call(synchronize(), timeout=5.0))
+
+    async def _acknowledge_terminal_checkpoint_finalization(
+        self,
+        session_id: str,
+        request_id: str,
+        *,
+        terminal_metadata: dict[str, Any],
+        persisted_session_metadata: dict[str, Any],
+    ) -> bool:
+        handle = self._handles.get(session_id)
+        if handle is None:
+            return False
+        acknowledge = getattr(
+            handle.transport,
+            "acknowledge_terminal_checkpoint_finalization",
+            None,
+        )
+        if not callable(acknowledge):
+            return False
+        return bool(
+            acknowledge(
+                request_id,
+                terminal_metadata,
+                persisted_session_metadata,
+            )
+        )
+
+    async def _watch_captured_completion(
+        self, project_root: Path, handle: Any, request_id: str,
+        owner: dict[str, Any], token: asyncio.Event, authority: dict[str, Any],
+    ) -> None:
+        """Observe durable capture even when its caller lives in another process."""
+        from .capture_handoff import read_captured_handoff
+
+        while handle.current_request_id == request_id:
+            try:
+                captured = await asyncio.to_thread(
+                    read_captured_handoff, project_root, request_id, handle.session_id, owner,
+                )
+                if captured is not None and handle.current_request_id == request_id:
+                    authority.update(captured)
+                    token.set()
+                    return
+            except Exception:  # noqa: BLE001 - observation failure is not capture authority
+                logger.debug("capture handoff observation deferred", exc_info=True)
+            await asyncio.sleep(0.25)
+
+    async def _await_captured_memory_fence(self, handle: Any, cancel: asyncio.Event) -> None:
+        """Keep a queued successor out of provider admission until memory agrees."""
+        from .capture_handoff import acknowledge_captured_handoff, read_captured_handoff
+        while handle.capture_handoff_pending is not None:
+            if cancel.is_set():
+                raise AudiaGenticError(code="CON-AGW-099", kind="agents", message="session request cancelled before captured-turn handoff")
+            if self._handles.get(handle.session_id) is not handle or not handle.transport.is_alive():
+                raise AudiaGenticError(code="RES-AGW-003", kind="agents", message="session unavailable during captured-turn handoff")
+            pending = handle.capture_handoff_pending
+            try:
+                verified = await asyncio.to_thread(
+                    read_captured_handoff, handle.project_root, pending["request-id"], handle.session_id,
+                    pending["owner"], acknowledged_marker=pending["authority"]["marker"],
+                )
+                synchronize = getattr(handle.transport, "synchronize_cleared_predecessor_checkpoint", None)
+                if verified is not None and callable(synchronize) and synchronize(
+                    pending["request-id"], verified["checkpoint"], verified["session-metadata"],
+                ):
+                    acknowledged = await asyncio.to_thread(acknowledge_captured_handoff, handle.project_root, pending["request-id"], verified["marker"])
+                    if acknowledged:
+                        handle.capture_handoff_pending = None
+                        return
+            except Exception:  # noqa: BLE001 - failed reconciliation keeps admission fenced
+                logger.debug("captured memory admission remains fenced", exc_info=True)
+            await asyncio.sleep(0.25)
 
     def focus_existing_conversation(
         self,
@@ -656,11 +1094,17 @@ class SessionRuntime:
         locator: ConversationFocusLocator,
         timeout_seconds: float = 20.0,
         passive: bool = False,
+        deadline_monotonic: float | None = None,
     ) -> dict[str, Any]:
         """Read the current response from the request-owned provider tab."""
         return self._call(
             providers_api.capture_latest_response(
-                project_root, provider_id=provider_id, locator=locator, passive=passive
+                project_root,
+                provider_id=provider_id,
+                locator=locator,
+                passive=passive,
+                timeout_seconds=timeout_seconds,
+                deadline_monotonic=deadline_monotonic,
             ),
             timeout=timeout_seconds,
         )
@@ -705,9 +1149,7 @@ class SessionRuntime:
         # different control ids for the same closed source.  Serialize the
         # complete source->successor decision so automatic recovery cannot
         # race an explicit resume and create two successor sessions.
-        with StartupLock(
-            gateway_session_resume_concurrency_lock_path(project_root, source_session_id)
-        ):
+        with session_store.session_generation_fence(project_root, source_session_id):
             return self._call(
                 self._resume_session(
                     project_root,
@@ -807,7 +1249,6 @@ class SessionRuntime:
             handle = self._handles.get(session_id)
             if handle is None:
                 return SessionFailureDisposition.TERMINATE
-            set_metadata_sink = None
             try:
                 return SessionFailureDisposition(handle.transport.turn_failure_disposition())
             except (AttributeError, TypeError, ValueError):
@@ -887,6 +1328,10 @@ class SessionRuntime:
         mcp_entries=(),
         project_name: str | None = None,
         resume_existing: bool = False,
+        request_id: str | None = None,
+        dispatch_owner_epoch: str | None = None,
+        worker_id: str | None = None,
+        attempt_epoch: int | None = None,
     ) -> dict[str, Any]:
         """Reattach an active durable generation after a runtime restart.
 
@@ -930,6 +1375,10 @@ class SessionRuntime:
                 mcp_entries=tuple(mcp_entries),
                 project_name=project_name,
                 resume_existing=resume_existing,
+                request_id=request_id,
+                dispatch_owner_epoch=dispatch_owner_epoch,
+                worker_id=worker_id,
+                attempt_epoch=attempt_epoch,
             ),
             timeout=None,
         )
@@ -1215,6 +1664,7 @@ class SessionRuntime:
             "pending-turns": handle.pending,
             "turn-active": handle.turn_lock.locked(),
             "current-request-id": handle.current_request_id,
+            "capture-handoff-pending": handle.capture_handoff_pending is not None,
             "child-pid": handle.child_pid,
             "latest-turn-event": handle.latest_turn_event,
             "lifecycle-decision": status_snapshot["lifecycle-decision"],
@@ -1261,6 +1711,10 @@ class SessionRuntime:
         mcp_entries,
         project_name: str | None,
         resume_existing: bool,
+        request_id: str | None,
+        dispatch_owner_epoch: str | None,
+        worker_id: str | None,
+        attempt_epoch: int | None,
     ) -> dict[str, Any]:
         # The loop serializes this check with every other session operation;
         # concurrent continuations cannot open two browser/provider handles.
@@ -1304,12 +1758,170 @@ class SessionRuntime:
         provider_ref = (binding or {}).get("provider-session-ref")
         bound_provider = (binding or {}).get("provider-id") or session_store.session_provider_id(record)
         surface_id = (binding or {}).get("surface-id")
+        metadata = session_store.session_provider_metadata(record)
+        prepared_current_turn = (
+            not resume_existing
+            and isinstance(request_id, str)
+            and bool(request_id)
+            and metadata.get("unresolved-turn-pending") is True
+            and metadata.get("unresolved-turn-id") == request_id
+            and metadata.get("submission-state") == "prepared"
+            and metadata.get("submission-proven") is False
+        )
+        if bound_provider and bound_provider != provider_id:
+            raise AudiaGenticError(
+                code="CON-AGW-120",
+                kind="agents",
+                message="durable provider binding does not match the requested provider",
+                details={"session-id": session_id, "provider-id": provider_id},
+            )
+        admitted_provider = session_store.session_provider_id(record)
+        if admitted_provider and admitted_provider != provider_id:
+            raise AudiaGenticError(
+                code="CON-AGW-120",
+                kind="agents",
+                message="requested provider does not match the admitted session provider",
+                details={"session-id": session_id, "provider-id": provider_id},
+            )
+        requested_surface_id = getattr(surface_hint, "surface_id", None)
+        if (
+            isinstance(surface_id, str)
+            and isinstance(requested_surface_id, str)
+            and surface_id != requested_surface_id
+        ):
+            raise AudiaGenticError(
+                code="CON-AGW-120",
+                kind="agents",
+                message="requested surface does not match the durable session surface",
+                details={"session-id": session_id, "surface-id": surface_id},
+            )
+        if prepared_current_turn:
+            from audiagentic.components.agents.gateway import profiles as profiles_mod
+            from audiagentic.components.agents.gateway import store as gateway_store
+
+            admitted_request = gateway_store.read_record(project_root, request_id)
+            admitted_profile = profiles_mod.snapshot_from_record(admitted_request)
+            admitted_surface_id = (
+                admitted_profile.resolved_surface_id if admitted_profile is not None else None
+            )
+            if requested_surface_id is None:
+                requested_surface_id = admitted_surface_id
+            if (
+                not isinstance(admitted_surface_id, str)
+                or not admitted_surface_id.strip()
+                or not isinstance(requested_surface_id, str)
+                or admitted_surface_id != requested_surface_id
+            ):
+                raise AudiaGenticError(
+                    code="CON-AGW-125",
+                    kind="agents",
+                    message="prepared recovery surface differs from the admission-frozen surface",
+                    details={"request-id": request_id, "session-id": session_id},
+                )
+            if not all((dispatch_owner_epoch, worker_id)) or attempt_epoch is None:
+                raise AudiaGenticError(
+                    code="CON-AGW-125",
+                    kind="agents",
+                    message="prepared turn recovery requires a durable dispatch owner fence",
+                    details={"request-id": request_id, "session-id": session_id},
+                )
+            claim = session_store.claim_prepared_submission_recovery(
+                project_root,
+                session_id,
+                request_id,
+                dispatch_owner_epoch=dispatch_owner_epoch,
+                worker_id=worker_id,
+                attempt_epoch=attempt_epoch,
+            )
+            metadata["submission-recovery-claim"] = claim
         if not isinstance(provider_ref, str) or not provider_ref.strip():
-            metadata = session_store.session_provider_metadata(record)
+            if prepared_current_turn:
+                # This session never acquired a conversation identity before
+                # the gateway stopped. Reopen its configured provider surface
+                # under the same gateway session id, then let normal dispatch
+                # send the immutable admitted prompt. The prepared checkpoint
+                # is the only state that authorizes this path.
+                capacity_source_id = metadata.get("gateway-capacity-source-id")
+                binding_record = record.get("binding") or {}
+                try:
+                    return await self._open_session(
+                        project_root,
+                        execution_profile_id=execution_profile_id,
+                        provider_id=provider_id,
+                        model_id=session_store.session_model_id(record) or model_id,
+                        model_selector=None,
+                        session_id=session_id,
+                        surface_hint=surface_hint,
+                        idle_timeout_seconds=idle_timeout_seconds,
+                        max_lifetime_seconds=max_lifetime_seconds,
+                        turn_timeout_seconds=turn_timeout_seconds,
+                        turn_silence_timeout_seconds=turn_silence_timeout_seconds,
+                        correlation_id=correlation_id,
+                        request_runtime_root=request_runtime_root,
+                        mcp_entries=mcp_entries,
+                        project_name=project_name,
+                        resume_provider_metadata=metadata,
+                        capacity_source_id=(
+                            capacity_source_id
+                            if isinstance(capacity_source_id, str)
+                            else None
+                        ),
+                        identity_context_fingerprint=binding_record.get("identity-context-fingerprint"),
+                        execution_context_fingerprint=binding_record.get("execution-context-fingerprint"),
+                        context_id=binding_record.get("context-id"),
+                        agent_definition_id=binding_record.get("agent-definition-id"),
+                        agent_definition_digest=binding_record.get("agent-definition-digest"),
+                        role_ids=binding_record.get("role-ids"),
+                        role_set_digest=binding_record.get("role-set-digest"),
+                        execution_profile_digest=binding_record.get("execution-profile-digest"),
+                        effective_capability_digest=binding_record.get("effective-capability-digest"),
+                        preserve_admitted_session_on_open_failure=True,
+                        prepared_recovery_claim={
+                            "claim-id": claim["claim-id"],
+                            "request-id": request_id,
+                            "dispatch-owner-epoch": dispatch_owner_epoch,
+                            "worker-id": worker_id,
+                            "attempt-epoch": attempt_epoch,
+                        },
+                    )
+                except asyncio.CancelledError:
+                    session_store.release_prepared_submission_recovery_claim(
+                        project_root, session_id, claim_id=claim["claim-id"]
+                    )
+                    raise
+                except AudiaGenticError:
+                    session_store.release_prepared_submission_recovery_claim(
+                        project_root, session_id, claim_id=claim["claim-id"]
+                    )
+                    raise
+                except Exception as exc:  # noqa: BLE001 - preserve provider cause
+                    session_store.release_prepared_submission_recovery_claim(
+                        project_root, session_id, claim_id=claim["claim-id"]
+                    )
+                    raise AudiaGenticError(
+                        code="EXT-AGW-118",
+                        kind="agents",
+                        message="provider rejected prepared session recovery",
+                        details={
+                            "session-id": session_id,
+                            "provider-id": provider_id,
+                            "error-type": type(exc).__name__,
+                            "error-message": str(exc).strip(),
+                            "submission-state": "not_started",
+                        },
+                    ) from exc
             if resume_existing:
                 # There is no stable provider conversation identity to open.
                 # Never create a replacement tab or replay the prompt; retain
                 # the request for a later provider-aware recovery pass.
+                if isinstance(request_id, str) and request_id:
+                    _observe_missing_provider_session_ref(
+                        project_root,
+                        request_id=request_id,
+                        session_id=session_id,
+                        attempt_epoch=attempt_epoch,
+                        metadata=metadata,
+                    )
                 raise AudiaGenticError(
                     code="CON-AGW-124",
                     kind="agents",
@@ -1327,8 +1939,8 @@ class SessionRuntime:
             # Gated on a provider capability probe (does bound_provider's
             # adapter declare a non-ACP session transport, e.g. gpt-auto's
             # CDP seam) rather than a surface_id or provider_id literal --
-            # applies to any provider with this shape, including the
-            # dedicated gpt-auto-t1/t2 test projects, with no code change
+            # applies to any provider with this shape, including
+            # configured provider instances, with no code change
             # needed when a new one is added.
             from audiagentic.components.providers import providers_api
 
@@ -1359,13 +1971,6 @@ class SessionRuntime:
                 message="active session has no durable provider binding to rehydrate",
                 details={"session-id": session_id, "suggestion": "resume the session explicitly"},
             )
-        if bound_provider and bound_provider != provider_id:
-            raise AudiaGenticError(
-                code="CON-AGW-120",
-                kind="agents",
-                message="durable provider binding does not match the requested provider",
-                details={"session-id": session_id, "provider-id": provider_id},
-            )
         if not isinstance(surface_id, str) or not surface_id.strip():
             raise AudiaGenticError(
                 code="RES-AGW-003",
@@ -1383,39 +1988,55 @@ class SessionRuntime:
                     message="rehydrated provider attempted to replace its session binding",
                     details={"session-id": session_id},
                 )
-            session_store.install_initial_provider_binding(
-                project_root,
-                session_id,
-                provider_id=provider_id,
-                surface_id=surface_id,
-                provider_session_ref=provider_ref,
-                metadata=dict(getattr(update, "metadata", {}) or {}),
-            )
-
-        async def checkpoint_sink(metadata: dict[str, Any]) -> None:
-            pending = bool(metadata.get("unresolved-turn-pending"))
-            remove = () if pending else (
-                "recovery-state",
-                "unresolved-turn-id",
-                "unresolved-baseline-user-id",
-                "unresolved-baseline-assistant-id",
-                "unresolved-baseline-user-count",
-                "unresolved-baseline-assistant-count",
-            )
-            if metadata.get("submission-proven") is False:
-                remove += (
-                    "submission-proven",
-                    "prompt-message-id",
-                    "assistant-message-id",
-                    "assistant-before-message-id",
-                    "assistant-before-id",
-                    "terminal-evidence",
+            update_metadata = dict(getattr(update, "metadata", {}) or {})
+            if prepared_current_turn:
+                session_store.install_prepared_recovery_binding(
+                    project_root,
+                    session_id,
+                    request_id,
+                    provider_id=provider_id,
+                    surface_id=surface_id,
+                    provider_session_ref=provider_ref,
+                    expected_surface_id=requested_surface_id,
+                    claim_id=claim["claim-id"],
+                    dispatch_owner_epoch=dispatch_owner_epoch,
+                    worker_id=worker_id,
+                    attempt_epoch=attempt_epoch,
+                    binding_metadata=update_metadata,
+                    binding_identity={
+                        "identity_context_fingerprint": binding.get(
+                            "identity-context-fingerprint"
+                        ),
+                        "execution_context_fingerprint": binding.get(
+                            "execution-context-fingerprint"
+                        ),
+                        "context_id": binding.get("context-id"),
+                        "agent_definition_id": binding.get("agent-definition-id"),
+                        "agent_definition_digest": binding.get("agent-definition-digest"),
+                        "role_ids": binding.get("role-ids"),
+                        "role_set_digest": binding.get("role-set-digest"),
+                        "execution_profile_digest": binding.get("execution-profile-digest"),
+                        "effective_capability_digest": binding.get(
+                            "effective-capability-digest"
+                        ),
+                    },
                 )
-            if not pending or not metadata.get("prompt-text-digest"):
-                remove += ("prompt-text-digest",)
-            session_store.update_provider_metadata(
-                project_root, session_id, metadata, remove_keys=remove
-            )
+            else:
+                session_store.install_initial_provider_binding(
+                    project_root,
+                    session_id,
+                    provider_id=provider_id,
+                    surface_id=surface_id,
+                    provider_session_ref=provider_ref,
+                    metadata=update_metadata,
+                )
+
+        checkpoint_sink = _make_submission_checkpoint_sink(
+            project_root, session_id, request_id=request_id,
+            dispatch_owner_epoch=dispatch_owner_epoch, worker_id=worker_id,
+            attempt_epoch=attempt_epoch,
+            prepared_recovery_claim=claim if prepared_current_turn else None,
+        )
 
         prepare_kwargs: dict[str, Any] = {
             "provider_id": provider_id,
@@ -1441,6 +2062,24 @@ class SessionRuntime:
                     message="resolved session surface is unsupported; cannot rehydrate session",
                     details={"session-id": session_id, "provider-id": provider_id},
                 )
+            prepared_surface_id = getattr(
+                getattr(getattr(prepared, "surface", None), "ref", None),
+                "surface_id",
+                None,
+            )
+            if prepared_current_turn and (
+                not isinstance(requested_surface_id, str)
+                or not requested_surface_id.strip()
+                or prepared_surface_id != requested_surface_id
+                or prepared_surface_id != surface_id
+            ):
+                await _close_failed_transport(prepared.transport)
+                raise AudiaGenticError(
+                    code="CON-AGW-120",
+                    kind="agents",
+                    message="rehydrated provider surface differs from the admission-frozen surface",
+                    details={"session-id": session_id},
+                )
             transport = prepared.transport
             if resume_existing:
                 defer_recovery = getattr(transport, "defer_unresolved_reconciliation", None)
@@ -1450,14 +2089,26 @@ class SessionRuntime:
         except asyncio.CancelledError:
             if transport is not None:
                 await _close_failed_transport(transport)
+            if prepared_current_turn:
+                session_store.release_prepared_submission_recovery_claim(
+                    project_root, session_id, claim_id=claim["claim-id"]
+                )
             raise
         except AudiaGenticError:
             if transport is not None:
                 await _close_failed_transport(transport)
+            if prepared_current_turn:
+                session_store.release_prepared_submission_recovery_claim(
+                    project_root, session_id, claim_id=claim["claim-id"]
+                )
             raise
         except Exception as exc:  # noqa: BLE001 - preserve provider cause
             if transport is not None:
                 await _close_failed_transport(transport)
+            if prepared_current_turn:
+                session_store.release_prepared_submission_recovery_claim(
+                    project_root, session_id, claim_id=claim["claim-id"]
+                )
             raise AudiaGenticError(
                 code="EXT-AGW-118",
                 kind="agents",
@@ -1479,8 +2130,12 @@ class SessionRuntime:
                     message="rehydrated transport did not prove the original session identity",
                     details={"session-id": session_id},
                 )
-        except BaseException as exc:
+        except BaseException:
             await _close_failed_transport(transport)
+            if prepared_current_turn:
+                session_store.release_prepared_submission_recovery_claim(
+                    project_root, session_id, claim_id=claim["claim-id"]
+                )
             raise
 
         handle = _SessionHandle(
@@ -1497,6 +2152,7 @@ class SessionRuntime:
             surface_snapshot=getattr(prepared, "surface", None),
             request_runtime_root=request_runtime_root,
             runtime_preserve_relpaths=getattr(prepared, "runtime_preserve_relpaths", ()),
+            ownership=_binding_ownership(record),
         )
         handle.child_pid = getattr(transport, "child_pid", None)
         handle.adopted_child = getattr(transport, "_adopted_child", None)
@@ -1561,6 +2217,12 @@ class SessionRuntime:
         request_provider_metadata_sink: Any = None,
         resume_provider_ref: str | None = None,
         resume_provider_metadata: dict[str, Any] | None = None,
+        request_id: str | None = None,
+        dispatch_owner_epoch: str | None = None,
+        worker_id: str | None = None,
+        attempt_epoch: int | None = None,
+        preserve_admitted_session_on_open_failure: bool = False,
+        prepared_recovery_claim: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         started = time.monotonic()
         logger.info(
@@ -1579,58 +2241,65 @@ class SessionRuntime:
             )
         session_id = session_id or session_store.generate_session_id()
         allocated_session_id = session_id
+        resolved_surface_id = getattr(surface_hint, "surface_id", None)
 
         async def binding_sink(update: Any) -> None:
             metadata = dict(update.metadata)
-            session_store.install_initial_provider_binding(
-                project_root,
-                allocated_session_id,
-                provider_id=provider_id,
-                surface_id=surface_hint.surface_id,
-                provider_session_ref=update.provider_session_ref.value,
-                metadata=metadata,
-                identity_context_fingerprint=identity_context_fingerprint,
-                execution_context_fingerprint=execution_context_fingerprint,
-                context_id=context_id,
-                agent_definition_id=agent_definition_id,
-                agent_definition_digest=agent_definition_digest,
-                role_ids=role_ids,
-                role_set_digest=role_set_digest,
-                execution_profile_digest=execution_profile_digest,
-                effective_capability_digest=effective_capability_digest,
-            )
+            if not isinstance(resolved_surface_id, str) or not resolved_surface_id.strip():
+                raise AudiaGenticError(
+                    code="CON-AGW-120",
+                    kind="agents",
+                    message="provider binding arrived without a resolved surface identity",
+                    details={"session-id": allocated_session_id},
+                )
+            if prepared_recovery_claim:
+                admitted_provider = session_store.session_provider_id(
+                    session_store.read_session_record(project_root, allocated_session_id)
+                )
+                if admitted_provider and provider_id != admitted_provider:
+                    raise AudiaGenticError(
+                        code="CON-AGW-120",
+                        kind="agents",
+                        message="prepared provider binding conflicts with admission-frozen identity",
+                        details={"session-id": allocated_session_id},
+                    )
+                session_store.assert_prepared_submission_recovery_claim(
+                    project_root,
+                    allocated_session_id,
+                    prepared_recovery_claim["request-id"],
+                    claim_id=prepared_recovery_claim["claim-id"],
+                    dispatch_owner_epoch=prepared_recovery_claim["dispatch-owner-epoch"],
+                    worker_id=prepared_recovery_claim["worker-id"],
+                    attempt_epoch=prepared_recovery_claim["attempt-epoch"],
+                )
+            else:
+                session_store.install_initial_provider_binding(
+                    project_root,
+                    allocated_session_id,
+                    provider_id=provider_id,
+                    surface_id=resolved_surface_id,
+                    provider_session_ref=update.provider_session_ref.value,
+                    metadata=metadata,
+                    identity_context_fingerprint=identity_context_fingerprint,
+                    execution_context_fingerprint=execution_context_fingerprint,
+                    context_id=context_id,
+                    agent_definition_id=agent_definition_id,
+                    agent_definition_digest=agent_definition_digest,
+                    role_ids=role_ids,
+                    role_set_digest=role_set_digest,
+                    execution_profile_digest=execution_profile_digest,
+                    effective_capability_digest=effective_capability_digest,
+                )
             # Provider identity is discovered during the first turn, after
             # the request has entered ``running``. Persist the immutable
             # binding metadata to the canonical session record; the active
             # request receives its own metadata through the per-turn sink.
 
-        async def checkpoint_sink(metadata: dict[str, Any]) -> None:
-            pending = bool(metadata.get("unresolved-turn-pending"))
-            remove = () if pending else (
-                "recovery-state",
-                "unresolved-turn-id",
-                "unresolved-baseline-user-id",
-                "unresolved-baseline-assistant-id",
-                "unresolved-baseline-user-count",
-                "unresolved-baseline-assistant-count",
-            )
-            if metadata.get("submission-proven") is False:
-                remove += (
-                    "submission-proven",
-                    "prompt-message-id",
-                    "assistant-message-id",
-                    "assistant-before-message-id",
-                    "assistant-before-id",
-                    "terminal-evidence",
-                )
-            if not pending or not metadata.get("prompt-text-digest"):
-                remove += ("prompt-text-digest",)
-            session_store.update_provider_metadata(
-                project_root,
-                allocated_session_id,
-                metadata,
-                remove_keys=remove,
-            )
+        checkpoint_sink = _make_submission_checkpoint_sink(
+            project_root, allocated_session_id, request_id=request_id,
+            dispatch_owner_epoch=dispatch_owner_epoch, worker_id=worker_id,
+            attempt_epoch=attempt_epoch, prepared_recovery_claim=prepared_recovery_claim,
+        )
 
         # AS28 slice 4a: resolve provider-neutral transport via the public
         # prepare seam. No AcpLaunch / AcpSessionTransport construction here.
@@ -1658,7 +2327,14 @@ class SessionRuntime:
             model_id,
             extra={"session-runtime-phase": "open.prepare.begin", "correlation-id": correlation_id},
         )
-        prepared = self._provider_prepare_fn(project_root, **prepare_kwargs)
+        from audiagentic.components.agents.gateway.session.dispatch import _preparation_span
+
+        timing_record = {
+            "request-id": request_id, "session-id": session_id,
+            "attempt-epoch": attempt_epoch, "dispatch-owner-epoch": dispatch_owner_epoch,
+        }
+        with _preparation_span(project_root, timing_record, "provider-prepare"):
+            prepared = self._provider_prepare_fn(project_root, **prepare_kwargs)
         logger.info(
             "gateway open phase prepare-provider complete elapsed-ms=%.1f transport=%s",
             (time.monotonic() - prepare_started) * 1000,
@@ -1681,6 +2357,50 @@ class SessionRuntime:
                     and getattr(prepared.surface.validation, "state", "unknown"),
                 },
             )
+        prepared_surface_id = getattr(
+            getattr(getattr(prepared, "surface", None), "ref", None),
+            "surface_id",
+            None,
+        )
+        if not isinstance(prepared_surface_id, str) or not prepared_surface_id.strip():
+            await _close_failed_transport(prepared.transport)
+            raise AudiaGenticError(
+                code="CON-AGW-120",
+                kind="agents",
+                message="provider preparation returned no resolved surface identity",
+                details={"session-id": session_id, "provider-id": provider_id},
+            )
+        if resolved_surface_id and resolved_surface_id != prepared_surface_id:
+            await _close_failed_transport(prepared.transport)
+            raise AudiaGenticError(
+                code="CON-AGW-120",
+                kind="agents",
+                message="provider preparation changed the requested surface identity",
+                details={"session-id": session_id},
+            )
+        resolved_surface_id = prepared_surface_id
+        if prepared_recovery_claim:
+            from audiagentic.components.agents.gateway import profiles as profiles_mod
+            from audiagentic.components.agents.gateway import store as gateway_store
+
+            admitted_request = gateway_store.read_record(
+                project_root, prepared_recovery_claim["request-id"]
+            )
+            admitted_profile = profiles_mod.snapshot_from_record(admitted_request)
+            if (
+                admitted_profile is None
+                or admitted_profile.resolved_surface_id != resolved_surface_id
+            ):
+                await _close_failed_transport(prepared.transport)
+                raise AudiaGenticError(
+                    code="CON-AGW-125",
+                    kind="agents",
+                    message="prepared recovery provider surface differs from admission-frozen identity",
+                    details={
+                        "request-id": prepared_recovery_claim["request-id"],
+                        "session-id": session_id,
+                    },
+                )
         transport = prepared.transport
         set_owner_probe = getattr(transport, "set_durable_owner_probe", None)
         if callable(set_owner_probe):
@@ -1721,7 +2441,8 @@ class SessionRuntime:
             },
         )
         try:
-            open_result = await transport.open()
+            with _preparation_span(project_root, timing_record, "transport-open"):
+                open_result = await transport.open()
         except BaseException as exc:
             logger.exception(
                 "gateway open phase transport-open failed elapsed-ms=%.1f",
@@ -1737,7 +2458,11 @@ class SessionRuntime:
             # remain active and block later work or mislead recovery logic.
             try:
                 admitted = session_store.read_session_record(project_root, session_id)
-                if admitted.get("state") == "active" and not admitted.get("binding"):
+                if (
+                    not preserve_admitted_session_on_open_failure
+                    and admitted.get("state") == "active"
+                    and not admitted.get("binding")
+                ):
                     session_store.transition_session_record(
                         project_root,
                         session_id,
@@ -1817,7 +2542,7 @@ class SessionRuntime:
                 message="worker-backed gateway session cannot open a provider transport",
                 details={"session-id": session_id},
             )
-        record = session_store.build_session_record(
+        opened_record = session_store.build_session_record(
             session_id=session_id,
             created_by_request_id=admitted_record.get("created-by-request-id"),
             provider_transport_kind="provider-session",
@@ -1833,7 +2558,18 @@ class SessionRuntime:
             execution_context_fingerprint=execution_context_fingerprint,
             created_at=(admitted_record.get("timing") or {}).get("created-at"),
         )
-        session_id = str(record["session-id"])
+        session_id = str(opened_record["session-id"])
+        record = dict(admitted_record)
+        record["binding"] = opened_record.get("binding")
+        record["provider-transport-kind"] = "provider-session"
+        provider_group = dict(record.get("provider") or {})
+        provider_group.update(opened_record.get("provider") or {})
+        provider_metadata = dict((record.get("provider") or {}).get("metadata") or {})
+        provider_metadata.update((opened_record.get("provider") or {}).get("metadata") or {})
+        if provider_metadata:
+            provider_group["metadata"] = provider_metadata
+        record["provider"] = provider_group
+        record.setdefault("timing", {})["updated-at"] = now_iso_z()
         try:
             bookkeeping_started = time.monotonic()
             logger.info(
@@ -1844,8 +2580,9 @@ class SessionRuntime:
                     "correlation-id": correlation_id,
                 },
             )
-            session_store.write_session_record(project_root, record)
-            binding_store.register_open_binding(project_root, record)
+            if not prepared_recovery_claim:
+                session_store.write_session_record(project_root, record)
+                binding_store.register_open_binding(project_root, record)
             logger.info(
                 "gateway open phase bookkeeping complete elapsed-ms=%.1f session-id=%s",
                 (time.monotonic() - bookkeeping_started) * 1000,
@@ -1855,7 +2592,7 @@ class SessionRuntime:
                     "correlation-id": correlation_id,
                 },
             )
-        except BaseException as exc:
+        except BaseException:
             # Never leak a child because bookkeeping failed.
             await _close_failed_transport(transport)
             raise
@@ -1928,10 +2665,32 @@ class SessionRuntime:
             surface_snapshot=getattr(prepared, "surface", None),
             request_runtime_root=request_runtime_root,
             runtime_preserve_relpaths=getattr(prepared, "runtime_preserve_relpaths", ()),
+            ownership=_binding_ownership(record),
         )
         handle.child_pid = child_pid
         handle.child_creation_identity = child_creation_identity
         handle.adopted_child = getattr(transport, "_adopted_child", None)
+        if prepared_recovery_claim:
+            def _install_prepared_handle(_committed_record: dict[str, Any]) -> None:
+                self._handles[session_id] = handle
+
+            try:
+                record = session_store.commit_prepared_recovery_open(
+                    project_root,
+                    session_id,
+                    prepared_recovery_claim["request-id"],
+                    opened_record,
+                    claim_id=prepared_recovery_claim["claim-id"],
+                    dispatch_owner_epoch=prepared_recovery_claim["dispatch-owner-epoch"],
+                    worker_id=prepared_recovery_claim["worker-id"],
+                    attempt_epoch=prepared_recovery_claim["attempt-epoch"],
+                    expected_surface_id=resolved_surface_id,
+                    on_commit=_install_prepared_handle,
+                )
+            except BaseException:
+                self._observer_ingress.invalidate_all_for_session(session_id)
+                await _close_failed_transport(transport)
+                raise
         self._trace_session_opened(
             handle,
             provider_id=provider_id,
@@ -2003,7 +2762,8 @@ class SessionRuntime:
                 extra={"session-id": session_id},
                 exc_info=True,
             )
-        self._handles[session_id] = handle
+        if not prepared_recovery_claim:
+            self._handles[session_id] = handle
         _publish_session_event(
             SESSION_OPENED_TOPIC,
             {
@@ -2099,8 +2859,12 @@ class SessionRuntime:
             )
 
         # ── Resolve source record + binding (raw/protected reads) ──
+        # AS118: the caller holds the source's generation fence. A retention
+        # claim refuses the resume before any provider call; otherwise the
+        # source is stamped as accepted activity first, so a purge that loses
+        # this race rereads it as recently active (only ever newer, never older).
         try:
-            source_record = session_store.read_session_record(project_root, source_session_id)
+            source_record = session_store.record_accepted_turn(project_root, source_session_id)
         except AudiaGenticError as exc:
             _record_failure(exc)
             raise
@@ -2315,7 +3079,9 @@ class SessionRuntime:
             # session's own (per-turn-refreshed) provider-metadata alongside
             # it as an opaque supplementary hint -- generic here, only
             # meaningful to whichever provider builder chooses to read it.
-            "resume_provider_metadata": session_store.session_provider_metadata(source_record),
+            "resume_provider_metadata": session_store.session_provider_metadata(
+                existing_successor if existing_successor is not None else source_record
+            ),
             "project_name": project_name,
         }
         if request_runtime_root is not None:
@@ -2411,11 +3177,7 @@ class SessionRuntime:
         }
         rehydrating_successor = existing_successor is not None
         if rehydrating_successor:
-            record = session_store.update_provider_metadata(
-                project_root,
-                successor_session_id,
-                provider_metadata,
-            )
+            record = existing_successor
             session_id = successor_session_id
         else:
             record = session_store.build_session_record(
@@ -2448,7 +3210,16 @@ class SessionRuntime:
                 execution_context_fingerprint=source_binding.get("execution-context-fingerprint"),
             )
         try:
-            if not rehydrating_successor:
+            if rehydrating_successor:
+                # Reattachment proves binding metadata, not authority over an
+                # existing request's checkpoint. Keep its durable turn state;
+                # only the request-fenced checkpoint writer may change it.
+                record = session_store.update_provider_metadata(
+                    project_root, session_id,
+                    {key: value for key, value in provider_metadata.items()
+                     if key not in session_store._RECOVERY_CHECKPOINT_KEYS},
+                )
+            else:
                 session_store.write_session_record(project_root, record)
                 binding_store.register_open_binding(project_root, record)
         except Exception as exc:
@@ -2543,6 +3314,7 @@ class SessionRuntime:
             surface_snapshot=surface,
             request_runtime_root=request_runtime_root,
             runtime_preserve_relpaths=getattr(prepared, "runtime_preserve_relpaths", ()),
+            ownership=_binding_ownership(source_record),
         )
         handle.child_pid = child_pid
         handle.adopted_child = getattr(transport, "_adopted_child", None)
@@ -2683,6 +3455,7 @@ class SessionRuntime:
         dispatch_claim: Callable[[], dict[str, Any]] | None = None,
         resume_existing: bool = False,
         request_provider_metadata_sink: Any = None,
+        request_session_checkpoint_sink: Any = None,
     ) -> SessionTurnResult:
         handle = self._require_handle(session_id)
         # Turns queue FIFO on the session lock (RV513) — reject only when the
@@ -2714,7 +3487,7 @@ class SessionRuntime:
             from .fifo_wait import acquire_turn_lock
 
             await acquire_turn_lock(handle.turn_lock, _local_cancel_event)
-        except BaseException as exc:
+        except BaseException:
             if request_id is not None:
                 self._turn_cancels.pop(request_id, None)
             raise
@@ -2729,6 +3502,7 @@ class SessionRuntime:
         # cancellation while waiting cannot strand this session's turn lock.
         turn_slot_started = False
         try:
+            await self._await_captured_memory_fence(handle, _local_cancel_event)
             # A session request remains durably queued while it waits for this
             # FIFO lock. The callback is the sole queued -> running CAS and is
             # intentionally invoked before provider capacity acquisition or
@@ -2840,7 +3614,9 @@ class SessionRuntime:
                 # so every downstream observer sees the neutral contract.
                 if not hasattr(obs, "attributes"):
                     try:
-                        from audiagentic.foundation.transports.acp import _map_acp_event_to_observation
+                        from audiagentic.foundation.transports.acp import (
+                            _map_acp_event_to_observation,
+                        )
                         obs = _map_acp_event_to_observation(obs, session_id, request_id)
                     except (AttributeError, TypeError, ValueError):
                         logger.debug("could not normalize legacy transport event", exc_info=True)
@@ -2892,8 +3668,10 @@ class SessionRuntime:
                     # This is observation-only and never touches browser focus,
                     # navigation, tabs, or provider controls.
                     try:
-                        from audiagentic.components.agents.gateway.observation_projection import append_transport_observation
                         from audiagentic.components.agents.gateway import store as gateway_store
+                        from audiagentic.components.agents.gateway.observation_projection import (
+                            append_transport_observation,
+                        )
                         attempt_epoch = 1
                         target_hash = None
                         try:
@@ -2941,13 +3719,34 @@ class SessionRuntime:
 
             # AS28 slice 4b-A: call transport.prompt() with the neutral contract.
             # Include cancel_token so the transport can check it for cancellation.
+            capture_token = None
+            capture_watch = None
+            captured_authority: dict[str, Any] = {}
+            captured_owner = None
+            if request_id and getattr(handle.transport, "supports_external_completion", False):
+                from audiagentic.components.agents.gateway import store as gateway_store
+
+                from .capture_handoff import capture_owner
+                try:
+                    owned_request = await asyncio.to_thread(gateway_store.read_record, project_root, request_id)
+                    captured_owner = capture_owner(owned_request)
+                except Exception:  # noqa: BLE001 - no durable owner means no capture signal
+                    logger.debug("capture observation not armed", exc_info=True)
+                if captured_owner is not None:
+                    capture_token = asyncio.Event()
             session_prompt = SessionPrompt(
                 turn_id=request_id or "turn-0",
                 body=prompt,
                 cancel_token=_local_cancel_event if request_id is not None else None,
+                completion_token=capture_token,
             )
             set_request_owner = getattr(handle.transport, "set_request_owner", None)
+            set_session_checkpoint_sink = getattr(
+                handle.transport, "set_turn_session_checkpoint_sink", None
+            )
             try:
+                if callable(set_session_checkpoint_sink):
+                    set_session_checkpoint_sink(request_session_checkpoint_sink)
                 set_metadata_sink = getattr(handle.transport, "set_request_metadata_sink", None)
                 if callable(set_metadata_sink):
                     set_metadata_sink(request_provider_metadata_sink)
@@ -2970,6 +3769,10 @@ class SessionRuntime:
                         details={"session-id": session_id, "request-id": request_id},
                     )
                 invocation = method(session_prompt, _observation_sink)
+                if capture_token is not None:
+                    capture_watch = asyncio.create_task(self._watch_captured_completion(
+                        project_root, handle, request_id, captured_owner, capture_token, captured_authority,
+                    ))
                 if active_timeout_seconds is not None and active_timeout_seconds > 0:
                     result = await asyncio.wait_for(invocation, timeout=active_timeout_seconds)
                 else:
@@ -3010,6 +3813,17 @@ class SessionRuntime:
                     await self._fail_session(handle, reason="failed")
                 raise
             finally:
+                if capture_watch is not None:
+                    capture_watch.cancel()
+                    await asyncio.gather(capture_watch, return_exceptions=True)
+                if callable(set_session_checkpoint_sink):
+                    clear_session_checkpoint_sink = getattr(
+                        handle.transport, "clear_turn_session_checkpoint_sink", None
+                    )
+                    if callable(clear_session_checkpoint_sink):
+                        clear_session_checkpoint_sink(request_session_checkpoint_sink)
+                    else:
+                        set_session_checkpoint_sink(None)
                 if callable(set_request_owner):
                     set_request_owner(None)
                 if callable(set_metadata_sink):
@@ -3020,6 +3834,37 @@ class SessionRuntime:
                 handle.turn_closing_deadline = None
                 if request_id is not None:
                     self._turn_cancels.pop(request_id, None)
+            if result.stop_reason == "externally-captured":
+                from .capture_handoff import acknowledge_captured_handoff, read_captured_handoff
+                verified = await asyncio.to_thread(
+                    read_captured_handoff, project_root, request_id, session_id, captured_owner,
+                )
+                if not captured_authority:
+                    raise AudiaGenticError(
+                        code="CON-AGW-156", kind="agents",
+                        message="external completion has no current durable capture authority",
+                        details={"request-id": request_id, "session-id": session_id},
+                    )
+                # The observer has unwound, but this coroutine still owns FIFO.
+                # Reconcile memory before any queued successor can be admitted.
+                handle.capture_handoff_pending = {
+                    "request-id": request_id, "owner": captured_owner, "authority": captured_authority,
+                }
+                synchronize = getattr(handle.transport, "synchronize_cleared_predecessor_checkpoint", None)
+                reconciled = bool(verified is not None and callable(synchronize) and synchronize(
+                    request_id, verified["checkpoint"], verified["session-metadata"],
+                ))
+                if reconciled:
+                    acknowledged = await asyncio.to_thread(
+                        acknowledge_captured_handoff, project_root, request_id, verified["marker"],
+                    )
+                    if acknowledged:
+                        handle.capture_handoff_pending = None
+                session_store.record_session_turn(project_root, session_id, request_id)
+                session_store.record_session_timeline(
+                    project_root, session_id, "session.capture-handoff", state="active",
+                    attributes={"request-id": request_id, "memory-reconciled": reconciled},
+                )
         finally:
             try:
                 if request_id is not None:
@@ -3030,6 +3875,10 @@ class SessionRuntime:
                     await notify_turn_done(request_id)
             finally:
                 handle.turn_lock.release()
+        if result.stop_reason == "externally-captured":
+            # The captured artifact is authoritative. Do not republish provider
+            # metadata, terminal proof or output after the operator won the CAS.
+            return result
         if request_id is not None:
             final_output = getattr(result, "final_summary", None)
             result_error_code = getattr(result, "error_code", None)
@@ -3042,12 +3891,98 @@ class SessionRuntime:
                 started=trace_started,
             )
         if request_id is not None:
-            session_store.record_session_turn(
+            result_metadata = dict(getattr(result, "metadata", {}) or {})
+            terminal_checkpoint_metadata: dict[str, object] = {}
+            if result.stop_reason == "end-turn" and not getattr(result, "error_code", None):
+                get_terminal_checkpoint = getattr(
+                    handle.transport, "terminal_checkpoint_metadata", None
+                )
+                if callable(get_terminal_checkpoint):
+                    try:
+                        terminal_checkpoint_metadata = dict(
+                            get_terminal_checkpoint(request_id) or {}
+                        )
+                    except Exception:  # noqa: BLE001 - fail closed on private proof lookup
+                        logger.warning(
+                            "provider terminal checkpoint lookup failed",
+                            extra={"request-id": request_id, "session-id": session_id},
+                            exc_info=True,
+                        )
+            # Internal checkpoint identity is persisted only to the session
+            # record for the exact-turn CAS; it never enters SessionTurnResult
+            # or the client-facing request result.
+            session_metadata_update = {
+                **result_metadata,
+                **terminal_checkpoint_metadata,
+            }
+            turn_record = session_store.record_session_turn(
                 project_root,
                 session_id,
                 request_id,
-                provider_metadata=dict(getattr(result, "metadata", {}) or {}) or None,
+                provider_metadata=session_metadata_update or None,
             )
+            if result.stop_reason == "end-turn" and not getattr(result, "error_code", None):
+                persisted_session_metadata = session_store.session_provider_metadata(turn_record)
+                terminal_evidence = session_metadata_update.get("terminal-evidence")
+                terminal_evidence = terminal_evidence if isinstance(terminal_evidence, dict) else {}
+                try:
+                    from audiagentic.components.agents.gateway import store as gateway_store
+                    from audiagentic.components.agents.gateway.observability import (
+                        append_observation,
+                    )
+
+                    terminal_attempt_epoch = 1
+                    try:
+                        request_record = gateway_store.read_record(
+                            project_root, request_id, include_output=False
+                        )
+                        terminal_attempt_epoch = int(request_record.get("attempt-epoch") or 1)
+                    except Exception:  # noqa: BLE001 - trace is advisory
+                        pass
+
+                    append_observation(
+                        project_root,
+                        request_id,
+                        session_id=session_id,
+                        turn_id=request_id,
+                        attempt_epoch=max(1, terminal_attempt_epoch),
+                        source="session-terminal-proof",
+                        diagnostic_facts={
+                            "checkpoint": {
+                                "pending-after-proof-write": (
+                                    persisted_session_metadata.get("unresolved-turn-pending") is True
+                                ),
+                                "turn-id-matches-request": (
+                                    terminal_evidence.get("turn-id") == request_id
+                                    and session_metadata_update.get("unresolved-turn-id") == request_id
+                                ),
+                                "submission-proof-present": (
+                                    session_metadata_update.get("submission-proven") is True
+                                ),
+                                "terminal-evidence-valid": (
+                                    terminal_evidence.get("policy") == "response-complete"
+                                    and terminal_evidence.get("turn-id") == request_id
+                                ),
+                            }
+                        },
+                        decision={
+                            "timing-event": "terminal-proof-persisted",
+                            "checkpoint-cleared": False,
+                        },
+                        action={
+                            "event": "terminal-proof-recorded",
+                            "kind": "terminal-proof",
+                            "outcome": "pending-request-terminal-write",
+                        },
+                        causal_input_ids=[request_id, session_id],
+                        force_flush=True,
+                    )
+                except Exception:  # noqa: BLE001 - trace persistence must not affect the turn
+                    logger.warning(
+                        "could not persist terminal proof observation",
+                        extra={"request-id": request_id, "session-id": session_id},
+                        exc_info=True,
+                    )
         # SH15: record dropped-events at turn end for richer progress summary
         turn_end_attrs: dict[str, Any] = {
             "request-id": request_id,
@@ -3091,6 +4026,26 @@ class SessionRuntime:
         )
         return result
 
+    async def _release_transport(self, handle: _SessionHandle) -> None:
+        """The one cleanup boundary for a session's transport (SH49).
+
+        OWNED: ``close()`` (terminates the gateway's own child, unchanged).
+        EXTERNAL: ``detach()`` only; ``close()`` is never called, even when the
+        transport cannot detach, so gateway cleanup can never terminate or
+        signal a process the gateway does not own.
+        """
+        if handle.ownership is not SessionOwnership.EXTERNAL:
+            await handle.transport.close()
+            return
+        detach = getattr(handle.transport, "detach", None)
+        if not callable(detach):
+            logger.warning(
+                "external session transport cannot detach; leaving it running",
+                extra={"session-id": handle.session_id},
+            )
+            return
+        await detach()
+
     async def _fail_session(self, handle: _SessionHandle, *, reason: str) -> None:
         # Reaper and owning turn can observe the same transport failure. The
         # first caller owns the existing store/transport cleanup; later callers
@@ -3100,7 +4055,7 @@ class SessionRuntime:
         handle.failure_started = True
         self._handles.pop(handle.session_id, None)
         try:
-            await handle.transport.close()
+            await self._release_transport(handle)
         except Exception:  # noqa: BLE001 - provider cleanup is best effort
             # A provider cleanup failure must not strand the durable session
             # in an owned in-memory state.  Persist the terminal session below
@@ -3198,7 +4153,7 @@ class SessionRuntime:
                     and not owning_task.done()
                 ):
                     owning_task.cancel()
-            await handle.transport.close()
+            await self._release_transport(handle)
             if (
                 reason == "shutdown"
                 and owning_task is not None
@@ -3321,7 +4276,7 @@ class SessionRuntime:
             await asyncio.gather(owning_task, return_exceptions=True)
 
         try:
-            await asyncio.wait_for(handle.transport.close(), timeout=5.0)
+            await asyncio.wait_for(self._release_transport(handle), timeout=5.0)
         except Exception:  # noqa: BLE001 - provider cleanup is best effort
             logger.warning(
                 "provider transport close failed after authoritative session close",

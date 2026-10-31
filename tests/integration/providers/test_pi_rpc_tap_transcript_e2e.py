@@ -5,7 +5,7 @@ across the sequence AS40's validate_first section requires: initialization
 (session/new's get_state/get_available_models), a real prompt turn (agent
 start -> incremental message updates -> agent end), and shutdown -- driven
 through the real pi-acp bridge with the tee shim installed, using a real
-local model via the embedded llama-server rig (the same provisioning
+local model served by tests/helpers/model_server.py (the same helper
 gateway-pi-smoke uses), so no external API key is needed.
 
 Unlike test_pi_rpc_tap_real_binaries.py (which only proves the session/new
@@ -29,6 +29,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from tests.integration.providers.acp_io import read_acp_response
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 
@@ -58,7 +59,7 @@ def _write_harness_config(project_root: Path, rig_port: int) -> None:
         yaml.safe_dump(
             {
                 "harness": {"type": "pi"},
-                "rig": {"port": rig_port, "model": _MODEL_PROFILE, "provider": "audiagentic"},
+                "endpoint": {"url": f"http://127.0.0.1:{rig_port}/v1", "model": _MODEL_PROFILE, "provider": "audiagentic"},
                 "mcp": {"enabled": False},
                 "smoke": {"timeout": 60},
             },
@@ -115,6 +116,7 @@ def test_real_pi_rpc_transcript_through_the_tap_covers_a_full_prompt_turn(
     transcript across the initialization/prompt/agent_end sequence."""
     _require_docker_gate()
 
+    from tests.helpers.model_server import start_model_server
     from tests.integration.agents.gateway_docker_harness import free_port
     from tests.integration.providers.harness import assert_install_result_ok
 
@@ -130,11 +132,6 @@ def test_real_pi_rpc_transcript_through_the_tap_covers_a_full_prompt_turn(
     from audiagentic.components.providers.services.lifecycle.lifecycle import install_provider_cli
     from audiagentic.foundation.paths.home import global_harness_runtime
     from audiagentic.runtime.harness import refresh_materialized_agent_config
-    from audiagentic.runtime.harness.provisioning import provision_embedded_rig
-    from audiagentic.runtime.rig.service import (
-        release_embedded_rig,
-        start_or_attach_embedded_rig,
-    )
 
     monkeypatch.setenv("AUDIAGENTIC_REPO_ROOT", str(tmp_path))
 
@@ -143,9 +140,11 @@ def test_real_pi_rpc_transcript_through_the_tap_covers_a_full_prompt_turn(
 
     install_result = install_provider_cli("pi", timeout=900, project_root=tmp_path)
     assert_install_result_ok("pi", install_result)
+    from tests.helpers.pi_smoke import restrict_smoke_pi
+
+    restrict_smoke_pi(tmp_path, monkeypatch)
 
     harness_runtime = global_harness_runtime()
-    provision_embedded_rig(harness_runtime, tmp_path)
     refresh_materialized_agent_config(harness_runtime, project_root=tmp_path)
 
     monkeypatch.setenv("PI_CODING_AGENT_DIR", str(harness_runtime / "agent"))
@@ -167,9 +166,7 @@ def test_real_pi_rpc_transcript_through_the_tap_covers_a_full_prompt_turn(
         },
     )
 
-    launch = start_or_attach_embedded_rig(
-        profile_name=_MODEL_PROFILE, rig_port=rig_port, model_id=_PI_MODEL_REF
-    )
+    server = start_model_server(_PI_MODEL_REF, port=rig_port)
     try:
         project_root = tmp_path / "project"
         project_root.mkdir()
@@ -245,18 +242,8 @@ def test_real_pi_rpc_transcript_through_the_tap_covers_a_full_prompt_turn(
             )
             # ACP streams sessionUpdate notifications (no "id") before the
             # final session/prompt response (id=3) -- drain until we see it.
-            prompt_resp = None
-            for _ in range(200):
-                line = proc.stdout.readline()
-                if not line:
-                    break
-                message = json.loads(line)
-                if _answer_server_request(proc, message):
-                    continue
-                if message.get("id") == 3:
-                    prompt_resp = message
-                    break
-            assert prompt_resp is not None, "session/prompt never resolved"
+            prompt_resp, reason, tail = read_acp_response(proc, 3, _answer_server_request)
+            assert prompt_resp is not None, f"session/prompt stopped: {reason}; tail={tail}"
             assert "result" in prompt_resp, json.dumps(prompt_resp, indent=2)
             assert prompt_resp["result"].get("stopReason") == "end_turn"
         finally:
@@ -268,7 +255,7 @@ def test_real_pi_rpc_transcript_through_the_tap_covers_a_full_prompt_turn(
             listener.close()
             consumer.join(timeout=5)
     finally:
-        release_embedded_rig(launch)
+        server.stop()
 
     frame_types = [f.payload.get("type") for f in frames if isinstance(f, JsonlTapFrame)]
     # The exact-version transcript fixture: real tapped frame types spanning
@@ -281,8 +268,9 @@ def test_real_pi_rpc_transcript_through_the_tap_covers_a_full_prompt_turn(
 
 
 _TOOL_PROMPT_TEXT = (
-    "Use your shell tool right now to run exactly this command: "
-    "echo AS41_TOOL_TAP_PROOF_9f3a1c. Call the tool -- do not reply with text only."
+    "Call the bash tool exactly once with command: printf AS41_TOOL_TAP_PROOF_9f3a1c. "
+    "Do not create or edit files. After the tool returns, reply with only OK "
+    "and end the turn."
 )
 
 
@@ -314,6 +302,7 @@ def test_real_pi_rpc_transcript_captures_tool_call_frame_types(
     """
     _require_docker_gate()
 
+    from tests.helpers.model_server import start_model_server
     from tests.integration.agents.gateway_docker_harness import free_port
     from tests.integration.providers.harness import assert_install_result_ok
 
@@ -329,11 +318,6 @@ def test_real_pi_rpc_transcript_captures_tool_call_frame_types(
     from audiagentic.components.providers.services.lifecycle.lifecycle import install_provider_cli
     from audiagentic.foundation.paths.home import global_harness_runtime
     from audiagentic.runtime.harness import refresh_materialized_agent_config
-    from audiagentic.runtime.harness.provisioning import provision_embedded_rig
-    from audiagentic.runtime.rig.service import (
-        release_embedded_rig,
-        start_or_attach_embedded_rig,
-    )
 
     monkeypatch.setenv("AUDIAGENTIC_REPO_ROOT", str(tmp_path))
 
@@ -342,9 +326,11 @@ def test_real_pi_rpc_transcript_captures_tool_call_frame_types(
 
     install_result = install_provider_cli("pi", timeout=900, project_root=tmp_path)
     assert_install_result_ok("pi", install_result)
+    from tests.helpers.pi_smoke import restrict_smoke_pi
+
+    restrict_smoke_pi(tmp_path, monkeypatch, tools="bash")
 
     harness_runtime = global_harness_runtime()
-    provision_embedded_rig(harness_runtime, tmp_path)
     refresh_materialized_agent_config(harness_runtime, project_root=tmp_path)
 
     monkeypatch.setenv("PI_CODING_AGENT_DIR", str(harness_runtime / "agent"))
@@ -361,9 +347,7 @@ def test_real_pi_rpc_transcript_captures_tool_call_frame_types(
         },
     )
 
-    launch = start_or_attach_embedded_rig(
-        profile_name=_MODEL_PROFILE, rig_port=rig_port, model_id=_PI_MODEL_REF
-    )
+    server = start_model_server(_PI_MODEL_REF, port=rig_port)
     try:
         project_root = tmp_path / "project"
         project_root.mkdir()
@@ -448,23 +432,7 @@ def test_real_pi_rpc_transcript_captures_tool_call_frame_types(
                     },
                 },
             )
-            # A tool-invoking turn streams far more sessionUpdate notifications
-            # (thinking + tool call + tool result + reply) than a plain-text
-            # turn; 400 was proven too few empirically (this session, real
-            # Docker run); generous bound so we get a conclusive result.
-            prompt_resp = None
-            observed_messages: list[dict] = []
-            for _ in range(4000):
-                line = proc.stdout.readline()
-                if not line:
-                    break
-                message = json.loads(line)
-                observed_messages.append(message)
-                if _answer_server_request(proc, message):
-                    continue
-                if message.get("id") == 3:
-                    prompt_resp = message
-                    break
+            prompt_resp, reason, observed_messages = read_acp_response(proc, 3, _answer_server_request)
             if prompt_resp is None:
                 # AS41 diagnostic: the child exited (EOF) before the turn
                 # resolved. Surface the exit code and captured stderr so the
@@ -477,7 +445,7 @@ def test_real_pi_rpc_transcript_captures_tool_call_frame_types(
                     exit_code = proc.poll()
                 stderr_text = b"".join(stderr_chunks).decode("utf-8", errors="replace")
                 pytest.fail(
-                    f"session/prompt never resolved -- child EOF (exit_code={exit_code}).\n"
+                    f"session/prompt stopped: {reason} (exit_code={exit_code}).\n"
                     f"--- captured stderr (pi-acp + shim dump) ---\n{stderr_text}\n"
                     f"--- end stderr ---\n"
                     f"last protocol messages: {json.dumps(observed_messages[-10:], default=str)}"
@@ -493,7 +461,7 @@ def test_real_pi_rpc_transcript_captures_tool_call_frame_types(
             consumer.join(timeout=5)
             stderr_thread.join(timeout=5)
     finally:
-        release_embedded_rig(launch)
+        server.stop()
 
     frame_types = [f.payload.get("type") for f in frames if isinstance(f, JsonlTapFrame)]
     distinct_types = sorted(set(t for t in frame_types if t is not None))

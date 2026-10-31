@@ -239,7 +239,6 @@ class TestGatewayPiSmokeStdinDelivery:
         result = execute_isolated_provider_turn(
             identity=identity,
             execution_request=execution_request,
-            timeout_seconds=60,
         )
 
         # ── Step 1: Verify the dispatch succeeded ──────────────────────
@@ -334,7 +333,6 @@ class TestGatewayPiSmokeStdinDelivery:
         result = execute_isolated_provider_turn(
             identity=identity,
             execution_request=execution_request,
-            timeout_seconds=60,
         )
 
         # The result_data should NOT contain traceback or raw diagnostic data
@@ -409,7 +407,6 @@ class TestGatewayPiSmokeCommandShape:
         result = execute_isolated_provider_turn(
             identity=identity,
             execution_request=execution_request,
-            timeout_seconds=60,
         )
         assert result.provider_id == "pi"
 

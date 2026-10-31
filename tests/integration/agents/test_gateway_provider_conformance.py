@@ -22,8 +22,6 @@ def test_gateway_provider_conformance_covers_every_descriptor() -> None:
         "gemini",
         "goose",
         "gpt-auto",
-        "gpt-auto-t1",
-        "gpt-auto-t2",
         "kilo",
         "local-openai",
         "opencode",
@@ -41,5 +39,6 @@ def test_every_provider_exercises_gateway_request_states(
     provider_id: str,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    request: pytest.FixtureRequest,
 ) -> None:
-    conformance.assert_one_shot_state_matrix(tmp_path, provider_id, monkeypatch)
+    conformance.assert_one_shot_state_matrix(tmp_path, provider_id, monkeypatch, request)

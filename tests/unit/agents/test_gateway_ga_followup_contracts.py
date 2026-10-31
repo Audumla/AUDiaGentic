@@ -2,15 +2,21 @@ from __future__ import annotations
 
 import json
 
-from audiagentic.components.agents.gateway import replay
 from audiagentic.components.agents.agents_paths import (
     gateway_observation_index_path,
     gateway_timeline_index_path,
     gateway_timeline_path,
 )
-from audiagentic.components.agents.gateway.evidence_projection import project_public_gateway_evidence
+from audiagentic.components.agents.gateway import replay
+from audiagentic.components.agents.gateway.evidence_projection import (
+    project_public_gateway_evidence,
+)
+from audiagentic.components.agents.gateway.observability import (
+    append_observation,
+    observation_summary,
+    read_observation_page,
+)
 from audiagentic.components.agents.gateway.observation_projection import append_request_projection
-from audiagentic.components.agents.gateway.observability import append_observation, observation_summary, read_observation_page
 from audiagentic.components.agents.gateway.store import transition_history_page
 
 
@@ -192,6 +198,17 @@ def test_reconnect_classification_is_read_only_and_fail_closed():
     assert safe["classification"] == "safe-reconnect"
     assert safe["read-only"] is True
     assert ambiguous["classification"] == "reconcile-required"
+    response_only_after_restart = replay.classify_reconnect(
+        {
+            "state": "running",
+            "provider-metadata": {
+                "unresolved-turn-pending": True,
+                "unresolved-turn-id": "turn-response-only",
+                "submission-proven": False,
+            },
+        }
+    )
+    assert response_only_after_restart["classification"] == "reconcile-required"
 
 def test_replay_uses_canonical_errors_meaningful_activity_and_actual_recovery_outcomes():
     entries = [

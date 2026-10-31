@@ -11,7 +11,7 @@ from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 
 def _harness_cfg() -> dict:
-    return {"rig": {"model": "qwen3.5-0.8b", "port": 42001, "provider": "audiagentic"}}
+    return {"endpoint": {"model": "qwen3.5-0.8b", "url": "http://127.0.0.1:42001/v1", "provider": "audiagentic"}}
 
 
 def test_materialize_writes_agents_md_via_contributions(

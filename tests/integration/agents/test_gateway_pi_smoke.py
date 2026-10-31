@@ -19,10 +19,9 @@ This suite proves that one-shot path end-to-end, with nothing mocked:
   - reaching a genuine "completed" terminal state with real model output.
 
 Provisioning reuses AUDiaGentic's own real APIs throughout: install_provider_cli
-for the CLI (which also seeds the embedded rig binary + model assets when
-AUDIAGENTIC_DOCKER_TESTS / pytest is detected — see
-runtime/harness/pi/install/__init__.py:_should_provision_embedded_rig), and
-write_execution_profile / patch_provider_config for the gateway-facing config.
+for the CLI, and write_execution_profile / patch_provider_config for the
+gateway-facing config. The model is a real llama-server that the test-only
+tests/helpers/model_server.py downloads and starts (AUDiaGentic never hosts one).
 The only hand-authored file here is the harness's own ag.yaml (rig port/model)
 — genuine project-authored config with no creation API, the same status as
     the canonical global agents catalog.
@@ -37,6 +36,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from tests.helpers.gateway_settings import use_gateway_settings
 from tests.integration.agents.gateway_docker_harness import free_port, write_execution_profile
 from tests.integration.providers.harness import assert_install_result_ok
 
@@ -49,7 +49,9 @@ pytestmark = [
 ]
 
 _DOCKER_GATE_ENV = "AUDIAGENTIC_GATEWAY_PI_SMOKE_DOCKER"
-_MODEL_PROFILE = "qwen3.5-0.8b"
+# Use the same provisioned model as the passing full-turn RPC transcript
+# fixture; the 0.8B model repeatedly kept generating instead of ending turns.
+_MODEL_PROFILE = "qwen3.5-2b"
 _PI_MODEL_REF = "audiagentic/audiagentic-rig"
 _PROMPT = "Reply with exactly: OK"
 
@@ -68,7 +70,7 @@ def _write_harness_config(project_root: Path, rig_port: int) -> None:
         yaml.safe_dump(
             {
                 "harness": {"type": "pi"},
-                "rig": {"port": rig_port, "model": _MODEL_PROFILE, "provider": "audiagentic"},
+                "endpoint": {"url": f"http://127.0.0.1:{rig_port}/v1", "model": _MODEL_PROFILE, "provider": "audiagentic"},
                 "mcp": {"enabled": False},
                 "smoke": {"timeout": 60},
             },
@@ -86,6 +88,8 @@ def test_gateway_dispatches_real_pi_provider_via_full_isolation_worker(
     completed state via the real ``pi --print --model ...`` CLI invocation."""
     _require_docker_gate()
 
+    from tests.helpers.model_server import start_model_server
+
     from audiagentic.components.agents.gateway.client import (
         get_gateway_client,
         reset_gateway_client,
@@ -96,14 +100,9 @@ def test_gateway_dispatches_real_pi_provider_via_full_isolation_worker(
     from audiagentic.components.providers.services.lifecycle.lifecycle import install_provider_cli
     from audiagentic.foundation.paths.home import global_harness_runtime
     from audiagentic.runtime.harness import refresh_materialized_agent_config
-    from audiagentic.runtime.harness.provisioning import provision_embedded_rig
-    from audiagentic.runtime.rig.service import (
-        release_embedded_rig,
-        start_or_attach_embedded_rig,
-    )
 
     monkeypatch.setenv("AUDIAGENTIC_REPO_ROOT", str(tmp_path))
-    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_MODE", "in-process")
+    use_gateway_settings(monkeypatch, tmp_path, implementation="embedded")
 
     rig_port = free_port()
     _write_harness_config(tmp_path, rig_port)
@@ -119,19 +118,21 @@ def test_gateway_dispatches_real_pi_provider_via_full_isolation_worker(
     # Real npm install of the Pi CLI + pi-mcp-adapter + pi-acp, through the
     # same install_provider_cli path test_provider_prompt_launch_e2e.py and
     # tests/integration/providers/harness.py use for their own clean-room
-    # recipe tests. Under AUDIAGENTIC_DOCKER_TESTS=1 (or plain pytest, per
-    # _should_provision_embedded_rig) this also downloads real llama-server
-    # binaries and seeds/downloads a real local GGUF model — see
-    # runtime/harness/pi/install/__init__.py.
+    # recipe tests. The model it talks to is a real llama-server that
+    # tests/helpers/model_server.py downloads and starts below (test-only;
+    # AUDiaGentic itself never hosts a model).
     # Installation must remain a real lifecycle operation, but a hung npm
     # registry/process must not consume the whole Docker gate.  The image
-    # caches Python and rig assets; it intentionally does not pre-install Pi,
-    # so this call continues to exercise clean provider installation.
+    # caches Python and model-server assets; it intentionally does not
+    # pre-install Pi, so this call continues to exercise clean provider
+    # installation.
     install_result = install_provider_cli("pi", timeout=300, project_root=tmp_path)
     assert_install_result_ok("pi", install_result)
+    from tests.helpers.pi_smoke import restrict_smoke_pi
+
+    restrict_smoke_pi(tmp_path, monkeypatch)
 
     harness_runtime = global_harness_runtime()
-    provision_embedded_rig(harness_runtime, tmp_path)
     refresh_materialized_agent_config(harness_runtime, project_root=tmp_path)
     # Provider lifecycle installs the harness in the system npm prefix.  The
     # runtime intentionally no longer carries a second embedded CLI copy.
@@ -156,16 +157,8 @@ def test_gateway_dispatches_real_pi_provider_via_full_isolation_worker(
         },
     )
 
-    rig_bin_dir = harness_runtime / "rig" / "bin"
-    assert rig_bin_dir.is_dir(), f"Embedded rig bin dir missing after real install: {rig_bin_dir}"
-
-    # The managed-service path is the only shared-rig launch authority. This
-    # loads the real GGUF and exposes it through /v1/models for the Pi job.
-    launch = start_or_attach_embedded_rig(
-        profile_name=_MODEL_PROFILE,
-        rig_port=rig_port,
-        model_id=_PI_MODEL_REF,
-    )
+    # A real GGUF served at the configured port, exposed through /v1/models for the Pi job.
+    server = start_model_server(_PI_MODEL_REF, port=rig_port)
     try:
         reset_gateway_client()
         client = get_gateway_client()
@@ -174,13 +167,12 @@ def test_gateway_dispatches_real_pi_provider_via_full_isolation_worker(
                 tmp_path,
                 execution_profile_id="pi-smoke",
                 prompt_body=_PROMPT,
-                timeout_seconds=90,
             )
-            result = client.wait_execution_request(
-                tmp_path,
-                result["request-id"],
-                timeout_seconds=90,
-            )
+            if result.get("state") not in {"completed", "failed", "cancelled", "interrupted"}:
+                # Real CPU model generation may outlive the initial caller
+                # wait. Continue observing the same ID, never resubmit.
+                result = client.wait_execution_request(tmp_path, result["request-id"], timeout_seconds=180)
+            assert result.get("wait-outcome") != "timeout", json.dumps(result, indent=2, default=str)
         finally:
             reset_gateway_client()
 
@@ -188,4 +180,4 @@ def test_gateway_dispatches_real_pi_provider_via_full_isolation_worker(
         assert result["provider-id"] == "pi"
         assert (result.get("output") or "").strip(), f"pi produced no output: {result}"
     finally:
-        release_embedded_rig(launch)
+        server.stop()

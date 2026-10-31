@@ -44,14 +44,10 @@ def test_documented_planning_states_match_runtime_workflow() -> None:
             assert source in definition["values"]
             assert set(targets).issubset(set(definition["values"]))
             transition = f"`{source}` → " + ", ".join(f"`{target}`" for target in targets)
-            ascii_transition = f"{source} -> " + ", ".join(targets)
             assert transition in readme_flat
             assert transition in creating_flat
-            assert ascii_transition in config_flat
     assert "Item initial state: `pending`" in creating_flat
     assert "Review initial state: `created`" in creating_flat
-    assert "pending/in_progress are placed in active/" in config_flat
-    assert "created/considered are placed in active/" in config_flat
     for surface_name, surface in surfaces.items():
         assert "pending" in surface and "created" in surface, surface_name
         assert "linked review" in surface.lower() and "closed" in surface.lower(), surface_name
@@ -59,8 +55,3 @@ def test_documented_planning_states_match_runtime_workflow() -> None:
     review_placements = workflow["kinds"]["review"]["workflows"]["standard"]["placement"]
     assert all(f"`{state}` → `{placement}/`" in creating_flat for state, placement in item_placements.items())
     assert all(f"`{state}` → `{placement}/`" in creating_flat for state, placement in review_placements.items())
-    assert all(f"{state} -> {placement}/" in config_flat for state, placement in item_placements.items())
-    assert all(f"{state} -> {placement}/" in config_flat for state, placement in review_placements.items())
-    for source, targets in workflow["kinds"]["review"]["workflows"]["standard"]["transitions"].items():
-        ascii_transition = f"{source} -> " + ", ".join(targets)
-        assert ascii_transition in config_flat

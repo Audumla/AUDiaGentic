@@ -163,7 +163,6 @@ class SubmissionEnvelope:
     model_id: str | None = None
     component_profile: str | None = None
     mode: str = "async"
-    timeout_seconds: float | None = None
     session: SessionSpec = field(default_factory=SessionSpec)
     prompt_body: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
@@ -193,7 +192,6 @@ class SubmissionEnvelope:
             model_id=value.get("model_id"),
             component_profile=value.get("component_profile"),
             mode=value.get("mode", "async"),
-            timeout_seconds=value.get("timeout_seconds"),
             session=SessionSpec.from_mapping(session),
             prompt_body=value.get("prompt_body"),
             metadata=dict(metadata),
@@ -217,7 +215,6 @@ class SubmissionEnvelope:
             "model_id": self.model_id,
             "component_profile": self.component_profile,
             "mode": self.mode,
-            "timeout_seconds": self.timeout_seconds,
             "session": self.session.to_mapping(),
             "prompt_body": self.prompt_body,
             "metadata": dict(self.metadata),
@@ -237,6 +234,11 @@ class SubmissionEnvelope:
         metadata), VAL-AGW-066 (mode), and VAL-AGW-082 (wire shape).
         """
         _require_string("project_root", self.project_root)
+        self.validate_fields()
+        return canonicalize_project_root(self.project_root, windows=windows)
+
+    def validate_fields(self) -> None:
+        """Validate existing non-root fields without inspecting or resolving a path."""
         _require_integer("schema_version", self.schema_version)
         _require_optional_string("idempotency_key", self.idempotency_key, max_length=_MAX_IDEMPOTENCY_KEY_LENGTH)
         for name in (
@@ -249,7 +251,6 @@ class SubmissionEnvelope:
         ):
             _require_optional_string(name, getattr(self, name), allow_empty=name == "component_profile")
         _require_string("mode", self.mode)
-        _require_optional_number("timeout_seconds", self.timeout_seconds, positive=True)
         _validate_session_spec(self.session)
         # Every gateway request is an execution turn.  A session continuation
         # still needs a new user message; an empty/no-body request cannot be
@@ -281,7 +282,6 @@ class SubmissionEnvelope:
                     "credential-like material is not allowed in envelope metadata",
                     {"metadata_key": key},
                 )
-        return canonicalize_project_root(self.project_root, windows=windows)
 
 
 def sanitize_submission_metadata(metadata: Mapping[str, Any] | None) -> dict[str, Any]:
@@ -513,7 +513,6 @@ class ExecutionManifest:
     context_fingerprint: str
     session: SessionSpec
     mode: str
-    timeout_seconds: float | None
     prompt_digest: str
     work_id: str | None = None
     context_id: str | None = None
@@ -533,7 +532,6 @@ class ExecutionManifest:
             context_fingerprint=value["context_fingerprint"],
             session=SessionSpec.from_mapping(value.get("session") or {}),
             mode=value.get("mode", "async"),
-            timeout_seconds=value.get("timeout_seconds"),
             prompt_digest=value["prompt_digest"],
             work_id=value.get("work_id"),
             context_id=value.get("context_id"),
@@ -553,7 +551,6 @@ class ExecutionManifest:
             "context_fingerprint": self.context_fingerprint,
             "session": self.session.to_mapping(),
             "mode": self.mode,
-            "timeout_seconds": self.timeout_seconds,
             "prompt_digest": self.prompt_digest,
             "work_id": self.work_id,
             "context_id": self.context_id,
@@ -606,7 +603,6 @@ def build_manifest(
         context_fingerprint=compute_context_fingerprint(identity),
         session=envelope.session,
         mode=envelope.mode,
-        timeout_seconds=envelope.timeout_seconds,
         # Keep the caller-supplied body digest distinct from the admitted
         # rendered-instruction digest.  The latter is persisted separately as
         # prompt-template-digest; conflating them makes provenance and

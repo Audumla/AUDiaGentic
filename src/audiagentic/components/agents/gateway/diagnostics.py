@@ -201,6 +201,35 @@ def activity_monitoring_snapshot(
     return result
 
 
+def _proves_unsent(
+    code: str | None, details: Mapping[str, Any], side_effect_state: str | None,
+) -> bool:
+    # The FSM enters SIDE_EFFECT_ATTEMPTED before composer insertion. A
+    # completed pre-Send reconciliation can subsequently prove no submission;
+    # do not let the earlier phase label override that explicit outcome.
+    return (
+        code in {"EXT-GPTAUTO-003", "EXT-GPTAUTO-004"}
+        and (
+            code == "EXT-GPTAUTO-003"
+            or (
+                details.get("failure-stage") == "readiness"
+                and details.get("previous-turn-unresolved") is False
+                and details.get("turn-state") in (None, "not-started", "pre-submit")
+                and details.get("side-effect-state") in (None, "not-started")
+                and side_effect_state in (None, "not-started")
+            )
+        )
+        and details.get("submission-state") == "not_started"
+        and details.get("submission-attempted") is False
+        and details.get("submission-proven") is False
+        and details.get("submission-ambiguous") is False
+        and not details.get("side-effect-attempted")
+        and not details.get("send-intent-ever")
+        and not details.get("send-button-clicked")
+        and not details.get("enter-dispatched")
+    )
+
+
 def classify_error(
     error: BaseException | Mapping[str, Any] | None,
     *,
@@ -241,17 +270,48 @@ def classify_error(
         # the root code as the diagnostic reason; otherwise retain the
         # historical service-restart fallback.
         reason = root_code or "service-restart"
+    proven_unsent = _proves_unsent(code, details, side_effect_state)
+    root_details = (
+        root_recovery_error.get("details")
+        if isinstance(root_recovery_error, Mapping) else None
+    )
+    # Only the queue's presubmit exhaustion wrapper can carry readiness's
+    # complete negative proof. A root code or a not-started label alone is
+    # insufficient; conflicting outer evidence keeps the ordinary fence.
+    wrapped_unsent = (
+        code == "CON-AGW-084"
+        and root_code == "EXT-GPTAUTO-004"
+        and details.get("recovery-phase") in {"presubmit-retry", "presubmit-reconcile"}
+        and details.get("side-effect-state") == "not-started"
+        and details.get("session-fence-state") is None
+        and details.get("turn-state") in (None, "not-started", "pre-submit")
+        and details.get("submission-state") in (None, "not_started")
+        and side_effect_state in (None, "not-started")
+        and not any(details.get(key) for key in (
+            "submission-attempted", "submission-proven", "submission-ambiguous",
+            "previous-turn-unresolved", "side-effect-attempted", "send-intent-ever",
+            "send-button-clicked", "enter-dispatched",
+        ))
+        and isinstance(root_details, Mapping)
+        and _proves_unsent(root_code, root_details, side_effect_state)
+    )
     attempted = bool(
         details.get("submission-attempted")
         or details.get("side-effect-attempted")
-        or str(details.get("turn-state", "")) == "side-effect-attempted"
+        or (not proven_unsent and str(details.get("turn-state", "")) == "side-effect-attempted")
     )
     proven = bool(details.get("submission-proven"))
-    ambiguous = bool(details.get("submission-ambiguous")) or attempted and not proven or str(details.get("turn-state", "")) in {
+    ambiguous = bool(details.get("submission-ambiguous")) or attempted and not proven or (not proven_unsent and str(details.get("turn-state", "")) in {
         "side-effect-attempted",
         "submission-ambiguous",
-    }
-    if code == "CON-AGW-084" and root_code and root_code.startswith("EXT-"):
+    })
+    if wrapped_unsent:
+        classification = FailureClass.BROWSER_ADAPTER_ERROR
+        certainty = EvidenceCertainty.STRONG
+        recovery = RecoveryDisposition.RETRY_SAFE
+        default_phase = ObservationPhase.PRE_SUBMIT
+        default_side_effect = SideEffectState.NOT_STARTED
+    elif code == "CON-AGW-084" and root_code and root_code.startswith("EXT-"):
         classification = FailureClass.PROVIDER_ERROR
         certainty = EvidenceCertainty.STRONG
         recovery = RecoveryDisposition.RECONCILE_REQUIRED
@@ -263,6 +323,15 @@ def classify_error(
         recovery = RecoveryDisposition.RECONCILE_REQUIRED
         default_phase = ObservationPhase.RECONCILIATION
         default_side_effect = SideEffectState.MAY_HAVE_STARTED
+    elif proven_unsent and code == "EXT-GPTAUTO-004":
+        # Admission failed before a turn existed. Explicit negative proof,
+        # including absence of a prior unresolved turn, outranks the generic
+        # EXT-004 code. Missing or contradictory proof stays conservative.
+        classification = FailureClass.BROWSER_ADAPTER_ERROR
+        certainty = EvidenceCertainty.STRONG
+        recovery = RecoveryDisposition.RETRY_SAFE
+        default_phase = ObservationPhase.PRE_SUBMIT
+        default_side_effect = SideEffectState.NOT_STARTED
     elif ambiguous or code == "EXT-GPTAUTO-004":
         classification = FailureClass.AMBIGUOUS_SIDE_EFFECT
         certainty = EvidenceCertainty.STRONG

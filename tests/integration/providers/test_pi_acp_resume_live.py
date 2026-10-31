@@ -7,7 +7,7 @@ Unlike an earlier draft of this test (raw hand-rolled JSON-RPC over the
 bridge's stdio), this drives the actual product transport classes end-to-end
 -- the same classes AS49's resume workflow will call -- through the same
 install-then-run Docker pattern this repo's other live-provider recipes use
-(install_provider_cli + provision_embedded_rig + patch_provider_config, as in
+(install_provider_cli + the test-only model server + patch_provider_config, as in
 test_gateway_pi_smoke.py / test_pi_rpc_tap_transcript_e2e.py). A prior version
 of this test only proved the bridge's wire protocol, not that AUDiaGentic's
 own code correctly drives it -- this version closes that gap.
@@ -79,7 +79,7 @@ def _write_harness_config(project_root: Path, rig_port: int) -> None:
         yaml.safe_dump(
             {
                 "harness": {"type": "pi"},
-                "rig": {"port": rig_port, "model": _MODEL_PROFILE, "provider": "audiagentic"},
+                "endpoint": {"url": f"http://127.0.0.1:{rig_port}/v1", "model": _MODEL_PROFILE, "provider": "audiagentic"},
                 "mcp": {"enabled": False},
                 "smoke": {"timeout": 60},
             },
@@ -96,6 +96,7 @@ def test_real_acp_agent_session_transport_resumes_after_real_process_death(
     pi-acp bridge, across a genuine SIGKILL of the original child."""
     _require_docker_gate()
 
+    from tests.helpers.model_server import start_model_server
     from tests.integration.agents.gateway_docker_harness import free_port
     from tests.integration.providers.harness import assert_install_result_ok
 
@@ -108,11 +109,6 @@ def test_real_acp_agent_session_transport_resumes_after_real_process_death(
     from audiagentic.foundation.transports.acp import AcpAgentSessionTransport
     from audiagentic.foundation.transports.agent_session import SessionPrompt
     from audiagentic.runtime.harness import refresh_materialized_agent_config
-    from audiagentic.runtime.harness.provisioning import provision_embedded_rig
-    from audiagentic.runtime.rig.service import (
-        release_embedded_rig,
-        start_or_attach_embedded_rig,
-    )
 
     monkeypatch.setenv("AUDIAGENTIC_REPO_ROOT", str(tmp_path))
 
@@ -121,9 +117,13 @@ def test_real_acp_agent_session_transport_resumes_after_real_process_death(
 
     install_result = install_provider_cli("pi", timeout=900, project_root=tmp_path)
     assert_install_result_ok("pi", install_result)
+    from tests.helpers.pi_smoke import restrict_smoke_pi
+
+    # This proves persistence/replay, not a coding-agent tool loop. Keep the
+    # real CLI/model/bridge, with the same native echo policy as other Pi smokes.
+    restrict_smoke_pi(tmp_path, monkeypatch)
 
     harness_runtime = global_harness_runtime()
-    provision_embedded_rig(harness_runtime, tmp_path)
     refresh_materialized_agent_config(harness_runtime, project_root=tmp_path)
 
     monkeypatch.setenv("PI_CODING_AGENT_DIR", str(harness_runtime / "agent"))
@@ -140,9 +140,7 @@ def test_real_acp_agent_session_transport_resumes_after_real_process_death(
         },
     )
 
-    launch = start_or_attach_embedded_rig(
-        profile_name=_MODEL_PROFILE, rig_port=rig_port, model_id=_PI_MODEL_REF
-    )
+    server = start_model_server(_PI_MODEL_REF, port=rig_port)
     try:
         project_root = tmp_path / "project"
         project_root.mkdir()
@@ -162,11 +160,20 @@ def test_real_acp_agent_session_transport_resumes_after_real_process_death(
             return acp_launch
 
         async def _run() -> tuple[bool, int, str]:
+            import time
+
+            started = time.monotonic()
+
+            def phase(name: str) -> None:
+                print(f"pi-resume phase={name} elapsed={time.monotonic() - started:.2f}s", flush=True)
+
             # ── Transport #1: real session/new + one real turn ──────────
+            phase("first-open-start")
             transport_1 = AcpAgentSessionTransport(
                 _build_launch(), cwd=project_root, ag_session_id="ag-pi-acp-resume"
             )
             open_result = await transport_1.open()
+            phase("first-open-complete")
             provider_session_ref = open_result.provider_session_ref.value
 
             events_1: list = []
@@ -178,12 +185,14 @@ def test_real_acp_agent_session_transport_resumes_after_real_process_death(
                 SessionPrompt(turn_id="turn-1", body=_TURN_1_PROMPT), _sink_1
             )
             assert turn_1.stop_reason == "end_turn", turn_1
+            phase("first-turn-complete")
 
             # Genuine hard death -- SIGKILL the real child, not close()'s
             # polite SDK-unwind path. Public child_pid property only.
             child_pid = transport_1._inner.child_pid
             assert child_pid is not None
             os.kill(child_pid, signal.SIGKILL)
+            phase("first-process-killed")
             await asyncio.sleep(0.5)  # let the OS reap / SDK notice, best-effort
 
             # ── Transport #2: brand-new object AND brand-new process,
@@ -195,6 +204,7 @@ def test_real_acp_agent_session_transport_resumes_after_real_process_death(
                 resume_provider_ref=provider_session_ref,
             )
             await transport_2.open()
+            phase("resume-open-complete")
 
             supports_resume = transport_2._inner.supports_resume
             dropped = transport_2._inner.dropped_between_turns
@@ -208,13 +218,14 @@ def test_real_acp_agent_session_transport_resumes_after_real_process_death(
                 SessionPrompt(turn_id="turn-2", body=_TURN_2_PROMPT), _sink_2
             )
             resumed_turn_ok = turn_2.stop_reason == "end_turn"
+            phase("resumed-turn-complete")
 
             await transport_2.close()
             return supports_resume, dropped, ("end_turn" if resumed_turn_ok else turn_2.stop_reason)
 
         supports_resume, dropped_on_resume, turn_2_stop_reason = asyncio.run(_run())
     finally:
-        release_embedded_rig(launch)
+        server.stop()
 
     assert supports_resume is True, (
         "real pi-acp bridge did not advertise agent_capabilities.load_session "

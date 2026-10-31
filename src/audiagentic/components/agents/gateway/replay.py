@@ -6,6 +6,7 @@ import json
 import os
 from collections import defaultdict
 from collections.abc import Iterable, Mapping
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -15,20 +16,135 @@ from audiagentic.components.agents.agents_paths import (
     gateway_request_path,
 )
 from audiagentic.foundation.io import iter_ndjson, last_ndjson
+from audiagentic.foundation.observability.journal_segments import has_segments, head_read_lock
 from audiagentic.foundation.system.process import StartupLock
 from audiagentic.foundation.time import now_iso_z
 from audiagentic.foundation.transports.agent_session import is_meaningful_activity_label
 
 SCHEMA_VERSION = "gateway-recovery.v1"
 _PAGE_SIZE = 100
+RECOVERY_CLAIM_LEASE_SECONDS = 120.0
+RECOVERY_UNRESOLVED_COOLDOWN_SECONDS = 60.0
+_RECOVERY_CLOCK_SKEW_SECONDS = 5.0
+
+
+class RecoveryClaimLostError(RuntimeError):
+    """Raised when a recovery worker no longer owns its durable claim."""
 
 
 def _text(value: Any, limit: int = 256) -> str | None:
     return value[:limit] if isinstance(value, str) and value else None
 
 
+def _parse_recovery_time(value: Any) -> datetime | None:
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    if parsed.tzinfo is None:
+        return None
+    return parsed.astimezone(timezone.utc)
+
+
+def recovery_claim_state(
+    entries: Iterable[Mapping[str, Any]], *, now: datetime | None = None
+) -> dict[str, Any] | None:
+    """Project the authoritative reconciliation claim from journal order."""
+    current: dict[str, Any] | None = None
+    generation = 0
+    for entry in entries:
+        if entry.get("event") == "action-intent" and entry.get("action-kind") == "reconcile" and entry.get("disposition") == "intent-persisted":
+            raw_generation = entry.get("claim-generation")
+            generation = raw_generation if isinstance(raw_generation, int) and not isinstance(raw_generation, bool) else generation + 1
+            current = {
+                "action-attempt-id": entry.get("action-attempt-id"),
+                "claim-generation": generation,
+                "lease-expires-at": entry.get("lease-expires-at"),
+                "intent": dict(entry),
+                "result": None,
+                "lease-created-at": entry.get("created-at"),
+            }
+        elif current is not None and entry.get("event") == "claim-renewal" and entry.get("action-attempt-id") == current["action-attempt-id"] and entry.get("claim-generation") == current["claim-generation"]:
+            current["lease-expires-at"] = entry.get("lease-expires-at")
+            current["lease-created-at"] = entry.get("created-at")
+        elif current is not None and entry.get("event") == "action-result" and entry.get("action-attempt-id") == current["action-attempt-id"] and entry.get("claim-generation") == current["claim-generation"]:
+            current["result"] = dict(entry)
+    if current is None:
+        return None
+    current["created-at"] = current["intent"].get("created-at")
+    reference = now or datetime.now(timezone.utc)
+    created = _parse_recovery_time(current.get("created-at"))
+    lease_created = _parse_recovery_time(current.get("lease-created-at"))
+    expires = _parse_recovery_time(current.get("lease-expires-at"))
+    current["valid"] = bool(
+        created
+        and lease_created
+        and expires
+        and created <= reference + timedelta(seconds=_RECOVERY_CLOCK_SKEW_SECONDS)
+        and lease_created <= reference + timedelta(seconds=_RECOVERY_CLOCK_SKEW_SECONDS)
+        and expires >= lease_created
+        and expires <= lease_created + timedelta(
+            seconds=RECOVERY_CLAIM_LEASE_SECONDS + _RECOVERY_CLOCK_SKEW_SECONDS
+        )
+    )
+    current["invalid-reason"] = None if current["valid"] else "invalid-claim-timestamps"
+    current["active"] = bool(current["valid"] and expires and expires > reference)
+    return current
+
+
+def assert_recovery_claim_owner(
+    project_root: Path,
+    request_id: str,
+    *,
+    action_attempt_id: str,
+    claim_generation: int,
+) -> dict[str, Any]:
+    """Fail closed unless this attempt owns the current, unexpired claim."""
+    with _lock(project_root, request_id):
+        claim = recovery_claim_state(_read(project_root, request_id), now=datetime.now(timezone.utc))
+        if not claim or not claim.get("valid") or not claim.get("active") or claim.get("action-attempt-id") != action_attempt_id or claim.get("claim-generation") != claim_generation or claim.get("result") is not None:
+            raise RecoveryClaimLostError("recovery claim is no longer owned")
+        return claim
+
+
+def renew_recovery_claim(
+    project_root: Path,
+    request_id: str,
+    *,
+    action_attempt_id: str,
+    claim_generation: int,
+) -> bool:
+    """Extend an owned claim without changing its generation."""
+    with _lock(project_root, request_id):
+        claim = recovery_claim_state(_read(project_root, request_id), now=datetime.now(timezone.utc))
+        if not claim or not claim.get("valid") or not claim.get("active") or claim.get("action-attempt-id") != action_attempt_id or claim.get("claim-generation") != claim_generation or claim.get("result") is not None:
+            return False
+        expires = (datetime.now(timezone.utc) + timedelta(seconds=RECOVERY_CLAIM_LEASE_SECONDS)).isoformat().replace("+00:00", "Z")
+        _append(project_root, request_id, {"schema-version": SCHEMA_VERSION, "event": "claim-renewal", "action-attempt-id": action_attempt_id, "claim-generation": claim_generation, "lease-expires-at": expires, "created-at": now_iso_z()})
+        return True
+
+
 def _lock(project_root: Path, request_id: str) -> StartupLock:
     return StartupLock(gateway_request_path(project_root, request_id).with_name("mutation.lock"))
+
+
+def recovery_capture_lock(
+    project_root: Path, request_id: str, *, timeout: float = 0.25
+) -> StartupLock:
+    """Return the cross-process mutex for one provider response capture.
+
+    The durable claim decides *which* recovery attempt may proceed; this
+    mutex prevents a stale worker and a takeover worker from entering the
+    provider runtime concurrently while the first attempt is still unwinding.
+    """
+    return StartupLock(
+        gateway_request_path(project_root, request_id).with_name(
+            "recovery-capture.lock"
+        ),
+        timeout=timeout,
+    )
 
 
 def _read(project_root: Path, request_id: str) -> list[dict[str, Any]]:
@@ -36,32 +152,39 @@ def _read(project_root: Path, request_id: str) -> list[dict[str, Any]]:
 
 
 def _append(project_root: Path, request_id: str, event: dict[str, Any]) -> dict[str, Any]:
+    from audiagentic.foundation.observability.journal_segments import journal_lock
+
     path = gateway_recovery_action_path(project_root, request_id)
     path.parent.mkdir(parents=True, exist_ok=True)
+    with journal_lock(path):
+        return _append_locked(project_root, request_id, event)
+
+
+def _append_locked(project_root: Path, request_id: str, event: dict[str, Any]) -> dict[str, Any]:
+    from audiagentic.foundation.observability.journal_segments import (
+        journal_sequence_watermark,
+        prepare_append,
+    )
+
+    from .retention import journal_max_bytes
+
+    path = gateway_recovery_action_path(project_root, request_id)
     previous = last_ndjson(gateway_recovery_action_path(project_root, request_id))
     event = dict(event)
-    event["event-seq"] = (int(previous.get("event-seq", 0)) if previous else 0) + 1
+    event["event-seq"] = (int(previous.get("event-seq", 0)) if previous else journal_sequence_watermark(path)) + 1
     line = json.dumps(event, sort_keys=True, separators=(",", ":")) + "\n"
+    index = gateway_recovery_index_path(project_root, request_id)
+    prepare_append(path, index, max_bytes=journal_max_bytes("recovery"),
+                   incoming_bytes=len(line.encode("utf-8")))
     offset = path.stat().st_size if path.exists() else 0
     with path.open("a", encoding="utf-8", newline="\n") as handle:
         handle.write(line)
         handle.flush()
         os.fsync(handle.fileno())
-    index = gateway_recovery_index_path(project_root, request_id)
     with index.open("a", encoding="utf-8", newline="\n") as handle:
         handle.write(json.dumps({"event-seq": event["event-seq"], "offset": offset, "length": len(line.encode("utf-8"))}, separators=(",", ":")) + "\n")
         handle.flush()
         os.fsync(handle.fileno())
-    from audiagentic.components.agents.gateway.retention import (
-        compact_indexed_ndjson,
-        journal_max_bytes,
-    )
-    compact_indexed_ndjson(
-        path,
-        index,
-        max_bytes=journal_max_bytes("recovery"),
-        preserve=lambda row: row.get("event") in {"action-result", "recovery-terminal", "reconciliation-result"},
-    )
     return event
 
 
@@ -86,10 +209,11 @@ def prepare_recovery_action(
     if action_kind not in {"provider-native-retry", "provider-native-continue", "linked-child-turn", "reconcile"}:
         raise ValueError("unknown recovery action kind")
     with _lock(project_root, request_id):
+        entries = list(iter_ndjson(gateway_recovery_action_path(project_root, request_id)))
         existing: dict[str, Any] | None = None
         result_seen = False
         consumed_budget = 0
-        for entry in iter_ndjson(gateway_recovery_action_path(project_root, request_id)):
+        for entry in entries:
             if entry.get("action-attempt-id") == action_attempt_id:
                 existing = entry
             if entry.get("event") == "action-result" and entry.get("action-attempt-id") == action_attempt_id:
@@ -102,6 +226,40 @@ def prepare_recovery_action(
                     return {**existing, "disposition": "already-recorded", "outcome": "action-already-recorded"}
                 return {**existing, "disposition": "reconciliation-required", "outcome": "action-result-missing"}
             return existing
+        claim_generation = None
+        if action_kind == "reconcile":
+            now = datetime.now(timezone.utc)
+            claim = recovery_claim_state(entries, now=now)
+            if claim:
+                prior_result = claim.get("result")
+                if prior_result is not None:
+                    outcome = prior_result.get("outcome")
+                    created = _parse_recovery_time(prior_result.get("created-at"))
+                    if outcome == "reconciliation-completed":
+                        return {**claim["intent"], **prior_result, "disposition": "already-recorded"}
+                    if created is None or created > now + timedelta(seconds=_RECOVERY_CLOCK_SKEW_SECONDS):
+                        return {**claim["intent"], **prior_result, "disposition": "reconciliation-required", "outcome": "recovery-timestamp-invalid"}
+                    if (now - created).total_seconds() < RECOVERY_UNRESOLVED_COOLDOWN_SECONDS:
+                        return {**claim["intent"], **prior_result, "disposition": "reconciliation-required", "outcome": "recovery-cooldown-active"}
+                elif not claim.get("valid"):
+                    # A malformed/future lease cannot prove another observer
+                    # still owns the reconciliation claim. Reconcile is
+                    # read-only with respect to provider prompts; advance the
+                    # generation so stale workers fail their owner fence.
+                    prior_generation = claim.get("claim-generation")
+                    claim_generation = (
+                        prior_generation
+                        if isinstance(prior_generation, int)
+                        and not isinstance(prior_generation, bool)
+                        and prior_generation > 0
+                        else 0
+                    ) + 1
+                elif claim.get("active"):
+                    return {**claim["intent"], "disposition": "reconciliation-required", "outcome": "recovery-claim-active"}
+                else:
+                    claim_generation = int(claim.get("claim-generation") or 0) + 1
+            else:
+                claim_generation = 1
         remaining_budget = max(0, int(retry_budget) - consumed_budget)
         if action_kind in {"provider-native-retry", "provider-native-continue"} and submission_proven is not False:
             disposition, outcome = "reconciliation-required", "rejected-ambiguous-submission"
@@ -132,6 +290,14 @@ def prepare_recovery_action(
             "binding": safe_binding,
             "created-at": now_iso_z(),
         }
+        if action_kind == "reconcile" and disposition == "intent-persisted":
+            event["claim-generation"] = claim_generation or 1
+            event["claim-owner-id"] = event["action-attempt-id"]
+            created = _parse_recovery_time(event["created-at"])
+            if created is not None:
+                event["lease-expires-at"] = (
+                    created + timedelta(seconds=RECOVERY_CLAIM_LEASE_SECONDS)
+                ).isoformat().replace("+00:00", "Z")
         result = _append(project_root, request_id, event)
     try:
         from .observability import append_observation
@@ -155,18 +321,23 @@ def record_recovery_result(
     action_attempt_id: str,
     outcome: str,
     terminal: bool = False,
+    claim_generation: int | None = None,
     causal_input_ids: Iterable[str] = (),
 ) -> dict[str, Any]:
     """Append reconciliation/result evidence; never mutate the intent event."""
     with _lock(project_root, request_id):
-        intent_seen = False
-        for entry in iter_ndjson(gateway_recovery_action_path(project_root, request_id)):
-            if entry.get("event") == "action-result" and entry.get("action-attempt-id") == action_attempt_id:
-                return entry
-            if entry.get("action-attempt-id") == action_attempt_id:
-                intent_seen = True
-        if not intent_seen:
+        entries = list(iter_ndjson(gateway_recovery_action_path(project_root, request_id)))
+        intent = next((entry for entry in entries if entry.get("event") == "action-intent" and entry.get("action-attempt-id") == action_attempt_id), None)
+        if intent is None:
             raise ValueError("recovery action intent is missing")
+        resolved_generation = claim_generation if isinstance(claim_generation, int) else intent.get("claim-generation")
+        existing_result = next((entry for entry in entries if entry.get("event") == "action-result" and entry.get("action-attempt-id") == action_attempt_id), None)
+        if existing_result is not None:
+            return existing_result
+        if intent.get("action-kind") == "reconcile":
+            claim = recovery_claim_state(entries, now=datetime.now(timezone.utc))
+            if not claim or claim.get("action-attempt-id") != action_attempt_id or claim.get("claim-generation") != resolved_generation or not claim.get("valid") or not claim.get("active") or claim.get("result") is not None:
+                return {"disposition": "stale-claim", "outcome": "recovery-claim-lost", "action-attempt-id": action_attempt_id, "claim-generation": resolved_generation}
         result = _append(
             project_root,
             request_id,
@@ -174,6 +345,7 @@ def record_recovery_result(
                 "schema-version": SCHEMA_VERSION,
                 "event": "action-result",
                 "action-attempt-id": _text(action_attempt_id, 128),
+                "claim-generation": resolved_generation,
                 "outcome": _text(outcome, 128) or "unknown",
                 "terminal": bool(terminal),
                 "causal-input-ids": [_text(value, 128) for value in causal_input_ids if _text(value, 128)],
@@ -283,63 +455,64 @@ def _offset(cursor: str | None) -> int:
 
 
 def read_recovery_page(project_root: Path, request_id: str, *, limit: int = 25, cursor: str | None = None) -> dict[str, Any]:
-    if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= _PAGE_SIZE:
-        raise ValueError("recovery limit must be an integer between 1 and 100")
-    start = _offset(cursor)
-    index_offset: int | None = None
-    if cursor:
-        try:
-            padded = cursor + "=" * (-len(cursor) % 4)
-            value = json.loads(base64.urlsafe_b64decode(padded.encode()).decode())
-            index_offset = value.get("index-offset")
-            if index_offset is not None and (isinstance(index_offset, bool) or not isinstance(index_offset, int) or index_offset < 0):
-                raise ValueError
-        except (ValueError, KeyError, TypeError, UnicodeError, json.JSONDecodeError) as exc:
-            raise ValueError("invalid recovery cursor") from exc
-    items: list[dict[str, Any]] = []
-    has_more = False
-    next_index_offset: int | None = None
-    journal = gateway_recovery_action_path(project_root, request_id)
-    index_path = gateway_recovery_index_path(project_root, request_id)
-    if journal.exists() and index_path.exists():
-        with index_path.open("rb") as index_handle, journal.open("rb") as journal_handle:
-            if index_offset is not None:
-                index_handle.seek(index_offset)
-            index = 0
-            while True:
-                current_index_offset = index_handle.tell()
-                raw_index = index_handle.readline()
-                if not raw_index:
-                    break
-                if index_offset is None and index < start:
+    with head_read_lock(gateway_recovery_action_path(project_root, request_id)):
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= _PAGE_SIZE:
+            raise ValueError("recovery limit must be an integer between 1 and 100")
+        start = _offset(cursor)
+        index_offset: int | None = None
+        if cursor:
+            try:
+                padded = cursor + "=" * (-len(cursor) % 4)
+                value = json.loads(base64.urlsafe_b64decode(padded.encode()).decode())
+                index_offset = value.get("index-offset")
+                if index_offset is not None and (isinstance(index_offset, bool) or not isinstance(index_offset, int) or index_offset < 0):
+                    raise ValueError
+            except (ValueError, KeyError, TypeError, UnicodeError, json.JSONDecodeError) as exc:
+                raise ValueError("invalid recovery cursor") from exc
+        items: list[dict[str, Any]] = []
+        has_more = False
+        next_index_offset: int | None = None
+        journal = gateway_recovery_action_path(project_root, request_id)
+        index_path = gateway_recovery_index_path(project_root, request_id)
+        if journal.exists() and index_path.exists() and not has_segments(journal):
+            with index_path.open("rb") as index_handle, journal.open("rb") as journal_handle:
+                if index_offset is not None:
+                    index_handle.seek(index_offset)
+                index = 0
+                while True:
+                    current_index_offset = index_handle.tell()
+                    raw_index = index_handle.readline()
+                    if not raw_index:
+                        break
+                    if index_offset is None and index < start:
+                        index += 1
+                        continue
+                    if len(items) >= limit:
+                        has_more = True
+                        next_index_offset = current_index_offset
+                        break
+                    metadata = json.loads(raw_index)
+                    journal_handle.seek(int(metadata["offset"]))
+                    items.append(json.loads(journal_handle.readline().decode("utf-8")))
                     index += 1
+        else:
+            for index, entry in enumerate(iter_ndjson(journal)):
+                if index < start:
                     continue
-                if len(items) >= limit:
+                if len(items) < limit:
+                    items.append(entry)
+                else:
                     has_more = True
-                    next_index_offset = current_index_offset
                     break
-                metadata = json.loads(raw_index)
-                journal_handle.seek(int(metadata["offset"]))
-                items.append(json.loads(journal_handle.readline().decode("utf-8")))
-                index += 1
-    else:
-        for index, entry in enumerate(iter_ndjson(journal)):
-            if index < start:
-                continue
-            if len(items) < limit:
-                items.append(entry)
-            else:
-                has_more = True
-                break
-    result = {
-        "schema-version": SCHEMA_VERSION,
-        "request-id": request_id,
-        "items": items,
-        "returned": len(items),
-    }
-    if has_more:
-        result["next-cursor"] = _cursor(start + len(items), index_offset=next_index_offset)
-    return result
+        result = {
+            "schema-version": SCHEMA_VERSION,
+            "request-id": request_id,
+            "items": items,
+            "returned": len(items),
+        }
+        if has_more:
+            result["next-cursor"] = _cursor(start + len(items), index_offset=next_index_offset)
+        return result
 
 
 def replay_observations(entries: Iterable[Mapping[str, Any]]) -> dict[str, Any]:

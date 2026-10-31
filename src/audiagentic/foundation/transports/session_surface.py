@@ -12,7 +12,7 @@ consume once a surface has been resolved.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from enum import StrEnum
 from types import MappingProxyType
 from typing import Any
@@ -42,6 +42,35 @@ class ControlSupport(StrEnum):
 
     SUPPORTED = "supported"
     UNSUPPORTED = "unsupported"
+
+
+@dataclass(frozen=True)
+class JoinedSessionCapabilities:
+    """Joined-session capability claims, not installation or live readiness proof."""
+
+    detach_safe: bool = False
+    prompt_delivery: bool = False
+    native_atomic_queue_admission: bool = False
+    correlated_terminal_output: bool = False
+    human_concurrency_safe: bool = False
+
+    def __post_init__(self) -> None:
+        for declared in fields(self):
+            if type(getattr(self, declared.name)) is not bool:
+                raise ValueError(f"JoinedSessionCapabilities.{declared.name} must be a boolean")
+
+    @property
+    def claimed(self) -> bool:
+        """Any joined capability is claimed (partial claims are readiness input, not support)."""
+        return any(getattr(self, declared.name) for declared in fields(self))
+
+    @property
+    def qualified(self) -> bool:
+        """All five claims are present; consumers still require independent proof."""
+        return all((
+            self.detach_safe, self.prompt_delivery, self.native_atomic_queue_admission,
+            self.correlated_terminal_output, self.human_concurrency_safe,
+        ))
 
 
 # ---------------------------------------------------------------------------
@@ -321,8 +350,11 @@ class ResolvedSessionSurface:
     validation: SurfaceValidation = field(
         default_factory=SurfaceValidation,
     )
+    joined_capabilities: JoinedSessionCapabilities = field(default_factory=JoinedSessionCapabilities)
 
     def __post_init__(self) -> None:
+        if not isinstance(self.joined_capabilities, JoinedSessionCapabilities):
+            raise ValueError("ResolvedSessionSurface.joined_capabilities must be typed capability claims")
         object.__setattr__(
             self,
             "controls",

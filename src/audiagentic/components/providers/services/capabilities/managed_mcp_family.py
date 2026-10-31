@@ -1,4 +1,5 @@
 """Descriptor-backed managed-MCP automation family."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -52,7 +53,7 @@ def _desired(request: ManagedMcpRequest) -> dict[str, tuple[str, McpServerEntry]
     }
 
 
-def manage_mcp_entries(
+def _manage_mcp_entries(
     project_root: Path,
     provider_id: str,
     *,
@@ -66,7 +67,9 @@ def manage_mcp_entries(
         or descriptor.mcp_config is None
         or descriptor.automation_capability("managed-mcp") is None
     ):
-        return _result(ok=False, supported=False, provider_id=provider_id, error_code="RES-PREC-001")
+        return _result(
+            ok=False, supported=False, provider_id=provider_id, error_code="RES-PREC-001"
+        )
     if mode not in _family_declaration().supported_modes:
         return _result(ok=False, provider_id=provider_id, error_code="CON-PREC-002")
 
@@ -101,7 +104,7 @@ def manage_mcp_entries(
         project_root,
         internal_scope,
         desired if mode == "apply" else {},
-        managed_ids=set(desired) if mode == "apply" else None,
+        managed_ids=set(request.managed_ids) if request.managed_ids is not None else None,
     )
     after = registry.load().get(internal_scope, {})
     collisions = sync.get("collisions") or []
@@ -111,17 +114,44 @@ def manage_mcp_entries(
         changed=bool(sync.get("updated") or sync.get("removed")),
         managed_ids=tuple(sorted(after)),
         removed_ids=tuple(sorted(set(before) - set(after))),
-        collision_ids=tuple(sorted({
-            str(row.get("managed_id") or row.get("managed-id") or "")
-            for row in collisions
-        } - {""})),
+        collision_ids=tuple(
+            sorted(
+                {str(row.get("managed_id") or row.get("managed-id") or "") for row in collisions}
+                - {""}
+            )
+        ),
         auto_refreshed=bool(sync.get("auto_refreshed", False)),
         action_needed=sync.get("action_needed"),
         error_code=None if sync.get("ok") else "CON-PMCP-002",
     )
 
 
+def manage_mcp_entries(
+    project_root: Path, provider_id: str, *, mode: ManagedMcpMode, request: ManagedMcpRequest
+) -> ManagedMcpResult:
+    """Fence the complete ownership transition, leaving status read-only."""
+    from ..mcp.fence import native_mcp_fence
+
+    descriptor = get_descriptor(provider_id)
+    if mode not in {"apply", "prune"} or descriptor is None or descriptor.mcp_config is None:
+        return _manage_mcp_entries(project_root, provider_id, mode=mode, request=request)
+    with native_mcp_fence(project_root):
+        return _manage_mcp_entries(project_root, provider_id, mode=mode, request=request)
+
+
 def adopt_legacy_mcp_ownership(
+    project_root: Path, *, ownership_scope: str, managed_ids: frozenset[str]
+) -> None:
+    """Serialize bounded legacy ownership migration with all native writers."""
+    from ..mcp.fence import native_mcp_fence
+
+    with native_mcp_fence(project_root):
+        _adopt_legacy_mcp_ownership(
+            project_root, ownership_scope=ownership_scope, managed_ids=managed_ids
+        )
+
+
+def _adopt_legacy_mcp_ownership(
     project_root: Path,
     *,
     ownership_scope: str,

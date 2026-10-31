@@ -1,4 +1,5 @@
 """Load and register ComponentDescriptors from YAML config files."""
+
 from __future__ import annotations
 
 import logging
@@ -11,8 +12,6 @@ from audiagentic.foundation.contracts.errors import (
 )
 from audiagentic.foundation.io import load_yaml_file
 
-_component_error: Any = make_error_factory("VAL", "COMP", "components")
-
 from .base import (
     SCOPE_HARNESS,
     SCOPE_PROJECT,
@@ -24,6 +23,8 @@ from .base import (
 )
 from .hooks import initialize_lifecycle_hook_dispatch
 from .registry import register
+
+_component_error: Any = make_error_factory("VAL", "COMP", "components")
 
 logger = logging.getLogger(__name__)
 
@@ -97,8 +98,18 @@ def _require_propagate(ms: dict, path: Path) -> str:
     return ms["propagate"]
 
 
-def register_from_yaml(path: Path) -> ComponentDescriptor:
-    """Parse a single component config YAML and register the descriptor."""
+def _require_bool(ms: dict, key: str, path: Path) -> bool:
+    value = ms.get(key, False)
+    if not isinstance(value, bool):
+        raise _component_error(
+            11, f"{path.name}: MCP server {ms.get('name')!r} {key} must be true or false",
+            path=str(path), field=key,
+        )
+    return value
+
+
+def parse_component_descriptor(path: Path) -> ComponentDescriptor:
+    """Read one declaration without registration, hooks or lifecycle effects."""
     data = load_yaml_file(path)
     if data.get("type") != "component":
         raise _component_error(
@@ -142,6 +153,7 @@ def register_from_yaml(path: Path) -> ComponentDescriptor:
             instructions=ms.get("instructions", ""),
             tool_descriptions=ms.get("tool-descriptions") or {},
             propagate=_require_propagate(ms, path),
+            worktree_scoped=_require_bool(ms, "worktree-scoped", path),
         )
         for ms in (data.get("mcp-servers") or [])
     )
@@ -206,8 +218,47 @@ def register_from_yaml(path: Path) -> ComponentDescriptor:
         context_namespace=data.get("context-namespace") or None,
         implementation_cardinality=data.get("implementation-cardinality") or None,
     )
+    return descriptor
+
+
+def register_from_yaml(path: Path) -> ComponentDescriptor:
+    """Read and register one component declaration."""
+    descriptor = parse_component_descriptor(path)
     register(descriptor, replace=True)
     return descriptor
+
+
+def component_metadata_directories(project_root: Path | None = None) -> list[Path]:
+    """Resolve the shared declaration layers without initializing components."""
+    from audiagentic.foundation.paths.names import (
+        get_active_profile,
+        resolve_profile_component_config_dir,
+    )
+    from audiagentic.foundation.paths.project import find_project_root
+
+    targets = list(_get_component_config_dirs())
+    project_root = project_root or find_project_root()
+    profile = get_active_profile()
+    if profile and project_root is not None:
+        targets.append(resolve_profile_component_config_dir(project_root, profile))
+    return targets
+
+
+def read_component_metadata(project_root: Path | None = None) -> tuple[ComponentDescriptor, ...]:
+    """Read the canonical base/profile layers without initializing components."""
+    targets = component_metadata_directories(project_root)
+    resolved: dict[str, ComponentDescriptor] = {}
+    for directory in targets:
+        layer: set[str] = set()
+        for path in sorted(directory.glob("*.yaml")):
+            if load_yaml_file(path).get("type") != "component":
+                continue
+            descriptor = parse_component_descriptor(path)
+            if descriptor.component_id in layer:
+                raise _component_error(2, "duplicate component identity in metadata layer")
+            layer.add(descriptor.component_id)
+            resolved[descriptor.component_id] = descriptor
+    return tuple(resolved[key] for key in sorted(resolved))
 
 
 def register_all_components(config_dirs: list[Path] | None = None) -> list[ComponentDescriptor]:
@@ -264,9 +315,7 @@ def register_all_components(config_dirs: list[Path] | None = None) -> list[Compo
         # is given, so find_project_root() returns the correct root. If the env var
         # is not set (direct invocation outside launcher), falls back to cwd walk-up.
         project_root = find_project_root() or Path.cwd()
-        profile_dir = resolve_profile_component_config_dir(
-            project_root.resolve(), current_profile
-        )
+        profile_dir = resolve_profile_component_config_dir(project_root.resolve(), current_profile)
         targets = list(targets) + [profile_dir]
 
     cache_key = frozenset(str(p.resolve()) for p in targets)
@@ -317,7 +366,11 @@ def register_all_components(config_dirs: list[Path] | None = None) -> list[Compo
             try:
                 __import__(descriptor.lifecycle_observer)
             except Exception:
-                logger.warning("Failed to import lifecycle observer for %s", descriptor.component_id, exc_info=True)
+                logger.warning(
+                    "Failed to import lifecycle observer for %s",
+                    descriptor.component_id,
+                    exc_info=True,
+                )
 
     _validate_descriptors_contributions(descriptors)
     initialize_lifecycle_hook_dispatch()

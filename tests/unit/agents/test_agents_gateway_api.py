@@ -4,6 +4,7 @@ stack wired together (store + queue + dispatch), against a fake execute_provider
 
 from __future__ import annotations
 
+import os
 import threading
 from pathlib import Path
 from types import SimpleNamespace
@@ -55,9 +56,30 @@ def _result(data: dict) -> SimpleNamespace:
     return SimpleNamespace(result_data=data)
 
 
-def test_workspace_name_resolves_sibling_project_root(tmp_path: Path) -> None:
+@pytest.fixture
+def bounded_workspace_discovery(tmp_path: Path, monkeypatch):
+    """Exercise automatic sibling discovery without enumerating host ancestors."""
+    monkeypatch.delenv("AUDIAGENTIC_WORKSPACE_ROOTS", raising=False)
+    real_iterdir = Path.iterdir
+    visits: list[Path] = []
+    candidates: list[Path] = []
+
+    def iterdir(parent: Path):
+        visits.append(parent)
+        if parent != tmp_path:
+            return iter(())
+        children = list(real_iterdir(parent))
+        candidates.extend(children)
+        return iter(children)
+
+    monkeypatch.setattr(Path, "iterdir", iterdir)
+    return visits, candidates
+
+
+def test_workspace_name_resolves_sibling_project_root(tmp_path: Path, monkeypatch) -> None:
     current = tmp_path / "AUDiaGentic"
     target = tmp_path / "bigcherry"
+    monkeypatch.setenv("AUDIAGENTIC_WORKSPACE_ROOTS", os.pathsep.join(map(str, (current, target))))
     for root in (current, target):
         (root / ".audiagentic" / "config").mkdir(parents=True)
     (target / ".audiagentic" / "config" / "project.yaml").write_text(
@@ -70,17 +92,68 @@ def test_workspace_name_resolves_sibling_project_root(tmp_path: Path) -> None:
     assert resolved == target.resolve()
 
 
-def test_workspace_name_resolution_fails_closed_when_missing(tmp_path: Path) -> None:
+def test_workspace_name_ignores_sibling_config_dir_that_normalizes_to_project_id(
+    tmp_path: Path, bounded_workspace_discovery,
+) -> None:
+    current = tmp_path / "AUDiaGentic"
+    current_config = current / ".audiagentic" / "config"
+    current_config.mkdir(parents=True)
+    (current_config / "project.yaml").write_text(
+        "project-id: audiagentic" + chr(10) + "project-name: AUDiaGentic" + chr(10),
+        encoding="utf-8",
+    )
+    # The resolver scans direct siblings. This operational directory's name
+    # normalizes to `audiagentic`, but it has no project manifest and is not a
+    # second checkout.
+    (tmp_path / ".audiagentic").mkdir()
+    similarly_named = tmp_path / "AUDiaGentic-test"
+    similar_config = similarly_named / ".audiagentic" / "config"
+    similar_config.mkdir(parents=True)
+    (similar_config / "project.yaml").write_text(
+        "project-id: audiagentic-test" + chr(10) + "project-name: AUDiaGentic Test" + chr(10),
+        encoding="utf-8",
+    )
+
+    assert gateway._resolve_workspace_project_root(current, "AUDiaGentic") == current.resolve()
+    visits, candidates = bounded_workspace_discovery
+    assert tmp_path in visits  # The automatic-discovery branch was exercised.
+    assert tmp_path / ".audiagentic" in candidates
+    assert similarly_named in candidates
+
+
+def test_workspace_name_resolution_fails_closed_when_missing(
+    tmp_path: Path, bounded_workspace_discovery,
+) -> None:
+    unrelated = tmp_path / "unrelated"
+    manifest = unrelated / ".audiagentic" / "config" / "project.yaml"
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text("project-id: unrelated\n", encoding="utf-8")
     with pytest.raises(AudiaGenticError) as exc_info:
         gateway._resolve_workspace_project_root(tmp_path / "AUDiaGentic", "missing")
 
     assert exc_info.value.code == "RES-AGW-152"
+    visits, candidates = bounded_workspace_discovery
+    assert tmp_path in visits
+    assert unrelated in candidates
+
+
+def test_absolute_workspace_root_disambiguates_duplicate_worktrees(tmp_path: Path) -> None:
+    target = tmp_path / "AUDiaGentic"
+    (target / ".audiagentic" / "config").mkdir(parents=True)
+    (target / ".audiagentic" / "config" / "project.yaml").write_text(
+        "project-id: audiagentic" + chr(10) + "project-name: AUDiaGentic" + chr(10),
+        encoding="utf-8",
+    )
+
+    assert gateway._resolve_workspace_project_root(
+        tmp_path / "other", str(target)
+    ) == target.resolve()
 
 def test_submit_returns_immediately_for_long_running_request(tmp_path: Path, monkeypatch):
     _make_profile(tmp_path, "default", "local-openai")
     hold = threading.Event()
 
-    def slow_execute_provider(*, identity, execution_request, timeout_seconds):
+    def slow_execute_provider(*, identity, execution_request, activity_callback=None):
         hold.wait(timeout=5)
         return _result(
             {
@@ -107,7 +180,7 @@ def test_submit_returns_immediately_for_long_running_request(tmp_path: Path, mon
 def test_run_blocks_until_completion_and_returns_output(tmp_path: Path, monkeypatch):
     _make_profile(tmp_path, "default", "local-openai")
 
-    def fake_execute_provider(*, identity, execution_request, timeout_seconds):
+    def fake_execute_provider(*, identity, execution_request, activity_callback=None):
         return _result(
             {
                 "provider-id": execution_request["provider-id"],
@@ -159,7 +232,7 @@ def test_admission_freezes_component_template_context(tmp_path: Path, monkeypatc
     frozen = {"project": {"name": "At admission"}}
     observed: dict = {}
 
-    def fake_execute_provider(*, identity, execution_request, timeout_seconds):
+    def fake_execute_provider(*, identity, execution_request, activity_callback=None):
         observed.update(execution_request["packet-data"])
         return _result({
             "provider-id": execution_request["provider-id"], "status": "ok",
@@ -200,7 +273,7 @@ def test_application_injects_its_component_context_reader(tmp_path: Path, monkey
 def test_public_status_contains_canonical_agent_status(tmp_path: Path, monkeypatch):
     _make_profile(tmp_path, "default", "local-openai")
 
-    def fake_execute_provider(*, identity, execution_request, timeout_seconds):
+    def fake_execute_provider(*, identity, execution_request, activity_callback=None):
         return _result(
             {
                 "provider-id": execution_request["provider-id"],
@@ -228,7 +301,7 @@ def test_public_status_contains_canonical_agent_status(tmp_path: Path, monkeypat
 def test_public_status_is_slim_v4_projection(tmp_path: Path, monkeypatch):
     _make_profile(tmp_path, "default", "local-openai")
 
-    def fake_execute_provider(*, identity, execution_request, timeout_seconds):
+    def fake_execute_provider(*, identity, execution_request, activity_callback=None):
         return _result(
             {
                 "provider-id": execution_request["provider-id"],
@@ -270,6 +343,7 @@ def test_status_poll_reconciles_adoptable_terminal_failure_once(tmp_path: Path, 
         "provider-metadata": {"submission-proven": True},
     }
     calls: list[dict[str, object]] = []
+    completed = threading.Event()
     monkeypatch.setattr(gateway.store, "read_public_status", lambda *_: dict(public_record))
     monkeypatch.setattr(
         gateway.store,
@@ -279,9 +353,11 @@ def test_status_poll_reconciles_adoptable_terminal_failure_once(tmp_path: Path, 
     monkeypatch.setattr(
         gateway,
         "recover_execution_request",
-        lambda *args, **kwargs: calls.append({"args": args, **kwargs}) or {
-            "reconciliation": {"outcome": "unresolved"}
-        },
+        lambda *args, **kwargs: (
+            calls.append({"args": args, **kwargs}),
+            completed.set(),
+            {"reconciliation": {"outcome": "unresolved"}},
+        )[-1],
     )
     monkeypatch.setattr(
         gateway,
@@ -293,6 +369,7 @@ def test_status_poll_reconciles_adoptable_terminal_failure_once(tmp_path: Path, 
         "lifecycle": "terminal",
         "outcome": "failed",
     }
+    assert completed.wait(1.0)
     assert len(calls) == 1
     assert calls[0]["action"] == "reconcile"
     assert calls[0]["expected_revision"] == 7
@@ -332,7 +409,7 @@ def test_public_status_has_no_legacy_response_version_argument(tmp_path: Path):
 def test_active_component_profile_changes_execution_fingerprint(tmp_path: Path, monkeypatch):
     _make_profile(tmp_path, "default", "local-openai")
 
-    def fake_execute_provider(*, identity, execution_request, timeout_seconds):
+    def fake_execute_provider(*, identity, execution_request, activity_callback=None):
         return _result(
             {
                 "provider-id": execution_request["provider-id"],
@@ -405,7 +482,6 @@ def test_submit_replays_same_idempotency_key_without_second_enqueue(tmp_path: Pa
     [
         ({"metadata": {"idempotency_key": 7}}, "idempotency_key"),
         ({"metadata": {"schema_version": "1"}}, "schema_version"),
-        ({"timeout_seconds": "later"}, "timeout_seconds"),
     ],
 )
 def test_direct_submission_rejects_malformed_wire_values_before_resolution(
@@ -450,8 +526,10 @@ def test_provider_chat_url_rejects_non_gpt_profile(tmp_path: Path) -> None:
 def test_wait_returns_timeout_status_for_still_running_request(tmp_path: Path, monkeypatch):
     _make_profile(tmp_path, "default", "local-openai")
     hold = threading.Event()
+    started = threading.Event()
 
-    def slow_execute_provider(*, identity, execution_request, timeout_seconds):
+    def slow_execute_provider(*, identity, execution_request, activity_callback=None):
+        started.set()
         hold.wait(timeout=5)
         return _result(
             {
@@ -468,6 +546,9 @@ def test_wait_returns_timeout_status_for_still_running_request(tmp_path: Path, m
     )
 
     submitted = gateway.submit_execution_request(tmp_path, prompt_body="hi")
+    # The request is only "active" once the provider is running; wait for that instead of
+    # betting on how fast a loaded runner schedules the worker thread.
+    assert started.wait(timeout=10)
     result = gateway.wait_execution_request(tmp_path, submitted["request-id"], timeout_seconds=0.2)
     assert result["wait-outcome"] == "timeout"
     assert result["status"]["lifecycle"] == "active"
@@ -539,7 +620,7 @@ def test_cancel_queued_request_reaches_cancelled_state(tmp_path: Path, monkeypat
     hold = threading.Event()
     started = threading.Event()
 
-    def slow_execute_provider(*, identity, execution_request, timeout_seconds):
+    def slow_execute_provider(*, identity, execution_request, activity_callback=None):
         started.set()
         hold.wait(timeout=5)
         return _result(
@@ -573,7 +654,7 @@ def test_cancel_queued_request_reaches_cancelled_state(tmp_path: Path, monkeypat
 def test_list_execution_requests_most_recent_first_and_filterable(tmp_path: Path, monkeypatch):
     _make_profile(tmp_path, "default", "local-openai")
 
-    def fake_execute_provider(*, identity, execution_request, timeout_seconds):
+    def fake_execute_provider(*, identity, execution_request, activity_callback=None):
         return _result(
             {
                 "provider-id": execution_request["provider-id"],
@@ -728,7 +809,7 @@ def test_dashboard_request_projection_does_not_own_session_focus():
         {
             "request-id": "req_live",
             "state": "running",
-            "resolved-provider-id": "gpt-auto-t2",
+            "resolved-provider-id": "gpt-auto@t2",
             "session-id": "ses-live",
         }
     )
@@ -792,7 +873,7 @@ def test_dashboard_session_request_does_not_duplicate_session_focus_control():
             "request-id": "req_session_gpt",
             "state": "running",
             "session-id": "ses_shared",
-            "resolved-provider-id": "gpt-auto-t2",
+            "resolved-provider-id": "gpt-auto@t2",
         },
         include_execution=False,
     )
@@ -849,7 +930,7 @@ def test_terminal_status_is_equivalent_across_get_wait_and_list(
     """All request-returning entry points use the same canonical projector."""
     _make_profile(tmp_path, "default", "local-openai")
 
-    def fake_execute_provider(*, identity, execution_request, timeout_seconds):
+    def fake_execute_provider(*, identity, execution_request, activity_callback=None):
         return _result(
             {
                 "provider-id": execution_request["provider-id"],

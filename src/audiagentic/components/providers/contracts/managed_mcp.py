@@ -1,4 +1,5 @@
 """Typed public contract for the managed-MCP automation family."""
+
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
@@ -36,7 +37,9 @@ class ManagedMcpEntry:
             args=tuple(str(item) for item in value.get("args", ())),
             env=tuple(sorted((str(k), str(v)) for k, v in dict(value.get("env", {})).items())),
             url=str(value["url"]) if value.get("url") else None,
-            headers=tuple(sorted((str(k), str(v)) for k, v in dict(value.get("headers", {})).items())),
+            headers=tuple(
+                sorted((str(k), str(v)) for k, v in dict(value.get("headers", {})).items())
+            ),
             transport=value.get("transport"),
         )
 
@@ -52,28 +55,45 @@ class ManagedMcpEntry:
 @dataclass(frozen=True)
 class ManagedMcpRequest:
     ownership_scope: str
+    managed_ids: frozenset[str] | None
     entries: tuple[ManagedMcpEntry, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.ownership_scope:
             raise ValueError("ownership_scope is required")
+        if self.managed_ids is not None and (
+            not isinstance(self.managed_ids, frozenset)
+            or any(not isinstance(item, str) or not item for item in self.managed_ids)
+        ):
+            raise ValueError("managed_ids must be null or a frozenset of nonempty strings")
         ids = [entry.managed_id for entry in self.entries]
         if len(ids) != len(set(ids)):
             raise ValueError("managed MCP ids must be unique")
+        if self.managed_ids is not None and not set(ids).issubset(self.managed_ids):
+            raise ValueError("entries must belong to the explicit managed_ids subset")
 
     @classmethod
     def from_mapping(cls, value: Mapping[str, Any]) -> ManagedMcpRequest:
         raw_entries = value.get("entries", ())
         if not isinstance(raw_entries, Sequence) or isinstance(raw_entries, (str, bytes)):
             raise ValueError("entries must be a collection")
+        managed_ids = value["managed_ids"]
+        if managed_ids is not None and (
+            not isinstance(managed_ids, (list, tuple))
+            or any(not isinstance(item, str) or not item for item in managed_ids)
+            or len(managed_ids) != len(set(managed_ids))
+        ):
+            raise ValueError("managed_ids must be null or a unique string collection")
         return cls(
             ownership_scope=str(value["ownership_scope"]),
+            managed_ids=None if value["managed_ids"] is None else frozenset(value["managed_ids"]),
             entries=tuple(ManagedMcpEntry.from_mapping(item) for item in raw_entries),
         )
 
     def to_mapping(self) -> dict[str, Any]:
         return {
             "ownership_scope": self.ownership_scope,
+            "managed_ids": None if self.managed_ids is None else sorted(self.managed_ids),
             "entries": [entry.to_mapping() for entry in self.entries],
         }
 

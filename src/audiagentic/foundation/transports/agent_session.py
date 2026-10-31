@@ -204,6 +204,9 @@ _ALLOWED_ATTRIBUTE_KEYS: Mapping[TransportObservationKind, frozenset[str]] = {
             "timing-event",
             "diagnostic-signature",
             "diagnostic-details",
+            "submission-stage",
+            "submission-attempt-id",
+            "send-intent-ever",
         }
     ),
     TransportObservationKind.TERMINAL: frozenset({"stop_reason", "error_code"}),
@@ -437,13 +440,16 @@ class TransportObservation:
 class SessionPrompt:
     """A gateway prompt request for one turn.
 
-    Contains only the turn id, prompt body text, and optional cancellation
-    token/deadline. No provider-native framing or protocol details.
+    Contains the turn id, prompt body text, and optional internal cancellation
+    or captured-completion signals. No provider-native framing or payload.
     """
 
     turn_id: str
     body: str
     cancel_token: object | None = field(default=None, repr=False)
+    # Internal notification that an independently verified response is already
+    # durable. This releases observation only; it is not provider cancellation.
+    completion_token: object | None = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
         _validate_id(self.turn_id, "turn_id")

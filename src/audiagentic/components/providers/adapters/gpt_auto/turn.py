@@ -10,7 +10,6 @@ from collections import Counter
 from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import Any, NoReturn
-from urllib.parse import urlsplit
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.time import now_iso_z
@@ -102,6 +101,18 @@ def _is_durable_assistant_message_id(message_id: str | None) -> bool:
 _REMOUNT_TERMINAL_WITNESS_SIGNALS = frozenset(
     {"completion-control", "more-actions-menu", "response-complete-status"}
 )
+_TERMINAL_CHECKPOINT_IDENTITY_KEYS = (
+    "submission-attempt-id",
+    "prompt-text-digest",
+    "prompt-message-id",
+    "assistant-before-message-id",
+    "assistant-before-id",
+    "unresolved-baseline-user-id",
+    "unresolved-baseline-assistant-id",
+    "unresolved-baseline-user-count",
+    "unresolved-baseline-assistant-count",
+    "unresolved-baseline-error-alert-occurrences",
+)
 
 
 def _text_digest(text: str | None) -> str | None:
@@ -109,6 +120,53 @@ def _text_digest(text: str | None) -> str | None:
     if text is None:
         return None
     return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
+
+
+def _terminal_checkpoint_fingerprints(
+    chat: Any, turn_id: str
+) -> tuple[str | None, str | None]:
+    """Hash both terminal identities from one turn-scoped checkpoint snapshot."""
+    getter = getattr(chat, "terminal_checkpoint_metadata", None)
+    if not callable(getter):
+        return None, None
+    try:
+        checkpoint = getter(turn_id)
+    except Exception:  # noqa: BLE001 - terminal proof must remain best-effort
+        return None, None
+    if (
+        not isinstance(checkpoint, dict)
+        or checkpoint.get("unresolved-turn-id") != turn_id
+        or not isinstance(checkpoint.get("submission-attempt-id"), str)
+        or not checkpoint["submission-attempt-id"]
+    ):
+        return None, None
+    attempt_fingerprint = hashlib.sha256(
+        checkpoint["submission-attempt-id"].encode("utf-8")
+    ).hexdigest()
+    checkpoint_fingerprint: str | None = None
+    if checkpoint.get("submission-proven") is True:
+        identity = {
+            "turn-id": turn_id,
+            "fields": {
+                key: {"present": key in checkpoint, "value": checkpoint.get(key)}
+                for key in _TERMINAL_CHECKPOINT_IDENTITY_KEYS
+            },
+        }
+        encoded = json.dumps(
+            identity, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")
+        checkpoint_fingerprint = hashlib.sha256(encoded).hexdigest()
+    return attempt_fingerprint, checkpoint_fingerprint
+
+
+def _terminal_attempt_fingerprint(chat: Any, turn_id: str) -> str | None:
+    """Return a non-reversible link to the private submission-attempt id."""
+    return _terminal_checkpoint_fingerprints(chat, turn_id)[0]
+
+
+def _terminal_checkpoint_fingerprint(chat: Any, turn_id: str) -> str | None:
+    """Bind terminal proof to the private frozen identity of its own turn."""
+    return _terminal_checkpoint_fingerprints(chat, turn_id)[1]
 
 
 def _advance_with_trace(
@@ -334,13 +392,21 @@ class GptAutoTurn:
         # side_effect_attempted, which also covers ambiguous pre-ack failures.
         self._composer_action_confirmed = False
         self._prompt_message_id: str | None = None
+        self._submission_prompt_correlation_verified = False
+        self._terminal_response_only_proof = False
         self._response_message_id: str | None = None
         self._submission_proof_url: str | None = None
         self._submission_proof_assistant_id: str | None = None
+        # A provider-validated prompt may be live even when the durable
+        # dispatching->proven checkpoint CAS is rejected. Keep observing this
+        # exact turn under the persisted no-replay fence; never represent the
+        # in-memory proof as restart-safe durable proof.
+        self._submission_proof_persist_pending = False
         # Normal turns may retain a confirmed prompt anchor while ChatGPT
         # virtualizes that user node out of later snapshots. Recovery turns
         # remain stricter and use the existing unresolved-correlation rules.
         self._recovered_existing_turn = False
+        self._recovery_correlation_text: str | None = None
         self._submission_settled = asyncio.Event()
         self._done = asyncio.Event()
         # Keep the last bounded observation locally so an unprovable provider
@@ -359,6 +425,7 @@ class GptAutoTurn:
         # own tab position.
         self._completion_materialization_attempted = False
         self._completion_materialization_succeeded = False
+        self._terminal_body_materialization_attempted = False
         self._delivery_timeout_retry_attempted = False
         self._delivery_timeout_retry_probe_failed = False
         self._conversation_load_retry_attempts = 0
@@ -398,7 +465,7 @@ class GptAutoTurn:
 
     def _virtualized_assistant_id(self) -> str | None:
         """Return the durable request-owned assistant identity, if known."""
-        for candidate in (self._submission_proof_assistant_id, self._response_message_id):
+        for candidate in (self._response_message_id, self._submission_proof_assistant_id):
             if _is_durable_assistant_message_id(candidate):
                 return candidate
         return None
@@ -481,6 +548,12 @@ class GptAutoTurn:
         try:
             return await self._run()
         except asyncio.CancelledError:
+            capture_token = getattr(self.request, "completion_token", None)
+            if capture_token is not None and capture_token.is_set():
+                # Local observation was released after a durable gateway
+                # capture. Preserve the exact checkpoint for the owner to
+                # reconcile after this observer relinquishes its turn.
+                raise
             if self.side_effect_attempted:
                 mark_unresolved = getattr(self.chat, "mark_submission_unresolved", None)
                 if mark_unresolved is not None:
@@ -629,6 +702,18 @@ class GptAutoTurn:
             self._move(TurnState.SUBMITTING)
             self._move(TurnState.SIDE_EFFECT_ATTEMPTED)
             current = await self._snapshot_for_observation()
+            if not self.request.body:
+                candidate_text = current.latest_user_correlation_text() or ""
+                expected_digest = checkpoint.get("prompt-text-digest")
+                if (
+                    current.latest_user_id == self._prompt_message_id
+                    and candidate_text and expected_digest
+                    and PromptFingerprint.from_text(candidate_text).digest == expected_digest
+                ):
+                    # Promptless restart is observation-only. Recover a local
+                    # correlation projection, never change raw provenance or
+                    # grant Send authority from reconstructed provider text.
+                    self._recovery_correlation_text = candidate_text
             persisted_alerts = checkpoint.get(
                 "unresolved-baseline-error-alert-occurrences"
             )
@@ -644,12 +729,17 @@ class GptAutoTurn:
                 )
                 self._prompt_message_id = self._prompt_id_for_snapshot(current)
                 derived_prompt_id = True
+                if not self.request.body:
+                    candidate_text = current.latest_user_correlation_text() or ""
+                    if (candidate_text and checkpoint.get("prompt-text-digest")
+                            == PromptFingerprint.from_text(candidate_text).digest):
+                        self._recovery_correlation_text = candidate_text
                 mark_prompt = getattr(self.chat, "mark_prompt_submitted", None)
                 if mark_prompt is not None and self._prompt_message_id is not None:
                     mark_prompt(
                         self._prompt_message_id,
                         checkpoint.get("unresolved-baseline-assistant-id"),
-                        self.request.body,
+                        self.request.body or self._recovery_correlation_text or "",
                     )
             response_ref = _response_ref_for_prompt(current, self._prompt_message_id)
             # Build a synthetic pre-response baseline when the assistant
@@ -681,9 +771,10 @@ class GptAutoTurn:
                 self._response_message_id = response_ref.message_id
             self._baseline_snapshot = baseline
             if derived_prompt_id:
-                persist_identity = getattr(self.chat, "persist_unresolved_identity", None)
-                if persist_identity is not None:
-                    await persist_identity()
+                # This is new observational identity, not another dispatch
+                # or submission-proof transition. Keep the frozen recovered
+                # checkpoint intact until terminal gateway finalization.
+                await self._publish_message_ids(strict=False)
             self._move(TurnState.SUBMITTED)
             self._move(TurnState.AWAITING_RESPONSE)
             final = await self._await_response(
@@ -696,9 +787,11 @@ class GptAutoTurn:
             if final is None:
                 raise RuntimeError("recovered response observation ended without a result")
             await self._publish_message_ids(strict=False)
-            await self._persist_and_clear_unresolved()
+            capture_checkpoint = getattr(self.chat, "capture_terminal_checkpoint_metadata", None)
+            if callable(capture_checkpoint):
+                capture_checkpoint(self.request.turn_id)
             self._move(TurnState.COMPLETE)
-            await self._emit(TransportObservationKind.TERMINAL, {"stop_reason": "end-turn"})
+            await self._emit_terminal_success()
             result = self._result("end-turn")
             return SessionTurnResult(**{**result.__dict__, "final_summary": final, "final_media_type": self._final_media_type})
         except asyncio.CancelledError:
@@ -717,7 +810,9 @@ class GptAutoTurn:
         """Wait through renderer lag before classifying a pre-ID recovery."""
         baseline_count = checkpoint.get("unresolved-baseline-user-count")
         try:
-            baseline_count_value = int(baseline_count)
+            if not isinstance(baseline_count, int) or isinstance(baseline_count, bool) or baseline_count < 0:
+                raise ValueError("invalid recovered baseline count")
+            baseline_count_value = baseline_count
         except (TypeError, ValueError) as exc:
             raise AudiaGenticError(
                 "EXT-GPTAUTO-004", "providers",
@@ -734,8 +829,18 @@ class GptAutoTurn:
         while True:
             candidate_id = current.latest_user_id
             candidate_text = current.latest_user_correlation_text() or ""
-            if current.user_count > baseline_count_value and candidate_id:
-                if not match_prompt(self.request.body, candidate_text):
+            if candidate_id and (
+                current.user_count > baseline_count_value
+                or current.has_ordered_message_advance(
+                    "user", checkpoint.get("unresolved-baseline-user-id"), candidate_id,
+                )
+            ):
+                matches = (
+                    match_prompt(self.request.body, candidate_text) if self.request.body else
+                    bool(checkpoint.get("prompt-text-digest") and candidate_text
+                         and checkpoint["prompt-text-digest"] == PromptFingerprint.from_text(candidate_text).digest)
+                )
+                if not matches:
                     raise AudiaGenticError(
                         "EXT-GPTAUTO-004", "providers",
                         "gpt-auto recovered a conflicting prompt identity",
@@ -773,7 +878,19 @@ class GptAutoTurn:
         )
         if protocol_timeout <= 0:
             protocol_timeout = 30.0
-        return await asyncio.wait_for(self.chat.snapshot(), timeout=protocol_timeout)
+        # Keep outer cancellation distinct from an observation timeout. On
+        # Python 3.11 wait_for can consume cancellation when the snapshot
+        # finishes in the same loop tick, leaving the observer running.
+        observation = asyncio.ensure_future(self.chat.snapshot())
+        try:
+            done, _ = await asyncio.wait({observation}, timeout=protocol_timeout)
+            if not done:
+                raise asyncio.TimeoutError
+            return observation.result()
+        finally:
+            if not observation.done():
+                observation.cancel()
+            await asyncio.gather(observation, return_exceptions=True)
 
     async def _run(self) -> SessionTurnResult:
         if self.cancel_event.is_set():
@@ -830,19 +947,63 @@ class GptAutoTurn:
                     **self._diagnostics(expected_prompt=self.request.body),
                 },
             )
+        if self._terminal_response_only_proof:
+            await self._emit(
+                TransportObservationKind.TIMING,
+                {
+                    "timing-event": "submission-proof-terminal-response-only",
+                },
+            )
         self.submission_confirmed = True
         await self._emit_timing("submit-confirmed")
         mark_activity = getattr(self.chat, "mark_validated_activity", None)
         if callable(mark_activity):
             mark_activity()
         prompt_id = self._prompt_message_id or self._prompt_id_for_snapshot(proof)
-        if prompt_id:
+        if prompt_id and self._submission_prompt_correlation_verified:
             mark_prompt = getattr(self.chat, "mark_prompt_submitted", None)
             if mark_prompt is not None:
                 mark_prompt(prompt_id, baseline.latest_assistant_id, self.request.body)
                 persist_checkpoint = getattr(self.chat, "persist_unresolved_checkpoint", None)
                 if persist_checkpoint is not None:
-                    await persist_checkpoint(turn_id=self.request.turn_id, baseline=baseline)
+                    try:
+                        await persist_checkpoint(
+                            turn_id=self.request.turn_id,
+                            baseline=baseline,
+                        )
+                    except AudiaGenticError as exc:
+                        if not self._can_continue_with_live_submission_proof(
+                            exc,
+                            proof=proof,
+                            baseline=baseline,
+                        ):
+                            raise
+                        self._submission_proof_persist_pending = True
+                        self._terminal_evidence[
+                            "submission-proof-persistence-pending"
+                        ] = True
+                        logger.warning(
+                            "gpt-auto continuing read-only observation after proof checkpoint rejection",
+                            extra={
+                                "turn-id": self.request.turn_id,
+                                "failure-code": exc.code,
+                            },
+                        )
+                        await self._emit_timing(
+                            "submission-proof-persistence-pending"
+                        )
+        elif prompt_id and not self._terminal_response_only_proof:
+            raise AudiaGenticError(
+                code="EXT-GPTAUTO-003",
+                kind="providers",
+                message="gpt-auto rejected an uncorrelated provider prompt identity",
+                details={
+                    "turn-id": self.request.turn_id,
+                    "failure-reason": "provider-prompt-correlation-unverified",
+                    "submission-ambiguous": True,
+                    **self._diagnostics(expected_prompt=self.request.body),
+                },
+            )
         self._move(TurnState.SUBMITTED)
         self._phase = "turn-accepted-observation"
         await self._emit(TransportObservationKind.TURN_ACCEPTED, {"reason": "provider-accepted"})
@@ -912,30 +1073,23 @@ class GptAutoTurn:
         # A repeat projection after terminal proof must not downgrade the
         # proven provider answer.
         await self._publish_message_ids(strict=False)
-        clear_unresolved = getattr(self.chat, "clear_unresolved_turn", None)
-        persist_clear = getattr(self.chat, "persist_unresolved_clear", None)
-        try:
-            if persist_clear is not None:
-                await persist_clear()
-        except Exception:  # noqa: BLE001 - provider completion is already proven
-            self._terminal_evidence["checkpoint-clear-persisted"] = False
-            if self.chat.state not in {
-                ChatState.CLOSED,
-                ChatState.FAILED,
-                ChatState.RECOVERING,
-            }:
-                self._set_chat_state(ChatState.RECOVERING)
-            logger.exception(
-                "gpt-auto terminal checkpoint clear failed; retaining unresolved fence",
-                extra={"turn-id": self.request.turn_id},
-            )
-        else:
-            if clear_unresolved is not None:
-                clear_unresolved()
-            self._terminal_evidence["checkpoint-clear-persisted"] = True
+        capture_terminal_checkpoint = getattr(
+            self.chat, "capture_terminal_checkpoint_metadata", None
+        )
+        if callable(capture_terminal_checkpoint):
+            # Preserve the exact private checkpoint so the gateway can
+            # compare-and-clear it only after the request terminal state and
+            # response artifact are durable. A provider checkpoint write is
+            # request-owner-fenced and must not clear a running request.
+            capture_terminal_checkpoint(self.request.turn_id)
 
         self._move(TurnState.COMPLETE)
 
+        await self._emit_terminal_success()
+        result = self._result("end-turn")
+        return SessionTurnResult(**{**result.__dict__, "final_summary": final, "final_media_type": self._final_media_type})
+
+    async def _emit_terminal_success(self) -> None:
         try:
             await self._emit(
                 TransportObservationKind.TERMINAL,
@@ -947,9 +1101,6 @@ class GptAutoTurn:
                 "gpt-auto terminal observation sink failed after proven completion",
                 extra={"turn-id": self.request.turn_id},
             )
-        result = self._result("end-turn")
-        return SessionTurnResult(**{**result.__dict__, "final_summary": final, "final_media_type": self._final_media_type})
-
     def _require_admitted_project(self, snapshot: ChatSnapshot, *, phase: str) -> None:
         """Fence every browser side effect to the admitted ChatGPT Project."""
         expected = parse_project_id(self.chat.project_url or "")
@@ -999,11 +1150,14 @@ class GptAutoTurn:
             is_new = _new_user_message(self._baseline_snapshot, current) if self._baseline_snapshot else True
             if (
                 is_new
+                and current.latest_user_id
+                and not current.latest_user_id.startswith("fallback-")
                 and match_prompt(
                     self.request.body, current.latest_user_correlation_text() or ""
                 )
             ):
                 self._prompt_message_id = self._prompt_id_for_snapshot(current)
+                self._submission_prompt_correlation_verified = True
                 mark_prompt = getattr(self.chat, "mark_prompt_submitted", None)
                 if mark_prompt is not None and self._prompt_message_id is not None:
                     mark_prompt(
@@ -1058,22 +1212,21 @@ class GptAutoTurn:
             self._remember_snapshot(final_snapshot)
             if (
                 _new_user_message(baseline, final_snapshot)
+                and final_snapshot.latest_user_id
+                and not final_snapshot.latest_user_id.startswith("fallback-")
                 and match_prompt(
                     self.request.body,
                     final_snapshot.latest_user_correlation_text() or "",
                 )
             ):
                 self._prompt_message_id = self._prompt_id_for_snapshot(final_snapshot)
+                self._submission_prompt_correlation_verified = True
                 return final_snapshot
 
-        # A fresh project conversation can virtualize both the user message and
-        # its prompt node after the assistant answer is complete. If the submit
-        # operation attempted a side effect and this page has no baseline
-        # assistant, a newly-created durable assistant with terminal controls is
-        # sufficient to prove this request reached a terminal provider turn.
-        # Keep this fenced to a new project conversation; retained conversations
-        # still require the explicit request anchor to prevent adopting another
-        # turn.
+        # A new project conversation can have a completed response while the
+        # user block is virtualized. Preserve this strong terminal-response
+        # evidence for request output capture, but do not promote it to
+        # submission-proven or persist a synthetic provider prompt ID.
         if final_snapshot is not None:
             baseline_project_id = parse_project_id(baseline.url)
             fresh_project_terminal = (
@@ -1099,9 +1252,11 @@ class GptAutoTurn:
                 self._prompt_message_id = (
                     f"virtualized-prompt-for-{final_snapshot.latest_assistant_id}"
                 )
+                self._terminal_response_only_proof = True
                 self._submission_proof_url = canonical_chat_url(final_snapshot.url)
                 self._submission_proof_assistant_id = final_snapshot.latest_assistant_id
                 return final_snapshot
+
         # A retained duplicate tab may have the accepted prompt mounted even
         # when the originally-bound page was stale or virtualised.  This is a
         # read-only correlation lookup; it never resubmits the prompt.
@@ -1112,8 +1267,18 @@ class GptAutoTurn:
             except Exception as exc:  # noqa: BLE001 - bounded recovery evidence
                 self._last_observation_error = exc
                 alternate = None
-            if alternate is not None:
+            if (
+                alternate is not None
+                and _new_user_message(baseline, alternate)
+                and alternate.latest_user_id
+                and not alternate.latest_user_id.startswith("fallback-")
+                and match_prompt(
+                    self.request.body,
+                    alternate.latest_user_correlation_text() or "",
+                )
+            ):
                 self._prompt_message_id = self._prompt_id_for_snapshot(alternate)
+                self._submission_prompt_correlation_verified = True
                 return alternate
         return None
 
@@ -1144,12 +1309,38 @@ class GptAutoTurn:
         if self.cancel_event.is_set():
             self._move(TurnState.CANCELLED)
             return
+        mark_dispatching = getattr(self.chat, "mark_submission_dispatching", None)
+        if callable(mark_dispatching):
+            await mark_dispatching(turn_id=self.request.turn_id)
         self.side_effect_attempted = True
         try:
             if self.cancel_event.is_set():
                 self._move(TurnState.CANCELLED)
                 return
             self._move(TurnState.SIDE_EFFECT_ATTEMPTED)
+
+            async def record_submission_stage(stage: str) -> None:
+                persist_stage = getattr(self.chat, "persist_submission_stage", None)
+                attempt_id = None
+                if callable(persist_stage):
+                    attempt_id = persist_stage(turn_id=self.request.turn_id, stage=stage)
+                    if asyncio.iscoroutine(attempt_id):
+                        attempt_id = await attempt_id
+                await self._emit(
+                    TransportObservationKind.TIMING,
+                    {
+                        "timing-event": "submission-stage",
+                        "submission-stage": stage,
+                        "send-intent-ever": stage
+                        in {"send-intent", "send-click-acknowledged"},
+                        **(
+                            {"submission-attempt-id": attempt_id}
+                            if isinstance(attempt_id, str) and attempt_id
+                            else {}
+                        ),
+                    },
+                )
+
             browser = getattr(self.chat.runtime, "gpt_browser", None)
             if browser is not None:
                 page = await browser.page_by_handle(self.chat.page_handle)
@@ -1157,8 +1348,13 @@ class GptAutoTurn:
                     page,
                     self.request.body,
                     timeout=self.chat.config.turn.submission_timeout_seconds,
+                    stage_callback=record_submission_stage,
                 )
             else:
+                # Legacy bridge transports expose one opaque submit operation;
+                # persist intent before entering it, but never interpret its
+                # acknowledgement as provider-side submission proof.
+                await record_submission_stage("send-intent")
                 result = await self.chat.runtime.bridge.call(
                     "submit_prompt",
                     {"pageHandle": self.chat.page_handle, "text": self.request.body},
@@ -1188,20 +1384,23 @@ class GptAutoTurn:
                 return
             if proven_unsent:
                 self.side_effect_attempted = False
-                await self._persist_and_clear_unresolved()
+                await self._persist_and_clear_unresolved(proven_unsent=True)
                 await self._publish_message_ids(strict=True)
             raise AudiaGenticError(
                 code="EXT-GPTAUTO-003",
                 kind="providers",
                 message="gpt-auto composer operation timed out before submission was proven",
                 details={
+                    **self._diagnostics(expected_prompt=self.request.body),
                     "turn-id": self.request.turn_id,
                     "failure-reason": "composer-operation-timeout",
+                    "failure-stage": "submission",
+                    "retryable-same-session": proven_unsent,
                     "submission-ambiguous": not proven_unsent,
                     "submission-state": "not_started" if proven_unsent else "ambiguous",
                     "submission-proven": False,
+                    "submission-attempted": not proven_unsent,
                     "submission-stage": exc.stage if isinstance(exc, ComposerSubmissionTimeout) else "unknown",
-                    **self._diagnostics(expected_prompt=self.request.body),
                 },
             ) from exc
         finally:
@@ -1274,6 +1473,7 @@ class GptAutoTurn:
         loop = asyncio.get_running_loop()
         tracker = ObservationTracker(policy=policy, now=loop.time())
         expected_fingerprint = PromptFingerprint.from_text(self.request.body)
+        expanded_prompt_ids: set[str] = set()
         # Edge-triggered, not level-triggered: an unchanged fact observed on
         # every poll (e.g. the new user message still being "new" relative
         # to baseline) must not count as PROGRESS again each time -- only a
@@ -1396,7 +1596,40 @@ class GptAutoTurn:
             new_msg = _new_user_message(baseline, snap)
             text_matches = new_msg and expected_fingerprint.matches_text(
                 snap.latest_user_correlation_text() or ""
-            )
+            ) and bool(snap.latest_user_id) and not snap.latest_user_id.startswith("fallback-")
+            # Long user messages can be physically truncated in a collapsed
+            # DOM node. Expand that exact fresh user once before retrying the
+            # unchanged full prompt fingerprint; never send or refresh here.
+            user_id = snap.latest_user_id
+            browser = getattr(getattr(self.chat, "runtime", None), "gpt_browser", None)
+            expand_prompt = getattr(browser, "expand_user_prompt", None)
+            if (
+                not text_matches and new_msg
+                and isinstance(user_id, str) and user_id
+                and not user_id.startswith(("fallback-", "virtualized-prompt-for-"))
+                and user_id not in set(baseline.user_message_ids)
+                and user_id != baseline.latest_user_id
+                and user_id not in expanded_prompt_ids
+                and callable(expand_prompt)
+                and getattr(self.chat, "page_handle", None)
+                and parse_project_id(snap.url)
+                and parse_project_id(snap.url) == parse_project_id(self.chat.project_url or baseline.url)
+                and (
+                    not parse_provider_session_id(baseline.url)
+                    or canonical_chat_url(snap.url) == canonical_chat_url(baseline.url)
+                )
+            ):
+                expanded_prompt_ids.add(user_id)
+                try:
+                    page = await browser.page_by_handle(self.chat.page_handle)
+                    if canonical_chat_url(page.url) == canonical_chat_url(snap.url):
+                        if await expand_prompt(page, user_id):
+                            await self._emit_timing("submission-proof-prompt-expanded")
+                            continue
+                except ProviderBindingIntegrityError:
+                    raise
+                except Exception as exc:
+                    self._last_observation_error = exc
             user_id_changed = snap.latest_user_id != previous_user_id
             soft_changed = (
                 snap.generating != previous_generating or snap.dom_signals != previous_dom_signals
@@ -1470,11 +1703,16 @@ class GptAutoTurn:
                 and snap.terminal_witness_assistant_id == snap.latest_assistant_id
             )
             if mounted_completed_new_conversation:
-                # A newly-created conversation with real prompt/assistant IDs,
-                # provider-paired ordering, and assistant-owned completion
-                # controls is decisive provider evidence. Do not strand the
-                # request on presentation-only prompt text normalization.
+                # A newly-created conversation with real, ordered provider
+                # prompt/assistant IDs and assistant-owned completion controls
+                # can safely supply a terminal output. If the prompt text
+                # failed correlation this is response-only evidence: never
+                # persist it as provider prompt identity.
                 self._prompt_message_id = snap.latest_user_id
+                if text_matches:
+                    self._submission_prompt_correlation_verified = True
+                else:
+                    self._terminal_response_only_proof = True
                 self._submission_proof_url = canonical_chat_url(snap.url)
                 self._submission_proof_assistant_id = snap.latest_assistant_id
                 return snap
@@ -1495,13 +1733,12 @@ class GptAutoTurn:
                 and snap.terminal_witness_assistant_id == snap.latest_assistant_id
             )
             if prompt_unmounted_completion:
-                # _scope_response_snapshot already has the corresponding
-                # virtualized-prompt safety fence.  Give it a request-local
-                # anchor so the normal response observer can correlate the
-                # fresh assistant without inventing a provider message ID.
+                # Keep a request-local anchor for output scoping only. This
+                # synthetic ID must never be written as submission proof.
                 self._prompt_message_id = (
                     f"virtualized-prompt-for-{snap.latest_assistant_id}"
                 )
+                self._terminal_response_only_proof = True
                 self._submission_proof_url = canonical_chat_url(snap.url)
                 self._submission_proof_assistant_id = snap.latest_assistant_id
                 return snap
@@ -1551,6 +1788,7 @@ class GptAutoTurn:
             previous_dom_activity_digest = snap.dom_activity_digest
             if text_matches:
                 self._prompt_message_id = self._prompt_id_for_snapshot(snap)
+                self._submission_prompt_correlation_verified = True
             outcome = _advance_with_trace(
                 tracker,
                 observation,
@@ -1567,8 +1805,17 @@ class GptAutoTurn:
             finder = getattr(self.chat, "find_prompt_snapshot", None)
             if finder is not None:
                 alternate = await finder(baseline, self.request.body)
-                if alternate is not None:
+                if (
+                    alternate is not None
+                    and _new_user_message(baseline, alternate)
+                    and alternate.latest_user_id
+                    and not alternate.latest_user_id.startswith("fallback-")
+                    and expected_fingerprint.matches_text(
+                        alternate.latest_user_correlation_text() or ""
+                    )
+                ):
                     self._prompt_message_id = self._prompt_id_for_snapshot(alternate)
+                    self._submission_prompt_correlation_verified = True
                     return alternate
             await asyncio.sleep(0.2)
         # The last poll can observe a completed assistant answer while the
@@ -1740,13 +1987,29 @@ class GptAutoTurn:
             raw: ChatSnapshot,
             *,
             allow_legacy_error: bool = False,
-        ) -> tuple[ChatSnapshot, ChatMessageRef | None]:
+        ) -> tuple[ChatSnapshot | None, ChatMessageRef | None]:
+            if (
+                self.chat.provider_session_id
+                and self.chat.chat_url
+                and canonical_chat_url(raw.url) == canonical_chat_url(self.chat.chat_url)
+                and parse_project_id(raw.url) == parse_project_id(self.chat.chat_url)
+                and url_matches_provider_session(raw.url, self.chat.provider_session_id)
+                and _empty_owned_response_identity_transient(
+                    baseline, raw, prompt_message_id=prompt_message_id or "",
+                    prompt_text=self.request.body or self._recovery_correlation_text,
+                    bound_assistant_id=self._response_message_id,
+                )
+            ):
+                # Retain the pin; an empty renderer candidate is neither a new
+                # response nor progress. The outer observation policy still
+                # owns cancellation and deadlines.
+                return None, None
             try:
                 return _scope_response_snapshot(
                     baseline,
                     raw,
                     prompt_message_id=prompt_message_id or "",
-                    prompt_text=self.request.body,
+                    prompt_text=self.request.body or self._recovery_correlation_text,
                     allow_virtualized_prompt=not self._recovered_existing_turn,
                     virtualized_assistant_id=self._virtualized_assistant_id(),
                     bound_assistant_id=self._response_message_id,
@@ -1754,8 +2017,49 @@ class GptAutoTurn:
                     allow_empty_baseline_virtualized_assistant=(
                         allow_empty_baseline_virtualized_assistant
                     ),
+                    allow_proven_submission_virtualized_assistant=(
+                        self.submission_confirmed or self._recovered_existing_turn
+                    ),
                 )
             except ProviderBindingIntegrityError as exc:
+                remount = _owned_prompt_response_remount(
+                    baseline, raw, prompt_message_id=prompt_message_id or "",
+                    prompt_text=self.request.body or self._recovery_correlation_text,
+                    old_assistant_id=(
+                        self._response_message_id
+                        if self._response_message_id != raw.latest_assistant_id
+                        else self._virtualized_assistant_id()
+                    ),
+                )
+                if remount is not None:
+                    # The request/conversation and unique ordered prompt span
+                    # are authoritative. A DOM UUID/ordinal is only a hint.
+                    # Re-scope using the observed node; completion still goes
+                    # through the unchanged independent stability verifier.
+                    return _scope_response_snapshot(
+                        baseline, raw, prompt_message_id=prompt_message_id or "",
+                        prompt_text=self.request.body or self._recovery_correlation_text,
+                        bound_assistant_id=remount.message_id,
+                        virtualized_assistant_id=remount.message_id,
+                    )
+                terminal_remount = _terminal_single_response_remount(
+                    baseline,
+                    raw,
+                    prompt_message_id=prompt_message_id or "",
+                    prompt_text=self.request.body or self._recovery_correlation_text,
+                )
+                if terminal_remount is not None:
+                    # ChatGPT can replace the completed assistant node while
+                    # preserving the exact latest prompt and terminal DOM
+                    # witness.  Treat that as a safe response-slot remount,
+                    # not as an ownership failure.  This path is terminal-
+                    # only and never permits a streaming or ambiguous turn.
+                    self._response_message_id = terminal_remount.message_id
+                    mark_assistant = getattr(self.chat, "mark_assistant_observed", None)
+                    if mark_assistant is not None:
+                        mark_assistant(terminal_remount.message_id)
+                    await self._publish_message_ids(strict=True)
+                    return raw, terminal_remount
                 await self._log_response_decision_diagnostics(
                     _response_decision_diagnostics(
                         baseline,
@@ -1777,6 +2081,10 @@ class GptAutoTurn:
                         correlation_error=str(exc),
                     )
                 )
+                if _assistant_identity_is_pending(raw, baseline, prompt_message_id or ""):
+                    # No replay, refresh, terminal state or synthetic work
+                    # activity merely because a renderer identity is unclear.
+                    return None, None
                 raise
 
         def _replacement_proven(raw: ChatSnapshot, new_id: str) -> bool:
@@ -1796,44 +2104,11 @@ class GptAutoTurn:
                 or observed_url != bound_url
             ):
                 return False
-            return (
-                _fallback_prompt_anchor_is_stable(
-                    baseline, raw, prompt_message_id, prompt_text=self.request.body
-                )
-                and (
-                    _is_fallback_assistant_message_id(old_id)
-                    or _terminal_same_response_slot_replacement(
-                        raw,
-                        prompt_message_id=prompt_message_id,
-                        old_assistant_id=old_id,
-                        new_assistant_id=new_id,
-                    )
-                    or _terminal_same_turn_response_replacement(
-                        raw,
-                        prompt_message_id=prompt_message_id,
-                        old_assistant_id=old_id,
-                        new_assistant_id=new_id,
-                    )
-                )
-                and (
-                    _is_fallback_assistant_message_id(new_id)
-                    or _is_durable_assistant_message_id(new_id)
-                )
-                and (
-                    _same_response_slot_replacement(
-                        raw,
-                        prompt_message_id=prompt_message_id,
-                        old_assistant_id=old_id,
-                        new_assistant_id=new_id,
-                    )
-                    or _terminal_same_turn_response_replacement(
-                        raw,
-                        prompt_message_id=prompt_message_id,
-                        old_assistant_id=old_id,
-                        new_assistant_id=new_id,
-                    )
-                )
+            remount = _owned_prompt_response_remount(
+                baseline, raw, prompt_message_id=prompt_message_id,
+                prompt_text=self.request.body or self._recovery_correlation_text, old_assistant_id=old_id,
             )
+            return remount is not None and remount.message_id == new_id
 
         seen_progress_blocks: Counter[ChatProgressBlock] = Counter()
         # GP47 (2026-08-19): _advance_with_trace only logs on a tracker STATE
@@ -2058,6 +2333,10 @@ class GptAutoTurn:
                 # its duplicate-tab finder fallback always set this before
                 # _await_response() can be reached.
                 current, response_ref = raw_current, None
+            if current is None:
+                tracker = ObservationTracker(policy=policy, now=loop.time())
+                await asyncio.sleep(self.chat.config.turn.poll_interval_seconds)
+                continue
             if (
                 current.generating
                 or bool(current.progress_blocks)
@@ -2087,14 +2366,74 @@ class GptAutoTurn:
             # this recovery path because stale stop controls are deliberately
             # advisory elsewhere. When generating is still reported, require
             # one unchanged correlated response observation before attempting.
+            pinned_terminal_body_unmounted = bool(
+                response_ref is None
+                and request_activity_response_id
+                and request_activity_response_id == self._response_message_id
+                and request_activity_response_text
+                and current.terminal_witness_assistant_id
+                == request_activity_response_id
+                and not current.generating
+                and not current.error_present
+                and not current.dom_signals.intersection(
+                    {
+                        "auth-required",
+                        "provider-interruption",
+                        "conversation-load-failed",
+                        "request-error-alert",
+                        "network-error-alert",
+                        "stream-cache-expired",
+                    }
+                )
+                and current.dom_signals.intersection(
+                    {"completion-control", "response-complete-status"}
+                )
+                and same_chat_identity(current.url, baseline.url)
+                and same_chat_identity(current.url, self.chat.chat_url or baseline.url)
+                and (
+                    not self.chat.provider_session_id
+                    or url_matches_provider_session(
+                        current.url, self.chat.provider_session_id
+                    )
+                )
+                and (
+                    current.latest_assistant_id is None
+                    or current.latest_assistant_id == request_activity_response_id
+                )
+                and (
+                    current.latest_user_id is None
+                    or current.latest_user_id == prompt_message_id
+                )
+                and (
+                    current.user_count == 0
+                    or current.latest_user_id == prompt_message_id
+                )
+                and all(
+                    user_id == prompt_message_id for user_id in current.user_message_ids
+                )
+                and not any(
+                    ref.role == "assistant"
+                    and ref.message_id != request_activity_response_id
+                    for ref in current.message_refs
+                )
+            )
+            should_materialize_terminal_body = (
+                pinned_terminal_body_unmounted
+                and not self._terminal_body_materialization_attempted
+            )
             if (
-                not self._completion_materialization_attempted
-                and response_ref is not None
-                and current.latest_assistant_text
-                and (not current.generating or response_content_stable)
-                and not (current.dom_signals & self._TERMINAL_WITNESS_SIGNALS)
+                (
+                    not self._completion_materialization_attempted
+                    and response_ref is not None
+                    and current.latest_assistant_text
+                    and (not current.generating or response_content_stable)
+                    and not (current.dom_signals & self._TERMINAL_WITNESS_SIGNALS)
+                )
+                or should_materialize_terminal_body
             ):
                 self._completion_materialization_attempted = True
+                if should_materialize_terminal_body:
+                    self._terminal_body_materialization_attempted = True
                 materialize = getattr(self.chat, "materialize_latest_assistant_turn", None)
                 if callable(materialize):
                     try:
@@ -2136,6 +2475,10 @@ class GptAutoTurn:
                                 extra={"turn-id": self.request.turn_id},
                                 exc_info=True,
                             )
+            if current is None:
+                tracker = ObservationTracker(policy=policy, now=loop.time())
+                await asyncio.sleep(self.chat.config.turn.poll_interval_seconds)
+                continue
             now = loop.time()
             adopted_same_slot_replacement = False
             verification_replacement_adopted = False
@@ -2207,6 +2550,9 @@ class GptAutoTurn:
                     completion_satisfied=complete.satisfied,
                     completion_matched=complete.matched,
                     correlation_error=None,
+                    terminal_body_materialization_attempted=(
+                        self._terminal_body_materialization_attempted
+                    ),
                 )
             )
             id_only_replacement = (
@@ -2686,6 +3032,10 @@ class GptAutoTurn:
                 else:
                     verify = raw_verify
                     verify_ref = None
+                if verify is None:
+                    tracker = ObservationTracker(policy=policy, now=loop.time())
+                    await asyncio.sleep(self.chat.config.turn.poll_interval_seconds)
+                    continue
                 verify_facts = _facts(baseline, current, verify)
                 if verify_facts.get("auth-required"):
                     raise AudiaGenticError(
@@ -2809,6 +3159,17 @@ class GptAutoTurn:
                     if "verified" in locals()
                     else [],
                 }
+                attempt_fingerprint, checkpoint_fingerprint = (
+                    _terminal_checkpoint_fingerprints(self.chat, self.request.turn_id)
+                )
+                if attempt_fingerprint is not None:
+                    self._terminal_evidence[
+                        "submission-attempt-fingerprint"
+                    ] = attempt_fingerprint
+                if checkpoint_fingerprint is not None:
+                    self._terminal_evidence[
+                        "submission-checkpoint-fingerprint"
+                    ] = checkpoint_fingerprint
                 mark_activity = getattr(self.chat, "mark_validated_activity", None)
                 if callable(mark_activity):
                     mark_activity()
@@ -2925,9 +3286,11 @@ class GptAutoTurn:
                 extra={"turn-id": self.request.turn_id, "stop-executed": stopped},
             )
 
-    async def _persist_and_clear_unresolved(self) -> None:
+    async def _persist_and_clear_unresolved(self, *, proven_unsent: bool = False) -> None:
         """Persist removal of the recovery fence before clearing memory."""
-        persist_clear = getattr(self.chat, "persist_unresolved_clear", None)
+        persist_clear = (
+            getattr(self.chat, "persist_proven_unsent_clear", None) if proven_unsent else None
+        ) or getattr(self.chat, "persist_unresolved_clear", None)
         if persist_clear is not None:
             await persist_clear()
         clear_unresolved = getattr(self.chat, "clear_unresolved_turn", None)
@@ -3040,7 +3403,7 @@ class GptAutoTurn:
             "conversation-load-failure-max-attempts": recovery.conversation_load_failure_max_attempts,
         }
         text = getattr(snapshot, "latest_assistant_text", None) if snapshot else None
-        if not isinstance(text, str) or not text.strip():
+        if not submission_attempted or not isinstance(text, str) or not text.strip():
             return {
                 "failure-response-available": False,
                 "submission-proven": submission_proven,
@@ -3149,6 +3512,34 @@ class GptAutoTurn:
         unresolved_metadata = getattr(self.chat, "unresolved_metadata", None)
         if unresolved_metadata is not None:
             metadata.update(unresolved_metadata())
+        # Terminal checkpoint identity is handed to SessionRuntime through
+        # GptAutoSessionTransport. Do not leak digests or provider message IDs
+        # through the public turn-result metadata projection.
+        for key in (
+            "target-id",
+            "unresolved-turn-id",
+            "unresolved-baseline-user-id",
+            "unresolved-baseline-assistant-id",
+            "unresolved-baseline-user-count",
+            "unresolved-baseline-assistant-count",
+            "unresolved-baseline-error-alert-occurrences",
+            "prompt-text-digest",
+            "prompt-message-id",
+            "assistant-message-id",
+            "assistant-before-message-id",
+            "assistant-before-id",
+            "submission-state",
+            "submission-attempt-id",
+            "submission-stage",
+            "send-intent-ever",
+            "submission-proven",
+            "submission-proof-source",
+            "submission-recovery-claim",
+            "submission-recovery-generation",
+            "submission-proof-persistence-pending",
+            "unresolved-turn-pending",
+        ):
+            metadata.pop(key, None)
         if self._terminal_evidence:
             metadata["terminal-evidence"] = dict(self._terminal_evidence)
         return SessionTurnResult(
@@ -3162,6 +3553,12 @@ class GptAutoTurn:
 
     async def _publish_message_ids(self, *, strict: bool = False) -> None:
         """Persist proven prompt identity before response observation begins."""
+        if self._submission_proof_persist_pending:
+            # acquire_provider_identity() has already persisted the exact
+            # conversation URL/ref. Replaying the rejected proof metadata
+            # through another sink would only repeat the failed CAS and could
+            # terminalize a healthy live response before observation.
+            return
         if not self.chat.provider_session_id:
             return
         metadata = _message_ids(self)
@@ -3213,6 +3610,67 @@ class GptAutoTurn:
                 extra={"turn-id": self.request.turn_id},
                 exc_info=True,
             )
+
+    def _can_continue_with_live_submission_proof(
+        self,
+        exc: AudiaGenticError,
+        *,
+        proof: ChatSnapshot,
+        baseline: ChatSnapshot,
+    ) -> bool:
+        """Permit read-only live observation after a narrowly proven CAS reject.
+
+        This never upgrades the durable checkpoint. It requires the exact
+        request owner and unresolved dispatch fence to remain current, plus
+        the in-memory exact prompt correlation already established by the
+        provider watcher. Missing facts fail closed.
+        """
+        if (
+            exc.code != "CON-AGW-125"
+            or not self.submission_confirmed
+            or not self._submission_prompt_correlation_verified
+            or not isinstance(self._prompt_message_id, str)
+            or not self._prompt_message_id.strip()
+        ):
+            return False
+        expected_project_id = parse_project_id(self.chat.project_url or "")
+        observed_project_id = parse_project_id(proof.url)
+        provider_session_id = parse_provider_session_id(proof.url)
+        if (
+            not expected_project_id
+            or observed_project_id != expected_project_id
+            or not provider_session_id
+            or not match_prompt(
+                self.request.body,
+                proof.latest_user_correlation_text() or "",
+            )
+            or (
+                parse_provider_session_id(baseline.url)
+                and provider_session_id != parse_provider_session_id(baseline.url)
+            )
+        ):
+            return False
+        details = exc.details if isinstance(exc.details, dict) else {}
+        predicates = details.get("checkpoint-diagnostics")
+        if not isinstance(predicates, dict):
+            return False
+        return (
+            predicates.get("observed-stage") == "dispatching"
+            and predicates.get("requested-stage") == "proven"
+            and predicates.get("unresolved-turn-pending") is True
+            and predicates.get("turn-id-matches-request") is True
+            and predicates.get("claim-id-supplied") is False
+            and predicates.get("claim-present") is False
+            and predicates.get("claim-generation-present") is False
+            and predicates.get("submission-proven") is False
+            and predicates.get("request-recovery-required") is False
+            and predicates.get("proof-source-valid") is True
+            and predicates.get("proof-update-keys-safe") is True
+            and predicates.get("baseline-user-count-matches") is True
+            and predicates.get("baseline-assistant-count-matches") is True
+            and predicates.get("fingerprint-equal") is True
+            and predicates.get("request-owner-is-current") is True
+        )
 
 
 def _tool_activity_signals(
@@ -3306,6 +3764,130 @@ def _response_ref_for_prompt(
     return None
 
 
+def _owned_prompt_response_remount(
+    baseline: ChatSnapshot, snapshot: ChatSnapshot, *,
+    prompt_message_id: str, prompt_text: str,
+    old_assistant_id: str | None,
+) -> ChatMessageRef | None:
+    """Correlate a rendered replacement by the owned prompt, not UUID stability."""
+    if (
+        not old_assistant_id or not snapshot.latest_assistant_id
+        or snapshot.error_present
+        or not same_chat_identity(baseline.url, snapshot.url)
+        or not (_same_response_slot_replacement(
+            snapshot, prompt_message_id=prompt_message_id,
+            old_assistant_id=old_assistant_id,
+            new_assistant_id=snapshot.latest_assistant_id,
+        ) or _terminal_owned_response_span(snapshot, prompt_message_id) is not None)
+        or not _fallback_prompt_anchor_is_stable(
+            baseline, snapshot, prompt_message_id, prompt_text=prompt_text,
+        )
+    ):
+        return None
+    prompts = [ref for ref in snapshot.message_refs
+               if ref.role == "user" and ref.message_id == prompt_message_id]
+    if len(prompts) != 1 or not PromptFingerprint.from_text(prompt_text).matches_text(
+        prompts[0].correlation_text or prompts[0].text or ""
+    ):
+        return None
+    return next(ref for ref in snapshot.message_refs
+                if ref.role == "assistant" and ref.message_id == snapshot.latest_assistant_id)
+
+
+def _terminal_owned_response_span(snapshot: ChatSnapshot, prompt_message_id: str) -> ChatMessageRef | None:
+    """Select the terminal final node, not a renderer UUID, within an owned turn.
+
+    Callers must additionally prove conversation identity and the full prompt
+    fingerprint. This is correlation only; stability and fresh verification
+    still decide completion. Intermediate assistant nodes need not retain the
+    ID observed during streaming.
+    """
+    if (snapshot.error_present or snapshot.generating
+            or snapshot.latest_user_id != prompt_message_id
+            or not snapshot.latest_assistant_text
+            or snapshot.terminal_witness_assistant_id != snapshot.latest_assistant_id
+            or not snapshot.dom_signals & _REMOUNT_TERMINAL_WITNESS_SIGNALS):
+        return None
+    refs = snapshot.message_refs
+    indexes = [i for i, ref in enumerate(refs)
+               if ref.role == "user" and ref.message_id == prompt_message_id]
+    if len(indexes) != 1:
+        return None
+    tail = refs[indexes[0] + 1:]
+    if not tail or any(ref.role != "assistant" for ref in tail):
+        return None
+    ids = [ref.message_id for ref in tail]
+    prompt = refs[indexes[0]]
+    if not (len(ids) == 2 and all(ids) and len(set(ids)) == len(ids)
+            and ids[-1] == snapshot.latest_assistant_id
+            and prompt.renderer_turn_id
+            and all(ref.renderer_turn_id == prompt.renderer_turn_id for ref in tail)
+            and tail[0].renderer_unit_id
+            and tail[0].renderer_unit_id == tail[1].renderer_unit_id
+            and tail[0].sequence < tail[1].sequence):
+        return None
+    return tail[-1]
+
+
+def _empty_owned_response_identity_transient(
+    baseline: ChatSnapshot, snapshot: ChatSnapshot, *,
+    prompt_message_id: str, prompt_text: str, bound_assistant_id: str | None,
+) -> bool:
+    """Defer an empty prompt-correlated candidate without authorizing rebind."""
+    if (
+        not bound_assistant_id or not prompt_text
+        or snapshot.error_present or snapshot.latest_assistant_text
+        or not snapshot.latest_assistant_id
+        or snapshot.latest_assistant_id == bound_assistant_id
+        or snapshot.latest_assistant_id == baseline.latest_assistant_id
+        or snapshot.latest_assistant_id in baseline.assistant_message_ids
+        or any(ref.role == "assistant" and ref.message_id == snapshot.latest_assistant_id
+               for ref in baseline.message_refs)
+        or snapshot.latest_user_id != prompt_message_id
+        or not same_chat_identity(baseline.url, snapshot.url)
+        or not _fallback_prompt_anchor_is_stable(
+            baseline, snapshot, prompt_message_id, prompt_text=prompt_text,
+        )
+    ):
+        return False
+    prompts = [i for i, ref in enumerate(snapshot.message_refs)
+               if ref.role == "user" and ref.message_id == prompt_message_id]
+    if len(prompts) != 1:
+        return False
+    prompt = snapshot.message_refs[prompts[0]]
+    if not PromptFingerprint.from_text(prompt_text).matches_text(
+        prompt.correlation_text or prompt.text or ""
+    ):
+        return False
+    tail = snapshot.message_refs[prompts[0] + 1:]
+    candidates = [ref for ref in tail
+                  if ref.role == "assistant" and ref.message_id == snapshot.latest_assistant_id]
+    return bool(
+        len(candidates) == 1
+        and not any(ref.role == "user" for ref in tail)
+        and not candidates[0].text and not candidates[0].markdown
+        and not (prompt.renderer_turn_id and candidates[0].renderer_turn_id
+                 and prompt.renderer_turn_id != candidates[0].renderer_turn_id)
+    )
+
+
+def _assistant_identity_is_pending(
+    snapshot: ChatSnapshot, baseline: ChatSnapshot, prompt_message_id: str,
+) -> bool:
+    """Ambiguous renderer evidence is not proof of provider/request failure."""
+    if not same_chat_identity(snapshot.url, baseline.url):
+        return False
+    prompts = [index for index, ref in enumerate(snapshot.message_refs)
+               if ref.role == "user" and ref.message_id == prompt_message_id]
+    if len(prompts) == 1 and snapshot.latest_user_id == prompt_message_id:
+        return not any(ref.role == "user" for ref in snapshot.message_refs[prompts[0] + 1:])
+    # Prompt virtualization without any explicit later user is uncertainty,
+    # not evidence authorizing capture or a terminal ownership failure.
+    return snapshot.latest_user_id is None and not any(
+        ref.role == "user" for ref in snapshot.message_refs
+    )
+
+
 def _same_response_slot_replacement(
     snapshot: ChatSnapshot,
     *,
@@ -3351,14 +3933,14 @@ def _same_response_slot_replacement(
     return snapshot.latest_assistant_id == new_assistant_id
 
 
-def _terminal_same_response_slot_replacement(
+def _terminal_response_replacement(
     snapshot: ChatSnapshot,
     *,
     prompt_message_id: str,
     old_assistant_id: str,
     new_assistant_id: str,
 ) -> bool:
-    """Allow a durable assistant ID to change only after a proven remount.
+    """Shared terminal replacement proof for observation and operator capture.
 
     The provider can rematerialize the completed assistant node with a new
     ``data-message-id``.  A durable-ID change is normally unsafe, but it is
@@ -3368,11 +3950,19 @@ def _terminal_same_response_slot_replacement(
     a transient streaming remount from masking a submission/ownership bug.
     """
     return (
-        _same_response_slot_replacement(
+        not snapshot.error_present
+        and new_assistant_id != old_assistant_id
+        and (
+            _same_response_slot_replacement(
             snapshot,
             prompt_message_id=prompt_message_id,
             old_assistant_id=old_assistant_id,
             new_assistant_id=new_assistant_id,
+            )
+            or (
+                (selected := _terminal_owned_response_span(snapshot, prompt_message_id)) is not None
+                and selected.message_id == new_assistant_id
+            )
         )
         and not snapshot.generating
         and bool(snapshot.latest_assistant_text)
@@ -3381,48 +3971,62 @@ def _terminal_same_response_slot_replacement(
     )
 
 
-def _terminal_same_turn_response_replacement(
+def _terminal_single_response_remount(
+    baseline: ChatSnapshot,
     snapshot: ChatSnapshot,
     *,
     prompt_message_id: str,
-    old_assistant_id: str,
-    new_assistant_id: str,
-) -> bool:
-    """Prove a terminal assistant remount within one prompt turn.
+    prompt_text: str | None,
+) -> ChatMessageRef | None:
+    """Recover a completed response after a terminal assistant remount.
 
-    Some ChatGPT renderer revisions briefly retain the old assistant node
-    while mounting the terminal replacement.  The ordinary slot predicate
-    deliberately rejects that overlap because it is ambiguous in a normal
-    snapshot.  This narrower terminal-only predicate is safe when the
-    prompt is still the latest user turn, exactly two assistant nodes occupy
-    that turn (the bound node and its replacement), and the replacement is
-    the independent terminal witness.
+    The renderer may expose only the newly materialized assistant node after
+    replacing the node that was pinned during submission.  This is safe only
+    when the same conversation contains one uniquely matching latest prompt,
+    one assistant in that prompt span, and an independent terminal witness.
     """
-    if not new_assistant_id or new_assistant_id == old_assistant_id:
-        return False
-    if snapshot.latest_user_id != prompt_message_id:
-        return False
-    prompt_indexes = [
-        index
-        for index, ref in enumerate(snapshot.message_refs)
+    if snapshot.generating or not snapshot.latest_assistant_text:
+        return None
+    if snapshot.latest_assistant_id != snapshot.terminal_witness_assistant_id:
+        return None
+    if not _is_durable_assistant_message_id(baseline.latest_assistant_id):
+        return None
+    if not _is_durable_assistant_message_id(snapshot.latest_assistant_id):
+        return None
+    if not snapshot.dom_signals & _REMOUNT_TERMINAL_WITNESS_SIGNALS:
+        return None
+    if not same_chat_identity(snapshot.url, baseline.url):
+        return None
+
+    prompt_refs = [
+        ref
+        for ref in snapshot.message_refs
         if ref.role == "user" and ref.message_id == prompt_message_id
     ]
-    if len(prompt_indexes) != 1:
-        return False
-    tail = snapshot.message_refs[prompt_indexes[0] + 1 :]
-    if any(ref.role == "user" for ref in tail):
-        return False
-    assistants = [ref for ref in tail if ref.role == "assistant"]
-    return (
-        len(assistants) == 2
-        and assistants[0].message_id == old_assistant_id
-        and assistants[1].message_id == new_assistant_id
-        and snapshot.latest_assistant_id == new_assistant_id
-        and snapshot.terminal_witness_assistant_id == new_assistant_id
-        and not snapshot.generating
-        and bool(snapshot.latest_assistant_text)
-        and bool(snapshot.dom_signals & _REMOUNT_TERMINAL_WITNESS_SIGNALS)
+    if not prompt_refs and prompt_text:
+        prompt_digest = PromptFingerprint.from_text(prompt_text).digest
+        prompt_refs = [
+            ref
+            for ref in snapshot.message_refs
+            if ref.role == "user"
+            and PromptFingerprint.from_text(ref.correlation_text or ref.text or "").digest
+            == prompt_digest
+        ]
+    if len(prompt_refs) != 1 or snapshot.latest_user_id != prompt_refs[0].message_id:
+        return None
+    prompt_index = next(
+        index
+        for index, ref in enumerate(snapshot.message_refs)
+        if ref is prompt_refs[0]
     )
+    tail = snapshot.message_refs[prompt_index + 1 :]
+    assistants = [ref for ref in tail if ref.role == "assistant"]
+    if any(ref.role == "user" for ref in tail) or len(assistants) != 1:
+        return None
+    assistant = assistants[0]
+    if assistant.message_id != snapshot.latest_assistant_id:
+        return None
+    return assistant
 
 
 def _scope_response_snapshot(
@@ -3436,6 +4040,7 @@ def _scope_response_snapshot(
     bound_assistant_id: str | None = None,
     allow_legacy_owned_error_alert: bool = False,
     allow_empty_baseline_virtualized_assistant: bool = False,
+    allow_proven_submission_virtualized_assistant: bool = False,
 ) -> tuple[ChatSnapshot, ChatMessageRef | None]:
     """Project a raw snapshot onto this request's own response, not
     whatever is conversation-global-latest.
@@ -3456,6 +4061,17 @@ def _scope_response_snapshot(
             "provider conversation changed during response observation"
         )
     response_ref = _response_ref_for_prompt(snapshot, prompt_message_id)
+    terminal_remount = (
+        _owned_prompt_response_remount(
+                baseline, snapshot, prompt_message_id=prompt_message_id,
+                prompt_text=prompt_text, old_assistant_id=bound_assistant_id,
+            ) if prompt_text and bound_assistant_id else None
+    )
+    if terminal_remount is not None and _terminal_owned_response_span(snapshot, prompt_message_id):
+        response_ref = terminal_remount
+        # The selected final node, not the first intermediate node, is now
+        # the scoped hint. Publishing still requires _replacement_proven.
+        virtualized_assistant_id = terminal_remount.message_id
     if (
         response_ref is not None
         and not _fallback_prompt_anchor_is_stable(
@@ -3466,6 +4082,37 @@ def _scope_response_snapshot(
         # visible user-turn anchor advances, do not correlate a later
         # response even when its text is identical.
         response_ref = None
+    if (
+        response_ref is not None
+        and bound_assistant_id
+        and response_ref.message_id == bound_assistant_id
+        and snapshot.latest_assistant_id
+        and snapshot.latest_assistant_id != bound_assistant_id
+        and _terminal_response_replacement(
+            snapshot,
+            prompt_message_id=prompt_message_id,
+            old_assistant_id=bound_assistant_id,
+            new_assistant_id=snapshot.latest_assistant_id,
+        )
+    ):
+        # The trace can contain both the assistant node pinned while output
+        # was streaming and a later terminal node for the same prompt turn.
+        # _response_ref_for_prompt() deliberately returns the first assistant
+        # in the prompt span, which otherwise leaves response_ref bound to the
+        # older node forever even though the newer node is the terminal
+        # witness. Adopt the latter only under the same narrow terminal
+        # replacement proof used when the old node has already unmounted.
+        terminal_ref = next(
+            (
+                ref
+                for ref in reversed(snapshot.message_refs)
+                if ref.role == "assistant"
+                and ref.message_id == snapshot.latest_assistant_id
+            ),
+            None,
+        )
+        if terminal_ref is not None:
+            response_ref = terminal_ref
     request_error_alert = _request_error_alert_is_owned(
         baseline,
         snapshot,
@@ -3606,7 +4253,7 @@ def _scope_response_snapshot(
             )
             if (
                 latest_assistant_ref is not None
-                and _terminal_same_turn_response_replacement(
+                and _terminal_response_replacement(
                     snapshot,
                     prompt_message_id=matched_prompt_id,
                     old_assistant_id=bound_assistant_id,
@@ -3676,6 +4323,24 @@ def _scope_response_snapshot(
             and snapshot.assistant_message_ids[0] == snapshot.latest_assistant_id
             and _is_durable_assistant_message_id(snapshot.latest_assistant_id)
         )
+        baseline_assistant_ids = set(baseline.assistant_message_ids)
+        fresh_assistant_ids = set(snapshot.assistant_message_ids) - baseline_assistant_ids
+        if not fresh_assistant_ids:
+            fresh_assistant_ids = {
+                ref.message_id
+                for ref in assistant_refs
+                if ref.message_id not in baseline_assistant_ids
+            }
+        proven_submission_terminal_assistant = (
+            allow_proven_submission_virtualized_assistant
+            and fresh_assistant
+            and len(fresh_assistant_ids) == 1
+            and _is_durable_assistant_message_id(snapshot.latest_assistant_id)
+            and not snapshot.generating
+            and bool(
+                _REMOUNT_TERMINAL_WITNESS_SIGNALS <= snapshot.dom_signals
+            )
+        )
         if (
             fresh_assistant
             and prompt_unmounted
@@ -3683,6 +4348,7 @@ def _scope_response_snapshot(
             and terminal_bound
             and virtualized_assistant_id is None
             and not empty_baseline_first_assistant
+            and not proven_submission_terminal_assistant
         ):
             # A prompt-unmounted assistant is request-owned only when its
             # identity was pinned during submission proof. Without that
@@ -3705,7 +4371,11 @@ def _scope_response_snapshot(
             and prompt_unmounted
             and same_conversation
             and terminal_bound
-            and (virtualized_assistant_id is not None or empty_baseline_first_assistant)
+            and (
+                virtualized_assistant_id is not None
+                or empty_baseline_first_assistant
+                or proven_submission_terminal_assistant
+            )
         ):
             response_ref = ChatMessageRef(
                 role="assistant",
@@ -4022,6 +4692,7 @@ def _response_decision_diagnostics(
     completion_satisfied: bool,
     completion_matched: object,
     correlation_error: str | None,
+    terminal_body_materialization_attempted: bool = False,
 ) -> dict[str, Any]:
     """Return content-free correlation and completion gates for one poll.
 
@@ -4032,6 +4703,21 @@ def _response_decision_diagnostics(
     """
     raw_assistant_refs = tuple(ref for ref in raw.message_refs if ref.role == "assistant")
     raw_user_refs = tuple(ref for ref in raw.message_refs if ref.role == "user")
+    prompt_refs = tuple(
+        ref for ref in raw_user_refs if prompt_message_id and ref.message_id == prompt_message_id
+    )
+    prompt_ref = prompt_refs[-1] if prompt_refs else None
+    refs_after_prompt = tuple(
+        ref
+        for ref in raw.message_refs
+        if prompt_ref is not None and ref.sequence > prompt_ref.sequence
+    )
+    user_refs_after_prompt = tuple(
+        ref for ref in refs_after_prompt if ref.role == "user"
+    )
+    assistant_refs_after_prompt = tuple(
+        ref for ref in refs_after_prompt if ref.role == "assistant"
+    )
     terminal_id = raw.terminal_witness_assistant_id
     latest_id = raw.latest_assistant_id
     response_id = response_ref.message_id if response_ref is not None else None
@@ -4120,6 +4806,19 @@ def _response_decision_diagnostics(
             prompt_message_id
             and any(ref.message_id == prompt_message_id for ref in raw_user_refs)
         ),
+        "turn-anchor-ref-count": len(prompt_refs),
+        "turn-anchor-ref-sequence": prompt_ref.sequence if prompt_ref is not None else None,
+        "refs-after-anchor-user-count": len(user_refs_after_prompt),
+        "refs-after-anchor-assistant-count": len(assistant_refs_after_prompt),
+        "latest-user-matches-turn-anchor": bool(
+            prompt_message_id and raw.latest_user_id == prompt_message_id
+        ),
+        "latest-assistant-matches-terminal-witness": bool(
+            latest_id and terminal_id and latest_id == terminal_id
+        ),
+        "assistant-id-changed-from-bound": bool(
+            bound_assistant_id and latest_id and bound_assistant_id != latest_id
+        ),
         "prompt-unmounted": prompt_unmounted,
         "latest-assistant-durable": _is_durable_assistant_message_id(latest_id),
         "response-ref-present": response_ref is not None,
@@ -4132,6 +4831,13 @@ def _response_decision_diagnostics(
             and virtualized_assistant_id
             and response_id == virtualized_assistant_id
         ),
+        "terminal-node-unmounted": bool(
+            response_id is None
+            and bound_assistant_id
+            and terminal_id == bound_assistant_id
+            and not raw.generating
+        ),
+        "terminal-node-rematerialization-attempted": terminal_body_materialization_attempted,
         "terminal-witness-present": terminal_id is not None,
         "terminal-witness-hash": _text_digest(terminal_id) if terminal_id else None,
         "response-ref-hash": _text_digest(response_id) if response_id else None,

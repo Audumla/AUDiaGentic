@@ -1,4 +1,5 @@
 """TOML MCP config reader/writer for OpenHands [mcp_servers] format."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -28,7 +29,9 @@ def _load_mcp_toml(path: Path) -> dict[str, Any]:
     try:
         return tomllib.loads(path.read_text(encoding="utf-8"))
     except tomllib.TOMLDecodeError as exc:
-        raise _openhands_toml_error(1, f"Invalid OpenHands config.toml: {path}", path=str(path)) from exc
+        raise _openhands_toml_error(
+            1, f"Invalid OpenHands config.toml: {path}", path=str(path)
+        ) from exc
 
 
 def read_mcp_toml(path: Path) -> dict[str, McpServerEntry]:
@@ -53,6 +56,11 @@ def read_mcp_toml(path: Path) -> dict[str, McpServerEntry]:
                 env=dict(cfg.get("env", {})),
             )
     return entries
+
+
+def read_raw_mcp_toml(path: Path) -> dict[str, Any]:
+    """Read full native server records for ownership evidence."""
+    return _load_mcp_toml(path).get("mcp_servers", {})
 
 
 def write_mcp_toml(path: Path, entries: dict[str, McpServerEntry]) -> None:

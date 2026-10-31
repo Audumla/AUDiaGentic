@@ -26,6 +26,7 @@ from audiagentic.foundation.toolchains.config.managed_config import (
 from audiagentic.foundation.transports.session_surface import (
     ContentChannelCapability,
     ControlSupport,
+    JoinedSessionCapabilities,
     PlatformEvidence,
     SessionControlAction,
     SessionIdentityOperation,
@@ -159,6 +160,8 @@ def _build_mcp_config_spec(data: dict[str, Any]) -> McpConfigSpec:
         else raw_mcp_path
     )
     return McpConfigSpec(
+        project_scoped=data.get("project_scoped"),
+        raw_reader=resolve_ref(data["raw_reader"]) if data.get("raw_reader") else None,
         config_path=mcp_config_path,
         reader=resolve_ref(data["reader"]),
         writer=resolve_ref(data["writer"]),
@@ -167,6 +170,7 @@ def _build_mcp_config_spec(data: dict[str, Any]) -> McpConfigSpec:
         refresh_mode=data.get("refresh_mode", "none"),
         reload_fn=resolve_ref(data["reload_fn"]) if "reload_fn" in data else None,
         transports=frozenset(transports),
+        user_scope=_build_managed_config_spec(data["user_scope"]) if data.get("user_scope") else None,
     )
 
 
@@ -342,6 +346,9 @@ def _build_cli_install(data: dict[str, Any]) -> CliInstallRecipe:
             ),
             probe=list(data["probe"]) if "probe" in data else None,
             probe_fn=resolve_ref(data["probe_fn"]) if "probe_fn" in data else None,
+            native_executable_fn=(
+                resolve_ref(data["native_executable"]) if "native_executable" in data else None
+            ),
         )
     else:
         # Explicit step form
@@ -361,6 +368,9 @@ def _build_cli_install(data: dict[str, Any]) -> CliInstallRecipe:
             ),
             probe=list(data["probe"]) if "probe" in data else None,
             probe_fn=resolve_ref(data["probe_fn"]) if "probe_fn" in data else None,
+            native_executable_fn=(
+                resolve_ref(data["native_executable"]) if "native_executable" in data else None
+            ),
         )
 
 
@@ -423,6 +433,7 @@ def _build_session_surfaces(
         "evidence",
         "platforms",
         "adapter_ref",
+        "joined_capabilities",
     }
 
     declarations: list[SessionSurfaceDeclaration] = []
@@ -598,6 +609,31 @@ def _build_session_surfaces(
                 )
             )
 
+        raw_joined = item.get("joined_capabilities", {})
+        if not isinstance(raw_joined, dict):
+            raise AudiaGenticError(
+                code="VAL-PCAP-011", kind="providers",
+                message="joined_capabilities must be a mapping",
+            )
+        try:
+            # The neutral value rejects coercion; its constructor rejects every
+            # unknown key (including the derived 'qualified' property).
+            joined_capabilities = JoinedSessionCapabilities(**raw_joined)
+        except (TypeError, ValueError) as exc:
+            raise AudiaGenticError(
+                code="VAL-PCAP-011", kind="providers", message=str(exc),
+            ) from exc
+        if joined_capabilities.qualified and (
+            (item.get("evidence") or {}).get("validated") is not True
+            or not any((pe.get("evidence") or {}).get("validated") is True for pe in raw_platforms)
+        ):
+            # Ordinary declarations retain their existing evidence parser.
+            # Qualified joins cannot turn a truthy string/number into proof.
+            raise AudiaGenticError(
+                code="VAL-PCAP-011", kind="providers",
+                message="qualified joined claims require boolean validated platform evidence",
+            )
+
         declarations.append(
             SessionSurfaceDeclaration(
                 surface_id=str(item["surface_id"]),
@@ -615,6 +651,7 @@ def _build_session_surfaces(
                 evidence=evidence,
                 platforms=tuple(platforms),
                 adapter_ref=str(item["adapter_ref"]).strip() if item.get("adapter_ref") else None,
+                joined_capabilities=joined_capabilities,
             )
         )
 

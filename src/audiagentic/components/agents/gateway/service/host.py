@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import errno
 import logging
 import os
 import secrets
 import threading
+import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
 from audiagentic.components.agents.gateway.application import (
     GatewayApplication,
@@ -16,17 +19,39 @@ from audiagentic.components.agents.gateway.remote_client import load_auth_token
 from audiagentic.components.agents.gateway.service.application import (
     GatewayServiceApplication,
 )
-from audiagentic.components.agents.gateway.service.contract import PROTOCOL_VERSION
+from audiagentic.components.agents.gateway.service.contract import (
+    GATEWAY_SERVICE_KEY,
+    PROTOCOL_VERSION,
+)
 from audiagentic.components.agents.gateway.service.http_transport import GatewayHTTPServer
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.system.managed_process import current_process_evidence
 from audiagentic.foundation.system.managed_service import ManagedServiceStore
-from audiagentic.foundation.system.managed_service_contracts import EndpointInfo, ServiceKey
+from audiagentic.foundation.system.managed_service_contracts import EndpointInfo
 from audiagentic.foundation.system.managed_service_owner import ManagedServiceOwner
 from audiagentic.foundation.time import now_iso_z
 
 logger = logging.getLogger(__name__)
-GATEWAY_SERVICE_KEY = ServiceKey("agent-execution-gateway", "default")
+
+_T = TypeVar("_T")
+_BIND_RETRY_SECONDS = 0.2
+
+
+def bind_with_wait(make: Callable[[], _T], wait_seconds: float, *, sleep: Callable[[float], None] = time.sleep,
+                   clock: Callable[[], float] = time.monotonic) -> _T:
+    """Create (and so bind) the server, retrying only while the port is still held, for at most ``wait_seconds``.
+
+    A restart's replacement starts while the retiring owner is still letting go of the port. Any other bind
+    failure, and a held port once the wait is over, is raised unchanged; with a wait of 0 it fails at once.
+    """
+    deadline = clock() + max(0.0, wait_seconds)
+    while True:
+        try:
+            return make()
+        except OSError as error:
+            if error.errno != errno.EADDRINUSE or clock() >= deadline:
+                raise
+            sleep(_BIND_RETRY_SECONDS)
 
 
 class GatewayServiceHost:
@@ -45,6 +70,8 @@ class GatewayServiceHost:
         lifecycle: object | None = None,
         service_root: Path | None = None,
         composition_graph: object | None = None,
+        node_authority: object | None = None,
+        node_runtime: object | None = None,
     ) -> None:
         self.server = server
         self.service_store = service_store
@@ -60,9 +87,12 @@ class GatewayServiceHost:
         self._ingress_thread: threading.Thread | None = None
         self._operations_stop = threading.Event()
         self._operations_thread: threading.Thread | None = None
+        self._journal_maintenance_at = 0.0
         # AS60 step 7 / RV888: this process's own composition root. Shutdown
         # uninstalls the shared-gateway execution-profile registry.
         self._composition_graph = composition_graph
+        self._node_authority = node_authority
+        self._node_runtime = node_runtime
 
     @property
     def endpoint(self) -> str:
@@ -79,7 +109,11 @@ class GatewayServiceHost:
         token_path: Path | None = None,
         application: GatewayApplication | None = None,
         service_root: Path | None = None,
+        shared_config: Any = None,
+        bind_wait: float = 0.0,
     ) -> GatewayServiceHost:
+        if shared_config is not None:
+            host, port, service_root = shared_config.host, shared_config.port, shared_config.service_root
         if host != "127.0.0.1" or isinstance(port, bool) or not 0 <= port <= 65535:
             from audiagentic.components.agents.gateway.service.http_transport import transport_error
 
@@ -99,11 +133,24 @@ class GatewayServiceHost:
             build_gateway_service_graph,
         )
 
-        composition_graph = build_gateway_service_graph()
+        node_ports = None
+        if shared_config is not None and shared_config.nodes:
+            from audiagentic.components.agents.gateway.node.server_runtime import NodeQueuePorts
+
+            node_ports = NodeQueuePorts()
+        composition_graph = (build_gateway_service_graph(node_config=shared_config, node_ports=node_ports)
+                             if node_ports is not None else build_gateway_service_graph())
+        node_runtime = None
+        claimed_epoch = None
         try:
             store = ManagedServiceStore(GATEWAY_SERVICE_KEY, root=service_root)
             resolved_token_path = token_path or store.root / "auth.token"
             token = load_or_create_auth_token(resolved_token_path)
+            node_authority = None
+            if shared_config is not None and shared_config.nodes:
+                from audiagentic.components.agents.gateway.node.authority import NodeGrantAuthority
+
+                node_authority = NodeGrantAuthority(shared_config, service_root=store.root)
             domain_application = application or build_gateway_application()
             configured_recent_seconds = recent_window_seconds()
             service_application = GatewayServiceApplication(
@@ -111,12 +158,16 @@ class GatewayServiceHost:
                 store,
                 dashboard_recent_seconds=configured_recent_seconds,
             )
-            server = GatewayHTTPServer(
-                (host, port),
-                service_application,
-                token,
-                dashboard_path=os.environ.get("AUDIAGENTIC_GATEWAY_DASHBOARD_PATH", "/dashboard"),
-                dashboard_recent_seconds=configured_recent_seconds,
+            server = bind_with_wait(
+                lambda: GatewayHTTPServer(
+                    (host, port),
+                    service_application,
+                    token,
+                    dashboard_path=os.environ.get("AUDIAGENTIC_GATEWAY_DASHBOARD_PATH", "/dashboard"),
+                    dashboard_recent_seconds=configured_recent_seconds,
+                    shared_config=shared_config,
+                ),
+                bind_wait,
             )
             owner = ManagedServiceOwner(store)
             address = f"{server.server_address[0]}:{server.server_address[1]}"
@@ -146,6 +197,22 @@ class GatewayServiceHost:
                         ),
                         health_facts={"ready": False},
                     )
+                    claimed_epoch = record.owner_epoch
+                if node_ports is not None:
+                    from audiagentic.components.agents.gateway import api as gateway_api
+                    from audiagentic.components.agents.gateway.node.server_runtime import (
+                        NodeServerRuntime,
+                    )
+                    from audiagentic.runtime.bootstrap.gateway_service_composition import (
+                        QUEUE_MANAGER,
+                    )
+
+                    queue = composition_graph.root(QUEUE_MANAGER)
+                    if queue is not gateway_api.get_queue_manager():
+                        raise RuntimeError("Gateway graph queue is not the installed manager")
+                    node_runtime = NodeServerRuntime(shared_config, store, node_authority,
+                        queue, record.owner_epoch, node_ports)
+                    service_application._node_admission = node_runtime.admission
             except Exception:
                 server.server_close()
                 raise
@@ -153,6 +220,17 @@ class GatewayServiceHost:
             # This process's composition root: a failure after the graph is
             # built but before the host object exists must still uninstall
             # the registry the graph's factory just installed.
+            cleaned = True
+            try:
+                if node_runtime is not None:
+                    node_runtime.close()
+            except Exception:
+                cleaned = False
+            if claimed_epoch is not None and cleaned:
+                try:
+                    owner.retire(expected_epoch=claimed_epoch)
+                except Exception:
+                    pass  # Preserve the original construction failure.
             composition_graph.shutdown()
             raise
         # SH10: bind the lifecycle controller now that the owner epoch is
@@ -188,9 +266,24 @@ class GatewayServiceHost:
             lifecycle=lifecycle,
             service_root=service_root,
             composition_graph=composition_graph,
+            node_authority=node_authority,
+            node_runtime=node_runtime,
         )
 
     def serve_forever(self) -> None:
+        try:
+            self._serve_forever()
+        except BaseException:
+            try:
+                self.close()
+            except Exception:
+                try:
+                    logger.warning("Gateway startup or shutdown cleanup failed")
+                except Exception:
+                    pass
+            raise
+
+    def _serve_forever(self) -> None:
         # SH07: reconcile durable active work from the prior service generation
         # BEFORE readiness and before ingress admits new work. A recovery
         # failure propagates and prevents the service from reporting ready.
@@ -209,10 +302,31 @@ class GatewayServiceHost:
             from audiagentic.components.agents.gateway.queue.recovery import recovery_runner
 
             queue_manager = gateway_api.get_queue_manager()
-            for project_root, request_id in recovery_report.queued:
-                record = gateway_api.store.read_record(project_root, request_id)
+            # Seed already-running predecessors first. Queued recovery must
+            # preserve admission order, not random request-ID/filename order.
+            # Otherwise the new session-order fence could put a successor in
+            # front of the unresolved provider turn it must wait for.
+            running = [
+                (root, gateway_api.store.read_record(root, request_id))
+                for root, request_id in recovery_report.running
+            ]
+            queued = [
+                (root, gateway_api.store.read_record(root, request_id))
+                for root, request_id in recovery_report.queued
+            ]
+            # New admissions have a durable ordinal. Timestamp fallback is
+            # compatibility only for legacy records from before this field.
+            def ordering(entry):
+                return (
+                    entry[1].get("enqueue-ordinal") or 0,
+                    entry[1].get("created-at") or "", entry[1]["request-id"],
+                )
+            for project_root, record in sorted(running, key=ordering):
+                if record.get("node-placement") is not None:
+                    self._enqueue_node_recovery(project_root, record)
+                    continue
                 runtime = record.get("gateway-profile-runtime") or {}
-                queue_manager.enqueue_recovered_queued(
+                queue_manager.enqueue_recovered_running(
                     project_root,
                     record,
                     dict(runtime.get("params") or {}),
@@ -220,10 +334,12 @@ class GatewayServiceHost:
                     dispatch_owner_epoch=self.owner_epoch,
                     dispatch_service_root=self.service_store.root,
                 )
-            for project_root, request_id in recovery_report.running:
-                record = gateway_api.store.read_record(project_root, request_id)
+            for project_root, record in sorted(queued, key=ordering):
+                if record.get("node-placement") is not None:
+                    self._enqueue_node_recovery(project_root, record)
+                    continue
                 runtime = record.get("gateway-profile-runtime") or {}
-                queue_manager.enqueue_recovered_running(
+                queue_manager.enqueue_recovered_queued(
                     project_root,
                     record,
                     dict(runtime.get("params") or {}),
@@ -238,29 +354,73 @@ class GatewayServiceHost:
         from audiagentic.components.agents.gateway.service.known_projects import (
             scan_known_gpt_auto_projects,
         )
-        from audiagentic.components.providers.adapters.gpt_auto.config import (
-            validate_machine_gpt_auto_config,
-            validate_project_gpt_auto_config,
-        )
+        from audiagentic.components.providers.providers_api import validate_gpt_auto_configuration
 
-        validate_machine_gpt_auto_config()
+        validate_gpt_auto_configuration()
         scan_known_gpt_auto_projects(
             self.service_store.root / "known-projects.json",
-            check_project=validate_project_gpt_auto_config,
+            check_project=validate_gpt_auto_configuration,
         )
+        if self._node_runtime is not None:
+            self._node_runtime.start()
         if not self._externally_managed:
             self.service_store.heartbeat({"ready": True}, expected_epoch=self.owner_epoch)
         self._start_ingress_poller()
         self._start_operations_poller()
         if self.lifecycle is not None:
             self.lifecycle.start()  # type: ignore[attr-defined]
+        serving_failed = False
         try:
             self.server.serve_forever(poll_interval=0.1)
+        except BaseException:
+            serving_failed = True
+            raise
         finally:
-            self._stop_background()
+            try:
+                self._stop_background()
+                if self._node_runtime is not None:
+                    self._node_runtime.close()
+            except Exception:
+                if not serving_failed:
+                    raise
 
     def shutdown(self) -> None:
         self.server.shutdown()
+
+    def _enqueue_node_recovery(self, project_root: Path, record: dict) -> dict:
+        if self._node_runtime is None or record.get("node-admission") is None:
+            return self._defer_unavailable_node(project_root, record)
+        return self._node_runtime.enqueue_recovered(project_root, record)
+
+    def _defer_unavailable_node(self, project_root: Path, record: dict) -> dict:
+        """Keep original node work observable while native routing is disabled.
+
+        Node runtime composition must replace the unavailable dispatch decision,
+        never substitute an ordinary local runner. This branch remains the safe
+        policy when the configured recipient/recovery owner is unavailable.
+        """
+        from audiagentic.components.agents.gateway import store
+        from audiagentic.components.agents.gateway.node.contracts import conflict
+
+        with self.service_store.owner_guard(self.owner_epoch):
+            current = store.read_record(project_root, record["request-id"])
+            if current["state"] not in {"queued", "running"}:
+                return current
+            if current.get("node-placement") is None:
+                raise conflict(1, "Node recovery requires canonical placement")
+            dispatch = current.get("node-dispatch")
+            side_effect = (
+                "not-started" if dispatch is None else
+                "terminal-evidence-seen" if dispatch.get("receipt-stage") == "terminal" else
+                "may-have-started"
+            )
+            defer = store.defer_owned_queued_recovery if current["state"] == "queued" else store.defer_owned_recovery
+            return defer(project_root, current["request-id"], owner_epoch=self.owner_epoch,
+                worker_id=current.get("worker-id"), attempt_epoch=current["attempt-epoch"],
+                expected_revision=current["revision"],
+                error=conflict(1, "Node runtime is unavailable; retain original work for reconciliation"),
+                phase="node-runtime-unavailable", side_effect_state=side_effect,
+                retry_delay_seconds=None)
 
     def _start_ingress_poller(self, interval_seconds: float = 1.0) -> None:
         """SH09: drain the durable trigger spool while the service runs."""
@@ -304,9 +464,15 @@ class GatewayServiceHost:
             ManagementOperationStore,
         )
 
+        authority = getattr(self, "_node_authority", None)
+        operation_authority = getattr(self, "_node_runtime", None) or authority
+        executor = (
+            GatewayOperationExecutor(self._application, node_authority=operation_authority)
+            if operation_authority is not None else GatewayOperationExecutor(self._application)
+        )
         pump = ManagementOperationPump(
             ManagementOperationStore(self.service_store.root),
-            GatewayOperationExecutor(self._application),
+            executor,
         )
 
         def _poll() -> None:
@@ -320,10 +486,25 @@ class GatewayServiceHost:
                     pump.run_once(owner_epoch=self.owner_epoch)
                 except Exception:  # noqa: BLE001 - keep the poller alive
                     logger.exception("gateway management operation poll failed")
+                runtime = getattr(self, "_node_runtime", None)
+                if runtime is not None:
+                    try:
+                        runtime.queue.retry_node_notifications()
+                    except Exception:
+                        try:
+                            logger.warning("Node notification maintenance failed")
+                        except Exception:
+                            pass
                 try:
                     self.run_watchdog_pass()
                 except Exception:  # noqa: BLE001 - keep the poller alive
                     logger.exception("gateway watchdog pass failed")
+                if time.monotonic() >= self._journal_maintenance_at:
+                    self._journal_maintenance_at = time.monotonic() + 3600
+                    try:
+                        self.schedule_journal_maintenance()
+                    except Exception:  # noqa: BLE001 - maintenance cannot stop operations
+                        logger.exception("gateway journal maintenance scheduling failed")
 
         # Startup scan makes notifier loss and host restart harmless. It is
         # best-effort: a malformed old operation must not prevent the poller
@@ -336,6 +517,15 @@ class GatewayServiceHost:
             target=_poll, name="gateway-operations-poller", daemon=True
         )
         self._operations_thread.start()
+
+    def schedule_journal_maintenance(self) -> None:
+        """Queue hourly/startup sweeps even when no new request finishes."""
+        from ..retention import schedule_request_retention
+        from .known_projects import load_known_projects
+
+        registry = load_known_projects(self.service_store.root / "known-projects.json")
+        for project in registry.projects:
+            schedule_request_retention(project.project_root)
 
     def run_watchdog_pass(self) -> tuple[dict[str, Any], ...]:
         """Diagnose running work and revalidate stale live transports safely.
@@ -443,6 +633,11 @@ class GatewayServiceHost:
         runtime = peek_session_runtime()
         results: list[dict[str, Any]] = []
         for project_root, record in registry.snapshot():
+            if record.get("node-placement") is not None:
+                # Remote receipts, not local session/DOM absence, settle nodes.
+                # Their existing queue notification/reconciliation path owns
+                # progress; never enter ordinary watchdog recovery here.
+                continue
             try:
                 try:
                     updated = diagnose_activity_lease(project_root, record)
@@ -506,32 +701,66 @@ class GatewayServiceHost:
                 registry.update(project_root, updated)
                 diagnostics = updated.get("diagnostics")
                 provider_turn_pending = False
+                provider_turn_id: str | None = None
                 runtime_owns_turn = False
                 session_id = updated.get("session-id")
                 if isinstance(session_id, str) and session_id:
                     try:
                         session_record = sessions_store.read_session_record(project_root, session_id)
+                        session_metadata = sessions_store.session_provider_metadata(
+                            session_record
+                        )
+                        candidate_turn_id = session_metadata.get("unresolved-turn-id")
+                        provider_turn_id = (
+                            candidate_turn_id
+                            if isinstance(candidate_turn_id, str)
+                            else None
+                        )
                         provider_turn_pending = (
-                            sessions_store.session_provider_metadata(session_record).get(
-                                "unresolved-turn-pending"
-                            )
-                            is True
+                            session_metadata.get("unresolved-turn-pending") is True
+                            and provider_turn_id in (None, updated.get("request-id"))
                         )
                     except Exception:  # noqa: BLE001 - durable request state remains authoritative
                         provider_turn_pending = False
-                    if provider_turn_pending and runtime is not None:
-                        try:
-                            runtime_status = runtime.session_runtime_status(session_id)
-                            runtime_owns_turn = bool(
-                                runtime_status.get("available")
-                                and (
-                                    runtime_status.get("turn-active") is True
-                                    or runtime_status.get("current-request-id")
-                                    == updated.get("request-id")
-                                )
+                if (
+                    provider_turn_id is not None
+                    and provider_turn_id != updated.get("request-id")
+                    and updated.get("state") == "running"
+                ):
+                    # The provider session can still hold a predecessor's
+                    # unresolved-turn marker while this request waits in the
+                    # same conversation. Do not use that predecessor's latest
+                    # DOM response to terminalize the waiting request.
+                    try:
+                        store.record_gateway_timeline(
+                            project_root,
+                            updated["request-id"],
+                            "provider.capture-skipped",
+                            state="running",
+                            attributes={
+                                "reason": "foreign-unresolved-turn",
+                                "provider-turn-id": provider_turn_id,
+                            },
+                        )
+                    except Exception:  # noqa: BLE001 - the skip remains fail-closed
+                        logger.debug(
+                            "could not record foreign-turn capture skip",
+                            extra={"request-id": updated.get("request-id")},
+                            exc_info=True,
+                        )
+                if provider_turn_pending and runtime is not None:
+                    try:
+                        runtime_status = runtime.session_runtime_status(session_id)
+                        runtime_owns_turn = bool(
+                            runtime_status.get("available")
+                            and (
+                                runtime_status.get("turn-active") is True
+                                or runtime_status.get("current-request-id")
+                                == updated.get("request-id")
                             )
-                        except Exception:  # noqa: BLE001 - capture remains an advisory fallback
-                            runtime_owns_turn = False
+                        )
+                    except Exception:  # noqa: BLE001 - capture remains an advisory fallback
+                        runtime_owns_turn = False
                 if (
                     updated.get("state") == "running"
                     and isinstance(updated.get("session-id"), str)
@@ -681,8 +910,9 @@ class GatewayServiceHost:
     def close(self) -> None:
         if self._closed:
             return
-        self._closed = True
         self._stop_background()
+        if self._node_runtime is not None:
+            self._node_runtime.close()
         if self._composition_graph is not None:
             self._composition_graph.shutdown()  # type: ignore[attr-defined]
         self.server.server_close()
@@ -694,6 +924,7 @@ class GatewayServiceHost:
                 extra={"service_kind": GATEWAY_SERVICE_KEY.service_kind},
                 exc_info=True,
             )
+        self._closed = True
 
     def __enter__(self) -> GatewayServiceHost:
         return self

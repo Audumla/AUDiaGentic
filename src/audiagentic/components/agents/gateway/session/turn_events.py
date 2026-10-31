@@ -12,15 +12,15 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
-from audiagentic.components.agents.gateway.observation_projection import (
-    project_transport_observation,
-)
 from audiagentic.components.agents.gateway.event_topics import (
     TURN_MODEL_COMPLETED_TOPIC,
     TURN_MODEL_IN_PROGRESS_TOPIC,
     TURN_MODEL_STARTED_TOPIC,
     TURN_TOOL_COMPLETED_TOPIC,
     TURN_TOOL_STARTED_TOPIC,
+)
+from audiagentic.components.agents.gateway.observation_projection import (
+    project_transport_observation,
 )
 from audiagentic.components.agents.gateway.session import sessions_store as session_store
 from audiagentic.foundation.transports.agent_session import (

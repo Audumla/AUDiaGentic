@@ -104,12 +104,42 @@ def test_project_name_uses_config_then_workspace_then_directory(tmp_path: Path):
     assert resolve_project_name(tmp_path, workspace_name="bigcherry") == "Big Cherry"
 
 
+def test_project_name_uses_git_repository_name_across_worktrees(tmp_path: Path):
+    main = tmp_path / "checkout-dir"
+    common = main / ".git"
+    (common / "worktrees" / "wt-feature").mkdir(parents=True)
+    (common / "config").write_text(
+        '[core]\n\tbare = false\n[remote "origin"]\n\turl = https://github.com/Owner/RepoName.git\n'
+        '\tfetch = +refs/heads/*:refs/remotes/origin/*\n',
+        encoding="utf-8",
+    )
+    worktree = tmp_path / "wt-feature"
+    worktree.mkdir()
+    (worktree / ".git").write_text(f"gitdir: {common / 'worktrees' / 'wt-feature'}\n", encoding="utf-8")
+    (common / "worktrees" / "wt-feature" / "commondir").write_text("../..\n", encoding="utf-8")
+
+    assert resolve_project_name(main) == "RepoName"
+    assert resolve_project_name(worktree) == "RepoName"
+    assert resolve_project_name(worktree, workspace_name="Label") == "Label"
+
+    # Without an origin remote, the main checkout's directory names the repository.
+    (common / "config").write_text("[core]\n\tbare = false\n", encoding="utf-8")
+    assert resolve_project_name(worktree) == "checkout-dir"
+
+    # SSH remotes name the repository too.
+    (common / "config").write_text('[remote "origin"]\n\turl = git@github.com:Owner/Other.git\n', encoding="utf-8")
+    assert resolve_project_name(worktree) == "Other"
+
+
 def test_session_transport_uses_admitted_project_name(monkeypatch, tmp_path: Path):
     captured: dict[str, object] = {}
 
     class FakeChat:
         def __init__(self, **kwargs):
             captured.update(kwargs)
+
+        def set_page_mutation_owner_probe(self, _probe):
+            return None
 
     monkeypatch.setattr(session_transport, "PersistentChat", FakeChat)
     monkeypatch.setattr(session_transport, "get_runtime", lambda *_args: object())
@@ -133,6 +163,9 @@ def test_session_transport_uses_provider_project_name_for_pinned_profile(
     class FakeChat:
         def __init__(self, **kwargs):
             captured.update(kwargs)
+
+        def set_page_mutation_owner_probe(self, _probe):
+            return None
 
     monkeypatch.setattr(session_transport, "PersistentChat", FakeChat)
     monkeypatch.setattr(session_transport, "get_runtime", lambda *_args: object())

@@ -26,7 +26,7 @@ class _FakeChild:
 def test_process_completes_before_timeout_returns_normally(monkeypatch) -> None:
     child = _FakeChild(run_seconds=0.1)
     stdout, stderr = worker_module._wait_for_provider_terminal(
-        child, "input", timeout_seconds=5.0
+        child, "input"
     )
     assert stdout == "stdout-payload"
     assert stderr == "stderr-payload"
@@ -36,7 +36,7 @@ def test_elapsed_timeout_is_not_a_gateway_failure() -> None:
     """Quiet remote/tool work may outlive the request timeout without a kill."""
     child = _FakeChild(run_seconds=0.3)
     stdout, stderr = worker_module._wait_for_provider_terminal(
-        child, "input", timeout_seconds=0.1
+        child, "input"
     )
     assert stdout == "stdout-payload"
     assert stderr == "stderr-payload"
@@ -45,7 +45,7 @@ def test_elapsed_timeout_is_not_a_gateway_failure() -> None:
 def test_no_cpu_sampling_is_needed_for_provider_terminal() -> None:
     child = _FakeChild(run_seconds=0.15)
     stdout, stderr = worker_module._wait_for_provider_terminal(
-        child, "input", timeout_seconds=0.05
+        child, "input"
     )
     assert stdout == "stdout-payload"
     assert stderr == "stderr-payload"

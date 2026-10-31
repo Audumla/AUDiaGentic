@@ -51,6 +51,15 @@ def test_component_mcp_adapters_do_not_import_owning_internals() -> None:
                 continue
             relative = target.removeprefix(prefix)
             allowed = (
+                # These modules explicitly own public management/projection
+                # contracts; public boundaries are not all named *_api.py.
+                target.rsplit(".", 1)[0] in {
+                    "audiagentic.components.agents.configuration.management",
+                    "audiagentic.components.agents.gateway.evidence_projection",
+                    # Shared by the agent and operator gateway MCP servers.
+                    "audiagentic.components.agents.mcp.gateway_mcp_support",
+                }
+                or
                 ".contracts." in target
                 or relative.endswith("_api")
                 or relative.endswith("_client")

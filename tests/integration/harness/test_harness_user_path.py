@@ -14,14 +14,6 @@ from types import SimpleNamespace
 from audiagentic.launcher import _main
 
 
-def _stub_embedded_rig_provision(monkeypatch) -> None:
-    """Keep this lifecycle test independent of binary/model downloads."""
-    monkeypatch.setattr(
-        "audiagentic.runtime.harness.provisioning.provision_embedded_rig",
-        lambda *_args, **_kwargs: None,
-    )
-
-
 def test_launch_fails_loud_when_config_refresh_fails(tmp_path: Path, monkeypatch) -> None:
     """A failed launch-time config rebuild must abort, not launch stale."""
     project = tmp_path / "project"
@@ -42,7 +34,7 @@ def test_launch_fails_loud_when_config_refresh_fails(tmp_path: Path, monkeypatch
     launched: list[int] = []
     monkeypatch.setattr(
         "audiagentic.runtime.harness.build_global_context",
-        lambda **_kw: launched.append(1) or SimpleNamespace(embedded_rig=False),
+        lambda **_kw: launched.append(1) or SimpleNamespace(),
     )
     monkeypatch.setattr(
         "audiagentic.runtime.harness.run_agent", lambda *_a, **_kw: launched.append(1) or 0
@@ -61,7 +53,6 @@ def test_bootstrap_refresh_launch_and_cleanup_materialize_owned_paths(
 
     runtime = global_harness_runtime()
     project.mkdir()
-    _stub_embedded_rig_provision(monkeypatch)
     # Install a real component so MCP collection exercises the normal
     # descriptor/lifecycle path rather than a hand-built config fixture.
     from audiagentic.foundation.components.loader import register_all_components
@@ -72,7 +63,7 @@ def test_bootstrap_refresh_launch_and_cleanup_materialize_owned_paths(
 
     assert _main(["--project", str(project), "bootstrap", "--target", str(runtime)]) == 0
     # No embedded harness CLI is installed anymore — bootstrap only materializes
-    # the agent config + rig backend area.
+    # the agent config.
     assert not (runtime / "cli").exists()
     assert (runtime / "agent" / "models.json").is_file()
     assert (runtime / "agent" / "settings.json").is_file()
@@ -83,6 +74,7 @@ def test_bootstrap_refresh_launch_and_cleanup_materialize_owned_paths(
 
     # Bootstrap is repeatable and preserves the harness's large/user-owned area.
     sentinel = runtime / "rig" / "bin" / "models" / "user-model.gguf"
+    sentinel.parent.mkdir(parents=True)
     sentinel.write_bytes(b"user-owned")
     assert _main(["--project", str(project), "bootstrap", "--target", str(runtime)]) == 0
     assert sentinel.read_bytes() == b"user-owned"
@@ -99,7 +91,7 @@ def test_bootstrap_refresh_launch_and_cleanup_materialize_owned_paths(
     )
     monkeypatch.setattr(
         "audiagentic.runtime.harness.build_global_context",
-        lambda **_kw: SimpleNamespace(embedded_rig=False),
+        lambda **_kw: SimpleNamespace(),
     )
     monkeypatch.setattr("audiagentic.runtime.harness.env_flag", lambda *_a: False)
     monkeypatch.setattr("audiagentic.runtime.harness.run_agent", lambda *_a, **_kw: 0)

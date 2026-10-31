@@ -1,0 +1,123 @@
+# Configuration inventory (plan item CFG02).
+#
+# tests/unit/architecture/test_config_inventory.py fails when an AUDIAGENTIC_* string
+# literal or a module that builds .audiagentic paths itself is added without being
+# listed here, or when a listed entry no longer exists. CFG09 drives
+# path-builders to empty; CFG10 drives the public env allowlist down.
+
+env:
+  # Behaviour switches that belong in settings (CFG10 moves them to configuration keys).
+  user-config:
+    - AUDIAGENTIC_AG_BASE_URL
+    - AUDIAGENTIC_AG_ENABLE_MCP
+    - AUDIAGENTIC_AG_MODEL
+    - AUDIAGENTIC_AG_PROVIDER
+    - AUDIAGENTIC_AI_AUDIT
+    - AUDIAGENTIC_AI_AUDIT_LEVEL
+    - AUDIAGENTIC_AI_AUDIT_REDACT
+    - AUDIAGENTIC_AUTO_UPDATE_ENABLED
+    - AUDIAGENTIC_GATEWAY_PORT
+    - AUDIAGENTIC_LOCALE
+    - AUDIAGENTIC_LOCAL_PROVIDER_BASE_URL
+    - AUDIAGENTIC_LOG_BACKUP_COUNT
+    - AUDIAGENTIC_LOG_CONSOLE
+    - AUDIAGENTIC_LOG_DIR
+    - AUDIAGENTIC_LOG_FORMAT
+    - AUDIAGENTIC_LOG_LEVEL
+    - AUDIAGENTIC_RECONCILE_PROVIDERS_ON_LAUNCH
+    - AUDIAGENTIC_STARTUP_STATUS
+  # Process wiring and credential references; candidates for the small public allowlist (CFG10). ROOT duplicates REPO_ROOT.
+  deployment:
+    - AUDIAGENTIC_COMPONENT_CONFIG_DIRS
+    - AUDIAGENTIC_COMPONENT_PROFILE
+    - AUDIAGENTIC_CONFIG
+    - AUDIAGENTIC_GATEWAY_ENDPOINT
+    - AUDIAGENTIC_GATEWAY_TOKEN_FILE
+    - AUDIAGENTIC_GITHUB_CLIENT_ID
+    - AUDIAGENTIC_GITHUB_TOKEN
+    - AUDIAGENTIC_HOME
+    - AUDIAGENTIC_LOCAL_PROVIDER_API_KEY
+    - AUDIAGENTIC_PROJECT
+    - AUDIAGENTIC_ROOT
+    - AUDIAGENTIC_WORKSPACE_ROOTS
+  # Set by AUDiaGentic for its own child processes; not user configuration.
+  internal:
+    - AUDIAGENTIC_GATEWAY_DASHBOARD_PATH
+    - AUDIAGENTIC_GATEWAY_DASHBOARD_URL
+    - AUDIAGENTIC_GATEWAY_RESTART_HANDOFF
+    - AUDIAGENTIC_PI_ACTIVITY_PATH
+    - AUDIAGENTIC_PI_TAP_ADDRESS
+    - AUDIAGENTIC_PI_TAP_AUTHKEY
+    - AUDIAGENTIC_QUIET_STATUS
+    - AUDIAGENTIC_REPO_ROOT
+    - AUDIAGENTIC_SERVICE_OWNER_EPOCH
+    - AUDIAGENTIC_WORKER_ACTIVITY_INTERVAL_SECONDS
+    - AUDIAGENTIC_WORKER_ACTIVITY_SOURCES
+    - AUDIAGENTIC_WORKER_ACTIVITY_STALL_AFTER
+  # Test, smoke and debug switches.
+  test:
+    - AUDIAGENTIC_ACTIVITY_RIG_PAUSE
+    - AUDIAGENTIC_ACTIVITY_RIG_PAUSE_SECONDS
+    - AUDIAGENTIC_ACTIVITY_RIG_STALL
+    - AUDIAGENTIC_ACTIVITY_RIG_STALL_SECONDS
+    - AUDIAGENTIC_AG_SMOKE_TIMEOUT
+    - AUDIAGENTIC_GATEWAY_TEST_STALL_CLAIM_TO_START_MS
+    - AUDIAGENTIC_GATEWAY_TEST_STALL_TERMINAL_TO_CLEANUP_MS
+    - AUDIAGENTIC_MCP_SMOKE_ONLY
+    - AUDIAGENTIC_PI_TAP_DUMP_STDERR_ON_CRASH
+  # AUDIAGENTIC_-prefixed string literals that are not environment variables.
+  not-env:
+    - AUDIAGENTIC_MCP_EXCLUSIVE_PATCH
+
+# The configuration core (CFG03): the one sanctioned place that resolves settings paths.
+configuration-core:
+  - audiagentic/foundation/config/settings.py
+
+# Modules that join '.audiagentic' paths themselves instead of using the configuration core.
+path-builders:
+  - audiagentic/commands/launch.py
+  - audiagentic/components/agent_jobs/dead_letter.py
+  - audiagentic/components/agent_jobs/event_triggers.py
+  - audiagentic/components/agent_jobs/prompt_context.py
+  - audiagentic/components/agent_jobs/prompt_launch.py
+  - audiagentic/components/agent_jobs/prompt_templates.py
+  - audiagentic/components/agents/gateway/api.py
+  - audiagentic/components/agents/gateway/queue/worker_host.py
+  - audiagentic/components/agents/work/event_failures.py
+  - audiagentic/components/agents/work/event_observer.py
+  - audiagentic/components/coding_lsp/lsp_session_resolution.py
+  - audiagentic/components/ledger/archive.py
+  - audiagentic/components/ledger/event_outbox.py
+  - audiagentic/components/ledger/ledger_bootstrap.py
+  - audiagentic/components/planning/events.py
+  - audiagentic/components/planning/item_store.py
+  - audiagentic/components/project/project_api.py
+  - audiagentic/components/project/project_files.py
+  - audiagentic/components/project/project_surfaces.py
+  - audiagentic/components/providers/adapters/pi/interactive.py
+  - audiagentic/components/providers/adapters/pi/print_activity.py
+  - audiagentic/components/providers/protocols/streaming/completion.py
+  - audiagentic/components/providers/protocols/streaming/provider_streaming.py
+  - audiagentic/components/providers/services/catalog/models.py
+  - audiagentic/components/providers/services/catalog/source_catalog.py
+  - audiagentic/components/providers/services/config/model_source_config.py
+  - audiagentic/components/providers/services/config/provider_catalog.py
+  - audiagentic/components/providers/services/config/provider_config.py
+  - audiagentic/components/providers/services/execution/prompt_syntax.py
+  - audiagentic/components/providers/skill_surfaces.py
+  - audiagentic/components/providers/surfaces/contributions.py
+  - audiagentic/components/release/github_auth.py
+  - audiagentic/foundation/config/layers.py
+  - audiagentic/foundation/event/event_config.py
+  - audiagentic/foundation/features/state.py
+  - audiagentic/foundation/lifecycle/baseline_sync.py
+  - audiagentic/foundation/lifecycle/detector.py
+  - audiagentic/foundation/lifecycle/uninstall.py
+  - audiagentic/foundation/logging/config.py
+  - audiagentic/foundation/paths/component_paths.py
+  - audiagentic/foundation/paths/names.py
+  - audiagentic/foundation/system/browser_manager.py
+  - audiagentic/foundation/toolchains/config/artifact_registry.py
+  - audiagentic/foundation/toolchains/config/managed_config.py
+  - audiagentic/foundation/toolchains/recipe_catalogue.py
+  - audiagentic/runtime/harness/run_common.py

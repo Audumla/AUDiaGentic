@@ -21,10 +21,11 @@ def main() -> int:
     root = Path(__file__).resolve().parents[2]
     client = get_gateway_client(root)
     first = client.submit_execution_request(
-        "gpt-auto-reviewer-agent",
+        root,
+        agent_id="gpt-auto-reviewer-agent",
         prompt_body="Review plan item AU01. Give two concise risks.",
         session_keep_alive=True,
-        timeout_seconds=900,
+        wait_timeout_seconds=900,
         source="gpt-auto-live-test",
         metadata={"plan-item-id": "AU01"},
     )
@@ -36,17 +37,18 @@ def main() -> int:
     first_provider = first_result.get("provider-metadata") or {}
 
     second = client.submit_execution_request(
-        "gpt-auto-reviewer-agent",
+        root,
+        agent_id="gpt-auto-reviewer-agent",
         prompt_body="Continue that review: which risk comes first? One sentence.",
         session_id=session_id,
         session_keep_alive=True,
-        timeout_seconds=900,
+        wait_timeout_seconds=900,
         source="gpt-auto-live-test",
         metadata={"plan-item-id": "AU01"},
     )
     second_result = client.wait_execution_request(root, second["request-id"], 930)
     second_provider = second_result.get("provider-metadata") or {}
-    get_gateway_client().close_execution_session(root, session_id)
+    client.close_execution_session(root, session_id)
 
     ok = (
         second_result.get("state") == "completed"

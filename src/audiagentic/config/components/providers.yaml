@@ -18,6 +18,10 @@ files:
     lifecycle: runtime-only
     recursive: true
     description: Runtime provider catalogs and session state
+  - path: .audiagentic/state/providers
+    lifecycle: create-if-missing
+    recursive: true
+    description: Durable native MCP ownership and raw-entry integrity proofs; retained across runtime cleanup
 mcp-servers:
   - name: ag-providers-mgmt
     module: audiagentic.components.providers.providers_mcp
@@ -59,14 +63,14 @@ mcp-servers:
       get_reconciliation_policy: Return this project's provider reconciliation policy (mode auto/allowlist/prompt, plus allowed/decided provider lists).
       set_reconciliation_policy: Set this project's provider reconciliation policy, controlling which detected provider CLIs get auto-enabled on launch.
       list_providers: List all known providers and their configuration or catalog status.
-      get_provider_status: Return detailed status for a specific provider including catalog contents.
-      list_provider_descriptors: List all registered provider descriptors and static metadata.
+      get_provider_status: Return detailed provider state and catalog contents. Provider capability is distinct from Project-owned MCP target selection.
+      list_provider_descriptors: Inspect registered provider descriptors; may initialize the provider registry. Use the startup-free harness CLI catalog for onboarding discovery.
       list_provider_models: List model IDs from a provider runtime catalog.
       refresh_provider_catalog: Fetch and persist live model catalog for a provider.
       refresh_all_catalogs: Fetch and persist model catalogs for all providers that support it.
       manage_cli_lifecycle: Apply, prune, plan, or inspect one provider CLI lifecycle through the typed provider family contract.
-      operate_provider_surface: Apply, prune, plan, or inspect generated surface contributions for one provider and ownership scope.
-      operate_provider_surfaces: Apply, prune, plan, or inspect generated surface contributions for one or all active providers.
+      operate_provider_surface: Apply, prune, plan, or inspect generated instruction/skill contributions for one provider and ownership scope. This does not select native MCP registration.
+      operate_provider_surfaces: Apply, prune, plan, or inspect generated instruction/skill contributions for one or all active providers, separate from native MCP registration.
       model_source_list: List declared model sources (local endpoints and remote accounts) from model-sources.yaml.
       list_model_inventory: Show AUDiaGentic model sources, vendor groups, their models, and compatible harness paths without network access.
       refresh_model_source_catalog: Explicitly refresh one configured vendor or endpoint source catalog.

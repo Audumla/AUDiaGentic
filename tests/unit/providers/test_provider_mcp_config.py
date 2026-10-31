@@ -489,14 +489,8 @@ class TestSyncManagedProviderMcp:
         assert "ag-project" in data["mcpServers"]
         assert "ag-project-mgmt" not in data["mcpServers"]
 
-    def test_adopts_unregistered_entry_with_matching_name(self, tmp_path: Path) -> None:
-        """AUDiaGentic takes ownership of any entry whose name matches a managed server.
-
-        An entry present in the config file but not in the managed registry was
-        written by an older code path. The managed sync must adopt it (overwrite
-        with the correct entry and record ownership) rather than skip it.
-        This prevents orphaned entries from blocking future syncs.
-        """
+    def test_refuses_unregistered_entry_with_matching_name(self, tmp_path: Path) -> None:
+        """A matching name alone is not evidence of AUDiaGentic ownership."""
         path = tmp_path / ".mcp.json"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(
@@ -516,10 +510,10 @@ class TestSyncManagedProviderMcp:
             {"project.ag-project-mgmt": ("ag-project-mgmt", entry)},
         )
 
-        assert result["ok"] is True
-        assert not result["collisions"]
+        assert result["ok"] is False
+        assert result["collisions"]
         data = json.loads(path.read_text())
-        assert data["mcpServers"]["ag-project-mgmt"]["command"] == "python"
+        assert data["mcpServers"]["ag-project-mgmt"]["command"] == "old"
 
 
 class TestSyncManagedProviderMcpSubset:

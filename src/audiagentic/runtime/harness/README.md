@@ -18,4 +18,4 @@ Translate installed AUDiaGentic state into concrete agent-facing runtime files, 
 
 - `pi/` Pi-specific install, runner, prompt, and MCP formatting helpers.
 - `opencode/` OpenCode-specific formatting and installer helpers.
-- top-level modules handle shared harness descriptors, paths, reload markers, and rig integration.
+- top-level modules handle shared harness descriptors, paths, reload markers, and the model-server endpoint.

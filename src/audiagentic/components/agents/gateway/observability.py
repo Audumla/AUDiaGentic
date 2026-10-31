@@ -16,8 +16,9 @@ import json
 import os
 import re
 import time
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 from audiagentic.components.agents.agents_paths import (
     gateway_observation_artifact_dir,
@@ -27,6 +28,7 @@ from audiagentic.components.agents.agents_paths import (
 )
 from audiagentic.foundation.io import atomic_write_text, iter_ndjson, last_ndjson, tail_ndjson
 from audiagentic.foundation.logging.redaction import redact_text
+from audiagentic.foundation.observability.journal_segments import has_segments, head_read_lock
 from audiagentic.foundation.system.process import StartupLock
 from audiagentic.foundation.time import now_iso_z
 
@@ -60,6 +62,12 @@ _SAFE_TEXT_KEYS = frozenset(
         "id", "kind", "state", "status", "phase", "label", "event", "source",
         "code", "classification", "outcome", "digest", "hash", "sequence", "count",
         "model-activity", "tool-call-id", "tool-status", "stop-reason",
+        "observed-stage", "requested-stage",
+        "proof-source-valid", "proof-update-keys-safe", "frozen-identity-unchanged",
+        "frozen-identity-mismatch-keys",
+        "provider-anchor-valid", "fingerprint-equal",
+        "baseline-user-count-matches", "baseline-assistant-count-matches",
+        "baseline-user-id-is-new", "request-owner-is-current",
         "error-code", "reason", "timing-event", "diagnostic-signature",
         "correlation-quality", "assistant-id", "turn-id",
         "group", "activity-label", "activity-group", "completion-matched",
@@ -68,7 +76,13 @@ _SAFE_TEXT_KEYS = frozenset(
         "signals", "response-id", "identity-quality", "reconnect-classification",
         "side-effect-state", "resolution-state", "failure-code", "reason-code",
         "failure-reason", "submission-state", "submission-proven", "submission-ambiguous",
+        "failure-phase", "exception-type", "exception-origin", "exception-code",
+        "submission-stage", "turn-bound", "provider-binding-present", "send-intent-ever",
         "terminal", "terminal-witness", "media-type", "bytes", "attempt-epoch",
+        "clear-outcome",
+        "stage", "node-stage", "connection-generation", "grant-revision",
+        "gateway-owner-epoch", "command-epoch", "receipt-stage", "receipt-sequence",
+        "artifact-kind", "artifact-sha256", "ack-sequence", "elapsed-ms",
     }
 )
 
@@ -77,6 +91,11 @@ def _safe(value: Any, *, depth: int = 0, key: str | None = None) -> Any:
     """Project provider facts to bounded JSON without secret-bearing keys."""
     if depth > 3:
         return None
+    if key == "artifact-sha256":
+        # This explicitly named digest is not secret text. Syntax alone is not
+        # artifact/authority proof; its producer owns that validation.
+        text = _text(value)
+        return text if text is not None and re.fullmatch(r"[0-9a-f]{64}", text) else None
     if isinstance(value, Mapping):
         result: dict[str, Any] = {}
         for raw_key, raw_value in list(value.items())[:_MAX_ITEMS]:
@@ -174,8 +193,17 @@ def append_observation(
     observed_at: str | None = None,
     monotonic_ms: int | None = None,
     force_flush: bool = False,
+    event_kind: str = "dom-observed",
 ) -> dict[str, Any]:
-    """Append one immutable observation, coalescing identical polls safely."""
+    """Append a bounded observation; DOM polls retain historical coalescing.
+
+    Finite node milestones always append/flush and never coalesce, including
+    across event families. Projection is not node authority validation: node
+    producers must validate canonical identifiers/enums/hashes before calling,
+    and must never supply raw prompts/output, paths, native refs or exceptions.
+    """
+    if not isinstance(event_kind, str) or event_kind not in {"dom-observed", "node-stage-observed"}:
+        raise ValueError("unsupported observation event kind")
     safe_parts = {
         "dom-signals": _project_fields(dom_signals),
         "activity": _project_fields(activity),
@@ -188,19 +216,28 @@ def append_observation(
     }
     current_digest = _digest(safe_parts)
     journal_path = gateway_observation_path(project_root, request_id)
-    with _journal_lock(project_root, request_id):
+    from audiagentic.foundation.observability.journal_segments import (
+        journal_lock,
+        journal_sequence_watermark,
+        prepare_append,
+    )
+
+    from .retention import journal_max_bytes
+
+    with _journal_lock(project_root, request_id), journal_lock(journal_path):
         previous = last_ndjson(journal_path)
-        event_seq = int(previous.get("event_seq", 0)) + 1 if previous else 1
+        event_seq = (int(previous.get("event_seq", 0)) if previous else journal_sequence_watermark(journal_path)) + 1
         previous_digest = previous.get("current_digest") if previous else None
         index_path = gateway_observation_index_path(project_root, request_id)
         unchanged = bool(
-            previous
+            event_kind == "dom-observed"
+            and previous
             and previous_digest == current_digest
             and previous.get("event") in {"dom-observed", "observation-coalesced"}
         )
         event: dict[str, Any] = {
             "schema_version": SCHEMA_VERSION,
-            "event": "observation-coalesced" if unchanged else "dom-observed",
+            "event": "observation-coalesced" if unchanged else event_kind,
             "event_id": f"obs_{request_id}_{event_seq}",
             "event_seq": event_seq,
             "attempt_epoch": max(1, int(attempt_epoch)),
@@ -245,6 +282,8 @@ def append_observation(
                 event["coalesced"]["repeat_count"] = int(previous.get("coalesced", {}).get("repeat_count", 1)) + poll_gap
                 return event
         line = json.dumps(event, sort_keys=True, separators=(",", ":")) + "\n"
+        prepare_append(journal_path, index_path, max_bytes=journal_max_bytes("observation"),
+                       incoming_bytes=len(line.encode("utf-8")))
         journal_path.parent.mkdir(parents=True, exist_ok=True)
         offset = journal_path.stat().st_size if journal_path.exists() else 0
         with journal_path.open("a", encoding="utf-8", newline="\n") as handle:
@@ -261,17 +300,6 @@ def append_observation(
             handle.write(index_line)
             handle.flush()
             os.fsync(handle.fileno())
-        from audiagentic.components.agents.gateway.retention import (
-            compact_indexed_ndjson,
-            journal_max_bytes,
-        )
-        compact_indexed_ndjson(
-            journal_path,
-            index_path,
-            max_bytes=journal_max_bytes("observation"),
-            preserve=lambda row: row.get("facts", {}).get("decision", {}).get("terminal") is True
-            or row.get("facts", {}).get("action", {}).get("terminal") is True,
-        )
     return event
 
 
@@ -285,106 +313,108 @@ def read_observation_page(
     tail: int | None = None,
 ) -> dict[str, Any]:
     purge_expired_observation_artifacts(project_root, request_id)
-    if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
-        raise ValueError("observation limit must be an integer between 1 and 100")
-    if tail is not None and (isinstance(tail, bool) or not isinstance(tail, int) or not 1 <= tail <= 100):
-        raise ValueError("observation tail must be an integer between 1 and 100")
-    cursor_after, cursor_offset = _decode_cursor(cursor)
-    after = max(cursor_after, int(since_sequence or 0))
-    page: list[dict[str, Any]] = []
-    has_more = False
-    next_cursor_offset: int | None = None
-    if tail is not None and not cursor and not since_sequence:
-        index_path = gateway_observation_index_path(project_root, request_id)
-        journal_path = gateway_observation_path(project_root, request_id)
-        if index_path.exists() and journal_path.exists():
-            recent = tail_ndjson(index_path, tail + 1)
-            with journal_path.open("rb") as journal_handle:
-                for index in list(recent)[-tail:]:
-                    journal_handle.seek(int(index["offset"]))
-                    page.append(json.loads(journal_handle.readline().decode("utf-8")))
-            has_more = len(recent) > tail
-        else:
-            recent = tail_ndjson(journal_path, tail + 1)
-            has_more = len(recent) > tail
-            page = recent[-tail:]
-    else:
-        index_path = gateway_observation_index_path(project_root, request_id)
-        journal_path = gateway_observation_path(project_root, request_id)
-        if index_path.exists() and journal_path.exists():
-            try:
-                with index_path.open("rb") as index_handle, journal_path.open("rb") as journal_handle:
-                    if cursor_offset is not None:
-                        index_handle.seek(cursor_offset)
-                    while True:
-                        current_index_offset = index_handle.tell()
-                        raw_index = index_handle.readline()
-                        if not raw_index:
-                            break
-                        index = json.loads(raw_index)
-                        if int(index.get("event_seq", 0)) <= after:
-                            continue
-                        if len(page) >= limit:
-                            has_more = True
-                            next_cursor_offset = current_index_offset
-                            break
+    with head_read_lock(gateway_observation_path(project_root, request_id)):
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
+            raise ValueError("observation limit must be an integer between 1 and 100")
+        if tail is not None and (isinstance(tail, bool) or not isinstance(tail, int) or not 1 <= tail <= 100):
+            raise ValueError("observation tail must be an integer between 1 and 100")
+        cursor_after, cursor_offset = _decode_cursor(cursor)
+        after = max(cursor_after, int(since_sequence or 0))
+        page: list[dict[str, Any]] = []
+        has_more = False
+        next_cursor_offset: int | None = None
+        if tail is not None and not cursor and not since_sequence:
+            index_path = gateway_observation_index_path(project_root, request_id)
+            journal_path = gateway_observation_path(project_root, request_id)
+            if index_path.exists() and journal_path.exists() and not has_segments(journal_path):
+                recent = tail_ndjson(index_path, tail + 1)
+                with journal_path.open("rb") as journal_handle:
+                    for index in list(recent)[-tail:]:
                         journal_handle.seek(int(index["offset"]))
-                        item = json.loads(journal_handle.readline().decode("utf-8"))
-                        page.append(item)
-            except (OSError, KeyError, TypeError, ValueError, UnicodeDecodeError, json.JSONDecodeError):
-                page = []
-                has_more = False
+                        page.append(json.loads(journal_handle.readline().decode("utf-8")))
+                has_more = len(recent) > tail
+            else:
+                recent = tail_ndjson(journal_path, tail + 1)
+                has_more = len(recent) > tail
+                page = recent[-tail:]
         else:
-            for item in iter_ndjson(journal_path):
-                if int(item.get("event_seq", 0)) <= after:
-                    continue
-                if len(page) < limit:
-                    page.append(item)
-                else:
-                    has_more = True
-                    break
-    next_cursor = _cursor(int(page[-1]["event_seq"]), index_offset=next_cursor_offset) if has_more and page else None
-    return {
-        "schema_version": SCHEMA_VERSION,
-        "request_id": request_id,
-        "items": page,
-        "count": len(page),
-        "has_more": bool(next_cursor),
-        "next_cursor": next_cursor,
-    }
+            index_path = gateway_observation_index_path(project_root, request_id)
+            journal_path = gateway_observation_path(project_root, request_id)
+            if index_path.exists() and journal_path.exists() and not has_segments(journal_path):
+                try:
+                    with index_path.open("rb") as index_handle, journal_path.open("rb") as journal_handle:
+                        if cursor_offset is not None:
+                            index_handle.seek(cursor_offset)
+                        while True:
+                            current_index_offset = index_handle.tell()
+                            raw_index = index_handle.readline()
+                            if not raw_index:
+                                break
+                            index = json.loads(raw_index)
+                            if int(index.get("event_seq", 0)) <= after:
+                                continue
+                            if len(page) >= limit:
+                                has_more = True
+                                next_cursor_offset = current_index_offset
+                                break
+                            journal_handle.seek(int(index["offset"]))
+                            item = json.loads(journal_handle.readline().decode("utf-8"))
+                            page.append(item)
+                except (OSError, KeyError, TypeError, ValueError, UnicodeDecodeError, json.JSONDecodeError):
+                    page = []
+                    has_more = False
+            else:
+                for item in iter_ndjson(journal_path):
+                    if int(item.get("event_seq", 0)) <= after:
+                        continue
+                    if len(page) < limit:
+                        page.append(item)
+                    else:
+                        has_more = True
+                        break
+        next_cursor = _cursor(int(page[-1]["event_seq"]), index_offset=next_cursor_offset) if has_more and page else None
+        return {
+            "schema_version": SCHEMA_VERSION,
+            "request_id": request_id,
+            "items": page,
+            "count": len(page),
+            "has_more": bool(next_cursor),
+            "next_cursor": next_cursor,
+        }
 
 
 def observation_summary(project_root: Path, request_id: str) -> dict[str, Any]:
     purge_expired_observation_artifacts(project_root, request_id)
-    journal = gateway_observation_path(project_root, request_id)
-    index = gateway_observation_index_path(project_root, request_id)
-    count = 0
-    first = None
-    latest = None
-    if index.exists() and journal.exists():
-        try:
-            first = next(iter_ndjson(journal), None)
-            latest = last_ndjson(journal)
-            last_index = last_ndjson(index)
-            count = int(last_index.get("event_seq", 0)) if last_index else 0
-        except (OSError, ValueError, TypeError, json.JSONDecodeError):
-            count = 0
-    if count == 0:
-        for item in iter_ndjson(journal):
-            count += 1
-            first = first or item
-            latest = item
-    return {
-        "schema_version": SCHEMA_VERSION,
-        "request_id": request_id,
-        "count": count,
-        "first_event_seq": first.get("event_seq") if first else None,
-        "last_event_seq": latest.get("event_seq") if latest else None,
-        "last_poll_seq": latest.get("poll_seq") if latest else None,
-        "latest": latest,
-        "has_more": False,
-        "next_cursor": None,
-    }
+    with head_read_lock(gateway_observation_path(project_root, request_id)):
+        journal = gateway_observation_path(project_root, request_id)
+        index = gateway_observation_index_path(project_root, request_id)
+        count = 0
+        first = None
+        latest = None
+        if index.exists() and journal.exists() and not has_segments(journal):
+            try:
+                first = next(iter_ndjson(journal), None)
+                latest = last_ndjson(journal)
+                last_index = last_ndjson(index)
+                count = int(last_index.get("event_seq", 0)) if last_index else 0
+            except (OSError, ValueError, TypeError, json.JSONDecodeError):
+                count = 0
+        if count == 0:
+            for item in iter_ndjson(journal):
+                count += 1
+                first = first or item
+                latest = item
+        return {
+            "schema_version": SCHEMA_VERSION,
+            "request_id": request_id,
+            "count": count,
+            "first_event_seq": first.get("event_seq") if first else None,
+            "last_event_seq": latest.get("event_seq") if latest else None,
+            "last_poll_seq": latest.get("poll_seq") if latest else None,
+            "latest": latest,
+            "has_more": False,
+            "next_cursor": None,
+        }
 
 
 def capture_redacted_artifact(

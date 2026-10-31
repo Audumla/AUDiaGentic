@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from audiagentic.components.agents.agents_paths import gateway_request_dir
 from audiagentic.components.agents.gateway.session.retention import request_retention_pin
 from audiagentic.components.agents.gateway.session.root_registry import (
@@ -13,6 +15,7 @@ from audiagentic.components.agents.gateway.session.sessions_store import (
     update_provider_metadata,
     write_session_record,
 )
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 
 def test_request_referenced_by_durable_session_is_retention_pinned(tmp_path):
@@ -30,51 +33,31 @@ def test_unreferenced_request_is_not_retention_pinned(tmp_path):
     assert request_retention_pin(tmp_path, "req_unreferenced").pinned is False
 
 
-def test_provider_metadata_checkpoint_updates_and_clears_only_checkpoint_fields(tmp_path):
+def test_provider_metadata_cannot_bypass_checkpoint_or_budget_authority(tmp_path):
     record = build_session_record(
         session_id="ses_checkpoint",
         execution_profile_id="review",
         provider_id="gpt-auto",
-        provider_metadata={"chat-url": "https://chatgpt.com/c/existing"},
+        provider_metadata={"chat-url": "https://chatgpt.com/c/existing",
+                           "unresolved-turn-pending": True, "unresolved-turn-id": "turn-1",
+                           "conversation-load-recovery-attempts": 1,
+                           "conversation-load-recovery-revision": 2},
     )
     write_session_record(tmp_path, record)
+    with pytest.raises(AudiaGenticError, match="request-owner fence"):
+        update_provider_metadata(tmp_path, "ses_checkpoint",
+            {"unresolved-turn-pending": False}, remove_keys=("unresolved-turn-id",))
+    # Legacy checkpoint/binding projections cannot reset the independent CAS.
     update_provider_metadata(
         tmp_path,
         "ses_checkpoint",
         {
-            "unresolved-turn-pending": True,
-            "recovery-state": "side-effect-may-have-started",
-            "unresolved-turn-id": "turn-1",
-            "conversation-load-recovery-attempts": 1,
-        },
-    )
-    pending = read_session_record(tmp_path, "ses_checkpoint")
-    assert pending["provider"]["metadata"]["unresolved-turn-pending"] is True
-    assert pending["provider"]["metadata"]["chat-url"].endswith("existing")
-
-    update_provider_metadata(
-        tmp_path,
-        "ses_checkpoint",
-        {"unresolved-turn-pending": False},
-        remove_keys=("recovery-state", "unresolved-turn-id"),
-    )
-    cleared = read_session_record(tmp_path, "ses_checkpoint")
-    assert cleared["provider"]["metadata"] == {
-        "chat-url": "https://chatgpt.com/c/existing",
-        "unresolved-turn-pending": False,
-        "conversation-load-recovery-attempts": 1,
-    }
-
-    update_provider_metadata(
-        tmp_path,
-        "ses_checkpoint",
-        {
-            "unresolved-turn-pending": False,
             "conversation-load-recovery-attempts": 0,
         },
+        remove_keys=("conversation-load-recovery-revision",),
     )
     terminal = read_session_record(tmp_path, "ses_checkpoint")
-    assert terminal["provider"]["metadata"]["conversation-load-recovery-attempts"] == 0
+    assert terminal["provider"]["metadata"] == record["provider"]["metadata"]
 
 
 def test_record_session_turn_does_not_resurrect_terminal_unresolved_fence(tmp_path):

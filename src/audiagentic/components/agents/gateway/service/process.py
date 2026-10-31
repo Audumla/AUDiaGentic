@@ -10,8 +10,8 @@ from pathlib import Path
 
 from audiagentic.components.agents.gateway.service.host import GatewayServiceHost
 
-
 _CLOSE_DEADLINE_SECONDS = 30.0
+_REPLACEMENT_BIND_WAIT_SECONDS = 30.0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -19,6 +19,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--port", type=int, required=True)
     parser.add_argument("--token-file", type=Path, required=True)
     parser.add_argument("--service-root", type=Path, default=None)
+    # Seconds a restart's replacement waits for the retiring owner to release the port. Only the
+    # handoff passes it; a first start fails at once on a held port (a different service is there).
+    parser.add_argument("--bind-wait", type=float, default=0.0)
     args = parser.parse_args(argv)
     # Provider adapters use this neutral URL contract when they create their
     # dedicated browser-window anchor. The gateway itself remains HTTP-only.
@@ -27,6 +30,7 @@ def main(argv: list[str] | None = None) -> int:
         port=args.port,
         token_path=args.token_file,
         service_root=args.service_root,
+        bind_wait=args.bind_wait,
     )
     host.lifecycle.restart_enabled = True
     unexpected_server_exit = False
@@ -46,6 +50,7 @@ def main(argv: list[str] | None = None) -> int:
         if host.lifecycle.restart_requested:
             os.environ["AUDIAGENTIC_GATEWAY_RESTART_HANDOFF"] = "1"
         closed = _close_host_with_deadline(host)
+        _release_port(host)
     if not closed:
         _fence_stranded_host(host)
     if host.lifecycle.restart_requested or not closed:
@@ -59,6 +64,14 @@ def main(argv: list[str] | None = None) -> int:
         # detached, so terminate this owner immediately.
         os._exit(0)
     return 0
+
+
+def _release_port(host: GatewayServiceHost) -> None:
+    """Close the listening socket now, so a replacement never races this process's exit for the port."""
+    try:
+        host.server.server_close()
+    except Exception:  # noqa: BLE001 - already closed, or closing failed; the replacement retries its bind
+        pass
 
 
 def _close_host_with_deadline(host: GatewayServiceHost) -> bool:
@@ -97,8 +110,9 @@ def _launch_replacement(argv: list[str]) -> None:
     # perform ordinary startup/teardown and must not suppress its own provider
     # cleanup if it is later stopped for a non-restart reason.
     env.pop("AUDIAGENTIC_GATEWAY_RESTART_HANDOFF", None)
+    arguments = [*argv] if "--bind-wait" in argv else [*argv, "--bind-wait", str(_REPLACEMENT_BIND_WAIT_SECONDS)]
     subprocess.Popen(
-        [sys.executable, "-m", __package__ + ".process", *argv],
+        [sys.executable, "-m", __package__ + ".process", *arguments],
         env=env,
         stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,

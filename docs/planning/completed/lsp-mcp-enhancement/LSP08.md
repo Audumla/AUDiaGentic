@@ -2,7 +2,7 @@
 id: LSP08
 order: 8
 plan: lsp-mcp-enhancement
-state: done
+state: completed
 wave: W2.4
 phase: Phase 0
 ---

@@ -8,7 +8,6 @@ registry, or custom validation -- these are thin wrappers over the shared
 """
 from __future__ import annotations
 
-import os
 import time
 from pathlib import Path
 from typing import Any
@@ -16,19 +15,13 @@ from typing import Any
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 _COMPONENT_ID = "agents"
-_RESTART_WAIT_SECONDS_ENV = "AUDIAGENTIC_GATEWAY_RESTART_WAIT_SECONDS"
 _RESTART_POLL_SECONDS = 0.25
 
 
 def _restart_wait_seconds() -> float:
-    raw = os.environ.get(_RESTART_WAIT_SECONDS_ENV, "60")
-    try:
-        value = float(raw)
-    except ValueError as exc:
-        raise ValueError(f"{_RESTART_WAIT_SECONDS_ENV} must be a number") from exc
-    if value <= 0:
-        raise ValueError(f"{_RESTART_WAIT_SECONDS_ENV} must be positive")
-    return value
+    from audiagentic.components.agents.gateway.settings import gateway_setting
+
+    return float(gateway_setting("restart_wait_seconds", 60))
 
 
 def active_implementation_id(project_root: Path) -> str:
@@ -202,6 +195,8 @@ def gateway_set_config(
     options = dict(impl_state.options)
     options.update(updates)
 
+    if implementation_id == "standalone":
+        validate_standalone_config(options)
     new_state = ImplementationState(enabled=impl_state.enabled, options=options)
     set_implementation_state(project_root, _COMPONENT_ID, implementation_id, new_state)
 
@@ -210,6 +205,58 @@ def gateway_set_config(
         "config": options,
         "updated_keys": list(updates.keys()),
     }
+
+
+
+def validate_standalone_config(options: dict[str, Any]) -> None:
+    """Validate the mutually exclusive local and shared connection forms."""
+    connector = options.get("connector-config")
+    if connector is not None:
+        if (
+            not isinstance(connector, str) or not connector.strip()
+            or not Path(connector).is_absolute()
+            or "endpoint" in options or "token-file" in options
+        ):
+            raise AudiaGenticError("VAL-AGSV-029", "validation",
+                                  "connector-config requires an absolute reference and excludes endpoint/token-file")
+        from .service.shared_config import load_shared_connector_config
+
+        load_shared_connector_config(Path(connector))
+    elif not all(isinstance(options.get(key), str) and options[key].strip()
+                 for key in ("endpoint", "token-file")):
+        raise AudiaGenticError("VAL-AGSV-029", "validation",
+                              "standalone requires connector-config or endpoint and token-file")
+
+
+def gateway_connect_config(project_root: Path, config_path: Path) -> dict[str, Any]:
+    """Select a validated connector through the existing Agents state owner.
+
+    Callers must complete the TLS identity handshake before requesting this
+    write. Selection and the reference are committed in one Foundation shard
+    replacement; unrelated implementation options/features are preserved.
+    """
+    from copy import deepcopy
+    from audiagentic.foundation.features.state import (
+        get_component_state, set_component_state, shard_path,
+    )
+    from audiagentic.foundation.system.process import StartupLock
+
+    reference = str(config_path.resolve(strict=True))
+    validate_standalone_config({"connector-config": reference})
+    path = shard_path(project_root, _COMPONENT_ID)
+    with StartupLock(path.with_suffix(".lock")):
+        component = deepcopy(get_component_state(project_root, _COMPONENT_ID, persist_migration=False))
+        implementations = component.setdefault("implementations", {})
+        for entry in implementations.values():
+            entry["enabled"] = False
+        standalone = implementations.setdefault("standalone", {})
+        options = standalone.setdefault("options", {})
+        options.pop("endpoint", None)
+        options.pop("token-file", None)
+        options["connector-config"] = reference
+        standalone["enabled"] = True
+        set_component_state(project_root, _COMPONENT_ID, component)
+    return {"implementation": "standalone", "connector-config": reference, "enabled": True}
 
 
 def gateway_create_operation(
@@ -272,12 +319,17 @@ def gateway_get_retention_policy(project_root: Path) -> dict[str, Any]:
     )
 
     policy = load_retention_policy()
+    from .journal_retention import journal_retention_days
+
     return {
         "available": policy.available,
         "purge-enabled": policy.enabled,
         "minimum-archive-age-seconds": policy.minimum_archive_age_seconds,
         "max-batch-size": policy.max_batch_size,
         "request-history-limit": policy.request_history_limit,
+        "journal-retention-days": journal_retention_days(),
+        "journal-rotation": "daily-utc-and-size",
+        "journal-compression": "gzip-closed-segments",
         "timeline-max-bytes": policy.timeline_max_bytes,
         "observation-max-bytes": policy.observation_max_bytes,
         "recovery-max-bytes": policy.recovery_max_bytes,
@@ -346,3 +398,36 @@ def gateway_restart(project_root: Path, *, force: bool = False) -> dict[str, Any
     finally:
         replacement.close()
     return {"restarting": restarting, "restarted": True, "status": status}
+
+
+def _attached_call(project_root: Path, method: str, **kwargs: Any) -> dict[str, Any]:
+    """Call one lifecycle method on the running service; never starts a service."""
+    from audiagentic.components.agents.gateway.service.bootstrap import attach_existing_gateway
+
+    client = attach_existing_gateway()
+    try:
+        return getattr(client, method)(project_root, **kwargs)
+    finally:
+        client.close()
+
+
+def gateway_drain(project_root: Path) -> dict[str, Any]:
+    """Stop the running service admitting new work; in-flight work finishes."""
+    return _attached_call(project_root, "service_drain")
+
+
+def gateway_resume(project_root: Path) -> dict[str, Any]:
+    """Admit new work again after a drain."""
+    return _attached_call(project_root, "service_resume")
+
+
+def gateway_stop(project_root: Path, *, force: bool = False) -> dict[str, Any]:
+    """Stop the running service; graceful stop is refused unless it is quiescent."""
+    return _attached_call(project_root, "service_stop", force=force)
+
+
+def gateway_recover(*, reason: str) -> dict[str, Any]:
+    """Record-only recovery of a live-but-unprovable owner; never signals the pid."""
+    from audiagentic.components.agents.gateway.service.lifecycle import recover_unprovable_owner
+
+    return recover_unprovable_owner(confirm=True, reason=reason)

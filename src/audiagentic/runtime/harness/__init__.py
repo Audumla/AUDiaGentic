@@ -41,10 +41,8 @@ def wire_harness_status() -> None:
         "harness_cli_available": harness_cli_available,
         "build_runtime_sync": build_runtime_sync,
         "refresh_harness_config_if_installed": refresh_harness_config_if_installed,
-        "query_rig_server_version": query_rig_server_version,
         "version_info": version_info,
         "default_config_path": default_config_path,
-        "load_active_profile": load_active_profile,
         "resolve_session_info": resolve_session_info,
     })
 
@@ -129,12 +127,8 @@ def install_to(target: Path, project_root: Path | None = None) -> int:
     from .config import load_harness_config
 
     root = project_root or Path.cwd()
-    for path in (target / "agent", target / "logs", target / "rig" / "bin" / "models"):
+    for path in (target / "agent", target / "logs"):
         path.mkdir(parents=True, exist_ok=True)
-    from .provisioning import provision_embedded_rig, should_provision_embedded_rig
-
-    if should_provision_embedded_rig():
-        provision_embedded_rig(target, root)
     providers_api.materialize_provider_config(
         root,
         get_harness_type(root),
@@ -301,7 +295,6 @@ def resolve_session_info(project_root: Path | None = None) -> ProviderSessionInf
     """
     from audiagentic.foundation.config import load_layered_config
     from audiagentic.foundation.paths.home import global_harness_runtime
-    from audiagentic.runtime.rig.models import query_server_version
 
     info = ProviderSessionInfo()
 
@@ -313,20 +306,17 @@ def resolve_session_info(project_root: Path | None = None) -> ProviderSessionInf
         config_path=str(default_config_path()),
     )
 
-    # Local rig: server version + models.json (if harness exists)
+    # The harness's models.json, if it has one
     harness = global_harness_runtime()
-    if harness and (harness / "rig" / "bin").exists():
-        server_ver = query_server_version(harness / "rig" / "bin")
-        info = ProviderSessionInfo(**{**info.__dict__, "server_version": server_ver})
-        models_path = harness / "agent" / "models.json"
-        if models_path.exists():
-            try:
-                models_json = json.loads(models_path.read_text(encoding="utf-8"))
-                info = ProviderSessionInfo(**{**info.__dict__, "models_data": models_json})
-            except (OSError, json.JSONDecodeError):
-                pass  # degraded: no models JSON
+    models_path = harness / "agent" / "models.json" if harness else None
+    if models_path is not None and models_path.exists():
+        try:
+            models_json = json.loads(models_path.read_text(encoding="utf-8"))
+            info = ProviderSessionInfo(**{**info.__dict__, "models_data": models_json})
+        except (OSError, json.JSONDecodeError):
+            pass  # degraded: no models JSON
 
-    # Endpoint from env (remote rig / OpenAI-compatible connection)
+    # Endpoint from env (the OpenAI-compatible model server)
     base_url = os.environ.get("AUDIAGENTIC_AG_BASE_URL")
     info = ProviderSessionInfo(**{**info.__dict__, "base_url": base_url})
 
@@ -346,23 +336,6 @@ def resolve_session_info(project_root: Path | None = None) -> ProviderSessionInf
     })
 
     return info
-
-
-def query_rig_server_version(bin_dir: Path, timeout: float = 10.0) -> str | None:
-    from audiagentic.runtime.rig.models import query_server_version
-
-    return query_server_version(bin_dir, timeout=timeout)
-
-
-def load_active_profile(
-    requested: str | None,
-    model: str,
-    *,
-    rig_config: Path | None = None,
-) -> tuple[str, dict[str, object]]:
-    from audiagentic.runtime.rig.models import load_model_profile
-
-    return load_model_profile(requested, model, rig_config=rig_config)
 
 
 def load_pi_config(project_root: Path | None = None) -> dict:

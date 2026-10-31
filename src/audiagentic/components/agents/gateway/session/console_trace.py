@@ -4,7 +4,7 @@ The gateway service normally communicates over HTTP/MCP, so provider launch
 activity is otherwise difficult to see while debugging a live CLI process.
 This module writes a small, human-readable trace to stderr (never stdout,
 which may be an MCP protocol stream).  Summary mode is enabled by default;
-set ``AUDIAGENTIC_GATEWAY_CONSOLE_TRACE=off`` to disable it or ``full`` to
+set ``gateway.console_trace.mode`` to ``off`` to disable it or ``full`` to
 include bounded prompt/response bodies.
 """
 
@@ -14,17 +14,17 @@ import os
 import sys
 import threading
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from collections.abc import Mapping
 from typing import Any, TextIO
 
+from audiagentic.components.agents.gateway.settings import gateway_setting
 from audiagentic.foundation.paths.home import global_log_dir
 
 _DEFAULT_MAX_BODY_CHARS = 4096
 _PROGRESS_INTERVAL_SECONDS = 5.0
-_VALID_MODES = frozenset({"off", "summary", "full"})
 
 
 def _default_stream() -> TextIO:
@@ -33,11 +33,11 @@ def _default_stream() -> TextIO:
     The managed gateway deliberately has no console and its service host
     discards child stderr/stdout.  Persisting the bounded trace to the shared
     gateway log makes it observable without reintroducing console windows.
-    ``AUDIAGENTIC_GATEWAY_CONSOLE_TRACE_FILE`` remains an explicit override;
-    stderr is only the safe fallback if the log cannot be opened.
+    ``gateway.console_trace.file`` is an explicit override; stderr is only the
+    safe fallback if the log cannot be opened.
     """
 
-    configured = os.environ.get("AUDIAGENTIC_GATEWAY_CONSOLE_TRACE_FILE", "").strip()
+    configured = str(gateway_setting("console_trace.file", "", strict=False)).strip()
     path = Path(os.path.expandvars(configured)) if configured else global_log_dir("gateway") / "console-trace.log"
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -47,16 +47,11 @@ def _default_stream() -> TextIO:
 
 
 def _mode() -> str:
-    value = os.environ.get("AUDIAGENTIC_GATEWAY_CONSOLE_TRACE", "summary").strip().lower()
-    return value if value in _VALID_MODES else "summary"
+    return str(gateway_setting("console_trace.mode", "summary", strict=False))
 
 
 def _max_body_chars() -> int:
-    try:
-        value = int(os.environ.get("AUDIAGENTIC_GATEWAY_CONSOLE_TRACE_MAX_CHARS", ""))
-    except ValueError:
-        value = _DEFAULT_MAX_BODY_CHARS
-    return max(256, min(value or _DEFAULT_MAX_BODY_CHARS, 1_048_576))
+    return int(gateway_setting("console_trace.max_chars", _DEFAULT_MAX_BODY_CHARS, strict=False))
 
 
 def _safe_body(value: Any) -> str:
@@ -102,6 +97,11 @@ class GatewayConsoleTrace:
         if not isinstance(name, (str, os.PathLike)):
             return
         path = Path(name)
+        # Only a stream backed by a real file rotates. A capture wrapper (pytest's stderr)
+        # reports a repr such as "<_io.FileIO name=8 ...>" as its name; treating that as a
+        # path would recreate it as a literal file in the working directory.
+        if not path.is_absolute() and not path.exists():
+            return
         try:
             if path.stat().st_size + len(line.encode("utf-8")) <= console_trace_max_bytes():
                 return

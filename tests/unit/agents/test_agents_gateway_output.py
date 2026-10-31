@@ -144,7 +144,7 @@ def test_late_terminal_writer_does_not_overwrite_winner_artifact(tmp_path: Path)
     late = persist_final_response(tmp_path, request_id, "late worker response")
 
     assert gateway_final_response_path(tmp_path, request_id).read_text(encoding="utf-8") == winner
-    assert late["sha256"] == hashlib.sha256("late worker response".encode()).hexdigest()
+    assert late["sha256"] == hashlib.sha256(b"late worker response").hexdigest()
 
 
 def test_final_response_artifact_preserves_markdown_media_type(tmp_path: Path) -> None:

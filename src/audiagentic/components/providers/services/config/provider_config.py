@@ -1,17 +1,22 @@
 """Provider config loading and validation helpers."""
+
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
 
+from audiagentic.foundation.config.merge import merged
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.contracts.schema_registry import validate_with_schema
 from audiagentic.foundation.features.base import ImplementationState
 from audiagentic.foundation.features.state import (
+    get_component_state,
     get_implementation_state,
     set_implementation_state,
 )
 from audiagentic.foundation.io import load_yaml_file, save_yaml_file
+
+from ...descriptors.target import ProviderTarget, base_provider_id, provider_config_error
 
 _COMPONENT_ID = "providers"
 
@@ -39,7 +44,9 @@ def validate_prompt_surface(provider_id: str, provider_cfg: dict[str, Any]) -> l
     vscode_mode = prompt_surface.get("vscode-mode")
 
     if enabled:
-        supported_modes = [mode for mode in (cli_mode, vscode_mode) if mode and mode != "unsupported"]
+        supported_modes = [
+            mode for mode in (cli_mode, vscode_mode) if mode and mode != "unsupported"
+        ]
         if not supported_modes:
             issues.append(
                 f"{provider_id}: prompt-surface.enabled requires at least one supported cli-mode or vscode-mode"
@@ -97,13 +104,93 @@ def _save_provider_config(path: Path, payload: dict[str, Any]) -> None:
     save_yaml_file(path, payload, sort_keys=False, atomic=True)
 
 
-def is_provider_enabled(project_root: Path, provider_id: str) -> bool:
-    """Single source of truth for provider enablement: implementation feature state.
+def provider_enabled_policy(project_root: Path, provider_id: str) -> str | bool:
+    """``providers.<id>.enabled`` from settings: ``"auto"`` (default), ``True`` or ``False``."""
+    if not project_root.is_dir():
+        return "auto"
+    from audiagentic.foundation.config.settings import resolve_settings_cached
 
-    Provider settings files hold launch config; whether a provider is enabled
-    lives in `features.yaml` under the provider's implementation state.
+    entry = (resolve_settings_cached(project_root).get("providers") or {}).get(base_provider_id(provider_id))
+    return entry["enabled"] if isinstance(entry, dict) and "enabled" in entry else "auto"
+
+
+def _persisted_enabled(project_root: Path, provider_id: str) -> bool | None:
+    """Enablement written by ``set_provider_enabled``/reconciliation, or None if never set."""
+    implementations = get_component_state(project_root, _COMPONENT_ID, persist_migration=False).get(
+        "implementations", {}
+    )
+    stored = implementations.get(base_provider_id(provider_id))
+    return bool(stored["enabled"]) if isinstance(stored, dict) and "enabled" in stored else None
+
+
+def provider_instance_config(project_root: Path, target: ProviderTarget, config: Any) -> Any:
+    """``config`` with the target's ``providers.<id>.instances.<name>`` overlay applied.
+
+    The overlay is merge-patched (RFC 7396) over the provider's options, inside
+    its ``settings`` mapping when the provider file wraps them there. A name
+    that is not configured is an error that lists the configured ones.
     """
-    return get_implementation_state(project_root, _COMPONENT_ID, provider_id).enabled
+    if target.instance is None or not isinstance(config, dict):
+        return config
+    from audiagentic.foundation.config.settings import resolve_settings_cached
+
+    entry = (resolve_settings_cached(project_root).get("providers") or {}).get(target.provider_id) or {}
+    instances = entry.get("instances") or {}
+    if target.instance not in instances:
+        raise provider_config_error(
+            6, "Provider instance is not configured",
+            provider=target.provider_id, instance=target.instance, configured=sorted(instances),
+        )
+    overlay = instances[target.instance]
+    if isinstance(config.get("settings"), dict):
+        return {**config, "settings": merged(config["settings"], overlay)}
+    return merged(config, overlay)
+
+
+def is_provider_enabled(project_root: Path, provider_id: str) -> bool:
+    """Whether a provider is enabled: policy, else persisted enablement.
+
+    ``providers.<id>.enabled`` ``true``/``false`` in settings decides outright.
+    Under ``auto`` the persisted implementation state applies (written by
+    ``set_provider_enabled`` and reconciliation, which also own the provider's
+    generated footprint). Runtime gates use ``is_provider_usable`` instead.
+    """
+    policy = provider_enabled_policy(project_root, provider_id)
+    if isinstance(policy, bool):
+        return policy
+    return bool(_persisted_enabled(project_root, provider_id))
+
+
+def is_provider_usable(project_root: Path, provider_id: str) -> bool:
+    """Whether a provider may run here (CFG06): enabled, or ``auto`` and observed available.
+
+    Under ``auto`` with no persisted enablement, the provider's own availability
+    check decides (CLI found, browser reachable), so a clean install needs no
+    enablement step. A provider with nothing checkable stays disabled until
+    enabled in settings.
+    """
+    policy = provider_enabled_policy(project_root, provider_id)
+    if isinstance(policy, bool):
+        return policy
+    persisted = _persisted_enabled(project_root, provider_id)
+    if persisted is not None:
+        return persisted
+    from audiagentic.components.providers.providers_api import check_provider_availability
+
+    return check_provider_availability(project_root, base_provider_id(provider_id))[0] is True
+
+
+def is_native_mcp_target_enabled(project_root: Path, provider_id: str) -> bool:
+    """Explicit native selection works without interactive provider setup.
+
+    Once provider state exists, its canonical disabled state suppresses exposure.
+    This is a read of the existing feature authority, not another enablement map.
+    """
+    implementations = get_component_state(project_root, _COMPONENT_ID, persist_migration=False).get(
+        "implementations", {}
+    )
+    state = implementations.get(provider_id)
+    return state is None or bool(state.get("enabled", False))
 
 
 def apply_feature_enabled_state(
@@ -179,11 +266,26 @@ def set_provider_enabled(project_root: Path, provider_id: str, *, enabled: bool)
     )
 
     fn = enable_implementation if enabled else disable_implementation
+    previous = get_implementation_state(project_root, _COMPONENT_ID, provider_id)
     if fn(project_root, _COMPONENT_ID, provider_id).get("ok"):
         if not enabled:
             from ..lifecycle.project_purge import purge_provider_project
 
             purge_provider_project(project_root, provider_id)
+            set_implementation_state(
+                project_root,
+                _COMPONENT_ID,
+                provider_id,
+                ImplementationState(enabled=False, options=previous.options),
+            )
+        from audiagentic.foundation.event import get_bus
+
+        from ...events import PROVIDER_STATE_CHANGED
+
+        get_bus().publish(
+            PROVIDER_STATE_CHANGED,
+            {"project_root": project_root, "provider_id": provider_id, "enabled": enabled},
+        )
         return
     state = get_implementation_state(project_root, _COMPONENT_ID, provider_id)
     set_implementation_state(
@@ -196,6 +298,20 @@ def set_provider_enabled(project_root: Path, provider_id: str, *, enabled: bool)
         from ..lifecycle.project_purge import purge_provider_project
 
         purge_provider_project(project_root, provider_id)
+        set_implementation_state(
+            project_root,
+            _COMPONENT_ID,
+            provider_id,
+            ImplementationState(enabled=False, options=previous.options),
+        )
+    from audiagentic.foundation.event import get_bus
+
+    from ...events import PROVIDER_STATE_CHANGED
+
+    get_bus().publish(
+        PROVIDER_STATE_CHANGED,
+        {"project_root": project_root, "provider_id": provider_id, "enabled": enabled},
+    )
 
 
 _VALID_RECONCILIATION_MODES = ("auto", "allowlist", "prompt")

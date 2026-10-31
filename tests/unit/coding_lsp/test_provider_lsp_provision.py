@@ -39,9 +39,7 @@ def _desc(
         caps.append(
             Capability(
                 kind="lsp-self-support",
-                mechanism=LspSelfSupportSpec(
-                    on_enabled=on_lsp_enabled, probe=lsp_support_probe
-                ),
+                mechanism=LspSelfSupportSpec(on_enabled=on_lsp_enabled, probe=lsp_support_probe),
             )
         )
     return ProviderDescriptor(
@@ -75,7 +73,9 @@ def test_ensure_lens_skips_when_harness_absent(tmp_path: Path, monkeypatch) -> N
     assert "not installed" in result["skipped"]
 
 
-def test_ensure_lens_starts_background_install_when_harness_present(tmp_path: Path, monkeypatch) -> None:
+def test_ensure_lens_starts_background_install_when_harness_present(
+    tmp_path: Path, monkeypatch
+) -> None:
     # Enabling runs subprocess.run directly (not threaded) and returns immediately.
     pi_bin = tmp_path / "pi"
     pi_bin.write_text("#!/bin/sh\n", encoding="utf-8")
@@ -157,17 +157,23 @@ def test_managed_mcp_all_skips_no_capability(tmp_path: Path, monkeypatch) -> Non
         lambda pid: providers.get(pid),
     )
     # Mock the registry to avoid file I/O
-    mock_reg = type("MockReg", (), {
-        "load": lambda self: {},
-        "save": lambda self, d: None,
-    })()
+    mock_reg = type(
+        "MockReg",
+        (),
+        {
+            "load": lambda self: {},
+            "save": lambda self, d: None,
+        },
+    )()
     monkeypatch.setattr(
         "audiagentic.components.providers.services.mcp.managed_mcp_registry.mcp_ownership_registry",
         lambda root: mock_reg,
     )
 
     entry = ManagedMcpEntry(managed_id="coding-lsp/ag-lsp", name="ag-lsp", command="ag-lsp")
-    request = ManagedMcpRequest(ownership_scope="coding-lsp/ag-lsp", entries=(entry,))
+    request = ManagedMcpRequest(
+        ownership_scope="coding-lsp/ag-lsp", managed_ids=None, entries=(entry,)
+    )
 
     results = manage_mcp_entries_all(
         tmp_path,
@@ -218,6 +224,7 @@ def test_provision_fans_out_to_hooks(tmp_path: Path, monkeypatch) -> None:
 # ---------------------------------------------------------------------------
 # self-provided-lsp status is a query: it must never provision (RV497)
 # ---------------------------------------------------------------------------
+
 
 def _self_lsp_handler(descriptor, tmp_path: Path, monkeypatch):
     from audiagentic.components.providers.services.capabilities.self_provided_lsp_handler import (

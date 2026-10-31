@@ -283,17 +283,27 @@ def test_project_url_is_optional_for_project_name_discovery():
     assert GptAutoConfig.from_dict(value).project_url is None
 
 
+def test_automatic_browser_path_uses_platform_discovery(monkeypatch):
+    from audiagentic.components.providers.adapters.gpt_auto import config as config_module
+
+    executable = Path(sys.executable)
+    monkeypatch.setattr(config_module, 'discover_browser_candidates', lambda: [executable])
+    value = valid_config()
+    value['browser']['executable'] = 'auto'
+    assert GptAutoConfig.from_dict(value).browser.executable == executable
+
+
 def test_repository_base_gpt_auto_profile_does_not_pin_a_chatgpt_project():
     """The shared base profile must use the admitted project name.
 
     A fixed URL takes precedence over ``project_name`` in
     ``PersistentChat.open_project_page`` and silently routes every caller to
-    that one ChatGPT project.  Dedicated aliases such as gpt-auto-t1/t2 can
-    remain explicitly pinned; only the reusable base profile is dynamic.
+    that one ChatGPT project.  Provider instances (providers.gpt-auto.instances) can
+    pin a project explicitly; only the reusable base profile is dynamic.
     """
     root = Path(__file__).resolve().parents[2]
     document = yaml.safe_load(
-        (root / ".audiagentic/config/providers/gpt-auto.yaml").read_text(encoding="utf-8")
+        (root / "src/audiagentic/components/providers/adapters/gpt_auto/gpt-auto-defaults.yaml").read_text(encoding="utf-8")
     )
 
     assert GptAutoConfig.from_project_dict(document).project_url is None
@@ -353,7 +363,7 @@ def test_is_gpt_auto_relevant_url_scopes_to_plausible_owned_tabs():
 def test_live_workflow_does_not_treat_static_streaming_animation_as_busy() -> None:
     root = Path(__file__).resolve().parents[2]
     document = yaml.safe_load(
-        (root / ".audiagentic/config/providers/gpt-auto.yaml").read_text(encoding="utf-8")
+        (root / "src/audiagentic/components/providers/adapters/gpt_auto/gpt-auto-defaults.yaml").read_text(encoding="utf-8")
     )
     config = GptAutoConfig.from_project_dict(document)
     signals = {item["name"]: item for item in config.workflow.bridge_signals()}
@@ -365,7 +375,7 @@ def test_live_workflow_declares_delivery_timeout_retry_signal() -> None:
     root = Path(__file__).resolve().parents[2]
     config = GptAutoConfig.from_project_dict(
         yaml.safe_load(
-            (root / ".audiagentic/config/providers/gpt-auto.yaml").read_text(encoding="utf-8")
+            (root / "src/audiagentic/components/providers/adapters/gpt_auto/gpt-auto-defaults.yaml").read_text(encoding="utf-8")
         )
     )
     signals = {item["name"]: item for item in config.workflow.bridge_signals()}
@@ -447,7 +457,7 @@ def test_real_merged_config_response_complete_requires_correlated_completion_fac
     while generation is active must remain rejected."""
     root = Path(__file__).resolve().parents[2]
     document = yaml.safe_load(
-        (root / ".audiagentic/config/providers/gpt-auto.yaml").read_text(encoding="utf-8")
+        (root / "src/audiagentic/components/providers/adapters/gpt_auto/gpt-auto-defaults.yaml").read_text(encoding="utf-8")
     )
     config = GptAutoConfig.from_project_dict(document)
     policy = config.workflow.policy("response-complete")
@@ -477,7 +487,7 @@ def test_real_merged_config_response_complete_requires_correlated_completion_fac
 def test_real_merged_config_stream_cache_expired_is_request_failure() -> None:
     root = Path(__file__).resolve().parents[2]
     document = yaml.safe_load(
-        (root / ".audiagentic/config/providers/gpt-auto.yaml").read_text(encoding="utf-8")
+        (root / "src/audiagentic/components/providers/adapters/gpt_auto/gpt-auto-defaults.yaml").read_text(encoding="utf-8")
     )
     config = GptAutoConfig.from_project_dict(document)
     policy = config.workflow.policy("response-failed")
@@ -496,7 +506,7 @@ def test_real_merged_config_response_complete_recognizes_canvas_variant_alone() 
     just the synthetic fixture."""
     root = Path(__file__).resolve().parents[2]
     document = yaml.safe_load(
-        (root / ".audiagentic/config/providers/gpt-auto.yaml").read_text(encoding="utf-8")
+        (root / "src/audiagentic/components/providers/adapters/gpt_auto/gpt-auto-defaults.yaml").read_text(encoding="utf-8")
     )
     config = GptAutoConfig.from_project_dict(document)
     policy = config.workflow.policy("response-complete")
@@ -524,7 +534,7 @@ def test_real_merged_config_canvas_group_rejects_mid_generation_false_positive()
     and did fail during code review's analysis of the pre-fix diff."""
     root = Path(__file__).resolve().parents[2]
     document = yaml.safe_load(
-        (root / ".audiagentic/config/providers/gpt-auto.yaml").read_text(encoding="utf-8")
+        (root / "src/audiagentic/components/providers/adapters/gpt_auto/gpt-auto-defaults.yaml").read_text(encoding="utf-8")
     )
     config = GptAutoConfig.from_project_dict(document)
     policy = config.workflow.policy("response-complete")
@@ -560,7 +570,7 @@ def test_real_merged_config_ignores_renderer_position_markers() -> None:
     """
     root = Path(__file__).resolve().parents[2]
     document = yaml.safe_load(
-        (root / ".audiagentic/config/providers/gpt-auto.yaml").read_text(encoding="utf-8")
+        (root / "src/audiagentic/components/providers/adapters/gpt_auto/gpt-auto-defaults.yaml").read_text(encoding="utf-8")
     )
     config = GptAutoConfig.from_project_dict(document)
     policy = config.workflow.policy("response-complete")

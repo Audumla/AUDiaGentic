@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
+import pytest
+
 from audiagentic.components.agents.gateway import store
 from audiagentic.components.agents.gateway.api import (
     get_execution_diagnostics,
@@ -13,6 +15,7 @@ from audiagentic.components.agents.gateway.diagnostics import (
     merge_diagnostics,
 )
 from audiagentic.components.agents.gateway.queue.dispatch import diagnose_activity_lease
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 
 def test_ambiguous_gpt_auto_error_is_not_provider_failure() -> None:
@@ -30,6 +33,124 @@ def test_ambiguous_gpt_auto_error_is_not_provider_failure() -> None:
     assert result["side-effect-state"] == "may-have-started"
     assert result["recovery"]["disposition"] == "operator-adopt-available"
     assert result["provider-signals"] == ["completion-control", "more-actions-menu"]
+
+
+def test_explicit_unsent_outcome_supersedes_earlier_fsm_phase_only_with_full_proof():
+    details = {
+        "turn-state": "side-effect-attempted",
+        "submission-state": "not_started",
+        "submission-attempted": False,
+        "submission-proven": False,
+        "submission-ambiguous": False,
+    }
+    result = classify_error({"code": "EXT-GPTAUTO-003", "details": details})
+    assert result["side-effect-state"] == "not-started"
+    assert result["recovery"]["disposition"] == "retry-safe"
+    for key in ("submission-state", "submission-attempted", "submission-proven", "submission-ambiguous"):
+        incomplete = dict(details)
+        del incomplete[key]
+        assert classify_error({"code": "EXT-GPTAUTO-003", "details": incomplete})["side-effect-state"] == "may-have-started"
+    for extra in (
+        {"side-effect-attempted": True}, {"submission-ambiguous": True},
+        {"submission-attempted": True}, {"send-intent-ever": True},
+        {"send-button-clicked": True}, {"enter-dispatched": True},
+    ):
+        assert classify_error({"code": "EXT-GPTAUTO-003", "details": {**details, **extra}})["side-effect-state"] == "may-have-started"
+
+
+def test_readiness_unsent_proof_survives_redaction_and_is_not_ambiguous():
+    from audiagentic.components.agents.gateway.store._records import _redact_error
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+    proof = {
+        "failure-stage": "readiness", "submission-state": "not_started",
+        "submission-attempted": False, "submission-proven": False,
+        "submission-ambiguous": False, "previous-turn-unresolved": False,
+        "chat-state": "failed", "retryable-same-session": False,
+    }
+    saved = _redact_error(AudiaGenticError(
+        code="EXT-GPTAUTO-004", kind="providers", message="admission failed",
+        details={**proof, "cause-message": "private diagnostic", "prompt-body": "private prompt"},
+    ))
+    assert saved["details"] == proof
+    assert _redact_error(saved) == saved
+    result = classify_error(saved)
+    assert result["classification"] == "browser-adapter-error"
+    assert result["phase"] == "pre-submit"
+    assert result["side-effect-state"] == "not-started"
+    assert result["recovery"]["disposition"] == "retry-safe"
+    # Safe to retry does not mean the failed transport can be reused.
+    assert saved["details"]["retryable-same-session"] is False
+    for key in (
+        "failure-stage", "submission-state", "submission-attempted",
+        "submission-proven", "submission-ambiguous", "previous-turn-unresolved",
+    ):
+        incomplete = dict(proof)
+        del incomplete[key]
+        assert classify_error({"code": "EXT-GPTAUTO-004", "details": incomplete})["classification"] == "ambiguous-side-effect"
+    for extra in (
+        {"previous-turn-unresolved": True}, {"submission-attempted": True},
+        {"submission-proven": True}, {"submission-ambiguous": True},
+        {"send-intent-ever": True}, {"side-effect-attempted": True},
+        {"send-button-clicked": True}, {"enter-dispatched": True},
+        {"turn-state": "submission-ambiguous"}, {"turn-state": "side-effect-attempted"},
+        {"turn-state": "submitted"}, {"turn-state": "unknown"},
+        {"side-effect-state": "may-have-started"},
+        {"side-effect-state": "submission-proven"},
+    ):
+        assert classify_error({"code": "EXT-GPTAUTO-004", "details": {**proof, **extra}})["classification"] == "ambiguous-side-effect"
+    for state in ("may-have-started", "submission-proven", "terminal-evidence-seen"):
+        result = classify_error({"code": "EXT-GPTAUTO-004", "details": proof}, side_effect_state=state)
+        assert result["recovery"]["disposition"] != "retry-safe"
+
+
+def test_saved_gpt_error_retains_typed_unsent_recovery_proof_without_prompt_text():
+    from audiagentic.components.agents.gateway.store._records import _redact_error
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+    proof = {
+        "turn-state": "side-effect-attempted", "submission-state": "not_started",
+        "submission-attempted": False, "submission-proven": False,
+        "submission-ambiguous": False, "failure-stage": "submission",
+        "retryable-same-session": True, "send-intent-ever": False,
+    }
+    saved = _redact_error(AudiaGenticError(
+        code="EXT-GPTAUTO-003", kind="providers", message="unsent timeout",
+        details={**proof, "prompt-body": "private prompt must not be copied"},
+    ))
+    assert saved["details"] == proof
+    assert classify_error(saved)["side-effect-state"] == "not-started"
+
+
+def test_internal_error_original_type_survives_redaction_without_repr_or_prompt() -> None:
+    """SH31: the bare exception classname must reach the durable record even
+    though _REDACTED_ERROR_KEYS strips the rest of ``details``."""
+    from audiagentic.components.agents.gateway.store._records import _redact_error
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+    saved = _redact_error(AudiaGenticError(
+        code="INT-AGW-098", kind="agents", message="session dispatch failed: TimeoutError()",
+        details={
+            "original-type": "TimeoutError",
+            "original-repr": "TimeoutError('private stdout/prompt content')",
+        },
+    ))
+    assert saved["details"] == {"original-type": "TimeoutError"}
+    assert "original-repr" not in saved["details"]
+    assert "private" not in str(saved)
+    # Idempotent re-redaction of an already-saved record (dict-shaped error).
+    assert _redact_error(saved) == saved
+
+
+def test_internal_error_without_original_type_has_no_details() -> None:
+    from audiagentic.components.agents.gateway.store._records import _redact_error
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+    saved = _redact_error(AudiaGenticError(
+        code="INT-AGW-098", kind="agents", message="session dispatch failed",
+        details={"original-repr": "only the repr, no type"},
+    ))
+    assert "details" not in saved
 
 
 def test_response_policy_timeout_is_reconciliation_timeout() -> None:
@@ -546,3 +667,65 @@ def test_abandon_recovery_is_single_cas_operation(tmp_path) -> None:
     assert result["disposition"] == "accepted"
     assert result["revision"] == running["revision"] + 1
     assert result["diagnostics"]["resolution-state"] == "abandon-requested"
+
+
+def _orphaned_running(tmp_path, *, evidence: bool = True) -> dict:
+    """A provider-session request whose gateway host exited mid-turn (GA27)."""
+    record = store.build_record(
+        execution_profile_id="gpt-auto",
+        prompt_body="orphaned",
+        provider_transport_kind="provider-session",
+        session_id="ses-orphan",
+    )
+    record.update({"state": "running", "dispatch-owner-epoch": "owner-gone", "worker-id": "worker-1",
+                   "attempt-epoch": 1})
+    if evidence:
+        record["diagnostic-evidence"] = [{
+            "evidence-id": "ev_1", "sequence": 1, "request-id": record["request-id"], "session-id": "ses-orphan",
+            "attempt-epoch": 1, "phase": "in-progress", "kind": "activity", "certainty": "strong",
+            "side-effect-state": "may-have-started", "source": "session-transport", "source-sequence": 1,
+        }]
+    store.write_record(tmp_path, record)
+    return record
+
+
+def _sessions(monkeypatch, *, live: set[str], state: str = "active") -> list[str]:
+    from audiagentic.components.agents.gateway import api
+    from audiagentic.components.agents.gateway.session import sessions, sessions_store
+
+    closed: list[str] = []
+    monkeypatch.setattr(sessions_store, "read_session_record", lambda _root, _sid: {"state": state})
+    monkeypatch.setattr(sessions, "get_session_runtime", lambda: type("R", (), {"live_session_ids": lambda self: live})())
+    monkeypatch.setattr(api, "close_execution_session", lambda _root, sid: closed.append(sid) or {"state": "failed"})
+    return closed
+
+
+def test_abandon_settles_orphaned_request_without_persisted_diagnostics(tmp_path, monkeypatch) -> None:
+    record = _orphaned_running(tmp_path)
+    closed = _sessions(monkeypatch, live=set())
+
+    result = recover_execution_request(tmp_path, record["request-id"], action="abandon")
+
+    assert closed == ["ses-orphan"]  # the orphaned session is closed like a client close
+    assert result["state"] == "cancelled"
+    terminal = store.read_record(tmp_path, record["request-id"])
+    assert terminal["state"] == "cancelled"
+    assert terminal["error"]["code"] == "CON-AGW-CANCELLED"
+
+
+def test_abandon_without_any_evidence_is_still_refused(tmp_path, monkeypatch) -> None:
+    record = _orphaned_running(tmp_path, evidence=False)
+    _sessions(monkeypatch, live=set())
+    with pytest.raises(AudiaGenticError) as raised:
+        recover_execution_request(tmp_path, record["request-id"], action="abandon")
+    assert raised.value.code == "CON-AGW-145"
+
+
+def test_abandon_does_not_close_a_live_session(tmp_path, monkeypatch) -> None:
+    record = _orphaned_running(tmp_path)
+    closed = _sessions(monkeypatch, live={"ses-orphan"})
+
+    result = recover_execution_request(tmp_path, record["request-id"], action="abandon")
+
+    assert closed == []
+    assert result["state"] == "running"  # cancel requested; the live owner settles it

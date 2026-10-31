@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import threading
 import time
 from pathlib import Path
@@ -22,15 +23,154 @@ from audiagentic.components.agents.gateway.application import (
 
 logger = logging.getLogger(__name__)
 
+
+def validate_node_selectors(node_id: Any, workspace_id: Any) -> tuple[str, str]:
+    """Validate an explicit pair of configured IDs without resolving files or clients."""
+    if not all(isinstance(value, str) and re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,63}", value)
+               for value in (node_id, workspace_id)):
+        from audiagentic.foundation.contracts.errors import make_error_factory
+
+        raise make_error_factory("VAL", "AGSV", "gateway-service")(
+            22, "node_id and workspace_id require a complete pair of configured IDs, not paths"
+        )
+    return node_id, workspace_id
+
+
+def _uses_shared_connector(root: Path) -> bool:
+    """Inspect selection only; never construct or discover a gateway client."""
+    if (
+        os.environ.get("AUDIAGENTIC_GATEWAY_ENDPOINT")
+        and os.environ.get("AUDIAGENTIC_GATEWAY_TOKEN_FILE")
+    ):
+        return False
+    from audiagentic.foundation.features.state import get_component_state
+
+    # The one implementation resolver (settings, then the project's selection);
+    # selection logic is not duplicated here.
+    if _resolve_implementation_id(root)[0] != "standalone":
+        return False
+    component = get_component_state(root, _COMPONENT_ID, persist_migration=False)
+    standalone = (component.get("implementations") or {}).get("standalone") or {}
+    return bool((standalone.get("options") or {}).get("connector-config"))
+
+
+def resolve_request_project_root(root: Path, request_id: str) -> Path:
+    """Route a project-scoped request using the public client boundary."""
+    if _uses_shared_connector(root):
+        return root
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+    from . import store as gateway_store
+    from .api import _resolve_workspace_project_root
+    if not isinstance(request_id, str) or not request_id.startswith("req_"):
+        return root
+    parts = request_id.split("_")
+    if len(parts) < 3 or len(parts[-1]) != 12 or any(
+        character not in "0123456789abcdef" for character in parts[-1].casefold()
+    ):
+        return root
+    # The project slug is not necessarily unique across configured worktrees
+    # (for example, a main checkout and a detached Codex worktree can share
+    # project-id/project-name). Prefer the durable request record, which is
+    # authoritative and already carries the exact project root, before using
+    # the human-readable slug resolver.
+    configured = os.environ.get("AUDIAGENTIC_WORKSPACE_ROOTS", "")
+    if configured.strip():
+        candidates = [
+            Path(value).expanduser().resolve()
+            for value in configured.split(os.pathsep)
+            if value.strip()
+        ]
+    else:
+        candidates = [root]
+        if root.parent.is_dir():
+            candidates.extend(
+                child.resolve()
+                for child in root.parent.iterdir()
+                if child.is_dir() and child.resolve() != root
+            )
+    matches: list[Path] = []
+    for candidate in dict.fromkeys(candidates):
+        try:
+            gateway_store.read_record(candidate, request_id)
+        except AudiaGenticError as exc:
+            if exc.code == "RES-AGW-001":
+                continue
+            raise
+        matches.append(candidate)
+    if len(matches) == 1:
+        return matches[0]
+    if len(matches) > 1:
+        raise AudiaGenticError(
+            code="VAL-AGW-152",
+            kind="agents",
+            message="gateway request id is ambiguous across project checkouts",
+            details={"request-id": request_id, "project-roots": [str(path) for path in matches]},
+        )
+    return _resolve_workspace_project_root(root, "_".join(parts[1:-1]))
+
+
+def resolve_session_project_root(root: Path, session_id: str) -> Path:
+    """Find the owning checkout for a session before dispatching resume.
+
+    Session IDs are intentionally opaque and therefore cannot encode a
+    project slug.  The MCP process may nevertheless serve sibling checkouts;
+    probing their durable session records avoids routing resume through the
+    process CWD.  Multiple matches fail closed rather than selecting a
+    session from the wrong project.
+    """
+    if _uses_shared_connector(root):
+        return root
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+    from .session import sessions_store
+
+    root = root.resolve()
+    configured = os.environ.get("AUDIAGENTIC_WORKSPACE_ROOTS", "")
+    if configured.strip():
+        candidates = [
+            Path(value).expanduser().resolve()
+            for value in configured.split(os.pathsep)
+            if value.strip()
+        ]
+    else:
+        parent = root.parent
+        candidates = [root]
+        if parent.is_dir():
+            candidates.extend(
+                child.resolve()
+                for child in parent.iterdir()
+                if child.is_dir() and child.resolve() != root
+            )
+
+    matches: list[Path] = []
+    for candidate in dict.fromkeys(candidates):
+        try:
+            sessions_store.read_session_record(candidate, session_id)
+        except AudiaGenticError as exc:
+            if exc.code == "RES-AGW-002":
+                continue
+            raise
+        matches.append(candidate)
+
+    if len(matches) == 1:
+        return matches[0]
+    if len(matches) > 1:
+        raise AudiaGenticError(
+            code="VAL-AGW-152",
+            kind="agents",
+            message="gateway session id is ambiguous across project checkouts",
+            details={"session-id": session_id, "project-roots": [str(path) for path in matches]},
+        )
+    return root
+
 _COMPONENT_ID = "agents"
-# SH11 migration compatibility: AUDIAGENTIC_GATEWAY_MODE historically used
-# "in-process"; the component-implementation id is "embedded". Accept both
-# on the env path without silently favoring one meaning over the other.
-_MODE_ALIASES = {"in-process": "embedded"}
 
 
 class GatewayClient(Protocol):
     """Requester-facing gateway operations, independent of inbound transport."""
+
+    def list_agent_definition_cards(self, project_root: Path) -> list[dict[str, Any]]: ...
 
     def submit_execution_request(self, project_root: Path, **kwargs: Any) -> dict[str, Any]: ...
     def get_execution_request(self, project_root: Path, request_id: str, *, include_response: bool = False) -> dict[str, Any]: ...
@@ -102,6 +242,11 @@ class EmbeddedGatewayClient:
     ) -> None:
         self._application = application or get_gateway_application()
         self._logical_client_id = logical_client_id
+
+    def list_agent_definition_cards(self, project_root: Path) -> list[dict[str, Any]]:
+        from audiagentic.components.agents.configuration.management import list_agent_definition_cards
+
+        return list_agent_definition_cards(project_root)
 
     def submit_execution_request(self, project_root: Path, **kwargs: Any) -> dict[str, Any]:
         if self._logical_client_id is not None:
@@ -232,7 +377,7 @@ class EmbeddedGatewayClient:
 
 _CLIENT_LOCK = threading.Lock()
 _CLIENT: GatewayClient | None = None
-_CLIENT_CONFIG: tuple[str | None, str, str | None, str | None] | None = None
+_CLIENT_CONFIG: tuple[Any, ...] | None = None
 
 
 def _has_live_provable_shared_owner() -> bool:
@@ -258,15 +403,10 @@ def _has_live_provable_shared_owner() -> bool:
 def _resolve_embedded_coexistence_policy(project_root: Path | None) -> str:
     """"warn" or "refuse" when a live shared owner exists (SH11 Slice D).
 
-    Precedence: ``AUDIAGENTIC_GATEWAY_EMBEDDED_ALLOW`` env override (explicit
-    migration escape hatch) > the project's ``embedded`` implementation
-    config > the descriptor default (``refuse``, per RV736 A6 -- silent
-    coexistence beside a shared owner is the exact dual-ownership bug this
-    boundary exists to prevent).
+    The project's ``embedded`` implementation config, else the descriptor
+    default (``refuse``, per RV736 A6 -- silent coexistence beside a shared
+    owner is the exact dual-ownership bug this boundary exists to prevent).
     """
-    env_override = os.environ.get("AUDIAGENTIC_GATEWAY_EMBEDDED_ALLOW")
-    if env_override:
-        return env_override.strip().lower()
     if project_root is not None:
         from audiagentic.components.agents.gateway.management_api import gateway_get_config
 
@@ -281,43 +421,34 @@ def _resolve_implementation_id(project_root: Path | None) -> tuple[str, str]:
     """Resolve which gateway implementation is active, and how it was chosen.
 
     Resolution order (SH11 Slice B), highest precedence first:
-    1. explicit ``AUDIAGENTIC_GATEWAY_MODE`` env override -- compatibility
-       path for the pre-SH11 env-only world; the "in-process" spelling is
-       aliased to "embedded", the real implementation id, without silently
-       treating them as different things.
+    1. ``gateway.implementation`` in settings (CFG09).
     2. the project's selected component implementation
        (``foundation.features.registry.resolve_active_implementation``),
        which itself falls through to the descriptor-declared default
-       (``embedded``) when nothing was ever explicitly selected.
-    3. "automatic" as a final production fallback -- only reachable if the
-       registry itself is unavailable (e.g. descriptors not loaded), so
-       resolution never raises merely for lack of project context.
+       (``automatic``) when nothing was ever explicitly selected.
+    3. "automatic" as a final fallback -- only reachable without a project
+       root or if the registry itself is unavailable (e.g. descriptors not
+       loaded), so resolution never raises merely for lack of project context.
 
     Returns ``(implementation_id, source)`` where source is one of
-    ``env-override`` / ``component-config`` / ``schema-default``.
+    ``settings`` / ``component-config`` / ``schema-default``.
     """
-    env_mode = os.environ.get("AUDIAGENTIC_GATEWAY_MODE")
-    if env_mode:
-        normalized = env_mode.strip().lower()
-        resolved = _MODE_ALIASES.get(normalized, normalized)
-        if resolved != normalized:
-            logger.warning(
-                "AUDIAGENTIC_GATEWAY_MODE=%r is a compatibility alias for %r; "
-                "prefer selecting the 'embedded' implementation via component config",
-                normalized, resolved,
-            )
-        return resolved, "env-override"
+    from audiagentic.components.agents.gateway.settings import gateway_setting
+
+    configured = gateway_setting("implementation")
+    if configured:
+        return str(configured), "settings"
 
     if project_root is not None:
         from audiagentic.foundation.features.registry import resolve_active_implementation
 
         implementation_id = resolve_active_implementation(
-            project_root, _COMPONENT_ID, fallback="embedded"
+            project_root, _COMPONENT_ID, fallback="automatic"
         )
         if implementation_id:
             return implementation_id, "component-config"
 
-    return ("automatic", "schema-default") if project_root is not None else ("embedded", "schema-default")
+    return "automatic", "schema-default"
 
 
 def get_gateway_client(project_root: Path | None = None) -> GatewayClient:
@@ -335,7 +466,30 @@ def get_gateway_client(project_root: Path | None = None) -> GatewayClient:
     mode, _source = _resolve_implementation_id(project_root)
     endpoint = os.environ.get("AUDIAGENTIC_GATEWAY_ENDPOINT")
     token_file = os.environ.get("AUDIAGENTIC_GATEWAY_TOKEN_FILE")
-    config = (str(project_root) if project_root is not None else None, mode, endpoint, token_file)
+    connector = None
+    connector_path = None
+    if mode == "standalone" and project_root is not None:
+        from .management_api import gateway_get_config, validate_standalone_config
+
+        options = gateway_get_config(project_root, "standalone")["config"]
+        # An explicit local override is a complete pair, never a partial mix
+        # with a shared connector's identity or credentials.
+        if endpoint is not None or token_file is not None:
+            if not endpoint or not token_file:
+                raise config_error(1, "standalone gateway requires explicit endpoint and token file")
+        else:
+            validate_standalone_config(options)
+            connector_path = options.get("connector-config")
+            if connector_path:
+                from .service.shared_config import load_shared_connector_config
+
+                connector = load_shared_connector_config(Path(connector_path))
+            else:
+                endpoint, token_file = options["endpoint"], options["token-file"]
+    config = (
+        str(project_root) if project_root is not None else None,
+        mode, endpoint, token_file, connector_path, connector,
+    )
     global _CLIENT, _CLIENT_CONFIG
     with _CLIENT_LOCK:
         if _CLIENT is not None and _CLIENT_CONFIG == config:
@@ -365,7 +519,7 @@ def get_gateway_client(project_root: Path | None = None) -> GatewayClient:
                     )
             client: GatewayClient = EmbeddedGatewayClient()
         elif mode == "standalone":
-            if not endpoint or not token_file:
+            if connector is None and (not endpoint or not token_file):
                 raise config_error(
                     1,
                     "standalone gateway requires explicit endpoint and token file",
@@ -375,7 +529,22 @@ def get_gateway_client(project_root: Path | None = None) -> GatewayClient:
                 load_auth_token,
             )
 
-            client = StandaloneGatewayClient(endpoint, load_auth_token(Path(token_file)))
+            if connector is not None:
+                import ssl
+
+                client = StandaloneGatewayClient(
+                    connector.endpoint, load_auth_token(connector.token_file),
+                    shared_server_id=connector.server_id,
+                    shared_project_id=connector.project_id,
+                    **({"shared_source_node_config": connector.source_node_config_file,
+                        "shared_caller_root": project_root}
+                       if connector.source_node_config_file is not None else {}),
+                    ssl_context=ssl.create_default_context(
+                        cafile=str(connector.ca_file) if connector.ca_file else None
+                    ),
+                )
+            else:
+                client = StandaloneGatewayClient(endpoint, load_auth_token(Path(token_file)))
         elif mode == "automatic":
             from audiagentic.components.agents.gateway.service.bootstrap import (
                 start_or_attach_gateway,
@@ -407,6 +576,7 @@ def reset_gateway_client() -> None:
 # control, close, cancel) are deliberately excluded -- reconnecting the
 # client is always safe, but replaying a mutation blindly is not.
 _READ_ONLY_GATEWAY_METHODS = frozenset({
+    "list_agent_definition_cards",
     "get_execution_request",
     "get_execution_diagnostics",
     "get_execution_observations",
@@ -474,6 +644,14 @@ def call_gateway_method(
     """
     from audiagentic.foundation.contracts.errors import AudiaGenticError
 
+    if "node_id" in kwargs or "workspace_id" in kwargs:
+        validate_node_selectors(kwargs.get("node_id"), kwargs.get("workspace_id"))
+        if project_root is None or not _uses_shared_connector(project_root):
+            from audiagentic.foundation.contracts.errors import make_error_factory
+
+            raise make_error_factory("VAL", "AGSV", "gateway-service")(
+                22, "node selectors require an explicitly configured shared connector"
+            )
     client = get_gateway_client(project_root)
     try:
         return getattr(client, method_name)(project_root, *args, **kwargs)
