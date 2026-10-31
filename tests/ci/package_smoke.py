@@ -66,7 +66,7 @@ def main() -> None:
             "assert callable(process.main); "
             "from importlib.resources import files; "
             "assert (files('audiagentic.components.providers.adapters.gpt_auto') / 'gpt-auto-defaults.yaml').read_text().strip(); "
-            "assert (files('audiagentic.components.providers.contracts') / 'model-sources-default.yaml').read_text().strip(); "
+            "assert (files('audiagentic.components.providers.contracts') / 'model-sources.schema.json').read_text().strip(); "
             "assert (files('audiagentic.components.ledger.contracts') / 'change-event.schema.json').read_text().strip(); "
             "assert (files('audiagentic.components.agent_jobs.contracts') / 'job-record.schema.json').read_text().strip(); "
             "print('installed wheel import/version proof passed')",

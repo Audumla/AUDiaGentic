@@ -2,7 +2,7 @@
 
 Files missing from [tool.setuptools.package-data] exist in a source checkout,
 so tests pass there, but an installed package fails at runtime (for example
-CFG-CONF-001 on model-sources-default.yaml, or gpt-auto losing its defaults).
+CFG-CONF-001 on a missing default, or gpt-auto losing its defaults).
 """
 from __future__ import annotations
 
