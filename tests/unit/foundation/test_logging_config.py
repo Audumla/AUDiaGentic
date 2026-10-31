@@ -27,11 +27,21 @@ from audiagentic.foundation.logging.context import (
 # ---------------------------------------------------------------------------
 
 @pytest.fixture(autouse=True)
-def _reset():
-    """Isolate every test — reset logging state before and after."""
+def _reset(tmp_path, monkeypatch):
+    """Isolate every test — reset logging state, and keep user settings out of it."""
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg-config"))
+    monkeypatch.delenv("AUDIAGENTIC_CONFIG", raising=False)
     reset_logging_for_test()
     yield
     reset_logging_for_test()
+
+
+def _settings(root, text):
+    """Write a project settings file whose ``logging`` section is ``text`` (YAML, indented under it)."""
+    path = root / ".audiagentic" / "settings.yaml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("schema_version: 1\nlogging:\n" + text, encoding="utf-8")
+    return path
 
 
 class _ListHandler(logging.Handler):
@@ -198,8 +208,8 @@ def test_no_file_handler_when_dir_is_none(monkeypatch):
 
 
 def test_file_handler_created_when_dir_set(tmp_path, monkeypatch):
-    monkeypatch.setenv("AUDIAGENTIC_LOG_DIR", str(tmp_path / "logs"))
-    configure_logging()
+    _settings(tmp_path, f"  dir: {tmp_path / 'logs'}\n")
+    configure_logging(project_root=tmp_path)
     file_handlers = [
         h for h in logging.getLogger().handlers
         if isinstance(h, logging.handlers.TimedRotatingFileHandler)
@@ -235,11 +245,9 @@ def test_safe_file_handler_skips_locked_rollover(tmp_path, monkeypatch):
 # Dev formatter
 # ---------------------------------------------------------------------------
 
-def test_dev_formatter_active_when_format_is_dev(monkeypatch):
-    monkeypatch.setenv("AUDIAGENTIC_LOG_FORMAT", "dev")
-    monkeypatch.delenv("AUDIAGENTIC_LOG_DIR", raising=False)
-    monkeypatch.setenv("AUDIAGENTIC_LOG_CONSOLE", "true")
-    configure_logging()
+def test_dev_formatter_active_when_format_is_dev(tmp_path):
+    _settings(tmp_path, "  format: dev\n  console: true\n")
+    configure_logging(project_root=tmp_path)
 
     from audiagentic.foundation.logging.config import _DevFormatter
     stream_handlers = [
@@ -250,11 +258,9 @@ def test_dev_formatter_active_when_format_is_dev(monkeypatch):
     assert isinstance(stream_handlers[0].formatter, _DevFormatter)
 
 
-def test_console_formatter_active_when_format_is_console(monkeypatch):
-    monkeypatch.setenv("AUDIAGENTIC_LOG_FORMAT", "console")
-    monkeypatch.delenv("AUDIAGENTIC_LOG_DIR", raising=False)
-    monkeypatch.setenv("AUDIAGENTIC_LOG_CONSOLE", "true")
-    configure_logging()
+def test_console_formatter_active_when_format_is_console(tmp_path):
+    _settings(tmp_path, "  format: console\n  console: true\n")
+    configure_logging(project_root=tmp_path)
 
     from audiagentic.foundation.logging.config import _ConsoleFormatter
     stream_handlers = [
@@ -275,86 +281,65 @@ def test_env_var_overrides_level(monkeypatch):
     assert cfg.level == "DEBUG"
 
 
-def test_env_var_overrides_format(monkeypatch):
-    monkeypatch.setenv("AUDIAGENTIC_LOG_FORMAT", "dev")
+def test_only_the_level_has_an_environment_override(tmp_path, monkeypatch):
+    """Format, console, dir and the AI audit switches are settings; the removed variables are ignored."""
+    for name, value in (("AUDIAGENTIC_LOG_FORMAT", "dev"), ("AUDIAGENTIC_AI_AUDIT", "on"),
+                        ("AUDIAGENTIC_LOG_DIR", str(tmp_path / "x")), ("AUDIAGENTIC_LOG_CONSOLE", "false")):
+        monkeypatch.setenv(name, value)
     cfg = load_logging_config()
-    assert cfg.format == "dev"
+    assert cfg.format == "json" and cfg.ai_audit.enabled is False and cfg.dir is None and cfg.console is True
 
 
-def test_env_var_ai_audit_on(monkeypatch):
-    monkeypatch.setenv("AUDIAGENTIC_AI_AUDIT", "on")
-    cfg = load_logging_config()
-    assert cfg.ai_audit.enabled is True
+def test_ai_audit_is_enabled_by_a_setting(tmp_path):
+    _settings(tmp_path, "  ai_audit:\n    enabled: true\n")
+    assert load_logging_config(project_root=tmp_path).ai_audit.enabled is True
 
 
 # ---------------------------------------------------------------------------
 # Config merge — project/local files
 # ---------------------------------------------------------------------------
 
-def test_project_config_overrides_default(tmp_path, monkeypatch):
-    """Project-local config overrides package default."""
-    cfg_dir = tmp_path / ".audiagentic" / "config" / "foundation"
-    cfg_dir.mkdir(parents=True)
-    (cfg_dir / "logging.yaml").write_text("logging:\n  level: DEBUG\n", encoding="utf-8")
+def test_project_settings_override_the_packaged_default(tmp_path):
+    _settings(tmp_path, "  level: DEBUG\n")
+    assert load_logging_config(project_root=tmp_path).level == "DEBUG"
 
-    monkeypatch.setenv("AUDIAGENTIC_REPO_ROOT", str(tmp_path))
+
+def test_project_settings_override_user_settings(tmp_path):
+    user = tmp_path / "xdg-config" / "audiagentic" / "settings.yaml"
+    user.parent.mkdir(parents=True)
+    user.write_text("schema_version: 1\nlogging:\n  level: ERROR\n  format: dev\n", encoding="utf-8")
+    _settings(tmp_path, "  level: DEBUG\n")
     cfg = load_logging_config(project_root=tmp_path)
-    assert cfg.level == "DEBUG"
+    assert (cfg.level, cfg.format) == ("DEBUG", "dev")
 
 
-def test_local_yaml_overrides_project(tmp_path, monkeypatch):
-    """Machine-local logging.local.yaml overrides project logging.yaml."""
-    cfg_dir = tmp_path / ".audiagentic" / "config" / "foundation"
-    cfg_dir.mkdir(parents=True)
-    (cfg_dir / "logging.yaml").write_text("logging:\n  level: INFO\n", encoding="utf-8")
-    (cfg_dir / "logging.local.yaml").write_text("logging:\n  level: DEBUG\n", encoding="utf-8")
-
-    cfg = load_logging_config(project_root=tmp_path)
-    assert cfg.level == "DEBUG"
-
-
-def test_env_var_beats_local_yaml(tmp_path, monkeypatch):
-    """Env var must override even the machine-local YAML."""
-    cfg_dir = tmp_path / ".audiagentic" / "config" / "foundation"
-    cfg_dir.mkdir(parents=True)
-    (cfg_dir / "logging.local.yaml").write_text("logging:\n  level: DEBUG\n", encoding="utf-8")
+def test_env_var_beats_settings(tmp_path, monkeypatch):
+    _settings(tmp_path, "  level: DEBUG\n")
     monkeypatch.setenv("AUDIAGENTIC_LOG_LEVEL", "WARNING")
-
-    cfg = load_logging_config(project_root=tmp_path)
-    assert cfg.level == "WARNING"
+    assert load_logging_config(project_root=tmp_path).level == "WARNING"
 
 
 # ---------------------------------------------------------------------------
 # silenced: list union
 # ---------------------------------------------------------------------------
 
-def test_silenced_lists_union_across_layers(tmp_path):
-    """silenced: from project config should be added to the package defaults, not replace them."""
-    cfg_dir = tmp_path / ".audiagentic" / "config" / "foundation"
-    cfg_dir.mkdir(parents=True)
-    (cfg_dir / "logging.yaml").write_text(
-        "logging:\n  silenced:\n    - mynoisy.lib\n", encoding="utf-8"
-    )
-
+def test_silenced_lists_add_to_the_packaged_defaults(tmp_path):
+    _settings(tmp_path, "  silenced:\n    - mynoisy.lib\n")
     cfg = load_logging_config(project_root=tmp_path)
-    # Package defaults include mcp, asyncio, httpx, urllib3; project adds mynoisy.lib
     assert "mynoisy.lib" in cfg.silenced
     assert "mcp" in cfg.silenced
 
 
 # ---------------------------------------------------------------------------
-# Malformed YAML — graceful fallback
+# Invalid settings — graceful fallback
 # ---------------------------------------------------------------------------
 
-def test_malformed_local_yaml_falls_back_to_defaults(tmp_path, capsys):
-    cfg_dir = tmp_path / ".audiagentic" / "config" / "foundation"
-    cfg_dir.mkdir(parents=True)
-    (cfg_dir / "logging.local.yaml").write_text(": bad: yaml: [\n", encoding="utf-8")
-
+def test_invalid_settings_fall_back_to_the_packaged_defaults(tmp_path, capsys):
+    _settings(tmp_path, "  level: LOUD\n")
     cfg = load_logging_config(project_root=tmp_path)
-    # Should return a valid config (defaults), not raise
     assert isinstance(cfg, LoggingConfig)
-    assert cfg.level in ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
+    assert cfg.level == "INFO"
+    assert "falls back to its packaged defaults" in capsys.readouterr().err
 
 
 # ---------------------------------------------------------------------------
@@ -415,21 +400,11 @@ def test_ai_audit_redaction_via_config_patterns(tmp_path):
     assert "[REDACTED]" in content
 
 
-def test_ai_audit_custom_pattern_from_yaml(tmp_path):
-    """Project-local YAML can add custom redact_patterns that are unioned with pkg defaults."""
-    cfg_dir = tmp_path / ".audiagentic" / "config" / "foundation"
-    cfg_dir.mkdir(parents=True)
-    (cfg_dir / "logging.yaml").write_text(
-        "logging:\n  ai_audit:\n    redact_patterns:\n      - 'MYTOKEN-[0-9]+'\n",
-        encoding="utf-8",
-    )
-
-    from audiagentic.foundation.logging.config import load_logging_config
+def test_ai_audit_custom_pattern_from_settings(tmp_path):
+    """Settings can add redact_patterns; the packaged defaults stay."""
+    _settings(tmp_path, "  ai_audit:\n    redact_patterns:\n      - 'MYTOKEN-[0-9]+'\n")
     cfg = load_logging_config(project_root=tmp_path)
-
-    # Custom pattern is present
     assert any("MYTOKEN" in p for p in cfg.ai_audit.redact_patterns)
-    # Pkg default Bearer pattern is also present (union, not replace)
     assert any("Bearer" in p for p in cfg.ai_audit.redact_patterns)
 
 

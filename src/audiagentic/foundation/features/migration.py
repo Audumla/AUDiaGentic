@@ -155,6 +155,7 @@ PROVIDER_REGISTRY = Path(PROJECT_MARKER_NAME) / "config" / "runtime" / "provider
 PROVIDER_POLICY = Path(PROJECT_MARKER_NAME) / "config" / "provider-policy.yaml"
 PROJECT_MODEL_SOURCES = Path(PROJECT_MARKER_NAME) / "config" / "model-sources.yaml"
 HARNESS_FILES_DIR = Path(PROJECT_MARKER_NAME) / "config" / "harness"
+LOGGING_FILES_DIR = Path(PROJECT_MARKER_NAME) / "config" / "foundation"
 DECIDED_KEY = "reconciliation.decided"
 _HARNESS_AG_KEYS = {"endpoint", "smoke", "mcp"}
 
@@ -244,6 +245,30 @@ def _harness_values(scope: str, directory: Path, unknown: list[str]) -> tuple[li
     return files, values
 
 
+def _logging_values(
+    files: list[tuple[str, Path]], unknown: list[str],
+) -> tuple[list[Path], dict[SettingsPath, Any]]:
+    """Legacy logging files as keys of the ``logging`` section (``exclusive_local`` has no equivalent)."""
+    found: list[Path] = []
+    values: dict[SettingsPath, Any] = {}
+    for scope, file in files:
+        if not file.is_file():
+            continue
+        found.append(file)
+        data = load_yaml_file(file)
+        for key, value in data.items():
+            if key != "logging" or not isinstance(value, dict):
+                unknown.append(f"{file}: {key}")
+                continue
+            for path, leaf in _leaves((scope, "logging"), value).items():
+                if leaf is None:
+                    continue  # a null meant "unset": nothing to carry over
+                if path in values and values[path] != leaf:
+                    unknown.append(f"{file}: {'.'.join(path[1:])} also set differently in another logging file")
+                values[path] = leaf
+    return found, values
+
+
 def _user_model_sources_file() -> Path:
     from audiagentic.foundation.paths.home import audiagentic_home
 
@@ -288,6 +313,19 @@ def plan_provider_config_migration(project_root: Path) -> ProviderConfigPlan:
         files, harness_values = _harness_values(scope, directory, unknown)
         sources.extend(files)
         values.update(harness_values)
+    from audiagentic.foundation.paths.home import audiagentic_home
+
+    # The machine-local file is per host, so it goes to the user scope with the user-global one.
+    logging_files, logging_values = _logging_values(
+        [
+            ("project", project_root / LOGGING_FILES_DIR / "logging.yaml"),
+            ("user", project_root / LOGGING_FILES_DIR / "logging.local.yaml"),
+            ("user", audiagentic_home() / "config" / "foundation" / "logging.yaml"),
+        ],
+        unknown,
+    )
+    sources.extend(logging_files)
+    values.update(logging_values)
     documents = _scope_documents(project_root)
     conflicts: dict[SettingsPath, tuple[Any, Any]] = {}
     for path, value in values.items():

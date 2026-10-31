@@ -303,6 +303,7 @@ test-scoped. Everything else becomes settings keys
   (`enabled:<implementation>`), moved by `audiagentic config migrate`. `providers.<id>.enabled` stays
   the user's own override and wins over the observation; `auto` defers to it, then to availability.
   Component options and feature state remain in the shards until their own migration.
+- `foundation/logging.yaml` and `logging.local.yaml`, user and project (done: the `logging` section; `AUDIAGENTIC_LOG_LEVEL` is the one remaining environment override; `silenced` and `redact_patterns` stay additive to the packaged lists).
 - `harness/ag.yaml` and `harness/pi.yaml`, user and project (done: the `harness` section, packaged defaults in the vendor settings; `audiagentic config migrate`).
 - `model-sources.yaml` (done: `model-sources` section at user and project scope; `audiagentic config migrate`), `provider-policy.yaml` (done: `reconciliation` section, decisions as local state), `providers/<id>.yaml` and
   `runtime/providers.yaml` (done: `providers.<id>`; install and access modes come from the descriptor; `audiagentic config migrate`), `gpt-auto*.yaml` overlays, `interoperability/*.yaml`, `.audiagentic/components/*.yaml` markers -> sections of `settings.yaml`.

@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "settings: logging",
+  "description": "Diagnostic logging and the AI audit log. AUDIAGENTIC_LOG_LEVEL is the one environment override.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "level": {
+      "enum": [
+        "DEBUG",
+        "INFO",
+        "WARNING",
+        "ERROR",
+        "CRITICAL"
+      ]
+    },
+    "format": {
+      "enum": [
+        "json",
+        "dev",
+        "console"
+      ]
+    },
+    "console": {
+      "type": "boolean",
+      "description": "false suppresses the stderr handler; logs then go to the file only, which needs dir."
+    },
+    "dir": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Directory for the rotating diagnostic.log; unset logs to stderr only."
+    },
+    "diagnostic": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "backup_count": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "ai_audit": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "level": {
+          "enum": [
+            "full",
+            "summary",
+            "metadata_only"
+          ]
+        },
+        "redact": {
+          "type": "boolean"
+        },
+        "backup_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "redact_patterns": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Regexes redacted from audit content. Entries set in a scope are added to the packaged ones; a packaged pattern cannot be dropped."
+        }
+      }
+    },
+    "loggers": {
+      "type": "object",
+      "additionalProperties": {
+        "enum": [
+          "DEBUG",
+          "INFO",
+          "WARNING",
+          "ERROR",
+          "CRITICAL"
+        ]
+      },
+      "description": "Per-logger level overrides."
+    },
+    "silenced": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "Loggers forced to WARNING. Entries set in a scope are added to the packaged ones."
+    }
+  }
+}

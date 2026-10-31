@@ -167,3 +167,31 @@ def test_a_legacy_harness_key_without_a_home_refuses_the_migration(project: Path
     with pytest.raises(ValueError, match="refused"):
         apply_provider_config_migration(project)
     assert ag.exists()
+
+
+def test_logging_files_move_to_their_scopes_and_roll_back(project: Path, tmp_path: Path) -> None:
+    project_file = _write(project / ".audiagentic" / "config" / "foundation" / "logging.yaml",
+                          {"logging": {"level": "DEBUG", "silenced": ["noisy"]}})
+    local_file = _write(project / ".audiagentic" / "config" / "foundation" / "logging.local.yaml",
+                        {"logging": {"format": "dev", "dir": None}})
+    user_file = _write(tmp_path / "home" / "config" / "foundation" / "logging.yaml",
+                       {"logging": {"console": False}})
+    originals = [p.read_bytes() for p in (project_file, local_file, user_file)]
+    manifest = Path(apply_provider_config_migration(project)["manifest"])
+
+    assert _settings(project)["logging"] == {"level": "DEBUG", "silenced": ["noisy"]}
+    user = yaml.safe_load((tmp_path / "xdg-config" / "audiagentic" / "settings.yaml").read_text())
+    assert user["logging"] == {"format": "dev", "console": False}
+
+    report = rollback_provider_config_migration(project, manifest)
+    assert report["kept"] == []
+    assert [p.read_bytes() for p in (project_file, local_file, user_file)] == originals
+    assert "logging" not in _settings(project)
+
+
+def test_logging_files_that_disagree_refuse_the_migration(project: Path, tmp_path: Path) -> None:
+    _write(project / ".audiagentic" / "config" / "foundation" / "logging.local.yaml", {"logging": {"level": "DEBUG"}})
+    _write(tmp_path / "home" / "config" / "foundation" / "logging.yaml", {"logging": {"level": "ERROR"}})
+    assert any("level" in item for item in plan_provider_config_migration(project).unknown)
+    with pytest.raises(ValueError, match="refused"):
+        apply_provider_config_migration(project)

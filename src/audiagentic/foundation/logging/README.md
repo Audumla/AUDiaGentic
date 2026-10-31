@@ -8,7 +8,7 @@ Provide one place to configure stdlib logging, structured output, correlation co
 
 ## Capabilities
 
-- Load layered logging config from package, user, project, machine-local, and env tiers.
+- Read the `logging` section of the resolved settings (packaged defaults, user, project); `AUDIAGENTIC_LOG_LEVEL` overrides the level.
 - Build console/file logging setup.
 - Carry correlation IDs through log context.
 - Support diagnostic logs and optional redacted AI audit logs.
