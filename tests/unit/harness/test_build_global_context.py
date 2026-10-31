@@ -21,8 +21,6 @@ def _patch_common(monkeypatch: pytest.MonkeyPatch, *, harness_available: bool = 
         lambda project_root=None: {"endpoint": {"model": "qwen3.5-0.8b", "provider": "audiagentic", "url": "http://127.0.0.1:42001/v1"}},
     )
     monkeypatch.setattr("audiagentic.runtime.harness.config.require_harness_provider", lambda harness_cfg: "audiagentic")
-    monkeypatch.delenv("AUDIAGENTIC_AG_BASE_URL", raising=False)
-    monkeypatch.delenv("AUDIAGENTIC_AG_MODEL", raising=False)
 
     def query(endpoint: str, timeout: float = 10.0) -> str | None:
         asked.append(endpoint)
@@ -71,18 +69,6 @@ def test_opencode_context_matches_pi_shape(tmp_path: Path, monkeypatch: pytest.M
     assert (opencode.provider, opencode.model, opencode.endpoint) == (pi.provider, pi.model, pi.endpoint)
 
 
-def test_the_environment_endpoint_wins_over_the_configured_url(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    asked = _patch_common(monkeypatch)
-    monkeypatch.setenv("AUDIAGENTIC_AG_BASE_URL", "http://models.internal:9000/v1")
-
-    ctx = build_global_context("pi", project_root=tmp_path, agent_runtime=tmp_path / "runtime", enable_mcp=True)
-
-    assert ctx.endpoint == "http://models.internal:9000/v1"
-    assert asked == ["http://models.internal:9000/v1"]
-
-
 def test_the_requested_model_is_used_when_the_server_names_none(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -113,12 +99,3 @@ def test_missing_model_raises_canonical_error(tmp_path: Path, monkeypatch: pytes
         build_global_context("opencode", project_root=tmp_path, agent_runtime=tmp_path / "runtime", enable_mcp=True)
 
     assert excinfo.value.code == "CFG-HCFG-009"
-
-
-def test_env_model_overrides_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _patch_common(monkeypatch, served_model=None)
-    monkeypatch.setenv("AUDIAGENTIC_AG_MODEL", "env-model")
-
-    ctx = build_global_context("pi", project_root=tmp_path, agent_runtime=tmp_path / "runtime", enable_mcp=True)
-
-    assert ctx.model == "env-model"

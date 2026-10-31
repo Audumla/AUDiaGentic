@@ -46,7 +46,7 @@ Keep only the public variables chosen in CFG01 plus XDG_*; turn configuration-in
 
 ## Standards
 
-
+docs/design/configuration-model.md (environment variables: three public names plus XDG_*, private _AUDIAGENTIC_ prefix for internal plumbing, test switches stay test-scoped); docs/standards/ARCHITECTURE_STANDARDS.md and ARCHITECTURE_GUIDELINES.md: one configuration authority, no parallel loaders or compatibility paths without an approved obligation, delete obsolete code in the same change, evidence-led scope (tests/unit/architecture/config_inventory.yaml tracks progress).
 
 ## Acceptance Criteria
 
@@ -66,6 +66,8 @@ Phase 2: deferred until needed (see 'Phasing' in docs/design/configuration-model
 
 2026-10-31 slice 1 (rig residue, no legacy path, approved by the user): the harness `rig:` section is now `endpoint:` (url, model, provider) in config/provisioning/harness/ag.yaml. Deleted: local_rig_host, local_rig_port, require_harness_rig_port (replaced by require_harness_endpoint, which validates endpoint.url), AUDIAGENTIC_RIG_HOST, AUDIAGENTIC_RIG_PORT, AUDIAGENTIC_RIG_BASE_URL (three env names out of the config inventory), and the stale rig READMEs. The seeded model source `ag-rig` is now `ag-endpoint` (base-url from endpoint.url, no env override). No fallback reader: a project that still sets `rig:` in .audiagentic/config/harness/ag.yaml is no longer read, and an `ag-rig` entry already written to a project's model sources stays there as an orphan until removed by hand. Remaining behaviour-switch variables for later slices: AUDIAGENTIC_AG_* (base url, model, provider, enable_mcp), AUDIAGENTIC_AI_AUDIT*, AUDIAGENTIC_LOG_*, AUDIAGENTIC_LOCALE, AUDIAGENTIC_GATEWAY_PORT, AUDIAGENTIC_AUTO_UPDATE_ENABLED, AUDIAGENTIC_LOCAL_PROVIDER_BASE_URL, AUDIAGENTIC_RECONCILE_PROVIDERS_ON_LAUNCH, AUDIAGENTIC_STARTUP_STATUS. CFG10 stays pending: the design gates the full reduction on every entrypoint using the resolver (CFG09).
 
+2026-10-31 slice 2 (AG_* inputs, no legacy path): removed the user-facing AUDIAGENTIC_AG_BASE_URL, AUDIAGENTIC_AG_MODEL, AUDIAGENTIC_AG_PROVIDER and AUDIAGENTIC_AG_ENABLE_MCP overrides (4 names out of the inventory) and the env_flag helper. The harness endpoint, model, provider and mcp.enabled come only from the layered harness config (package default, user-global ag.yaml, project-local ag.yaml). The launcher passes the endpoint and model it resolved to its child processes through the private _AUDIAGENTIC_HARNESS_ENDPOINT / _AUDIAGENTIC_HARNESS_MODEL variables (foundation/config/harness.py ENDPOINT_ENV, MODEL_ENV); the inventory scan ignores the underscore-prefixed internal namespace by design. build_global_context(enable_mcp=...) now defaults to False and the launcher no longer reads an env flag. AUDIAGENTIC_AG_SMOKE_TIMEOUT stays a test switch. Remaining behaviour switches: AI_AUDIT*, LOG_*, LOCALE, GATEWAY_PORT, AUTO_UPDATE_ENABLED, LOCAL_PROVIDER_BASE_URL, RECONCILE_PROVIDERS_ON_LAUNCH, STARTUP_STATUS.
+
 ## Change Log
 
 - 2026-10-28T21:06:02.889937+00:00 (created-by): Created by claude
@@ -73,3 +75,5 @@ Phase 2: deferred until needed (see 'Phasing' in docs/design/configuration-model
 - 2026-10-28T21:21:50.653458+00:00 (updated-by): Updated: section:notes
 - 2026-10-28T22:07:05.424881+00:00 (updated-by): Updated: section:notes
 - 2026-10-31T02:25:32.424561+00:00 (updated-by): Updated: section:notes
+- 2026-10-31T03:16:24.025032+00:00 (updated-by): Updated: section:notes
+- 2026-10-31T03:33:38.394009+00:00 (updated-by): Updated: section:standards

@@ -167,25 +167,26 @@ def _success_case(
 def _pi_case(project_root: Path) -> None:
     def _run() -> None:
         model = os.environ.get("AUDIAGENTIC_TEST_PI_MODEL", "qwen3.5-0.8b")
-        os.environ["AUDIAGENTIC_AG_MODEL"] = model
-        os.environ["AUDIAGENTIC_AG_PROVIDER"] = os.environ.get(
-            "AUDIAGENTIC_TEST_PI_PROVIDER",
-            "audiagentic",
-        )
         harness_runtime = global_harness_runtime()
         refresh_materialized_agent_config(harness_runtime, project_root=project_root)
         server = start_model_server()
-        os.environ["AUDIAGENTIC_AG_BASE_URL"] = server.endpoint
+        harness_cfg = project_root / ".audiagentic" / "config" / "harness" / "ag.yaml"
+        harness_cfg.parent.mkdir(parents=True, exist_ok=True)
+        harness_cfg.write_text(
+            "endpoint:\n"
+            f"  url: {server.endpoint}\n"
+            f"  model: {model}\n"
+            f"  provider: {os.environ.get('AUDIAGENTIC_TEST_PI_PROVIDER', 'audiagentic')}\n",
+            encoding="utf-8",
+        )
         try:
             ctx = build_global_context(
                 project_root=project_root,
                 agent_runtime=harness_runtime,
-                enable_mcp=False,
             )
             exit_code = run_agent(ctx, RunnerParams(prompt=_DEFAULT_PROMPT, mode="text"), smoke=False)
             assert exit_code == 0, f"pi harness exited with {exit_code}"
         finally:
-            os.environ.pop("AUDIAGENTIC_AG_BASE_URL", None)
             server.stop()
 
     _with_installed_cli("pi", project_root, _run)

@@ -15,6 +15,7 @@ from audiagentic.components.providers.contracts.session_status import (
     ProviderSessionInfo,
 )
 from audiagentic.foundation.config import load_layered_config
+from audiagentic.foundation.config.harness import ENDPOINT_ENV
 from audiagentic.foundation.contracts.errors import make_error
 
 logger = logging.getLogger(__name__)
@@ -100,7 +101,7 @@ def harness_config(ctx: ProviderSessionInfo) -> dict[str, Any]:
 
 def endpoint_info(ctx: ProviderSessionInfo) -> dict[str, Any]:
     """Return endpoint info from provider session info."""
-    base_url = ctx.base_url or os.environ.get("AUDIAGENTIC_AG_BASE_URL")
+    base_url = ctx.base_url or os.environ.get(ENDPOINT_ENV)
     if not base_url:
         return {"base_url": None, "endpoint_reachable": False}
 

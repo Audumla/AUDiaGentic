@@ -93,7 +93,6 @@ def test_bootstrap_refresh_launch_and_cleanup_materialize_owned_paths(
         "audiagentic.runtime.harness.build_global_context",
         lambda **_kw: SimpleNamespace(),
     )
-    monkeypatch.setattr("audiagentic.runtime.harness.env_flag", lambda *_a: False)
     monkeypatch.setattr("audiagentic.runtime.harness.run_agent", lambda *_a, **_kw: 0)
     monkeypatch.setattr("audiagentic.runtime.harness.translate_agent_args", lambda _params: [])
     assert _main(["--project", str(project), "--prompt", "hello"]) == 0

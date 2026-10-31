@@ -8,10 +8,6 @@
 env:
   # Behaviour switches that belong in settings (CFG10 moves them to configuration keys).
   user-config:
-    - AUDIAGENTIC_AG_BASE_URL
-    - AUDIAGENTIC_AG_ENABLE_MCP
-    - AUDIAGENTIC_AG_MODEL
-    - AUDIAGENTIC_AG_PROVIDER
     - AUDIAGENTIC_AI_AUDIT
     - AUDIAGENTIC_AI_AUDIT_LEVEL
     - AUDIAGENTIC_AI_AUDIT_REDACT
