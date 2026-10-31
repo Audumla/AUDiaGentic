@@ -25,6 +25,7 @@ from typing import Any
 
 from audiagentic.foundation.contracts.errors import make_error_factory
 from audiagentic.foundation.io import atomic_write_json
+from audiagentic.foundation.paths.names import project_runtime_dir
 from audiagentic.foundation.toolchains.config.fragments import FragmentStore, reconcile_fragments
 
 _config_error = make_error_factory("VAL", "MCFG", "managed-config")
@@ -140,7 +141,7 @@ class ManagedFragmentRegistry:
         storage_path: Path | None = None,
     ) -> None:
         self._path = (
-            storage_path or project_root / ".audiagentic" / "runtime" / "providers" / filename
+            storage_path or project_runtime_dir(project_root) / "providers" / filename
         )
         self._top_level_key = top_level_key
         self._contract_version = contract_version

@@ -29,6 +29,7 @@ from audiagentic.components.agents.gateway.mapping import normalize_chat_title
 from audiagentic.components.agents.gateway.queue import dispatch as dispatch
 from audiagentic.components.agents.gateway.queue import queue as queue_mod
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.foundation.paths.names import project_marker_path
 from audiagentic.foundation.time import now_iso_z
 
 logger = logging.getLogger(__name__)
@@ -92,7 +93,7 @@ def _resolve_workspace_project_root(
         # unambiguous selector for that case; require managed project
         # metadata before accepting it.
         if not explicit_root.is_dir() or not (
-            explicit_root / ".audiagentic" / "config" / "project.yaml"
+            project_marker_path(explicit_root) / "config" / "project.yaml"
         ).is_file():
             raise AudiaGenticError(
                 code="RES-AGW-152",
@@ -129,7 +130,7 @@ def _resolve_workspace_project_root(
     for candidate in candidates:
         if candidate in matches:
             continue
-        config_path = candidate / ".audiagentic" / "config" / "project.yaml"
+        config_path = project_marker_path(candidate) / "config" / "project.yaml"
         # The parent scan can include hidden operational directories (notably
         # a sibling `.audiagentic` config folder). Their basename normalizes
         # to the project id `audiagentic`, but they are not project roots.

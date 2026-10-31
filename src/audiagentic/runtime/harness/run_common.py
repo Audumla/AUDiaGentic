@@ -10,6 +10,7 @@ from pathlib import Path
 from audiagentic.foundation.cli_io import print_message
 from audiagentic.foundation.config.harness import ENDPOINT_ENV, MODEL_ENV
 from audiagentic.foundation.contracts.errors import make_error
+from audiagentic.foundation.paths.names import project_marker_path
 from audiagentic.foundation.system.supervised_process import spawn_supervised
 from audiagentic.runtime.harness.context import AgentContext, new_launch_runtime_root
 
@@ -74,7 +75,7 @@ def build_global_context(
         project_root=project_root,
         agent_runtime=agent_runtime,
         agent_work=project_root,
-        agent_log_dir=project_root / ".audiagentic" / "logs" / "cli",
+        agent_log_dir=project_marker_path(project_root) / "logs" / "cli",
         endpoint=endpoint,
         model=model,
         provider=provider,
@@ -183,7 +184,7 @@ def run_provider_agent(
         print_message("\033[2J\033[H", flush=False)
 
     ctx.agent_work.mkdir(parents=True, exist_ok=True)
-    (ctx.project_root / ".audiagentic" / "sessions").mkdir(parents=True, exist_ok=True)
+    (project_marker_path(ctx.project_root) / "sessions").mkdir(parents=True, exist_ok=True)
     if ctx.enable_mcp:
         if ctx.prepared_mcp_surface is None:
             ctx.prepared_mcp_surface = providers_api.prepare_projected_provider_mcp_surface(

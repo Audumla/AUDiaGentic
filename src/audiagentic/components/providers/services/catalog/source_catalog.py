@@ -30,7 +30,7 @@ from typing import Any
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error_factory
 from audiagentic.foundation.io import atomic_write_json, load_yaml_value
-from audiagentic.foundation.paths.names import get_package_providers_config_dir
+from audiagentic.foundation.paths.names import get_package_providers_config_dir, project_runtime_dir
 from audiagentic.foundation.registry_utils import Registry
 from audiagentic.foundation.time import now_iso_z
 
@@ -199,9 +199,7 @@ def classify_remote_failure(exc: Exception) -> str:
 
 def _cache_path(project_root: Path, source_id: str) -> Path:
     return (
-        project_root
-        / ".audiagentic"
-        / "runtime"
+        project_runtime_dir(project_root)
         / "providers"
         / "source-catalogs"
         / f"{source_id}.json"
@@ -268,7 +266,7 @@ def _timeline(project_root: Path, source_id: str, event: str, attributes: dict[s
     from audiagentic.foundation.observability import record_timeline_event
 
     record_timeline_event(
-        project_root / ".audiagentic" / "runtime" / "providers" / "source-catalog-timeline.jsonl",
+        project_runtime_dir(project_root) / "providers" / "source-catalog-timeline.jsonl",
         component="providers",
         resource_kind="model-source-catalog",
         resource_id=source_id,

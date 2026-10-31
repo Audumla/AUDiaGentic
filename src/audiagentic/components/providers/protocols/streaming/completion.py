@@ -10,6 +10,7 @@ from typing import Any
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.contracts.schema_registry import validate_with_schema
+from audiagentic.foundation.paths.names import project_runtime_dir
 from audiagentic.foundation.time import now_iso_z
 
 
@@ -273,7 +274,7 @@ def build_synthetic_fallback(
 
 def completion_artifact_dir(project_root: Path, job_id: str) -> Path:
     """Get the artifact directory for completions."""
-    return project_root / ".audiagentic" / "runtime" / "jobs" / job_id / "completions"
+    return project_runtime_dir(project_root) / "jobs" / job_id / "completions"
 
 
 def completion_path(project_root: Path, job_id: str, provider_id: str) -> Path:

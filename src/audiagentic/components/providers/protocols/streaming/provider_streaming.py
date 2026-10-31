@@ -23,6 +23,7 @@ from audiagentic.components.providers.protocols.streaming.sinks import (
     StreamSink,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.foundation.paths.names import project_runtime_dir
 from audiagentic.foundation.system.supervised_process import (
     spawn_supervised,
 )
@@ -154,7 +155,7 @@ def build_provider_stream_sinks(
     job_id = packet_ctx.get("job-id")
     if working_root and job_id:
         runtime_root = (
-            Path(str(working_root)) / ".audiagentic" / "runtime" / "jobs" / str(job_id)
+            project_runtime_dir(Path(str(working_root))) / "jobs" / str(job_id)
         )
 
     stream_controls = stream_controls or {}

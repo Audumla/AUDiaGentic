@@ -24,6 +24,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from audiagentic.foundation.paths.names import project_runtime_dir
 from audiagentic.foundation.system.managed_process import (
     DetachedLaunch,
     ProcessEvidence,
@@ -41,7 +42,7 @@ logger = logging.getLogger(__name__)
 def _config_dir(runtime_root: Path | None = None) -> Path:
     """Return the runtime config directory, creating it if needed."""
     root = runtime_root or Path.home()
-    cfg = root / ".audiagentic" / "runtime"
+    cfg = project_runtime_dir(root)
     cfg.mkdir(parents=True, exist_ok=True)
     return cfg
 

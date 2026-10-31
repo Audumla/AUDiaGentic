@@ -8,6 +8,8 @@ from pathlib import Path
 
 import yaml
 
+from audiagentic.foundation.paths.names import project_marker_path
+
 logger = logging.getLogger(__name__)
 
 
@@ -60,7 +62,7 @@ def load_event_config(root: Path | None = None) -> EventLayerConfig:
     if root is None:
         root = _find_event_root()
 
-    config_path = root / ".audiagentic" / "event" / "config.yaml"
+    config_path = project_marker_path(root) / "event" / "config.yaml"
 
     if config_path.exists():
         try:
@@ -101,7 +103,7 @@ def _find_event_root() -> Path:
 
     current = Path.cwd()
     for parent in [current, *current.parents]:
-        if (parent / ".audiagentic").exists():
+        if (project_marker_path(parent)).exists():
             return parent
 
     return current

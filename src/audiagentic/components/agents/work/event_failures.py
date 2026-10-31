@@ -6,9 +6,10 @@ from pathlib import Path
 from typing import Any
 
 from audiagentic.foundation.observability.operational_records import append_operational_record
+from audiagentic.foundation.paths.names import RUNTIME_RELATIVE
 from audiagentic.foundation.time import now_iso_z
 
-_FAILURE_PATH = Path(".audiagentic") / "runtime" / "agents" / "event-failures.ndjson"
+_FAILURE_PATH = RUNTIME_RELATIVE / "agents" / "event-failures.ndjson"
 
 
 def event_failure_path(project_root: Path) -> Path:

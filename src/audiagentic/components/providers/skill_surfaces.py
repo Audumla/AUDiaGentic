@@ -25,6 +25,7 @@ from audiagentic.components.providers.surfaces.registry import load_renderer_reg
 from audiagentic.foundation.cli_io import print_message
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.io import atomic_write_text
+from audiagentic.foundation.paths.names import project_marker_path
 
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
@@ -108,14 +109,14 @@ def _load_skills_from_registry(project_root: Path | None = None) -> list[SkillDe
             continue
         # Project-level override wins if present
         if project_root is not None:
-            override = project_root / ".audiagentic" / "skills" / tag_id / "skill.md"
+            override = project_marker_path(project_root) / "skills" / tag_id / "skill.md"
             if override.exists():
                 content = override.read_text(encoding="utf-8")
                 skills.append(_skill_definition_from_content(tag_id, content))
                 continue
         skills.append(_skill_definition_from_content(tag_id, descriptor.skill_content()))
     if project_root is not None:
-        project_skills = project_root / ".audiagentic" / "skills"
+        project_skills = project_marker_path(project_root) / "skills"
         for path in sorted(project_skills.glob("project-*/skill.md")):
             tag_id = path.parent.name
             skills.append(_skill_definition_from_content(tag_id, path.read_text(encoding="utf-8")))

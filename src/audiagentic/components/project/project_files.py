@@ -7,13 +7,14 @@ from pathlib import Path
 from typing import Any
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.foundation.paths.names import MARKER_RELATIVE, PROJECT_MARKER_NAME
 
 
 def read_project_file(project_root: Path, relative_path: str) -> dict[str, Any]:
     # "." / "" have no valid interpretation under the .audiagentic/-prefix rule below;
     # treat them as "list the root" so agents have a discovery path instead of a guessing game.
-    rel = Path(".audiagentic") if relative_path in ("", ".") else Path(relative_path)
-    if not rel.parts or rel.parts[0] != ".audiagentic":
+    rel = MARKER_RELATIVE if relative_path in ("", ".") else Path(relative_path)
+    if not rel.parts or rel.parts[0] != PROJECT_MARKER_NAME:
         raise AudiaGenticError(
             code="VAL-PROJFILE-001",
             kind="project",

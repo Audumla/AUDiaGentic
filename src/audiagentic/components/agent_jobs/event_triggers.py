@@ -19,6 +19,7 @@ from jsonschema import Draft202012Validator
 from audiagentic.components.agent_jobs.prompt_templates import load_prompt_from_file
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.io import load_yaml_file
+from audiagentic.foundation.paths.names import project_marker_path
 from audiagentic.foundation.templates import _MISSING, resolve_path
 
 logger = logging.getLogger(__name__)
@@ -152,7 +153,7 @@ def load_event_triggers(project_root: Path) -> list[TriggerConfig]:
         IO-PTMPL-001 if a template file is missing, IO-PTMPL-002 on read
         errors, IO-PATH-001 if a template path escapes project root.
     """
-    config_path = project_root / ".audiagentic" / _TRIGGER_CONFIG_PATH
+    config_path = project_marker_path(project_root) / _TRIGGER_CONFIG_PATH
     if not config_path.exists():
         return []
 

@@ -7,6 +7,7 @@ from pathlib import Path
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.lifecycle.components import uninstall_all_components
 from audiagentic.foundation.lifecycle.detector import detect_installed_state
+from audiagentic.foundation.paths.names import project_runtime_dir
 
 WORKFLOW_FILES = (
     Path(".github/workflows/release.yml"),
@@ -37,7 +38,7 @@ def apply_uninstall(
             pass
 
     # Safety sweep: remove any runtime state not covered by a component declaration.
-    runtime_dir = project_root / ".audiagentic" / "runtime"
+    runtime_dir = project_runtime_dir(project_root)
     if runtime_dir.exists():
         shutil.rmtree(runtime_dir)
 

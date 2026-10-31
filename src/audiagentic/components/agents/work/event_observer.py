@@ -16,13 +16,14 @@ from audiagentic.foundation.event.event_bus import SubscriptionHandle, get_bus
 from audiagentic.foundation.event.lifecycle_observer import subscribe_component_lifecycle
 from audiagentic.foundation.logging.context import get_correlation_id, new_correlation_id
 from audiagentic.foundation.observability.operational_records import append_operational_record
+from audiagentic.foundation.paths.names import RUNTIME_RELATIVE
 from audiagentic.foundation.time import now_iso_z
 
 from .event_ingress import WorkEventIngress
 from .triggers import trigger_matches
 
 logger = logging.getLogger(__name__)
-_AUDIT_PATH = Path(".audiagentic") / "runtime" / "agents" / "trigger-audit.ndjson"
+_AUDIT_PATH = RUNTIME_RELATIVE / "agents" / "trigger-audit.ndjson"
 
 GW_TOPIC_REQUESTED = "agents.execution.gateway.requested"
 GW_TOPIC_CANCEL_REQUESTED = "agents.execution.gateway.cancel-requested"

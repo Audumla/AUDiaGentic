@@ -10,6 +10,7 @@ from audiagentic.foundation.components.registry import is_enabled, is_installed
 from audiagentic.foundation.features.registry import all_features, all_implementations
 from audiagentic.foundation.features.resolver import resolve_feature, resolve_implementation
 from audiagentic.foundation.io import load_yaml_file
+from audiagentic.foundation.paths.names import project_marker_path
 
 from . import project_components, project_files, project_surfaces
 
@@ -112,7 +113,7 @@ def resolve_project_name(
 
 def _legacy_project_config(project_root: Path) -> dict[str, Any]:
     """The legacy ``.audiagentic/config/project.yaml`` mapping, empty when absent or malformed."""
-    path = project_root / ".audiagentic" / "config" / "project.yaml"
+    path = project_marker_path(project_root) / "config" / "project.yaml"
     data = load_yaml_file(path) if path.is_file() else {}
     return data if isinstance(data, dict) else {}
 

@@ -26,6 +26,7 @@ from audiagentic.components.planning.identity import (
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.io import load_yaml_file
+from audiagentic.foundation.paths.names import RUNTIME_RELATIVE
 from audiagentic.foundation.paths.safety import resolve_user_path
 from audiagentic.foundation.system.process import StartupLock
 from audiagentic.foundation.workflow import (
@@ -152,7 +153,7 @@ def _lock_path(project_root: Path, lock_key: str) -> Path:
     """
     safe_key = re.sub(r"[^A-Za-z0-9_.-]+", "_", lock_key)
     return resolve_user_path(
-        Path(".audiagentic") / "runtime" / "planning" / "locks" / f"{safe_key}.lock",
+        RUNTIME_RELATIVE / "planning" / "locks" / f"{safe_key}.lock",
         project_root=project_root,
         field_name="Planning item lock",
     )

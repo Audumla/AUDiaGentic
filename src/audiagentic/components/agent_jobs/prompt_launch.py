@@ -26,6 +26,7 @@ from audiagentic.components.providers.providers_api import (
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.io import load_yaml_file
+from audiagentic.foundation.paths.names import project_marker_path
 from audiagentic.foundation.templates import has_placeholders
 from audiagentic.foundation.time import now_iso_z
 
@@ -112,7 +113,7 @@ def _submit_canonical_work(
 
 
 def load_project_config(project_root: Path) -> dict[str, Any]:
-    path = project_root / ".audiagentic" / "config" / "project.yaml"
+    path = project_marker_path(project_root) / "config" / "project.yaml"
     return load_yaml_file(path)
 
 

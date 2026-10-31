@@ -38,12 +38,13 @@ from jsonschema import Draft202012Validator
 from audiagentic.foundation.contracts.errors import make_error_factory
 from audiagentic.foundation.io import load_yaml_value, save_yaml_file
 from audiagentic.foundation.paths.home import audiagentic_home
+from audiagentic.foundation.paths.names import MARKER_RELATIVE
 
 _model_sources_error = make_error_factory("VAL", "MEP", "providers")
 
 _CONTRACT_VERSION = "v1"
 _SCHEMA_PATH = Path(__file__).resolve().parents[2] / "contracts" / "model-sources.schema.json"
-_RELATIVE_CONFIG_PATH = Path(".audiagentic") / "config" / "model-sources.yaml"
+_RELATIVE_CONFIG_PATH = MARKER_RELATIVE / "config" / "model-sources.yaml"
 # Colocated with the schema, not under config/providers/ -- that directory
 # is auto-globbed as provider descriptors by
 # components/providers/adapters/__init__.py, and this file is not one.

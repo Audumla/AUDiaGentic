@@ -19,6 +19,7 @@ from typing import Any
 
 from audiagentic.components.providers.adapters.cli import require_executable
 from audiagentic.foundation.config import load_layered_config
+from audiagentic.foundation.paths.names import project_marker_path
 from audiagentic.foundation.paths.package import PACKAGE_ROOT
 from audiagentic.foundation.transports import ProviderLaunch
 
@@ -110,7 +111,7 @@ def build_interactive_launch(
     environment: dict[str, str] = {
         "HOME": str(agent_runtime),
         "PI_CODING_AGENT_DIR": str(agent_dir),
-        "PI_CODING_AGENT_SESSION_DIR": str(project_root / ".audiagentic" / "sessions"),
+        "PI_CODING_AGENT_SESSION_DIR": str(project_marker_path(project_root) / "sessions"),
     }
     if mcp_surface is not None:
         environment.update(dict(mcp_surface.extra_env))

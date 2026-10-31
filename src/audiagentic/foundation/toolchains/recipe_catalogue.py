@@ -24,6 +24,7 @@ from audiagentic.foundation.contracts.errors import make_error_factory
 from audiagentic.foundation.paths.names import (
     get_active_profile,
     get_package_config_dir,
+    project_marker_path,
 )
 
 from .recipe_loader import DeclarativeRecipeTemplate, load_recipe_from_yaml
@@ -87,7 +88,7 @@ class RecipeCatalogue:
 
     def _project_recipe_dir(self) -> Path:
         """Return project-level recipe override directory."""
-        return self._project_root / ".audiagentic" / _RECIPE_DIR_NAME
+        return project_marker_path(self._project_root) / _RECIPE_DIR_NAME
 
     def _profile_recipe_dir(self) -> Path | None:
         """Return the active component-profile recipe directory, or None."""
@@ -95,8 +96,7 @@ class RecipeCatalogue:
         if not profile_name:
             return None
         return (
-            self._project_root
-            / ".audiagentic"
+            project_marker_path(self._project_root)
             / profile_name
             / _RECIPE_DIR_NAME
         )

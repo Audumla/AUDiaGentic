@@ -24,6 +24,7 @@ from audiagentic.components.coding_lsp.runtime_resolver import (
     resolve_active_runtime_servers,
 )
 from audiagentic.components.coding_lsp.uri_utils import file_to_uri
+from audiagentic.foundation.paths.names import PROJECT_MARKER_NAME
 
 logger = logging.getLogger(__name__)
 
@@ -135,7 +136,7 @@ def resolve_project_root(path: str | Path) -> Path:
         home = Path.home().resolve()
     except (RuntimeError, OSError):
         home = None
-    return _walk_up_to_marker(resolved, ".audiagentic", home)
+    return _walk_up_to_marker(resolved, PROJECT_MARKER_NAME, home)
 
 
 def resolve_language_root(path: str | Path, language: str) -> Path:

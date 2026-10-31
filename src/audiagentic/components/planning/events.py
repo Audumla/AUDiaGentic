@@ -10,6 +10,7 @@ from typing import Any
 
 from audiagentic.foundation.event import DeliveryMode, get_bus
 from audiagentic.foundation.io import atomic_write_json
+from audiagentic.foundation.paths.names import RUNTIME_RELATIVE
 from audiagentic.foundation.paths.safety import resolve_user_path
 
 logger = logging.getLogger(__name__)
@@ -30,7 +31,7 @@ LEDGER_EVENT_RECORDED = "ledger.event.recorded"
 
 _registered_bus: Any | None = None
 
-_OUTBOX_RELATIVE = Path(".audiagentic") / "runtime" / "planning" / "outbox"
+_OUTBOX_RELATIVE = RUNTIME_RELATIVE / "planning" / "outbox"
 
 
 def _outbox_dir(project_root: Path) -> Path:

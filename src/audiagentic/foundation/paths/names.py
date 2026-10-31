@@ -81,6 +81,13 @@ def get_package_providers_config_dir() -> Path:
 # ── Project marker resolution ─────────────────────────────────────────────
 
 
+MARKER_RELATIVE = Path(PROJECT_MARKER_NAME)
+"""The marker directory relative to a project root."""
+
+RUNTIME_RELATIVE = MARKER_RELATIVE / RUNTIME_DIR_NAME
+"""The runtime directory relative to a project root."""
+
+
 def project_marker_path(project_root: Path) -> Path:
     """Return the .audiagentic marker directory inside a project root."""
     return project_root / PROJECT_MARKER_NAME
