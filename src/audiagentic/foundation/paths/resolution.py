@@ -87,40 +87,6 @@ def resolve_required_dir(path_map: dict[str, Path], *, label: str = "Directory")
     )
 
 
-def load_layered_mapping(
-    *,
-    package_default_path: Path,
-    user_global_path: Path | None = None,
-    project_local_path: Path | None = None,
-) -> dict[str, Any]:
-    """Load mapping from package default, user global, and project local layers."""
-    if not package_default_path.exists():
-        raise _path_error(
-            "CFG",
-            3,
-            f"Package config missing (reinstall may be needed): {package_default_path}",
-            path=str(package_default_path),
-        )
-
-    payloads: dict[str, dict[str, Any]] = {
-        "package_default": _load_yaml_mapping(package_default_path),
-        "user_global": _load_yaml_mapping(user_global_path),
-        "project_local": _load_yaml_mapping(project_local_path),
-    }
-    project_local = dict(payloads["project_local"])
-    exclusive_local = bool(project_local.pop("exclusive_local", False))
-    payloads["project_local"] = project_local
-    if exclusive_local:
-        payloads["user_global"] = {}
-
-    result: dict[str, Any] = {}
-    from audiagentic.foundation.config.merge import deep_merge as _deep_merge
-
-    for layer in _MERGE_ORDER:
-        result = _deep_merge(result, payloads[layer])
-    return result
-
-
 def _resolve_path(root: Path | None, value: str | Path) -> Path:
     raw = Path(value)
     if raw.is_absolute():

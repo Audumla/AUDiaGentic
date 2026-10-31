@@ -5,53 +5,10 @@ from pathlib import Path
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.paths.resolution import (
     build_layered_path_map,
-    load_layered_mapping,
     resolve_existing_dir,
     resolve_existing_file,
     resolve_required_file,
 )
-
-
-def test_load_layered_mapping_merges_default_global_local(tmp_path: Path) -> None:
-    pkg = tmp_path / "pkg.yaml"
-    global_cfg = tmp_path / "global.yaml"
-    local_cfg = tmp_path / "local.yaml"
-    pkg.write_text("a: 1\nnested:\n  pkg: true\n  shared: pkg\n", encoding="utf-8")
-    global_cfg.write_text("nested:\n  global: true\n  shared: global\n", encoding="utf-8")
-    local_cfg.write_text("nested:\n  local: true\n  shared: local\n", encoding="utf-8")
-
-    resolved = load_layered_mapping(
-        package_default_path=pkg,
-        user_global_path=global_cfg,
-        project_local_path=local_cfg,
-    )
-
-    assert resolved == {
-        "a": 1,
-        "nested": {
-            "pkg": True,
-            "global": True,
-            "local": True,
-            "shared": "local",
-        },
-    }
-
-
-def test_load_layered_mapping_respects_exclusive_local(tmp_path: Path) -> None:
-    pkg = tmp_path / "pkg.yaml"
-    global_cfg = tmp_path / "global.yaml"
-    local_cfg = tmp_path / "local.yaml"
-    pkg.write_text("shared: pkg\n", encoding="utf-8")
-    global_cfg.write_text("shared: global\n", encoding="utf-8")
-    local_cfg.write_text("exclusive_local: true\nshared: local\n", encoding="utf-8")
-
-    resolved = load_layered_mapping(
-        package_default_path=pkg,
-        user_global_path=global_cfg,
-        project_local_path=local_cfg,
-    )
-
-    assert resolved == {"shared": "local"}
 
 
 def test_resolve_existing_file_prefers_project_local(tmp_path: Path) -> None:

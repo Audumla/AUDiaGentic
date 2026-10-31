@@ -3,10 +3,8 @@
 # data, no secrets, no Python paths; code contributes the factory, this file
 # only selects between implementations by identifier.
 #
-# Override tiers (see foundation/config/layers.py):
-#   package default   this file
-#   user global       ~/.audiagentic/config/gateway-service-composition.yaml
-#   project local     <project>/.audiagentic/config/gateway-service-composition.yaml
+# Packaged wiring only: there is no user or project override; build a different graph by passing a
+# config to the builder.
 gateway-service-composition:
   roots:
     - agents.execution-profile-registry

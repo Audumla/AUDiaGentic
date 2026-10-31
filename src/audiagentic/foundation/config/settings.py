@@ -11,7 +11,7 @@ Phase 1 scopes, lowest precedence first: vendor (packaged
 project (current checkout's tracked ``.audiagentic/settings.yaml``), explicit
 (``--config`` / ``AUDIAGENTIC_CONFIG``), then CLI overrides. Resolution never
 creates files or directories. New configuration consumers use
-``resolve_settings``; ``layers.load_layered_config`` must not gain callers.
+``resolve_settings``; the old layered loader is gone.
 """
 from __future__ import annotations
 

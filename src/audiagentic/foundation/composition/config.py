@@ -1,7 +1,6 @@
 """Composition configuration: roots and bindings, and nothing else.
 
-Hosted on the existing three-tier `load_layered_config` precedence API — this
-adds no loader of its own. The schema is deliberately two keys wide:
+A packaged wiring table (no user or project override). The schema is deliberately two keys wide:
 
     composition:
       roots:
@@ -164,20 +163,14 @@ def parse_composition_config(raw: Any, *, namespace: str = CONFIG_NAMESPACE) -> 
 def load_composition_config(
     *,
     pkg_default_path: Path,
-    project_root: Path | None = None,
     namespace: str = CONFIG_NAMESPACE,
 ) -> CompositionConfig:
-    """Load and validate composition config across the three standard tiers.
+    """Load and validate a packaged composition table.
 
-    `namespace` also selects the override filename (`<namespace>.yaml` under
-    the user-global and project-local config directories), so a second
-    composition root's config never collides with the primary root's.
+    Composition is the wiring of the code (which implementation backs each service), not user
+    configuration, so it has no user or project override: a different graph is built by passing
+    ``config`` to the builder. `namespace` is the top-level key of the packaged file.
     """
-    from audiagentic.foundation.config import load_layered_config
+    from audiagentic.foundation.io import load_yaml_file
 
-    raw = load_layered_config(
-        pkg_default_path=pkg_default_path,
-        project_root=project_root,
-        namespace=namespace,
-    )
-    return parse_composition_config(raw, namespace=namespace)
+    return parse_composition_config(load_yaml_file(pkg_default_path), namespace=namespace)
