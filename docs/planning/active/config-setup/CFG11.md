@@ -58,12 +58,14 @@ the old function names live only inside the atomic cutover PR and are deleted in
 validated against descriptor `options_schema`, descriptor defaults below vendor scope.
 
 **Provider enablement truth table** (single rule, no arbitrary precedence).
-`providers.<id>.enabled` policy: `false` always disables. `auto` evaluates at resolution
-(reconciliation policy allows, host available, qualified where required) and is never persisted.
-`true` permits activation, still subject to runtime gates (host available). The legacy feature-level
-`enabled: false` is not a separate veto: migrate converts a legacy explicit false to policy
-`false` and a legacy explicit true to policy `true` when no policy exists; if both exist and
-conflict, migrate refuses and lists the conflict for the user to resolve.
+The shards are gitignored per-host files, so a provider's persisted `enabled` is lifecycle state
+(what enable/disable/reconcile applied on this host), not policy. It becomes the local observation
+`providers` / `<id>.enabled`. `providers.<id>.enabled` in settings stays the user's own override:
+`false` always disables; `true` permits activation (still subject to the host being available);
+`auto` (default) defers to the local observation, else to availability. Reconcile and the lifecycle
+commands write only the observation, never the policy; migrate never writes the policy, and reports
+a conflicting existing value instead of merging over it. Per-feature `enabled` (explicit false
+disables a capability) and options are user intent and move to the `features` settings section.
 
 **Observations** (availability, qualification, last reconcile, surface/catalog outcomes) go to the
 state-path service, never to settings. Contract per key: owner component, scope (project or user),
