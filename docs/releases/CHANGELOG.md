@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.46.0](https://github.com/Audumla/AUDiaGentic/compare/v0.45.0...v0.46.0) (2026-10-31)
+
+
+### Features
+
+* **config:** generic settings writer and 'config set' (CFG06) ([#251](https://github.com/Audumla/AUDiaGentic/issues/251)) ([2dc04e5](https://github.com/Audumla/AUDiaGentic/commit/2dc04e50810a1b6431822b1ed398b0e6e6ab81c5))
+* **doctor:** explain a gateway port held by another home's service (SH64) ([#245](https://github.com/Audumla/AUDiaGentic/issues/245)) ([0c1517f](https://github.com/Audumla/AUDiaGentic/commit/0c1517f3f977600b23a37ff8485d87342ebedb05))
+* **gateway:** audiagentic gateway restart as the operator command (SH63) ([#259](https://github.com/Audumla/AUDiaGentic/issues/259)) ([8d92f2f](https://github.com/Audumla/AUDiaGentic/commit/8d92f2fee209a47f533579901582d61aa89f170d))
+* **project:** agents get the worktree workflow from the project instructions (DW01) ([#257](https://github.com/Audumla/AUDiaGentic/issues/257)) ([a13b4e3](https://github.com/Audumla/AUDiaGentic/commit/a13b4e38f8a03515874f1c44fdb542bfe1941f38))
+* **providers:** provider instances replace gpt-auto-t1/t2 (CFG06) ([#247](https://github.com/Audumla/AUDiaGentic/issues/247)) ([3a2e297](https://github.com/Audumla/AUDiaGentic/commit/3a2e297b9ce8849664a1974fff07bc319e39416f))
+* **worktree:** worktree merge dry-run plans publishing without sending anything (DW01 slice 4a) ([#249](https://github.com/Audumla/AUDiaGentic/issues/249)) ([56ad8f0](https://github.com/Audumla/AUDiaGentic/commit/56ad8f072e6aa0c90bf6509c186b315f75b4ff5f))
+* **worktree:** worktree merge pushes, opens the pull request and requests auto-merge (DW01 4c) ([#253](https://github.com/Audumla/AUDiaGentic/issues/253)) ([93c0d5d](https://github.com/Audumla/AUDiaGentic/commit/93c0d5d5479c29b69d8609378926fc256c6fe398))
+* **worktree:** worktree push runs user-defined checks then pushes the exact checked commit (DW01 slice 4b) ([#252](https://github.com/Audumla/AUDiaGentic/issues/252)) ([93d51fa](https://github.com/Audumla/AUDiaGentic/commit/93d51fa8a1725094fd6ea95149c00a1f81d28109))
+* **worktree:** worktree sync brings a task branch up to date without rewriting it (DW01) ([#254](https://github.com/Audumla/AUDiaGentic/issues/254)) ([239a934](https://github.com/Audumla/AUDiaGentic/commit/239a934798830a673707bb20ad7bbe4bde519a40))
+
+
+### Bug Fixes
+
+* **gateway:** a restart's replacement waits for the port instead of failing to bind (SH63) ([#255](https://github.com/Audumla/AUDiaGentic/issues/255)) ([85b4061](https://github.com/Audumla/AUDiaGentic/commit/85b40617a171f41444d19f512f229f7d7b492eb7))
+
+
+### Documentation
+
+* **planning:** audit SH22 against the tree and correct the stale not-started note ([#256](https://github.com/Audumla/AUDiaGentic/issues/256)) ([6214f5a](https://github.com/Audumla/AUDiaGentic/commit/6214f5af4d23bc005c4f80a5e9ef25355ed56e5d))
+* **planning:** reviewed design for worktree merge (DW01 slice 4) ([#248](https://github.com/Audumla/AUDiaGentic/issues/248)) ([1fc45b6](https://github.com/Audumla/AUDiaGentic/commit/1fc45b6fa41ff930ce41a1231a30ffb32af575b8))
+
 ## [0.45.0](https://github.com/Audumla/AUDiaGentic/compare/v0.44.1...v0.45.0) (2026-10-30)
 
 
