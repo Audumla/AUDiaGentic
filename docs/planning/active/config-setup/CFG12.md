@@ -43,7 +43,7 @@ Unit tests for the probe hook; a documented live run per provider with a probe.
 
 ## Standards
 
-
+docs/design/configuration-model.md (Qualification evidence: evidence, not hand-edited descriptors); docs/standards/ARCHITECTURE_STANDARDS.md section 3 (ownership: providers own their probes) and section 2 (configuration, not central lists); docs/standards/ARCHITECTURE_GUIDELINES.md section 9 (no compatibility paths); reuse the CFG07 platform record and the SH53 evidence schema, no parallel store.
 
 ## Acceptance Criteria
 
@@ -51,6 +51,9 @@ qualify runs a provider's live acceptance probe when its prerequisites exist and
 
 ## Notes
 
+
+
 ## Change Log
 
 - 2026-10-31T12:21:43.390702+00:00 (created-by): Created by agent
+- 2026-10-31T12:30:22.445841+00:00 (updated-by): Updated: section:standards
