@@ -75,6 +75,8 @@ Phase 1 (approved 2026-10-28; see 'Phasing' in docs/design/configuration-model.m
 
 2026-10-29: completed for phase 1 only (see Acceptance Criteria); phase 2 remainder is explicit there.
 
+2026-10-31: the phase 2 remainder now has an active owner, CFG11 (about 46 path-building modules, the provider shard and option files, model sources, interoperability, component markers, logging, shared server/node config, `config migrate` with rollback, user-project scope). This item stays completed for phase 1 only.
+
 ## Change Log
 
 - 2026-10-28T21:05:58.219424+00:00 (created-by): Created by claude
@@ -88,3 +90,4 @@ Phase 1 (approved 2026-10-28; see 'Phasing' in docs/design/configuration-model.m
 - 2026-10-29T02:39:28.790216+00:00 (updated-by): Updated: section:notes
 - 2026-10-29T03:28:49.375412+00:00 (updated-by): Updated: section:validation, section:acceptance_criteria, section:notes
 - 2026-10-29T03:28:51.703687+00:00 (state-transition): State: in_progress → completed
+- 2026-10-31T03:42:21.857757+00:00 (updated-by): Updated: section:notes

@@ -72,6 +72,8 @@ Phase 2: deferred until needed (see 'Phasing' in docs/design/configuration-model
 
 2026-10-30: generic settings writer (foundation/config/writer.py, yaml_edit.py) and `audiagentic config set` landed in the settings-writer PR. GPT review (APPROVE PR A with safety fixes) applied: lock held outside the repo, hash re-check before replace (refuse, never overwrite a human edit), candidate parsed by the strict loader and validated by the section schemas, exact-merge-result check, scope rules enforced in the writer (`x-audiagentic-scopes` on gateway/home), symlink refusal, bounded 0600 backups, mode preservation, cache invalidation via the existing file stamp. PR B (provider enable/disable via the writer, deleting the providers shard) stays deferred until the shard inventory and migration contract exist: enabled flag AND shard options must be classified first; no shard fallback without an approved obligation.
 
+2026-10-31 GPT on-track review (verdict ADJUST; the architecture and spec remain sound). Delivered: provider policy in settings, provider instances (replacing the t1/t2 alias descriptors), the generic settings writer and `config set`, and the harness endpoint rename. NOT delivered, and CFG06 must not be marked complete until it is: the provider feature-state shard (.audiagentic/config/runtime/features/providers.yaml) is still a second authority. It holds `enabled`, `options` (validated against the descriptor options_schema) and per-feature enable state (feature_resolution), and is the shared foundation.features mechanism also used by coding_lsp, memory, planning and gateway; the per-provider option files also still sit beside settings. Moving only `enabled` would leave two authorities. The consolidation (inventory of fields and consumers, destination keys, precedence, migration, rollback, removal criteria, GPT review) is owned by CFG11, and is a completion dependency of CFG06.
+
 ## Change Log
 
 - 2026-10-28T21:05:44.274107+00:00 (created-by): Created by claude
@@ -87,3 +89,4 @@ Phase 2: deferred until needed (see 'Phasing' in docs/design/configuration-model
 
 - chg_20261031_010914_settings-can-be-written-with-c_3841
 - 2026-10-31T01:09:16.752705+00:00 (updated-by): Updated: section:ledger-events
+- 2026-10-31T03:42:11.610783+00:00 (updated-by): Updated: section:notes
