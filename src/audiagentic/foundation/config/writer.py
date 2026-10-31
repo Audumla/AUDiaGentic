@@ -26,7 +26,7 @@ from .settings import SETTINGS_FILE, document_issues, raise_issues, scope_source
 from .strict_yaml import load_settings_text, settings_error
 from .yaml_edit import patch_text
 
-WRITABLE_SCOPES = ("user", "project")
+WRITABLE_SCOPES = ("user", "user-project", "project")
 BACKUPS_KEPT = 5
 _NEW_FILE = "schema_version: 1\n"
 _SHARED_FILE_MODE = 0o644
@@ -116,8 +116,8 @@ def replace_section(
 def _target(scope: str, project_root: Path | None) -> Path:
     if scope not in WRITABLE_SCOPES:
         raise settings_error(8, "Settings scope cannot be written", scope=scope, writable=list(WRITABLE_SCOPES))
-    source = next(s for s in scope_sources(project_root=project_root) if s.scope == scope)
-    if source.path is None:
+    source = next((s for s in scope_sources(project_root=project_root) if s.scope == scope), None)
+    if source is None or source.path is None:
         raise settings_error(8, "Settings scope has no file here: run inside a project checkout", scope=scope)
     for unsafe in (source.path, source.path.parent):
         if unsafe.is_symlink():
@@ -154,7 +154,7 @@ def _state_file(kind: str, path: Path, suffix: str = "") -> Path:
 def _mode(scope: str, path: Path) -> int:
     if path.is_file():
         return path.stat().st_mode & 0o777
-    return _PRIVATE_FILE_MODE if scope == "user" else _SHARED_FILE_MODE
+    return _PRIVATE_FILE_MODE if scope in ("user", "user-project") else _SHARED_FILE_MODE
 
 
 def _backup(path: Path, raw: bytes) -> Path:

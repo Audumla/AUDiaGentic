@@ -6,9 +6,10 @@ RFC 7396 merge with provenance, and validation. The schema is the envelope in
 the canonical schema registry (``settings``) composed with the sections that
 components declare in ``config/components/<component>/settings/<section>.schema.json``.
 
-Phase 1 scopes, lowest precedence first: vendor (packaged
+Scopes, lowest precedence first: vendor (packaged
 ``config/provisioning/foundation/settings.yaml``), user (platform config dir),
-project (current checkout's tracked ``.audiagentic/settings.yaml``), explicit
+project (current checkout's tracked ``.audiagentic/settings.yaml``), user-project
+(one person's untracked overrides for the project, ``<user config>/projects/<id>.yaml``), explicit
 (``--config`` / ``AUDIAGENTIC_CONFIG``), then CLI overrides. Resolution never
 creates files or directories. New configuration consumers use
 ``resolve_settings``; the old layered loader is gone.
@@ -25,13 +26,21 @@ from typing import Any
 
 from jsonschema import Draft202012Validator
 
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.contracts.schema_registry import read_schema
 from audiagentic.foundation.paths.home import user_config_dir
 from audiagentic.foundation.paths.names import get_component_config_dirs, get_package_config_dir
 from audiagentic.foundation.paths.project import discover_checkout_root
 
 from .merge import Origin, merge_patch, without_nulls
-from .strict_yaml import LoadedDocument, Position, json_pointer, load_settings_file, settings_error
+from .strict_yaml import (
+    LoadedDocument,
+    Position,
+    json_pointer,
+    load_settings_file,
+    load_settings_text,
+    settings_error,
+)
 
 SETTINGS_FILE = "settings.yaml"
 CONFIG_ENV = "AUDIAGENTIC_CONFIG"
@@ -141,6 +150,31 @@ def discover_project_root(
     return discover_checkout_root(cwd)
 
 
+def _declared_project_id(project_root: Path) -> str | None:
+    """``project.id`` from the vendor, user and project scopes (never from the scope it names)."""
+    declared = None
+    for path in (user_config_dir() / SETTINGS_FILE, project_config_dir(project_root) / SETTINGS_FILE):
+        try:
+            if path.is_file():
+                value = load_settings_text(path.read_text(encoding="utf-8-sig"), path).data.get("project")
+                if isinstance(value, dict) and isinstance(value.get("id"), str) and value["id"]:
+                    declared = value["id"]
+        except (OSError, AudiaGenticError):
+            continue
+    return declared
+
+
+def user_project_settings_path(project_root: Path) -> Path:
+    """One person's overrides for one project: ``<user config>/projects/<project-id>.yaml``.
+
+    The identity is the same in every worktree and clone of the project (``project.id``, else the git
+    repository), so the file applies to all of them and never touches tracked files.
+    """
+    from audiagentic.foundation.paths.identity import project_identity
+
+    return user_config_dir() / "projects" / f"{project_identity(project_root, _declared_project_id(project_root))}.yaml"
+
+
 def scope_sources(
     *,
     project_root: Path | None,
@@ -155,6 +189,8 @@ def scope_sources(
             "project", project_config_dir(project_root) / SETTINGS_FILE if project_root else None, required=False,
         ),
     ]
+    if project_root is not None:
+        sources.append(ScopeSource("user-project", user_project_settings_path(project_root), required=False))
     explicit = config_file if config_file is not None else environ.get(CONFIG_ENV) or None
     if explicit is not None:
         path = Path(explicit).expanduser()

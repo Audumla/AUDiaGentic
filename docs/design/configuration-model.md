@@ -14,7 +14,7 @@ nothing is half-migrated.
 **Phase 1 (now)**
 - CFG03: resolver with four file scopes only: vendor, user, project (current
   checkout), explicit (`--config` / `AUDIAGENTIC_CONFIG`), then CLI flags.
-- CFG04 (part): tracked project settings and identity; no user-project scope.
+- CFG04 (part): tracked project settings and identity.
 - CFG05: agent files and templates with single-level `extends`.
 - CFG08: `setup` and `doctor`.
 - CFG09 (part): migrate only the agent catalog and gateway configuration.

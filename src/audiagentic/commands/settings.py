@@ -35,7 +35,7 @@ def add_settings_parsers(config_sub: Any) -> None:
     write.add_argument("assignments", nargs="*", metavar="KEY=VALUE",
                        help="Dotted key and YAML or JSON value, for example providers.pi.enabled=false")
     write.add_argument("--unset", action="append", default=[], metavar="KEY", help="Remove a key (repeatable)")
-    write.add_argument("--scope", choices=("project", "user"), default="project",
+    write.add_argument("--scope", choices=("project", "user-project", "user"), default="project",
                        help="Which settings file to write (default: project, .audiagentic/settings.yaml)")
     write.add_argument("--dry-run", action="store_true", help="Show the change without writing")
     write.add_argument("--json", action="store_true", dest="as_json", help="Machine-readable output")
