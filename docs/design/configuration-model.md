@@ -14,7 +14,7 @@ nothing is half-migrated.
 **Phase 1 (now)**
 - CFG03: resolver with four file scopes only: vendor, user, project (current
   checkout), explicit (`--config` / `AUDIAGENTIC_CONFIG`), then CLI flags.
-- CFG04 (part): tracked project settings and identity; no user-project scope.
+- CFG04 (part): tracked project settings and identity.
 - CFG05: agent files and templates with single-level `extends`.
 - CFG08: `setup` and `doctor`.
 - CFG09 (part): migrate only the agent catalog and gateway configuration.
@@ -308,11 +308,13 @@ with the shared-gateway configuration design).
 ## Removed or merged
 
 - `~/.audiagentic/config/agents.yaml` prompt/role/execution-profile/agent chain -> agent files and templates.
-- `.audiagentic/config/runtime/features/*.yaml` implementation `enabled` flags (and the legacy
-  `features.yaml` monolith) -> local observations under `.audiagentic/state/observations/`
-  (`enabled:<implementation>`), moved by `audiagentic config migrate`. `providers.<id>.enabled` stays
-  the user's own override and wins over the observation; `auto` defers to it, then to availability.
-  Component options and feature state remain in the shards until their own migration.
+- `.audiagentic/config/runtime/features/*.yaml` (gitignored per-host files; the legacy `features.yaml` monolith is gone): an
+  implementation's `enabled` flag is lifecycle state, so it is a local observation under
+  `.audiagentic/state/observations/` (`enabled:<implementation>`); component options and feature
+  switches are the `features` settings section, written to the **user-project** scope (untracked, per
+  person and project; a tracked project file may carry shared defaults). `audiagentic config migrate`
+  moves both. `providers.<id>.enabled` stays the user's own override and wins over the observation; `auto`
+  defers to it, then to availability.
 - `.audiagentic/event/config.yaml` (done: `events`), `config/agent-jobs/event-triggers.yaml` (done: `event-triggers`, each trigger still validated by the agent-jobs schema) and `config/execution/prompt-syntax.yaml` (done: `prompt-syntax`); `audiagentic config migrate` moves them.
 - `AUDIAGENTIC_AUTO_UPDATE_ENABLED`, `STARTUP_STATUS`, `RECONCILE_PROVIDERS_ON_LAUNCH` -> `launch.auto_update`, `launch.status`, `launch.reconcile_providers`; `AUDIAGENTIC_LOCALE` -> `locale`; `AUDIAGENTIC_LOCAL_PROVIDER_BASE_URL` -> the provider's own settings; `AUDIAGENTIC_GATEWAY_PORT` -> internal gateway-to-adapter wiring (`_AUDIAGENTIC_GATEWAY_PORT`), the port itself being `gateway.port`. All done (CFG10 slice 4).
 - `foundation/logging.yaml` and `logging.local.yaml`, user and project (done: the `logging` section; `AUDIAGENTIC_LOG_LEVEL` is the one remaining environment override; `silenced` and `redact_patterns` stay additive to the packaged lists).

@@ -9,8 +9,16 @@ from audiagentic.foundation.features import registry, state
 from audiagentic.foundation.io import save_yaml_file
 
 
+def _settings_file(root):
+    from audiagentic.foundation.config.settings import user_project_settings_path
+
+    return user_project_settings_path(root)
+
+
 @pytest.fixture(autouse=True)
-def clean_client(monkeypatch):
+def clean_client(monkeypatch, tmp_path):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg-config"))
+    monkeypatch.delenv("AUDIAGENTIC_CONFIG", raising=False)
     client.reset_gateway_client()
     registry.clear()
     for key in ("MODE", "ENDPOINT", "TOKEN_FILE"):
@@ -34,16 +42,16 @@ def connector(tmp_path):
 
 def test_connect_atomic_selection_preserves_other_configuration(tmp_path, connector, monkeypatch):
     original = {
-        "options": {"unrelated": True}, "features": {"x": {"enabled": True}},
+        "options": {"unrelated": True}, "features": {"language:x": {"enabled": True}},
         "implementations": {
             "automatic": {"enabled": True, "options": {"startup-timeout-seconds": 42}},
             "standalone": {"enabled": False, "options": {"endpoint": "http://127.0.0.1:1", "token-file": "old"},
-                           "features": {"retained": {"enabled": True}}},
+                           "features": {"mcp:retained": {"enabled": True}}},
         },
     }
     state.set_component_state(tmp_path, "agents", original)
-    state.set_component_state(tmp_path, "planning", {"untouched": True})
-    planning = state.shard_path(tmp_path, "planning").read_bytes()
+    state.set_component_state(tmp_path, "planning", {"options": {"untouched": True}})
+    planning = state.get_component_state(tmp_path, "planning")
     real_write = state.set_component_state
     writes = Mock(wraps=real_write)
     monkeypatch.setattr(state, "set_component_state", writes)
@@ -57,11 +65,11 @@ def test_connect_atomic_selection_preserves_other_configuration(tmp_path, connec
     }
     assert result["implementations"]["standalone"] == {
         "enabled": True, "options": {"connector-config": str(connector.resolve())},
-        "features": {"retained": {"enabled": True}},
+        "features": {"mcp:retained": {"enabled": True}},
     }
     assert registry.resolve_active_implementation(tmp_path, "agents") == "standalone"
-    assert state.shard_path(tmp_path, "planning").read_bytes() == planning
-    assert "secret-token" not in state.shard_path(tmp_path, "agents").read_text()
+    assert state.get_component_state(tmp_path, "planning") == planning
+    assert "secret-token" not in _settings_file(tmp_path).read_text()
 
 
 def test_selected_connector_builds_shared_tls_client(tmp_path, connector, monkeypatch):
@@ -103,7 +111,7 @@ def test_local_standalone_options_remain_supported(tmp_path, connector, monkeypa
 @pytest.mark.parametrize("invalid", ["relative", "mixed", "missing", "malformed"])
 def test_invalid_connector_never_changes_selection(tmp_path, connector, invalid):
     management_api.gateway_select_implementation(tmp_path, "automatic")
-    before = state.shard_path(tmp_path, "agents").read_bytes()
+    before = _settings_file(tmp_path).read_bytes()
     options = {"connector-config": str(connector)}
     if invalid == "relative":
         options["connector-config"] = "connector.yaml"
@@ -115,7 +123,7 @@ def test_invalid_connector_never_changes_selection(tmp_path, connector, invalid)
         connector.write_text("schema-version: 100")
     with pytest.raises(AudiaGenticError):
         management_api.gateway_set_config(tmp_path, "standalone", options)
-    assert state.shard_path(tmp_path, "agents").read_bytes() == before
+    assert _settings_file(tmp_path).read_bytes() == before
 
 
 def test_missing_selected_connector_never_bootstraps(tmp_path, connector, monkeypatch):

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.50.0](https://github.com/Audumla/AUDiaGentic/compare/v0.49.1...v0.50.0) (2026-10-31)
+
+
+### Features
+
+* **config:** user-project scope; feature options and switches move from shards to settings (CFG06, CFG11) ([#294](https://github.com/Audumla/AUDiaGentic/issues/294)) ([c625639](https://github.com/Audumla/AUDiaGentic/commit/c625639cfb0a6d9d3bbd768291f33e2d60c9b2d4))
+
 ## [0.49.1](https://github.com/Audumla/AUDiaGentic/compare/v0.49.0...v0.49.1) (2026-10-31)
 
 
