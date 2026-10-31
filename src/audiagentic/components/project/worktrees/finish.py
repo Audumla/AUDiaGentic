@@ -237,7 +237,7 @@ def _bundle_tip(main: Path, reference: str, tip: str, base: str | None, destinat
 
 def finish(repo: Path, target: str, *, active_work, discard_ignored: int | None = None,
            abandon: str | None = None, pull_requests=forge.pull_requests_for_branch,
-           state_root: Path | None = None) -> dict[str, Any]:
+           state_root: Path | None = None, scratch_root: Path | None = None) -> dict[str, Any]:
     """Preserve, then remove, the worktree ``target``; refuse on anything uncertain.
 
     Merged work is finished on proof. Unmerged work needs ``abandon`` set to the tip prefix the
@@ -256,7 +256,7 @@ def finish(repo: Path, target: str, *, active_work, discard_ignored: int | None 
             if (journal and PHASES.index(journal["phase"]) >= PHASES.index("REMOVING")
                     and journal["proof"]["identity"]["common-dir"] == str(git.common_dir(repo))
                     and git.resolve_commit(main, journal.get("quarantine-ref", "")) == journal["proof"]["head"]):
-                return _finish_tail(main, repo, path, journal, journal_file, state)
+                return _finish_tail(main, repo, path, journal, journal_file, state, scratch_root)
             raise refuse_error(1, "That path is not a removable worktree of this repository", path=str(path))
 
         base = git.default_branch(main)
@@ -321,7 +321,7 @@ def finish(repo: Path, target: str, *, active_work, discard_ignored: int | None 
         finally:
             if not removed:
                 worktree_drain.end(path, state_root=state)
-        return _finish_tail(main, repo, path, body, journal_file, state)
+        return _finish_tail(main, repo, path, body, journal_file, state, scratch_root)
 
 
 def _intact(repo: Path, path: Path, tip: str) -> bool:
@@ -337,8 +337,42 @@ def _digest_entry_in(archive: Path, entry: str) -> dict[str, tuple]:
     return _entry_digest(archive, entry)
 
 
+def default_scratch_root(main: Path) -> Path:
+    """``<dev-root>/tmp/<project>`` for a primary checkout at ``<dev-root>/projects/<project>``."""
+    return main.parent.parent / "tmp" / main.name
+
+
+def retire_scratch(root: Path, branch: str | None) -> str | None:
+    """Move ``<root>/<branch>`` aside to ``<root>/.finished/`` and return where it went.
+
+    Nothing is deleted here: the container's scratch sweep removes it later. The branch name must be
+    plain path segments, the directory must be a real directory (not a link) directly inside ``root``,
+    and the destination must be new. Anything else leaves the directory alone and returns ``None``.
+    """
+    if not branch or branch.startswith("/"):
+        return None
+    parts = branch.split("/")
+    if any(p in ("", ".", "..", ".finished") or p.startswith(".") for p in parts):
+        return None
+    source = root.joinpath(*parts)
+    try:
+        if source.is_symlink() or not source.is_dir():
+            return None
+        if source.resolve().parent != root.resolve().joinpath(*parts[:-1]).resolve() \
+                or not source.resolve().is_relative_to(root.resolve()):
+            return None
+        destination = root / ".finished" / f"{'-'.join(parts)}-{now_iso_z().replace(':', '')}"
+        if destination.exists():
+            return None
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        source.rename(destination)
+        return str(destination)
+    except OSError:
+        return None
+
+
 def _finish_tail(main: Path, repo: Path, path: Path, body: dict[str, Any], journal_file: Path,
-                 state: Path) -> dict[str, Any]:
+                 state: Path, scratch_root: Path | None = None) -> dict[str, Any]:
     """The steps after the worktree is gone; each is idempotent so a crashed finish resumes here.
 
     The fence is lifted only once the whole tail has completed; a failure leaves it in place.
@@ -357,6 +391,9 @@ def _finish_tail(main: Path, repo: Path, path: Path, body: dict[str, Any], journ
         records.forget(repo, recorded.worktree_id, state_root=state)
     _write_journal(journal_file, body, "COMPLETE")
     worktree_drain.end(path, state_root=state)
+    scratch = retire_scratch(scratch_root or default_scratch_root(main), branch)
+    if scratch:
+        notes.append(f"task scratch moved to {scratch}; the scratch sweep removes it")
     return {"path": str(path), "branch": branch, "tip": tip, "pr": proof["pr"],
             "quarantine-ref": body.get("quarantine-ref"), "archive": body.get("archive"),
             "bundle": body.get("bundle"), "abandoned": bool(body.get("abandon")), "notes": notes}

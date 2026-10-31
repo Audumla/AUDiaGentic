@@ -357,3 +357,42 @@ def test_abandon_never_overrides_active_gateway_work(repo, unmerged, state) -> N
                         pull_requests=lambda _r, _b: (), state_root=state, abandon=tip[:12])
     assert raised.value.code == "CON-WTFIN-002" and "gateway-active-work" in raised.value.message
     assert feature.is_dir()
+
+
+def test_scratch_is_moved_aside_never_deleted(tmp_path: Path) -> None:
+    root = tmp_path / "tmp" / "proj"
+    (root / "me" / "feature").mkdir(parents=True)
+    (root / "me" / "feature" / "out.log").write_text("x")
+    moved = finisher.retire_scratch(root, "me/feature")
+    assert moved and Path(moved).parent == root / ".finished"
+    assert (Path(moved) / "out.log").read_text() == "x"
+    assert not (root / "me" / "feature").exists()
+
+
+@pytest.mark.parametrize("branch", [None, "", "/abs", "../x", "me/../x", ".finished", "me//x", ".hidden", "missing"])
+def test_scratch_odd_branch_names_are_left_alone(tmp_path: Path, branch) -> None:
+    root = tmp_path / "tmp" / "proj"
+    (root / "me").mkdir(parents=True)
+    (tmp_path / "tmp" / "x").mkdir()
+    assert finisher.retire_scratch(root, branch) is None
+    assert (tmp_path / "tmp" / "x").is_dir() and (root / "me").is_dir()
+
+
+def test_scratch_symlink_is_not_followed(tmp_path: Path) -> None:
+    root = tmp_path / "tmp" / "proj"
+    root.mkdir(parents=True)
+    target = tmp_path / "precious"
+    target.mkdir()
+    (root / "feature").symlink_to(target)
+    assert finisher.retire_scratch(root, "feature") is None
+    assert target.is_dir() and (root / "feature").is_symlink()
+
+
+def test_finish_moves_the_branch_scratch(repo, merged, state, tmp_path) -> None:
+    feature, _tip, pr = merged
+    scratch = tmp_path / "scratch"
+    (scratch / "me" / "feature").mkdir(parents=True)
+    result = _run(repo, state, feature, pr, scratch_root=scratch)
+    assert not (scratch / "me" / "feature").exists()
+    assert any("scratch moved" in n for n in result["notes"])
+    assert len(list((scratch / ".finished").iterdir())) == 1
