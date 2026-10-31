@@ -85,6 +85,15 @@ def _main(argv: list[str] | None = None) -> int:
         description="AUDiaGentic",
         add_help=True,
     )
+    from audiagentic.runtime.update.checker import current_version
+
+    parser.add_argument(
+        "--version",
+        "-V",
+        action="version",
+        version=f"audiagentic {current_version()}",
+        help="Print the installed version and exit",
+    )
     parser.add_argument(
         "--project",
         metavar="PATH",
