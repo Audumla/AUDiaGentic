@@ -2,7 +2,7 @@
 id: CFG08
 order: 8
 plan: config-setup
-state: in_progress
+state: completed
 created-at: '2026-10-28T21:05:53.564412+00:00'
 breadth: ''
 skill: intermediate
@@ -41,7 +41,7 @@ Also: installed-wheel qualification (clean Python 3.10 wheel install passes setu
 
 ## Validation
 
-
+Live checks 2026-10-29 (end-to-end agent_task_submit through the user-scope MCP registration, from clean throwaway homes) and 2026-10-31 (installed 0.46.0 wheel from PyPI: setup, doctor, config set dry-run, planning/ledger/gateway MCP initialize). Unit coverage: doctor checks (tests/unit/foundation/test_doctor.py), settings CLI, launcher arguments including --version. Single-port enforcement across homes is tracked by SH64.
 
 ## Effort & Risk
 
@@ -104,6 +104,8 @@ A caveat found on the way: an MCP server process that was already running when t
 
 Still open before CFG08 can complete: installed-wheel qualification (the criterion above ran from the editable shared runtime, not an installed wheel), and the fixed gateway port 8765 is not enforced against two homes (CON-MSVC-037 reports it; one shared home avoids it in practice).
 
+2026-10-31 installed-wheel qualification (the remaining CFG08 item). audiagentic 0.46.0 installed from PyPI into a throwaway virtualenv (python 3.14), fresh AUDIAGENTIC_HOME and XDG_* directories, and a git project with no remote; run with `python -I` so the package resolves from site-packages. Result: PASS. `audiagentic setup` created the user settings; `doctor` reported package.data ok (packaged defaults and schemas present) and settings.valid ok, with only the expected clean-install warnings (no agent files or catalog yet, project id from the directory name, no remote default branch, port 8765 held by the shared gateway of another home = SH64). `audiagentic config set providers.pi.enabled=false --scope project --dry-run` produced the correct new-file diff (the CFG06 writer works installed). The planning, ledger and gateway MCP entrypoints (`audiagentic mcp audiagentic.components.<x>`) each answered a JSON-RPC initialize from the wheel. Finding fixed with this note: `audiagentic --version` did not exist and fell through to the launch path (update check, provider reconcile, wrote CLAUDE.md, AGENTS.md and .audiagentic into the project, exit 1); a --version/-V argument now prints the version and exits without launching (tests/unit/test_launcher_arguments.py). Not part of CFG08: the gateway end-to-end submit from the wheel needs a configured agent and provider and was already verified from the shared runtime on 2026-10-29; the single-port enforcement across two homes is owned by SH64.
+
 ## Change Log
 
 - 2026-10-28T21:05:53.564412+00:00 (created-by): Created by claude
@@ -120,3 +122,6 @@ Still open before CFG08 can complete: installed-wheel qualification (the criteri
 - 2026-10-29T14:28:12.548201+00:00 (updated-by): Updated: section:notes
 - 2026-10-29T20:28:37.050401+00:00 (updated-by): Updated: section:notes
 - 2026-10-29T20:46:36.103718+00:00 (updated-by): Updated: section:notes
+- 2026-10-31T02:03:33.579897+00:00 (updated-by): Updated: section:notes
+- 2026-10-31T02:03:35.992897+00:00 (updated-by): Updated: section:validation
+- 2026-10-31T02:03:41.106413+00:00 (state-transition): State: in_progress → completed
