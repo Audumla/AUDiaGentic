@@ -105,7 +105,6 @@ path-builders:
   - audiagentic/components/release/github_auth.py
   - audiagentic/foundation/config/layers.py
   - audiagentic/foundation/event/event_config.py
-  - audiagentic/foundation/features/state.py
   - audiagentic/foundation/lifecycle/baseline_sync.py
   - audiagentic/foundation/lifecycle/detector.py
   - audiagentic/foundation/lifecycle/uninstall.py

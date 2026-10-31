@@ -40,12 +40,19 @@ def add_settings_parsers(config_sub: Any) -> None:
     write.add_argument("--dry-run", action="store_true", help="Show the change without writing")
     write.add_argument("--json", action="store_true", dest="as_json", help="Machine-readable output")
     write.add_argument("--config", dest="config_file", metavar="FILE", help=argparse.SUPPRESS)
+    migrate = config_sub.add_parser(
+        "migrate", help="Move legacy configuration to its current home (preview unless --apply)",
+    )
+    migrate.add_argument("--apply", action="store_true", help="Make the change (default: preview only)")
+    migrate.add_argument("--rollback", metavar="MANIFEST", help="Undo the migration recorded in this manifest file")
+    migrate.add_argument("--json", action="store_true", dest="as_json", help="Machine-readable output")
+    migrate.add_argument("--config", dest="config_file", metavar="FILE", help=argparse.SUPPRESS)
     paths = config_sub.add_parser("paths", help="Show settings, state and cache locations (read-only)")
     paths.add_argument("--json", action="store_true", dest="as_json", help="Machine-readable output")
     paths.add_argument("--config", dest="config_file", metavar="FILE", help="Explicit settings file (highest file scope)")
 
 
-SETTINGS_COMMANDS = {"show", "validate", "paths", "set"}
+SETTINGS_COMMANDS = {"show", "validate", "paths", "set", "migrate"}
 _MISSING = object()
 
 
@@ -57,6 +64,8 @@ def run_settings_command(args: argparse.Namespace) -> int:
             return _paths(args, settings)
         if args.config_cmd == "set":
             return _set(args, settings)
+        if args.config_cmd == "migrate":
+            return _migrate(args, settings)
         resolved = settings.resolve_settings(
             project=args.project, config_file=args.config_file, collect=args.config_cmd == "validate",
         )
@@ -251,3 +260,42 @@ def _set(args: argparse.Namespace, settings: Any) -> int:
     for item in shadowed:
         print(f"note: {item['key']} is overridden by a higher scope: {item['effective-from']}")
     return 0
+
+
+def _migrate(args: argparse.Namespace, settings: Any) -> int:
+    """Move implementation ``enabled`` flags out of the feature-state shards (see features.migration)."""
+    from pathlib import Path
+
+    from audiagentic.foundation.features import migration
+
+    project_root = settings.discover_project_root(args.project)
+    if project_root is None:
+        raise settings_error(8, "Settings scope has no file here: run inside a project checkout")
+
+    def emit(payload: dict[str, Any], text: str) -> int:
+        print(json.dumps(payload, indent=2) if args.as_json else text)
+        return 0
+
+    try:
+        if args.rollback:
+            report = migration.rollback_enabled_migration(project_root, Path(args.rollback))
+            return emit({"ok": True, **report}, f"restored {len(report['restored'])}, kept {len(report['kept'])}"
+                        + "".join(f"\n  kept: {item}" for item in report["kept"]))
+        plan = migration.plan_enabled_migration(project_root)
+        if plan.conflicts:
+            raise ValueError(f"conflicting observations: {sorted(plan.conflicts)}")
+        if not args.apply:
+            return emit(
+                {"ok": True, "applied": False, "flags": len(plan.flags), "shards": [str(p) for p in plan.shards]},
+                f"{len(plan.flags)} enabled flag(s) in {len(plan.shards)} shard(s) would move to local state"
+                + ("; run with --apply" if plan.flags else ""),
+            )
+        result = migration.apply_enabled_migration(project_root)
+        return emit({"ok": True, "applied": True, **result},
+                    f"{result['status']}" + (f": manifest {result['manifest']}" if "manifest" in result else ""))
+    except (ValueError, OSError) as error:
+        if args.as_json:
+            print(json.dumps({"ok": False, "message": str(error)}))
+        else:
+            print(f"migrate failed: {error}")
+        return EXIT_INVALID

@@ -37,7 +37,7 @@ def describe(root: Path | None, component_id: str) -> list[dict]:
 def resolve(
     root: Path, owner, config_file: Path | None, *, interactive: bool = False
 ) -> dict[str, Any]:
-    state = get_component_state(root, owner.component_id, persist_migration=False)
+    state = get_component_state(root, owner.component_id)
     supplied = load_yaml_file(config_file) if config_file else {}
     if set(supplied) - {"options"} or not isinstance(supplied.get("options", {}), dict):
         raise error("Configuration file must contain an owner options mapping")
@@ -98,5 +98,5 @@ def persist(root: Path, component_id: str, resolution: dict) -> bool:
 
 
 def validate_current(root: Path, component_id: str, resolution: dict) -> None:
-    if get_component_state(root, component_id, persist_migration=False) != resolution["state"]:
+    if get_component_state(root, component_id) != resolution["state"]:
         raise error("Owner configuration changed after preflight; retry the installation")

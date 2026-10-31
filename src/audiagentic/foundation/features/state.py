@@ -1,25 +1,30 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
 from audiagentic.foundation.io import load_yaml_file, save_yaml_file
+from audiagentic.foundation.paths.names import PROJECT_MARKER_NAME
 
 from .base import FeatureState, ImplementationState
+from .observations import (
+    clear_observation,
+    get_observation,
+    observed_keys,
+    record_observation,
+)
 
-# Runtime state directory. State is sharded per component (parent) so a mutation
-# to component A never rewrites component B's data (write-scope isolation).
-RUNTIME_DIR = Path(".audiagentic") / "config" / "runtime"
+# Component option and feature state is sharded per component (parent), so a mutation to
+# component A never rewrites component B's data (write-scope isolation).
+RUNTIME_DIR = Path(PROJECT_MARKER_NAME) / "config" / "runtime"
 SHARD_DIR = RUNTIME_DIR / "features"
-# Legacy monolithic state file (pre-sharding). Kept only for back-compat reads
-# and one-shot migration; mutations never write it.
-LEGACY_FEATURE_STATE_PATH = RUNTIME_DIR / "features.yaml"
-# Deprecated alias retained for back-compat with external callers/tests.
-FEATURE_STATE_PATH = LEGACY_FEATURE_STATE_PATH
 
-
-def runtime_dir(project_root: Path) -> Path:
-    return project_root / RUNTIME_DIR
+# An implementation's ``enabled`` flag is lifecycle state: what enable, disable and reconciliation
+# applied on this host. It lives in the observation store, not in the shard, and is merged back
+# into the component view below. ``providers.<id>.enabled`` in settings is the separate, user-owned
+# override that wins over it.
+ENABLED_PREFIX = "enabled:"
 
 
 def shard_dir(project_root: Path) -> Path:
@@ -31,133 +36,40 @@ def shard_path(project_root: Path, parent: str) -> Path:
     return shard_dir(project_root) / f"{parent}.yaml"
 
 
-def legacy_feature_state_path(project_root: Path) -> Path:
-    return project_root / LEGACY_FEATURE_STATE_PATH
-
-
-# Deprecated: legacy path accessor retained for back-compat.
-def feature_state_path(project_root: Path) -> Path:
-    return legacy_feature_state_path(project_root)
-
-
-def _load_legacy_state(project_root: Path) -> dict[str, Any]:
-    path = legacy_feature_state_path(project_root)
-    if not path.exists():
-        return {}
-    return load_yaml_file(path)
-
-
-def load_feature_state(project_root: Path) -> dict[str, Any]:
-    """Return the whole-document state assembled from all per-component shards.
-
-    Back-compat helper. If shards exist, they are the source of truth; otherwise
-    the legacy monolithic file (if present) is returned.
-    """
-    directory = shard_dir(project_root)
-    if directory.exists():
-        state: dict[str, Any] = {}
-        for shard in sorted(directory.glob("*.yaml")):
-            parent = shard.stem
-            state[parent] = load_yaml_file(shard)
-        if state:
-            return state
-    return _load_legacy_state(project_root)
-
-
-def save_feature_state(project_root: Path, state: dict[str, Any]) -> None:
-    """Write the whole-document state out as per-component shards.
-
-    Back-compat helper (migration / bulk writes). Per-component mutations should
-    use set_component_state, which writes only the affected shard.
-    """
-    for parent, component_state in state.items():
-        save_yaml_file(
-            shard_path(project_root, parent),
-            component_state if isinstance(component_state, dict) else {},
-            sort_keys=True,
-            atomic=True,
-        )
-
-
-def get_component_state(
-    project_root: Path, parent: str, *, persist_migration: bool = True
-) -> dict[str, Any]:
+def get_component_state(project_root: Path, parent: str) -> dict[str, Any]:
     path = shard_path(project_root, parent)
-    if path.exists():
-        component_state = load_yaml_file(path)
-    else:
-        # Lazy read-migration: pull this parent's slice out of the legacy file.
-        legacy = _load_legacy_state(project_root)
-        component_state = legacy.get(parent) or {}
-        if not isinstance(component_state, dict):
-            return {}
-        if component_state:
-            migrate_component_state_to_flat(component_state)
-            if persist_migration:
-                set_component_state(project_root, parent, component_state)
-            return dict(component_state)
-        return {}
+    component_state = load_yaml_file(path) if path.exists() else {}
     if not isinstance(component_state, dict):
-        return {}
-    if _needs_migration(component_state):
-        migrate_component_state_to_flat(component_state)
-        if persist_migration:
-            set_component_state(project_root, parent, component_state)
-    return dict(component_state)
+        component_state = {}
+    component_state = deepcopy(component_state)
+    for key in observed_keys(project_root, parent, ENABLED_PREFIX):
+        implementation = key[len(ENABLED_PREFIX):]
+        entry = component_state.setdefault("implementations", {}).setdefault(implementation, {})
+        if isinstance(entry, dict):
+            entry["enabled"] = bool(get_observation(project_root, parent, key))
+    return component_state
 
 
 def set_component_state(project_root: Path, parent: str, component_state: dict[str, Any]) -> None:
-    # Isolation: only the affected parent's shard is rewritten.
-    save_yaml_file(
-        shard_path(project_root, parent),
-        component_state,
-        sort_keys=True,
-        atomic=True,
-    )
-
-
-def migrate_to_shards(project_root: Path) -> list[str]:
-    """One-shot split of the legacy monolithic features.yaml into per-component shards.
-
-    Each top-level key becomes ``features/{parent}.yaml`` (with nested->flat
-    feature-key migration applied). The legacy file is renamed to
-    ``features.yaml.migrated`` (never deleted) for rollback. Returns the list of
-    parents migrated. No-op (returns []) if the legacy file is absent.
-    """
-    legacy_path = legacy_feature_state_path(project_root)
-    if not legacy_path.exists():
-        return []
-    legacy = load_yaml_file(legacy_path)
-    migrated: list[str] = []
-    for parent, component_state in legacy.items():
-        if not isinstance(component_state, dict):
-            component_state = {}
-        else:
-            migrate_component_state_to_flat(component_state)
-        set_component_state(project_root, parent, component_state)
-        migrated.append(parent)
-    legacy_path.rename(legacy_path.with_suffix(legacy_path.suffix + ".migrated"))
-    return migrated
+    """Replace one component's state; each implementation's ``enabled`` goes to the observation store."""
+    shard = deepcopy(component_state)
+    enabled: dict[str, bool] = {}
+    for implementation, entry in (shard.get("implementations") or {}).items():
+        if isinstance(entry, dict) and "enabled" in entry:
+            enabled[implementation] = bool(entry.pop("enabled"))
+    for key in observed_keys(project_root, parent, ENABLED_PREFIX):
+        if key[len(ENABLED_PREFIX):] not in enabled:
+            clear_observation(project_root, parent, key)
+    for implementation, value in enabled.items():
+        key = ENABLED_PREFIX + implementation
+        if get_observation(project_root, parent, key) is not value:
+            record_observation(project_root, parent, key, value, source="feature-state")
+    save_yaml_file(shard_path(project_root, parent), shard, sort_keys=True, atomic=True)
 
 
 # ---------------------------------------------------------------------------
 # Composite key helpers
 # ---------------------------------------------------------------------------
-
-
-def _needs_migration(component_state: dict[str, Any]) -> bool:
-    """Check if component state needs migration from nested to flat format."""
-    features = component_state.get("features")
-    if isinstance(features, dict) and _is_nested_features_map(features):
-        return True
-    implementations = component_state.get("implementations")
-    if isinstance(implementations, dict):
-        for impl_data in implementations.values():
-            if isinstance(impl_data, dict):
-                impl_features = impl_data.get("features")
-                if isinstance(impl_features, dict) and _is_nested_features_map(impl_features):
-                    return True
-    return False
 
 
 def feature_composite_key(kind: str, feature_id: str) -> str:
@@ -173,77 +85,6 @@ def parse_feature_composite_key(key: str) -> tuple[str, str] | None:
     if not kind or not feature_id:
         return None
     return kind, feature_id
-
-
-# ---------------------------------------------------------------------------
-# Migration: nested features -> flat composite keys
-# ---------------------------------------------------------------------------
-
-
-def _is_nested_features_map(features: dict[str, Any]) -> bool:
-    """Check if features dict uses old nested format (kind -> id -> state)."""
-    for value in features.values():
-        if isinstance(value, dict):
-            for inner_value in value.values():
-                if isinstance(inner_value, dict) and (
-                    "enabled" in inner_value or "options" in inner_value
-                ):
-                    return True
-    return False
-
-
-def _migrate_features_to_flat(features: dict[str, Any]) -> dict[str, Any]:
-    """Migrate nested features map to flat composite key format.
-
-    Before: { "language": { "python": { "enabled": true } } }
-    After:  { "language:python": { "enabled": true } }
-    """
-    if not _is_nested_features_map(features):
-        return features
-
-    flat: dict[str, Any] = {}
-    for kind, kind_map in features.items():
-        if not isinstance(kind_map, dict):
-            flat[kind] = kind_map
-            continue
-        for feature_id, feature_data in kind_map.items():
-            composite = feature_composite_key(kind, feature_id)
-            flat[composite] = feature_data
-    return flat
-
-
-def _migrate_component_features(component_state: dict[str, Any]) -> dict[str, Any]:
-    """Migrate features in a component state dict to flat format."""
-    if "features" not in component_state:
-        return component_state
-    features = component_state["features"]
-    if isinstance(features, dict) and _is_nested_features_map(features):
-        component_state["features"] = _migrate_features_to_flat(features)
-    return component_state
-
-
-def _migrate_implementation_features(component_state: dict[str, Any]) -> dict[str, Any]:
-    """Migrate implementation-scoped features to flat format."""
-    implementations = component_state.get("implementations")
-    if not isinstance(implementations, dict):
-        return component_state
-    for impl_id, impl_data in implementations.items():
-        if not isinstance(impl_data, dict):
-            continue
-        features = impl_data.get("features")
-        if isinstance(features, dict) and _is_nested_features_map(features):
-            impl_data["features"] = _migrate_features_to_flat(features)
-    return component_state
-
-
-def migrate_component_state_to_flat(component_state: dict[str, Any]) -> dict[str, Any]:
-    """Migrate a component's state dict from nested to flat feature keys.
-
-    Runs in-place and returns the mutated dict.
-    """
-    _migrate_component_features(component_state)
-    _migrate_implementation_features(component_state)
-    return component_state
 
 
 # ---------------------------------------------------------------------------

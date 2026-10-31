@@ -245,7 +245,7 @@ def gateway_connect_config(project_root: Path, config_path: Path) -> dict[str, A
     validate_standalone_config({"connector-config": reference})
     path = shard_path(project_root, _COMPONENT_ID)
     with StartupLock(path.with_suffix(".lock")):
-        component = deepcopy(get_component_state(project_root, _COMPONENT_ID, persist_migration=False))
+        component = deepcopy(get_component_state(project_root, _COMPONENT_ID))
         implementations = component.setdefault("implementations", {})
         for entry in implementations.values():
             entry["enabled"] = False

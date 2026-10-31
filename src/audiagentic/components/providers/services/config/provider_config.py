@@ -116,7 +116,7 @@ def provider_enabled_policy(project_root: Path, provider_id: str) -> str | bool:
 
 def _persisted_enabled(project_root: Path, provider_id: str) -> bool | None:
     """Enablement written by ``set_provider_enabled``/reconciliation, or None if never set."""
-    implementations = get_component_state(project_root, _COMPONENT_ID, persist_migration=False).get(
+    implementations = get_component_state(project_root, _COMPONENT_ID).get(
         "implementations", {}
     )
     stored = implementations.get(base_provider_id(provider_id))
@@ -186,7 +186,7 @@ def is_native_mcp_target_enabled(project_root: Path, provider_id: str) -> bool:
     Once provider state exists, its canonical disabled state suppresses exposure.
     This is a read of the existing feature authority, not another enablement map.
     """
-    implementations = get_component_state(project_root, _COMPONENT_ID, persist_migration=False).get(
+    implementations = get_component_state(project_root, _COMPONENT_ID).get(
         "implementations", {}
     )
     state = implementations.get(provider_id)
