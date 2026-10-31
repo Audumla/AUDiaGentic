@@ -36,7 +36,7 @@ def _run_cli(args: list[str], *, cwd: Path, env: dict[str, str]) -> subprocess.C
 
 def _base_env(tmp_path: Path) -> dict[str, str]:
     env = os.environ.copy()
-    env["AUDIAGENTIC_HOME"] = str(tmp_path / "home")
+    env["_AUDIAGENTIC_HOME"] = str(tmp_path / "home")
     env["AUDIAGENTIC_REPO_ROOT"] = str(tmp_path)
     env.pop("AUDIAGENTIC_PROFILE", None)
     env.pop("_AUDIAGENTIC_COMPONENT_CONFIG_DIRS", None)

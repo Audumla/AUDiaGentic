@@ -2,7 +2,7 @@
 
 The memory component provisions Hindsight-owned artifacts under the OS home
 (``~/.hindsight/*``). The global autouse fixture only isolates
-``AUDIAGENTIC_HOME``, not the OS home, so without this a recipe/provision test
+``_AUDIAGENTIC_HOME``, not the OS home, so without this a recipe/provision test
 would read and overwrite the developer's real ``~/.hindsight`` files. This
 redirects ``expanduser`` (USERPROFILE/HOME and the Windows HOMEDRIVE+HOMEPATH
 pair) to a per-test tmp dir. Tests that need to assert on the isolated home set

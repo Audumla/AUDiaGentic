@@ -77,7 +77,7 @@ def test_every_path_builder_is_listed() -> None:
 
 
 _PUBLIC_ENV = {"AUDIAGENTIC_CONFIG", "AUDIAGENTIC_PROFILE", "AUDIAGENTIC_PROJECT"}
-_PENDING_DECISION_ENV = {"AUDIAGENTIC_GATEWAY_ENDPOINT", "AUDIAGENTIC_GATEWAY_TOKEN_FILE", "AUDIAGENTIC_HOME"}
+_PENDING_DECISION_ENV: set[str] = set()
 
 
 def test_public_environment_is_the_documented_allowlist() -> None:

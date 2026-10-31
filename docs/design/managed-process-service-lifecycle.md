@@ -149,7 +149,7 @@ callback vocabulary belongs in foundation.
 ## 7. Durable layout and observability
 
 The machine-scoped default is resolved by foundation paths beneath
-`AUDIAGENTIC_HOME`/`~/.audiagentic`, not by consumer literals:
+`_AUDIAGENTIC_HOME`/`~/.audiagentic`, not by consumer literals:
 
 ```text
 services/<scope>/<service-kind>/<service-id>/

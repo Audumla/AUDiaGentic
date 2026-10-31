@@ -45,8 +45,6 @@ def test_protocol_mismatch_is_rejected_before_lease_acquisition(monkeypatch) -> 
 def test_standalone_mode_requires_explicit_endpoint_and_token_file(monkeypatch, tmp_path) -> None:
     reset_gateway_client()
     use_gateway_settings(monkeypatch, tmp_path, implementation="standalone")
-    monkeypatch.delenv("AUDIAGENTIC_GATEWAY_ENDPOINT", raising=False)
-    monkeypatch.delenv("AUDIAGENTIC_GATEWAY_TOKEN_FILE", raising=False)
 
     with pytest.raises(AudiaGenticError, match="CFG-AGSV-001"):
         get_gateway_client()

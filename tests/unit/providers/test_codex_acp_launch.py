@@ -92,7 +92,7 @@ def test_codex_launch_uses_shared_bridge_before_path_or_npx(monkeypatch, tmp_pat
 def test_codex_acp_recipe_is_pinned_and_shared(tmp_path, monkeypatch):
     import audiagentic.components.providers.adapters.codex.acp_install as install
 
-    monkeypatch.setenv("AUDIAGENTIC_HOME", str(tmp_path / "shared-home"))
+    monkeypatch.setenv("_AUDIAGENTIC_HOME", str(tmp_path / "shared-home"))
     assert install.CODEX_ACP_PACKAGE == "@agentclientprotocol/codex-acp"
     assert install.CODEX_ACP_VERSION == "1.6.2"
     assert install.shared_codex_acp_root() == (

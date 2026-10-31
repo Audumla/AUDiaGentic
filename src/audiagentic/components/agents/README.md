@@ -173,12 +173,15 @@ audiagentic gateway serve --host 127.0.0.1 --port 8765 --token-file <private-pat
 ```
 
 Clients opt in with `gateway.implementation: standalone` in the user settings
-plus the endpoint and token file; there is no discovery or in-process fallback
-in this phase:
+plus the endpoint and a token file reference; there is no discovery or in-process
+fallback in this phase:
 
-```text
-AUDIAGENTIC_GATEWAY_ENDPOINT=http://127.0.0.1:8765
-AUDIAGENTIC_GATEWAY_TOKEN_FILE=<private-path>
+```yaml
+gateway:
+  implementation: standalone
+  endpoint: http://127.0.0.1:8765
+  token:
+    file: <private-path>   # absolute or ~/...; the token itself is never stored in settings
 ```
 
 The service rejects non-loopback origins, missing/incorrect tokens, protocol

@@ -25,7 +25,7 @@ from audiagentic.foundation.time import now_iso_z
 def home(tmp_path, monkeypatch):
     home_dir = tmp_path / "home"
     home_dir.mkdir()
-    monkeypatch.setenv("AUDIAGENTIC_HOME", str(home_dir))
+    monkeypatch.setenv("_AUDIAGENTIC_HOME", str(home_dir))
     return home_dir
 
 

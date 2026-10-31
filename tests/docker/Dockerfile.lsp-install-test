@@ -4,7 +4,7 @@ ENV AUDIAGENTIC_DOCKER_TESTS=1
 ENV AUDIAGENTIC_REAL_PROVIDER_CLI_TESTS=1
 ENV AUDIAGENTIC_REPO_ROOT=/app
 ENV HOME=/tmp/audiagentic-test-home
-ENV AUDIAGENTIC_HOME=/tmp/audiagentic-test-home/.audiagentic
+ENV _AUDIAGENTIC_HOME=/tmp/audiagentic-test-home/.audiagentic
 ENV PATH="/tmp/audiagentic-test-home/.cargo/bin:/tmp/audiagentic-test-home/.local/bin:/tmp/audiagentic-test-home/go/bin:/go/bin:/root/.cargo/bin:/usr/local/go/bin:${PATH}"
 
 WORKDIR /app

@@ -163,6 +163,26 @@
       },
       "uniqueItems": true,
       "description": "Project checkouts this machine's gateway clients may resolve workspace names and request ids against. Unset searches the current checkout and its sibling directories."
+    },
+    "endpoint": {
+      "type": "string",
+      "pattern": "^https?://[^\\s]+$",
+      "description": "URL of a standalone gateway this machine's clients connect to. Used together with token; both or neither."
+    },
+    "token": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "file"
+      ],
+      "properties": {
+        "file": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Absolute path (or ~/...) of the file holding the gateway token. The token itself is never stored in settings."
+        }
+      },
+      "description": "Typed credential reference for the gateway token."
     }
   }
 }

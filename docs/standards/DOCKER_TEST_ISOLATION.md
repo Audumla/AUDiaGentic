@@ -22,7 +22,7 @@ developer-machine snapshot that makes missing lifecycle behavior invisible.
 
 - `COPY . /app` and `ADD . /app` are prohibited. Every recipe lists its inputs.
 - Copying `.claude`, `.codex`, `.config`, or `.cache` is prohibited.
-- Mutating recipes set both `HOME` and `AUDIAGENTIC_HOME` below `/tmp`.
+- Mutating recipes set both `HOME` and `_AUDIAGENTIC_HOME` below `/tmp`.
 - Project-owned generated surfaces are copied only by a test explicitly checking
   an existing projection. A fresh-install or lifecycle recipe starts without them.
 - Docker socket mounts, host-home mounts, credential forwarding, and bind-mounted

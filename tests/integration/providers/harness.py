@@ -113,7 +113,7 @@ def install_context_for(provider_id: str, monkeypatch, tmp_path: Path) -> Path |
     policy = policy_for(provider_id)
     if not policy.use_project_root:
         return None
-    monkeypatch.setenv("AUDIAGENTIC_HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("_AUDIAGENTIC_HOME", str(tmp_path / "home"))
     return tmp_path
 
 

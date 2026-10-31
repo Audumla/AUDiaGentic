@@ -77,9 +77,9 @@ runtime state, harness configuration and the legacy agent catalog. Every process
 machine must use the same one: two homes mean two gateway services fighting over one
 port, and agents defined in one invisible from the other. A harness that starts MCP
 servers without your environment (a user-scope registration from `setup harness`) sees
-no `AUDIAGENTIC_HOME`, so choose the home here and they all agree.
+no `_AUDIAGENTIC_HOME`, so choose the home here and they all agree.
 
-Precedence: the `AUDIAGENTIC_HOME` environment variable (it wins, and a service passes it
+Precedence: the `_AUDIAGENTIC_HOME` environment variable (it wins, and a service passes it
 to its children), then this setting, then `~/.audiagentic`. Like the gateway section it is
 read from the machine scopes only, so a project's own `settings.yaml` cannot move it. An
 invalid settings file stops the command with its file, line and key instead of quietly

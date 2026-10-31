@@ -834,9 +834,9 @@ def test_explicit_composition_mode_selects_standalone_without_fallback(
 ) -> None:
     application = SharedApplication()
     host, thread, _service_root, token_path = _start_host(tmp_path, application)
-    use_gateway_settings(monkeypatch, tmp_path, implementation="standalone")
-    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_ENDPOINT", host.endpoint)
-    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_TOKEN_FILE", str(token_path))
+    use_gateway_settings(
+        monkeypatch, tmp_path, implementation="standalone", endpoint=host.endpoint, token={"file": str(token_path)},
+    )
     reset_gateway_client()
     try:
         client = get_gateway_client()

@@ -136,7 +136,7 @@ def _main(argv: list[str] | None = None) -> int:
         "--target",
         metavar="PATH",
         default=None,
-        help="Runtime location (default: ~/.audiagentic/harness, override with AUDIAGENTIC_HOME)",
+        help="Runtime location (default: ~/.audiagentic/harness, override with the home setting)",
     )
 
     cleanup_parser = subparsers.add_parser(
@@ -146,7 +146,7 @@ def _main(argv: list[str] | None = None) -> int:
         "--target",
         metavar="PATH",
         default=None,
-        help="Runtime location (default: ~/.audiagentic/harness, override with AUDIAGENTIC_HOME)",
+        help="Runtime location (default: ~/.audiagentic/harness, override with the home setting)",
     )
 
     component_parser = subparsers.add_parser("component", help="Manage installed components")

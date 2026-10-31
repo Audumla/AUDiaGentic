@@ -69,6 +69,6 @@ def test_mutating_recipes_declare_disposable_home() -> None:
     missing: list[str] = []
     for name in sorted(recipe_names):
         source = (DOCKER_DIR / name).read_text(encoding="utf-8")
-        if "ENV HOME=/tmp/" not in source or "ENV AUDIAGENTIC_HOME=/tmp/" not in source:
+        if "ENV HOME=/tmp/" not in source or "ENV _AUDIAGENTIC_HOME=/tmp/" not in source:
             missing.append(name)
-    assert missing == [], f"mutating recipes without disposable HOME/AUDIAGENTIC_HOME: {missing}"
+    assert missing == [], f"mutating recipes without disposable HOME/_AUDIAGENTIC_HOME: {missing}"

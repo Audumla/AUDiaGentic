@@ -52,7 +52,7 @@ def _cmd_bootstrap(target: Path, project_root: Path) -> int:
 
     print_message("\nBootstrap complete. Run 'audiagentic' from any project directory.")
     if target != global_harness_runtime():
-        print_message(f"Set AUDIAGENTIC_HOME={target.parent} to use this location.")
+        print_message(f"Set home: {target.parent} in your user settings to use this location.")
     return 0
 
 

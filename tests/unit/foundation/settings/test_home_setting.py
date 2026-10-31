@@ -14,7 +14,7 @@ from audiagentic.foundation.paths.names import home_directory, home_source
 @pytest.fixture
 def machine(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """No environment home, an isolated user config directory, and a git project as cwd."""
-    monkeypatch.delenv("AUDIAGENTIC_HOME", raising=False)
+    monkeypatch.delenv("_AUDIAGENTIC_HOME", raising=False)
     monkeypatch.delenv("AUDIAGENTIC_CONFIG", raising=False)
     monkeypatch.delenv("AUDIAGENTIC_PROJECT", raising=False)
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
@@ -44,7 +44,7 @@ def test_the_user_setting_chooses_the_home(machine: Path, tmp_path: Path) -> Non
 
 def test_the_environment_wins_over_the_setting(machine: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _user_settings(tmp_path, f"home: {tmp_path / 'shared-home'}\n")
-    monkeypatch.setenv("AUDIAGENTIC_HOME", str(tmp_path / "env-home"))
+    monkeypatch.setenv("_AUDIAGENTIC_HOME", str(tmp_path / "env-home"))
     assert home_source() == (tmp_path / "env-home", "environment")
 
 

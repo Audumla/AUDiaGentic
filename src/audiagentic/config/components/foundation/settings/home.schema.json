@@ -5,5 +5,5 @@
   "type": "string",
   "minLength": 1,
   "pattern": "^(/|[A-Za-z]:[\\\\/]|~)",
-  "description": "The AUDiaGentic home directory: gateway service records, provider runtime, harness config and the legacy agent catalog. An absolute path (or ~/...). Machine scope: read from the user settings or an explicit file, never from a project's own settings. The AUDIAGENTIC_HOME environment variable, when set, wins."
+  "description": "The AUDiaGentic home directory: gateway service records, provider runtime, harness config and the legacy agent catalog. An absolute path (or ~/...). Machine scope: read from the user settings or an explicit file, never from a project's own settings. A service passes its home to the processes it starts through an internal variable, which wins for those children."
 }

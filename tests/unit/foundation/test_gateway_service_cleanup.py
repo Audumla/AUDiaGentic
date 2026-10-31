@@ -15,7 +15,7 @@ def _stand_in_service(home: Path) -> subprocess.Popen:
     """A process that looks like a gateway service to the cleanup (module name in argv)."""
     return subprocess.Popen(
         [sys.executable, "-c", "import time; time.sleep(60)", _SERVICE_MODULE],
-        env={**os.environ, "AUDIAGENTIC_HOME": str(home)},
+        env={**os.environ, "_AUDIAGENTIC_HOME": str(home)},
     )
 
 
@@ -48,7 +48,7 @@ def test_leaves_a_service_with_another_home_alone(tmp_path: Path, started: list)
 def test_leaves_unrelated_processes_with_the_same_home_alone(tmp_path: Path, started: list) -> None:
     unrelated = subprocess.Popen(
         [sys.executable, "-c", "import time; time.sleep(60)"],
-        env={**os.environ, "AUDIAGENTIC_HOME": str(tmp_path / "home")},
+        env={**os.environ, "_AUDIAGENTIC_HOME": str(tmp_path / "home")},
     )
     started.append(unrelated)
     assert stop_gateway_services(tmp_path / "home") == []
