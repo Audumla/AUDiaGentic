@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.54.1](https://github.com/Audumla/AUDiaGentic/compare/v0.54.0...v0.54.1) (2026-10-31)
+
+
+### Documentation
+
+* **planning:** rework the gateway setup plan (CFG13-CFG17), close CFG01 with qualification ([#313](https://github.com/Audumla/AUDiaGentic/issues/313)) ([c850948](https://github.com/Audumla/AUDiaGentic/commit/c85094853ab4719139c8c6d5768f4f9cb9f7e228))
+
 ## [0.54.0](https://github.com/Audumla/AUDiaGentic/compare/v0.53.1...v0.54.0) (2026-10-31)
 
 
