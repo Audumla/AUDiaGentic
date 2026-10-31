@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.48.1](https://github.com/Audumla/AUDiaGentic/compare/v0.48.0...v0.48.1) (2026-10-31)
+
+
+### Documentation
+
+* plan optional agent collaboration as a separate capability ([#29](https://github.com/Audumla/AUDiaGentic/issues/29)) ([56eb4a5](https://github.com/Audumla/AUDiaGentic/commit/56eb4a5fb351d019dd4ca10f3905b94d3ee2dccf))
+
 ## [0.48.0](https://github.com/Audumla/AUDiaGentic/compare/v0.47.0...v0.48.0) (2026-10-31)
 
 
