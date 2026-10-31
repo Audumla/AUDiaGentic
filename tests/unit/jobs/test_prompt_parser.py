@@ -125,25 +125,26 @@ def test_parse_prompt_launch_request_rejects_majority_pass_in_mvp() -> None:
 
 def test_parse_prompt_launch_request_uses_configurable_syntax_aliases(tmp_path: Path) -> None:
     project_root = tmp_path / "project"
-    (project_root / ".audiagentic" / "config" / "execution").mkdir(parents=True, exist_ok=True)
-    (project_root / ".audiagentic" / "config" / "execution" / "prompt-syntax.yaml").write_text(
+    (project_root / ".audiagentic").mkdir(parents=True, exist_ok=True)
+    (project_root / ".audiagentic" / "settings.yaml").write_text(
         "\n".join(
             [
-                "contract-version: v1",
-                "default-profile: shared",
-                "generic-tag: agent",
-                "tag-aliases:",
-                "  inspect: adhoc",
-                "provider-aliases:",
-                "  clinex: cline",
-                "directive-aliases:",
-                "  who: id",
-                "  ctxx: context",
-                "  outx: output",
-                "  tpl: template",
-                "  agent: provider",
-                "profiles:",
-                "  shared: {}",
+                "schema_version: 1",
+                "prompt-syntax:",
+                "  default-profile: shared",
+                "  generic-tag: agent",
+                "  tag-aliases:",
+                "    inspect: adhoc",
+                "  provider-aliases:",
+                "    clinex: cline",
+                "  directive-aliases:",
+                "    who: id",
+                "    ctxx: context",
+                "    outx: output",
+                "    tpl: template",
+                "    agent: provider",
+                "  profiles:",
+                "    shared: {}",
             ]
         ),
         encoding="utf-8",

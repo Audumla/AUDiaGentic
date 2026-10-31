@@ -558,35 +558,21 @@ def deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]
 # ── GP26: machine-level drift detection entry points ────────────────────────
 
 
-def machine_gpt_auto_override_path(provider_id: str = "gpt-auto") -> Path:
-    """Return the optional machine-scoped provider override file path.
-
-    Mirrors the gateway's own machine scope: a settings file here applies to
-    every project on this machine that resolves this provider, matching GP20's
-    ``load defaults -> load optional machine override -> project overlay`` flow.
-    """
-    from audiagentic.foundation.paths.home import global_config_dir
-
-    return global_config_dir() / "providers" / f"{provider_id}.yaml"
-
-
 def _load_machine_override(provider_id: str = "gpt-auto") -> dict[str, Any]:
-    """Load the optional machine override file as a bare settings dict.
+    """The machine override: ``providers.<id>`` written in the USER settings scope, as a bare settings dict.
 
-    Returns ``{}`` when absent or unreadable-as-mapping -- a missing machine
-    override is not drift; the packaged defaults alone are the machine baseline.
+    Applies to every project on this machine that resolves this provider, matching GP20's
+    ``load defaults -> load optional machine override -> project overlay`` flow. Returns ``{}``
+    when absent. A corrupt user settings file is treated as absent here; the startup validation
+    resolves settings itself and surfaces the failure as the drift it is.
     """
-    path = machine_gpt_auto_override_path(provider_id)
-    if not path.exists():
-        return {}
+    from audiagentic.foundation.config.writer import read_scope_settings
+
     try:
-        payload = load_yaml_file(path)
-    except Exception:  # noqa: BLE001
-        # A corrupt machine override must not be silently treated as absent by
-        # this resolver alone -- the startup validation below re-reads it and
-        # will surface the parse failure as the drift it is.
+        entry = (read_scope_settings("user").get("providers") or {}).get(provider_id)
+    except AudiaGenticError:
         return {}
-    return provider_settings(payload)
+    return provider_settings(entry) if isinstance(entry, dict) else {}
 
 
 def resolve_gpt_auto_config(

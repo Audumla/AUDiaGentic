@@ -167,6 +167,8 @@ def apply_feature_enabled_state(
 def _settings_entries(project_root: Path) -> dict[str, Any]:
     from audiagentic.foundation.config.settings import resolve_settings_cached
 
+    if not project_root.is_dir():
+        return {}
     entries = resolve_settings_cached(project_root).get("providers") or {}
     return entries if isinstance(entries, dict) else {}
 
@@ -286,6 +288,8 @@ _DECIDED_KEY = "reconciliation.decided"
 def _reconciliation_settings(project_root: Path) -> dict[str, Any]:
     from audiagentic.foundation.config.settings import resolve_settings_cached
 
+    if not project_root.is_dir():
+        return {}
     section = resolve_settings_cached(project_root).get("reconciliation")
     return section if isinstance(section, dict) else {}
 

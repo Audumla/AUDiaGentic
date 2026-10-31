@@ -1,0 +1,9 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "settings: event-triggers",
+  "description": "Event triggers that start agent jobs: each names an event pattern, what to run and an optional payload filter. The agent-jobs component validates each trigger against its own trigger schema when it loads them.",
+  "type": "array",
+  "items": {
+    "type": "object"
+  }
+}

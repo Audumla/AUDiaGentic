@@ -25,11 +25,10 @@ def _load_error_resolutions() -> None:
 
 
 def _write_config(project_root: Path, triggers: list[dict]) -> None:
-    config_dir = project_root / ".audiagentic" / "config" / "agent-jobs"
-    config_dir.mkdir(parents=True, exist_ok=True)
-    config_path = config_dir / "event-triggers.yaml"
+    config_path = project_root / ".audiagentic" / "settings.yaml"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(
-        yaml.safe_dump({"triggers": triggers}),
+        yaml.safe_dump({"schema_version": 1, "event-triggers": triggers}),
         encoding="utf-8",
     )
 
@@ -127,7 +126,7 @@ class TestLoadValidTriggers:
         assert t.target == {"kind": "adhoc", "adhoc-id": "adhoc-1"}
         assert t.metadata_propagation == {"correlation_id": True}
 
-    def test_no_config_file_returns_empty(self, tmp_path: Path) -> None:
+    def test_no_triggers_setting_returns_empty(self, tmp_path: Path) -> None:
         assert load_event_triggers(tmp_path) == []
 
 
@@ -506,9 +505,9 @@ class TestReadmeExample:
         end = text.index("```", start)
         example = text[start:end]
 
-        config_dir = tmp_path / ".audiagentic" / "config" / "agent-jobs"
-        config_dir.mkdir(parents=True)
-        (config_dir / "event-triggers.yaml").write_text(example, encoding="utf-8")
+        settings = tmp_path / ".audiagentic" / "settings.yaml"
+        settings.parent.mkdir(parents=True)
+        settings.write_text(example, encoding="utf-8")
 
         triggers = load_event_triggers(tmp_path)
         assert len(triggers) == 1

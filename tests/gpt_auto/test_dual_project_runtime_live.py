@@ -42,6 +42,7 @@ pytest-collected (no ``test_*`` functions, only ``main()``).
 
 from __future__ import annotations
 
+from audiagentic.components.providers.services.config.provider_config import load_provider_config_lenient
 import asyncio
 import json
 import sys
@@ -79,7 +80,7 @@ def _load_config() -> GptAutoConfig:
     ChatGPT project URL."""
     import yaml
 
-    raw = yaml.safe_load((REPO_ROOT / ".audiagentic/config/providers/gpt-auto.yaml").read_text(encoding="utf-8"))
+    raw = load_provider_config_lenient(REPO_ROOT)["providers"]["gpt-auto"]
     settings = dict(raw["settings"])
     settings.pop("project-url", None)
     return GptAutoConfig.from_project_dict(settings)

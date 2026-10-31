@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "settings: events",
+  "description": "The foundation event layer: where events are stored, loop protection and replay.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "event_store": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Event store directory, relative to the project's .audiagentic directory."
+        },
+        "retention_days": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "cycle_detection": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_depth": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "correlation_tracking": {
+          "type": "boolean"
+        },
+        "max_correlation_chains": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_events_per_correlation": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "replay": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "dispatch_on_replay": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

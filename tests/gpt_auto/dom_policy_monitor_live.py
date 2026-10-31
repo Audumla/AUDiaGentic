@@ -11,6 +11,7 @@ review turns run through the public GatewayClient and production Gateway path.
 
 from __future__ import annotations
 
+from audiagentic.components.providers.services.config.provider_config import load_provider_config_lenient
 import asyncio
 import json
 import threading
@@ -50,9 +51,7 @@ def _submit(
 async def _monitor(
     chat_url: str, stop: threading.Event, ready: threading.Event, result: dict[str, Any]
 ) -> None:
-    provider_document = yaml.safe_load(
-        (ROOT / ".audiagentic/config/providers/gpt-auto.yaml").read_text(encoding="utf-8")
-    )
+    provider_document = load_provider_config_lenient(ROOT)["providers"]["gpt-auto"]
     config = GptAutoConfig.from_project_dict(provider_document)
     bridge = PythonCdpBridge(config)
     transitions: list[dict[str, Any]] = []

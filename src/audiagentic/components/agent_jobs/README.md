@@ -12,10 +12,11 @@ and cancellation all use the public Agents Work APIs. The former job store,
 records, state machine, stage runner, review persistence, and job-control
 modules have been retired.
 
-Example trigger configuration:
+Example trigger configuration, the `event-triggers` list in `.audiagentic/settings.yaml`:
 
 ```yaml
-triggers:
+schema_version: 1
+event-triggers:
   - contract-version: v1
     trigger-id: plan-item-review
     kind: event
