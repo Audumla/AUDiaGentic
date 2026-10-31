@@ -20,19 +20,14 @@ from tests.helpers import sandbox as sandbox_helper
 
 def _write_project_and_provider_config(sandbox) -> None:
     (sandbox.repo / ".audiagentic").mkdir(parents=True, exist_ok=True)
-    (sandbox.repo / ".audiagentic" / "config").mkdir(parents=True, exist_ok=True)
-    (sandbox.repo / ".audiagentic" / "config" / "project.yaml").write_text(
+    (sandbox.repo / ".audiagentic" / "settings.yaml").write_text(
         "\n".join(
             [
-                "contract-version: v1",
-                "project-id: sample-project",
-                "project-name: Sample Project",
-                "workflow-profile: standard",
-                "tracked-docs-root: docs",
-                "runtime-root: .audiagentic/runtime",
-                "release-strategy: release-please",
+                "schema_version: 1",
+                "project:",
+                "  id: sample-project",
+                "  name: Sample Project",
                 "prompt-launch:",
-                "  syntax: prefix-token-v1",
                 "  allow-adhoc-target: false",
                 "  default-review-policy:",
                 "    required-reviews: 2",
@@ -52,14 +47,6 @@ def _write_project_and_provider_config(sandbox) -> None:
                 "    capture-input-events: true",
                 "    allow-pause-resume: true",
                 "    event-format: ndjson",
-            ]
-        ),
-        encoding="utf-8",
-    )
-    (sandbox.repo / ".audiagentic" / "settings.yaml").write_text(
-        "\n".join(
-            [
-                "schema_version: 1",
                 "providers:",
                 "  codex:",
                 "    enabled: true",

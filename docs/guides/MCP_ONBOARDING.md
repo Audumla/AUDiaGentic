@@ -74,16 +74,17 @@ wire contract. Installing planning does not expose Project management in native 
 
 ## Ownership, lifecycle and recovery
 
-Project-owned `.audiagentic/config/project.yaml` records intent:
+The `mcp-onboarding` section of the project settings (`.audiagentic/settings.yaml`) records intent:
 
 ```yaml
 mcp-onboarding:
-  contract-version: v1
   bindings:
     ag-planning: [pi, opencode]
 ```
 
-New projects start with explicit empty bindings. Older projects migrate only on
+`audiagentic config migrate` moves an older `.audiagentic/config/project.yaml` into settings.
+
+New projects start with no recorded bindings. Older projects migrate only on
 an explicit mutation using recorded ownership and matching native evidence.
 Matching names or bytes without ownership are never adopted. Lifecycle, provider
 state and config refresh reuse this resolver instead of broadcasting.

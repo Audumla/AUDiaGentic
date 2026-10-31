@@ -9,11 +9,9 @@ for _p in (str(_ROOT), str(_ROOT / "src")):
         sys.path.insert(0, _p)
 
 import yaml
-from jsonschema import Draft202012Validator
 from tests.helpers import sandbox as sandbox_helper
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.foundation.contracts.schema_registry import read_schema
 from audiagentic.foundation.lifecycle.fresh_install import apply_fresh_install
 
 
@@ -26,7 +24,7 @@ def test_fresh_install_creates_scaffold_and_manifest(tmp_path: Path) -> None:
     try:
         result = apply_fresh_install(sandbox.repo)
         assert result["status"] == "success"
-        assert (sandbox.repo / ".audiagentic" / "config" / "project.yaml").is_file()
+        assert (sandbox.repo / ".audiagentic" / "config" / "interoperability" / "config.yaml").is_file()
         assert not (sandbox.repo / ".audiagentic" / "config" / "runtime" / "providers.yaml").exists()
         assert not (
             sandbox.repo / ".audiagentic" / "config" / "execution" / "prompt-syntax.yaml"
@@ -38,9 +36,7 @@ def test_fresh_install_creates_scaffold_and_manifest(tmp_path: Path) -> None:
         assert not (sandbox.repo / ".audiagentic" / "components" / "memory.yaml").exists()
         assert not (sandbox.repo / ".audiagentic" / "components" / "agent-planning.yaml").exists()
 
-        project_cfg = _load_yaml(sandbox.repo / ".audiagentic" / "config" / "project.yaml")
-        validator = Draft202012Validator(read_schema("project-config"))
-        assert not list(validator.iter_errors(project_cfg))
+        assert not (sandbox.repo / ".audiagentic" / "config" / "project.yaml").exists()
 
         # project marker has expected fields
         marker = _load_yaml(sandbox.repo / ".audiagentic" / "components" / "project.yaml")

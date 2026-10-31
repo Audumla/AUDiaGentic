@@ -54,20 +54,20 @@ def test_install_release_creates_release_workflow(tmp_path):
     assert "scripts/components/optional/ledger/finalize_ledger.py" not in content
 
 
-def test_install_project_seeds_project_yaml(tmp_path):
+def test_install_project_seeds_interoperability_config(tmp_path):
     _cli("component", "install", "project", project=tmp_path)
-    project_yaml = tmp_path / ".audiagentic" / "config" / "project.yaml"
-    assert project_yaml.is_file()
-    assert project_yaml.stat().st_size > 0
+    seeded = tmp_path / ".audiagentic" / "config" / "interoperability" / "config.yaml"
+    assert seeded.is_file()
+    assert seeded.stat().st_size > 0
 
 
 def test_reinstall_project_preserves_create_if_missing(tmp_path):
     _cli("component", "install", "project", project=tmp_path)
-    project_yaml = tmp_path / ".audiagentic" / "config" / "project.yaml"
-    project_yaml.write_text("contract-version: v1\nproject-id: my-project\n", encoding="utf-8")
+    seeded = tmp_path / ".audiagentic" / "config" / "interoperability" / "config.yaml"
+    seeded.write_text("contract-version: v1\nowner: my-project\n", encoding="utf-8")
 
     _cli("component", "install", "project", project=tmp_path)
-    assert "my-project" in project_yaml.read_text(encoding="utf-8")
+    assert "my-project" in seeded.read_text(encoding="utf-8")
 
 
 # ── uninstall removes required-managed files for optional components ──────────

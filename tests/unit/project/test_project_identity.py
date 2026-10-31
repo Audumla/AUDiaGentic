@@ -75,13 +75,10 @@ def test_fallbacks_are_normalized_and_provisional(tmp_path: Path) -> None:
     assert project_id(plain) == ("hidden-name", "folder")
 
 
-def test_declared_id_wins_over_legacy_and_git(tmp_path: Path) -> None:
+def test_declared_id_and_name_win_over_git(tmp_path: Path) -> None:
     root = _repo(tmp_path / "repo", ("origin", "git@example.com:org/remote-name.git"))
-    legacy = root / ".audiagentic" / "config"
-    legacy.mkdir(parents=True)
-    (legacy / "project.yaml").write_text("project-id: legacy-id\nproject-name: Display Name\n", encoding="utf-8")
-    assert project_id(root) == ("legacy-id", "legacy")
-    _settings(root, "project:\n  id: declared\n")
+    assert project_id(root) == ("remote-name", "git-remote")
+    _settings(root, "project:\n  id: declared\n  name: Display Name\n")
     assert project_id(root) == ("declared", "settings")
     assert context(root)["id"] == "declared"
     assert context(root)["name"] == "Display Name"
@@ -110,7 +107,5 @@ def test_provider_project_name_follows_the_declared_id(tmp_path: Path) -> None:
     _settings(root, "project:\n  id: declared-id\n")
     assert resolve_project_name(root) == "declared-id"
     assert resolve_project_name(root, workspace_name="Label") == "declared-id"  # a host label is only a fallback
-    legacy = root / ".audiagentic" / "config"
-    legacy.mkdir(parents=True)
-    (legacy / "project.yaml").write_text("project-name: Explicit Name\n", encoding="utf-8")
+    _settings(root, "project:\n  id: declared-id\n  name: Explicit Name\n")
     assert resolve_project_name(root) == "Explicit Name"  # an explicit display name still wins

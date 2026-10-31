@@ -75,16 +75,21 @@ def bounded_workspace_discovery(tmp_path: Path, monkeypatch):
     return visits, candidates
 
 
+def _managed_project(root: Path, project_id: str, name: str | None = None) -> None:
+    """Install marker plus the identity settings a managed project carries."""
+    marker = root / ".audiagentic" / "components"
+    marker.mkdir(parents=True, exist_ok=True)
+    (marker / "project.yaml").write_text("component-id: project\n", encoding="utf-8")
+    text = f"schema_version: 1\nproject:\n  id: {project_id}\n" + (f"  name: {name}\n" if name else "")
+    (root / ".audiagentic" / "settings.yaml").write_text(text, encoding="utf-8")
+
+
 def test_workspace_name_resolves_sibling_project_root(tmp_path: Path, monkeypatch) -> None:
     current = tmp_path / "AUDiaGentic"
     target = tmp_path / "bigcherry"
     monkeypatch.setattr("audiagentic.components.agents.gateway.workspace_roots.configured_workspace_roots", lambda: [current.resolve(), target.resolve()])
-    for root in (current, target):
-        (root / ".audiagentic" / "config").mkdir(parents=True)
-    (target / ".audiagentic" / "config" / "project.yaml").write_text(
-        "project-id: bigcherry" + chr(10) + "project-name: BigCherry" + chr(10),
-        encoding="utf-8",
-    )
+    _managed_project(current, "audiagentic")
+    _managed_project(target, "bigcherry", "BigCherry")
 
     resolved = gateway._resolve_workspace_project_root(current, "BigCherry")
 
@@ -95,23 +100,13 @@ def test_workspace_name_ignores_sibling_config_dir_that_normalizes_to_project_id
     tmp_path: Path, bounded_workspace_discovery,
 ) -> None:
     current = tmp_path / "AUDiaGentic"
-    current_config = current / ".audiagentic" / "config"
-    current_config.mkdir(parents=True)
-    (current_config / "project.yaml").write_text(
-        "project-id: audiagentic" + chr(10) + "project-name: AUDiaGentic" + chr(10),
-        encoding="utf-8",
-    )
+    _managed_project(current, "audiagentic", "AUDiaGentic")
     # The resolver scans direct siblings. This operational directory's name
     # normalizes to `audiagentic`, but it has no project manifest and is not a
     # second checkout.
     (tmp_path / ".audiagentic").mkdir()
     similarly_named = tmp_path / "AUDiaGentic-test"
-    similar_config = similarly_named / ".audiagentic" / "config"
-    similar_config.mkdir(parents=True)
-    (similar_config / "project.yaml").write_text(
-        "project-id: audiagentic-test" + chr(10) + "project-name: AUDiaGentic Test" + chr(10),
-        encoding="utf-8",
-    )
+    _managed_project(similarly_named, "audiagentic-test", "AUDiaGentic Test")
 
     assert gateway._resolve_workspace_project_root(current, "AUDiaGentic") == current.resolve()
     visits, candidates = bounded_workspace_discovery
@@ -124,9 +119,7 @@ def test_workspace_name_resolution_fails_closed_when_missing(
     tmp_path: Path, bounded_workspace_discovery,
 ) -> None:
     unrelated = tmp_path / "unrelated"
-    manifest = unrelated / ".audiagentic" / "config" / "project.yaml"
-    manifest.parent.mkdir(parents=True)
-    manifest.write_text("project-id: unrelated\n", encoding="utf-8")
+    _managed_project(unrelated, "unrelated")
     with pytest.raises(AudiaGenticError) as exc_info:
         gateway._resolve_workspace_project_root(tmp_path / "AUDiaGentic", "missing")
 
@@ -138,11 +131,7 @@ def test_workspace_name_resolution_fails_closed_when_missing(
 
 def test_absolute_workspace_root_disambiguates_duplicate_worktrees(tmp_path: Path) -> None:
     target = tmp_path / "AUDiaGentic"
-    (target / ".audiagentic" / "config").mkdir(parents=True)
-    (target / ".audiagentic" / "config" / "project.yaml").write_text(
-        "project-id: audiagentic" + chr(10) + "project-name: AUDiaGentic" + chr(10),
-        encoding="utf-8",
-    )
+    _managed_project(target, "audiagentic", "AUDiaGentic")
 
     assert gateway._resolve_workspace_project_root(
         tmp_path / "other", str(target)

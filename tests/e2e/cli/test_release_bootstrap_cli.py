@@ -54,7 +54,7 @@ def test_release_bootstrap_marker_has_expected_fields(tmp_path):
 
 def test_release_bootstrap_syncs_managed_files(tmp_path):
     _cli("release-bootstrap", project=tmp_path)
-    project_yaml = tmp_path / ".audiagentic" / "config" / "project.yaml"
+    project_yaml = tmp_path / ".audiagentic" / "config" / "interoperability" / "config.yaml"
     assert project_yaml.is_file()
 
 

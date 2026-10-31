@@ -7,9 +7,6 @@ description: Core project scaffold — config, prompts, and workflow files
 context-hook: audiagentic.components.project.project_api.context
 lifecycle-observer: audiagentic.components.project.onboarding_events
 files:
-  - path: .audiagentic/config/project.yaml
-    lifecycle: create-if-missing
-    description: Project identity and workflow config
   - path: .audiagentic/state/mcp-onboarding
     lifecycle: create-if-missing
     recursive: true

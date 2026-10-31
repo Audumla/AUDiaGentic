@@ -93,6 +93,11 @@ def project_marker_path(project_root: Path) -> Path:
     return project_root / PROJECT_MARKER_NAME
 
 
+def is_managed_project(project_root: Path) -> bool:
+    """True when the project carries the project component's installation marker."""
+    return (project_marker_path(project_root) / "components" / "project.yaml").is_file()
+
+
 def project_config_dir(project_root: Path) -> Path:
     """Return .audiagentic/config/ — source-of-truth config location."""
     return project_marker_path(project_root) / CONFIG_DIR_NAME

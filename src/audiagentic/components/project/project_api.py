@@ -8,7 +8,6 @@ from typing import Any
 from audiagentic.foundation.components.registry import is_enabled, is_installed
 from audiagentic.foundation.features.registry import all_features, all_implementations
 from audiagentic.foundation.features.resolver import resolve_feature, resolve_implementation
-from audiagentic.foundation.io import load_yaml_file
 from audiagentic.foundation.paths.identity import (
     git_common_dir as _git_common_dir,
 )
@@ -24,7 +23,6 @@ from audiagentic.foundation.paths.identity import (
 from audiagentic.foundation.paths.identity import (
     repository_name as _repository_name,
 )
-from audiagentic.foundation.paths.names import project_marker_path
 
 from . import project_components, project_files, project_surfaces
 
@@ -105,18 +103,16 @@ def resolve_project_name(
 ) -> str:
     """Resolve one canonical display name for project-owned consumers.
 
-    In precedence order: an explicit ``project-name`` in the legacy project file,
-    the declared ``project.id``, a host-provided workspace name (only a fallback
+    In precedence order: the ``project.name`` setting, the declared ``project.id``, a host-provided workspace name (only a fallback
     for unmanaged repositories, since client labels need not match the provider
     project), the git repository name, then the directory name. Worktree and
     clone directories are arbitrary local names, while the repository name is the
     same in every worktree of it.
     """
-    legacy = _legacy_project_config(project_root)
-    configured_name = legacy.get("project-name") or legacy.get("project_name")
-    if isinstance(configured_name, str) and configured_name.strip():
-        return configured_name.strip()
-    declared = _declared_project_id(project_root)
+    configured_name = _declared_setting(project_root, "project.name")
+    if configured_name:
+        return configured_name
+    declared = _declared_setting(project_root, "project.id")
     if declared:
         return declared
     if isinstance(workspace_name, str) and workspace_name.strip():
@@ -125,40 +121,29 @@ def resolve_project_name(
     return identity[0] if identity else project_root.resolve().name
 
 
-def _legacy_project_config(project_root: Path) -> dict[str, Any]:
-    """The legacy ``.audiagentic/config/project.yaml`` mapping, empty when absent or malformed."""
-    path = project_marker_path(project_root) / "config" / "project.yaml"
-    data = load_yaml_file(path) if path.is_file() else {}
-    return data if isinstance(data, dict) else {}
-
-
 def project_id(project_root: Path) -> tuple[str, str]:
     """The stable, path-safe project identity and where it came from.
 
     Unlike the display name, this is the same in every worktree and clone and
     is safe to use in file names (docs/design/configuration-model.md,
     Discovery). Sources, in precedence order: ``settings`` (``project.id`` in
-    the resolved settings), ``legacy`` (``project-id`` in
-    ``.audiagentic/config/project.yaml``), ``git-remote`` (origin repository
-    name), ``main-checkout`` and ``folder``. The last two are provisional.
+    the resolved settings), ``git-remote`` (origin repository name),
+    ``main-checkout`` and ``folder``. The last two are provisional.
     """
-    declared = _declared_project_id(project_root)
+    declared = _declared_setting(project_root, "project.id")
     if declared:
         return declared, "settings"
-    legacy = _path_safe_id(str(_legacy_project_config(project_root).get("project-id") or ""))
-    if legacy:
-        return legacy, "legacy"
     name, source = _git_repository_identity(project_root) or (project_root.resolve().name, "folder")
     return _path_safe_id(name) or "project", source
 
 
-def _declared_project_id(project_root: Path) -> str | None:
-    """``project.id`` from the resolved settings; a root that does not exist has none."""
+def _declared_setting(project_root: Path, key: str) -> str | None:
+    """A string project setting such as ``project.id``; a root that does not exist has none."""
     if not project_root.is_dir():
         return None
     from audiagentic.foundation.config.settings import resolve_settings_cached
 
-    declared = resolve_settings_cached(project_root).get("project.id")
+    declared = resolve_settings_cached(project_root).get(key)
     return declared if isinstance(declared, str) and declared else None
 
 
@@ -181,14 +166,10 @@ def context(
     workspace_name: str | None = None,
 ) -> dict[str, Any]:
     """Return stable, public project facts for prompt templates."""
-    data = _legacy_project_config(project_root)
     return {
         "id": project_id(project_root)[0],
         "name": resolve_project_name(project_root, workspace_name=workspace_name),
         "root": str(project_root.resolve()),
-        "workflow_profile": data.get("workflow-profile"),
-        "tracked_docs_root": data.get("tracked-docs-root"),
-        "release_strategy": data.get("release-strategy"),
     }
 
 

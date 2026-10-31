@@ -25,8 +25,6 @@ from audiagentic.components.providers.providers_api import (
     resolve_launch_model,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.foundation.io import load_yaml_file
-from audiagentic.foundation.paths.names import project_marker_path
 from audiagentic.foundation.templates import has_placeholders
 from audiagentic.foundation.time import now_iso_z
 
@@ -112,9 +110,20 @@ def _submit_canonical_work(
     }
 
 
-def load_project_config(project_root: Path) -> dict[str, Any]:
-    path = project_marker_path(project_root) / "config" / "project.yaml"
-    return load_yaml_file(path)
+def _prompt_launch_settings(project_root: Path) -> dict[str, Any]:
+    """The resolved ``prompt-launch`` settings section; empty when none is set."""
+    from audiagentic.foundation.config.settings import resolve_settings_cached
+
+    section = resolve_settings_cached(project_root).get("prompt-launch")
+    return section if isinstance(section, dict) else {}
+
+
+def _project_identity(project_root: Path) -> str:
+    from audiagentic.foundation.config.settings import resolve_settings_cached
+    from audiagentic.foundation.paths.identity import project_identity
+
+    declared = resolve_settings_cached(project_root).get("project.id")
+    return project_identity(project_root, declared if isinstance(declared, str) else None)
 
 
 def _first_instance_model_id(project_root: Path, resolved: dict[str, Any]) -> str | None:
@@ -205,7 +214,7 @@ def _resolve_agent_provider_model(
 
 def _apply_launch_defaults(project_root: Path, request: dict[str, Any]) -> dict[str, Any]:
     merged = deepcopy(request)
-    prompt_launch = load_project_config(project_root).get("prompt-launch", {})
+    prompt_launch = _prompt_launch_settings(project_root)
     if isinstance(prompt_launch, dict):
         defaults = {
             "review-policy": prompt_launch.get("default-review-policy"),
@@ -255,7 +264,7 @@ def _render_launch_prompt(
     context = build_prompt_context_from_request(
         request=request,
         project_root=str(project_root),
-        project_id=load_project_config(project_root).get("project-id", ""),
+        project_id=_project_identity(project_root),
         job_id=job_id,
         execution_profile_id=request.get("execution-profile-id") or "",
         provider_id=provider_id,
@@ -275,7 +284,7 @@ def launch_prompt_request(
 ) -> dict[str, Any]:
     request = _apply_launch_defaults(project_root, request)
     review_tag = load_review_tag(load_prompt_syntax(project_root))
-    prompt_launch = load_project_config(project_root).get("prompt-launch", {})
+    prompt_launch = _prompt_launch_settings(project_root)
     if (
         request["target"]["kind"] == "adhoc"
         and request.get("target-origin") != "default"

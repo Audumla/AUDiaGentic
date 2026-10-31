@@ -441,16 +441,15 @@ def test_background_reconcile_resolves_selection_after_acquiring_fence(root, mon
     from contextlib import contextmanager
 
     from audiagentic.components.project.onboarding import service
-    from audiagentic.foundation.io import load_yaml_file, save_yaml_file
+    from audiagentic.foundation.config.writer import write_settings_patch
 
     assert project.install_mcp(root, mcp_id="ag-planning", harness_ids=["pi"])["ok"]
 
     @contextmanager
     def competing_install_finished(path):
-        config_path = root / ".audiagentic/config/project.yaml"
-        config = load_yaml_file(config_path)
-        config["mcp-onboarding"]["bindings"]["ag-planning"] = []
-        save_yaml_file(config_path, config, atomic=True)
+        write_settings_patch(
+            "project", {"mcp-onboarding": {"bindings": {"ag-planning": []}}}, project_root=root
+        )
         yield
 
     monkeypatch.setattr(service, "AdvisoryLock", competing_install_finished)
@@ -489,7 +488,6 @@ def test_provider_disable_prunes_and_enable_restores_persisted_selection(root):
     from audiagentic.components.providers.services.config.provider_config import (
         set_provider_enabled,
     )
-    from audiagentic.foundation.io import load_yaml_file
 
     assert project.install_mcp(root, mcp_id="ag-planning", harness_ids=["pi"])["ok"]
     assert project.install_mcp(root, mcp_id="ag-ledger", harness_ids=["pi"])["ok"]
@@ -507,12 +505,16 @@ def test_provider_disable_prunes_and_enable_restores_persisted_selection(root):
     data = json.loads(native.read_text())
     data["mcpServers"]["foreign"] = {"command": "user-owned"}
     native.write_text(json.dumps(data), encoding="utf8")
-    config = root / ".audiagentic/config/project.yaml"
-    bindings = load_yaml_file(config)["mcp-onboarding"]["bindings"]
+    from audiagentic.foundation.config.writer import read_scope_settings
+
+    def recorded():
+        return read_scope_settings("project", project_root=root)["mcp-onboarding"]["bindings"]
+
+    bindings = recorded()
     set_provider_enabled(root, "pi", enabled=False)
     assert set(json.loads(native.read_text())["mcpServers"]) == {"foreign", "separate-lsp"}
     assert project.resume_mcp_installations(root) == []
-    assert load_yaml_file(config)["mcp-onboarding"]["bindings"] == bindings
+    assert recorded() == bindings
     assert not providers.is_native_mcp_target_enabled(root, "pi")
     set_provider_enabled(root, "pi", enabled=True)
     assert set(json.loads(native.read_text())["mcpServers"]) == {
@@ -551,7 +553,7 @@ def test_intent_write_failure_has_terminal_actionable_record(root, monkeypatch):
     def fail(*args, **kwargs):
         raise OSError("injected intent failure")
 
-    monkeypatch.setattr(service, "save_yaml_file", fail)
+    monkeypatch.setattr(service, "_save_bindings", fail)
     result = project.install_mcp(root, mcp_id="ag-planning", harness_ids=["pi"])
     assert not result["ok"] and result["phase"] == "needs_reconciliation"
     assert result["action_needed"]

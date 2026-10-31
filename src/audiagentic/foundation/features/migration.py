@@ -50,6 +50,7 @@ PROVIDER_POLICY = Path(PROJECT_MARKER_NAME) / "config" / "provider-policy.yaml"
 PROJECT_MODEL_SOURCES = Path(PROJECT_MARKER_NAME) / "config" / "model-sources.yaml"
 HARNESS_FILES_DIR = Path(PROJECT_MARKER_NAME) / "config" / "harness"
 LOGGING_FILES_DIR = Path(PROJECT_MARKER_NAME) / "config" / "foundation"
+PROJECT_FILE = Path(PROJECT_MARKER_NAME) / "config" / "project.yaml"
 EVENT_CONFIG = Path(PROJECT_MARKER_NAME) / "event" / "config.yaml"
 EVENT_TRIGGERS = Path(PROJECT_MARKER_NAME) / "config" / "agent-jobs" / "event-triggers.yaml"
 PROMPT_SYNTAX = Path(PROJECT_MARKER_NAME) / "config" / "execution" / "prompt-syntax.yaml"
@@ -256,6 +257,35 @@ def _user_model_sources_file() -> Path:
     return audiagentic_home() / "config" / "model-sources.yaml"
 
 
+# Keys the project file once carried that nothing reads any more: they are dropped, not migrated.
+_PROJECT_FILE_UNUSED = {
+    "contract-version", "workflow-profile", "tracked-docs-root", "runtime-root", "release-strategy",
+    "workflow-overrides",
+}
+
+
+def _project_file_values(project_root: Path, unknown: list[str]) -> tuple[list[Path], dict[SettingsPath, Any]]:
+    """The legacy project file: identity, prompt-launch defaults and MCP bindings move to project settings."""
+    path = project_root / PROJECT_FILE
+    if not path.is_file():
+        return [], {}
+    values: dict[SettingsPath, Any] = {}
+    for key, value in load_yaml_file(path).items():
+        if key in _PROJECT_FILE_UNUSED or (key == "project-id" and not value) or (key == "project-name" and not value):
+            continue
+        if key == "project-id":
+            values[("project", "project", "id")] = value
+        elif key == "project-name":
+            values[("project", "project", "name")] = value
+        elif key == "prompt-launch" and isinstance(value, dict):
+            values.update(_leaves(("project", "prompt-launch"), {k: v for k, v in value.items() if k != "syntax"}))
+        elif key == "mcp-onboarding" and isinstance(value, dict):
+            values.update(_leaves(("project", "mcp-onboarding", "bindings"), value.get("bindings") or {}))
+        else:
+            unknown.append(f"{path}: {key}")
+    return [path], values
+
+
 def plan_provider_config_migration(project_root: Path) -> ProviderConfigPlan:
     sources: list[Path] = []
     entries: dict[str, dict[str, Any]] = {}
@@ -313,6 +343,9 @@ def plan_provider_config_migration(project_root: Path) -> ProviderConfigPlan:
     section_files, section_values = _project_section_files(project_root, unknown)
     sources.extend(section_files)
     values.update(section_values)
+    project_files, project_values = _project_file_values(project_root, unknown)
+    sources.extend(project_files)
+    values.update(project_values)
     shard_files, shard_values, shard_observations = _feature_shard_values(project_root, unknown)
     sources.extend(shard_files)
     values.update(shard_values)
