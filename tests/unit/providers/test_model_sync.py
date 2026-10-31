@@ -260,7 +260,7 @@ _SOURCE = {
 
 
 def _sources_file(tmp_path: Path) -> Path:
-    return tmp_path / ".audiagentic" / "config" / "model-sources.yaml"
+    return tmp_path / ".audiagentic" / "settings.yaml"
 
 
 def test_resource_crud_commits_desired_only(tmp_path: Path) -> None:

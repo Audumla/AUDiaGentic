@@ -146,31 +146,34 @@ def rollback_enabled_migration(project_root: Path, manifest_path: Path) -> dict[
     return {"restored": restored, "kept": kept}
 
 
-# --- provider configuration files -> settings --------------------------------------------------------
+# --- legacy configuration files -> settings -------------------------------------------------------
 
 PROVIDER_CONFIG_KIND = "provider-config"
 _PROVIDER_FILE_DROP = ("install-mode", "access-mode", "enabled")
 PROVIDER_FILES_DIR = Path(PROJECT_MARKER_NAME) / "config" / "providers"
 PROVIDER_REGISTRY = Path(PROJECT_MARKER_NAME) / "config" / "runtime" / "providers.yaml"
 PROVIDER_POLICY = Path(PROJECT_MARKER_NAME) / "config" / "provider-policy.yaml"
+PROJECT_MODEL_SOURCES = Path(PROJECT_MARKER_NAME) / "config" / "model-sources.yaml"
 DECIDED_KEY = "reconciliation.decided"
 
+# A settings key is (scope, section, ...): the scope names the settings file it lives in.
 SettingsPath = tuple[str, ...]
 
 
 @dataclass(frozen=True)
 class ProviderConfigPlan:
     sources: tuple[Path, ...]
-    values: dict[SettingsPath, Any]  # settings key path -> value
+    values: dict[SettingsPath, Any]
     decided: list[str] | None
     conflicts: dict[SettingsPath, tuple[Any, Any]] = field(default_factory=dict)  # path -> (existing, planned)
 
-    @property
-    def patch(self) -> dict[str, Any]:
+    def patch(self, scope: str) -> dict[str, Any]:
         patch: dict[str, Any] = {}
         for path, value in self.values.items():
+            if path[0] != scope:
+                continue
             node = patch
-            for part in path[:-1]:
+            for part in path[1:-1]:
                 node = node.setdefault(part, {})
             node[path[-1]] = value
         return patch
@@ -180,14 +183,13 @@ class ProviderConfigPlan:
         return not self.sources
 
 
-def _project_settings(project_root: Path) -> dict[str, Any]:
-    from audiagentic.foundation.config.settings import scope_sources
-    from audiagentic.foundation.config.strict_yaml import load_settings_text
+def _scope_documents(project_root: Path) -> dict[str, dict[str, Any]]:
+    from audiagentic.foundation.config.writer import read_scope_settings
 
-    source = next(s for s in scope_sources(project_root=project_root) if s.scope == "project")
-    if source.path is None or not source.path.is_file():
-        return {}
-    return load_settings_text(source.path.read_text(encoding="utf-8-sig"), source.path).data
+    return {
+        "project": read_scope_settings("project", project_root=project_root),
+        "user": read_scope_settings("user"),
+    }
 
 
 def _lookup(data: Any, path: SettingsPath) -> tuple[bool, Any]:
@@ -207,6 +209,12 @@ def _leaves(prefix: SettingsPath, value: Any) -> dict[SettingsPath, Any]:
     return {prefix: value}
 
 
+def _user_model_sources_file() -> Path:
+    from audiagentic.foundation.paths.home import audiagentic_home
+
+    return audiagentic_home() / "config" / "model-sources.yaml"
+
+
 def plan_provider_config_migration(project_root: Path) -> ProviderConfigPlan:
     sources: list[Path] = []
     entries: dict[str, dict[str, Any]] = {}
@@ -223,25 +231,34 @@ def plan_provider_config_migration(project_root: Path) -> ProviderConfigPlan:
     values: dict[SettingsPath, Any] = {}
     for provider_id, entry in sorted(entries.items()):
         options = {k: v for k, v in entry.items() if k not in _PROVIDER_FILE_DROP}
-        values.update(_leaves(("providers", provider_id), options))
+        values.update(_leaves(("project", "providers", provider_id), options))
     decided: list[str] | None = None
     policy = project_root / PROVIDER_POLICY
     if policy.is_file():
         sources.append(policy)
         section = load_yaml_file(policy).get("reconciliation-policy") or {}
         if "mode" in section:
-            values[("reconciliation", "mode")] = section["mode"]
+            values[("project", "reconciliation", "mode")] = section["mode"]
         if "allowed-providers" in section:
-            values[("reconciliation", "allowed-providers")] = sorted(set(section["allowed-providers"]))
+            values[("project", "reconciliation", "allowed-providers")] = sorted(set(section["allowed-providers"]))
         if "decided-providers" in section:
             decided = sorted(set(section["decided-providers"]))
-    existing = _project_settings(project_root)
+    for scope, file in (("project", project_root / PROJECT_MODEL_SOURCES), ("user", _user_model_sources_file())):
+        if file.is_file():
+            sources.append(file)
+            for source_id, source in (load_yaml_file(file).get("sources") or {}).items():
+                values.update(_leaves((scope, "model-sources", str(source_id)), source))
+    documents = _scope_documents(project_root)
     conflicts: dict[SettingsPath, tuple[Any, Any]] = {}
     for path, value in values.items():
-        present, current = _lookup(existing, path)
+        present, current = _lookup(documents[path[0]], path[1:])
         if present and current != value:
             conflicts[path] = (current, value)
     return ProviderConfigPlan(tuple(sources), values, decided, conflicts)
+
+
+def _backup_name(index: int, source: Path) -> str:
+    return f"{index:03d}-{source.name}"
 
 
 def apply_provider_config_migration(project_root: Path, *, now: datetime | None = None) -> dict[str, Any]:
@@ -252,25 +269,23 @@ def apply_provider_config_migration(project_root: Path, *, now: datetime | None 
         return {"status": "nothing-to-migrate"}
     if plan.conflicts:
         raise ValueError(
-            "provider-config migration refused: conflicts=" + str(sorted(".".join(p) for p in plan.conflicts))
+            "legacy configuration migration refused: conflicts=" + str(sorted(".".join(p) for p in plan.conflicts))
         )
     stamp = (now or datetime.now(UTC)).strftime("%Y%m%dT%H%M%S%fZ")
     directory = project_root / MIGRATIONS_DIR / f"provider-config-{stamp}"
     backups = directory / "backup"
     backups.mkdir(parents=True, exist_ok=False)
     sources = []
-    for source in plan.sources:
-        relative = source.relative_to(project_root)
-        target = backups / relative
-        target.parent.mkdir(parents=True, exist_ok=True)
-        atomic_write_bytes(target, source.read_bytes())
-        if _sha(target) != _sha(source):
+    for index, source in enumerate(plan.sources):
+        name = _backup_name(index, source)
+        atomic_write_bytes(backups / name, source.read_bytes())
+        if _sha(backups / name) != _sha(source):
             raise OSError(f"backup of {source} did not verify")
-        sources.append({"path": str(relative), "sha256": _sha(source)})
-    existing = _project_settings(project_root)
+        sources.append({"path": str(source), "sha256": _sha(source), "backup": name})
+    documents = _scope_documents(project_root)
     applied = []
     for path, value in plan.values.items():
-        present, before = _lookup(existing, path)
+        present, before = _lookup(documents[path[0]], path[1:])
         applied.append({"path": list(path), "before-present": present, "before": before, "after": value})
     held = get_observation(project_root, "providers", DECIDED_KEY)
     manifest = {
@@ -279,8 +294,10 @@ def apply_provider_config_migration(project_root: Path, *, now: datetime | None 
         "decided": {"before": held, "after": plan.decided} if plan.decided is not None else None,
     }
     _write_manifest(directory, manifest)
-    if plan.values:
-        write_settings_patch("project", plan.patch, project_root=project_root)
+    for scope in ("project", "user"):
+        patch = plan.patch(scope)
+        if patch:
+            write_settings_patch(scope, patch, project_root=project_root)
     if plan.decided is not None:
         record_observation(project_root, "providers", DECIDED_KEY, plan.decided, source="config-migrate", now=now)
     for source in plan.sources:
@@ -296,38 +313,41 @@ def rollback_provider_config_migration(project_root: Path, manifest_path: Path) 
 
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     if manifest.get("kind") != PROVIDER_CONFIG_KIND or manifest.get("version") != MANIFEST_VERSION:
-        raise ValueError("not a provider-config migration manifest")
+        raise ValueError("not a legacy-configuration migration manifest")
     if manifest["status"] == "rolled-back":
         return {"restored": [], "kept": []}
-    current = _project_settings(project_root)
+    documents = _scope_documents(project_root)
     restored: list[str] = []
     kept: list[str] = []
-    patch: dict[str, Any] = {}
-    removals: list[SettingsPath] = []
+    patches: dict[str, dict[str, Any]] = {"project": {}, "user": {}}
+    removals: dict[str, list[SettingsPath]] = {"project": [], "user": []}
     for entry in manifest["applied"]:
-        path = tuple(entry["path"])
-        present, value = _lookup(current, path)
+        scope, path = entry["path"][0], tuple(entry["path"][1:])
+        present, value = _lookup(documents[scope], path)
+        label = ".".join(entry["path"])
         if not present or value != entry["after"]:
-            kept.append(".".join(path))
+            kept.append(label)
             continue
-        restored.append(".".join(path))
+        restored.append(label)
         if entry["before-present"]:
-            node = patch
+            node = patches[scope]
             for part in path[:-1]:
                 node = node.setdefault(part, {})
             node[path[-1]] = entry["before"]
         else:
-            removals.append(path)
-    for path in removals:
-        cut = path
-        while len(cut) > 1 and _only_removed_below(current, cut[:-1], removals):
-            cut = cut[:-1]
-        node = patch
-        for part in cut[:-1]:
-            node = node.setdefault(part, {})
-        node[cut[-1]] = None
-    if patch:
-        write_settings_patch("project", patch, project_root=project_root)
+            removals[scope].append(path)
+    for scope, paths in removals.items():
+        for path in paths:
+            cut = path
+            while len(cut) > 1 and _only_removed_below(documents[scope], cut[:-1], paths):
+                cut = cut[:-1]
+            node = patches[scope]
+            for part in cut[:-1]:
+                node = node.setdefault(part, {})
+            node[cut[-1]] = None
+    for scope, patch in patches.items():
+        if patch:
+            write_settings_patch(scope, patch, project_root=project_root)
     decided = manifest.get("decided")
     if decided is not None:
         if get_observation(project_root, "providers", DECIDED_KEY) == decided["after"]:
@@ -340,11 +360,11 @@ def rollback_provider_config_migration(project_root: Path, manifest_path: Path) 
             kept.append("reconciliation.decided")
     backups = manifest_path.parent / "backup"
     for entry in manifest["sources"]:
-        target = project_root / entry["path"]
+        target = Path(entry["path"])
         if target.exists():
             kept.append(f"{entry['path']} (exists; not overwritten)")
             continue
-        atomic_write_bytes(target, (backups / entry["path"]).read_bytes())
+        atomic_write_bytes(target, (backups / entry["backup"]).read_bytes())
         restored.append(entry["path"])
     manifest["status"] = "rolled-back"
     _write_manifest(manifest_path.parent, manifest)

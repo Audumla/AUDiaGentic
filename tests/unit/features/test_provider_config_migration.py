@@ -21,6 +21,7 @@ from audiagentic.foundation.features.migration import (
 @pytest.fixture(autouse=True)
 def _isolated_user_scope(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg-config"))
+    monkeypatch.setenv("AUDIAGENTIC_HOME", str(tmp_path / "home"))
     monkeypatch.delenv("AUDIAGENTIC_CONFIG", raising=False)
 
 
@@ -59,7 +60,7 @@ def _legacy(project: Path) -> list[Path]:
 def test_plan_merges_registry_and_file_and_drops_descriptor_facts(project: Path) -> None:
     _legacy(project)
     plan = plan_provider_config_migration(project)
-    assert plan.patch == {
+    assert plan.patch("project") == {
         "providers": {"codex": {"default-model": "gpt-5", "timeout-seconds": 30, "settings": {"a": {"b": 1}}}},
         "reconciliation": {"mode": "allowlist", "allowed-providers": ["codex"]},
     }
@@ -107,5 +108,29 @@ def test_rollback_keeps_values_changed_after_the_migration(project: Path) -> Non
 
     write_settings_patch("project", {"providers": {"codex": {"default-model": "edited"}}}, project_root=project)
     report = rollback_provider_config_migration(project, manifest)
-    assert "providers.codex.default-model" in report["kept"]
+    assert "project.providers.codex.default-model" in report["kept"]
     assert _settings(project)["providers"]["codex"]["default-model"] == "edited"
+
+
+def _source(url: str) -> dict:
+    return {"source-class": "local-endpoint", "connector": "openai-compatible", "base-url": url, "model-id": "m"}
+
+
+def test_model_sources_files_move_to_their_scopes_and_roll_back(project: Path, tmp_path: Path) -> None:
+    project_file = _write(project / ".audiagentic" / "config" / "model-sources.yaml",
+                          {"contract-version": "v1", "sources": {"p1": _source("http://p")}})
+    user_file = _write(tmp_path / "home" / "config" / "model-sources.yaml",
+                       {"contract-version": "v1", "sources": {"u1": _source("http://u")}})
+    originals = [project_file.read_bytes(), user_file.read_bytes()]
+    manifest = Path(apply_provider_config_migration(project)["manifest"])
+
+    assert not project_file.exists() and not user_file.exists()
+    assert _settings(project)["model-sources"]["p1"]["base-url"] == "http://p"
+    user_settings = yaml.safe_load((tmp_path / "xdg-config" / "audiagentic" / "settings.yaml").read_text())
+    assert user_settings["model-sources"]["u1"]["base-url"] == "http://u"
+
+    report = rollback_provider_config_migration(project, manifest)
+    assert report["kept"] == []
+    assert [project_file.read_bytes(), user_file.read_bytes()] == originals
+    assert "model-sources" not in _settings(project)
+    assert "model-sources" not in yaml.safe_load((tmp_path / "xdg-config" / "audiagentic" / "settings.yaml").read_text())

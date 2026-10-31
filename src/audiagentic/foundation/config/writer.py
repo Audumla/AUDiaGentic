@@ -77,6 +77,42 @@ def write_settings_patch(
     return WriteResult(path, scope, True, True, keys, diff, backup)
 
 
+def read_scope_settings(scope: str, *, project_root: Path | None = None) -> dict[str, Any]:
+    """The values written in one scope's own file (not the effective merge); ``{}`` if absent.
+
+    For read-modify-write cycles that must not copy another scope's values into this one.
+    """
+    path = _target(scope, project_root)
+    if not path.is_file():
+        return {}
+    return load_settings_text(path.read_text(encoding="utf-8-sig"), path).data
+
+
+def replacement_patch(old: Any, new: Any) -> Any:
+    """An RFC 7396 patch that turns ``old`` into exactly ``new`` (``null`` removes what ``new`` drops)."""
+    if isinstance(old, dict) and isinstance(new, dict):
+        patch: dict[str, Any] = {key: None for key in old.keys() - new.keys()}
+        for key, value in new.items():
+            if key not in old:
+                patch[key] = value
+            elif old[key] != value:
+                patch[key] = replacement_patch(old[key], value)
+        return patch
+    return new
+
+
+def replace_section(
+    scope: str, section: str, value: dict[str, Any], *, project_root: Path | None = None,
+) -> WriteResult:
+    """Make one scope's ``section`` exactly ``value`` (an empty mapping removes it)."""
+    old = read_scope_settings(scope, project_root=project_root).get(section)
+    if not value:
+        patch_doc: dict[str, Any] = {section: None} if old is not None else {}
+    else:
+        patch_doc = {section: replacement_patch(old if isinstance(old, dict) else {}, value)}
+    return write_settings_patch(scope, patch_doc, project_root=project_root)
+
+
 def _target(scope: str, project_root: Path | None) -> Path:
     if scope not in WRITABLE_SCOPES:
         raise settings_error(8, "Settings scope cannot be written", scope=scope, writable=list(WRITABLE_SCOPES))
@@ -132,4 +168,7 @@ def _backup(path: Path, raw: bytes) -> Path:
     return target
 
 
-__all__ = ["BACKUPS_KEPT", "WRITABLE_SCOPES", "WriteResult", "write_settings_patch"]
+__all__ = [
+    "BACKUPS_KEPT", "WRITABLE_SCOPES", "WriteResult", "read_scope_settings", "replace_section",
+    "replacement_patch", "write_settings_patch",
+]
