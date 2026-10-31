@@ -250,20 +250,39 @@ providers:
 in the process that needs them and are never printed, logged or sent in
 requests; `config show` prints the reference.
 
-## Shared gateway server and node
+## Shared gateway role documents (kept)
 
-Same settings schema, selected with `--config FILE` (for example
-`/etc/audiagentic/settings.yaml`):
+The shared gateway's server, node and connector configurations stay explicit
+role documents, not settings sections. They are `server.yaml`, `node.yaml` and
+`connector.yaml` in the shared-gateway guide (`docs/guides/shared-gateway.md`),
+selected on the command line (`gateway serve config FILE`, `gateway node serve
+config FILE`, `gateway status|connect config FILE`) and loaded by
+`components/agents/gateway/service/shared_config.py`.
 
-```yaml
-gateway:
-  role: server               # or node
-  listen: 0.0.0.0
-  port: 8443
-  tls:
-    certificate: {file: /etc/audiagentic/server.crt}
-    private_key: {file: /run/secrets/server-key}
-```
+Decision (2026-10-31, after a cost/benefit review against the standards): moving
+them would replace 312 stable lines and three hardened validators, rewrite the
+node-grant revoke path (the server document is rewritten at runtime under a lock
+with a whole-file digest check), and need a settings writer for explicit-scope
+files plus a gateway migration, for no operator capability that is missing
+today. The return would be consistency only. This is a deferral of the CFG09
+"shared server/node" item, not a claim that the document meets the one-surface
+goal.
+
+Rules while they stay:
+
+- They are the only gateway configuration read outside settings. They hold no
+  secrets: credentials are `token-file` paths, mode-checked and never read by the
+  parser. New gateway options go in the `gateway` settings section, not in these
+  documents.
+- No new role document and no second loader. Their format changes only with the
+  runtime contract they describe.
+- Revisit when a concrete need appears: layered or per-project server settings,
+  an operator who needs `config show --origin` for grants, or a second consumer
+  of the same fields. The order then is node, connector (after the project
+  connector binding is a name, not a path), then server (needs a settings
+  writer for explicit-scope files and a node-grant revoke that keeps its fencing).
+- Not in scope for this design: the `gateway: role: server` form that earlier
+  drafts showed; one process serves one role from one document.
 
 ## Environment variables
 
@@ -303,7 +322,7 @@ with the shared-gateway configuration design).
 | `audiagentic agent list` / `show ID --resolved` / `add ID --extends T --provider P` | Agent management |
 | `audiagentic provider list` | Instances with enabled/available/qualified |
 | `audiagentic qualify` | Run qualification and write evidence |
-| `audiagentic gateway serve --config FILE` / `node serve --config FILE` | Start a configured role |
+| `audiagentic gateway serve config FILE` / `gateway node serve config FILE` | Start a shared-gateway role from its role document (see Shared gateway role documents) |
 
 ## Removed or merged
 
@@ -323,7 +342,6 @@ with the shared-gateway configuration design).
 - `model-sources.yaml` (done: `model-sources` section at user and project scope; `audiagentic config migrate`), `provider-policy.yaml` (done: `reconciliation` section, decisions as local state), `providers/<id>.yaml` and
   `runtime/providers.yaml` (done: `providers.<id>`; install and access modes come from the descriptor; `audiagentic config migrate`), `gpt-auto*.yaml` overlays, `interoperability/*.yaml`, `.audiagentic/components/*.yaml` markers -> sections of `settings.yaml`.
 - `config/providers/gpt_auto_t1.yaml`, `gpt_auto_t2.yaml` -> `gpt-auto` instances.
-- Separate shared gateway `server.yaml` / `node.yaml` schemas -> settings sections.
 - `AUDIAGENTIC_HOME`, `AUDIAGENTIC_ROOT`, `AUDIAGENTIC_REPO_ROOT`, `_AUDIAGENTIC_COMPONENT_CONFIG_DIRS` and the user-configuration variables -> platform paths, discovery and settings keys.
 - The 49 modules that build `.audiagentic` paths themselves -> three owners:
   the configuration resolver (human-authored config), a state-path service
@@ -371,7 +389,7 @@ provider or capability registry.
 | CFG06 | enabled/available/qualified; provider instances (retires gpt_auto_t1/t2) |
 | CFG07 | Qualification evidence, `qualify`, surface resolution from evidence |
 | CFG08 | `setup`, `doctor`, portable MCP registration, installed-wheel qualification |
-| CFG09 | Migrate agent catalog, providers, model sources (PC12), shared server/node, project and remaining subsystems; `config migrate` |
+| CFG09 | Migrate agent catalog, providers, model sources (PC12), project and remaining subsystems; `config migrate`. Shared server/node/connector role documents are deferred (Shared gateway role documents) |
 | CFG10 | Public env vars down to three; no unmanaged path builders |
 | SH42 | Owns installed release qualification and deployment docs; absorbs SH57 and SH59 |
 | SH53 | Uses CFG07's evidence schema and producer |
@@ -384,9 +402,9 @@ Detailed per-item mapping (from the alternative round-2 answer):
 
 | Plan | Disposition |
 |---|---|
-| SH35, SH37 | Amend: unified deployment settings; migrate standalone configuration |
+| SH35, SH37 | Preserve: the role documents stay (Shared gateway role documents); standalone connector selection and gateway options use settings |
 | SH36, SH40, SH44, SH49-SH52, SH54-SH56, SH58, SH60 | Preserve |
-| SH38 | Amend: unified loader, same ownership and custody semantics |
+| SH38 | Preserve: role-document loader, ownership and custody semantics unchanged |
 | SH39, SH45-SH48 | Amend: separate capability, instance and qualification resolution |
 | SH41, SH53 | Amend: one evidence representation (CFG07), not another registry |
 | SH42 | Consolidate: documentation and release qualification; absorbs SH57, SH59 |
