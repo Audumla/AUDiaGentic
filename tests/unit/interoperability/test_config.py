@@ -6,15 +6,13 @@ import yaml
 
 
 def test_event_config_imports_and_loads(tmp_path: Path) -> None:
-    config_dir = tmp_path / ".audiagentic" / "event"
-    config_dir.mkdir(parents=True, exist_ok=True)
-    config_dir.joinpath("config.yaml").write_text(
+    settings = tmp_path / ".audiagentic" / "settings.yaml"
+    settings.parent.mkdir(parents=True, exist_ok=True)
+    settings.write_text(
         yaml.safe_dump(
             {
-                "runtime": {
-                    "event_store": {"enabled": False},
-                    "replay": {"dispatch_on_replay": True},
-                }
+                "schema_version": 1,
+                "events": {"event_store": {"enabled": False}, "replay": {"dispatch_on_replay": True}},
             },
             sort_keys=False,
         ),

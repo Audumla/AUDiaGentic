@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "settings: prompt-syntax",
+  "description": "Project overlay on the provider-owned prompt syntax: shared keys (tags, aliases, ...), named profiles and the default profile. The provider layer owns the shape; this section only carries the overlay.",
+  "type": "object",
+  "properties": {
+    "default-profile": {
+      "type": "string",
+      "minLength": 1
+    },
+    "profiles": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object"
+      }
+    }
+  },
+  "additionalProperties": true
+}

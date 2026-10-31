@@ -195,3 +195,23 @@ def test_logging_files_that_disagree_refuse_the_migration(project: Path, tmp_pat
     assert any("level" in item for item in plan_provider_config_migration(project).unknown)
     with pytest.raises(ValueError, match="refused"):
         apply_provider_config_migration(project)
+
+
+def test_event_config_triggers_and_prompt_syntax_files_move_and_roll_back(project: Path) -> None:
+    events = _write(project / ".audiagentic" / "event" / "config.yaml", {"runtime": {"event_store": {"enabled": False}}})
+    triggers = _write(project / ".audiagentic" / "config" / "agent-jobs" / "event-triggers.yaml",
+                      {"triggers": [{"contract-version": "v1", "trigger-id": "t1", "kind": "event"}]})
+    syntax = _write(project / ".audiagentic" / "config" / "execution" / "prompt-syntax.yaml",
+                    {"contract-version": "v1", "default-profile": "compact", "profiles": {"compact": {}}})
+    originals = [p.read_bytes() for p in (events, triggers, syntax)]
+    manifest = Path(apply_provider_config_migration(project)["manifest"])
+
+    settings = _settings(project)
+    assert settings["events"] == {"event_store": {"enabled": False}}
+    assert settings["event-triggers"][0]["trigger-id"] == "t1"
+    assert settings["prompt-syntax"] == {"default-profile": "compact", "profiles": {"compact": {}}}
+
+    report = rollback_provider_config_migration(project, manifest)
+    assert report["kept"] == []
+    assert [p.read_bytes() for p in (events, triggers, syntax)] == originals
+    assert not ({"events", "event-triggers", "prompt-syntax"} & set(_settings(project)))

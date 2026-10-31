@@ -10,9 +10,6 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
-from audiagentic.foundation.io import load_yaml_file
-from audiagentic.foundation.paths.names import project_marker_path
-
 from .public_prompt_operations import (
     get_prompt_syntax_defaults,
 )
@@ -60,11 +57,10 @@ def load_prompt_syntax(
     if project_root is None:
         return syntax
 
-    syntax_path = project_marker_path(project_root) / "config" / "execution" / "prompt-syntax.yaml"
-    if not syntax_path.exists():
-        return syntax
-    payload = load_yaml_file(syntax_path)
-    if not isinstance(payload, dict):
+    from audiagentic.foundation.config.settings import resolve_settings_cached
+
+    payload = resolve_settings_cached(project_root).get("prompt-syntax")
+    if not isinstance(payload, dict) or not payload:
         return syntax
 
     shared_payload = {
