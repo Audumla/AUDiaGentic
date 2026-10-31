@@ -2,7 +2,7 @@
 id: CFG06
 order: 6
 plan: config-setup
-state: in_progress
+state: completed
 created-at: '2026-10-28T21:05:44.274107+00:00'
 breadth: ''
 skill: intermediate
@@ -42,7 +42,7 @@ Also: provider instances under providers.<id>.instances, selected by agents with
 
 ## Validation
 
-
+tests/unit/providers/test_provider_enabled_policy.py, test_provisioning.py, test_reconciliation_policy_enforcement.py (enabled policy, availability under auto, probe never disables); tests/unit/features/test_provider_config_migration.py (shards, options, policy move to settings with rollback); tests/unit/architecture/test_config_inventory.py (no second authority); tests/unit/providers/test_platform_qualification.py and test_qualification_doctor.py (qualified is evidence). Full suite: only the known baseline failures.
 
 ## Effort & Risk
 
@@ -76,6 +76,8 @@ Phase 2: deferred until needed (see 'Phasing' in docs/design/configuration-model
 
 Progress 2026-10-31: the provider shard's `enabled` flag is no longer configuration (local observation, #284) and provider options, policy and model sources are settings (#285, #287), so the dual authority for provider policy and options is gone. What keeps this item open: per-component options and feature state still sit in the shards (see CFG11 remaining item 3), and the qualification evidence (CFG07) is not done.
 
+2026-10-31 closed. enabled is policy (providers.<id>.enabled, default auto), available is observed (is_provider_usable falls back to the provider's own check), qualified is evidence (CFG07 local records and vendor evidence). The provider feature-state shard and per-provider option files are gone (CFG11: #284, #285, #294); instances replace the t1/t2 descriptors; PC10/DI01 are subsumed (no generated disabled-provider footprint).
+
 ## Change Log
 
 - 2026-10-28T21:05:44.274107+00:00 (created-by): Created by claude
@@ -93,3 +95,5 @@ Progress 2026-10-31: the provider shard's `enabled` flag is no longer configurat
 - 2026-10-31T01:09:16.752705+00:00 (updated-by): Updated: section:ledger-events
 - 2026-10-31T03:42:11.610783+00:00 (updated-by): Updated: section:notes
 - 2026-10-31T07:11:01.301957+00:00 (updated-by): Updated: section:notes
+- 2026-10-31T12:21:57.794767+00:00 (updated-by): Updated: section:validation, section:notes
+- 2026-10-31T12:22:10.499152+00:00 (state-transition): State: in_progress → completed

@@ -195,6 +195,10 @@
             }
           },
           "additionalProperties": false
+        },
+        "allow-unqualified": {
+          "type": "boolean",
+          "description": "Explicit override: resolve this provider's session surfaces on a platform that has no vendor or local qualification evidence. doctor reports every use. Default false."
         }
       }
     }
