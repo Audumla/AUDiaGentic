@@ -10,6 +10,11 @@ from typing import Any
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
 
+# The launching process resolves the harness endpoint and model once and hands them
+# to its child processes through these private variables; they are not configuration.
+ENDPOINT_ENV = "_AUDIAGENTIC_HARNESS_ENDPOINT"
+MODEL_ENV = "_AUDIAGENTIC_HARNESS_MODEL"
+
 
 def _harness_config_error(code_number: int, message: str, **details: object) -> AudiaGenticError:
     return make_error(
@@ -46,4 +51,4 @@ def require_harness_endpoint(harness_cfg: dict[str, Any]) -> str:
     return url
 
 
-__all__ = ["require_harness_endpoint"]
+__all__ = ["ENDPOINT_ENV", "MODEL_ENV", "require_harness_endpoint"]

@@ -45,7 +45,7 @@ runner submodule
 RunnerParams
     Dataclass with fields: prompt, mode, verbose. Same shape across all harnesses.
 
-build_global_context(*, project_root, agent_runtime, enable_mcp) -> context
+build_global_context(*, project_root, agent_runtime, enable_mcp=False) -> context
     Resolve config, start any required backend, return an opaque context object.
 
 run_agent(ctx, params) -> any
@@ -53,9 +53,6 @@ run_agent(ctx, params) -> any
 
 translate_agent_args(params) -> list[str]
     Translate harness-agnostic RunnerParams into harness-specific CLI flags.
-
-env_flag(name, default) -> bool
-    Read a boolean from an environment variable.
 
 MCP management
 --------------

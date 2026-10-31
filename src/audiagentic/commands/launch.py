@@ -131,16 +131,13 @@ def _cmd_launch(project_root: Path, args: list[str], runner_params: RunnerParams
     _status("starting agent...")
     from audiagentic.runtime.harness import (
         build_global_context,
-        env_flag,
         run_agent,
         translate_agent_args,
     )
 
-    enable_mcp = env_flag("AUDIAGENTIC_AG_ENABLE_MCP")
     ctx = build_global_context(
         project_root=project_root,
         agent_runtime=harness_runtime,
-        enable_mcp=enable_mcp,
     )
 
     if runner_params:

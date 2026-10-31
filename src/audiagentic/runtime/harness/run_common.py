@@ -8,6 +8,7 @@ from datetime import datetime
 from pathlib import Path
 
 from audiagentic.foundation.cli_io import print_message
+from audiagentic.foundation.config.harness import ENDPOINT_ENV, MODEL_ENV
 from audiagentic.foundation.contracts.errors import make_error
 from audiagentic.foundation.system.supervised_process import spawn_supervised
 from audiagentic.runtime.harness.context import AgentContext, new_launch_runtime_root
@@ -18,7 +19,7 @@ def build_global_context(
     *,
     project_root: Path,
     agent_runtime: Path,
-    enable_mcp: bool,
+    enable_mcp: bool = False,
 ) -> AgentContext:
     """Harness-agnostic global context: config, model/rig resolution, provider.
 
@@ -49,9 +50,7 @@ def build_global_context(
         )
 
     harness_cfg = load_harness_config(project_root=project_root)
-    requested_model = os.environ.get("AUDIAGENTIC_AG_MODEL") or harness_cfg.get("endpoint", {}).get(
-        "model"
-    )
+    requested_model = harness_cfg.get("endpoint", {}).get("model")
     if not requested_model:
         raise make_error(
             prefix="CFG",
@@ -59,16 +58,16 @@ def build_global_context(
             number=9,
             kind="harness-config",
             message=(
-                "No model configured. Set AUDIAGENTIC_AG_MODEL environment variable "
-                "or set 'model' in harness config."
+                "No model configured. Set endpoint.model in the harness config "
+                "(config/harness/ag.yaml, user or project)."
             ),
             details={"field": "endpoint.model"},
         )
 
     # The model server is one that already runs; AUDiaGentic does not host it.
-    endpoint = os.environ.get("AUDIAGENTIC_AG_BASE_URL") or require_harness_endpoint(harness_cfg)
+    endpoint = require_harness_endpoint(harness_cfg)
     model = query_server_model(endpoint) or requested_model
-    provider = os.environ.get("AUDIAGENTIC_AG_PROVIDER") or require_harness_provider(harness_cfg)
+    provider = require_harness_provider(harness_cfg)
     resolved_enable_mcp = enable_mcp or bool(harness_cfg.get("mcp", {}).get("enabled", False))
 
     return AgentContext(
@@ -90,8 +89,8 @@ def build_base_run_env(ctx: AgentContext) -> dict[str, str]:
 
     env = os.environ.copy()
     env["AUDIAGENTIC_REPO_ROOT"] = str(ctx.project_root)
-    env["AUDIAGENTIC_AG_BASE_URL"] = ctx.endpoint
-    env["AUDIAGENTIC_AG_MODEL"] = ctx.model
+    env[ENDPOINT_ENV] = ctx.endpoint
+    env[MODEL_ENV] = ctx.model
     env["OPENAI_API_BASE"] = ctx.endpoint
     env["OPENAI_BASE_URL"] = ctx.endpoint
     env["OPENAI_API_KEY"] = "dummy"

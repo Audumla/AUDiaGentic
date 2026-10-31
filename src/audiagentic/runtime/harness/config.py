@@ -6,7 +6,6 @@ should import config readers from another harness.
 """
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 from audiagentic.foundation.config.harness import require_harness_endpoint
@@ -75,7 +74,3 @@ def require_smoke_timeout(harness_cfg: dict) -> float:
         ) from exc
 
 
-def env_flag(name: str, default: bool = False) -> bool:
-    truthy = {"1", "true", "yes", "on"}
-    value = os.environ.get(name)
-    return default if value is None else value.strip().lower() in truthy

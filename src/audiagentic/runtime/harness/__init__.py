@@ -20,6 +20,7 @@ from pathlib import Path
 from audiagentic.components.providers.contracts.session_status import (
     ProviderSessionInfo,
 )
+from audiagentic.foundation.config.harness import ENDPOINT_ENV, MODEL_ENV
 from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
 from audiagentic.foundation.event import (
     LifecycleEventPayload,
@@ -255,7 +256,7 @@ def request_runtime_reload(
 # --- runner interface ---
 
 
-def build_global_context(*, project_root: Path, agent_runtime: Path, enable_mcp: bool):
+def build_global_context(*, project_root: Path, agent_runtime: Path, enable_mcp: bool = False):
     from .run_common import build_global_context as _build
 
     return _build(
@@ -276,12 +277,6 @@ def translate_agent_args(params: RunnerParams) -> list[str]:
     from audiagentic.components.providers import providers_api
 
     return providers_api.translate_interactive_runner_args(get_harness_type(), params)
-
-
-def env_flag(name: str, default: bool = False) -> bool:
-    from .config import env_flag as _env_flag
-
-    return _env_flag(name, default)
 
 
 # --- harness-specific helpers (pi-only until generalised) ---
@@ -316,19 +311,19 @@ def resolve_session_info(project_root: Path | None = None) -> ProviderSessionInf
         except (OSError, json.JSONDecodeError):
             pass  # degraded: no models JSON
 
-    # Endpoint from env (the OpenAI-compatible model server)
-    base_url = os.environ.get("AUDIAGENTIC_AG_BASE_URL")
+    # Endpoint the launching process resolved for this child (the OpenAI-compatible model server)
+    base_url = os.environ.get(ENDPOINT_ENV)
     info = ProviderSessionInfo(**{**info.__dict__, "base_url": base_url})
 
     # Model config from harness config (shared across providers)
-    requested = os.environ.get("AUDIAGENTIC_AG_MODEL")
+    requested = os.environ.get(MODEL_ENV)
     if not requested:
         cfg = load_layered_config(
             pkg_default_path=default_config_path(),
             project_root=None,
             namespace="harness/ag",
         )
-        requested = cfg.get("model")
+        requested = cfg.get("endpoint", {}).get("model")
 
     info = ProviderSessionInfo(**{
         **info.__dict__,
