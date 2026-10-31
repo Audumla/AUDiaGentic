@@ -68,6 +68,8 @@ Phase 2: deferred until needed (see 'Phasing' in docs/design/configuration-model
 
 2026-10-31 slice 2 (AG_* inputs, no legacy path): removed the user-facing AUDIAGENTIC_AG_BASE_URL, AUDIAGENTIC_AG_MODEL, AUDIAGENTIC_AG_PROVIDER and AUDIAGENTIC_AG_ENABLE_MCP overrides (4 names out of the inventory) and the env_flag helper. The harness endpoint, model, provider and mcp.enabled come only from the layered harness config (package default, user-global ag.yaml, project-local ag.yaml). The launcher passes the endpoint and model it resolved to its child processes through the private _AUDIAGENTIC_HARNESS_ENDPOINT / _AUDIAGENTIC_HARNESS_MODEL variables (foundation/config/harness.py ENDPOINT_ENV, MODEL_ENV); the inventory scan ignores the underscore-prefixed internal namespace by design. build_global_context(enable_mcp=...) now defaults to False and the launcher no longer reads an env flag. AUDIAGENTIC_AG_SMOKE_TIMEOUT stays a test switch. Remaining behaviour switches: AI_AUDIT*, LOG_*, LOCALE, GATEWAY_PORT, AUTO_UPDATE_ENABLED, LOCAL_PROVIDER_BASE_URL, RECONCILE_PROVIDERS_ON_LAUNCH, STARTUP_STATUS.
 
+2026-10-31 GPT on-track review (ADJUST). Slices 1 (rig residue) and 2 (AUDIAGENTIC_AG_*) are consistent with the spec: isolated removals are acceptable before CFG09 when they cannot interfere with migration or rollback, but CFG10 stays formally blocked on CFG11 (CFG09 phase 2) and on resolver coverage across every supported entrypoint. Remaining behaviour switches to disposition individually (each must end as an approved public exception, an `_AUDIAGENTIC_` internal, a deployment-only variable, or a settings key; AUDIAGENTIC_LOG_LEVEL stays the documented diagnostic exception): AI_AUDIT*, LOG_*, LOCALE, GATEWAY_PORT, AUTO_UPDATE_ENABLED, LOCAL_PROVIDER_BASE_URL, RECONCILE_PROVIDERS_ON_LAUNCH, STARTUP_STATUS; 6 deployment and 12 internal variables stay classified in config_inventory.yaml. Open check from the review: confirm the layered harness config (package/user/project ag.yaml via load_layered_config) honours the canonical resolver and provenance rules rather than being a separate resolution mechanism; if not, migrate it under CFG11. Logging/audit slices follow the CFG11 provider migration design unless an independently safe slice is ready.
+
 ## Change Log
 
 - 2026-10-28T21:06:02.889937+00:00 (created-by): Created by claude
@@ -77,3 +79,4 @@ Phase 2: deferred until needed (see 'Phasing' in docs/design/configuration-model
 - 2026-10-31T02:25:32.424561+00:00 (updated-by): Updated: section:notes
 - 2026-10-31T03:16:24.025032+00:00 (updated-by): Updated: section:notes
 - 2026-10-31T03:33:38.394009+00:00 (updated-by): Updated: section:standards
+- 2026-10-31T03:42:19.336440+00:00 (updated-by): Updated: section:notes
