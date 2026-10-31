@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.48.4](https://github.com/Audumla/AUDiaGentic/compare/v0.48.3...v0.48.4) (2026-10-31)
+
+
+### Documentation
+
+* **planning:** restore the CFG06-CFG10 refresh notes and CFG11 that [#274](https://github.com/Audumla/AUDiaGentic/issues/274) dropped ([#276](https://github.com/Audumla/AUDiaGentic/issues/276)) ([24f936e](https://github.com/Audumla/AUDiaGentic/commit/24f936edba5c2f13e651bfd3ee0714a7112d08ad))
+
 ## [0.48.3](https://github.com/Audumla/AUDiaGentic/compare/v0.48.2...v0.48.3) (2026-10-31)
 
 
