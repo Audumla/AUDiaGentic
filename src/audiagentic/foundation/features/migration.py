@@ -302,6 +302,26 @@ def _project_section_files(project_root: Path, unknown: list[str]) -> tuple[list
     return found, values
 
 
+def _machine_provider_overrides(unknown: list[str]) -> tuple[list[Path], dict[SettingsPath, Any]]:
+    """Machine-level provider override files (``<home>/config/providers/<id>.yaml``) as user-scope settings."""
+    from audiagentic.foundation.paths.home import global_config_dir
+
+    directory = global_config_dir() / "providers"
+    found: list[Path] = []
+    values: dict[SettingsPath, Any] = {}
+    for file in sorted(directory.glob("*.yaml")) if directory.is_dir() else []:
+        found.append(file)
+        data = load_yaml_file(file)
+        settings = data["settings"] if "settings" in data else {
+            k: v for k, v in data.items() if k not in _PROVIDER_FILE_DROP
+        }
+        if not isinstance(settings, dict):
+            unknown.append(f"{file}: settings is not a mapping")
+            continue
+        values.update(_leaves(("user", "providers", file.stem, "settings"), settings))
+    return found, values
+
+
 def _user_model_sources_file() -> Path:
     from audiagentic.foundation.paths.home import audiagentic_home
 
@@ -359,6 +379,9 @@ def plan_provider_config_migration(project_root: Path) -> ProviderConfigPlan:
     )
     sources.extend(logging_files)
     values.update(logging_values)
+    machine_files, machine_values = _machine_provider_overrides(unknown)
+    sources.extend(machine_files)
+    values.update(machine_values)
     section_files, section_values = _project_section_files(project_root, unknown)
     sources.extend(section_files)
     values.update(section_values)

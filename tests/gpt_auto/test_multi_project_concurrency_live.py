@@ -38,6 +38,7 @@ are edited per clone.
 
 from __future__ import annotations
 
+from audiagentic.components.providers.services.config.provider_config import load_provider_config_lenient
 import asyncio
 import json
 import shutil
@@ -95,12 +96,17 @@ def _make_project(tmp_root: Path, name: str, *, chatgpt_project_name: str) -> Pa
     text = text.replace("project-name: My Project", f"project-name: {chatgpt_project_name}")
     project_yaml_path.write_text(text, encoding="utf-8")
 
-    gpt_auto_yaml_path = dest_audiagentic / "config" / "providers" / "gpt-auto.yaml"
     import yaml
 
-    raw = yaml.safe_load(gpt_auto_yaml_path.read_text(encoding="utf-8"))
-    raw["settings"].pop("project-url", None)
-    gpt_auto_yaml_path.write_text(yaml.safe_dump(raw, sort_keys=False), encoding="utf-8")
+    entry = {
+        key: value
+        for key, value in load_provider_config_lenient(REPO_ROOT)["providers"]["gpt-auto"].items()
+        if key not in {"install-mode", "access-mode", "enabled"}
+    }
+    entry["settings"] = {k: v for k, v in entry.get("settings", {}).items() if k != "project-url"}
+    (dest_audiagentic / "settings.yaml").write_text(
+        yaml.safe_dump({"schema_version": 1, "providers": {"gpt-auto": entry}}, sort_keys=False), encoding="utf-8",
+    )
     return project_root
 
 
@@ -338,9 +344,7 @@ def _cdp_port() -> int:
 
     from audiagentic.components.providers.adapters.gpt_auto.config import GptAutoConfig
 
-    document = yaml.safe_load(
-        (REPO_ROOT / ".audiagentic/config/providers/gpt-auto.yaml").read_text(encoding="utf-8")
-    )
+    document = load_provider_config_lenient(REPO_ROOT)["providers"]["gpt-auto"]
     return GptAutoConfig.from_project_dict(document).browser.remote_debugging_port
 
 

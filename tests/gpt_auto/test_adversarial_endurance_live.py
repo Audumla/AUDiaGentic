@@ -49,6 +49,7 @@ functions, only ``main()``).
 
 from __future__ import annotations
 
+from audiagentic.components.providers.services.config.provider_config import load_provider_config_lenient
 import asyncio
 import json
 import subprocess
@@ -94,7 +95,7 @@ def _repo_remote_and_branch() -> tuple[str, str]:
 def _load_config() -> GptAutoConfig:
     import yaml
 
-    raw = yaml.safe_load((REPO_ROOT / ".audiagentic/config/providers/gpt-auto.yaml").read_text(encoding="utf-8"))
+    raw = load_provider_config_lenient(REPO_ROOT)["providers"]["gpt-auto"]
     settings = dict(raw["settings"])
     settings.pop("project-url", None)
     return GptAutoConfig.from_project_dict(settings)

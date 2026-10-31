@@ -215,3 +215,19 @@ def test_event_config_triggers_and_prompt_syntax_files_move_and_roll_back(projec
     assert report["kept"] == []
     assert [p.read_bytes() for p in (events, triggers, syntax)] == originals
     assert not ({"events", "event-triggers", "prompt-syntax"} & set(_settings(project)))
+
+
+def test_machine_provider_override_moves_to_user_settings_and_rolls_back(project: Path, tmp_path: Path) -> None:
+    override = _write(tmp_path / "home" / "config" / "providers" / "gpt-auto.yaml",
+                      {"settings": {"contract-version": "v1", "turn": {"response-timeout-seconds": 42}}})
+    original = override.read_bytes()
+    manifest = Path(apply_provider_config_migration(project)["manifest"])
+
+    user = yaml.safe_load((tmp_path / "xdg-config" / "audiagentic" / "settings.yaml").read_text())
+    assert user["providers"]["gpt-auto"]["settings"]["turn"]["response-timeout-seconds"] == 42
+    assert not override.exists()
+
+    report = rollback_provider_config_migration(project, manifest)
+    assert report["kept"] == []
+    assert override.read_bytes() == original
+    assert "providers" not in yaml.safe_load((tmp_path / "xdg-config" / "audiagentic" / "settings.yaml").read_text())
