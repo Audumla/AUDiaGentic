@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, cast
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
-from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_opener, urlopen
+from urllib.request import HTTPHandler, HTTPRedirectHandler, HTTPSHandler, Request, build_opener, urlopen
 
 from audiagentic.components.agents.gateway.client import validate_node_selectors
 from audiagentic.components.agents.gateway.service.contract import (
@@ -76,10 +76,15 @@ class StandaloneGatewayClient:
             ):
                 raise client_validation_error(16, "shared gateway requires safe server and project IDs")
             self._endpoint = _validate_shared_endpoint(endpoint)
-            context = ssl_context if ssl_context is not None else ssl.create_default_context()
-            if context.verify_mode != ssl.CERT_REQUIRED or not context.check_hostname:
-                raise client_validation_error(16, "shared gateway requires certificate and hostname verification")
-            self._shared_opener = build_opener(HTTPSHandler(context=context), _RejectRedirects())
+            if self._endpoint.startswith("http://"):
+                # The shared server listens on literal loopback HTTP only; TLS is the proxy's job.
+                # Bearer authentication and the server-id check still apply.
+                self._shared_opener = build_opener(HTTPHandler(), _RejectRedirects())
+            else:
+                context = ssl_context if ssl_context is not None else ssl.create_default_context()
+                if context.verify_mode != ssl.CERT_REQUIRED or not context.check_hostname:
+                    raise client_validation_error(16, "shared gateway requires certificate and hostname verification")
+                self._shared_opener = build_opener(HTTPSHandler(context=context), _RejectRedirects())
         else:
             self._endpoint = _validate_endpoint(endpoint)
         if not auth_token or any(character.isspace() for character in auth_token):
@@ -733,6 +738,16 @@ def _shared_submission_params(params: dict[str, Any]) -> dict[str, Any]:
 
 
 def _validate_shared_endpoint(endpoint: str) -> str:
+    """An HTTPS origin, or the literal loopback ``http://127.0.0.1:PORT`` the shared server binds."""
+    if endpoint.startswith("http://"):
+        try:
+            if urlparse(endpoint).port == 0:
+                raise ValueError
+            return _validate_endpoint(endpoint)
+        except Exception:  # noqa: BLE001 - re-raised below as the shared-endpoint error
+            raise client_validation_error(
+                16, "shared gateway endpoint must be an HTTPS origin or literal loopback http://127.0.0.1:PORT"
+            ) from None
     try:
         parsed = urlparse(endpoint)
         port = parsed.port
