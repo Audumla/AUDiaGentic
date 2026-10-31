@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.48.5](https://github.com/Audumla/AUDiaGentic/compare/v0.48.4...v0.48.5) (2026-10-31)
+
+
+### Documentation
+
+* **planning:** CFG11 provider shard and feature-state design ([#278](https://github.com/Audumla/AUDiaGentic/issues/278)) ([44b2f64](https://github.com/Audumla/AUDiaGentic/commit/44b2f643d2924691b31698be286ae4e1931ff500))
+
 ## [0.48.4](https://github.com/Audumla/AUDiaGentic/compare/v0.48.3...v0.48.4) (2026-10-31)
 
 
