@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.56.0](https://github.com/Audumla/AUDiaGentic/compare/v0.55.0...v0.56.0) (2026-10-31)
+
+
+### Features
+
+* **gateway:** shared client accepts literal loopback http (CFG14 slice 1) ([#319](https://github.com/Audumla/AUDiaGentic/issues/319)) ([407f749](https://github.com/Audumla/AUDiaGentic/commit/407f749265176144e1d00d652ee0bb7e9850650a))
+
 ## [0.55.0](https://github.com/Audumla/AUDiaGentic/compare/v0.54.2...v0.55.0) (2026-10-31)
 
 

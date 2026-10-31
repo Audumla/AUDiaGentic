@@ -19,11 +19,13 @@ Make `connector.yaml` the sole authority for an explicit client-to-gateway conne
 
 ## Steps
 
-- Inventory every reader and writer of the settings pair and the plain component-state options (client.py, management_api, select-implementation, status, tests, docs)
-- Delete gateway.endpoint and gateway.token.file from the schema and consumers; remove the plain endpoint/token-file branch and its writers
-- Connector endpoint: allow literal loopback http, keep https; keep existing redirect rejection
-- Migrate existing component-state options to a connector document where unambiguous; otherwise print the fix
-- Update docs and tests; search production, tests, config and dotted-path strings for removed symbols
+- Slice 1 (done in this PR): the shared client accepts literal loopback http://127.0.0.1:PORT (the shared server listens on loopback http only; TLS is the proxy's job) with the server-id check, bearer token and redirect rejection unchanged; https stays verified for every other host
+- Slice 2 (cutover, one PR so no release carries two sources or none): connector document gets `mode: plain|shared`; plain = literal loopback http + token-file only; shared = server-id required, project-id REMOVED (taken from the local project's declared project.id via foundation resolve_settings_cached), https or loopback http, ca-file, source-node-config; new user/explicit setting `gateway.connector` (path to the document) is the only explicit binding; `gateway connect config FILE` validates, does the health handshake, then writes the setting through the existing config writer (project PATH removed from the grammar)
+- Same PR deletes: gateway.endpoint and gateway.token.file (schema, client.py _explicit_connection and both branches, _uses_shared_connector pair test), component-state endpoint/token-file/connector-config options and their writers (management_api validate_standalone_config plain branch, gateway_connect_config popping), the standalone.yaml connection option keys, the agent_gateway_set_config connection keys; the standalone options schema becomes empty
+- Rewrite CFG-AGSV-001: standalone selected but no valid connector configured; run: audiagentic gateway connect config FILE; keep specific errors for malformed documents, unreadable token files and failed authentication
+- A plain connection serves one project: document it as single-project and refuse a mismatch where detectable; do not invent shared identity semantics for plain
+- Slice 3: docs (shared-gateway.md, configuration-model.md, config_inventory.yaml), a documented one-time conversion for existing connectors and component-state users (no automatic migration machinery; the settings pair is hours old), hermetic multi-project qualification
+- Rewrite tests: test_gateway_connector_selection.py, test_agents_gateway_management_api.py, settings schema tests, gateway connect CLI tests, standalone client tests; never the operator's real settings or the live shared gateway
 
 ## Detailed Solution & Technical Design
 
@@ -66,6 +68,8 @@ Trigger: one connection has three sources and the highest silently wins (CFG10 a
 
 Agreed with GPT (round 7). Partly reverses the settings half of CFG10 (#308). Release gate: no release may remove the old sources unless a user can still create a working connector (gateway connect with a hand-written connector stays a complete path). Dependencies: none.
 
+Design agreed with GPT in round 8 (Option B: one machine-level connector pointer, project id from the local project; explicit mode field; shared over loopback http). Differences from GPT's slice order: its order put the connect command after the cutover, which would leave no way to bind a connection; connect and the setting ship in the cutover PR. [::1] is not accepted: the server only binds 127.0.0.1. Pre-implementation checks done for slice 1: shared identity headers/health server-id check are transport-independent; get_gateway_client is called with a project root almost everywhere. Still to verify in slice 2: resolve_settings_cached invalidation after the connect write, gateway_connect_config lock scope, callers that pass no project root.
+
 ## Change Log
 
 - 2026-10-31T23:04:02.314327+00:00 (created-by): Created by claude
@@ -73,3 +77,4 @@ Agreed with GPT (round 7). Partly reverses the settings half of CFG10 (#308). Re
 - 2026-10-31T23:06:57.276584+00:00 (updated-by): Updated: section:standards
 - 2026-10-31T23:09:46.806307+00:00 (updated-by): Updated: section:notes
 - 2026-10-31T23:30:28.805567+00:00 (updated-by): Updated: section:title, section:description, section:steps, section:validation, section:standards, section:acceptance_criteria, section:notes
+- 2026-10-31T23:50:15.340783+00:00 (updated-by): Updated: section:steps, section:notes
