@@ -299,6 +299,83 @@ Rules while they stay:
 - Not in scope for this design: the `gateway: role: server` form that earlier
   drafts showed; one process serves one role from one document.
 
+## Shared gateway setup (decided 2026-10-31)
+
+The aim of this work is an end-to-end outcome: a new operator sets up a gateway
+with as few decisions as possible, and no fact is defined in two places.
+Closing the CFG items one by one did not deliver it. CFG10 moved the gateway
+endpoint and token into settings while the connector document and the project
+component state still defined the same connection, so one connection had three
+sources and the highest silently won. The decision below was reached after a
+review against the code and three adversarial GPT rounds.
+
+Decisions:
+
+- **Generation, not consolidation.** The role documents stay separate (see
+  above). Setup friction comes from hand-written secrets, ids and
+  cross-references, so they are generated: `gateway init` creates the server
+  id, a principal, its token file (private mode, never printed) and the server
+  document, plus a loopback connector for the same machine. `gateway connector
+  create` writes a validated remote connector from the endpoint, the pinned
+  server id and the token-file path.
+- **One explicit connection authority: the connector document.** The settings
+  pair `gateway.endpoint`/`gateway.token.file` and the plain component-state
+  `endpoint`/`token-file` options are deleted, with a migration and no
+  compatibility reader. Automatic embedded selection needs no connector. The
+  connector accepts `http://127.0.0.1:PORT` and `http://[::1]:PORT` (the
+  server's native loopback origin; it never terminates TLS) and `https`
+  elsewhere; redirects stay rejected.
+- **Project identity is declared.** The id used to authorize a project is
+  `project.id` declared as a literal key in the project's tracked project
+  settings. The derived fallbacks (origin repository name, main checkout,
+  directory name) and values from user or explicit layers are refused for
+  gateway authorization, and the reader follows no includes or references.
+  `gateway init` writes the id once, when absent, through the existing config
+  writer (shown in dry-run, never changing an existing value). The id is
+  entered once; the connector takes it from the local project and the server
+  takes it from each root.
+- **Roots are paths, in the server document.** `projects` becomes an optional
+  list of root paths; ids are not typed. When omitted, the server serves the
+  project containing its working directory, resolved once at start. Roots are
+  canonicalized; duplicate, overlapping or aliased roots and duplicate ids are
+  rejected. There are no command-line root options (the gateway CLI is
+  keyword-only), no directory discovery and no registry.
+- **Grants follow the trust model (below).** A principal's `projects` omitted
+  means all projects in the server's configured root list; `[]` means none; an
+  explicit list narrows; unknown ids fail. `actions` omitted means a versioned
+  default set (read, submit, cancel, session) that never expands silently.
+  Migration must not broaden any existing principal.
+- **Validation resolves the deployment.** `gateway validate` checks project
+  ids, roots and grants, not only schema.
+
+Trust model and isolation. Shared gateways are run by collaborating operators
+who can reach every project, so project grants are not a tenant-security
+boundary. What is required is separation of running: each project executes with
+its own root, context, request, session and conversation namespace and
+project-owned state, and nothing in one project can inspect, modify, resume,
+cancel or trigger another project's work through that project's context, even
+for a principal authorized for both. Project settings and files cannot
+configure the gateway, authorize principals, select another project's workspace
+or change another project's settings; server configuration and root mappings
+are server-owned. This is application-level isolation and is mandatory and
+tested (CFG17). It is not a security boundary against code that runs with the
+server's operating-system privileges; filesystem and process isolation are not
+claimed unless the execution layer enforces and verifies them. No claim of
+project isolation is made until CFG17 passes.
+
+Not doing: node enrollment (needs the node handshake and trust model
+inspected first), settings consolidation of the role documents, a project
+registry, and automated remote token transfer. Remote setup still needs the
+operator to supply the endpoint, the pinned server id and a securely copied
+token.
+
+Acceptance (measured by CFG15/CFG16 tests): one project on one machine needs
+zero hand-edited files; a remote connector is the five documented fields
+(`gateway connector create` is deferred until a measured walkthrough needs it);
+adding a second project is one root line. Owning items: CFG13 (declared
+identity), CFG14 (single connection authority), CFG15 (init and validate),
+CFG16 (project roots and grants), CFG17 (project separation audit and tests).
+
 ## Environment variables
 
 Public: `AUDIAGENTIC_CONFIG` (explicit file, scope 6), `AUDIAGENTIC_PROJECT`
@@ -406,7 +483,8 @@ provider or capability registry.
 | CFG07 | Qualification evidence, `qualify`, surface resolution from evidence |
 | CFG08 | `setup`, `doctor`, portable MCP registration, installed-wheel qualification |
 | CFG09 | Migrate agent catalog, providers, model sources (PC12), project and remaining subsystems; `config migrate`. Shared server/node/connector role documents are deferred (Shared gateway role documents) |
-| CFG10 | Public env vars down to three; no unmanaged path builders |
+| CFG10 | Public env vars down to three; no unmanaged path builders. Its settings endpoint/token pair is removed by CFG14 |
+| CFG13-CFG17 | Gateway setup: declared project identity, single connection authority, init and validate, project roots and grants, project separation (Shared gateway setup) |
 | SH42 | Owns installed release qualification and deployment docs; absorbs SH57 and SH59 |
 | SH53 | Uses CFG07's evidence schema and producer |
 | PC10 | Delivered through CFG06 |
