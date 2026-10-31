@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.47.0](https://github.com/Audumla/AUDiaGentic/compare/v0.46.0...v0.47.0) (2026-10-31)
+
+
+### Features
+
+* **cli:** add --version; record CFG08 installed-wheel qualification and complete CFG08 ([#265](https://github.com/Audumla/AUDiaGentic/issues/265)) ([d9d4835](https://github.com/Audumla/AUDiaGentic/commit/d9d4835807453108dcb968db21528a13e8fd1cb9))
+
 ## [0.46.0](https://github.com/Audumla/AUDiaGentic/compare/v0.45.0...v0.46.0) (2026-10-31)
 
 
