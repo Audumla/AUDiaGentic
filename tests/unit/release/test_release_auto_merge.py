@@ -28,16 +28,29 @@ if(scenario === 'human') pr.user.login = 'some-user';
 if(scenario === 'wrong-base') pr.base.ref = 'other';
 if(scenario === 'already-merged') {pr.state='closed'; pr.merged=true;}
 if(scenario === 'closed') pr.state='closed';
-const github = {rest:{pulls:{
+let polls = 0, gets = 0;
+const run = (name, status, conclusion, id, slug='github-actions') => ({name, status, conclusion, id, head_sha:'a'.repeat(40), app:{slug}});
+const checkRuns = () => {
+  polls += 1;
+  if(scenario === 'check-pending-then-ok') return polls === 1 ? [run('tests','in_progress',null,1)] : [run('tests','completed','success',1)];
+  if(scenario === 'check-pending-forever') return [run('tests','in_progress',null,1)];
+  if(scenario === 'check-failed') return [run('tests','completed','failure',1)];
+  if(scenario === 'check-rerun-passed') return [run('tests','completed','failure',1), run('tests','completed','success',2)];
+  if(scenario === 'check-rerun-failed') return [run('tests','completed','success',1), run('tests','completed','failure',2)];
+  if(scenario === 'foreign-app-pending') return [run('tests','in_progress',null,1,'some-other-app')];
+  if(scenario === 'other-job-pending') return [run('release-pr-tests / tests','in_progress',null,1)];
+  return [];
+};
+const github = {rest:{checks:{listForRef: 'listForRef'}, pulls:{
   list: async () => ({data: scenario === 'none' ? [] : scenario === 'ambiguous' ? [pr,pr] : [pr]}),
-  get: async () => ({data:pr}), listFiles: ()=>{},
+  get: async () => { gets += 1; if(scenario === 'head-moves-while-waiting' && gets > 1) return {data:{...pr, head:{...pr.head, sha:'d'.repeat(40)}}}; return {data:pr}; }, listFiles: ()=>{},
   merge: async args => {calls.push(['merge',args]); return {data:{merged: scenario !== 'merge-failed'}};}
 }, repos:{createCommitStatus: async args => {calls.push(['privacy-status',args]);}},
 actions:{createWorkflowDispatch: async args => {calls.push(['dispatch',args]);}}},
-paginate: async () => [{filename: scenario === 'unexpected-file' ? '.github/workflows/release.yml' : 'pyproject.toml'}]};
+paginate: async fn => fn === 'listForRef' ? checkRuns() : [{filename: scenario === 'unexpected-file' ? '.github/workflows/release.yml' : 'pyproject.toml'}]};
 const core = {setOutput:(key,value)=>{outputs[key]=value;}};
 const context = {repo:{owner:'Audumla',repo:'AUDiaGentic'},ref:'refs/heads/main'};
-process.env.RELEASE_PR='44'; process.env.RELEASE_HEAD='a'.repeat(40);
+process.env.RELEASE_CHECK_POLL_MS='1'; process.env.RELEASE_CHECK_WAIT_MS='50'; process.env.RELEASE_PR='44'; process.env.RELEASE_HEAD='a'.repeat(40);
 process.env.SOURCE_SHA=scenario === 'invalid-source' ? 'main' : 'c'.repeat(40);
 (async()=>{let error=null; try {
   await new (Object.getPrototypeOf(async function(){}).constructor)('github','context','core',script)(github,context,core);
@@ -103,3 +116,27 @@ def test_post_publication_dispatch_uses_immutable_source():
 def test_post_publication_dispatch_rejects_mutable_source():
     result = execute("dispatch-full-validation", "invalid-source")
     assert result["error"] and not result["calls"]
+
+
+def test_merge_waits_for_a_pending_required_check_then_merges():
+    result = execute("merge-release-pr", "check-pending-then-ok")
+    assert result["error"] is None
+    assert [call[0] for call in result["calls"]] == ["privacy-status", "privacy-status", "merge", "dispatch"]
+
+
+@pytest.mark.parametrize("case", ["check-failed", "check-rerun-failed", "check-pending-forever", "head-moves-while-waiting"])
+def test_merge_never_overrides_a_bad_or_unfinished_check(case):
+    result = execute("merge-release-pr", case)
+    assert result["error"] and not result["calls"]
+
+
+def test_a_rerun_that_passed_after_a_failure_is_accepted():
+    assert execute("merge-release-pr", "check-rerun-passed")["error"] is None
+
+
+def test_a_check_run_from_another_app_is_not_waited_on():
+    assert execute("merge-release-pr", "foreign-app-pending")["error"] is None
+
+
+def test_other_jobs_named_tests_inside_a_reusable_workflow_do_not_block():
+    assert execute("merge-release-pr", "other-job-pending")["error"] is None

@@ -135,3 +135,38 @@ def test_release_retry_does_not_claim_next_release_events(tmp_path: Path) -> Non
     assert result["idempotent-retry"] is True
     assert result["released-event-ids"] == ["chg_same"]
     assert json.loads((releases / "CURRENT_RELEASE_LEDGER.ndjson").read_text())["event-id"] == "chg_next"
+
+
+def test_empty_current_ledger_is_a_noop_not_an_error(tmp_path: Path) -> None:
+    releases = tmp_path / "docs" / "releases"
+    releases.mkdir(parents=True)
+    (releases / "CURRENT_RELEASE_LEDGER.ndjson").write_text("[]\n", encoding="utf-8")
+
+    result = _archive_current_ledger_locked(tmp_path, "v0.9.9")
+
+    assert result["empty"] is True and result["released-event-ids"] == []
+    assert not (releases / "LEDGER.ndjson").exists()
+
+
+def test_empty_retry_after_a_nonempty_archive_reports_the_release_events(tmp_path: Path) -> None:
+    releases = tmp_path / "docs" / "releases"
+    releases.mkdir(parents=True)
+    (releases / "CURRENT_RELEASE_LEDGER.ndjson").write_text(json.dumps(_event("content")) + "\n", encoding="utf-8")
+    first = _archive_current_ledger_locked(tmp_path, "v1.0.0")
+
+    retry = _archive_current_ledger_locked(tmp_path, "v1.0.0")
+    other = _archive_current_ledger_locked(tmp_path, "v1.0.1")
+
+    assert retry["released-event-ids"] == first["released-event-ids"] == ["chg_same"]
+    assert retry["idempotent-retry"] is True and "empty" not in retry
+    assert other["empty"] is True
+
+
+def test_empty_current_ledger_still_rejects_a_corrupt_historical_ledger(tmp_path: Path) -> None:
+    releases = tmp_path / "docs" / "releases"
+    releases.mkdir(parents=True)
+    (releases / "CURRENT_RELEASE_LEDGER.ndjson").write_text("[]\n", encoding="utf-8")
+    (releases / "LEDGER.ndjson").write_text("{not json\n", encoding="utf-8")
+
+    with pytest.raises(AudiaGenticError):
+        _archive_current_ledger_locked(tmp_path, "v0.9.9")

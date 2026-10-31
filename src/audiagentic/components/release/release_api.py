@@ -98,9 +98,13 @@ def finalize(project_root: Path, release_id: str) -> dict[str, Any]:
             message="ledger archive event was not handled",
             details={"release-id": release_id},
         )
+    if archive_result.get("empty"):
+        # No events were recorded for this release: render nothing, so no stale or empty notes can
+        # be published; the release keeps the notes release-please generated for it.
+        return {**archive_result, "notes-source": "release-please"}
     released_ids = archive_result.get("released-event-ids") or None
     docs_result = render_release_docs(project_root, release_id, released_event_ids=released_ids)
-    return {**archive_result, **docs_result}
+    return {**archive_result, **docs_result, "notes-source": "events"}
 
 
 def ensure_baseline(project_root: Path, branch: str = "main", python_version: str = "3.13") -> dict[str, Any]:

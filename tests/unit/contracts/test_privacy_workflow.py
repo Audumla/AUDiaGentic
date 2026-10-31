@@ -73,3 +73,13 @@ def test_ledger_pr_reports_every_required_context_only_after_proving_it_is_gener
     assert 'exit 1' in script[guard:script.index('git push')]
     for context in REQUIRED_CONTEXTS:
         assert guard < script.index(f'context={context}') < script.index('gh pr merge'), context
+
+
+def test_release_notes_are_replaced_only_when_the_ledger_supplied_them():
+    workflow = yaml.safe_load((ROOT / '.github/workflows/release.yml').read_text())
+    jobs = workflow['jobs']
+    assert jobs['finalize-ledger']['outputs']['notes_source'] == '${{ steps.finalize.outputs.notes_source }}'
+    step = next(s for s in jobs['build-and-publish']['steps'] if s.get('name') == 'Update GitHub release notes from ledger')
+    assert step['if'] == "needs.finalize-ledger.outputs.notes_source == 'events'"
+    names = [s.get('name') for s in jobs['build-and-publish']['steps']]
+    assert names.index('Update GitHub release notes from ledger') < names.index('Publish to PyPI')

@@ -111,17 +111,31 @@ def _archive_current_ledger_locked(project_root: Path, release_id: str) -> dict[
     current_path = current_ledger_path(project_root)
     historical_path = historical_ledger_path(project_root)
 
-    events = load_persisted_events(current_path, role="current")
-    if not events:
+    if not current_path.exists():
         raise AudiaGenticError(
             code="CON-ARCHIVE-001",
             kind="release",
             message="no events in current ledger to archive",
-            details={"release-id": release_id},
+            details={"release-id": release_id, "reason": "current ledger file is missing"},
         )
-
-    historical_path = historical_ledger_path(project_root)
+    events = load_persisted_events(current_path, role="current")
     historical = load_persisted_events(historical_path, role="historical")
+    if not events:
+        # Nothing was recorded since the last release.  A retry after a nonempty archive of this
+        # same release finds its events in the historical ledger and reports them; otherwise the
+        # release simply has no ledger events, which is not an error.
+        prior_ids = sorted(e["event-id"] for e in historical if e.get("release-id") == release_id)
+        result: dict[str, Any] = {
+            "release-id": release_id,
+            "archived-events": len(prior_ids),
+            "purged-fragments": 0,
+            "historical-ledger": str(historical_path),
+            "released-event-ids": prior_ids,
+        }
+        if prior_ids:
+            return {**result, "idempotent-retry": True}
+        return {**result, "empty": True}
+
     historical_by_id = {event["event-id"]: event for event in historical}
     already_archived: set[str] = set()
     pending_events: list[dict[str, Any]] = []
