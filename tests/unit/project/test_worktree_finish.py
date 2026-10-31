@@ -396,3 +396,30 @@ def test_finish_moves_the_branch_scratch(repo, merged, state, tmp_path) -> None:
     assert not (scratch / "me" / "feature").exists()
     assert any("scratch moved" in n for n in result["notes"])
     assert len(list((scratch / ".finished").iterdir())) == 1
+
+
+def test_finish_fetches_the_merged_pull_request_head_and_accepts_a_contained_tip(repo, merged, state, tmp_path) -> None:
+    """A squash-merged branch whose forge head moved past the local tip is proven by containment, not by equality."""
+    feature, tip, _pr = merged
+    remote = tmp_path / "origin.git"
+    _git(feature, "push", "-q", "origin", f"{tip}:refs/heads/me/feature")
+    later = _git(remote, "commit-tree", f"{tip}^{{tree}}", "-p", tip, "-m", "pushed after the local branch stopped")
+    _git(remote, "update-ref", "refs/pull/9/head", later)
+    assert git.resolve_commit(repo, f"{later}^{{commit}}") is None  # not local yet
+    pr = forge.PullRequest(9, "MERGED", "main", "me/feature", later, _pr.merge_commit, False, "")
+
+    result = _run(repo, state, feature, pr)
+
+    assert not feature.exists() and git.resolve_commit(repo, result["quarantine-ref"]) == tip
+    assert git.resolve_commit(repo, f"{later}^{{commit}}") == later  # fetched as objects only
+
+
+def test_finish_refuses_when_the_local_branch_has_commits_the_merged_head_lacks(repo, merged, state) -> None:
+    feature, _tip, pr = merged
+    (feature / "extra.txt").write_text("not in the pull request\n")
+    _git(feature, "add", "extra.txt")
+    _git(feature, "commit", "-q", "-m", "local only")
+    with pytest.raises(AudiaGenticError) as raised:
+        _run(repo, state, feature, pr)
+    assert raised.value.code == "CON-WTFIN-002" and "tip-differs-from-pr" in raised.value.details["blockers"]
+    assert feature.is_dir() and git.branch_exists(repo, "me/feature")

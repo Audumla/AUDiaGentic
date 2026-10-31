@@ -11,6 +11,7 @@ audiagentic worktree list   [project PATH] [output json]
 audiagentic worktree prune  [project PATH] [output json]
 audiagentic worktree sync   [TARGET] [head TIP12] [dry-run yes] [project PATH] [output json]
 audiagentic worktree push   [TARGET] [head TIP12] [dry-run yes] [project PATH] [output json]
+audiagentic worktree ship   [TARGET] [title TEXT] [body TEXT] [head TIP12] [project PATH] [output json]
 audiagentic worktree merge  [TARGET] [title TEXT] [body TEXT] [head TIP12] [dry-run yes] [project PATH] [output json]
 audiagentic worktree finish TARGET [abandon TIP12] [discard-ignored N] [project PATH] [output json]
 ```
@@ -43,6 +44,16 @@ from yours. A merge conflict is aborted and the worktree is left exactly as it w
 conflicting files listed. After a sync, publish the new tip with `merge` or `push`. This is the
 fix for a pull request GitHub shows as "behind": the strict up-to-date rule needs the branch
 to contain the default branch before auto-merge can finish.
+
+## The everyday command: ship
+
+`ship` is `sync` then `merge`, in that order, and it returns without waiting. It reports
+`queued` (auto-merge is on), `behind` (the default branch moved again while the checks ran)
+or `merged`. Run it again after any default-branch move, for example a release landing: it
+syncs, pushes the new tip and keeps auto-merge on, which is the whole procedure for a pull
+request that shows BEHIND. Once it says `merged`, run the `finish` command it names. `ship`
+adds no check of its own: a dirty tree, unfinished gateway work, a conflict or a diverged
+remote refuse exactly as they do in `sync` and `merge`, and nothing is forced.
 
 ## Publishing: push and merge
 
@@ -99,7 +110,9 @@ Squash merges leave the branch tip unreachable from the default branch, so reach
 proves nothing. A worktree is merged only when all of this holds:
 
 - a pull request on this repository has this branch as its head and its head commit equals
-  the local tip (a fork's pull request does not count),
+  the local tip, or contains it (the local tip is an ancestor of the head the pull request
+  merged, as when a later commit was pushed from elsewhere); a fork's pull request does not
+  count, and local commits the merged head lacks still block (`tip-differs-from-pr`),
 - its state is `MERGED` and it merged into the default branch,
 - its merge commit is in the local default branch (`finish` fetches first; `prune` does not,
   so it reports `merge-commit-not-fetched` when the local copy is stale).
@@ -121,7 +134,8 @@ allowed. Run `prune` to see the exact reasons.
 `finish TARGET` takes the absolute path, or a branch or directory name when that is
 unique. It:
 
-1. fetches the default branch, then takes a per-project lock and fences the worktree so
+1. fetches the default branch and, for a merged pull request whose head is not local yet,
+   that head's objects (no ref is created), then takes a per-project lock and fences the worktree so
    MCP calls cannot start new work in it,
 2. runs the `prune` checks and records what it saw,
 3. preserves first: an immutable `refs/quarantine/...` ref at the tip, and a verified copy

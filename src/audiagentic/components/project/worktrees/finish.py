@@ -235,6 +235,35 @@ def _bundle_tip(main: Path, reference: str, tip: str, base: str | None, destinat
     return {"path": str(destination), "sha256": checksum, "commits": unique}
 
 
+def _fetch_merged_pull_heads(main: Path, repo: Path, path: Path, pull_requests, remote: str):
+    """Make the heads of this branch's merged pull requests available locally so containment can be proven.
+
+    Only objects are fetched (no ref is created or moved). Failure here is not fatal: the assessment then
+    reports the head as not fetched and the worktree is refused, never guessed. Returns a lookup that serves
+    the forge answer already obtained to the first assessment and asks the forge again after that.
+    """
+    entry = next((e for e in git.list_worktrees(repo) if e.path == path), None)
+    if entry is None or entry.branch is None:
+        return pull_requests
+    try:
+        found = pull_requests(repo, entry.branch)
+    except Exception:  # noqa: BLE001 - the assessment asks again and reports forge-unavailable itself
+        return pull_requests
+    for pr in found:
+        try:
+            if (pr.state == "MERGED" and not pr.cross_repository and pr.head_branch == entry.branch
+                    and git.resolve_commit(main, f"{pr.head_sha}^{{commit}}") is None):
+                git.fetch_pull_head(main, remote, pr.number)
+        except Exception:  # noqa: BLE001 - unknown stays a refusal in the assessment
+            continue
+    seeded = [found]
+
+    def lookup(repository: Path, branch: str):
+        return seeded.pop() if seeded else pull_requests(repository, branch)
+
+    return lookup
+
+
 def finish(repo: Path, target: str, *, active_work, discard_ignored: int | None = None,
            abandon: str | None = None, pull_requests=forge.pull_requests_for_branch,
            state_root: Path | None = None, scratch_root: Path | None = None) -> dict[str, Any]:
@@ -268,6 +297,7 @@ def finish(repo: Path, target: str, *, active_work, discard_ignored: int | None 
         except Exception as error:
             raise refuse_error(6, "Could not fetch the remote default branch; refusing to judge against a stale one") from error
 
+        pull_requests = _fetch_merged_pull_heads(main, repo, path, pull_requests, remote)
         if journal:  # an earlier transaction's evidence is kept, never overwritten
             journal_file.rename(journal_file.with_name(f"{journal_file.stem}.{journal.get('transaction', 'old')}.json"))
         worktree_drain.begin(path, reason="finish", state_root=state)
