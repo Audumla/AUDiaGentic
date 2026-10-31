@@ -13,6 +13,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from audiagentic.foundation.io import atomic_write_text
+from audiagentic.foundation.paths.names import project_runtime_dir
 
 _ACTIVITY_PATH_ENV = "AUDIAGENTIC_PI_ACTIVITY_PATH"
 _EXTENSION_NAME = "audiagentic-print-activity.mjs"
@@ -51,7 +52,7 @@ def _request_runtime_path(packet_ctx: dict[str, object]) -> Path | None:
         return None
     try:
         root = Path(working_root).resolve()
-        runtime = (root / ".audiagentic" / "runtime" / "jobs" / job_id).resolve()
+        runtime = (project_runtime_dir(root) / "jobs" / job_id).resolve()
         if not runtime.is_relative_to(root):
             return None
     except (OSError, RuntimeError, ValueError):

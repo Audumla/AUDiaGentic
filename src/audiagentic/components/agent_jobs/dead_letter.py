@@ -12,6 +12,7 @@ from typing import Any
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error_factory
 from audiagentic.foundation.observability.operational_records import append_operational_record
+from audiagentic.foundation.paths.names import RUNTIME_RELATIVE
 from audiagentic.foundation.time import now_iso_z
 
 logger = logging.getLogger(__name__)
@@ -32,7 +33,7 @@ _DEAD_LETTER_REQUIRED_KEYS = frozenset(
     )
 )
 
-_DEAD_LETTER_PATH = Path(".audiagentic") / "runtime" / "agent-jobs" / "dead-letter.ndjson"
+_DEAD_LETTER_PATH = RUNTIME_RELATIVE / "agent-jobs" / "dead-letter.ndjson"
 
 
 def dead_letter_path(project_root: Path) -> Path:

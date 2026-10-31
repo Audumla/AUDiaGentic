@@ -9,13 +9,14 @@ from typing import Any
 from audiagentic.components.ledger.paths import ledger_fragments_dir
 from audiagentic.foundation.event import DeliveryMode
 from audiagentic.foundation.io import atomic_write_json, atomic_write_text
+from audiagentic.foundation.paths.names import RUNTIME_RELATIVE
 from audiagentic.foundation.paths.safety import resolve_user_path
 from audiagentic.foundation.system.process import StartupLock
 
 
 def outbox_dir(project_root: Path) -> Path:
     return resolve_user_path(
-        Path(".audiagentic") / "runtime" / "ledger" / "event-outbox",
+        RUNTIME_RELATIVE / "ledger" / "event-outbox",
         project_root=project_root,
         field_name="Ledger event outbox",
     )
@@ -31,7 +32,7 @@ def _outbox_lock(project_root: Path, event_id: str) -> StartupLock:
 def fragment_write_lock(project_root: Path, event_id: str):
     """Serialize fragment existence checks and writes for one event ID."""
     directory = resolve_user_path(
-        Path(".audiagentic") / "runtime" / "ledger" / "fragment-locks",
+        RUNTIME_RELATIVE / "ledger" / "fragment-locks",
         project_root=project_root,
         field_name="Ledger fragment lock",
     )

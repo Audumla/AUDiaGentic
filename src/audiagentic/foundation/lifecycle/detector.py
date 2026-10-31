@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from audiagentic.foundation.io import load_yaml_file
+from audiagentic.foundation.paths.names import project_marker_path
 
 _PROJECT_MARKER = Path(".audiagentic/components/project.yaml")
 
@@ -26,10 +27,10 @@ def detect_installed_state(project_root: Path) -> InstalledState:
 
     audia_hits = [str(p) for p in AUDIAGENTIC_MARKERS if (project_root / p).exists()]
 
-    if not audia_hits and not (project_root / ".audiagentic").exists():
+    if not audia_hits and not (project_marker_path(project_root)).exists():
         return InstalledState("none", audia_hits)
 
-    audiagentic_dir = project_root / ".audiagentic"
+    audiagentic_dir = project_marker_path(project_root)
     if not audiagentic_dir.exists():
         return InstalledState("none", audia_hits)
 

@@ -18,13 +18,14 @@ from typing import Any
 from audiagentic.foundation.contracts.errors import make_error_factory
 from audiagentic.foundation.io import atomic_write_text
 from audiagentic.foundation.logging.redaction import DEFAULT_REDACT_PATTERNS
+from audiagentic.foundation.paths.names import MARKER_RELATIVE
 
 from .config_patcher import ConfigPatcher, OwnedChange
 from .managed_block import BlockChange, remove_managed_block
 
 _artifact_error = make_error_factory("CON", "ART", "artifact-registry")
 
-_SIDECAR = Path(".audiagentic") / "config" / "runtime" / "toolchain" / "artifacts.json"
+_SIDECAR = MARKER_RELATIVE / "config" / "runtime" / "toolchain" / "artifacts.json"
 
 
 @dataclass

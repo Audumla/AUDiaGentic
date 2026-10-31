@@ -27,6 +27,7 @@ from urllib.request import Request, urlopen
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.io import atomic_write_json
+from audiagentic.foundation.paths.names import project_marker_path
 
 # GitHub OAuth device flow endpoints
 _DEVICE_AUTH_URL = "https://github.com/login/device/code"
@@ -34,7 +35,7 @@ _TOKEN_URL = "https://github.com/login/oauth/access_token"
 _USER_AGENT = "audiagentic-release"
 
 # Storage location for the token
-_CREDENTIALS_DIR = Path.home() / ".audiagentic" / "credentials"
+_CREDENTIALS_DIR = project_marker_path(Path.home()) / "credentials"
 _CREDENTIALS_FILE = _CREDENTIALS_DIR / "github_token.json"
 
 # Environment variables checked before falling back to stored credentials.

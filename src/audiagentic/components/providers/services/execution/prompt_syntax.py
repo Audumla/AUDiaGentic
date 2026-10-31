@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from audiagentic.foundation.io import load_yaml_file
+from audiagentic.foundation.paths.names import project_marker_path
 
 from .public_prompt_operations import (
     get_prompt_syntax_defaults,
@@ -59,7 +60,7 @@ def load_prompt_syntax(
     if project_root is None:
         return syntax
 
-    syntax_path = project_root / ".audiagentic" / "config" / "execution" / "prompt-syntax.yaml"
+    syntax_path = project_marker_path(project_root) / "config" / "execution" / "prompt-syntax.yaml"
     if not syntax_path.exists():
         return syntax
     payload = load_yaml_file(syntax_path)

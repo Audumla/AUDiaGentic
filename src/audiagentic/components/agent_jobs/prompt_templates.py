@@ -7,6 +7,7 @@ from typing import Any
 
 from audiagentic.components.providers.providers_api import load_packaged_prompt_template
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.foundation.paths.names import project_marker_path
 from audiagentic.foundation.paths.safety import ensure_contained
 from audiagentic.foundation.templates import render_template as _render_dotted
 
@@ -14,9 +15,9 @@ logger = logging.getLogger(__name__)
 
 
 def _template_roots(project_root: Path, tag: str, provider_id: str) -> list[Path]:
-    roots = [project_root / ".audiagentic" / "prompts" / tag]
+    roots = [project_marker_path(project_root) / "prompts" / tag]
     if tag.startswith("ag-"):
-        roots.append(project_root / ".audiagentic" / "prompts" / tag.removeprefix("ag-"))
+        roots.append(project_marker_path(project_root) / "prompts" / tag.removeprefix("ag-"))
     candidates: list[Path] = []
     for root in roots:
         candidates.extend(
@@ -39,9 +40,9 @@ def load_prompt_template(
 ) -> tuple[str | None, Path | None]:
     candidates = []
     if allow_project_override and template_name:
-        roots = [project_root / ".audiagentic" / "prompts" / tag]
+        roots = [project_marker_path(project_root) / "prompts" / tag]
         if tag.startswith("ag-"):
-            roots.append(project_root / ".audiagentic" / "prompts" / tag.removeprefix("ag-"))
+            roots.append(project_marker_path(project_root) / "prompts" / tag.removeprefix("ag-"))
         for root in roots:
             candidates.append(root / f"{template_name}.md")
             candidates.append(root / provider_id / f"{template_name}.md")
@@ -142,7 +143,7 @@ def load_prompt_from_file(
 def load_prompt_context(project_root: Path, context_name: str | None) -> tuple[str | None, Path | None]:
     if not context_name:
         return None, None
-    context_path = project_root / ".audiagentic" / "prompts" / "context" / f"{context_name}.md"
+    context_path = project_marker_path(project_root) / "prompts" / "context" / f"{context_name}.md"
     if context_path.exists():
         return context_path.read_text(encoding="utf-8"), context_path
     return context_name, None

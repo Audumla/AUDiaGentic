@@ -14,6 +14,7 @@ from typing import Any
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.event.envelope import EventEnvelope
 from audiagentic.foundation.logging.redaction import is_bulk_key, is_sensitive_key
+from audiagentic.foundation.paths.names import project_runtime_dir
 from audiagentic.foundation.time import now_iso_z
 
 logger = logging.getLogger(__name__)
@@ -384,7 +385,7 @@ def load_session_data(
         AudiaGenticError: IO-CTX-002 if the session store is structurally corrupt.
     """
     root = Path(project_root) if isinstance(project_root, str) else project_root
-    input_path = root / ".audiagentic" / "runtime" / "jobs"
+    input_path = project_runtime_dir(root) / "jobs"
     if not input_path.is_dir():
         return {}
 

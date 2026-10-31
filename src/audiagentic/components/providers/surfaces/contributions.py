@@ -5,6 +5,8 @@ from typing import Any
 
 import yaml
 
+from audiagentic.foundation.paths.names import project_marker_path
+
 from .base import SurfaceContribution, parse_contribution_descriptor
 
 
@@ -54,7 +56,7 @@ def load_project_surface_contributions(project_root: Path | None) -> list[Surfac
     """Load instructions owned by the target project itself."""
     if project_root is None:
         return []
-    directory = project_root / ".audiagentic" / "config" / "project" / "instructions"
+    directory = project_marker_path(project_root) / "config" / "project" / "instructions"
     if not directory.exists():
         return []
     result: list[SurfaceContribution] = []

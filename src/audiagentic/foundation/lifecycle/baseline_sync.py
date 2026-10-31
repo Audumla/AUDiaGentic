@@ -20,6 +20,7 @@ from audiagentic.foundation.components.base import (
     MODE_GENERATED_MANAGED,
     MODE_RUNTIME_ONLY,
 )
+from audiagentic.foundation.paths.names import project_marker_path
 
 DEFAULT_DOC_DIRS: tuple[str, ...] = ("specifications", "implementation", "releases", "decisions")
 
@@ -116,7 +117,7 @@ def ensure_project_layout(target_root: Path) -> None:
     docs_root = target_root / "docs"
     for subdir in DEFAULT_DOC_DIRS:
         (docs_root / subdir).mkdir(parents=True, exist_ok=True)
-    audi_root = target_root / ".audiagentic"
+    audi_root = project_marker_path(target_root)
     audi_root.mkdir(parents=True, exist_ok=True)
     (audi_root / "runtime").mkdir(parents=True, exist_ok=True)
 

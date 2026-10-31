@@ -22,6 +22,7 @@ from audiagentic.components.agents.contracts.worker_protocol import (
     encode_worker_message,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.foundation.paths.names import project_runtime_dir
 from audiagentic.foundation.system.managed_process import process_creation_identity
 
 _MAX_FRAME_CHARS = 8 * 1024 * 1024
@@ -51,7 +52,7 @@ def _provider_activity_path(execution_request: dict[str, object]) -> Path | None
         return None
     try:
         root = Path(root_value).resolve()
-        candidate = (root / ".audiagentic" / "runtime" / "jobs" / job_id / "events.ndjson").resolve()
+        candidate = (project_runtime_dir(root) / "jobs" / job_id / "events.ndjson").resolve()
         if not candidate.is_relative_to(root):
             return None
     except (OSError, RuntimeError, ValueError):

@@ -9,11 +9,12 @@ from typing import Any
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.contracts.schema_registry import validate_with_schema
 from audiagentic.foundation.io import atomic_write_json
+from audiagentic.foundation.paths.names import project_runtime_dir
 from audiagentic.foundation.time import now_iso_z
 
 
 def runtime_catalog_root(project_root: Path) -> Path:
-    return project_root / ".audiagentic" / "runtime" / "providers"
+    return project_runtime_dir(project_root) / "providers"
 
 
 def runtime_catalog_path(project_root: Path, provider_id: str) -> Path:

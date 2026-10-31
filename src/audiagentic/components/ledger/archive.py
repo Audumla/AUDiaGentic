@@ -14,6 +14,7 @@ from audiagentic.components.ledger.paths import (
 from audiagentic.components.ledger.validation import load_persisted_events, validate_release_id
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.io import atomic_write_ndjson, atomic_write_text
+from audiagentic.foundation.paths.names import project_runtime_dir
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +74,7 @@ def _merge_historical_events(
 
 
 def _purge_fragments(project_root: Path, event_ids: set[str]) -> int:
-    fragments_dir = project_root / ".audiagentic" / "runtime" / "ledger" / "fragments"
+    fragments_dir = project_runtime_dir(project_root) / "ledger" / "fragments"
     if not fragments_dir.exists():
         return 0
     removed = 0

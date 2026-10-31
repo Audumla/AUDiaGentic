@@ -9,6 +9,7 @@ import yaml
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.io import atomic_write_text
+from audiagentic.foundation.paths.names import project_marker_path
 
 _ID_RE = re.compile(r"^[a-z][a-z0-9_-]{0,63}$")
 
@@ -23,7 +24,7 @@ def _validate_id(value: str) -> str:
 
 
 def _instructions_dir(root: Path) -> Path:
-    return root / ".audiagentic" / "config" / "project" / "instructions"
+    return project_marker_path(root) / "config" / "project" / "instructions"
 
 
 def _instruction_path(root: Path, item_id: str) -> Path:
@@ -31,7 +32,7 @@ def _instruction_path(root: Path, item_id: str) -> Path:
 
 
 def _skills_dir(root: Path) -> Path:
-    return root / ".audiagentic" / "skills"
+    return project_marker_path(root) / "skills"
 
 
 def _skill_path(root: Path, item_id: str) -> Path:

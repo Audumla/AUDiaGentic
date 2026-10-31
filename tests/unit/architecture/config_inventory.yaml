@@ -68,51 +68,8 @@ env:
 # The configuration core (CFG03): the one sanctioned place that resolves settings paths.
 configuration-core:
   - audiagentic/foundation/config/settings.py
+  - audiagentic/foundation/paths/names.py  # the path service: the one owner of the marker name and the project directories
 
 # Modules that join '.audiagentic' paths themselves instead of using the configuration core.
 path-builders:
-  - audiagentic/commands/launch.py
-  - audiagentic/components/agent_jobs/dead_letter.py
-  - audiagentic/components/agent_jobs/event_triggers.py
-  - audiagentic/components/agent_jobs/prompt_context.py
-  - audiagentic/components/agent_jobs/prompt_launch.py
-  - audiagentic/components/agent_jobs/prompt_templates.py
-  - audiagentic/components/agents/gateway/api.py
-  - audiagentic/components/agents/gateway/queue/worker_host.py
-  - audiagentic/components/agents/work/event_failures.py
-  - audiagentic/components/agents/work/event_observer.py
-  - audiagentic/components/coding_lsp/lsp_session_resolution.py
-  - audiagentic/components/ledger/archive.py
-  - audiagentic/components/ledger/event_outbox.py
-  - audiagentic/components/ledger/ledger_bootstrap.py
-  - audiagentic/components/planning/events.py
-  - audiagentic/components/planning/item_store.py
-  - audiagentic/components/project/project_api.py
-  - audiagentic/components/project/project_files.py
-  - audiagentic/components/project/project_surfaces.py
-  - audiagentic/components/providers/adapters/pi/interactive.py
-  - audiagentic/components/providers/adapters/pi/print_activity.py
-  - audiagentic/components/providers/protocols/streaming/completion.py
-  - audiagentic/components/providers/protocols/streaming/provider_streaming.py
-  - audiagentic/components/providers/services/catalog/models.py
-  - audiagentic/components/providers/services/catalog/source_catalog.py
-  - audiagentic/components/providers/services/config/model_source_config.py
-  - audiagentic/components/providers/services/config/provider_catalog.py
   - audiagentic/components/providers/services/config/provider_config.py
-  - audiagentic/components/providers/services/execution/prompt_syntax.py
-  - audiagentic/components/providers/skill_surfaces.py
-  - audiagentic/components/providers/surfaces/contributions.py
-  - audiagentic/components/release/github_auth.py
-  - audiagentic/foundation/config/layers.py
-  - audiagentic/foundation/event/event_config.py
-  - audiagentic/foundation/lifecycle/baseline_sync.py
-  - audiagentic/foundation/lifecycle/detector.py
-  - audiagentic/foundation/lifecycle/uninstall.py
-  - audiagentic/foundation/logging/config.py
-  - audiagentic/foundation/paths/component_paths.py
-  - audiagentic/foundation/paths/names.py
-  - audiagentic/foundation/system/browser_manager.py
-  - audiagentic/foundation/toolchains/config/artifact_registry.py
-  - audiagentic/foundation/toolchains/config/managed_config.py
-  - audiagentic/foundation/toolchains/recipe_catalogue.py
-  - audiagentic/runtime/harness/run_common.py

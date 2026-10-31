@@ -15,6 +15,7 @@ from audiagentic.foundation.lifecycle.baseline_sync import (
 )
 from audiagentic.foundation.lifecycle.components import DEFAULT_VERSION
 from audiagentic.foundation.lifecycle.detector import detect_installed_state
+from audiagentic.foundation.paths.names import project_marker_path
 from audiagentic.foundation.paths.package import REPO_ROOT
 from audiagentic.foundation.time import now_iso_z
 
@@ -27,7 +28,7 @@ def bootstrap_ledger(project_root: Path) -> dict[str, Any]:
     created_files_raw = sync_report.get("created-files", [])
     created_files: list[str] = list(created_files_raw) if isinstance(created_files_raw, (list, tuple)) else []
 
-    marker_path = project_root / ".audiagentic" / "components" / "project.yaml"
+    marker_path = project_marker_path(project_root) / "components" / "project.yaml"
     current_marker: dict[str, Any] | None = None
     if marker_path.exists():
         current_marker = load_yaml_file(marker_path)

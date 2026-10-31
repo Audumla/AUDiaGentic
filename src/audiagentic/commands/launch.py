@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from audiagentic.foundation.cli_io import print_error
+from audiagentic.foundation.paths.names import project_runtime_dir
 
 if TYPE_CHECKING:
     from audiagentic.runtime.harness import RunnerParams
@@ -22,7 +23,7 @@ def _status(msg: str) -> None:
 
 
 def _provider_reconcile_stamp_path(project_root: Path) -> Path:
-    return project_root / ".audiagentic" / "runtime" / "providers" / "launch-reconciled"
+    return project_runtime_dir(project_root) / "providers" / "launch-reconciled"
 
 
 def _should_reconcile_providers_on_launch(project_root: Path) -> bool:

@@ -21,6 +21,7 @@ from audiagentic.components.providers.contracts.model_projection import (
     ModelProjectionRequest,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error_factory
+from audiagentic.foundation.paths.names import project_runtime_dir
 from audiagentic.foundation.toolchains.config.managed_config import (
     ManagedFragmentRegistry,
     resolve_managed_config_path,
@@ -209,7 +210,7 @@ def build_model_projection_request(
 
 
 def _model_config_timeline_path(project_root: Path) -> Path:
-    return project_root / ".audiagentic" / "runtime" / "providers" / "model-config-timeline.jsonl"
+    return project_runtime_dir(project_root) / "providers" / "model-config-timeline.jsonl"
 
 
 def record_model_config_timeline(

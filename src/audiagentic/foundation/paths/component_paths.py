@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from audiagentic.foundation.contracts.errors import make_error
+from audiagentic.foundation.paths.names import project_marker_path
 from audiagentic.foundation.paths.safety import ensure_contained
 
 logger = logging.getLogger(__name__)
@@ -49,7 +50,7 @@ def _implementation_paths(project_root: Path, component_id: str) -> dict[str, st
 
 def _component_config_paths(project_root: Path, component_id: str) -> dict[str, str] | None:
     """Return the installed component config's paths block, if any."""
-    config_path = project_root / ".audiagentic" / "components" / f"{component_id}.yaml"
+    config_path = project_marker_path(project_root) / "components" / f"{component_id}.yaml"
     if not config_path.exists():
         return None
     try:

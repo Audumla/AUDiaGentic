@@ -6,6 +6,7 @@ from typing import Any
 
 from audiagentic.foundation.contracts.errors import make_error_factory
 from audiagentic.foundation.paths.home import audiagentic_home
+from audiagentic.foundation.paths.names import project_marker_path
 from audiagentic.foundation.paths.resolution import load_layered_mapping
 
 _config_error = make_error_factory("CFG", "CONF", "config")
@@ -29,7 +30,7 @@ def load_layered_config(
     project_local_path: Path | None = None
     if project_root is not None:
         project_local_path = (
-            project_root / ".audiagentic" / "config" / f"{namespace}.yaml"
+            project_marker_path(project_root) / "config" / f"{namespace}.yaml"
         )
 
     return load_layered_mapping(

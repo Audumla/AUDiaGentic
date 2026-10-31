@@ -30,6 +30,7 @@ from audiagentic.foundation.logging.formatters import (
     _DevFormatter,
     _SafeTimedRotatingFileHandler,
 )
+from audiagentic.foundation.paths.names import project_marker_path
 
 _logger = logging.getLogger(__name__)
 _configured = False
@@ -228,7 +229,7 @@ def load_logging_config(project_root: Path | None = None) -> LoggingConfig:
 
     # Tier 4: machine-local override
     if resolved_root is not None:
-        local_path = resolved_root / ".audiagentic" / "config" / "foundation" / "logging.local.yaml"
+        local_path = project_marker_path(resolved_root) / "config" / "foundation" / "logging.local.yaml"
         if local_path.exists():
             try:
                 from audiagentic.foundation.io import load_yaml_file
