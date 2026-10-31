@@ -1,7 +1,7 @@
 """AI communication audit logger.
 
 Captures incoming prompts, model reasoning, and outgoing responses as JSONL
-when AUDIAGENTIC_AI_AUDIT=on (or ai_audit.enabled: true in logging config).
+when ai_audit.enabled is true in the logging settings.
 Off by default — log() is a no-op with zero overhead when disabled.
 
 Usage:

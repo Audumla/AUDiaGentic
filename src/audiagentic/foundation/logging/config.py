@@ -1,16 +1,11 @@
 """Central logging configuration for AUDiaGentic.
 
 Provides configure_logging() — the single entry point for stdlib logging setup.
-Uses the layered config system (runtime/config/layered.py) with namespace
-'foundation/logging', then applies a fourth machine-local tier and env var
-overrides on top.
-
-Tier precedence (lowest → highest):
-  1. src/audiagentic/config/provisioning/foundation/logging.yaml  (package default)
-  2. ~/.audiagentic/config/foundation/logging.yaml                (user-global)
-  3. <project>/.audiagentic/config/foundation/logging.yaml        (project, committed)
-  4. <project>/.audiagentic/config/foundation/logging.local.yaml  (machine-local, gitignored)
-  5. Env vars                                                      (always wins)
+The ``logging`` section of the resolved settings (packaged defaults in the vendor settings, then
+the user and project settings) is the configuration; ``audiagentic config show logging --origin``
+explains each value. ``AUDIAGENTIC_LOG_LEVEL`` is the one documented diagnostic override and always
+wins. Two lists are additive, so a scope can add entries but never drop a packaged one (a redaction
+default must not vanish by accident): ``silenced`` and ``ai_audit.redact_patterns``.
 """
 from __future__ import annotations
 
@@ -30,28 +25,10 @@ from audiagentic.foundation.logging.formatters import (
     _DevFormatter,
     _SafeTimedRotatingFileHandler,
 )
-from audiagentic.foundation.paths.names import project_marker_path
 
 _logger = logging.getLogger(__name__)
 _configured = False
 _loaded_config: LoggingConfig | None = None
-
-# ---------------------------------------------------------------------------
-# Path resolution
-# ---------------------------------------------------------------------------
-
-def _find_pkg_root() -> Path:
-    from audiagentic.foundation.paths.package import find_package_root
-    return find_package_root(Path(__file__))
-
-_PKG_DEFAULT: Path | None = None
-
-def _pkg_default() -> Path:
-    global _PKG_DEFAULT
-    if _PKG_DEFAULT is None:
-        _PKG_DEFAULT = _find_pkg_root() / "config" / "provisioning" / "foundation" / "logging.yaml"
-    return _PKG_DEFAULT
-
 
 # ---------------------------------------------------------------------------
 # Config dataclass
@@ -87,73 +64,48 @@ class LoggingConfig:
 # Config loading
 # ---------------------------------------------------------------------------
 
-def _deep_merge(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
-    """Deep-merge overlay onto base. Lists are replaced (caller handles silenced union)."""
-    from audiagentic.foundation.config.merge import deep_merge as _shared_deep_merge
-    return _shared_deep_merge(base, overlay)
+def _packaged_logging() -> dict[str, Any]:
+    """The packaged ``logging`` defaults, read straight from the vendor settings file."""
+    from audiagentic.foundation.config.settings import vendor_settings_path
+    from audiagentic.foundation.io import load_yaml_file
+
+    section = load_yaml_file(vendor_settings_path()).get("logging")
+    return section if isinstance(section, dict) else {}
 
 
-def _safe_load_layered(project_root: Path | None) -> dict[str, Any]:
-    """Call load_layered_config, catching malformed YAML/config errors."""
+def _settings_logging(project_root: Path | None) -> dict[str, Any]:
+    """The effective ``logging`` section; the packaged defaults when settings cannot be read."""
     try:
-        from audiagentic.foundation.config import load_layered_config
-        return load_layered_config(
-            pkg_default_path=_pkg_default(),
-            project_root=project_root,
-            namespace="foundation/logging",
+        from audiagentic.foundation.config.settings import resolve_settings_cached
+
+        resolved = (
+            resolve_settings_cached(project_root) if project_root is not None
+            else resolve_settings_cached(machine_only=True)
         )
+        section = resolved.get("logging")
+        return dict(section) if isinstance(section, dict) else {}
     except AudiaGenticError:
         print_error(
-            "[audiagentic] WARNING: logging config malformed in one of the config tiers,"
-            " falling back to package defaults"
+            "[audiagentic] WARNING: settings are invalid, so logging falls back to its packaged defaults"
         )
-        try:
-            from audiagentic.foundation.io import load_yaml_file
-            return load_yaml_file(_pkg_default())
-        except Exception:
-            return {}
+        return _packaged_logging()
 
 
-def _apply_env_overrides(raw: dict[str, Any]) -> dict[str, Any]:
-    """Apply env var overrides to the raw merged dict (mutates in place, returns it)."""
-    log = raw.setdefault("logging", {})
+def _union(*lists: Any) -> list[str]:
+    return list(dict.fromkeys(str(item) for items in lists for item in (items or [])))
 
+
+def _apply_env_override(log: dict[str, Any]) -> dict[str, Any]:
+    """``AUDIAGENTIC_LOG_LEVEL``: the documented diagnostic override; everything else is a setting."""
     if val := os.environ.get("AUDIAGENTIC_LOG_LEVEL"):
         log["level"] = val
-    if val := os.environ.get("AUDIAGENTIC_LOG_FORMAT"):
-        log["format"] = val
-    if val := os.environ.get("AUDIAGENTIC_LOG_CONSOLE"):
-        log["console"] = val.lower() not in ("0", "false", "off", "no")
-    if val := os.environ.get("AUDIAGENTIC_LOG_DIR"):
-        log["dir"] = val
-
-    diag = log.setdefault("diagnostic", {})
-    if val := os.environ.get("AUDIAGENTIC_LOG_BACKUP_COUNT"):
-        try:
-            diag["backup_count"] = int(val)
-        except ValueError:
-            pass
-
-    audit = log.setdefault("ai_audit", {})
-    if val := os.environ.get("AUDIAGENTIC_AI_AUDIT"):
-        audit["enabled"] = val.lower() in ("1", "true", "on", "yes")
-    if val := os.environ.get("AUDIAGENTIC_AI_AUDIT_LEVEL"):
-        audit["level"] = val
-    if val := os.environ.get("AUDIAGENTIC_AI_AUDIT_REDACT"):
-        audit["redact"] = val.lower() not in ("0", "false", "off", "no")
-
-    return raw
+    return log
 
 
-def _dict_to_config(
-    raw: dict[str, Any],
-    silenced_union: list[str],
-    redact_patterns_union: list[str],
-) -> LoggingConfig:
-    log = raw.get("logging", {})
+def _dict_to_config(log: dict[str, Any]) -> LoggingConfig:
     dir_val = log.get("dir")
-    diag = log.get("diagnostic", {})
-    audit = log.get("ai_audit", {})
+    diag = log.get("diagnostic") or {}
+    audit = log.get("ai_audit") or {}
     return LoggingConfig(
         level=str(log.get("level", "INFO")).upper(),
         format=str(log.get("format", "json")).lower(),
@@ -167,10 +119,10 @@ def _dict_to_config(
             level=str(audit.get("level", "full")),
             redact=bool(audit.get("redact", True)),
             backup_count=int(audit.get("backup_count", 7)),
-            redact_patterns=redact_patterns_union,
+            redact_patterns=list(audit.get("redact_patterns") or []),
         ),
-        loggers={str(k): str(v) for k, v in log.get("loggers", {}).items()},
-        silenced=silenced_union,
+        loggers={str(k): str(v) for k, v in (log.get("loggers") or {}).items()},
+        silenced=list(log.get("silenced") or []),
     )
 
 
@@ -200,60 +152,15 @@ def load_logging_config(project_root: Path | None = None) -> LoggingConfig:
         return _loaded_config
 
     resolved_root = _resolve_project_root(project_root)
-
-    # Load pkg default lists separately — load_layered_config replaces lists entirely,
-    # so we capture the base values before they are overwritten by project config.
-    try:
-        from audiagentic.foundation.io import load_yaml_file as _lyf
-        _pkg_raw = _lyf(_pkg_default()).get("logging", {})
-        _pkg_silenced: list[str] = list(_pkg_raw.get("silenced", []))
-        _pkg_redact_patterns: list[str] = list(
-            _pkg_raw.get("ai_audit", {}).get("redact_patterns", [])
-        )
-    except Exception:
-        _pkg_silenced = []
-        _pkg_redact_patterns = []
-
-    # Tiers 1-3 via load_layered_config
-    raw = _safe_load_layered(resolved_root)
-
-    # Both silenced and redact_patterns are additive — start with pkg defaults.
-    silenced_sets: list[list[str]] = [
-        _pkg_silenced,
-        list(raw.get("logging", {}).get("silenced", [])),
-    ]
-    redact_patterns_sets: list[list[str]] = [
-        _pkg_redact_patterns,
-        list(raw.get("logging", {}).get("ai_audit", {}).get("redact_patterns", [])),
-    ]
-
-    # Tier 4: machine-local override
-    if resolved_root is not None:
-        local_path = project_marker_path(resolved_root) / "config" / "foundation" / "logging.local.yaml"
-        if local_path.exists():
-            try:
-                from audiagentic.foundation.io import load_yaml_file
-                local = load_yaml_file(local_path)
-                silenced_sets.append(list(local.get("logging", {}).get("silenced", [])))
-                redact_patterns_sets.append(
-                    list(local.get("logging", {}).get("ai_audit", {}).get("redact_patterns", []))
-                )
-                raw = _deep_merge(raw, local)
-            except AudiaGenticError:
-                print_error(
-                    f"[audiagentic] WARNING: {local_path} is malformed, skipping"
-                )
-
-    # Tier 5: env vars
-    raw = _apply_env_overrides(raw)
-
-    def _union(sets: list[list[str]]) -> list[str]:
-        return list(dict.fromkeys(s for tier in sets for s in tier))
-
-    silenced_union = _union(silenced_sets)
-    redact_patterns_union = _union(redact_patterns_sets)
-
-    cfg = _dict_to_config(raw, silenced_union, redact_patterns_union)
+    log = _apply_env_override(_settings_logging(resolved_root))
+    packaged = _packaged_logging()
+    log["silenced"] = _union(packaged.get("silenced"), log.get("silenced"))
+    audit = dict(log.get("ai_audit") or {})
+    audit["redact_patterns"] = _union(
+        (packaged.get("ai_audit") or {}).get("redact_patterns"), audit.get("redact_patterns"),
+    )
+    log["ai_audit"] = audit
+    cfg = _dict_to_config(log)
     _loaded_config = cfg
 
     _logger.debug(

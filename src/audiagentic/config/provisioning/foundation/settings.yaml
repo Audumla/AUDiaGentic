@@ -1,3 +1,38 @@
 # Packaged defaults (vendor scope). Never copied: user and project settings
 # override only the keys they change. See docs/design/configuration-model.md.
 schema_version: 1
+
+logging:
+  level: INFO              # DEBUG | INFO | WARNING | ERROR | CRITICAL; AUDIAGENTIC_LOG_LEVEL overrides it
+  format: json             # json | dev | console
+  console: true            # false = suppress the stderr handler (logs go to the file only; needs dir)
+  # dir: /path             # unset = stderr only; a path writes a rotating diagnostic.log there
+
+  diagnostic:
+    backup_count: 30       # days of daily-rotated log files to keep
+
+  ai_audit:
+    enabled: false         # off by default: zero overhead when disabled
+    level: full            # full | summary | metadata_only
+    redact: true           # strip API keys, bearer tokens and email addresses from the audit log
+    backup_count: 7        # days
+    # Regex patterns applied to audit content when redact is true. A scope that sets this list ADDS
+    # to these; a packaged pattern cannot be dropped.
+    redact_patterns:
+      - 'Bearer\s+\S+'
+      - '\bsk-[A-Za-z0-9_\-]{10,}\b'
+      - '\bghp_[A-Za-z0-9_]{10,}\b'
+      - '\bgho_[A-Za-z0-9_]{10,}\b'
+      - '\bxoxb-[A-Za-z0-9\-]+'
+      - '[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}'
+
+  # Per-logger level overrides, merged per key across scopes, for example:
+  #   audiagentic.components.providers: DEBUG
+  loggers: {}
+
+  # Loggers forced to WARNING regardless of the root level. A scope that sets this list ADDS to it.
+  silenced:
+    - mcp
+    - asyncio
+    - httpx
+    - urllib3
