@@ -6,10 +6,6 @@ import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import yaml
-
-from audiagentic.foundation.paths.names import project_marker_path
-
 logger = logging.getLogger(__name__)
 
 
@@ -58,40 +54,40 @@ class EventLayerConfig:
 
 
 def load_event_config(root: Path | None = None) -> EventLayerConfig:
-    """Load event-layer settings from `.audiagentic/event/config.yaml`."""
+    """Load event-layer settings from the ``events`` section of the resolved settings."""
     if root is None:
         root = _find_event_root()
 
-    config_path = project_marker_path(root) / "event" / "config.yaml"
+    try:
+        from audiagentic.foundation.config.settings import resolve_settings_cached
 
-    if config_path.exists():
-        try:
-            with open(config_path, encoding="utf-8") as f:
-                data = yaml.safe_load(f) or {}
-
-            return EventLayerConfig(
-                root=root,
-                event_store=EventStoreSettings(
-                    enabled=data.get("runtime", {}).get("event_store", {}).get("enabled", True),
-                    path=data.get("runtime", {}).get("event_store", {}).get("path", "runtime/foundation/events"),
-                    retention_days=data.get("runtime", {}).get("event_store", {}).get("retention_days", 365),
+        data = resolve_settings_cached(root).get("events") or {}
+        store = data.get("event_store") or {}
+        cycle = data.get("cycle_detection") or {}
+        replay = data.get("replay") or {}
+        defaults = EventLayerConfig()
+        return EventLayerConfig(
+            root=root,
+            event_store=EventStoreSettings(
+                enabled=store.get("enabled", defaults.event_store.enabled),
+                path=store.get("path", defaults.event_store.path),
+                retention_days=store.get("retention_days", defaults.event_store.retention_days),
+            ),
+            cycle_detection=EventCycleDetectionSettings(
+                max_depth=cycle.get("max_depth", defaults.cycle_detection.max_depth),
+                correlation_tracking=cycle.get("correlation_tracking", defaults.cycle_detection.correlation_tracking),
+                max_correlation_chains=cycle.get("max_correlation_chains", defaults.cycle_detection.max_correlation_chains),
+                max_events_per_correlation=cycle.get(
+                    "max_events_per_correlation", defaults.cycle_detection.max_events_per_correlation,
                 ),
-                cycle_detection=EventCycleDetectionSettings(
-                    max_depth=data.get("runtime", {}).get("cycle_detection", {}).get("max_depth", 10),
-                    correlation_tracking=data.get("runtime", {}).get("cycle_detection", {}).get("correlation_tracking", True),
-                    max_correlation_chains=data.get("runtime", {}).get("cycle_detection", {}).get("max_correlation_chains", 4096),
-                    max_events_per_correlation=data.get("runtime", {}).get("cycle_detection", {}).get("max_events_per_correlation", 1024),
-                ),
-                replay=EventReplaySettings(
-                    dispatch_on_replay=data.get("runtime", {}).get("replay", {}).get("dispatch_on_replay", False),
-                ),
-            )
-        except Exception:
-            logger.warning("Failed to load config from %s, using defaults", config_path, exc_info=True)
-            return EventLayerConfig(root=root)
-
-    logger.debug("Config file not found at %s, using defaults", config_path)
-    return EventLayerConfig(root=root)
+            ),
+            replay=EventReplaySettings(
+                dispatch_on_replay=replay.get("dispatch_on_replay", defaults.replay.dispatch_on_replay),
+            ),
+        )
+    except Exception:
+        logger.warning("Failed to load event settings for %s, using defaults", root, exc_info=True)
+        return EventLayerConfig(root=root)
 
 
 def _find_event_root() -> Path:

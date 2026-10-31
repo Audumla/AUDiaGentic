@@ -156,6 +156,9 @@ PROVIDER_POLICY = Path(PROJECT_MARKER_NAME) / "config" / "provider-policy.yaml"
 PROJECT_MODEL_SOURCES = Path(PROJECT_MARKER_NAME) / "config" / "model-sources.yaml"
 HARNESS_FILES_DIR = Path(PROJECT_MARKER_NAME) / "config" / "harness"
 LOGGING_FILES_DIR = Path(PROJECT_MARKER_NAME) / "config" / "foundation"
+EVENT_CONFIG = Path(PROJECT_MARKER_NAME) / "event" / "config.yaml"
+EVENT_TRIGGERS = Path(PROJECT_MARKER_NAME) / "config" / "agent-jobs" / "event-triggers.yaml"
+PROMPT_SYNTAX = Path(PROJECT_MARKER_NAME) / "config" / "execution" / "prompt-syntax.yaml"
 DECIDED_KEY = "reconciliation.decided"
 _HARNESS_AG_KEYS = {"endpoint", "smoke", "mcp"}
 
@@ -269,6 +272,36 @@ def _logging_values(
     return found, values
 
 
+def _project_section_files(project_root: Path, unknown: list[str]) -> tuple[list[Path], dict[SettingsPath, Any]]:
+    """Single-file project readers: event layer config, event triggers and the prompt-syntax overlay."""
+    found: list[Path] = []
+    values: dict[SettingsPath, Any] = {}
+    events = project_root / EVENT_CONFIG
+    if events.is_file():
+        found.append(events)
+        data = load_yaml_file(events)
+        for key, value in data.items():
+            if key == "runtime" and isinstance(value, dict):
+                values.update(_leaves(("project", "events"), value))
+            else:
+                unknown.append(f"{events}: {key}")
+    triggers = project_root / EVENT_TRIGGERS
+    if triggers.is_file():
+        found.append(triggers)
+        data = load_yaml_file(triggers)
+        items = data.get("triggers", data.get("event-triggers"))
+        if isinstance(items, list):
+            values[("project", "event-triggers")] = items
+        else:
+            unknown.append(f"{triggers}: no 'triggers' list")
+    syntax = project_root / PROMPT_SYNTAX
+    if syntax.is_file():
+        found.append(syntax)
+        overlay = {k: v for k, v in load_yaml_file(syntax).items() if k != "contract-version"}
+        values.update(_leaves(("project", "prompt-syntax"), overlay))
+    return found, values
+
+
 def _user_model_sources_file() -> Path:
     from audiagentic.foundation.paths.home import audiagentic_home
 
@@ -326,6 +359,9 @@ def plan_provider_config_migration(project_root: Path) -> ProviderConfigPlan:
     )
     sources.extend(logging_files)
     values.update(logging_values)
+    section_files, section_values = _project_section_files(project_root, unknown)
+    sources.extend(section_files)
+    values.update(section_values)
     documents = _scope_documents(project_root)
     conflicts: dict[SettingsPath, tuple[Any, Any]] = {}
     for path, value in values.items():
