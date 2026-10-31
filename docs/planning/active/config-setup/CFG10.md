@@ -64,9 +64,12 @@ Normative spec: docs/design/configuration-model.md (converged 2026-10-28, GPT ro
 
 Phase 2: deferred until needed (see 'Phasing' in docs/design/configuration-model.md).
 
+2026-10-31 slice 1 (rig residue, no legacy path, approved by the user): the harness `rig:` section is now `endpoint:` (url, model, provider) in config/provisioning/harness/ag.yaml. Deleted: local_rig_host, local_rig_port, require_harness_rig_port (replaced by require_harness_endpoint, which validates endpoint.url), AUDIAGENTIC_RIG_HOST, AUDIAGENTIC_RIG_PORT, AUDIAGENTIC_RIG_BASE_URL (three env names out of the config inventory), and the stale rig READMEs. The seeded model source `ag-rig` is now `ag-endpoint` (base-url from endpoint.url, no env override). No fallback reader: a project that still sets `rig:` in .audiagentic/config/harness/ag.yaml is no longer read, and an `ag-rig` entry already written to a project's model sources stays there as an orphan until removed by hand. Remaining behaviour-switch variables for later slices: AUDIAGENTIC_AG_* (base url, model, provider, enable_mcp), AUDIAGENTIC_AI_AUDIT*, AUDIAGENTIC_LOG_*, AUDIAGENTIC_LOCALE, AUDIAGENTIC_GATEWAY_PORT, AUDIAGENTIC_AUTO_UPDATE_ENABLED, AUDIAGENTIC_LOCAL_PROVIDER_BASE_URL, AUDIAGENTIC_RECONCILE_PROVIDERS_ON_LAUNCH, AUDIAGENTIC_STARTUP_STATUS. CFG10 stays pending: the design gates the full reduction on every entrypoint using the resolver (CFG09).
+
 ## Change Log
 
 - 2026-10-28T21:06:02.889937+00:00 (created-by): Created by claude
 - 2026-10-28T21:06:05.222566+00:00 (updated-by): Updated: section:description, section:steps, section:acceptance_criteria, section:notes
 - 2026-10-28T21:21:50.653458+00:00 (updated-by): Updated: section:notes
 - 2026-10-28T22:07:05.424881+00:00 (updated-by): Updated: section:notes
+- 2026-10-31T02:25:32.424561+00:00 (updated-by): Updated: section:notes

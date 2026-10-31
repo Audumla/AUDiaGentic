@@ -181,7 +181,7 @@ def _write_harness_config(project_root: Path, provider_id: str) -> None:
         yaml.safe_dump(
             {
                 "harness": {"type": provider_id},
-                "rig": {"port": _RIG_PORT, "model": _MODEL_ID, "provider": _VENDOR_ID},
+                "endpoint": {"url": f"http://127.0.0.1:{_RIG_PORT}/v1", "model": _MODEL_ID, "provider": _VENDOR_ID},
                 "mcp": {"enabled": False},
                 "smoke": {"timeout": 60},
             },

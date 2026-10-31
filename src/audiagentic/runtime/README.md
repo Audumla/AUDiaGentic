@@ -9,7 +9,7 @@ This layer owns code that turns packaged defaults plus installed components into
 ## Owns
 
 - harness materialization, reload markers, system prompt assembly, and MCP config writes
-- rig launch/reuse/probing for embedded and external backends
+- probing the external OpenAI-compatible model server the harness uses
 - read-only runtime environment facts (platform, process identity, live paths)
 - package update detection and update prompts
 
@@ -17,7 +17,6 @@ This layer owns code that turns packaged defaults plus installed components into
 
 - `build/` build-time helpers
 - `harness/` agent-facing runtime files, prompt assembly, and harness-specific adapters
-- `rig/` model backend launch, registry, and HTTP probes
 - `system/` read-only environment facts — importable from any layer
 - `update/` version checks and update workflow helpers
 

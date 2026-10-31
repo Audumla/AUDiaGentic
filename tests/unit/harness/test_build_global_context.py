@@ -18,11 +18,9 @@ def _patch_common(monkeypatch: pytest.MonkeyPatch, *, harness_available: bool = 
     )
     monkeypatch.setattr(
         "audiagentic.runtime.harness.config.load_harness_config",
-        lambda project_root=None: {"rig": {"model": "qwen3.5-0.8b", "provider": "audiagentic", "port": 42001}},
+        lambda project_root=None: {"endpoint": {"model": "qwen3.5-0.8b", "provider": "audiagentic", "url": "http://127.0.0.1:42001/v1"}},
     )
-    monkeypatch.setattr("audiagentic.runtime.harness.config.require_harness_rig_port", lambda harness_cfg: 42001)
     monkeypatch.setattr("audiagentic.runtime.harness.config.require_harness_provider", lambda harness_cfg: "audiagentic")
-    monkeypatch.setattr("audiagentic.foundation.config.local_runtime.local_rig_host", lambda: "127.0.0.1")
     monkeypatch.delenv("AUDIAGENTIC_AG_BASE_URL", raising=False)
     monkeypatch.delenv("AUDIAGENTIC_AG_MODEL", raising=False)
 
@@ -73,7 +71,7 @@ def test_opencode_context_matches_pi_shape(tmp_path: Path, monkeypatch: pytest.M
     assert (opencode.provider, opencode.model, opencode.endpoint) == (pi.provider, pi.model, pi.endpoint)
 
 
-def test_the_environment_endpoint_wins_over_the_configured_host_and_port(
+def test_the_environment_endpoint_wins_over_the_configured_url(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     asked = _patch_common(monkeypatch)
@@ -108,7 +106,7 @@ def test_the_model_the_server_reports_replaces_the_requested_one(
 def test_missing_model_raises_canonical_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_common(monkeypatch)
     monkeypatch.setattr(
-        "audiagentic.runtime.harness.config.load_harness_config", lambda project_root=None: {"rig": {}},
+        "audiagentic.runtime.harness.config.load_harness_config", lambda project_root=None: {"endpoint": {}},
     )
 
     with pytest.raises(AudiaGenticError) as excinfo:

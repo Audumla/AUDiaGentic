@@ -490,7 +490,7 @@ def materialize_provider_config(
     Args:
         project_root: Project root for component discovery and surface apply.
         provider_id: Canonical provider identifier ("pi", "opencode").
-        harness_cfg: Harness config dict (rig.model, rig.port, rig.provider).
+        harness_cfg: Harness config dict (endpoint.url, endpoint.model, endpoint.provider).
         agent_runtime: Target directory for agent files (harness runtime root).
             Used by Pi which writes to a global harness runtime; ignored by
             OpenCode which writes project-local files.

@@ -28,9 +28,9 @@ from audiagentic.components.providers import providers_api
 def _harness_cfg() -> dict:
     """Minimal harness config sufficient for both Pi and OpenCode materialize."""
     return {
-        "rig": {
+        "endpoint": {
             "model": "qwen3.5-0.8b",
-            "port": 42001,
+            "url": "http://127.0.0.1:42001/v1",
             "provider": "audiagentic",
         }
     }

@@ -25,9 +25,6 @@ env:
     - AUDIAGENTIC_LOG_FORMAT
     - AUDIAGENTIC_LOG_LEVEL
     - AUDIAGENTIC_RECONCILE_PROVIDERS_ON_LAUNCH
-    - AUDIAGENTIC_RIG_BASE_URL
-    - AUDIAGENTIC_RIG_HOST
-    - AUDIAGENTIC_RIG_PORT
     - AUDIAGENTIC_STARTUP_STATUS
   # Process wiring and credential references; candidates for the small public allowlist (CFG10). ROOT duplicates REPO_ROOT.
   deployment:
