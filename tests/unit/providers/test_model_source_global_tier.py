@@ -17,7 +17,6 @@ from audiagentic.components.providers.services.config.model_source_config import
     load_model_sources,
     load_resolved_model_sources,
     load_user_global_model_sources,
-    user_global_model_sources_path,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
@@ -27,6 +26,8 @@ def audiagentic_home_dir(tmp_path: Path, monkeypatch) -> Path:
     home = tmp_path / "home"
     home.mkdir()
     monkeypatch.setenv("AUDIAGENTIC_HOME", str(home))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg-config"))
+    monkeypatch.delenv("AUDIAGENTIC_CONFIG", raising=False)
     return home
 
 
@@ -69,7 +70,7 @@ def test_add_global_writes_user_global_file_only(
     result = providers_api.model_source_add_global("m27b1", _local_gpu())
     assert result["ok"] is True
 
-    assert user_global_model_sources_path().exists()
+    assert (tmp_path / "xdg-config" / "audiagentic" / "settings.yaml").exists()
     assert "m27b1" in load_user_global_model_sources()["sources"]
     # Project-local file must not exist -- nothing was written there.
     assert load_model_sources(project_root) == {"contract-version": "v1", "sources": {}}

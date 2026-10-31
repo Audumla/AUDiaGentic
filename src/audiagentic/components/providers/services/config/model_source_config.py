@@ -1,65 +1,45 @@
 """Canonical load/validate/write API for the model-sources contract.
 
-Persisted file contract (MO01 step 9): ``{contract-version: v1, sources:
-{<source-id>: <source>}}``, at two independent tiers:
+Model sources are the ``model-sources`` section of the settings files, keyed by source id, at two
+independent scopes:
 
-- **project-local** (``.audiagentic/config/model-sources.yaml``) — the
-  original, unchanged contract. Remote-account sources with project-specific
+- **project** (``.audiagentic/settings.yaml``): remote-account sources with project-specific
   credentials belong here.
-- **user-global** (``audiagentic_home()/config/model-sources.yaml``, AS105/
-  AS101) — shared local-endpoint sources (concurrency, resource-id) that
-  describe machine-wide hardware, declared once rather than copied into
-  every project.
+- **user** (the user settings file): shared local-endpoint sources (concurrency, resource-id)
+  that describe machine-wide hardware, declared once rather than copied into every project.
 
-``load_model_sources``/``write_model_sources`` are **project-local only,
-unchanged** — every existing caller (model_source_add/update/remove/
-set_enabled's read-modify-write cycle) keeps its exact current behaviour,
-with zero risk of accidentally copying inherited global sources into a
-project's own file. ``load_resolved_model_sources`` is the new merged view
-(deep-merge of both tiers) for consumers that need the full picture, e.g.
-actual provider dispatch/launch resolution -- never for round-tripping a
-mutation.
+The functions keep the document shape ``{contract-version: v1, sources: {<source-id>: <source>}}``.
+``load_model_sources``/``write_model_sources`` read and write the **project scope only**, so a
+read-modify-write cycle can never copy an inherited user source into a project's file.
+``load_resolved_model_sources`` is the merged view (user plus project) for consumers that need what
+a source actually resolves to, such as provider dispatch; never for round-tripping a mutation.
 
-The schema (``contracts/model-sources.schema.json``) is intentionally
-component-only — not mirrored into ``foundation/contracts/schemas`` — because
-no foundation consumer exists yet (MO01 step 11). Validation therefore reads
-the schema file directly rather than going through
-``foundation.contracts.schema_registry``, which only resolves schemas already
-mirrored there.
+The document schema (``contracts/model-sources.schema.json``) validates what these functions
+accept and return; the settings section schema is the same ``source`` definition, and a test keeps
+the two identical.
 """
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
 from jsonschema import Draft202012Validator
 
+from audiagentic.foundation.config.settings import resolve_settings_cached
+from audiagentic.foundation.config.writer import read_scope_settings, replace_section
 from audiagentic.foundation.contracts.errors import make_error_factory
-from audiagentic.foundation.io import load_yaml_value, save_yaml_file
-from audiagentic.foundation.paths.home import audiagentic_home
-from audiagentic.foundation.paths.names import MARKER_RELATIVE
 
 _model_sources_error = make_error_factory("VAL", "MEP", "providers")
 
 _CONTRACT_VERSION = "v1"
+SECTION = "model-sources"
 _SCHEMA_PATH = Path(__file__).resolve().parents[2] / "contracts" / "model-sources.schema.json"
-_RELATIVE_CONFIG_PATH = MARKER_RELATIVE / "config" / "model-sources.yaml"
-# Colocated with the schema, not under config/providers/ -- that directory
-# is auto-globbed as provider descriptors by
-# components/providers/adapters/__init__.py, and this file is not one.
-_PKG_DEFAULT_PATH = (
-    Path(__file__).resolve().parents[2] / "contracts" / "model-sources-default.yaml"
-)
 
 
 def _schema() -> dict[str, Any]:
     return json.loads(_SCHEMA_PATH.read_text(encoding="utf-8"))
-
-
-def model_sources_path(project_root: Path) -> Path:
-    """Resolve the canonical model-sources.yaml path for *project_root*."""
-    return project_root / _RELATIVE_CONFIG_PATH
 
 
 def validate_model_sources(payload: Any) -> list[str]:
@@ -68,122 +48,53 @@ def validate_model_sources(payload: Any) -> list[str]:
     return sorted(error.message for error in validator.iter_errors(payload))
 
 
-def _empty_document() -> dict[str, Any]:
-    return {"contract-version": _CONTRACT_VERSION, "sources": {}}
+def _document(sources: Any) -> dict[str, Any]:
+    return {"contract-version": _CONTRACT_VERSION, "sources": deepcopy(sources) if isinstance(sources, dict) else {}}
+
+
+def _load(scope: str, project_root: Path | None, what: str) -> dict[str, Any]:
+    document = _document(read_scope_settings(scope, project_root=project_root).get(SECTION))
+    issues = validate_model_sources(document)
+    if issues:
+        raise _model_sources_error(1, f"{what} model-sources failed schema validation", issues=issues)
+    return document
+
+
+def _write(scope: str, project_root: Path | None, payload: dict[str, Any], what: str) -> None:
+    issues = validate_model_sources(payload)
+    if issues:
+        raise _model_sources_error(1, f"{what} model-sources failed schema validation", issues=issues)
+    replace_section(scope, SECTION, payload["sources"], project_root=project_root)
 
 
 def load_model_sources(project_root: Path) -> dict[str, Any]:
-    """Load and validate the project's model-sources document.
-
-    A missing file returns an empty valid v1 document. A malformed or
-    schema-invalid file raises ``VAL-MEP-001`` — never silently substitutes
-    an empty document for content that exists but is broken.
-    """
-    path = model_sources_path(project_root)
-    if not path.exists():
-        return _empty_document()
-
-    payload = load_yaml_value(path, default=None)
-    if payload is None:
-        return _empty_document()
-
-    issues = validate_model_sources(payload)
-    if issues:
-        raise _model_sources_error(
-            1,
-            "model-sources.yaml failed schema validation",
-            path=str(path),
-            issues=issues,
-        )
-    return payload
+    """The project scope's model-sources document; an absent section is an empty valid document."""
+    return _load("project", project_root, "project")
 
 
 def write_model_sources(project_root: Path, payload: dict[str, Any]) -> None:
-    """Validate and atomically write the project's model-sources document."""
-    issues = validate_model_sources(payload)
-    if issues:
-        raise _model_sources_error(
-            1,
-            "model-sources.yaml failed schema validation",
-            issues=issues,
-        )
-    save_yaml_file(model_sources_path(project_root), payload, atomic=True)
-
-
-# ── User-global tier (AS105/AS101) — shared local-endpoint sources ────────
-
-
-def user_global_model_sources_path() -> Path:
-    """Resolve the user-global model-sources.yaml path.
-
-    Machine-wide, not project-scoped: describes shared hardware (a local
-    endpoint's connectivity and concurrency), not one project's intent.
-    """
-    return audiagentic_home() / "config" / "model-sources.yaml"
+    """Validate the document and make the project scope's section exactly its sources."""
+    _write("project", project_root, payload, "project")
 
 
 def load_user_global_model_sources() -> dict[str, Any]:
-    """Load and validate the user-global model-sources document.
-
-    A missing file returns an empty valid v1 document. Raises
-    ``VAL-MEP-001`` on a malformed or schema-invalid file.
-    """
-    path = user_global_model_sources_path()
-    if not path.exists():
-        return _empty_document()
-
-    payload = load_yaml_value(path, default=None)
-    if payload is None:
-        return _empty_document()
-
-    issues = validate_model_sources(payload)
-    if issues:
-        raise _model_sources_error(
-            1,
-            "user-global model-sources.yaml failed schema validation",
-            path=str(path),
-            issues=issues,
-        )
-    return payload
+    """The user scope's model-sources document (machine-wide sources)."""
+    return _load("user", None, "user")
 
 
 def write_user_global_model_sources(payload: dict[str, Any]) -> None:
-    """Validate and atomically write the user-global model-sources document."""
-    issues = validate_model_sources(payload)
-    if issues:
-        raise _model_sources_error(
-            1,
-            "user-global model-sources.yaml failed schema validation",
-            issues=issues,
-        )
-    save_yaml_file(user_global_model_sources_path(), payload, atomic=True)
+    _write("user", None, payload, "user")
 
 
 def load_resolved_model_sources(project_root: Path) -> dict[str, Any]:
-    """Return the deep-merged view: user-global sources plus this project's
-    own local sources, keyed by source-id.
-
-    For consumers that need the full picture a source actually resolves to
-    (e.g. provider dispatch/launch) — never for round-tripping a mutation.
-    ``load_model_sources``/``write_model_sources`` stay project-local only
-    and unchanged; mutating through the merged view would silently copy
-    inherited global sources into the project's own file.
-    """
-    from audiagentic.foundation.config.layers import load_layered_config
-
-    return load_layered_config(
-        pkg_default_path=_PKG_DEFAULT_PATH,
-        project_root=project_root,
-        namespace="model-sources",
-    )
+    """The merged view: user sources plus this project's own, keyed by source id."""
+    return _document(resolve_settings_cached(project_root).get(SECTION))
 
 
 __all__ = [
     "load_model_sources",
     "load_resolved_model_sources",
     "load_user_global_model_sources",
-    "model_sources_path",
-    "user_global_model_sources_path",
     "validate_model_sources",
     "write_model_sources",
     "write_user_global_model_sources",

@@ -151,7 +151,7 @@ required = [
     ("audiagentic.components.planning", "workflows.yaml"),
     ("audiagentic.components.agent_jobs", "workflows.yaml"),
     ("audiagentic.components.providers.adapters.gpt_auto", "gpt-auto-defaults.yaml"),
-    ("audiagentic.components.providers.contracts", "model-sources-default.yaml"),
+    ("audiagentic.components.providers.contracts", "model-sources.schema.json"),
     ("audiagentic.components.ledger.contracts", "change-event.schema.json"),
     ("audiagentic.components.agent_jobs.contracts", "job-record.schema.json"),
 ]

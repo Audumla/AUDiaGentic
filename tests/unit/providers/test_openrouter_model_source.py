@@ -257,7 +257,7 @@ def test_secret_ref_not_in_source_config_payload(tmp_path: Path) -> None:
     }
     write_model_sources(tmp_path, payload)
 
-    config_text = (tmp_path / ".audiagentic" / "config" / "model-sources.yaml").read_text(
+    config_text = (tmp_path / ".audiagentic" / "settings.yaml").read_text(
         encoding="utf-8"
     )
     assert "env:OPENROUTER_API_KEY" in config_text  # reference name OK

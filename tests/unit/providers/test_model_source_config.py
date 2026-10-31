@@ -6,11 +6,20 @@ import pytest
 
 from audiagentic.components.providers.services.config.model_source_config import (
     load_model_sources,
-    model_sources_path,
     validate_model_sources,
     write_model_sources,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+
+@pytest.fixture(autouse=True)
+def _isolated_user_scope(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg-config"))
+    monkeypatch.delenv("AUDIAGENTIC_CONFIG", raising=False)
+
+
+def _settings_file(root: Path) -> Path:
+    return root / ".audiagentic" / "settings.yaml"
 
 
 def _local_endpoint(**overrides) -> dict:
@@ -116,7 +125,7 @@ def test_missing_file_returns_empty_v1_document(tmp_path: Path) -> None:
 def test_write_then_load_roundtrips(tmp_path: Path) -> None:
     payload = {"contract-version": "v1", "sources": {"a": _local_endpoint()}}
     write_model_sources(tmp_path, payload)
-    assert model_sources_path(tmp_path).exists()
+    assert _settings_file(tmp_path).exists()
     assert load_model_sources(tmp_path) == payload
 
 
@@ -125,16 +134,38 @@ def test_write_rejects_invalid_payload(tmp_path: Path) -> None:
     with pytest.raises(AudiaGenticError) as exc:
         write_model_sources(tmp_path, payload)
     assert exc.value.code == "VAL-MEP-001"
-    assert not model_sources_path(tmp_path).exists()
+    assert not _settings_file(tmp_path).exists()
 
 
-def test_load_malformed_yaml_raises(tmp_path: Path) -> None:
-    path = model_sources_path(tmp_path)
+def test_load_schema_invalid_section_raises(tmp_path: Path) -> None:
+    path = _settings_file(tmp_path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("sources: [not, a, mapping]\ncontract-version: v1\n", encoding="utf-8")
+    path.write_text("schema_version: 1\nmodel-sources:\n  a:\n    source-class: nope\n", encoding="utf-8")
     with pytest.raises(AudiaGenticError) as exc:
         load_model_sources(tmp_path)
     assert exc.value.code == "VAL-MEP-001"
+
+
+def test_write_replaces_the_section_and_removing_the_last_source_removes_it(tmp_path: Path) -> None:
+    write_model_sources(tmp_path, {"contract-version": "v1", "sources": {"a": _local_endpoint(), "b": _remote_account()}})
+    write_model_sources(tmp_path, {"contract-version": "v1", "sources": {"a": _local_endpoint(**{"display-name": "Renamed"})}})
+    document = load_model_sources(tmp_path)
+    assert list(document["sources"]) == ["a"] and document["sources"]["a"]["display-name"] == "Renamed"
+    write_model_sources(tmp_path, {"contract-version": "v1", "sources": {}})
+    assert "model-sources" not in _settings_file(tmp_path).read_text(encoding="utf-8")
+
+
+def test_settings_section_schema_is_the_document_source_definition() -> None:
+    import json
+
+    from audiagentic.components.providers.services.config import model_source_config
+
+    document = json.loads(model_source_config._SCHEMA_PATH.read_text(encoding="utf-8"))
+    section = json.loads(
+        (Path(model_source_config.__file__).resolve().parents[4] / "config" / "components" / "providers"
+         / "settings" / "model-sources.schema.json").read_text(encoding="utf-8")
+    )
+    assert section["additionalProperties"] == document["$defs"]["source"]
 
 
 def test_wrong_contract_version_rejected() -> None:
