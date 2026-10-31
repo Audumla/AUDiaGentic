@@ -123,6 +123,18 @@ The path-builders list in tests/unit/architecture/config_inventory.yaml is empty
 
 Created 2026-10-31 after a GPT on-track review (verdict ADJUST): CFG09 is the critical dependency for closing CFG10 and CFG06; CFG10 completion is gated on this item and resolver coverage across supported entrypoints.
 
+Progress 2026-10-31 (merged unless stated; every move ships `audiagentic config migrate` preview/--apply/--rollback with verified backups and compare-and-swap rollback):
+- Implementation `enabled` flags: the feature shards were gitignored per-host files, so the flag is lifecycle state, now a local observation (#284). `providers.<id>.enabled` stays the user's override; migrate never writes it.
+- Providers: options in `providers.<id>`, reconciliation mode/allowlist in `reconciliation`, install/access modes derived from the descriptor, decisions as local state (#285). Model sources (#287). Harness + Pi (`harness`, #288). Logging (`logging`, #289; `silenced`/`redact_patterns` stay additive so a redaction default cannot be dropped). Launch switches and locale (`launch`, `locale`, #290). Event layer, event triggers, prompt syntax (`events`, `event-triggers`, `prompt-syntax`, #291, in review).
+- Path-builders: the inventory list is empty; `foundation.paths.names` is the path service (#286). `load_layered_config`/`load_layered_mapping` are deleted (#290); composition is a packaged table with no override.
+Remaining, in order:
+1. project.yaml: split into `project.name`, `prompt-launch.allow-adhoc-target`, local-state MCP onboarding bindings; drop the unused constants; replace its use as the "managed project" marker; `.audiagentic/components/*.yaml` markers (lifecycle state).
+2. gpt-auto machine override file (`global_config_dir()/providers/gpt-auto.yaml`) -> user-scope `providers.gpt-auto`.
+3. Component options and feature state still live in the per-component shards (free-form data such as gateway connector selection). Decide per component whether each becomes settings (shared intent) or stays local state; do not move them blindly.
+4. User-project scope with isolation and conflict tests.
+Decisions needed from the user (recommendation first): (a) shared gateway server/node/connector files: RECOMMEND keeping them as separate explicit role documents (like a service unit: operator-authored, strict, security-checked, relative to the file) and amending the spec line; folding them into settings sections would re-implement their credential and loopback validation for little gain. (b) shard options/features: see item 3.
+
 ## Change Log
 
 - 2026-10-31T03:41:56.742276+00:00 (created-by): Created by agent
+- 2026-10-31T07:10:56.461512+00:00 (updated-by): Updated: section:notes

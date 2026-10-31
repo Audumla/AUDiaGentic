@@ -70,6 +70,9 @@ Phase 2: deferred until needed (see 'Phasing' in docs/design/configuration-model
 
 2026-10-31 GPT on-track review (ADJUST). Slices 1 (rig residue) and 2 (AUDIAGENTIC_AG_*) are consistent with the spec: isolated removals are acceptable before CFG09 when they cannot interfere with migration or rollback, but CFG10 stays formally blocked on CFG11 (CFG09 phase 2) and on resolver coverage across every supported entrypoint. Remaining behaviour switches to disposition individually (each must end as an approved public exception, an `_AUDIAGENTIC_` internal, a deployment-only variable, or a settings key; AUDIAGENTIC_LOG_LEVEL stays the documented diagnostic exception): AI_AUDIT*, LOG_*, LOCALE, GATEWAY_PORT, AUTO_UPDATE_ENABLED, LOCAL_PROVIDER_BASE_URL, RECONCILE_PROVIDERS_ON_LAUNCH, STARTUP_STATUS; 6 deployment and 12 internal variables stay classified in config_inventory.yaml. Open check from the review: confirm the layered harness config (package/user/project ag.yaml via load_layered_config) honours the canonical resolver and provenance rules rather than being a separate resolution mechanism; if not, migrate it under CFG11. Logging/audit slices follow the CFG11 provider migration design unless an independently safe slice is ready.
 
+Progress 2026-10-31: slice 3 (#289) removed AUDIAGENTIC_LOG_FORMAT/CONSOLE/DIR/BACKUP_COUNT and AI_AUDIT/_LEVEL/_REDACT (settings `logging`); slice 4 (#290) removed AUTO_UPDATE_ENABLED, STARTUP_STATUS, RECONCILE_PROVIDERS_ON_LAUNCH, LOCALE, LOCAL_PROVIDER_BASE_URL, ROOT and turned GATEWAY_PORT into the internal `_AUDIAGENTIC_GATEWAY_PORT` (settings `launch`, `locale`, provider settings). The harness layered-config risk from the on-track review is closed: harness, logging and composition no longer use a layered loader, which is deleted. Env inventory now: diagnostic (LOG_LEVEL), deployment (11 process-wiring and credential references), internal, test.
+Remaining: a recorded disposition for each of the 11 deployment variables (keep as documented wiring, or fold into settings), a final audit that every entrypoint (CLI, MCP servers, gateway service, node, harness child) resolves settings through the same resolver, and the public allowlist document. Completion stays gated on CFG11.
+
 ## Change Log
 
 - 2026-10-28T21:06:02.889937+00:00 (created-by): Created by claude
@@ -80,3 +83,4 @@ Phase 2: deferred until needed (see 'Phasing' in docs/design/configuration-model
 - 2026-10-31T03:16:24.025032+00:00 (updated-by): Updated: section:notes
 - 2026-10-31T03:33:38.394009+00:00 (updated-by): Updated: section:standards
 - 2026-10-31T03:42:19.336440+00:00 (updated-by): Updated: section:notes
+- 2026-10-31T07:10:58.881871+00:00 (updated-by): Updated: section:notes
