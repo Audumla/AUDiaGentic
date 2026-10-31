@@ -1,4 +1,4 @@
-"""Environment overrides for machine-local runtime settings."""
+"""Machine-local runtime defaults for local providers (the API key still comes from the environment)."""
 from __future__ import annotations
 
 import os
@@ -11,8 +11,8 @@ def _local_config_error(message: str, **details: object) -> AudiaGenticError:
 
 
 def local_provider_base_url(configured: object = None) -> str:
-    """Resolve an explicit provider URL or the machine-local environment fallback."""
-    value = configured or os.environ.get("AUDIAGENTIC_LOCAL_PROVIDER_BASE_URL") or "https://api.openai.com"
+    """Resolve an explicit provider URL (from the provider's settings) or the OpenAI default."""
+    value = configured or "https://api.openai.com"
     value = str(value).strip().rstrip("/")
     if not value.startswith(("http://", "https://")):
         raise _local_config_error("local provider base URL must use http:// or https://", value=value)

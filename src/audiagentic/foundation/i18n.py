@@ -93,11 +93,11 @@ class _I18n:
 
     def initialize(self, config_dirs: list[Path] | None = None) -> None:
         """Load translation catalogs from all component locale directories."""
-        import os
 
+        from audiagentic.foundation.config.launch_settings import locale_setting
         from audiagentic.foundation.paths.names import get_component_config_dirs
 
-        self._default_locale = os.environ.get("AUDIAGENTIC_LOCALE", "en")
+        self._default_locale = locale_setting()
         unique_fallbacks: list[str] = []
         for loc in [self._default_locale, "en"]:
             if loc not in unique_fallbacks:

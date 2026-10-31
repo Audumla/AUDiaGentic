@@ -375,7 +375,11 @@ def _worktree_scoped_wrapper(fn: Any, name: str, *, structured: bool = False) ->
     On a structured-output server the worktree sits beside ``result`` in the
     one structured envelope (``{"result": value, "worktree": ...}``).
     """
-    from audiagentic.foundation.mcp.worktree import WORKTREE_PARAMETER, resolve_worktree, using_worktree
+    from audiagentic.foundation.mcp.worktree import (
+        WORKTREE_PARAMETER,
+        resolve_worktree,
+        using_worktree,
+    )
 
     signature = inspect.signature(fn, eval_str=True)
     if WORKTREE_PARAMETER in signature.parameters:

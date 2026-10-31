@@ -19,8 +19,10 @@ def test_launch_fails_loud_when_config_refresh_fails(tmp_path: Path, monkeypatch
     project = tmp_path / "project"
     project.mkdir()
 
-    monkeypatch.setenv("AUDIAGENTIC_AUTO_UPDATE_ENABLED", "false")
-    monkeypatch.setenv("AUDIAGENTIC_RECONCILE_PROVIDERS_ON_LAUNCH", "never")
+    (project / ".audiagentic").mkdir(exist_ok=True)
+    (project / ".audiagentic" / "settings.yaml").write_text(
+        "schema_version: 1\nlaunch:\n  auto_update: false\n  reconcile_providers: never\n", encoding="utf-8",
+    )
     monkeypatch.setattr(
         "audiagentic.runtime.harness.resolution.harness_cli_available",
         lambda _harness_type: "/usr/bin/pi",
@@ -83,8 +85,10 @@ def test_bootstrap_refresh_launch_and_cleanup_materialize_owned_paths(
     # harness is invoked.  Stub only the external runner boundary. The harness
     # CLI is a system install; stub its presence so this gate is network- and
     # host-independent.
-    monkeypatch.setenv("AUDIAGENTIC_AUTO_UPDATE_ENABLED", "false")
-    monkeypatch.setenv("AUDIAGENTIC_RECONCILE_PROVIDERS_ON_LAUNCH", "never")
+    (project / ".audiagentic").mkdir(exist_ok=True)
+    (project / ".audiagentic" / "settings.yaml").write_text(
+        "schema_version: 1\nlaunch:\n  auto_update: false\n  reconcile_providers: never\n", encoding="utf-8",
+    )
     monkeypatch.setattr(
         "audiagentic.runtime.harness.resolution.harness_cli_available",
         lambda _harness_type: "/usr/bin/pi",

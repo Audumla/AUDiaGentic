@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "settings: launch",
+  "description": "What `audiagentic` does when it launches a harness.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "status": {"type": "boolean", "description": "Print startup status lines to stderr."},
+    "auto_update": {"type": "boolean", "description": "Check for a newer release at launch and offer it."},
+    "reconcile_providers": {
+      "enum": ["auto", "always", "never"],
+      "description": "Whether launch re-detects provider CLIs and applies their enablement: auto does it once per project, always on every launch, never not at all."
+    }
+  }
+}

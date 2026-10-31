@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -13,12 +12,11 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_RECONCILE_PROVIDERS_ENV = "AUDIAGENTIC_RECONCILE_PROVIDERS_ON_LAUNCH"
-
-
 def _status(msg: str) -> None:
-    """Print a startup status line to stderr. Set AUDIAGENTIC_STARTUP_STATUS=0 to suppress."""
-    if os.environ.get("AUDIAGENTIC_STARTUP_STATUS", "1") != "0":
+    """Print a startup status line to stderr unless ``launch.status`` is false."""
+    from audiagentic.foundation.config.launch_settings import launch_setting
+
+    if launch_setting("status"):
         print_error(f"[audiagentic] {msg}")
 
 
@@ -27,10 +25,12 @@ def _provider_reconcile_stamp_path(project_root: Path) -> Path:
 
 
 def _should_reconcile_providers_on_launch(project_root: Path) -> bool:
-    setting = os.environ.get(_RECONCILE_PROVIDERS_ENV, "").strip().lower()
-    if setting in {"0", "false", "no", "never", "off"}:
+    from audiagentic.foundation.config.launch_settings import launch_setting
+
+    mode = launch_setting("reconcile_providers", project_root)
+    if mode == "never":
         return False
-    if setting in {"1", "true", "yes", "always", "on"}:
+    if mode == "always":
         return True
 
     from audiagentic.foundation.features.observations import observed_keys
@@ -73,7 +73,9 @@ def _cmd_launch(project_root: Path, args: list[str], runner_params: RunnerParams
     # Check for updates if auto-update is enabled
     _status("checking for updates...")
     try:
-        if os.environ.get("AUDIAGENTIC_AUTO_UPDATE_ENABLED", "true").lower() == "true":
+        from audiagentic.foundation.config.launch_settings import launch_setting
+
+        if launch_setting("auto_update", project_root):
             from audiagentic.runtime.update.prompt import maybe_prompt_update
             maybe_prompt_update()
     except Exception:
@@ -83,7 +85,7 @@ def _cmd_launch(project_root: Path, args: list[str], runner_params: RunnerParams
     # plus CLI probes only for undecided providers) — independent of the
     # heavier auto-enable/disable stamp gate below, so allowlist/prompt mode
     # catches a newly-installed CLI without the user needing to know about
-    # the stamp file or AUDIAGENTIC_RECONCILE_PROVIDERS_ON_LAUNCH.
+    # the stamp file or launch.reconcile_providers.
     try:
         from audiagentic.components.providers.services.lifecycle.lifecycle import (
             resolve_reconciliation_policy,
@@ -96,7 +98,7 @@ def _cmd_launch(project_root: Path, args: list[str], runner_params: RunnerParams
     # Sync provider enablement with actual host state on first run only.
     # Subsequent reconciliation is internal-only (no public/MCP surface) —
     # rerun by removing the launch-reconciled stamp or setting
-    # AUDIAGENTIC_RECONCILE_PROVIDERS_ON_LAUNCH=1.
+    # launch.reconcile_providers to always.
     try:
         from audiagentic.components.providers.services.lifecycle.lifecycle import (
             reconcile_all_providers,

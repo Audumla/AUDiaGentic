@@ -76,6 +76,5 @@ def build_application_graph(
     """
     resolved = config or load_composition_config(
         pkg_default_path=_pkg_default_path(),
-        project_root=project_root,
     )
     return build_graph(builtin_contributions(), resolved, overrides=overrides)

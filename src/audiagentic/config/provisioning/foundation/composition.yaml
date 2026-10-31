@@ -3,10 +3,8 @@
 # domain data, no secrets, and no Python paths. Code contributes the factories;
 # this file only selects between them by identifier.
 #
-# Override tiers (see foundation/config/layers.py):
-#   package default   this file
-#   user global       ~/.audiagentic/config/composition.yaml
-#   project local     <project>/.audiagentic/config/composition.yaml
+# Packaged wiring only: there is no user or project override; build a different graph by passing a
+# config to the builder.
 composition:
   # Only what the process actually constructs. Adding a root here without a
   # binding below is a build failure, not a silent no-op.

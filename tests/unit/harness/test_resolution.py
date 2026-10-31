@@ -59,8 +59,8 @@ def test_get_harness_type_is_config_order_driven(monkeypatch) -> None:
         facade, "get_harness_type", facade.get_harness_type
     )  # ensure real impl
     monkeypatch.setattr(
-        "audiagentic.foundation.config.load_layered_config",
-        lambda **_kw: {"harness": {"order": ["pi", "opencode"]}},
+        "audiagentic.foundation.config.harness_settings.harness_ag_config",
+        lambda _root=None: {"harness": {"order": ["pi", "opencode"]}},
     )
     monkeypatch.setattr(
         resolution.shutil, "which", lambda name: "/usr/bin/opencode" if name == "opencode" else None
@@ -72,8 +72,8 @@ def test_get_harness_type_pin_overrides_order(monkeypatch) -> None:
     from audiagentic.runtime import harness as facade
 
     monkeypatch.setattr(
-        "audiagentic.foundation.config.load_layered_config",
-        lambda **_kw: {"harness": {"type": "pi", "order": ["opencode"]}},
+        "audiagentic.foundation.config.harness_settings.harness_ag_config",
+        lambda _root=None: {"harness": {"type": "pi", "order": ["opencode"]}},
     )
     # Even with nothing installed, the explicit pin wins.
     monkeypatch.setattr(resolution.shutil, "which", lambda name: None)
@@ -84,8 +84,8 @@ def test_get_harness_type_falls_back_to_first_when_none_installed(monkeypatch) -
     from audiagentic.runtime import harness as facade
 
     monkeypatch.setattr(
-        "audiagentic.foundation.config.load_layered_config",
-        lambda **_kw: {"harness": {"order": ["pi", "opencode"]}},
+        "audiagentic.foundation.config.harness_settings.harness_ag_config",
+        lambda _root=None: {"harness": {"order": ["pi", "opencode"]}},
     )
     monkeypatch.setattr(resolution.shutil, "which", lambda name: None)
     # Nothing installed -> most-preferred configured harness, so config/dispatch

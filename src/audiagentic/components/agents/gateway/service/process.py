@@ -25,7 +25,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     # Provider adapters use this neutral URL contract when they create their
     # dedicated browser-window anchor. The gateway itself remains HTTP-only.
-    os.environ["AUDIAGENTIC_GATEWAY_PORT"] = str(args.port)
+    os.environ["_AUDIAGENTIC_GATEWAY_PORT"] = str(args.port)
     host = GatewayServiceHost.create(
         port=args.port,
         token_path=args.token_file,

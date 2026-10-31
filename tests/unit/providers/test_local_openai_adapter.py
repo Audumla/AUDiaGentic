@@ -164,9 +164,9 @@ class TestLocalOpenAiAdapter(unittest.TestCase):
         cfg = {}
         self.assertEqual(adapter._resolve_base_url(cfg), "https://api.openai.com")
 
-    def test_resolve_base_url_environment_fallback(self):
+    def test_resolve_base_url_ignores_the_removed_environment_variable(self):
         with unittest.mock.patch.dict("os.environ", {"AUDIAGENTIC_LOCAL_PROVIDER_BASE_URL": "http://llama:9000/"}):
-            self.assertEqual(adapter._resolve_base_url({}), "http://llama:9000")
+            self.assertEqual(adapter._resolve_base_url({}), "https://api.openai.com")
 
 
 if __name__ == "__main__":

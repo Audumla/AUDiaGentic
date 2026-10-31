@@ -212,7 +212,7 @@ def _gateway_service_endpoint_and_token() -> tuple[str, Path]:
     from audiagentic.components.agents.gateway.service.host import GATEWAY_SERVICE_KEY
     from audiagentic.foundation.paths.home import global_service_runtime
 
-    port = int(os.environ.get("AUDIAGENTIC_GATEWAY_PORT", "8765"))
+    port = int(os.environ.get("_AUDIAGENTIC_GATEWAY_PORT", "8765"))
     root = (
         global_service_runtime()
         / GATEWAY_SERVICE_KEY.scope
