@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.53.0](https://github.com/Audumla/AUDiaGentic/compare/v0.52.0...v0.53.0) (2026-10-31)
+
+
+### Features
+
+* **providers:** doctor reports unqualified surfaces and the allow-unqualified override (CFG07) ([#307](https://github.com/Audumla/AUDiaGentic/issues/307)) ([78e270c](https://github.com/Audumla/AUDiaGentic/commit/78e270c45d80db6ca3ddcc80c330931e4c88ba78))
+
 ## [0.52.0](https://github.com/Audumla/AUDiaGentic/compare/v0.51.0...v0.52.0) (2026-10-31)
 
 

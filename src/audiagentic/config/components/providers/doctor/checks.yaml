@@ -1,0 +1,4 @@
+# Doctor checks owned by the providers component (read-only). Each ref is module:attr.
+checks:
+  - id: providers.qualification
+    ref: audiagentic.components.providers.doctor_checks:check_qualification

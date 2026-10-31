@@ -2,7 +2,7 @@
 id: CFG07
 order: 7
 plan: config-setup
-state: pending
+state: completed
 created-at: '2026-10-28T21:05:48.895276+00:00'
 breadth: ''
 skill: advanced
@@ -38,7 +38,7 @@ Platform and surface qualification comes from evidence records, not hand-edited 
 
 ## Validation
 
-
+tests/unit/providers/test_platform_qualification.py and test_qualification_doctor.py: qualify writes the per-platform record; a platform with no vendor evidence is no-platform-match until qualify, then supported; stale (package version, spec version, fingerprint), failed and invalid records are rejected; one platform never serves another; the allow-unqualified override resolves and doctor reports it; doctor lists unqualified enabled surfaces and never probes. Full suite: only the known baseline failures.
 
 ## Effort & Risk
 
@@ -68,6 +68,8 @@ Phase 2: deferred until needed (see 'Phasing' in docs/design/configuration-model
 
 2026-10-31 slice delivered: local platform qualification records (<state>/qualification/v1/<provider>/<surface>/<platform>.yaml) with fingerprint, package version, spec version, result, time, environment, evidence digest; `audiagentic qualify [PROVIDER] [--surface ID] [--json]` (default checks: CLI installed, adapter resolves); the surface resolver accepts a valid local record for the running platform when the descriptor has no vendor evidence for it and rejects stale/failed/invalid ones (reasons qualification-stale/-failed/-invalid); one platform's record never serves another. Acceptance shown by test: a platform with no vendor evidence is no-platform-match until `qualify gpt-auto`, then supported, with no package edit. Remaining: per-provider live probes beyond the default checks, removing unmeasured vendor platform claims from descriptors (decision needed: it makes those platforms unqualified until qualified), and a doctor line for unqualified surfaces / the allow-unqualified override.
 
+2026-10-31 closed. Delivered: local platform records, `audiagentic qualify`, resolver use of valid local records, providers.<id>.allow-unqualified override reported by doctor (providers.qualification check). Interpretation: descriptor platform lists are the vendor evidence the wheel ships; a local record or the explicit override covers the rest. Follow-up (CFG12): live acceptance probes per provider over the existing live tests, and measuring the vendor platform claims.
+
 ## Change Log
 
 - 2026-10-28T21:05:48.895276+00:00 (created-by): Created by claude
@@ -76,3 +78,5 @@ Phase 2: deferred until needed (see 'Phasing' in docs/design/configuration-model
 - 2026-10-28T22:07:03.106732+00:00 (updated-by): Updated: section:notes
 - 2026-10-31T03:42:14.202506+00:00 (updated-by): Updated: section:notes
 - 2026-10-31T11:43:58.134526+00:00 (updated-by): Updated: section:notes
+- 2026-10-31T12:21:32.502326+00:00 (updated-by): Updated: section:validation, section:notes
+- 2026-10-31T12:21:49.450234+00:00 (state-transition): State: pending → completed

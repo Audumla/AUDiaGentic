@@ -137,3 +137,13 @@ def test_command_reports_results_and_exit_codes(capsys: pytest.CaptureFixture[st
     assert payload["results"][0]["result"] == "qualified"
     args.provider = "nope"
     assert qualify_command.run_qualify_command(args) == qualify_command.EXIT_UNKNOWN
+
+
+def test_allow_unqualified_is_an_explicit_override(foreign_platform: Path) -> None:
+    assert _resolve(foreign_platform).validation.reason == "no-platform-match"
+    (foreign_platform / ".audiagentic").mkdir(exist_ok=True)
+    (foreign_platform / ".audiagentic" / "settings.yaml").write_text(
+        "schema_version: 1\nproviders:\n  gpt-auto:\n    allow-unqualified: true\n", encoding="utf-8")
+    surface = _resolve(foreign_platform)
+    assert surface.validation.reason == ""
+    assert surface.validation.evidence.reference == "allow-unqualified override"
