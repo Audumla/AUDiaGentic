@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.53.1](https://github.com/Audumla/AUDiaGentic/compare/v0.53.0...v0.53.1) (2026-10-31)
+
+
+### Documentation
+
+* **planning:** close SH64 with live doctor evidence ([#310](https://github.com/Audumla/AUDiaGentic/issues/310)) ([2d67a5d](https://github.com/Audumla/AUDiaGentic/commit/2d67a5d7e7c982fbf584983f1e9bcdbd17549b85))
+
 ## [0.53.0](https://github.com/Audumla/AUDiaGentic/compare/v0.52.0...v0.53.0) (2026-10-31)
 
 
