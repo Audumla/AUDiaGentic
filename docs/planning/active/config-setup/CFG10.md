@@ -46,7 +46,7 @@ Keep only the public variables chosen in CFG01 plus XDG_*; turn configuration-in
 
 ## Standards
 
-
+docs/design/configuration-model.md (environment variables: three public names plus XDG_*, private _AUDIAGENTIC_ prefix for internal plumbing, test switches stay test-scoped); docs/standards/ARCHITECTURE_STANDARDS.md and ARCHITECTURE_GUIDELINES.md: one configuration authority, no parallel loaders or compatibility paths without an approved obligation, delete obsolete code in the same change, evidence-led scope (tests/unit/architecture/config_inventory.yaml tracks progress).
 
 ## Acceptance Criteria
 
@@ -76,3 +76,4 @@ Phase 2: deferred until needed (see 'Phasing' in docs/design/configuration-model
 - 2026-10-28T22:07:05.424881+00:00 (updated-by): Updated: section:notes
 - 2026-10-31T02:25:32.424561+00:00 (updated-by): Updated: section:notes
 - 2026-10-31T03:16:24.025032+00:00 (updated-by): Updated: section:notes
+- 2026-10-31T03:33:38.394009+00:00 (updated-by): Updated: section:standards
