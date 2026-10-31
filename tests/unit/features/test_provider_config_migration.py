@@ -1,0 +1,111 @@
+"""Provider option files, the registry and the policy file move into settings, with a rollback."""
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pytest
+import yaml
+
+from audiagentic.foundation.features import observations
+from audiagentic.foundation.features.migration import (
+    PROVIDER_FILES_DIR,
+    PROVIDER_POLICY,
+    PROVIDER_REGISTRY,
+    apply_provider_config_migration,
+    plan_provider_config_migration,
+    rollback_provider_config_migration,
+)
+
+
+@pytest.fixture(autouse=True)
+def _isolated_user_scope(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg-config"))
+    monkeypatch.delenv("AUDIAGENTIC_CONFIG", raising=False)
+
+
+@pytest.fixture
+def project(tmp_path: Path) -> Path:
+    root = tmp_path / "repo"
+    (root / ".git").mkdir(parents=True)
+    return root
+
+
+def _write(path: Path, data: dict) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(yaml.safe_dump(data), encoding="utf-8")
+    return path
+
+
+def _settings(project: Path) -> dict:
+    path = project / ".audiagentic" / "settings.yaml"
+    return yaml.safe_load(path.read_text(encoding="utf-8")) if path.is_file() else {}
+
+
+def _legacy(project: Path) -> list[Path]:
+    return [
+        _write(project / PROVIDER_REGISTRY, {"contract-version": "v1", "providers": {
+            "codex": {"install-mode": "x", "access-mode": "cli", "enabled": True, "default-model": "old", "timeout-seconds": 30},
+        }}),
+        _write(project / PROVIDER_FILES_DIR / "codex.yaml", {
+            "install-mode": "x", "access-mode": "cli", "default-model": "gpt-5", "settings": {"a": {"b": 1}},
+        }),
+        _write(project / PROVIDER_POLICY, {"contract-version": "v1", "reconciliation-policy": {
+            "mode": "allowlist", "allowed-providers": ["codex"], "decided-providers": ["codex", "claude"],
+        }}),
+    ]
+
+
+def test_plan_merges_registry_and_file_and_drops_descriptor_facts(project: Path) -> None:
+    _legacy(project)
+    plan = plan_provider_config_migration(project)
+    assert plan.patch == {
+        "providers": {"codex": {"default-model": "gpt-5", "timeout-seconds": 30, "settings": {"a": {"b": 1}}}},
+        "reconciliation": {"mode": "allowlist", "allowed-providers": ["codex"]},
+    }
+    assert plan.decided == ["claude", "codex"]
+    assert plan.conflicts == {}
+
+
+def test_apply_writes_settings_removes_sources_and_records_decisions(project: Path) -> None:
+    sources = _legacy(project)
+    result = apply_provider_config_migration(project)
+    assert result["status"] == "applied"
+    assert not any(p.exists() for p in sources)
+    assert _settings(project)["providers"]["codex"]["default-model"] == "gpt-5"
+    assert observations.get_observation(project, "providers", "reconciliation.decided") == ["claude", "codex"]
+    assert apply_provider_config_migration(project) == {"status": "nothing-to-migrate"}
+
+
+def test_conflict_with_existing_settings_refuses_and_touches_nothing(project: Path) -> None:
+    sources = _legacy(project)
+    _write(project / ".audiagentic" / "settings.yaml", {"schema_version": 1, "providers": {"codex": {"default-model": "mine"}}})
+    before = [p.read_bytes() for p in sources]
+    with pytest.raises(ValueError, match="refused"):
+        apply_provider_config_migration(project)
+    assert [p.read_bytes() for p in sources] == before
+    assert _settings(project)["providers"]["codex"]["default-model"] == "mine"
+
+
+def test_rollback_restores_sources_and_removes_only_migrated_keys(project: Path) -> None:
+    sources = _legacy(project)
+    originals = [p.read_bytes() for p in sources]
+    manifest = Path(apply_provider_config_migration(project)["manifest"])
+    assert json.loads(manifest.read_text())["status"] == "applied"
+    report = rollback_provider_config_migration(project, manifest)
+    assert report["kept"] == []
+    assert [p.read_bytes() for p in sources] == originals
+    assert "providers" not in _settings(project) and "reconciliation" not in _settings(project)
+    assert observations.get_observation(project, "providers", "reconciliation.decided") is None
+    assert rollback_provider_config_migration(project, manifest) == {"restored": [], "kept": []}
+
+
+def test_rollback_keeps_values_changed_after_the_migration(project: Path) -> None:
+    _legacy(project)
+    manifest = Path(apply_provider_config_migration(project)["manifest"])
+    from audiagentic.foundation.config.writer import write_settings_patch
+
+    write_settings_patch("project", {"providers": {"codex": {"default-model": "edited"}}}, project_root=project)
+    report = rollback_provider_config_migration(project, manifest)
+    assert "providers.codex.default-model" in report["kept"]
+    assert _settings(project)["providers"]["codex"]["default-model"] == "edited"

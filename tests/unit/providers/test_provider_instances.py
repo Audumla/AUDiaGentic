@@ -66,14 +66,11 @@ def test_two_instances_resolve_from_one_descriptor(tmp_path: Path) -> None:
 
 
 def test_overlay_merges_over_the_provider_options(tmp_path: Path) -> None:
-    provider_file = tmp_path / ".audiagentic" / "config" / "providers" / "gpt-auto.yaml"
-    provider_file.parent.mkdir(parents=True)
-    provider_file.write_text(
-        yaml.safe_dump({"access-mode": "cli", "auth-ref": "env:EXAMPLE_KEY", "install-mode": "external-configured",
-                        "settings": {"timeout": 30, "keep": True}}),
-        encoding="utf-8",
-    )
-    _write_settings(tmp_path, {"gpt-auto": {"instances": {"alpha": {"timeout": 60}}}})
+    _write_settings(tmp_path, {"gpt-auto": {
+        "auth-ref": "env:EXAMPLE_KEY",
+        "settings": {"timeout": 30, "keep": True},
+        "instances": {"alpha": {"timeout": 60}},
+    }})
     state = providers_api.get_provider_runtime_config_state(tmp_path, "gpt-auto@alpha")
     assert state["config"]["settings"] == {"timeout": 60, "keep": True}
 

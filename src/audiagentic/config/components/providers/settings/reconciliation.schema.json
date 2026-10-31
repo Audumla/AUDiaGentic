@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "settings: reconciliation",
+  "description": "How the providers component reconciles detected provider CLIs with enablement: auto enables whatever is detected, allowlist enables only the listed providers, prompt leaves each undecided provider for an interactive decision (recorded as local state, not here).",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "mode": {
+      "enum": [
+        "auto",
+        "allowlist",
+        "prompt"
+      ]
+    },
+    "allowed-providers": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    }
+  }
+}

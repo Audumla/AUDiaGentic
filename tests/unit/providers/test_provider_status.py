@@ -9,16 +9,14 @@ from audiagentic.components.providers.services.lifecycle.status import build_pro
 def test_provider_status_reports_cli_and_catalog(tmp_path: Path) -> None:
     project_root = tmp_path
     audi_root = project_root / ".audiagentic"
-    (audi_root / "config" / "runtime").mkdir(parents=True)
-    (audi_root / "config" / "runtime" / "providers.yaml").write_text(
+    audi_root.mkdir(parents=True)
+    (audi_root / "settings.yaml").write_text(
         "\n".join(
             [
-                "contract-version: v1",
+                "schema_version: 1",
                 "providers:",
                 "  codex:",
                 "    enabled: true",
-                "    install-mode: external-configured",
-                "    access-mode: cli",
                 "    default-model: gpt-5.4-mini",
                 "    model-aliases:",
                 "      fast: gpt-5.4-mini",

@@ -71,5 +71,4 @@ configuration-core:
   - audiagentic/foundation/paths/names.py  # the path service: the one owner of the marker name and the project directories
 
 # Modules that join '.audiagentic' paths themselves instead of using the configuration core.
-path-builders:
-  - audiagentic/components/providers/services/config/provider_config.py
+path-builders: []

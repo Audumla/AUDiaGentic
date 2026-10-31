@@ -263,7 +263,11 @@ def _set(args: argparse.Namespace, settings: Any) -> int:
 
 
 def _migrate(args: argparse.Namespace, settings: Any) -> int:
-    """Move implementation ``enabled`` flags out of the feature-state shards (see features.migration)."""
+    """Move legacy configuration to its current home (see features.migration).
+
+    Two independent migrations: implementation ``enabled`` flags out of the feature shards into
+    local state, and provider option files, registry and policy into settings.
+    """
     from pathlib import Path
 
     from audiagentic.foundation.features import migration
@@ -278,21 +282,40 @@ def _migrate(args: argparse.Namespace, settings: Any) -> int:
 
     try:
         if args.rollback:
-            report = migration.rollback_enabled_migration(project_root, Path(args.rollback))
+            manifest_path = Path(args.rollback)
+            kind = json.loads(manifest_path.read_text(encoding="utf-8")).get("kind")
+            undo = {
+                migration.MANIFEST_KIND: migration.rollback_enabled_migration,
+                migration.PROVIDER_CONFIG_KIND: migration.rollback_provider_config_migration,
+            }.get(kind)
+            if undo is None:
+                raise ValueError(f"unknown migration manifest kind: {kind!r}")
+            report = undo(project_root, manifest_path)
             return emit({"ok": True, **report}, f"restored {len(report['restored'])}, kept {len(report['kept'])}"
                         + "".join(f"\n  kept: {item}" for item in report["kept"]))
-        plan = migration.plan_enabled_migration(project_root)
-        if plan.conflicts:
-            raise ValueError(f"conflicting observations: {sorted(plan.conflicts)}")
+        flags = migration.plan_enabled_migration(project_root)
+        providers = migration.plan_provider_config_migration(project_root)
+        conflicts = [*sorted(map(str, flags.conflicts)), *sorted(".".join(p) for p in providers.conflicts)]
+        if conflicts:
+            raise ValueError(f"conflicting existing values: {conflicts}")
         if not args.apply:
             return emit(
-                {"ok": True, "applied": False, "flags": len(plan.flags), "shards": [str(p) for p in plan.shards]},
-                f"{len(plan.flags)} enabled flag(s) in {len(plan.shards)} shard(s) would move to local state"
-                + ("; run with --apply" if plan.flags else ""),
+                {"ok": True, "applied": False, "enabled-flags": len(flags.flags),
+                 "provider-settings": len(providers.values),
+                 "sources": [str(p) for p in (*flags.shards, *providers.sources)]},
+                f"{len(flags.flags)} enabled flag(s) would move to local state; "
+                f"{len(providers.values)} provider setting(s) from {len(providers.sources)} file(s) would move to settings"
+                + ("; run with --apply" if flags.flags or providers.values or providers.sources else ""),
             )
-        result = migration.apply_enabled_migration(project_root)
-        return emit({"ok": True, "applied": True, **result},
-                    f"{result['status']}" + (f": manifest {result['manifest']}" if "manifest" in result else ""))
+        results = {
+            "enabled-flags": migration.apply_enabled_migration(project_root),
+            "provider-config": migration.apply_provider_config_migration(project_root),
+        }
+        return emit(
+            {"ok": True, "applied": True, **results},
+            "\n".join(f"{name}: {r['status']}" + (f" (manifest {r['manifest']})" if "manifest" in r else "")
+                      for name, r in results.items()),
+        )
     except (ValueError, OSError) as error:
         if args.as_json:
             print(json.dumps({"ok": False, "message": str(error)}))

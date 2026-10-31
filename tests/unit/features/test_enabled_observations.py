@@ -141,12 +141,12 @@ def test_config_migrate_command_previews_applies_and_rolls_back(tmp_path: Path, 
         assert run_settings_command(args) == 0
         return json.loads(capsys.readouterr().out)
 
-    assert run()["applied"] is False and run()["flags"] == 2
+    assert run()["applied"] is False and run()["enabled-flags"] == 2
     assert yaml.safe_load((project / SHARD_DIR / "providers.yaml").read_text())["implementations"]["claude"]["enabled"]
     args = argparse.Namespace(config_cmd="migrate", project=project, config_file=None, as_json=True,
                               apply=True, rollback=None)
     assert run_settings_command(args) == 0
-    manifest = json.loads(capsys.readouterr().out)["manifest"]
+    manifest = json.loads(capsys.readouterr().out)["enabled-flags"]["manifest"]
     assert observations.get_observation(project, "providers", "enabled:claude") is True
     args = argparse.Namespace(config_cmd="migrate", project=project, config_file=None, as_json=True,
                               apply=False, rollback=manifest)
