@@ -25,7 +25,7 @@ from audiagentic.foundation.contracts.errors import AudiaGenticError
 def audiagentic_home_dir(tmp_path: Path, monkeypatch) -> Path:
     home = tmp_path / "home"
     home.mkdir()
-    monkeypatch.setenv("AUDIAGENTIC_HOME", str(home))
+    monkeypatch.setenv("_AUDIAGENTIC_HOME", str(home))
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg-config"))
     monkeypatch.delenv("AUDIAGENTIC_CONFIG", raising=False)
     return home

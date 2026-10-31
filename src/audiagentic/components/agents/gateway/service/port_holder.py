@@ -57,7 +57,7 @@ def _listening_inodes(port: int) -> set[str]:
 
 
 def find_holder(port: int) -> Holder | None:
-    """The process listening on ``port`` with its command and AUDIAGENTIC_HOME, or ``None`` if unreadable."""
+    """The process listening on ``port`` with its command and _AUDIAGENTIC_HOME, or ``None`` if unreadable."""
     inodes = _listening_inodes(port)
     if not inodes:
         return None
@@ -84,7 +84,7 @@ def find_holder(port: int) -> Holder | None:
         home = None
         try:
             for item in (entry / "environ").read_bytes().split(b"\0"):
-                if item.startswith(b"AUDIAGENTIC_HOME="):
+                if item.startswith(b"_AUDIAGENTIC_HOME="):
                     home = item.split(b"=", 1)[1].decode(errors="replace")
         except OSError:
             pass

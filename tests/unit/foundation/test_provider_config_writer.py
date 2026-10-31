@@ -105,7 +105,7 @@ def test_patch_provider_config_validates_gpt_auto_before_persisting(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """GP26: an invalid gpt-auto project patch must be rejected WITHOUT writing."""
-    monkeypatch.setenv("AUDIAGENTIC_HOME", str(tmp_path / "audihome"))
+    monkeypatch.setenv("_AUDIAGENTIC_HOME", str(tmp_path / "audihome"))
 
     with pytest.raises(AudiaGenticError) as exc_info:
         patch_provider_config(

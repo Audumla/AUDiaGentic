@@ -109,7 +109,7 @@ async def qualify(installed=False, native_clients=False):
             **os.environ,
             "PYTHONIOENCODING": "utf-8",
             "AUDIAGENTIC_REPO_ROOT": str(root),
-            "AUDIAGENTIC_HOME": str(home / ".audiagentic"),
+            "_AUDIAGENTIC_HOME": str(home / ".audiagentic"),
             "HOME": str(home),
             "USERPROFILE": str(home),
             "XDG_CONFIG_HOME": str(home / ".config"),

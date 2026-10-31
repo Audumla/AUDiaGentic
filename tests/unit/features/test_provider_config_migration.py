@@ -21,7 +21,7 @@ from audiagentic.foundation.features.migration import (
 @pytest.fixture(autouse=True)
 def _isolated_user_scope(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg-config"))
-    monkeypatch.setenv("AUDIAGENTIC_HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("_AUDIAGENTIC_HOME", str(tmp_path / "home"))
     monkeypatch.delenv("AUDIAGENTIC_CONFIG", raising=False)
 
 

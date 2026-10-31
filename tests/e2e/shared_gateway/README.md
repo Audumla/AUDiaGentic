@@ -26,7 +26,7 @@ python -I /path/to/tests/e2e/shared_gateway/qualify_native.py --installed-packag
 
 Replace `--installed-package DIR` with `--wheel /path/to/package.whl` if desired.
 Output must not already exist. It namespaces both workspaces under that directory,
-copies the catalog into `machine/config/agents.yaml`, and sets AUDIAGENTIC_HOME
+copies the catalog into `machine/config/agents.yaml`, and sets _AUDIAGENTIC_HOME
 before importing the installed application. Subprocess PYTHONPATH points only at
 the supplied installation. No checkout fallback is accepted by the driver.
 

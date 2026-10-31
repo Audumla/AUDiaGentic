@@ -2421,7 +2421,7 @@ def gated_source(tmp_path, monkeypatch):
 
     home = tmp_path / "home"
     home.mkdir()
-    monkeypatch.setenv("AUDIAGENTIC_HOME", str(home))
+    monkeypatch.setenv("_AUDIAGENTIC_HOME", str(home))
     providers_api.model_source_add_global(
         "gated-src",
         {

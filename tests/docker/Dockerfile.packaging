@@ -19,7 +19,7 @@ ENV AUDIAGENTIC_DOCKER_TESTS=1
 # root home.  Keeping every launcher-owned path below /tmp also makes the
 # containment assertion in run_packaging.sh meaningful.
 ENV HOME=/tmp/audiagentic-home
-ENV AUDIAGENTIC_HOME=/tmp/audiagentic-home/.audiagentic
+ENV _AUDIAGENTIC_HOME=/tmp/audiagentic-home/.audiagentic
 ENV XDG_CONFIG_HOME=/tmp/audiagentic-home/.config
 ENV XDG_CACHE_HOME=/tmp/audiagentic-home/.cache
 

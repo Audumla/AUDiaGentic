@@ -9,7 +9,6 @@ same operations without changing MCP or event adapters.
 from __future__ import annotations
 
 import logging
-import os
 import re
 import threading
 import time
@@ -38,10 +37,7 @@ def validate_node_selectors(node_id: Any, workspace_id: Any) -> tuple[str, str]:
 
 def _uses_shared_connector(root: Path) -> bool:
     """Inspect selection only; never construct or discover a gateway client."""
-    if (
-        os.environ.get("AUDIAGENTIC_GATEWAY_ENDPOINT")
-        and os.environ.get("AUDIAGENTIC_GATEWAY_TOKEN_FILE")
-    ):
+    if all(_explicit_connection()):
         return False
     from audiagentic.foundation.features.state import get_component_state
 
@@ -415,6 +411,18 @@ def _resolve_embedded_coexistence_policy(project_root: Path | None) -> str:
     return "refuse"
 
 
+def _explicit_connection() -> tuple[str | None, str | None]:
+    """The user's explicit standalone connection: ``gateway.endpoint`` and ``gateway.token.file``."""
+    from audiagentic.components.agents.gateway.settings import gateway_setting
+
+    endpoint = gateway_setting("endpoint")
+    token = gateway_setting("token")
+    token_file = token.get("file") if isinstance(token, dict) else None
+    if token_file:
+        token_file = str(Path(str(token_file)).expanduser())
+    return (str(endpoint) if endpoint else None), (token_file or None)
+
+
 def _resolve_implementation_id(project_root: Path | None) -> tuple[str, str]:
     """Resolve which gateway implementation is active, and how it was chosen.
 
@@ -462,8 +470,7 @@ def get_gateway_client(project_root: Path | None = None) -> GatewayClient:
 
     config_error = make_error_factory("CFG", "AGSV", "gateway-service")
     mode, _source = _resolve_implementation_id(project_root)
-    endpoint = os.environ.get("AUDIAGENTIC_GATEWAY_ENDPOINT")
-    token_file = os.environ.get("AUDIAGENTIC_GATEWAY_TOKEN_FILE")
+    endpoint, token_file = _explicit_connection()
     connector = None
     connector_path = None
     if mode == "standalone" and project_root is not None:

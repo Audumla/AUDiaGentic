@@ -70,7 +70,7 @@ def main(args, resources):
     machine = base / "machine"
     (machine / "config").mkdir(parents=True)
     shutil.copyfile(args.catalog.resolve(strict=True), machine / "config" / "agents.yaml")
-    os.environ["AUDIAGENTIC_HOME"] = str(machine)
+    os.environ["_AUDIAGENTIC_HOME"] = str(machine)
     package = (
         args.installed_package.resolve(strict=True)
         if args.installed_package

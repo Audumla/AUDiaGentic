@@ -53,7 +53,7 @@ def _isolate_audiagentic_home(
     tmp_path_factory: pytest.TempPathFactory,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Redirect the shared AUDiaGentic home (``AUDIAGENTIC_HOME``) to a per-test tmp
+    """Redirect the shared AUDiaGentic home (``_AUDIAGENTIC_HOME``) to a per-test tmp
     dir, so harness materialization / config refresh never touches the real
     ``~/.audiagentic``.
 
@@ -65,7 +65,7 @@ def _isolate_audiagentic_home(
     """
     if request.node.get_closest_marker("mutates_host") is not None:
         return
-    monkeypatch.setenv("AUDIAGENTIC_HOME", str(tmp_path_factory.mktemp("audiagentic-home")))
+    monkeypatch.setenv("_AUDIAGENTIC_HOME", str(tmp_path_factory.mktemp("audiagentic-home")))
     # The user and user-project settings scopes live in the platform config dir; a test must never
     # read or write the real one (it would leak between tests and runs).
     config_home = tmp_path_factory.mktemp("xdg-config")
@@ -113,7 +113,7 @@ def _stop_leaked_gateway_services(
     from tests.helpers.gateway_service_cleanup import stop_gateway_services
 
     yield
-    home = os.environ.get("AUDIAGENTIC_HOME", "")
+    home = os.environ.get("_AUDIAGENTIC_HOME", "")
     if home and Path(home).is_relative_to(tmp_path_factory.getbasetemp()):
         stop_gateway_services(Path(home))
 

@@ -18,12 +18,9 @@ env:
   credentials:
     - AUDIAGENTIC_GITHUB_TOKEN
     - AUDIAGENTIC_LOCAL_PROVIDER_API_KEY
-  # Deployment wiring that still needs a recorded decision (CFG10): the spec removes HOME in favour of the
-  # `home` setting, and the gateway endpoint and token file belong to the shared-gateway configuration design.
-  pending-decision:
-    - AUDIAGENTIC_GATEWAY_ENDPOINT
-    - AUDIAGENTIC_GATEWAY_TOKEN_FILE
-    - AUDIAGENTIC_HOME
+  # Decided (CFG10): nothing is pending. The home is the `home` setting; the gateway connection is
+  # `gateway.endpoint` and `gateway.token.file`.
+  pending-decision: []
   # Set by AUDiaGentic for its own child processes; not user configuration.
   internal:
     - AUDIAGENTIC_GATEWAY_DASHBOARD_PATH

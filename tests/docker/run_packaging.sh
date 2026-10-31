@@ -106,14 +106,14 @@ else
 fi
 
 echo "::: check 4 — bootstrap materializes a working harness :::"
-if audiagentic bootstrap --target "$AUDIAGENTIC_HOME/harness" &&
-	test -d "$AUDIAGENTIC_HOME/harness"; then
+if audiagentic bootstrap --target "$_AUDIAGENTIC_HOME/harness" &&
+	test -d "$_AUDIAGENTIC_HOME/harness"; then
 	python3 - <<'PYEOF'
 import sys
 from pathlib import Path
 import os
-pi_pkg = Path(os.environ['AUDIAGENTIC_HOME']) / 'harness/cli/node_modules/@earendil-works/pi-coding-agent'
-pi_binary = Path(os.environ['AUDIAGENTIC_HOME']) / 'harness/cli/node_modules/.bin/pi'
+pi_pkg = Path(os.environ['_AUDIAGENTIC_HOME']) / 'harness/cli/node_modules/@earendil-works/pi-coding-agent'
+pi_binary = Path(os.environ['_AUDIAGENTIC_HOME']) / 'harness/cli/node_modules/.bin/pi'
 if not pi_binary.exists():
     print('PASS: harness materialized (embedded provider CLI is intentionally not bootstrapped)')
     sys.exit(0)

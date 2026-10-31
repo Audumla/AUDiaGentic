@@ -126,8 +126,8 @@ def project_logs_dir(project_root: Path) -> Path:
 def home_directory() -> Path:
     """Return the AUDiaGentic home directory and nothing else about where it came from.
 
-    Precedence: the ``AUDIAGENTIC_HOME`` environment variable (deployment wiring, and
-    what a service passes to its children), then the ``home`` setting from the machine
+    Precedence: the internal ``_AUDIAGENTIC_HOME`` variable (what a service passes to its
+    children; not a public setting), then the ``home`` setting from the machine
     scopes (user settings or an explicit file), then ``~/.audiagentic``. The setting
     lets every process on a machine, including MCP servers a harness starts without any
     environment, agree on one home. An invalid settings file raises, because a silently
@@ -142,7 +142,7 @@ def home_source(config_file: Path | str | None = None) -> tuple[Path, str]:
     ``config_file`` is an explicit settings file (``--config``); without it the
     environment's ``AUDIAGENTIC_CONFIG`` applies, as everywhere else.
     """
-    custom = os.environ.get("AUDIAGENTIC_HOME")
+    custom = os.environ.get("_AUDIAGENTIC_HOME")
     if custom:
         return Path(custom), "environment"
     # Imported here: the settings resolver imports this module for the package paths.

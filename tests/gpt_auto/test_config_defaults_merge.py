@@ -161,7 +161,7 @@ def test_v3_contract_version_is_accepted_for_unbounded_response_observation() ->
 @pytest.fixture(autouse=True)
 def _isolated_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg-config"))
-    monkeypatch.setenv("AUDIAGENTIC_HOME", str(tmp_path / "audihome"))
+    monkeypatch.setenv("_AUDIAGENTIC_HOME", str(tmp_path / "audihome"))
     monkeypatch.delenv("AUDIAGENTIC_CONFIG", raising=False)
 
 

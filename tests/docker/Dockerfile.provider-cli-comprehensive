@@ -7,7 +7,7 @@ ENV PYTHONPATH="/app/src"
 ENV PATH="/tmp/audiagentic-test-home/.local/bin:/venv/bin:$PATH"
 ENV UV_TOOL_BIN_DIR=/tmp/audiagentic-test-home/.local/bin
 ENV HOME=/tmp/audiagentic-test-home
-ENV AUDIAGENTIC_HOME=/tmp/audiagentic-test-home/.audiagentic
+ENV _AUDIAGENTIC_HOME=/tmp/audiagentic-test-home/.audiagentic
 
 COPY pyproject.toml README.md ./
 COPY src ./src

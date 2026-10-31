@@ -375,7 +375,7 @@ For tests that genuinely require Docker (system packages, real CLI lifecycle):
 
 1. Create `tests/docker/Dockerfile.<component>-<purpose>` extending `audia-test-base:latest` (or a purpose-built prerequisite image).
 2. Copy only `pyproject.toml`, `README.md`, `src`, the required tests, and any explicit fixture directory. `COPY . /app` is prohibited.
-3. Set disposable `HOME` and `AUDIAGENTIC_HOME` values for every recipe that installs or configures providers.
+3. Set disposable `HOME` and `_AUDIAGENTIC_HOME` values for every recipe that installs or configures providers.
 4. Install test-runner dependencies in a recipe-local virtualenv. Do not bake provider CLIs or generated harness config into the common base.
 5. Invoke AUDiaGentic's provider/component lifecycle to install, configure, probe, exercise, and uninstall the dependency under test.
 6. Create in-container test script as a standalone pytest file at

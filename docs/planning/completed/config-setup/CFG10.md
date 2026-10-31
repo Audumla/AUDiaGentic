@@ -2,7 +2,7 @@
 id: CFG10
 order: 10
 plan: config-setup
-state: pending
+state: completed
 created-at: '2026-10-28T21:06:02.889937+00:00'
 breadth: ''
 skill: intermediate
@@ -38,7 +38,7 @@ Keep only the public variables chosen in CFG01 plus XDG_*; turn configuration-in
 
 ## Validation
 
-
+tests/unit/architecture/test_config_inventory.py: the public env is exactly AUDIAGENTIC_CONFIG, AUDIAGENTIC_PROFILE, AUDIAGENTIC_PROJECT, nothing is pending-decision, every AUDIAGENTIC_* name in source is classified; tests/unit/agents/test_gateway_remote_client.py, test_gateway_connector_selection.py and tests/integration/agents/test_gateway_standalone_service.py exercise gateway.endpoint and gateway.token.file; entrypoint audit (grep) shows settings files are read only through foundation/config (doctor only checks the user file exists) and every other AUDIAGENTIC_* read is classified.
 
 ## Effort & Risk
 
@@ -73,6 +73,8 @@ Phase 2: deferred until needed (see 'Phasing' in docs/design/configuration-model
 Progress 2026-10-31: slice 3 (#289) removed AUDIAGENTIC_LOG_FORMAT/CONSOLE/DIR/BACKUP_COUNT and AI_AUDIT/_LEVEL/_REDACT (settings `logging`); slice 4 (#290) removed AUTO_UPDATE_ENABLED, STARTUP_STATUS, RECONCILE_PROVIDERS_ON_LAUNCH, LOCALE, LOCAL_PROVIDER_BASE_URL, ROOT and turned GATEWAY_PORT into the internal `_AUDIAGENTIC_GATEWAY_PORT` (settings `launch`, `locale`, provider settings). The harness layered-config risk from the on-track review is closed: harness, logging and composition no longer use a layered loader, which is deleted. Env inventory now: diagnostic (LOG_LEVEL), deployment (11 process-wiring and credential references), internal, test.
 Remaining: a recorded disposition for each of the 11 deployment variables (keep as documented wiring, or fold into settings), a final audit that every entrypoint (CLI, MCP servers, gateway service, node, harness child) resolves settings through the same resolver, and the public allowlist document. Completion stays gated on CFG11.
 
+2026-10-31 closed. AUDIAGENTIC_HOME is no longer public: the `home` setting is the home and a service passes it to children through the internal _AUDIAGENTIC_HOME. AUDIAGENTIC_GATEWAY_ENDPOINT and AUDIAGENTIC_GATEWAY_TOKEN_FILE became gateway.endpoint and gateway.token.file (user or explicit scope; token is a file reference). Step 4 (one release honoured-with-warning) is not applied: the owner decided no legacy paths. Environment variables are not migrated by `config migrate`. Caveat for local recipes: the gateway launcher strips PYTHONPATH from child processes by design, so tests that spawn the managed gateway need the package installed from this source (CI installs it).
+
 ## Change Log
 
 - 2026-10-28T21:06:02.889937+00:00 (created-by): Created by claude
@@ -84,3 +86,5 @@ Remaining: a recorded disposition for each of the 11 deployment variables (keep 
 - 2026-10-31T03:33:38.394009+00:00 (updated-by): Updated: section:standards
 - 2026-10-31T03:42:19.336440+00:00 (updated-by): Updated: section:notes
 - 2026-10-31T07:10:58.881871+00:00 (updated-by): Updated: section:notes
+- 2026-10-31T12:28:11.515265+00:00 (updated-by): Updated: section:validation, section:notes
+- 2026-10-31T12:28:24.228940+00:00 (state-transition): State: pending → completed
