@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.48.2](https://github.com/Audumla/AUDiaGentic/compare/v0.48.1...v0.48.2) (2026-10-31)
+
+
+### Documentation
+
+* **planning:** refresh CFG06-CFG10 after the GPT on-track review; add CFG11 (CFG09 phase 2) ([#272](https://github.com/Audumla/AUDiaGentic/issues/272)) ([b353db4](https://github.com/Audumla/AUDiaGentic/commit/b353db477986d4be36caebc29c2836a413303589))
+
 ## [0.48.1](https://github.com/Audumla/AUDiaGentic/compare/v0.48.0...v0.48.1) (2026-10-31)
 
 
