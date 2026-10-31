@@ -7,24 +7,23 @@ created-at: '2026-10-31T23:04:07.737996+00:00'
 breadth: ''
 skill: advanced
 created-by: claude
-priority: P2
+priority: P1
 work: M
 ---
 
-# Minimal project-root selection for the shared gateway server
+# Server roots and principal defaults
 
 ## Description
 
-Operators currently type `projects: {id: path}` and repeat ids in every principal's grants, node workspaces and the connector. Under the trusted-operator model grants are not a tenant boundary, so simplify. `projects` becomes an optional list of root paths; each root's id is its declared project.id (CFG13). When omitted, `gateway serve` serves the project containing the working directory, resolved once at start; `projects: []` is invalid. A principal's `projects` omitted means all projects in the server's configured root list (frozen per loaded configuration, extended only by an explicit root change and reload); `[]` means none; an explicit list narrows; unknown ids fail. `actions` omitted means a versioned default set (read, submit, cancel, session), never an automatically expanding one; unknown actions fail. No command-line root options (the gateway CLI is keyword-only), no discovery, no registry. Failures surface at serve start and in `gateway validate server`.
+Simplify `server.yaml`. `projects` becomes an optional list of root paths; when omitted the server serves the project containing its working directory, resolved once at start. Each served project must have a declared project.id (read with foundation resolve_settings_cached(root).get('project.id')); a missing id or two roots with the same id is an actionable error. A principal's `projects` omitted means all configured roots, `[]` means none; `actions` omitted means all four existing actions (read, submit, cancel, session), documented in the schema and guide, unversioned. Unknown project ids and actions are rejected. Existing explicit lists migrate unchanged. No command-line root options (keyword-only CLI), registry, discovery, wildcard machinery or path-overlap analysis.
 
 ## Steps
 
-- Change the server schema and loader: optional list of root paths; canonicalize; read declared ids via CFG13
-- Capture the working-directory default once at startup; document that supervised services should list explicit roots
-- Principal grants: omitted projects = all configured, [] = none, explicit list narrows; omitted actions = the versioned default set
-- Reject duplicate canonical roots, overlapping roots, duplicate ids, missing declarations, unknown project ids and unknown actions before serving
-- Migrate the old `projects` map and explicit grants without broadening any principal's effective permissions; no compatibility reader
-- Make revoke preserve roots and unrelated content under its existing lock and digest check
+- Change the server schema and loader: optional list of root paths; read declared ids; reject missing and duplicate ids
+- Capture the working-directory default once at startup
+- Principal defaults: omitted projects = all roots, [] = none, omitted actions = the four existing actions; reject unknown ids and actions
+- Migrate the old projects map shape to the new one without changing any explicit permission; require an explicit operator decision if that cannot be established
+- Keep node revoke preserving the roots and unrelated content under its existing lock and digest check; update shared-gateway.md; register new error codes
 
 ## Detailed Solution & Technical Design
 
@@ -40,7 +39,7 @@ Operators currently type `projects: {id: path}` and repeat ids in every principa
 
 ## Validation
 
-Schema, cwd, canonical-path, grant and multi-project integration tests; revoke race tests unchanged.
+One-project and two-project configuration tests, duplicate-id tests, permission-default tests, migration tests, revoke test on the new shape.
 
 ## Effort & Risk
 
@@ -48,21 +47,24 @@ Schema, cwd, canonical-path, grant and multi-project integration tests; revoke r
 
 ## Standards
 
-docs/design/configuration-model.md (Shared gateway setup); docs/standards/ARCHITECTURE_STANDARDS.md: one configuration authority per fact, delete the old map shape and its tests in the same change, reuse the existing lock and digest-check writer for revoke, register new error codes.
+docs/design/configuration-model.md (Shared gateway setup); docs/standards/ARCHITECTURE_STANDARDS.md 4 and GUIDELINES 9: delete the old map shape and its tests with the callers in the same change; GUIDELINES 7: one owner for the server document.
 
 ## Acceptance Criteria
 
-- One project served from its directory needs no root configuration
-- Explicit multi-project roots work; each rejection above happens before serving
-- Offline validation equals startup validation for deterministic checks
-- Migration preserves every existing principal's effective project and action set (test)
-- Adding a second project is one root line, then validate
+- Single-project local setup needs no manually entered root
+- Each additional initialized project needs one root entry
+- Missing or duplicate project ids produce actionable errors
+- Omitted permission fields have deterministic documented meanings
+- Unknown project ids and actions are rejected
+- Existing explicit permissions are not broadened by migration
 
 ## Notes
 
 Depends on CFG13; sequence after CFG15 for end-to-end qualification. A project id change after admission must fail closed until grants are reconciled.
 
 Trigger: roots and ids are typed per project and repeated in grants, node workspaces and the connector; the gateway CLI is keyword-only and cannot take --project. Depends on CFG13; sequence after CFG15 for end-to-end qualification. A project id change after admission must fail closed until grants are reconciled. Standards: the old map shape is deleted with its callers and tests in the same change (STANDARDS 4, GUIDELINES 9); the server document keeps one owner, so revoke must preserve the roots and unrelated content under its existing lock and digest check (GUIDELINES 7); register new error codes.
+
+Agreed with GPT (round 7). Trusted operators on a shared server: grants are not a tenant boundary. Depends on CFG15.
 
 ## Change Log
 
@@ -71,3 +73,4 @@ Trigger: roots and ids are typed per project and repeated in grants, node worksp
 - 2026-10-31T23:07:02.193136+00:00 (updated-by): Updated: section:standards
 - 2026-10-31T23:09:52.257948+00:00 (updated-by): Updated: section:notes
 - 2026-10-31T23:14:30.183054+00:00 (updated-by): Updated: section:description, section:steps, section:standards, section:acceptance_criteria
+- 2026-10-31T23:30:33.748431+00:00 (updated-by): Updated: section:title, priority='P1', section:description, section:steps, section:validation, section:standards, section:acceptance_criteria, section:notes

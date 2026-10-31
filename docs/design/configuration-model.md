@@ -299,82 +299,82 @@ Rules while they stay:
 - Not in scope for this design: the `gateway: role: server` form that earlier
   drafts showed; one process serves one role from one document.
 
-## Shared gateway setup (decided 2026-10-31)
+## Shared gateway setup (decided 2026-10-31, re-scoped 2026-11-01)
 
-The aim of this work is an end-to-end outcome: a new operator sets up a gateway
-with as few decisions as possible, and no fact is defined in two places.
-Closing the CFG items one by one did not deliver it. CFG10 moved the gateway
-endpoint and token into settings while the connector document and the project
-component state still defined the same connection, so one connection had three
-sources and the highest silently won. The decision below was reached after a
-review against the code and three adversarial GPT rounds.
+The aim is an end-to-end outcome, in this order: easy setup, easy maintenance,
+and no fact defined in two places. Closing the CFG items one by one did not
+deliver it: CFG10 moved the gateway endpoint and token into settings while the
+connector document and the project component state still defined the same
+connection, so one connection had three sources and the highest silently won.
+The decisions below were agreed with GPT over seven review rounds and checked
+against the architecture standards. Security is a base baseline only (the
+environment is a shared server run by collaborating operators): authentication
+is required, tokens are private (0600) files referenced by path and never
+printed, logged or passed as arguments, the server binds loopback and remote
+access uses the existing proxy arrangement, and setup never overwrites existing
+credentials. No further hardening is part of this work unless a functional
+defect needs it.
 
 Decisions:
 
 - **Generation, not consolidation.** The role documents stay separate (see
-  above). Setup friction comes from hand-written secrets, ids and
-  cross-references, so they are generated: `gateway init` creates the server
-  id, a principal, its token file (private mode, never printed) and the server
-  document, plus a loopback connector for the same machine. `gateway connector
-  create` writes a validated remote connector from the endpoint, the pinned
-  server id and the token-file path.
-- **One explicit connection authority: the connector document.** The settings
-  pair `gateway.endpoint`/`gateway.token.file` and the plain component-state
-  `endpoint`/`token-file` options are deleted, with a migration and no
-  compatibility reader. Automatic embedded selection needs no connector. The
-  connector accepts `http://127.0.0.1:PORT` and `http://[::1]:PORT` (the
-  server's native loopback origin; it never terminates TLS) and `https`
-  elsewhere; redirects stay rejected.
-- **Project identity is declared.** The id used to authorize a project is
-  `project.id` declared as a literal key in the project's tracked project
-  settings. The derived fallbacks (origin repository name, main checkout,
-  directory name) and values from user or explicit layers are refused for
-  gateway authorization, and the reader follows no includes or references.
-  `gateway init` writes the id once, when absent, through the existing config
-  writer (shown in dry-run, never changing an existing value). The id is
-  entered once; the connector takes it from the local project and the server
-  takes it from each root.
-- **Roots are paths, in the server document.** `projects` becomes an optional
-  list of root paths; ids are not typed. When omitted, the server serves the
-  project containing its working directory, resolved once at start. Roots are
-  canonicalized; duplicate, overlapping or aliased roots and duplicate ids are
-  rejected. There are no command-line root options (the gateway CLI is
-  keyword-only), no directory discovery and no registry.
-- **Grants follow the trust model (below).** A principal's `projects` omitted
-  means all projects in the server's configured root list; `[]` means none; an
-  explicit list narrows; unknown ids fail. `actions` omitted means a versioned
-  default set (read, submit, cancel, session) that never expands silently.
-  Migration must not broaden any existing principal.
-- **Validation resolves the deployment.** `gateway validate` checks project
-  ids, roots and grants, not only schema.
+  above). `gateway init` generates the server id, a principal, its token file
+  and the server document, plus a same-machine loopback connector. A remote
+  connector stays a five-field file checked by `gateway validate connector`;
+  a `gateway connector create` command is deferred until a measured walkthrough
+  needs it.
+- **One explicit connection authority: the connector document** (CFG14). The
+  settings pair `gateway.endpoint`/`gateway.token.file` and the plain
+  component-state `endpoint`/`token-file` options are deleted with a migration
+  and no compatibility reader. Automatic embedded operation needs no connector.
+  The connector also accepts `http://127.0.0.1:PORT` and `http://[::1]:PORT`
+  (the server's native loopback origin); redirects stay rejected.
+- **Project identity is declared once.** A served project needs `project.id`
+  declared in settings (read with the foundation settings resolver; no new
+  reader). `gateway init` writes it into the tracked project scope when absent,
+  suggesting a value from the git origin name or directory, and never changes
+  an existing value. Duplicate ids among served roots are an error. The
+  connector takes the id from the local project.
+- **Roots are paths in the server document** (CFG16). `projects` is an
+  optional list of root paths; when omitted the server serves the project
+  containing its working directory, resolved once at start. A principal's
+  `projects` omitted means all configured roots, `[]` none; `actions` omitted
+  means the four existing actions (read, submit, cancel, session). Unknown ids
+  and actions are errors; existing explicit lists migrate unchanged. The
+  gateway CLI is keyword-only, so there are no command-line root options.
+- **Diagnostics without a new framework** (CFG15). `gateway validate` also
+  checks roots and references; a read-only `gateway where` shows the default
+  gateway directory, the document locations and the project's bound connector.
 
-Trust model and isolation. Shared gateways are run by collaborating operators
-who can reach every project, so project grants are not a tenant-security
-boundary. What is required is separation of running: each project executes with
-its own root, context, request, session and conversation namespace and
-project-owned state, and nothing in one project can inspect, modify, resume,
-cancel or trigger another project's work through that project's context, even
-for a principal authorized for both. Project settings and files cannot
-configure the gateway, authorize principals, select another project's workspace
-or change another project's settings; server configuration and root mappings
-are server-owned. This is application-level isolation and is mandatory and
-tested (CFG17). It is not a security boundary against code that runs with the
-server's operating-system privileges; filesystem and process isolation are not
-claimed unless the execution layer enforces and verifies them. No claim of
-project isolation is made until CFG17 passes.
+Trust model and separation. Shared gateways are run by collaborating operators
+who can reach every project, so grants are not a tenant boundary. Projects must
+still run separately: requests, sessions, idempotency keys, conversations,
+workspace selection and execution state are scoped to the project, and a
+project's settings cannot change the server or another project (the `gateway`
+settings section is user and explicit scope only). CFG17 audits and tests this
+at application level. OS and filesystem isolation of project code is not
+claimed.
 
-Not doing: node enrollment (needs the node handshake and trust model
-inspected first), settings consolidation of the role documents, a project
-registry, and automated remote token transfer. Remote setup still needs the
-operator to supply the endpoint, the pinned server id and a securely copied
-token.
+Where each fact lives after the work: server id and principals in
+`server.yaml` (generated by init; connector and node documents hold generated
+references to the server id); project id in the project's tracked settings;
+project roots in `server.yaml`; client endpoint and token path in
+`connector.yaml`; node endpoint in `node.yaml`; server port in the `gateway`
+settings section. One authoritative edit per fact per role; a repeated
+reference (for example the port inside a connector endpoint, or a token path on
+both server and client) is generated and checked by `gateway validate`, not a
+second authority.
 
-Acceptance (measured by CFG15/CFG16 tests): one project on one machine needs
-zero hand-edited files; a remote connector is the five documented fields
-(`gateway connector create` is deferred until a measured walkthrough needs it);
-adding a second project is one root line. Owning items: CFG13 (declared
-identity), CFG14 (single connection authority), CFG15 (init and validate),
-CFG16 (project roots and grants), CFG17 (project separation audit and tests).
+Not doing: node enrollment, settings consolidation of the role documents, a
+project registry, directory discovery, tenant-style grants and automated
+remote token transfer.
+
+Acceptance (measured by CFG15 and CFG16 tests): one new local project needs
+zero hand-edited files and at most two setup commands; a remote connector is
+one documented file validated by one command; adding a second initialized
+project is one root entry. Owning items: CFG14 (connection authority), CFG15
+(init, validation, diagnostics), CFG16 (roots and defaults), CFG17 (separation
+check, P2). CFG13 (declared-only identity hardening) was cancelled.
 
 ## Environment variables
 
@@ -484,7 +484,7 @@ provider or capability registry.
 | CFG08 | `setup`, `doctor`, portable MCP registration, installed-wheel qualification |
 | CFG09 | Migrate agent catalog, providers, model sources (PC12), project and remaining subsystems; `config migrate`. Shared server/node/connector role documents are deferred (Shared gateway role documents) |
 | CFG10 | Public env vars down to three; no unmanaged path builders. Its settings endpoint/token pair is removed by CFG14 |
-| CFG13-CFG17 | Gateway setup: declared project identity, single connection authority, init and validate, project roots and grants, project separation (Shared gateway setup) |
+| CFG14-CFG17 | Gateway setup: single connection authority, init/validate/where, project roots and principal defaults, project separation check (Shared gateway setup); CFG13 cancelled |
 | SH42 | Owns installed release qualification and deployment docs; absorbs SH57 and SH59 |
 | SH53 | Uses CFG07's evidence schema and producer |
 | PC10 | Delivered through CFG06 |
