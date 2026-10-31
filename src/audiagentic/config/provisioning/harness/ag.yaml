@@ -9,9 +9,8 @@
 #   3. Project-local — <project>/.audiagentic/config/harness/ag.yaml
 #
 # Set exclusive_local: true in the project-local file to skip the user-global tier.
-# Machine-local overrides: AUDIAGENTIC_RIG_HOST, AUDIAGENTIC_RIG_PORT,
-# AUDIAGENTIC_LOCAL_PROVIDER_BASE_URL, AUDIAGENTIC_HOME, and
-# AUDIAGENTIC_REPO_ROOT.
+# Machine-local overrides: AUDIAGENTIC_AG_BASE_URL, AUDIAGENTIC_AG_MODEL,
+# AUDIAGENTIC_AG_PROVIDER and AUDIAGENTIC_HOME.
 
 # Harness selection.
 # Each harness is an isolated adaptor under runtime/harness/<type>/.
@@ -30,9 +29,10 @@ harness:
   # resolution (used by tests and for forcing a specific harness).
   # type: pi
 
-# Embedded rig settings.
-rig:
-  port: 42001
+# The OpenAI-compatible model server the harness talks to. AUDiaGentic does not
+# host it; point url at one that is already running.
+endpoint:
+  url: http://127.0.0.1:42001/v1
   # Which model to use..
   model: audiagentic-rig
   # Provider id passed to the harness CLI (names the models.json backend block).

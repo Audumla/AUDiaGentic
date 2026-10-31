@@ -70,7 +70,7 @@ def _write_harness_config(project_root: Path, rig_port: int) -> None:
         yaml.safe_dump(
             {
                 "harness": {"type": "pi"},
-                "rig": {"port": rig_port, "model": _MODEL_PROFILE, "provider": "audiagentic"},
+                "endpoint": {"url": f"http://127.0.0.1:{rig_port}/v1", "model": _MODEL_PROFILE, "provider": "audiagentic"},
                 "mcp": {"enabled": False},
                 "smoke": {"timeout": 60},
             },

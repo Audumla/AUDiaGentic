@@ -27,11 +27,10 @@ def build_global_context(
     harness-specific launch state lives in each provider's
     components/providers/adapters/<harness>/interactive.py builder instead.
     """
-    from audiagentic.foundation.config.local_runtime import local_rig_host
     from audiagentic.runtime.harness.config import (
         load_harness_config,
+        require_harness_endpoint,
         require_harness_provider,
-        require_harness_rig_port,
     )
     from audiagentic.runtime.harness.endpoint import query_server_model
     from audiagentic.runtime.harness.resolution import harness_cli_available
@@ -50,7 +49,7 @@ def build_global_context(
         )
 
     harness_cfg = load_harness_config(project_root=project_root)
-    requested_model = os.environ.get("AUDIAGENTIC_AG_MODEL") or harness_cfg.get("rig", {}).get(
+    requested_model = os.environ.get("AUDIAGENTIC_AG_MODEL") or harness_cfg.get("endpoint", {}).get(
         "model"
     )
     if not requested_model:
@@ -63,13 +62,11 @@ def build_global_context(
                 "No model configured. Set AUDIAGENTIC_AG_MODEL environment variable "
                 "or set 'model' in harness config."
             ),
-            details={"field": "rig.model"},
+            details={"field": "endpoint.model"},
         )
 
     # The model server is one that already runs; AUDiaGentic does not host it.
-    endpoint = os.environ.get("AUDIAGENTIC_AG_BASE_URL") or (
-        f"http://{local_rig_host()}:{require_harness_rig_port(harness_cfg)}/v1"
-    )
+    endpoint = os.environ.get("AUDIAGENTIC_AG_BASE_URL") or require_harness_endpoint(harness_cfg)
     model = query_server_model(endpoint) or requested_model
     provider = os.environ.get("AUDIAGENTIC_AG_PROVIDER") or require_harness_provider(harness_cfg)
     resolved_enable_mcp = enable_mcp or bool(harness_cfg.get("mcp", {}).get("enabled", False))

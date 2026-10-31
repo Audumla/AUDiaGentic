@@ -8,7 +8,7 @@ This package is split by responsibility, not by feature flag:
 
 - `components/` exposes installable product-facing capabilities such as session control, provider integration, release tooling, and job orchestration.
 - `foundation/` provides reusable primitives: component metadata, contracts, events, logging, MCP helpers, workflow engines, and host probes.
-- `runtime/` owns mutable runtime concerns: layered config loading, harness materialization, rig lifecycle, install/update flows, and durable state.
+- `runtime/` owns mutable runtime concerns: layered config loading, harness materialization, install/update flows, and durable state.
 - `config/` ships package-default YAML and skill/config assets that `foundation` and `runtime` load at install time and during execution.
 
 ## Read This First
