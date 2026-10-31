@@ -4,10 +4,13 @@ from audiagentic.commands import gateway
 
 
 @pytest.mark.parametrize("command", ["drain", "resume", "stop", "recover"])
-def test_retired_lifecycle_routes_are_rejected(command, capsys):
-    assert gateway.dispatch_keyword([command]) == 2
-    assert "gateway help" in capsys.readouterr().err
+def test_lifecycle_commands_are_keyword_routes_not_exported_functions(command):
     assert not hasattr(gateway, f"cmd_gateway_{command}")
+
+
+def test_recover_without_a_reason_is_rejected(capsys):
+    assert gateway.dispatch_keyword(["recover"]) == 2
+    assert "gateway help" in capsys.readouterr().err
 
 
 def test_gateway_exports_current_routes_only():

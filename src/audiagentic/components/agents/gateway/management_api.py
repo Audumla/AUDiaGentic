@@ -398,3 +398,36 @@ def gateway_restart(project_root: Path, *, force: bool = False) -> dict[str, Any
     finally:
         replacement.close()
     return {"restarting": restarting, "restarted": True, "status": status}
+
+
+def _attached_call(project_root: Path, method: str, **kwargs: Any) -> dict[str, Any]:
+    """Call one lifecycle method on the running service; never starts a service."""
+    from audiagentic.components.agents.gateway.service.bootstrap import attach_existing_gateway
+
+    client = attach_existing_gateway()
+    try:
+        return getattr(client, method)(project_root, **kwargs)
+    finally:
+        client.close()
+
+
+def gateway_drain(project_root: Path) -> dict[str, Any]:
+    """Stop the running service admitting new work; in-flight work finishes."""
+    return _attached_call(project_root, "service_drain")
+
+
+def gateway_resume(project_root: Path) -> dict[str, Any]:
+    """Admit new work again after a drain."""
+    return _attached_call(project_root, "service_resume")
+
+
+def gateway_stop(project_root: Path, *, force: bool = False) -> dict[str, Any]:
+    """Stop the running service; graceful stop is refused unless it is quiescent."""
+    return _attached_call(project_root, "service_stop", force=force)
+
+
+def gateway_recover(*, reason: str) -> dict[str, Any]:
+    """Record-only recovery of a live-but-unprovable owner; never signals the pid."""
+    from audiagentic.components.agents.gateway.service.lifecycle import recover_unprovable_owner
+
+    return recover_unprovable_owner(confirm=True, reason=reason)
