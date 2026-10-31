@@ -197,7 +197,7 @@ def test_shared_metadata_and_explicit_alias_preserved_root_not_resolved(monkeypa
     client._renew_at = time.monotonic() + 100
     transport = Mock(return_value=Response({"state": "queued"}))
     monkeypatch.setattr(client._shared_opener, "open", transport)
-    monkeypatch.setenv("AUDIAGENTIC_COMPONENT_PROFILE", "must-not-leak")
+    monkeypatch.setenv("AUDIAGENTIC_PROFILE", "must-not-leak")
     metadata = {"schema_version": 1, "idempotency_key": "stable", "correlation_id": "trace"}
     class NoLocalRoot:
         def expanduser(self):

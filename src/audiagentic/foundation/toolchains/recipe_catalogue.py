@@ -286,7 +286,7 @@ def make_catalogue(project_root: str | Path) -> RecipeCatalogue:
     """Convenience constructor for RecipeCatalogue.
 
     Reuses the existing one-profile-per-process selection from the active
-    component profile (via AUDIAGENTIC_COMPONENT_PROFILE env var). Does not
+    component profile (via AUDIAGENTIC_PROFILE env var). Does not
     add a second profile mechanism or its own cache.
     """
     return RecipeCatalogue(project_root)

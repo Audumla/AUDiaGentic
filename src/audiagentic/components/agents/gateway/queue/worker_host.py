@@ -187,9 +187,9 @@ def main() -> int:
         # cannot observe a different root/profile.
         os.chdir(identity.project_root)
         if identity.component_profile:
-            os.environ["AUDIAGENTIC_COMPONENT_PROFILE"] = identity.component_profile
+            os.environ["AUDIAGENTIC_PROFILE"] = identity.component_profile
         else:
-            os.environ.pop("AUDIAGENTIC_COMPONENT_PROFILE", None)
+            os.environ.pop("AUDIAGENTIC_PROFILE", None)
 
         creation_identity = process_creation_identity(os.getpid())
         if not creation_identity:

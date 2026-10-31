@@ -84,7 +84,7 @@ def dispatch(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int |
     root = Path(str(root_value)).resolve() if root_value else None
     profile = options.get("component-profile", args.component_profile)
     if profile:
-        os.environ["AUDIAGENTIC_COMPONENT_PROFILE"] = str(profile)
+        os.environ["AUDIAGENTIC_PROFILE"] = str(profile)
     if root:
         os.environ["AUDIAGENTIC_REPO_ROOT"] = str(root)
 

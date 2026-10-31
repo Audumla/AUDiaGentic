@@ -57,7 +57,7 @@ def _get_component_config_dirs() -> list[Path]:
     """Resolve component config directories from override sources.
 
     Delegates to the shared resolver in foundation/paths/names.py
-    (AUDIAGENTIC_COMPONENT_CONFIG_DIRS env var, then package defaults) so
+    (_AUDIAGENTIC_COMPONENT_CONFIG_DIRS env var, then package defaults) so
     descriptor discovery and error-resolution loading share one source.
     """
     from audiagentic.foundation.paths.names import get_component_config_dirs

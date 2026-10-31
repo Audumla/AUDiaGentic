@@ -124,7 +124,7 @@ def _main(argv: list[str] | None = None) -> int:
         "--component-profile",
         metavar="NAME",
         default=None,
-        help="Component configuration profile name (env: AUDIAGENTIC_COMPONENT_PROFILE)",
+        help="Component configuration profile name (env: AUDIAGENTIC_PROFILE)",
     )
 
     subparsers = parser.add_subparsers(dest="command")
@@ -290,7 +290,7 @@ def _main(argv: list[str] | None = None) -> int:
     if args.component_profile:
         import os
 
-        os.environ["AUDIAGENTIC_COMPONENT_PROFILE"] = args.component_profile
+        os.environ["AUDIAGENTIC_PROFILE"] = args.component_profile
 
     if args.command == "config":
         import os

@@ -44,7 +44,7 @@ def test_automatic_gateway_declares_one_foundation_managed_service(monkeypatch, 
 
     use_gateway_settings(monkeypatch, tmp_path, port=9123)
     monkeypatch.setenv("AUDIAGENTIC_REPO_ROOT", str(tmp_path / "caller-project"))
-    monkeypatch.setenv("AUDIAGENTIC_COMPONENT_PROFILE", "caller-profile")
+    monkeypatch.setenv("AUDIAGENTIC_PROFILE", "caller-profile")
     monkeypatch.setattr(bootstrap, "ManagedServiceStore", FakeStore)
     monkeypatch.setattr(bootstrap, "ManagedServiceLifecycle", FakeLifecycle)
     monkeypatch.setattr(bootstrap, "StandaloneGatewayClient", FakeClient)
@@ -62,7 +62,7 @@ def test_automatic_gateway_declares_one_foundation_managed_service(monkeypatch, 
     assert declaration.process.cwd.is_dir()
     assert declaration.process.env == {
         "AUDIAGENTIC_REPO_ROOT": "",
-        "AUDIAGENTIC_COMPONENT_PROFILE": "",
+        "AUDIAGENTIC_PROFILE": "",
     }
     assert captured["adopted"] == (
         "lease-a", "epoch-a", "shared-service-host"

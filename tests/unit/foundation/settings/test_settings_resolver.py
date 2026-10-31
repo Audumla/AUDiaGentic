@@ -176,7 +176,7 @@ def test_sections_are_contributed_by_components(user_config: Path, tmp_path: Pat
     extra = tmp_path / "components"
     _write(extra / "demo" / "settings" / "demo.schema.json",
            '{"type": "object", "additionalProperties": false, "properties": {"flag": {"type": "boolean"}}}')
-    monkeypatch.setenv("AUDIAGENTIC_COMPONENT_CONFIG_DIRS", f"{get_package_components_config_dir()},{extra}")
+    monkeypatch.setenv("_AUDIAGENTIC_COMPONENT_CONFIG_DIRS", f"{get_package_components_config_dir()},{extra}")
     root = _project(tmp_path, "schema_version: 1\ndemo:\n  flag: true\n")
     assert resolve_settings(project=root).get("demo.flag") is True
 

@@ -176,7 +176,7 @@ def test_nonshared_root_resolvers_keep_local_routing(tmp_path, connector, monkey
     if local_override:
         monkeypatch.setenv("AUDIAGENTIC_GATEWAY_ENDPOINT", "http://127.0.0.1:9000")
         monkeypatch.setenv("AUDIAGENTIC_GATEWAY_TOKEN_FILE", str(connector.parent / "token"))
-    monkeypatch.setenv("AUDIAGENTIC_WORKSPACE_ROOTS", str(tmp_path))
+    monkeypatch.setattr("audiagentic.components.agents.gateway.workspace_roots.configured_workspace_roots", lambda: [tmp_path.resolve()])
     request = Mock(return_value={})
     session = Mock(return_value={})
     monkeypatch.setattr(store, "read_record", request)

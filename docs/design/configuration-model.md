@@ -298,6 +298,16 @@ variables stay private and undocumented as configuration; test switches stay
 test-scoped. Everything else becomes settings keys
 (`tests/unit/architecture/config_inventory.yaml` tracks progress).
 
+Status (CFG10): the public set is exactly `AUDIAGENTIC_CONFIG`, `AUDIAGENTIC_PROFILE` and
+`AUDIAGENTIC_PROJECT` (the profile variable was `AUDIAGENTIC_COMPONENT_PROFILE`; the component-directory
+override is the internal `_AUDIAGENTIC_COMPONENT_CONFIG_DIRS`). `AUDIAGENTIC_LOG_LEVEL` is the diagnostic
+exception; `AUDIAGENTIC_GITHUB_TOKEN` and `AUDIAGENTIC_LOCAL_PROVIDER_API_KEY` are credentials. Workspace
+roots are `gateway.workspace_roots` and the GitHub OAuth client is `release.github_client_id`. Three variables
+still need an owner decision, recorded in the inventory as `pending-decision`: `AUDIAGENTIC_HOME` (the `home`
+setting exists and the variable wins over it; the spec removes it, but containers and services set it today)
+and `AUDIAGENTIC_GATEWAY_ENDPOINT` / `AUDIAGENTIC_GATEWAY_TOKEN_FILE` (client connection wiring that belongs
+with the shared-gateway configuration design).
+
 ## CLI
 
 | Command | Behaviour |
@@ -332,7 +342,7 @@ test-scoped. Everything else becomes settings keys
 - `model-sources.yaml` (done: `model-sources` section at user and project scope; `audiagentic config migrate`), `provider-policy.yaml` (done: `reconciliation` section, decisions as local state), `providers/<id>.yaml` and
   `runtime/providers.yaml` (done: `providers.<id>`; install and access modes come from the descriptor; `audiagentic config migrate`), `gpt-auto*.yaml` overlays, `interoperability/*.yaml`, `.audiagentic/components/*.yaml` markers -> sections of `settings.yaml`.
 - `config/providers/gpt_auto_t1.yaml`, `gpt_auto_t2.yaml` -> `gpt-auto` instances.
-- `AUDIAGENTIC_HOME`, `AUDIAGENTIC_ROOT`, `AUDIAGENTIC_REPO_ROOT`, `AUDIAGENTIC_COMPONENT_CONFIG_DIRS` and the user-configuration variables -> platform paths, discovery and settings keys.
+- `AUDIAGENTIC_HOME`, `AUDIAGENTIC_ROOT`, `AUDIAGENTIC_REPO_ROOT`, `_AUDIAGENTIC_COMPONENT_CONFIG_DIRS` and the user-configuration variables -> platform paths, discovery and settings keys.
 - The 49 modules that build `.audiagentic` paths themselves -> three owners:
   the configuration resolver (human-authored config), a state-path service
   (ledger, gateway, provider state) and a package-resource resolver

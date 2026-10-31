@@ -48,11 +48,18 @@ _DEFAULT_SCOPES = "repo workflow"
 def _get_client_id() -> str:
     """Return the GitHub OAuth app client ID.
 
-    Override with ``AUDIAGENTIC_GITHUB_CLIENT_ID`` to use your own OAuth app.
+    Override with the ``release.github_client_id`` setting to use your own OAuth app.
     The app MUST have the device flow enabled
     (Settings > Developer settings > OAuth Apps > Enable Device Flow).
     """
-    return os.environ.get("AUDIAGENTIC_GITHUB_CLIENT_ID", "Ov23liBfQkqTtMqKdRvT")
+    from audiagentic.foundation.config.settings import resolve_settings_cached
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+    try:
+        configured = resolve_settings_cached(machine_only=True).get("release.github_client_id")
+    except AudiaGenticError:
+        configured = None
+    return configured if isinstance(configured, str) and configured else "Ov23liBfQkqTtMqKdRvT"
 
 
 def _get_credentials_path() -> Path:

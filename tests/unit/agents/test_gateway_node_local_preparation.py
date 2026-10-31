@@ -371,9 +371,9 @@ def test_expanded_version_is_a_closed_contract_before_preparation(setup):
 
 
 def test_process_component_profile_frozen_at_composition_not_wire(setup, monkeypatch):
-    monkeypatch.setenv("AUDIAGENTIC_COMPONENT_PROFILE", "process-profile")
+    monkeypatch.setenv("AUDIAGENTIC_PROFILE", "process-profile")
     owner = NodeLocalPreparer(setup.config)
-    monkeypatch.setenv("AUDIAGENTIC_COMPONENT_PROFILE", "later-environment")
+    monkeypatch.setenv("AUDIAGENTIC_PROFILE", "later-environment")
     result = owner.prepare(**setup.kwargs, metadata={"component-profile": "wire-profile"})
     assert private(result)["worker-identity"]["component-profile"] == "process-profile"
 

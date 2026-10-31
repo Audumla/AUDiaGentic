@@ -74,13 +74,11 @@ def resolve_request_project_root(root: Path, request_id: str) -> Path:
     # project-id/project-name). Prefer the durable request record, which is
     # authoritative and already carries the exact project root, before using
     # the human-readable slug resolver.
-    configured = os.environ.get("AUDIAGENTIC_WORKSPACE_ROOTS", "")
-    if configured.strip():
-        candidates = [
-            Path(value).expanduser().resolve()
-            for value in configured.split(os.pathsep)
-            if value.strip()
-        ]
+    from .workspace_roots import configured_workspace_roots
+
+    configured = configured_workspace_roots()
+    if configured:
+        candidates = configured
     else:
         candidates = [root]
         if root.parent.is_dir():
@@ -126,13 +124,11 @@ def resolve_session_project_root(root: Path, session_id: str) -> Path:
     from .session import sessions_store
 
     root = root.resolve()
-    configured = os.environ.get("AUDIAGENTIC_WORKSPACE_ROOTS", "")
-    if configured.strip():
-        candidates = [
-            Path(value).expanduser().resolve()
-            for value in configured.split(os.pathsep)
-            if value.strip()
-        ]
+    from .workspace_roots import configured_workspace_roots
+
+    configured = configured_workspace_roots()
+    if configured:
+        candidates = configured
     else:
         parent = root.parent
         candidates = [root]
@@ -244,7 +240,9 @@ class EmbeddedGatewayClient:
         self._logical_client_id = logical_client_id
 
     def list_agent_definition_cards(self, project_root: Path) -> list[dict[str, Any]]:
-        from audiagentic.components.agents.configuration.management import list_agent_definition_cards
+        from audiagentic.components.agents.configuration.management import (
+            list_agent_definition_cards,
+        )
 
         return list_agent_definition_cards(project_root)
 

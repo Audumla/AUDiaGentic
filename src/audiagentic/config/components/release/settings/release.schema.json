@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "x-audiagentic-scopes": [
+    "user",
+    "explicit"
+  ],
+  "title": "settings: release",
+  "description": "Release tooling, owned by the release component.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "github_client_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Client id of the GitHub OAuth app used for the device-flow login. The app must have the device flow enabled. Unset uses the packaged app."
+    }
+  }
+}
