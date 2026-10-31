@@ -23,7 +23,6 @@ def _validate(schema_name: str, payload: dict) -> None:
 def test_scaffold_seed_creates_layout(tmp_path: Path) -> None:
     target = tmp_path / "project"
     seed_example_project.seed_example_project(target)
-    assert (target / ".audiagentic" / "config" / "provider-policy.yaml").is_file()
     assert not (target / ".audiagentic" / "config" / "execution" / "prompt-syntax.yaml").exists()
     assert (target / ".audiagentic" / "skills" / "ag-ledger" / "skill.md").is_file()
     assert (target / ".github" / "workflows" / "release.yml").is_file()

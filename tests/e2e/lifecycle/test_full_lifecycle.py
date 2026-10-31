@@ -41,11 +41,10 @@ def test_sync_preserves_config_and_prompt_overrides(tmp_path) -> None:
         apply_fresh_install(sandbox.repo)
         install_component("providers", sandbox.repo)
 
-        provider_path = sandbox.repo / ".audiagentic" / "config" / "providers" / "custom.yaml"
-        provider_path.parent.mkdir(parents=True, exist_ok=True)
-        provider_path.write_text(
-            "provider-id: custom\ninstall-mode: toolchain\naccess-mode: none\nauth-ref: env:CUSTOM_KEY\n",
-            encoding="utf-8",
+        settings_path = sandbox.repo / ".audiagentic" / "settings.yaml"
+        settings_path.parent.mkdir(parents=True, exist_ok=True)
+        settings_path.write_text(
+            "schema_version: 1\nproviders:\n  custom:\n    auth-ref: env:CUSTOM_KEY\n", encoding="utf-8",
         )
 
         prompt_path = sandbox.repo / ".audiagentic" / "prompts" / "custom" / "default.md"
@@ -54,8 +53,7 @@ def test_sync_preserves_config_and_prompt_overrides(tmp_path) -> None:
 
         result = sync_managed_baseline(sandbox.repo)
 
-        assert ".audiagentic/config/providers" in result["preserved-files"]
-        assert "custom" in provider_path.read_text(encoding="utf-8")
+        assert "custom" in settings_path.read_text(encoding="utf-8")
         assert prompt_path.read_text(encoding="utf-8") == "custom prompt override"
         assert ".audiagentic/prompts/custom/default.md" not in result["refreshed-files"]
     finally:

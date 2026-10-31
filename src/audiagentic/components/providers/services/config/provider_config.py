@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
@@ -9,12 +10,18 @@ from audiagentic.foundation.config.merge import merged
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.contracts.schema_registry import validate_with_schema
 from audiagentic.foundation.features.base import ImplementationState
+from audiagentic.foundation.features.observations import (
+    clear_observation,
+    get_observation,
+    observed_keys,
+    record_observation,
+)
 from audiagentic.foundation.features.state import (
+    ENABLED_PREFIX,
     get_component_state,
     get_implementation_state,
     set_implementation_state,
 )
-from audiagentic.foundation.io import load_yaml_file, save_yaml_file
 
 from ...descriptors.target import ProviderTarget, base_provider_id, provider_config_error
 
@@ -53,55 +60,6 @@ def validate_prompt_surface(provider_id: str, provider_cfg: dict[str, Any]) -> l
             )
 
     return issues
-
-
-def _providers_yaml_path(project_root: Path) -> Path:
-    return project_root / ".audiagentic" / "config" / "runtime" / "providers.yaml"
-
-
-def _policy_yaml_path(project_root: Path) -> Path:
-    return project_root / ".audiagentic" / "config" / "provider-policy.yaml"
-
-
-def _provider_settings_path(project_root: Path, provider_id: str) -> Path:
-    """Return the project-owned settings file for one provider."""
-    return project_root / ".audiagentic" / "config" / "providers" / f"{provider_id}.yaml"
-
-
-def load_provider_settings(project_root: Path, provider_id: str) -> dict[str, Any]:
-    """Load one provider's project-owned settings file."""
-    path = _provider_settings_path(project_root, provider_id)
-    if not path.exists():
-        return {}
-    payload = load_yaml_file(path)
-    if not isinstance(payload, dict):  # defensive; load_yaml_file already enforces this
-        raise AudiaGenticError(
-            code="VAL-PCFG-003",
-            kind="providers",
-            message="provider settings must be a YAML mapping",
-            details={"provider-id": provider_id, "path": str(path)},
-        )
-    return payload
-
-
-def _merge_provider_files(project_root: Path, providers: dict[str, Any]) -> dict[str, Any]:
-    """Merge one complete provider file over any legacy registry entry."""
-    directory = project_root / ".audiagentic" / "config" / "providers"
-    if not directory.is_dir():
-        return providers
-    merged = dict(providers)
-    for path in sorted(directory.glob("*.yaml")):
-        provider_id = path.stem
-        file_cfg = load_yaml_file(path)
-        base_cfg = merged.get(provider_id, {})
-        if not isinstance(base_cfg, dict):
-            base_cfg = {}
-        merged[provider_id] = {**base_cfg, **file_cfg}
-    return merged
-
-
-def _save_provider_config(path: Path, payload: dict[str, Any]) -> None:
-    save_yaml_file(path, payload, sort_keys=False, atomic=True)
 
 
 def provider_enabled_policy(project_root: Path, provider_id: str) -> str | bool:
@@ -206,21 +164,34 @@ def apply_feature_enabled_state(
     return {**provider_cfg, "enabled": is_provider_enabled(project_root, provider_id)}
 
 
+def _settings_entries(project_root: Path) -> dict[str, Any]:
+    from audiagentic.foundation.config.settings import resolve_settings_cached
+
+    entries = resolve_settings_cached(project_root).get("providers") or {}
+    return entries if isinstance(entries, dict) else {}
+
+
+_POLICY_ONLY_KEYS = ("enabled", "instances")
+_DESCRIPTOR_KEYS = ("install-mode", "access-mode")  # facts of the provider descriptor, never configured
+
+
+def _provider_options(entry: Any) -> dict[str, Any]:
+    """A settings entry without the enablement policy and the instance overlays."""
+    if not isinstance(entry, dict):
+        return {}
+    return deepcopy({key: value for key, value in entry.items() if key not in _POLICY_ONLY_KEYS})
+
+
 def patch_provider_config(
     project_root: Path,
     provider_id: str,
     patch: dict[str, Any],
 ) -> dict[str, Any]:
-    """Atomically update one provider's complete project-owned config file."""
-    patch = {key: value for key, value in patch.items() if key != "enabled"}
-    path = _provider_settings_path(project_root, provider_id)
-    was_present = path.exists()
-    if was_present:
-        payload = load_yaml_file(path)
-    else:
-        payload = {}
-    candidate = dict(payload)
-    candidate.update(patch)
+    """Merge-patch one provider's options in the project settings file (``null`` removes a key)."""
+    from audiagentic.foundation.config.writer import write_settings_patch
+
+    provider_id = base_provider_id(provider_id)
+    patch = {key: value for key, value in patch.items() if key not in (*_POLICY_ONLY_KEYS, *_DESCRIPTOR_KEYS)}
     # GP26 write-time guard: validate the candidate BEFORE persisting, not
     # after. For gpt-auto, the effective-config resolver (three-tier: packaged
     # defaults -> machine override -> this project overlay) is the authoritative
@@ -230,6 +201,7 @@ def patch_provider_config(
             resolve_gpt_auto_config,
         )
 
+        candidate = merged(_provider_options(_settings_entries(project_root).get(provider_id)), patch)
         try:
             resolve_gpt_auto_config(candidate, provider_id=provider_id)
         except AudiaGenticError:
@@ -239,17 +211,9 @@ def patch_provider_config(
                 code="VAL-PCFG-004",
                 kind="providers",
                 message="provider config failed effective-config validation",
-                details={"provider-id": provider_id, "path": str(path), "error": str(exc)},
+                details={"provider-id": provider_id, "error": str(exc)},
             ) from exc
-    payload = candidate
-    _save_provider_config(path, payload)
-    if not was_present:
-        from audiagentic.foundation.toolchains.config.artifact_registry import ArtifactRegistry
-
-        ArtifactRegistry(project_root).register(
-            f"provider-settings/{provider_id}",
-            files=[path.relative_to(project_root)],
-        )
+    write_settings_patch("project", {"providers": {provider_id: patch}}, project_root=project_root)
     return load_provider_config(project_root)
 
 
@@ -316,31 +280,43 @@ def set_provider_enabled(project_root: Path, provider_id: str, *, enabled: bool)
 
 _VALID_RECONCILIATION_MODES = ("auto", "allowlist", "prompt")
 _DEFAULT_RECONCILIATION_POLICY: dict[str, Any] = {"mode": "auto"}
+_DECIDED_KEY = "reconciliation.decided"
+
+
+def _reconciliation_settings(project_root: Path) -> dict[str, Any]:
+    from audiagentic.foundation.config.settings import resolve_settings_cached
+
+    section = resolve_settings_cached(project_root).get("reconciliation")
+    return section if isinstance(section, dict) else {}
 
 
 def get_reconciliation_policy(project_root: Path) -> dict[str, Any]:
     """Return this project's provider reconciliation policy.
 
-    Defaults to ``{"mode": "auto"}`` (today's behavior: enable whatever CLI
-    is detected) when never explicitly configured. Use
-    `is_reconciliation_policy_configured` to distinguish "never set" from
-    "explicitly set to auto".
+    ``reconciliation`` in settings holds the mode and the allowlist; the providers the
+    operator has already been asked about are local state. Defaults to ``{"mode": "auto"}``
+    (enable whatever CLI is detected) when never explicitly configured. Use
+    `is_reconciliation_policy_configured` to distinguish "never set" from "explicitly set to auto".
     """
-    payload = load_provider_config_lenient(project_root)
-    policy = payload.get("reconciliation-policy")
-    if isinstance(policy, dict) and policy.get("mode") in _VALID_RECONCILIATION_MODES:
-        return policy
-    return dict(_DEFAULT_RECONCILIATION_POLICY)
+    section = _reconciliation_settings(project_root)
+    if section.get("mode") not in _VALID_RECONCILIATION_MODES:
+        return dict(_DEFAULT_RECONCILIATION_POLICY)
+    policy: dict[str, Any] = {"mode": section["mode"]}
+    if isinstance(section.get("allowed-providers"), list):
+        policy["allowed-providers"] = list(section["allowed-providers"])
+    decided = get_observation(project_root, _COMPONENT_ID, _DECIDED_KEY)
+    if isinstance(decided, list):
+        policy["decided-providers"] = list(decided)
+    return policy
 
 
 def is_reconciliation_policy_configured(project_root: Path) -> bool:
-    """Return whether a reconciliation-policy has ever been explicitly written.
+    """Return whether a reconciliation policy has ever been explicitly written.
 
     Distinct from `get_reconciliation_policy`, which always returns a usable
     policy (defaulting to auto) even when this is False.
     """
-    payload = load_provider_config_lenient(project_root)
-    return isinstance(payload.get("reconciliation-policy"), dict)
+    return _reconciliation_settings(project_root).get("mode") in _VALID_RECONCILIATION_MODES
 
 
 def set_reconciliation_policy(
@@ -352,10 +328,12 @@ def set_reconciliation_policy(
 ) -> dict[str, Any]:
     """Persist this project's provider reconciliation policy.
 
-    `allowed_providers`/`decided_providers` are only written when explicitly
+    `allowed_providers`/`decided_providers` are only kept when explicitly
     passed, so switching back to `mode="auto"` round-trips as ``{"mode":
     "auto"}`` with no stale lists left over from a prior allowlist/prompt mode.
     """
+    from audiagentic.foundation.config.writer import write_settings_patch
+
     if mode not in _VALID_RECONCILIATION_MODES:
         raise AudiaGenticError(
             code="VAL-PCFG-002",
@@ -363,25 +341,41 @@ def set_reconciliation_policy(
             message="invalid reconciliation-policy mode",
             details={"mode": mode, "allowed": list(_VALID_RECONCILIATION_MODES)},
         )
-    path = _policy_yaml_path(project_root)
-    policy: dict[str, Any] = {"mode": mode}
-    if allowed_providers is not None:
-        policy["allowed-providers"] = sorted(set(allowed_providers))
-    if decided_providers is not None:
-        policy["decided-providers"] = sorted(set(decided_providers))
-    payload = {"contract-version": "v1", "reconciliation-policy": policy}
-    validation_payload = load_provider_config_lenient(project_root)
-    validation_payload["reconciliation-policy"] = policy
-    issues = validate_provider_config(validation_payload)
-    if issues:
-        raise AudiaGenticError(
-            code="VAL-PCFG-001",
-            kind="providers",
-            message="provider config failed validation",
-            details={"issues": issues, "path": str(path)},
+    allowed = None if allowed_providers is None else sorted(set(allowed_providers))
+    write_settings_patch(
+        "project", {"reconciliation": {"mode": mode, "allowed-providers": allowed}}, project_root=project_root,
+    )
+    if decided_providers is None:
+        clear_observation(project_root, _COMPONENT_ID, _DECIDED_KEY)
+    else:
+        record_observation(
+            project_root, _COMPONENT_ID, _DECIDED_KEY, sorted(set(decided_providers)), source="reconcile",
         )
-    _save_provider_config(path, payload)
-    return policy
+    return get_reconciliation_policy(project_root)
+
+
+def _configured_providers(project_root: Path) -> dict[str, Any]:
+    """Providers with settings or local enablement state, as provider-config entries.
+
+    ``install-mode`` and ``access-mode`` are facts of the provider descriptor, not configuration,
+    so they are derived here and never written to a settings file.
+    """
+    from ...descriptors.registry import all_descriptors
+
+    entries = _settings_entries(project_root)
+    observed = {
+        key[len(ENABLED_PREFIX):] for key in observed_keys(project_root, _COMPONENT_ID, ENABLED_PREFIX)
+    }
+    descriptors = all_descriptors()
+    providers: dict[str, Any] = {}
+    for provider_id in sorted((set(entries) | observed) & set(descriptors)):
+        descriptor = descriptors[provider_id]
+        providers[provider_id] = {
+            "install-mode": descriptor.install_mode,
+            "access-mode": descriptor.access_mode,
+            **_provider_options(entries.get(provider_id)),
+        }
+    return providers
 
 
 def load_provider_config_lenient(project_root: Path) -> dict[str, Any]:
@@ -390,60 +384,24 @@ def load_provider_config_lenient(project_root: Path) -> dict[str, Any]:
     For callers that only need provider presence/enablement (resolution, reconcile
     fallback) and must tolerate partial blocks that strict validation would reject.
     """
-    path = _providers_yaml_path(project_root)
-    try:
-        payload = load_yaml_file(path) if path.exists() else {"contract-version": "v1"}
-        policy_path = _policy_yaml_path(project_root)
-        if policy_path.exists():
-            policy_payload = load_yaml_file(policy_path)
-            if isinstance(policy_payload.get("reconciliation-policy"), dict):
-                payload["reconciliation-policy"] = policy_payload["reconciliation-policy"]
-    except Exception:  # noqa: BLE001
-        return {"contract-version": "v1", "providers": {}}
-    if not isinstance(payload, dict) or not payload:
-        payload = {"contract-version": "v1"}
-    providers = payload.get("providers", {})
-    if not isinstance(providers, dict):
-        providers = {}
-    payload = dict(payload)
-    payload["providers"] = _merge_provider_files(project_root, providers)
+    payload: dict[str, Any] = {"contract-version": "v1", "providers": _configured_providers(project_root)}
+    if is_reconciliation_policy_configured(project_root):
+        payload["reconciliation-policy"] = get_reconciliation_policy(project_root)
     return payload
 
 
 def load_provider_config(project_root: Path) -> dict[str, Any]:
-    path = _providers_yaml_path(project_root)
-    try:
-        payload = load_yaml_file(path) if path.exists() else {"contract-version": "v1"}
-        policy_path = _policy_yaml_path(project_root)
-        if policy_path.exists():
-            policy_payload = load_yaml_file(policy_path)
-            if isinstance(policy_payload.get("reconciliation-policy"), dict):
-                payload["reconciliation-policy"] = policy_payload["reconciliation-policy"]
-    except Exception as exc:  # noqa: BLE001
-        raise AudiaGenticError(
-            code="IO-PCFG-001",
-            kind="providers",
-            message="failed to read provider config",
-            details={"path": str(path), "error": str(exc)},
-        ) from exc
-    if not isinstance(payload, dict) or not payload:
-        payload = {"contract-version": "v1"}
-    providers = payload.get("providers", {})
-    if isinstance(providers, dict):
-        payload = dict(payload)
-        providers = _merge_provider_files(project_root, providers)
-        payload["providers"] = {
-            provider_id: apply_feature_enabled_state(project_root, provider_id, provider_cfg)
-            if isinstance(provider_cfg, dict)
-            else provider_cfg
-            for provider_id, provider_cfg in providers.items()
-        }
+    payload = load_provider_config_lenient(project_root)
+    payload["providers"] = {
+        provider_id: apply_feature_enabled_state(project_root, provider_id, provider_cfg)
+        for provider_id, provider_cfg in payload["providers"].items()
+    }
     issues = validate_provider_config(payload)
     if issues:
         raise AudiaGenticError(
             code="VAL-PCFG-001",
             kind="providers",
             message="provider config failed validation",
-            details={"issues": issues, "path": str(path)},
+            details={"issues": issues},
         )
     return payload

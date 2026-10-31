@@ -98,7 +98,6 @@ path-builders:
   - audiagentic/components/providers/services/catalog/source_catalog.py
   - audiagentic/components/providers/services/config/model_source_config.py
   - audiagentic/components/providers/services/config/provider_catalog.py
-  - audiagentic/components/providers/services/config/provider_config.py
   - audiagentic/components/providers/services/execution/prompt_syntax.py
   - audiagentic/components/providers/skill_surfaces.py
   - audiagentic/components/providers/surfaces/contributions.py
