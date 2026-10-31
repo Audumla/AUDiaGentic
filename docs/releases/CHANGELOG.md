@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.51.0](https://github.com/Audumla/AUDiaGentic/compare/v0.50.3...v0.51.0) (2026-10-31)
+
+
+### Features
+
+* **providers:** audiagentic qualify and local platform qualification records ([#303](https://github.com/Audumla/AUDiaGentic/issues/303)) ([db55fc4](https://github.com/Audumla/AUDiaGentic/commit/db55fc445bba4358f61c0df846c30bb4eb492688))
+
 ## [0.50.3](https://github.com/Audumla/AUDiaGentic/compare/v0.50.2...v0.50.3) (2026-10-31)
 
 
