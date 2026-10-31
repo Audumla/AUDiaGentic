@@ -6,9 +6,11 @@ understand. ``apply_shard_migration`` stages verified backups, writes a manifest
 patch under the settings writer's lock, and only then removes the sources. ``rollback_shard_migration``
 restores a key only while it still holds the value the migration wrote, so later edits survive.
 
-Provider enablement becomes the ``providers.<id>.enabled`` policy (a legacy explicit value is
-the user's decision); everything else lands in ``features``. A conflict with a different value
-already in project settings is reported, never merged over.
+The shards are gitignored, per-host files. A provider's legacy ``enabled`` is what lifecycle and
+reconciliation applied on this host, so it becomes a local observation (``providers`` /
+``<id>.enabled``), never a ``providers.<id>.enabled`` policy: that key is the user's own override
+in tracked settings and wins over the observation. Everything else (feature intent, options)
+lands in ``features``. A different value already present is reported as a conflict, never merged over.
 """
 from __future__ import annotations
 
@@ -25,6 +27,7 @@ from audiagentic.foundation.config.writer import write_settings_patch
 from audiagentic.foundation.io import atomic_write_bytes, load_yaml_file
 from audiagentic.foundation.paths.names import PROJECT_MARKER_NAME
 
+from .observations import clear_observation, get_observation, record_observation
 from .state import (
     LEGACY_FEATURE_STATE_PATH,
     SHARD_DIR,
@@ -45,7 +48,8 @@ Path_ = tuple[str, ...]
 class MigrationPlan:
     sources: tuple[Path, ...]
     values: dict[Path_, Any]  # settings key path -> value to set
-    conflicts: dict[Path_, tuple[Any, Any]] = field(default_factory=dict)  # path -> (existing, planned)
+    observations: dict[tuple[str, str], Any] = field(default_factory=dict)  # (component, key) -> value
+    conflicts: dict[tuple[str, ...], tuple[Any, Any]] = field(default_factory=dict)  # path -> (existing, planned)
     unknown: tuple[str, ...] = ()
 
     @property
@@ -104,6 +108,7 @@ def _get(data: Any, path: Path_) -> tuple[bool, Any]:
 def plan_shard_migration(project_root: Path) -> MigrationPlan:
     states, sources, unknown = _load_states(project_root)
     values: dict[Path_, Any] = {}
+    observations: dict[tuple[str, str], Any] = {}
 
     def feature_values(base: Path_, features: Any, where: str) -> None:
         if not isinstance(features, dict):
@@ -133,7 +138,7 @@ def plan_shard_migration(project_root: Path) -> MigrationPlan:
                 if name not in _KNOWN_IMPLEMENTATION_KEYS:
                     unknown.append(f"{component}.implementations.{implementation}.{name}")
                 elif name == "enabled" and component == PROVIDERS:
-                    values[(PROVIDERS, implementation, "enabled")] = bool(value)
+                    observations[(PROVIDERS, f"{implementation}.enabled")] = bool(value)
                 elif name == "enabled":
                     values[(*base, "enabled")] = bool(value)
                 elif name == "options":
@@ -146,7 +151,11 @@ def plan_shard_migration(project_root: Path) -> MigrationPlan:
         present, current = _get(existing, path)
         if present and current != value and not isinstance(value, dict):
             conflicts[path] = (current, value)
-    return MigrationPlan(tuple(sources), values, conflicts, tuple(unknown))
+    for (component, key), value in observations.items():
+        held = get_observation(project_root, component, key)
+        if held is not None and held != value:
+            conflicts[("observation", component, key)] = (held, value)
+    return MigrationPlan(tuple(sources), values, observations, conflicts, tuple(unknown))
 
 
 def _sha(path: Path) -> str:
@@ -188,12 +197,20 @@ def apply_shard_migration(project_root: Path, *, now: datetime | None = None) ->
     for path, value in plan.values.items():
         present, before = _get(existing, path)
         applied.append({"path": list(path), "before-present": present, "before": before, "after": value})
+    for (component, key), value in plan.observations.items():
+        held = get_observation(project_root, component, key)
+        applied.append({
+            "observation": [component, key], "before-present": held is not None, "before": held, "after": value,
+        })
     manifest = {
         "version": MANIFEST_VERSION, "kind": "feature-shards", "status": "prepared",
         "created": stamp, "sources": sources, "applied": applied,
     }
     _write_manifest(directory, manifest)
-    write_settings_patch("project", plan.patch, project_root=project_root)
+    if plan.values:
+        write_settings_patch("project", plan.patch, project_root=project_root)
+    for (component, key), value in plan.observations.items():
+        record_observation(project_root, component, key, value, source="config-migrate", now=now)
     for source in plan.sources:
         source.unlink()
     manifest["status"] = "applied"
@@ -228,6 +245,18 @@ def rollback_shard_migration(project_root: Path, manifest_path: Path) -> dict[st
     patch: dict[str, Any] = {}
     removals: list[Path_] = []
     for entry in manifest["applied"]:
+        if "observation" in entry:
+            component, key = entry["observation"]
+            label = f"observation {component}.{key}"
+            if get_observation(project_root, component, key) != entry["after"]:
+                kept.append(label)
+            elif entry["before-present"]:
+                record_observation(project_root, component, key, entry["before"], source="config-migrate-rollback")
+                restored.append(label)
+            else:
+                clear_observation(project_root, component, key)
+                restored.append(label)
+            continue
         path = tuple(entry["path"])
         present, value = _get(current, path)
         if not present or value != entry["after"]:

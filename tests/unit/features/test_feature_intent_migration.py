@@ -90,7 +90,6 @@ def test_plan_maps_provider_enablement_to_policy_and_the_rest_to_features(projec
     _legacy(project)
     plan = plan_shard_migration(project)
     assert plan.patch == {
-        "providers": {"claude": {"enabled": True}},
         "features": {
             "providers": {"implementations": {"claude": {"options": {"x": 1}}}},
             "coding_lsp": {
@@ -99,6 +98,7 @@ def test_plan_maps_provider_enablement_to_policy_and_the_rest_to_features(projec
             },
         },
     }
+    assert plan.observations == {("providers", "claude.enabled"): True}
     assert plan.conflicts == {} and plan.unknown == ()
 
 
@@ -114,12 +114,28 @@ def test_unknown_legacy_fields_and_conflicts_refuse_the_migration(project: Path)
 def test_conflict_with_existing_project_settings_is_reported(project: Path) -> None:
     (project / ".audiagentic").mkdir(parents=True)
     (project / ".audiagentic" / "settings.yaml").write_text(
-        "schema_version: 1\nproviders:\n  claude:\n    enabled: false\n", encoding="utf-8")
+        "schema_version: 1\nfeatures:\n  coding_lsp:\n    features:\n      'language:python':\n        enabled: false\n",
+        encoding="utf-8")
     _legacy(project)
     plan = plan_shard_migration(project)
-    assert plan.conflicts == {("providers", "claude", "enabled"): (False, True)}
+    assert plan.conflicts == {("features", "coding_lsp", "features", "language:python", "enabled"): (False, True)}
     with pytest.raises(ValueError):
         apply_shard_migration(project)
+
+
+def test_conflicting_existing_observation_is_reported(project: Path) -> None:
+    observations.record_observation(project, "providers", "claude.enabled", False, source="test")
+    _legacy(project)
+    assert plan_shard_migration(project).conflicts == {("observation", "providers", "claude.enabled"): (False, True)}
+
+
+def test_a_provider_policy_in_settings_is_untouched_by_migration(project: Path) -> None:
+    (project / ".audiagentic").mkdir(parents=True)
+    (project / ".audiagentic" / "settings.yaml").write_text(
+        "schema_version: 1\nproviders:\n  claude:\n    enabled: false\n", encoding="utf-8")
+    _legacy(project)
+    apply_shard_migration(project)
+    assert _settings(project)["providers"]["claude"]["enabled"] is False
 
 
 def test_apply_then_rollback_round_trip(project: Path) -> None:
@@ -130,7 +146,8 @@ def test_apply_then_rollback_round_trip(project: Path) -> None:
     assert result["status"] == "applied"
     assert not any(p.exists() for p in sources)
     assert intent.feature_enabled(project, "coding_lsp", "language", "python") is True
-    assert _settings(project)["providers"]["claude"]["enabled"] is True
+    assert "providers" not in _settings(project)  # the policy is the user's, never written by migrate
+    assert observations.get_observation(project, "providers", "claude.enabled") is True
     manifest = Path(result["manifest"])
     assert json.loads(manifest.read_text())["status"] == "applied"
 
@@ -138,7 +155,7 @@ def test_apply_then_rollback_round_trip(project: Path) -> None:
     assert report["kept"] == []
     assert [p.read_bytes() for p in sources] == originals
     assert intent.feature_enabled(project, "coding_lsp", "language", "python") is None
-    assert "claude" not in (_settings(project).get("providers") or {})
+    assert observations.get_observation(project, "providers", "claude.enabled") is None
     assert rollback_shard_migration(project, manifest) == {"restored": [], "kept": [], "sources": []}
 
 
