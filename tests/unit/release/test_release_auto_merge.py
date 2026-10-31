@@ -68,11 +68,11 @@ def test_no_release_pr_is_a_noop():
 def test_merge_is_sha_guarded_and_then_dispatches():
     result = execute("merge-release-pr")
     assert result["error"] is None
-    assert [call[0] for call in result["calls"]] == ["privacy-status", "merge", "dispatch"]
-    assert result["calls"][0][1]["context"] == "privacy"
-    assert result["calls"][0][1]["sha"] == "a" * 40
-    assert result["calls"][1][1]["sha"] == "a" * 40
-    assert result["calls"][2][1]["workflow_id"] == "release.yml"
+    assert [call[0] for call in result["calls"]] == ["privacy-status", "privacy-status", "merge", "dispatch"]
+    assert [call[1]["context"] for call in result["calls"][:2]] == ["privacy", "tests"]
+    assert result["calls"][0][1]["sha"] == result["calls"][1][1]["sha"] == "a" * 40
+    assert result["calls"][2][1]["sha"] == "a" * 40
+    assert result["calls"][3][1]["workflow_id"] == "release.yml"
 
 
 @pytest.mark.parametrize("case", ["stale", "foreign", "human", "wrong-base", "closed"])
@@ -84,7 +84,7 @@ def test_changed_pr_blocks_merge_and_dispatch(case):
 def test_failed_merge_never_dispatches():
     result = execute("merge-release-pr", "merge-failed")
     assert result["error"]
-    assert [call[0] for call in result["calls"]] == ["privacy-status", "merge"]
+    assert [call[0] for call in result["calls"]] == ["privacy-status", "privacy-status", "merge"]
 
 
 def test_retry_after_merge_dispatches_without_merging_again():
