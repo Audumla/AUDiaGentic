@@ -8,6 +8,32 @@ not qualified; joined harness sessions are outside this slice.
 The opt-in installed-package native qualification harness (server-hosted
 execution only) is described in `tests/e2e/shared_gateway/README.md`.
 
+## Where configuration lives
+
+The three role documents below (`server.yaml`, `node.yaml`, `connector.yaml`) are
+deliberately separate from `settings.yaml`: they are operator-authored,
+per-role and per-machine, hold credential file paths, and the server document is
+rewritten by `gateway node revoke`. Everything else about the gateway (port,
+idle grace, trace, dashboard, implementation) is the `gateway` section of
+`settings.yaml` (`audiagentic config show gateway --origin`). Do not add gateway
+options to the role documents. See "Shared gateway role documents" in
+`docs/design/configuration-model.md` for the decision and when to revisit it.
+
+## First-time setup checklist
+
+1. Create each credential as its own file readable only by its owner
+   (`umask 077`), generated with a secure random source, never typed on a command
+   line or committed. One file per principal, node and connector.
+2. Create the state and workspace directories the documents name with mode `0700`;
+   the node receipt store refuses group/other-readable directories.
+3. Write the role document, then check it before serving: `gateway connect config
+   connector.yaml project PATH dry-run` validates a connector and the health
+   handshake. A server or node document is validated when it is served; fix
+   permission and path errors it reports (they never print the credential or its
+   path).
+4. Start the role (`gateway serve config server.yaml`, `gateway node serve config
+   node.yaml`).
+
 ## Server configuration
 
 Save the following as `server.yaml`. Create the referenced directories and
