@@ -251,6 +251,13 @@ def _adapter_factory_exists(adapter_ref: str) -> bool:
 # ---------------------------------------------------------------------------
 
 
+def _allow_unqualified(project_root: Path, provider_id: str) -> bool:
+    """The explicit ``providers.<id>.allow-unqualified`` override (CFG07); doctor reports it."""
+    from audiagentic.foundation.config.settings import resolve_settings_cached
+
+    return resolve_settings_cached(project_root).get(f"providers.{provider_id}.allow-unqualified") is True
+
+
 def _platform_matches(
     target_platform: str,
     platforms: tuple[PlatformEvidence, ...],
@@ -553,12 +560,18 @@ def resolve_session_surface(
                 outcome=SurfaceResolutionOutcome.UNPROVEN,
             )
         elif declaration.platforms:
-            return _unsupported_snapshot(
-                provider_id,
-                surface_hint.surface_id,
-                "no-platform-match",
-                requested_version=declaration.version_constraint,
+            if not _allow_unqualified(project_root, provider_id):
+                return _unsupported_snapshot(
+                    provider_id,
+                    surface_hint.surface_id,
+                    "no-platform-match",
+                    requested_version=declaration.version_constraint,
+                )
+            matched_pe = PlatformEvidence(
+                platform=target_platform,
+                evidence=ValidationEvidence(validated=True, reference="allow-unqualified override"),
             )
+            local_qualified = True  # the user took responsibility; the inventory gate does not second-guess it
 
     # ── 6. Effective evidence for the selected platform ─────────────
     if matched_pe:

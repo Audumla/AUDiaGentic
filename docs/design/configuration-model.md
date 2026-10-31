@@ -242,9 +242,10 @@ only if the package version, spec version and implementation fingerprint
 `qualification-stale`, `qualification-failed` or `qualification-invalid`. This
 platform record is separate from the finer-grained SH53 native-attach evidence
 (`providers/services/qualification/evidence.py`), which keeps its own
-content-addressed store. Not yet done: removing vendor platform claims that no
-one has measured, per-provider live probes beyond the default checks, and a
-doctor line listing unqualified surfaces.
+content-addressed store. `audiagentic doctor` (check `providers.qualification`)
+lists enabled surfaces with no usable evidence for this platform and every use
+of the explicit `providers.<id>.allow-unqualified: true` override. Follow-up
+(CFG12): per-provider live probes and measured vendor platform claims.
 
 ## Credentials
 
