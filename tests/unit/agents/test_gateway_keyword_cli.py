@@ -13,7 +13,7 @@ import pytest
 from audiagentic.commands import gateway
 
 
-@pytest.mark.parametrize("tail", [[], ["help"], ["serve", "help"], ["status", "help"], ["connect", "help"]])
+@pytest.mark.parametrize("tail", [[], ["help"], ["serve", "help"], ["status", "help"], ["connect", "help"], ["validate", "help"]])
 def test_help_subprocess_has_no_runtime_imports(tail):
     script = '''
 import importlib.abc
@@ -268,3 +268,46 @@ def test_restart_help_is_startup_free_and_mentions_the_operator_rule(capsys):
     assert gateway.dispatch_keyword(["restart", "help"]) == 0
     out = capsys.readouterr().out
     assert "no process is signalled by pid" in out and "explicit operator request" in out
+
+
+def test_validate_delegates_to_the_public_api(monkeypatch, capsys, tmp_path):
+    from audiagentic.components.agents.gateway import management_api
+    seen = []
+    monkeypatch.setattr(management_api, "gateway_validate_role_config", lambda role, path: seen.append((role, path)))
+    assert gateway.dispatch_keyword(["validate", "node", "config", str(tmp_path / "n.yaml")]) == 0
+    assert capsys.readouterr().out.strip() == "valid: node"
+    assert seen == [("node", tmp_path / "n.yaml")]
+
+
+def test_validate_reports_registered_errors(monkeypatch, capsys, tmp_path):
+    from audiagentic.components.agents.gateway import management_api
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+    def boom(_role, _path):
+        raise AudiaGenticError("VAL-AGSV-006", "validation", "invalid config")
+    monkeypatch.setattr(management_api, "gateway_validate_role_config", boom)
+    assert gateway.dispatch_keyword(["validate", "server", "config", str(tmp_path / "s.yaml")]) == 1
+    assert "VAL-AGSV-006: invalid config" in capsys.readouterr().err
+
+
+def test_validate_api_runs_the_real_loader_and_rejects_unknown_role(tmp_path):
+    from audiagentic.components.agents.gateway import management_api
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+    bad = tmp_path / "x.yaml"
+    bad.write_text("schema-version: 1\n")
+    with pytest.raises(AudiaGenticError):
+        management_api.gateway_validate_role_config("connector", bad)
+    with pytest.raises(AudiaGenticError):
+        management_api.gateway_validate_role_config("other", bad)
+
+
+@pytest.mark.parametrize("tail", [["validate"], ["validate", "other", "config", "a"], ["validate", "server", "a"],
+                                  ["validate", "server", "config", "a", "extra"], ["validate", "server", "config", "--x"]])
+def test_validate_rejects_bad_grammar(tail, capsys):
+    assert gateway.dispatch_keyword(tail) == 2
+    assert "Invalid gateway" in capsys.readouterr().err
+
+
+def test_validate_help_is_pure(capsys):
+    assert gateway.dispatch_keyword(["validate", "help"]) == 0
+    assert "validate server|node|connector" in capsys.readouterr().out
