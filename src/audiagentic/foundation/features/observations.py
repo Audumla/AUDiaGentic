@@ -61,6 +61,11 @@ def get_observation(
     return entry["value"]
 
 
+def observed_keys(project_root: Path, component: str, prefix: str = "") -> list[str]:
+    """Recorded keys of one component, optionally only those starting with ``prefix``."""
+    return sorted(key for key in _load(observations_path(project_root, component)) if key.startswith(prefix))
+
+
 def clear_observation(project_root: Path, component: str, key: str) -> bool:
     path = observations_path(project_root, component)
     if not path.is_file():
@@ -74,4 +79,4 @@ def clear_observation(project_root: Path, component: str, key: str) -> bool:
     return True
 
 
-__all__ = ["OBSERVATIONS_DIR", "clear_observation", "get_observation", "observations_path", "record_observation"]
+__all__ = ["OBSERVATIONS_DIR", "clear_observation", "get_observation", "observations_path", "observed_keys", "record_observation"]

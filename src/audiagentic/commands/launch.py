@@ -32,10 +32,11 @@ def _should_reconcile_providers_on_launch(project_root: Path) -> bool:
     if setting in {"1", "true", "yes", "always", "on"}:
         return True
 
-    from audiagentic.foundation.features.state import shard_path
+    from audiagentic.foundation.features.observations import observed_keys
+    from audiagentic.foundation.features.state import ENABLED_PREFIX
 
-    providers_feature_state = shard_path(project_root, "providers")
-    return not providers_feature_state.exists() and not _provider_reconcile_stamp_path(project_root).exists()
+    has_provider_state = bool(observed_keys(project_root, "providers", ENABLED_PREFIX))
+    return not has_provider_state and not _provider_reconcile_stamp_path(project_root).exists()
 
 
 def _mark_provider_launch_reconciled(project_root: Path) -> None:

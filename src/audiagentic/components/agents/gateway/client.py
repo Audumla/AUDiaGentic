@@ -49,7 +49,7 @@ def _uses_shared_connector(root: Path) -> bool:
     # selection logic is not duplicated here.
     if _resolve_implementation_id(root)[0] != "standalone":
         return False
-    component = get_component_state(root, _COMPONENT_ID, persist_migration=False)
+    component = get_component_state(root, _COMPONENT_ID)
     standalone = (component.get("implementations") or {}).get("standalone") or {}
     return bool((standalone.get("options") or {}).get("connector-config"))
 

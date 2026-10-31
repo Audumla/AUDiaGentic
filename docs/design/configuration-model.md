@@ -298,7 +298,11 @@ test-scoped. Everything else becomes settings keys
 ## Removed or merged
 
 - `~/.audiagentic/config/agents.yaml` prompt/role/execution-profile/agent chain -> agent files and templates.
-- `.audiagentic/config/runtime/features/*.yaml` (and legacy `features.yaml` migration) -> `providers.<id>.enabled` policy plus state observations.
+- `.audiagentic/config/runtime/features/*.yaml` implementation `enabled` flags (and the legacy
+  `features.yaml` monolith) -> local observations under `.audiagentic/state/observations/`
+  (`enabled:<implementation>`), moved by `audiagentic config migrate`. `providers.<id>.enabled` stays
+  the user's own override and wins over the observation; `auto` defers to it, then to availability.
+  Component options and feature state remain in the shards until their own migration.
 - `model-sources.yaml`, `provider-policy.yaml`, `providers/<id>.yaml`, `gpt-auto*.yaml` overlays, `interoperability/*.yaml`, `.audiagentic/components/*.yaml` markers -> sections of `settings.yaml`.
 - `config/providers/gpt_auto_t1.yaml`, `gpt_auto_t2.yaml` -> `gpt-auto` instances.
 - Separate shared gateway `server.yaml` / `node.yaml` schemas -> settings sections.

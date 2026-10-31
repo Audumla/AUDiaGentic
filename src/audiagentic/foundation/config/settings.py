@@ -283,12 +283,23 @@ def raise_issues(issues: list[SettingsIssue]) -> None:
 
 def doctor_settings(context: Any) -> list[Any]:
     """Doctor check: every settings scope is valid (read-only)."""
-    from audiagentic.foundation.lifecycle.doctor import FAIL, OK, CheckResult
+    from audiagentic.foundation.lifecycle.doctor import FAIL, OK, WARN, CheckResult
 
     resolved = resolve_settings(project=context.project, collect=True)
-    if not resolved.issues:
-        present = sum(1 for source in resolved.sources if source.present)
-        return [CheckResult("settings.valid", OK, f"{present} settings file(s) valid")]
-    return [CheckResult("settings.valid", FAIL, issue.describe(),
-                        "Fix the reported key, or run 'audiagentic config validate' for every issue")
-            for issue in resolved.issues]
+    if resolved.issues:
+        return [CheckResult("settings.valid", FAIL, issue.describe(),
+                            "Fix the reported key, or run 'audiagentic config validate' for every issue")
+                for issue in resolved.issues]
+    present = sum(1 for source in resolved.sources if source.present)
+    results = [CheckResult("settings.valid", OK, f"{present} settings file(s) valid")]
+    if resolved.project_root is not None:
+        from audiagentic.foundation.features.migration import plan_enabled_migration
+
+        pending = plan_enabled_migration(resolved.project_root)
+        if not pending.empty:
+            results.append(CheckResult(
+                "settings.legacy-enabled", WARN,
+                f"{len(pending.flags)} implementation enabled flag(s) are still in feature-state shards",
+                "Run 'audiagentic config migrate' to preview and 'audiagentic config migrate --apply' to move them",
+            ))
+    return results
