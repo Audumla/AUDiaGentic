@@ -23,7 +23,7 @@ its own clean-room recipe tests (see gateway_docker_harness.install_provider)
 
 Provisioning goes through gateway_docker_harness.py for the execution-profile and
 provider-CLI-install pieces. The harness runtime config
-(.audiagentic/config/harness/ag.yaml) and the rig HTTP handler stay local to
+(the harness section of .audiagentic/settings.yaml) and the rig HTTP handler stay local to
 this file: the harness config format is genuine project-authored config (no
     creation API exists for it), and this
 suite's rig needs SSE streaming support that the crash-matrix suite's
@@ -175,15 +175,18 @@ def rig_server():
 
 
 def _write_harness_config(project_root: Path, provider_id: str) -> None:
-    config_root = project_root / ".audiagentic" / "config" / "harness"
-    config_root.mkdir(parents=True, exist_ok=True)
-    (config_root / "ag.yaml").write_text(
+    settings_file = project_root / ".audiagentic" / "settings.yaml"
+    settings_file.parent.mkdir(parents=True, exist_ok=True)
+    settings_file.write_text(
         yaml.safe_dump(
             {
-                "harness": {"type": provider_id},
-                "endpoint": {"url": f"http://127.0.0.1:{_RIG_PORT}/v1", "model": _MODEL_ID, "provider": _VENDOR_ID},
-                "mcp": {"enabled": False},
-                "smoke": {"timeout": 60},
+                "schema_version": 1,
+                "harness": {
+                    "type": provider_id,
+                    "endpoint": {"url": f"http://127.0.0.1:{_RIG_PORT}/v1", "model": _MODEL_ID, "provider": _VENDOR_ID},
+                    "mcp": {"enabled": False},
+                    "smoke": {"timeout": 60},
+                },
             },
             sort_keys=False,
         ),

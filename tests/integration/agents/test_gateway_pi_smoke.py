@@ -22,7 +22,7 @@ Provisioning reuses AUDiaGentic's own real APIs throughout: install_provider_cli
 for the CLI, and write_execution_profile / patch_provider_config for the
 gateway-facing config. The model is a real llama-server that the test-only
 tests/helpers/model_server.py downloads and starts (AUDiaGentic never hosts one).
-The only hand-authored file here is the harness's own ag.yaml (rig port/model)
+The only hand-authored file here is the harness section of the project settings (model endpoint)
 — genuine project-authored config with no creation API, the same status as
     the canonical global agents catalog.
 """
@@ -64,15 +64,18 @@ def _require_docker_gate() -> None:
 def _write_harness_config(project_root: Path, rig_port: int) -> None:
     """Genuine operator-authored harness config — no CRUD API exists for it,
     same status as the canonical global agents catalog."""
-    config_root = project_root / ".audiagentic" / "config" / "harness"
-    config_root.mkdir(parents=True, exist_ok=True)
-    (config_root / "ag.yaml").write_text(
+    settings_file = project_root / ".audiagentic" / "settings.yaml"
+    settings_file.parent.mkdir(parents=True, exist_ok=True)
+    settings_file.write_text(
         yaml.safe_dump(
             {
-                "harness": {"type": "pi"},
-                "endpoint": {"url": f"http://127.0.0.1:{rig_port}/v1", "model": _MODEL_PROFILE, "provider": "audiagentic"},
-                "mcp": {"enabled": False},
-                "smoke": {"timeout": 60},
+                "schema_version": 1,
+                "harness": {
+                    "type": "pi",
+                    "endpoint": {"url": f"http://127.0.0.1:{rig_port}/v1", "model": _MODEL_PROFILE, "provider": "audiagentic"},
+                    "mcp": {"enabled": False},
+                    "smoke": {"timeout": 60},
+                },
             },
             sort_keys=False,
         ),
