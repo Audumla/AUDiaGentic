@@ -2,7 +2,7 @@
 id: CFG13
 order: 0
 plan: config-setup
-state: pending
+state: superseded
 created-at: '2026-10-31T23:03:59.378738+00:00'
 breadth: ''
 skill: advanced
@@ -15,7 +15,7 @@ work: S
 
 ## Description
 
-A shared-gateway server must not authorize from a derived project identity. project_id() falls back to the origin repository NAME (not owner or host), then main-checkout and the directory name, the last two documented as provisional, and its `settings` source reads the fully layered settings, so user or explicit layers can supply it. Add a strict declared-only resolver: the only valid authorization identity is project.id declared in the project's tracked project-scope settings. Derived, user-only and explicit-only values are refused with an actionable error. Reuse the resolver's origin metadata and the existing identity syntax check; no second algorithm. Normal local discovery keeps its fallbacks.
+Cancelled (2026-11-01). A standalone declared-only project identity reader and hardening was a security-weighted design; the user's priority is easy setup, easy maintenance and no duplicated config, with only base security in a shared environment. Kept from it: served projects need a declared project.id (gateway init writes it once into the tracked project scope when absent, using the existing config writer; the gateway reads it with foundation resolve_settings_cached(root).get('project.id')), and duplicate ids among roots are rejected. Those belong to CFG15 and CFG16. Derived ids (origin repository name, directory name) are only the suggestion init writes.
 
 ## Steps
 
@@ -40,7 +40,7 @@ A shared-gateway server must not authorize from a derived project identity. proj
 
 ## Validation
 
-Unit tests for each identity case over temporary repositories; architecture and contract suites.
+Plan cross-reference: CFG15 and CFG16 carry the retained requirements.
 
 ## Effort & Risk
 
@@ -52,11 +52,8 @@ docs/design/configuration-model.md (Shared gateway setup); docs/standards/ARCHIT
 
 ## Acceptance Criteria
 
-- Missing, user-only, explicit-only, derived-only, malformed, duplicate and overlapping-root identities each fail with a distinct actionable error
-- A valid tracked declaration resolves to the same id in every clone and worktree; client and server resolve the same id
-- The reader never follows includes or references (cross-scope injection test)
-- Non-gateway callers of project_id() are unchanged
-- No new identity algorithm is introduced
+- Superseded by CFG15 (stable id creation) and CFG16 (served-project id resolution and duplicate rejection)
+- No standalone identity reader, collision framework or overlap analysis is built
 
 ## Notes
 
@@ -66,6 +63,8 @@ Trigger: the shared gateway must not authorize from provisional ids, and CFG15/C
 
 Trigger: the shared gateway must not authorize from provisional ids (origin repository name, main checkout, directory name), and CFG15/CFG16 need one id entered once. Prerequisite for CFG15 and CFG16; independent of CFG14. Design record: docs/design/configuration-model.md, Shared gateway setup. Decided after five GPT rounds and a check against ARCHITECTURE_STANDARDS, ARCHITECTURE_GUIDELINES, SECRETS_MANAGEMENT and CI_RELEASE_GATES (placement is foundation, not the project component, because only providers is an approved cross-component API).
 
+Agreed with GPT in round 7: the plan of record is CFG14, CFG15, CFG16, CFG17 (P2) and CFG12 unchanged.
+
 ## Change Log
 
 - 2026-10-31T23:03:59.378738+00:00 (created-by): Created by claude
@@ -73,3 +72,5 @@ Trigger: the shared gateway must not authorize from provisional ids (origin repo
 - 2026-10-31T23:06:54.802508+00:00 (updated-by): Updated: section:standards
 - 2026-10-31T23:09:43.659951+00:00 (updated-by): Updated: section:steps, section:notes
 - 2026-10-31T23:14:25.206806+00:00 (updated-by): Updated: section:steps, section:acceptance_criteria, section:notes
+- 2026-10-31T23:30:23.820414+00:00 (state-transition): State: pending → superseded
+- 2026-10-31T23:30:26.340109+00:00 (updated-by): Updated: section:description, section:validation, section:acceptance_criteria, section:notes
