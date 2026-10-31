@@ -304,3 +304,14 @@ HTTPS handshake, unauthorized and cross-project denial, exclusion of legacy
 routes, two independent clients, correlated terminal output, and
 restart/disconnect recovery. Those checks remain deployment qualification work;
 the config unit tests do not establish them.
+
+## Operator lifecycle commands
+
+One place manages the running service: `audiagentic gateway` with `restart`, `drain`, `resume`,
+`stop [force]` and `recover reason TEXT`. Each is a thin adapter over `management_api`
+(`gateway_restart`, `gateway_drain`, `gateway_resume`, `gateway_stop`, `gateway_recover`), asks
+first unless `non-interactive` (`resume` never asks), and takes `output json`. `drain`, `resume`
+and `stop` attach to the running service and never start one. A graceful `stop` is refused while
+work is in flight; `force` stops anyway and reports the affected work. `recover` only records a
+failed owner under a new epoch and never signals a pid; it is refused while the owner is
+provable. Agent sessions run these only on an explicit operator request.

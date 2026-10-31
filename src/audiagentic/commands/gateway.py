@@ -131,6 +131,10 @@ _KEYWORD_HELP = {
   audiagentic gateway status config FILE [output json]
   audiagentic gateway connect config FILE project PATH [dry-run|non-interactive]
   audiagentic gateway restart [non-interactive] [output json]
+  audiagentic gateway drain [non-interactive] [output json]
+  audiagentic gateway resume [output json]
+  audiagentic gateway stop [force] [non-interactive] [output json]
+  audiagentic gateway recover reason TEXT [non-interactive] [output json]
   audiagentic gateway node serve config FILE
   audiagentic gateway node serve help
   audiagentic gateway node revoke config FILE node ID revision N
@@ -144,8 +148,30 @@ serve runs an independent foreground service using a server configuration.
 status reads remote health only; it never starts or controls a local service.
 connect validates a connector and checks remote health before binding a project.
 Use COMMAND help for configuration and credential details.
-Retired lifecycle commands drain/resume/stop/recover are not public CLI routes; restart is the one lifecycle command.
+drain/resume/stop/recover act on the already running service (they never start one). stop refuses while
+work is in flight unless force; recover only records a failed owner and never signals a pid.
+Agent sessions run the lifecycle commands only on an explicit operator request.
 Options beginning with -- are not accepted; use the keywords shown above.""",
+    "drain": """Drain the running gateway service (keyword syntax):
+  audiagentic gateway drain [non-interactive] [output json]
+
+The service stops admitting new work; in-flight work finishes. It acts on the running service only and
+never starts one. Undo with resume. Asks first unless non-interactive. Explicit operator request only.""",
+    "resume": """Resume a drained gateway service (keyword syntax):
+  audiagentic gateway resume [output json]
+
+The service admits new work again. It acts on the running service only and never starts one.""",
+    "stop": """Stop the running gateway service (keyword syntax):
+  audiagentic gateway stop [force] [non-interactive] [output json]
+
+A graceful stop is refused while work is in flight; force stops anyway and reports the affected work.
+No process is signalled by pid. Asks first unless non-interactive. Explicit operator request only.""",
+    "recover": """Record recovery of an unprovable gateway owner (keyword syntax):
+  audiagentic gateway recover reason TEXT [non-interactive] [output json]
+
+For a recorded owner that is alive but cannot be proven: the record is marked failed under a new owner
+epoch so a stale writer is fenced. No process is signalled or adopted, and it is refused while the owner
+is provable (use stop). Asks first unless non-interactive. Explicit operator request only.""",
     "restart": """Restart the managed gateway service (keyword syntax):
   audiagentic gateway restart [non-interactive] [output json]
 
@@ -258,8 +284,17 @@ def _shared_client(config: Any) -> StandaloneGatewayClient:
     )
 
 
-def _dispatch_restart(tail: list[str]) -> int:
-    """``gateway restart [non-interactive] [output json]``: a thin adapter over the management API."""
+_LIFECYCLE_PROMPTS = {
+    "restart": "Restart the shared gateway service? In-flight work drains first and every session using it is "
+               "briefly interrupted. [y/N] ",
+    "drain": "Drain the shared gateway service? It stops admitting new work for every session until resumed. [y/N] ",
+    "stop": "Stop the shared gateway service? Every session using it loses it until it is started again. [y/N] ",
+    "recover": "Record recovery of the unprovable gateway owner? No process is signalled. [y/N] ",
+}
+
+
+def _dispatch_lifecycle(command: str, tail: list[str]) -> int:
+    """``gateway restart|drain|resume|stop|recover``: thin adapters over the management API."""
     from audiagentic.foundation.cli_io import print_error
 
     rest = list(tail)
@@ -269,30 +304,47 @@ def _dispatch_restart(tail: list[str]) -> int:
     as_json = rest[-2:] == ["output", "json"]
     if as_json:
         rest = rest[:-2]
-    if rest or any(token.startswith("--") for token in tail):
+    force = command == "stop" and "force" in rest
+    if force:
+        rest.remove("force")
+    reason = None
+    if command == "recover" and len(rest) >= 2 and rest[0] == "reason":
+        reason = " ".join(rest[1:])
+        rest = []
+    if rest or (command == "recover" and not reason) or any(token.startswith("--") for token in tail):
         print_error("Invalid gateway syntax. Run: audiagentic gateway help")
         return 2
-    if not non_interactive:
-        answer = input("Restart the shared gateway service? In-flight work drains first and every session using "
-                       "it is briefly interrupted. [y/N] ").strip().lower()
-        if answer not in {"y", "yes"}:
-            print("Not restarted.")
+    if command in _LIFECYCLE_PROMPTS and not non_interactive and command != "resume":
+        if input(_LIFECYCLE_PROMPTS[command]).strip().lower() not in {"y", "yes"}:
+            print(f"Not {command}ed." if command != "stop" else "Not stopped.")
             return 1
     from audiagentic.components.agents.gateway import management_api
     from audiagentic.foundation.contracts.errors import AudiaGenticError
 
     try:
-        result = management_api.gateway_restart(Path.cwd())
+        if command == "restart":
+            result = management_api.gateway_restart(Path.cwd())
+        elif command == "drain":
+            result = management_api.gateway_drain(Path.cwd())
+        elif command == "resume":
+            result = management_api.gateway_resume(Path.cwd())
+        elif command == "stop":
+            result = management_api.gateway_stop(Path.cwd(), force=force)
+        else:
+            result = management_api.gateway_recover(reason=str(reason))
     except AudiaGenticError as error:
         print_error(f"{error.code}: {error.message}")
         return 1
     if as_json:
         _json_out(result)
         return 0
-    old = (result.get("restarting") or {}).get("owner-epoch")
-    new = (result.get("status") or {}).get("owner-epoch")
-    print(f"gateway service restarted: owner epoch {str(old)[:8]} -> {str(new)[:8]}, state "
-          f"{(result.get('status') or {}).get('state', 'unknown')}")
+    if command == "restart":
+        old = (result.get("restarting") or {}).get("owner-epoch")
+        new = (result.get("status") or {}).get("owner-epoch")
+        print(f"gateway service restarted: owner epoch {str(old)[:8]} -> {str(new)[:8]}, state "
+              f"{(result.get('status') or {}).get('state', 'unknown')}")
+    else:
+        print(f"gateway {command}: {json.dumps(result, default=str)}")
     return 0
 
 
@@ -306,8 +358,8 @@ def dispatch_keyword(tokens: list[str]) -> int:
     command = tokens[0]
     if command == "node":
         return _dispatch_node_keyword(tokens[1:])
-    if command == "restart" and tokens[1:] != ["help"]:
-        return _dispatch_restart(tokens[1:])
+    if command in _LIFECYCLE_PROMPTS | {"resume": ""} and tokens[1:] != ["help"]:
+        return _dispatch_lifecycle(command, tokens[1:])
     if command in _KEYWORD_HELP and tokens[1:] == ["help"]:
         print(_KEYWORD_HELP[command])
         return 0
