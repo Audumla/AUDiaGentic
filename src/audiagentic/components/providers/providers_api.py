@@ -2017,7 +2017,9 @@ def inspect_join_instance(
 
 def join_matrix(*, state_root: Path | None = None):
     """Join readiness of every provider surface, from the one Provider authority (SH48)."""
-    from audiagentic.components.providers.services.session.join_authority import join_matrix as _matrix
+    from audiagentic.components.providers.services.session.join_authority import (
+        join_matrix as _matrix,
+    )
 
     return _matrix(state_root=state_root)
 
@@ -2029,7 +2031,9 @@ def register_join(provider_id: str, surface_id: str, *, endpoint: str, session_r
     No registration exists unless the surface is join-ready and the instance is
     proven. The caller stores the frozen registration; nothing is kept here.
     """
-    from audiagentic.components.providers.services.session.join_authority import register_join as _register
+    from audiagentic.components.providers.services.session.join_authority import (
+        register_join as _register,
+    )
 
     return _register(provider_id, surface_id, endpoint=endpoint, session_ref=session_ref, state_root=state_root)
 
