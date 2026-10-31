@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import platform
 import sys
 from pathlib import Path
@@ -86,10 +85,11 @@ def config() -> dict[str, Any]:
 
 
 def set_auto_update(enabled: bool) -> dict[str, Any]:
-    """Enable or disable launch-time auto update checks."""
-    env_var = "AUDIAGENTIC_AUTO_UPDATE_ENABLED"
-    os.environ[env_var] = str(enabled).lower()
-    return {"ok": True, "auto_update_enabled": enabled, "env": env_var}
+    """Enable or disable launch-time auto update checks (``launch.auto_update`` in the user settings)."""
+    from audiagentic.foundation.config.writer import write_settings_patch
+
+    result = write_settings_patch("user", {"launch": {"auto_update": enabled}})
+    return {"ok": True, "auto_update_enabled": enabled, "file": str(result.path)}
 
 
 def refresh_harness_config(project_root: Path) -> dict[str, Any]:
@@ -106,11 +106,12 @@ def refresh_harness_config(project_root: Path) -> dict[str, Any]:
 
 
 def _auto_update_status() -> dict[str, Any]:
+    from audiagentic.foundation.config.launch_settings import launch_setting
     from audiagentic.runtime.update.checker import check_update, current_version
 
     payload: dict[str, Any] = {
         "installed_version": current_version(),
-        "enabled": os.environ.get("AUDIAGENTIC_AUTO_UPDATE_ENABLED", "true").lower() == "true",
+        "enabled": bool(launch_setting("auto_update")),
     }
     update = check_update(force=True)
     if update:

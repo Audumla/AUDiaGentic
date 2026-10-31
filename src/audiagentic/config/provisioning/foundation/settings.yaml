@@ -83,3 +83,10 @@ logging:
     - asyncio
     - httpx
     - urllib3
+
+launch:
+  status: true               # print startup status lines to stderr
+  auto_update: true          # check for a newer release at launch
+  reconcile_providers: auto  # auto = once per project | always | never
+
+locale: en
