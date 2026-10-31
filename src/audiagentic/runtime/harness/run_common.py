@@ -60,7 +60,7 @@ def build_global_context(
             kind="harness-config",
             message=(
                 "No model configured. Set endpoint.model in the harness config "
-                "(config/harness/ag.yaml, user or project)."
+                "(the harness.endpoint settings, user or project)."
             ),
             details={"field": "endpoint.model"},
         )

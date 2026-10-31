@@ -73,15 +73,18 @@ def _require_docker_gate() -> None:
 
 
 def _write_harness_config(project_root: Path, rig_port: int) -> None:
-    config_root = project_root / ".audiagentic" / "config" / "harness"
-    config_root.mkdir(parents=True, exist_ok=True)
-    (config_root / "ag.yaml").write_text(
+    settings_file = project_root / ".audiagentic" / "settings.yaml"
+    settings_file.parent.mkdir(parents=True, exist_ok=True)
+    settings_file.write_text(
         yaml.safe_dump(
             {
-                "harness": {"type": "pi"},
-                "endpoint": {"url": f"http://127.0.0.1:{rig_port}/v1", "model": _MODEL_PROFILE, "provider": "audiagentic"},
-                "mcp": {"enabled": False},
-                "smoke": {"timeout": 60},
+                "schema_version": 1,
+                "harness": {
+                    "type": "pi",
+                    "endpoint": {"url": f"http://127.0.0.1:{rig_port}/v1", "model": _MODEL_PROFILE, "provider": "audiagentic"},
+                    "mcp": {"enabled": False},
+                    "smoke": {"timeout": 60},
+                },
             },
             sort_keys=False,
         ),

@@ -75,10 +75,10 @@ def _harness_error(code_number: int, message: str, **details: object) -> AudiaGe
 
 
 def default_config_path() -> Path:
-    """Package-default harness config path (config/provisioning/harness/ag.yaml)."""
-    from .paths import _HARNESS_CONFIG
+    """The packaged defaults file the ``harness`` settings section starts from (vendor scope)."""
+    from audiagentic.foundation.config.settings import vendor_settings_path
 
-    return _HARNESS_CONFIG
+    return vendor_settings_path()
 
 
 def get_harness_type(project_root: Path | None = None) -> str:
@@ -93,14 +93,9 @@ def get_harness_type(project_root: Path | None = None) -> str:
        (``order[0]``) is returned so config/dispatch still target a valid
        harness; the not-installed condition surfaces at launch time.
     """
-    from audiagentic.foundation.config import load_layered_config
+    from audiagentic.foundation.config.harness_settings import harness_ag_config
 
-    cfg = load_layered_config(
-        pkg_default_path=default_config_path(),
-        project_root=project_root,
-        namespace="harness/ag",
-    )
-    harness_cfg = cfg.get("harness", {})
+    harness_cfg = harness_ag_config(project_root).get("harness", {})
 
     pinned = harness_cfg.get("type")
     if pinned:
@@ -186,18 +181,14 @@ def refresh_harness_config_if_installed(
 
     Routes through providers_api.materialize_provider_config (HA11).
     """
-    from audiagentic.foundation.config import load_layered_config
+    from audiagentic.foundation.config.harness_settings import harness_ag_config
     from audiagentic.runtime.harness.resolution import harness_cli_available
 
     harness_type = get_harness_type(project_root)
     if not harness_cli_available(harness_type):
         return False
 
-    harness_cfg = load_layered_config(
-        pkg_default_path=default_config_path(),
-        project_root=project_root,
-        namespace="harness/ag",
-    )
+    harness_cfg = harness_ag_config(project_root)
 
     from audiagentic.components.providers import providers_api
     from audiagentic.foundation.paths.home import global_harness_runtime
@@ -219,15 +210,11 @@ def refresh_materialized_agent_config(target: Path, project_root: Path | None = 
     adapter owns its own config shapes and delivery mechanism (HA11).
     """
     from audiagentic.components.providers import providers_api
-    from audiagentic.foundation.config import load_layered_config
+    from audiagentic.foundation.config.harness_settings import harness_ag_config
 
     root = project_root or Path.cwd()
     harness_type = get_harness_type(root)
-    harness_cfg = load_layered_config(
-        pkg_default_path=default_config_path(),
-        project_root=root,
-        namespace="harness/ag",
-    )
+    harness_cfg = harness_ag_config(root)
 
     providers_api.materialize_provider_config(
         root,
@@ -288,7 +275,7 @@ def resolve_session_info(project_root: Path | None = None) -> ProviderSessionInf
     Each harness resolves its own session info through its interface.
     Session component consumes this — it never touches rig internals.
     """
-    from audiagentic.foundation.config import load_layered_config
+    from audiagentic.foundation.config.harness_settings import harness_ag_config
     from audiagentic.foundation.paths.home import global_harness_runtime
 
     info = ProviderSessionInfo()
@@ -318,12 +305,7 @@ def resolve_session_info(project_root: Path | None = None) -> ProviderSessionInf
     # Model config from harness config (shared across providers)
     requested = os.environ.get(MODEL_ENV)
     if not requested:
-        cfg = load_layered_config(
-            pkg_default_path=default_config_path(),
-            project_root=None,
-            namespace="harness/ag",
-        )
-        requested = cfg.get("endpoint", {}).get("model")
+        requested = harness_ag_config(None).get("endpoint", {}).get("model")
 
     info = ProviderSessionInfo(**{
         **info.__dict__,

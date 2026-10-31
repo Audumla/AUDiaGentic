@@ -88,7 +88,7 @@ def materialize_provider_config(
         agent_runtime: Target directory for agent files (harness runtime root).
             Defaults to the global harness runtime from foundation.paths.home.
     """
-    from audiagentic.foundation.config import load_layered_config
+    from audiagentic.foundation.config.harness_settings import harness_pi_config
     from audiagentic.foundation.paths.home import global_harness_runtime
 
     if agent_runtime is None:
@@ -105,16 +105,8 @@ def materialize_provider_config(
             )
         agent_runtime = runtime
 
-    # Load Pi-specific config (theme, UI options).
-    pi_cfg_path = _TEMPLATES_DIR.parent.parent / "pi.yaml"
-    if pi_cfg_path.exists():
-        pi_cfg = load_layered_config(
-            pkg_default_path=pi_cfg_path,
-            project_root=project_root,
-            namespace="harness/pi",
-        )
-    else:
-        pi_cfg = {}
+    # Pi-specific config (theme, UI options).
+    pi_cfg = harness_pi_config(project_root)
 
     agent_dir = agent_runtime / "agent"
     agent_dir.mkdir(parents=True, exist_ok=True)

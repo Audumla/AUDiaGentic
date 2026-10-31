@@ -6,18 +6,11 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from audiagentic.foundation.config import load_layered_config
-from audiagentic.foundation.paths.package import PACKAGE_ROOT
-
-_PI_CONFIG = PACKAGE_ROOT / "config" / "provisioning" / "harness" / "pi.yaml"
+from audiagentic.foundation.config.harness_settings import harness_pi_config
 
 
 def _load_install_config(project_root=None) -> dict:
-    return load_layered_config(
-        pkg_default_path=_PI_CONFIG,
-        project_root=project_root,
-        namespace="harness/pi",
-    ).get("agent", {})
+    return harness_pi_config(project_root).get("agent", {})
 
 
 def _npm() -> str:

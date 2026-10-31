@@ -14,8 +14,8 @@ from typing import Any
 from audiagentic.components.providers.contracts.session_status import (
     ProviderSessionInfo,
 )
-from audiagentic.foundation.config import load_layered_config
 from audiagentic.foundation.config.harness import ENDPOINT_ENV
+from audiagentic.foundation.config.harness_settings import harness_ag_config
 from audiagentic.foundation.contracts.errors import make_error
 
 logger = logging.getLogger(__name__)
@@ -56,7 +56,6 @@ def model_info(ctx: ProviderSessionInfo) -> dict[str, Any]:
 
 def harness_config(ctx: ProviderSessionInfo) -> dict[str, Any]:
     """Return harness config from provider session info."""
-    from pathlib import Path
 
     from audiagentic.foundation.paths.home import global_harness_runtime
 
@@ -70,11 +69,7 @@ def harness_config(ctx: ProviderSessionInfo) -> dict[str, Any]:
             message="no harness config path available",
             details={},
         )
-    harness_cfg = load_layered_config(
-        pkg_default_path=Path(cfg_path),
-        project_root=None,
-        namespace="harness/ag",
-    )
+    harness_cfg = harness_ag_config(None)
     payload: dict[str, Any] = {
         "config": harness_cfg,
         "config_path": cfg_path,

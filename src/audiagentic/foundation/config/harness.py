@@ -34,7 +34,7 @@ def require_harness_endpoint(harness_cfg: dict[str, Any]) -> str:
         raise _harness_config_error(
             2,
             "Harness config missing required 'endpoint' section. "
-            "Expected config/provisioning/harness/ag.yaml to define endpoint.url.",
+            "Expected the packaged defaults (provisioning/foundation/settings.yaml, harness section) to define endpoint.url.",
             field="endpoint",
         )
     raw = endpoint_cfg.get("url")
@@ -42,7 +42,7 @@ def require_harness_endpoint(harness_cfg: dict[str, Any]) -> str:
         raise _harness_config_error(
             3,
             "Harness config missing required 'endpoint.url'. "
-            "Set it in config/provisioning/harness/ag.yaml or override config.",
+            "Set harness.endpoint in your settings (audiagentic config set).",
             field="endpoint.url",
         )
     url = str(raw).strip().rstrip("/")

@@ -18,12 +18,9 @@ from pathlib import Path
 from typing import Any
 
 from audiagentic.components.providers.adapters.cli import require_executable
-from audiagentic.foundation.config import load_layered_config
+from audiagentic.foundation.config.harness_settings import harness_pi_config
 from audiagentic.foundation.paths.names import project_marker_path
-from audiagentic.foundation.paths.package import PACKAGE_ROOT
 from audiagentic.foundation.transports import ProviderLaunch
-
-_PI_CONFIG = PACKAGE_ROOT / "config" / "provisioning" / "harness" / "pi.yaml"
 
 # Stock-Pi flags for a fast, isolated health check: no session, no tools, no
 # discovery of anything, one fixed prompt whose exact echo proves the round trip.
@@ -45,11 +42,7 @@ _TOOLS_MODE_FLAGS: dict[str, list[str]] = {
 
 
 def load_pi_config(project_root: Path | None = None) -> dict:
-    return load_layered_config(
-        pkg_default_path=_PI_CONFIG,
-        project_root=project_root,
-        namespace="harness/pi",
-    )
+    return harness_pi_config(project_root)
 
 
 def translate_runner_args(runner_params: Any) -> list[str]:

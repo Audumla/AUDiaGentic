@@ -154,7 +154,9 @@ PROVIDER_FILES_DIR = Path(PROJECT_MARKER_NAME) / "config" / "providers"
 PROVIDER_REGISTRY = Path(PROJECT_MARKER_NAME) / "config" / "runtime" / "providers.yaml"
 PROVIDER_POLICY = Path(PROJECT_MARKER_NAME) / "config" / "provider-policy.yaml"
 PROJECT_MODEL_SOURCES = Path(PROJECT_MARKER_NAME) / "config" / "model-sources.yaml"
+HARNESS_FILES_DIR = Path(PROJECT_MARKER_NAME) / "config" / "harness"
 DECIDED_KEY = "reconciliation.decided"
+_HARNESS_AG_KEYS = {"endpoint", "smoke", "mcp"}
 
 # A settings key is (scope, section, ...): the scope names the settings file it lives in.
 SettingsPath = tuple[str, ...]
@@ -166,6 +168,7 @@ class ProviderConfigPlan:
     values: dict[SettingsPath, Any]
     decided: list[str] | None
     conflicts: dict[SettingsPath, tuple[Any, Any]] = field(default_factory=dict)  # path -> (existing, planned)
+    unknown: tuple[str, ...] = ()  # legacy keys with no settings home; they refuse the migration
 
     def patch(self, scope: str) -> dict[str, Any]:
         patch: dict[str, Any] = {}
@@ -209,6 +212,38 @@ def _leaves(prefix: SettingsPath, value: Any) -> dict[SettingsPath, Any]:
     return {prefix: value}
 
 
+def _user_harness_dir() -> Path:
+    from audiagentic.foundation.paths.home import audiagentic_home
+
+    return audiagentic_home() / "config" / "harness"
+
+
+def _harness_values(scope: str, directory: Path, unknown: list[str]) -> tuple[list[Path], dict[SettingsPath, Any]]:
+    """Legacy ag.yaml and pi.yaml in one directory, as keys of the ``harness`` section."""
+    files: list[Path] = []
+    values: dict[SettingsPath, Any] = {}
+    ag = directory / "ag.yaml"
+    if ag.is_file():
+        files.append(ag)
+        data = load_yaml_file(ag)
+        for key, value in data.items():
+            if key == "harness" and isinstance(value, dict):
+                for name, item in value.items():
+                    if name in ("order", "type"):
+                        values[(scope, "harness", name)] = item
+                    else:
+                        unknown.append(f"{ag}: harness.{name}")
+            elif key in _HARNESS_AG_KEYS:
+                values.update(_leaves((scope, "harness", key), value))
+            else:
+                unknown.append(f"{ag}: {key}")
+    pi = directory / "pi.yaml"
+    if pi.is_file():
+        files.append(pi)
+        values.update(_leaves((scope, "harness", "pi"), load_yaml_file(pi)))
+    return files, values
+
+
 def _user_model_sources_file() -> Path:
     from audiagentic.foundation.paths.home import audiagentic_home
 
@@ -248,13 +283,18 @@ def plan_provider_config_migration(project_root: Path) -> ProviderConfigPlan:
             sources.append(file)
             for source_id, source in (load_yaml_file(file).get("sources") or {}).items():
                 values.update(_leaves((scope, "model-sources", str(source_id)), source))
+    unknown: list[str] = []
+    for scope, directory in (("project", project_root / HARNESS_FILES_DIR), ("user", _user_harness_dir())):
+        files, harness_values = _harness_values(scope, directory, unknown)
+        sources.extend(files)
+        values.update(harness_values)
     documents = _scope_documents(project_root)
     conflicts: dict[SettingsPath, tuple[Any, Any]] = {}
     for path, value in values.items():
         present, current = _lookup(documents[path[0]], path[1:])
         if present and current != value:
             conflicts[path] = (current, value)
-    return ProviderConfigPlan(tuple(sources), values, decided, conflicts)
+    return ProviderConfigPlan(tuple(sources), values, decided, conflicts, tuple(unknown))
 
 
 def _backup_name(index: int, source: Path) -> str:
@@ -267,9 +307,10 @@ def apply_provider_config_migration(project_root: Path, *, now: datetime | None 
     plan = plan_provider_config_migration(project_root)
     if plan.empty:
         return {"status": "nothing-to-migrate"}
-    if plan.conflicts:
+    if plan.conflicts or plan.unknown:
         raise ValueError(
             "legacy configuration migration refused: conflicts=" + str(sorted(".".join(p) for p in plan.conflicts))
+            + f" unknown={list(plan.unknown)}"
         )
     stamp = (now or datetime.now(UTC)).strftime("%Y%m%dT%H%M%S%fZ")
     directory = project_root / MIGRATIONS_DIR / f"provider-config-{stamp}"

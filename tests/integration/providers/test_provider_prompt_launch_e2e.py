@@ -170,13 +170,15 @@ def _pi_case(project_root: Path) -> None:
         harness_runtime = global_harness_runtime()
         refresh_materialized_agent_config(harness_runtime, project_root=project_root)
         server = start_model_server()
-        harness_cfg = project_root / ".audiagentic" / "config" / "harness" / "ag.yaml"
+        harness_cfg = project_root / ".audiagentic" / "settings.yaml"
         harness_cfg.parent.mkdir(parents=True, exist_ok=True)
         harness_cfg.write_text(
-            "endpoint:\n"
-            f"  url: {server.endpoint}\n"
-            f"  model: {model}\n"
-            f"  provider: {os.environ.get('AUDIAGENTIC_TEST_PI_PROVIDER', 'audiagentic')}\n",
+            "schema_version: 1\n"
+            "harness:\n"
+            "  endpoint:\n"
+            f"    url: {server.endpoint}\n"
+            f"    model: {model}\n"
+            f"    provider: {os.environ.get('AUDIAGENTIC_TEST_PI_PROVIDER', 'audiagentic')}\n",
             encoding="utf-8",
         )
         try:

@@ -85,7 +85,6 @@ where = ["src"]
   "config/providers/*.yaml",
   "config/recipes/*.yaml",
   # Package-default configs
-  "config/provisioning/harness/*.yaml",
   "config/provisioning/rig/*.yaml",
   "config/provisioning/foundation/*.yaml",
   "components/providers/contracts/*.yaml",
