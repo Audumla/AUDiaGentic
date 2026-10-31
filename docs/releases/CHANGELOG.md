@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.48.0](https://github.com/Audumla/AUDiaGentic/compare/v0.47.0...v0.48.0) (2026-10-31)
+
+
+### Features
+
+* **gateway:** drain, resume, stop and recover join restart as gateway CLI commands (SH63) ([#264](https://github.com/Audumla/AUDiaGentic/issues/264)) ([5b61990](https://github.com/Audumla/AUDiaGentic/commit/5b619900b55ade427919adc0e1eaeba30de8d6c3))
+
 ## [0.47.0](https://github.com/Audumla/AUDiaGentic/compare/v0.46.0...v0.47.0) (2026-10-31)
 
 
