@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.55.0](https://github.com/Audumla/AUDiaGentic/compare/v0.54.2...v0.55.0) (2026-10-31)
+
+
+### Features
+
+* **gateway:** offline gateway validate server|node|connector config FILE ([#314](https://github.com/Audumla/AUDiaGentic/issues/314)) ([53e56ad](https://github.com/Audumla/AUDiaGentic/commit/53e56ad39f88c06893a5ee8753b90b15a97c9130))
+
 ## [0.54.2](https://github.com/Audumla/AUDiaGentic/compare/v0.54.1...v0.54.2) (2026-10-31)
 
 
