@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.48.3](https://github.com/Audumla/AUDiaGentic/compare/v0.48.2...v0.48.3) (2026-10-31)
+
+
+### Documentation
+
+* **planning:** restore 28 closed review records (RV1149-RV1193) ([#274](https://github.com/Audumla/AUDiaGentic/issues/274)) ([399a8f1](https://github.com/Audumla/AUDiaGentic/commit/399a8f110117090020392c94e6b298720d486dc6))
+
 ## [0.48.2](https://github.com/Audumla/AUDiaGentic/compare/v0.48.1...v0.48.2) (2026-10-31)
 
 
