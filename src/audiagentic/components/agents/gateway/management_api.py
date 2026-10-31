@@ -228,6 +228,28 @@ def validate_standalone_config(options: dict[str, Any]) -> None:
                               "standalone requires connector-config or endpoint and token-file")
 
 
+def gateway_validate_role_config(role: str, config_path: Path) -> None:
+    """Validate one shared-gateway role document offline through its owning loader.
+
+    ``role`` is ``server``, ``node`` or ``connector``. Nothing is started, no network
+    is touched and credentials are checked for mode and identity but never read.
+    Raises ``AudiaGenticError`` on any invalid document.
+    """
+    from audiagentic.foundation.contracts.errors import make_error_factory
+
+    from .service import shared_config
+
+    loaders = {
+        "server": shared_config.load_shared_server_config,
+        "node": shared_config.load_shared_node_config,
+        "connector": shared_config.load_shared_connector_config,
+    }
+    if role not in loaders:
+        raise make_error_factory("VAL", "AGSV", "gateway-service")(
+            6, "gateway role must be server, node or connector", role=role)
+    loaders[role](Path(config_path).resolve())
+
+
 def gateway_connect_config(project_root: Path, config_path: Path) -> dict[str, Any]:
     """Select a validated connector through the existing Agents state owner.
 
