@@ -40,8 +40,10 @@ def _project(tmp_path: Path, text: str | None = None) -> Path:
 
 def test_vendor_defaults_alone(user_config: Path, tmp_path: Path) -> None:
     resolved = resolve_settings(cwd=tmp_path)
-    assert resolved.values == {"schema_version": 1}
+    assert {"schema_version", "harness", "logging"} <= set(resolved.values)
+    assert resolved.values["schema_version"] == 1
     assert resolved.origin("schema_version").scope == "vendor"
+    assert resolved.origin("harness.endpoint.url").scope == "vendor"
     assert resolved.project_root is None
 
 

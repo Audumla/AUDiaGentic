@@ -296,8 +296,8 @@ def _migrate(args: argparse.Namespace, settings: Any) -> int:
         flags = migration.plan_enabled_migration(project_root)
         providers = migration.plan_provider_config_migration(project_root)
         conflicts = [*sorted(map(str, flags.conflicts)), *sorted(".".join(p) for p in providers.conflicts)]
-        if conflicts:
-            raise ValueError(f"conflicting existing values: {conflicts}")
+        if conflicts or providers.unknown:
+            raise ValueError(f"conflicting existing values: {conflicts}; legacy keys with no home: {list(providers.unknown)}")
         if not args.apply:
             return emit(
                 {"ok": True, "applied": False, "enabled-flags": len(flags.flags),

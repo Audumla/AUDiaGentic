@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "settings: harness",
+  "description": "The agent harness AUDiaGentic launches: which one, the OpenAI-compatible model endpoint it talks to, and the Pi harness's own package pins, tool access, lockdown and UI.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "order": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "uniqueItems": true,
+      "description": "Harnesses tried in this order; the first whose CLI is on PATH is used."
+    },
+    "type": {"type": "string", "minLength": 1, "description": "Pin one harness and skip order-based resolution."},
+    "endpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "url": {"type": "string", "minLength": 1, "description": "Base URL of an already-running OpenAI-compatible model server."},
+        "model": {"type": "string", "minLength": 1, "description": "Model the harness requests."},
+        "provider": {"type": "string", "minLength": 1, "description": "Provider id passed to the harness CLI (names the models.json backend block)."}
+      }
+    },
+    "smoke": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {"timeout": {"type": "number", "exclusiveMinimum": 0, "description": "Smoke test timeout in seconds."}}
+    },
+    "mcp": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {"enabled": {"type": "boolean"}}
+    },
+    "pi": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "agent": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "packages": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "cli": {"type": "string", "minLength": 1},
+                "mcp_adapter": {"type": "string", "minLength": 1},
+                "acp": {"type": "string", "minLength": 1}
+              }
+            },
+            "acp_version": {"type": "string", "minLength": 1},
+            "runtime_extra": {"type": "string"},
+            "version": {"type": "string", "minLength": 1, "description": "Pinned npm version of the Pi CLI, or latest."},
+            "mcp_adapter_version": {"type": "string", "minLength": 1}
+          }
+        },
+        "tools": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "mode": {"enum": ["none", "mcp-only", "full"], "description": "Pi's built-in tool exposure."}
+          }
+        },
+        "lockdown": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "no_skills": {"type": "boolean"},
+            "no_prompt_templates": {"type": "boolean"},
+            "no_context_files": {"type": "boolean"}
+          }
+        },
+        "ui": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "theme": {"type": "string"},
+            "quiet_startup": {"type": "boolean"},
+            "collapse_changelog": {"type": "boolean"},
+            "thinking": {"type": "string"},
+            "editor_padding_x": {"type": "integer", "minimum": 0},
+            "theme_colors": {"type": "object"}
+          }
+        }
+      }
+    }
+  }
+}

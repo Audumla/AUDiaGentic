@@ -2,6 +2,53 @@
 # override only the keys they change. See docs/design/configuration-model.md.
 schema_version: 1
 
+harness:
+  # Each harness is an isolated adaptor under runtime/harness/<type>/. Launch uses an already
+  # available harness from PATH and never installs one as a side effect; the FIRST in this
+  # list that is found is used. Set `type` to pin one and skip the search.
+  order:
+    - pi
+    - opencode
+  # The OpenAI-compatible model server the harness talks to. AUDiaGentic does not host it; point
+  # url at one that is already running.
+  endpoint:
+    url: http://127.0.0.1:42001/v1
+    model: audiagentic-rig
+    provider: audiagentic
+  smoke:
+    timeout: 60.0
+  mcp:
+    enabled: true
+  pi:
+    agent:
+      # The installer consumes this package recipe, so clean installs need no hand-run npm.
+      packages:
+        cli: "@earendil-works/pi-coding-agent"
+        mcp_adapter: "pi-mcp-adapter"
+        acp: "pi-acp"
+      # Pi ACP is a separate community bridge, not a Pi native capability.
+      acp_version: "0.0.31"
+      runtime_extra: "acp"
+      # Pin an npm version to prevent silent upgrades on reinstall; "latest" tracks the release.
+      version: "0.77.0"
+      mcp_adapter_version: "2.11.0"
+    tools:
+      # none = disable every tool; mcp-only = disable Pi built-ins, keep MCP and explicit tools;
+      # full = Pi defaults.
+      mode: mcp-only
+    lockdown:
+      # Restrict the slash-command surface through Pi's own CLI flags (no source patching).
+      no_skills: true
+      no_prompt_templates: true
+      no_context_files: true
+    ui:
+      # Written into Pi's stock settings.json on each install/refresh.
+      theme: dark
+      quiet_startup: true
+      collapse_changelog: true
+      thinking: "off"
+      editor_padding_x: 0
+      theme_colors: {}
 logging:
   level: INFO              # DEBUG | INFO | WARNING | ERROR | CRITICAL; AUDIAGENTIC_LOG_LEVEL overrides it
   format: json             # json | dev | console

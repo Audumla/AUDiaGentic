@@ -26,13 +26,9 @@ def _harness_config_error(code_number: int, message: str, **details: object) -> 
 
 
 def load_harness_config(project_root: Path | None = None) -> dict:
-    from audiagentic.foundation.config import load_layered_config
-    from audiagentic.runtime.harness.paths import _HARNESS_CONFIG
-    return load_layered_config(
-        pkg_default_path=_HARNESS_CONFIG,
-        project_root=project_root,
-        namespace="harness/ag",
-    )
+    from audiagentic.foundation.config.harness_settings import harness_ag_config
+
+    return harness_ag_config(project_root)
 
 
 def require_harness_provider(harness_cfg: dict) -> str:
@@ -41,7 +37,7 @@ def require_harness_provider(harness_cfg: dict) -> str:
         raise _harness_config_error(
             1,
             "Harness config missing required 'provider'. "
-            "Set it in config/provisioning/harness/ag.yaml or override config.",
+            "Set harness.endpoint in your settings (audiagentic config set).",
             field="endpoint.provider",
         )
     return provider.strip()
@@ -53,7 +49,7 @@ def require_smoke_timeout(harness_cfg: dict) -> float:
         raise _harness_config_error(
             5,
             "Harness config missing required 'smoke' section. "
-            "Expected config/provisioning/harness/ag.yaml to define smoke.timeout.",
+            "Expected the packaged defaults (provisioning/foundation/settings.yaml, harness section) to define smoke.timeout.",
             field="smoke",
         )
     raw = smoke_cfg.get("timeout")
@@ -61,7 +57,7 @@ def require_smoke_timeout(harness_cfg: dict) -> float:
         raise _harness_config_error(
             6,
             "Harness config missing required 'smoke.timeout'. "
-            "Set it in config/provisioning/harness/ag.yaml or override config.",
+            "Set harness.endpoint in your settings (audiagentic config set).",
             field="smoke.timeout",
         )
     try:
