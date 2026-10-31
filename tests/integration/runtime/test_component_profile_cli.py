@@ -38,8 +38,8 @@ def _base_env(tmp_path: Path) -> dict[str, str]:
     env = os.environ.copy()
     env["AUDIAGENTIC_HOME"] = str(tmp_path / "home")
     env["AUDIAGENTIC_REPO_ROOT"] = str(tmp_path)
-    env.pop("AUDIAGENTIC_COMPONENT_PROFILE", None)
-    env.pop("AUDIAGENTIC_COMPONENT_CONFIG_DIRS", None)
+    env.pop("AUDIAGENTIC_PROFILE", None)
+    env.pop("_AUDIAGENTIC_COMPONENT_CONFIG_DIRS", None)
     src = Path(__file__).resolve().parents[3] / "src"
     root = Path(__file__).resolve().parents[3]
     existing = env.get("PYTHONPATH", "")

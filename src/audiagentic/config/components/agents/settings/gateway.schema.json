@@ -1,29 +1,41 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "x-audiagentic-scopes": ["user", "explicit"],
+  "x-audiagentic-scopes": [
+    "user",
+    "explicit"
+  ],
   "title": "settings: gateway",
   "description": "Agent gateway settings, owned by the agents component.",
   "type": "object",
   "additionalProperties": false,
   "properties": {
     "implementation": {
-      "enum": ["embedded", "automatic", "standalone"],
+      "enum": [
+        "embedded",
+        "automatic",
+        "standalone"
+      ],
       "description": "Gateway implementation; overrides the project's selected component implementation."
     },
     "port": {
-      "type": "integer", "minimum": 1, "maximum": 65535,
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 65535,
       "description": "Loopback port of the automatically started gateway."
     },
     "idle_grace_seconds": {
-      "type": "number", "minimum": 0,
+      "type": "number",
+      "minimum": 0,
       "description": "Idle time before an automatic gateway shuts itself down; 0 keeps it warm."
     },
     "queue_backend": {
-      "type": "string", "minLength": 1,
+      "type": "string",
+      "minLength": 1,
       "description": "Work-queue backend; only in-memory is available, any other value fails closed when the queue is created."
     },
     "restart_wait_seconds": {
-      "type": "number", "exclusiveMinimum": 0,
+      "type": "number",
+      "exclusiveMinimum": 0,
       "description": "How long a restart waits for the old gateway to stop."
     },
     "console_trace": {
@@ -31,15 +43,22 @@
       "additionalProperties": false,
       "properties": {
         "mode": {
-          "enum": ["off", "summary", "full"],
+          "enum": [
+            "off",
+            "summary",
+            "full"
+          ],
           "description": "Operator trace detail."
         },
         "file": {
-          "type": "string", "minLength": 1,
+          "type": "string",
+          "minLength": 1,
           "description": "Trace file; defaults to the gateway log directory."
         },
         "max_chars": {
-          "type": "integer", "minimum": 256, "maximum": 1048576,
+          "type": "integer",
+          "minimum": 256,
+          "maximum": 1048576,
           "description": "Longest body written per trace line."
         }
       }
@@ -49,7 +68,9 @@
       "additionalProperties": false,
       "properties": {
         "recent_seconds": {
-          "type": "integer", "minimum": 1, "maximum": 2592000,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2592000,
           "description": "Window of recent requests the dashboard shows."
         }
       }
@@ -59,16 +80,52 @@
       "description": "Machine retention policy.",
       "additionalProperties": false,
       "properties": {
-        "policy_id": {"type": "string", "minLength": 1},
-        "purge_enabled": {"type": "boolean"},
-        "minimum_archive_age_seconds": {"type": "number", "minimum": 0},
-        "max_batch_size": {"type": "integer", "minimum": 1, "maximum": 10000},
-        "request_history_limit": {"type": "integer", "minimum": 1, "maximum": 10000},
-        "timeline_max_bytes": {"type": "integer", "minimum": 1, "maximum": 268435456},
-        "observation_max_bytes": {"type": "integer", "minimum": 1, "maximum": 268435456},
-        "recovery_max_bytes": {"type": "integer", "minimum": 1, "maximum": 268435456},
-        "console_trace_max_bytes": {"type": "integer", "minimum": 1, "maximum": 268435456},
-        "journal_retention_days": {"type": "integer", "minimum": 1, "maximum": 3650}
+        "policy_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "purge_enabled": {
+          "type": "boolean"
+        },
+        "minimum_archive_age_seconds": {
+          "type": "number",
+          "minimum": 0
+        },
+        "max_batch_size": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10000
+        },
+        "request_history_limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10000
+        },
+        "timeline_max_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 268435456
+        },
+        "observation_max_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 268435456
+        },
+        "recovery_max_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 268435456
+        },
+        "console_trace_max_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 268435456
+        },
+        "journal_retention_days": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3650
+        }
       }
     },
     "watchdog": {
@@ -76,12 +133,36 @@
       "description": "Execution watchdog policy.",
       "additionalProperties": false,
       "properties": {
-        "policy_id": {"type": "string", "minLength": 1},
-        "activity_lease_seconds": {"type": "number", "exclusiveMinimum": 0},
-        "absolute_safety_ceiling_seconds": {"type": "number", "minimum": 0},
-        "diagnostic_grace_seconds": {"type": "number", "exclusiveMinimum": 0},
-        "initial_activity_grace_seconds": {"type": "number", "exclusiveMinimum": 0}
+        "policy_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "activity_lease_seconds": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "absolute_safety_ceiling_seconds": {
+          "type": "number",
+          "minimum": 0
+        },
+        "diagnostic_grace_seconds": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "initial_activity_grace_seconds": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
       }
+    },
+    "workspace_roots": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true,
+      "description": "Project checkouts this machine's gateway clients may resolve workspace names and request ids against. Unset searches the current checkout and its sibling directories."
     }
   }
 }

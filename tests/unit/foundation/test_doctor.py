@@ -97,7 +97,7 @@ def test_a_crashing_or_erroring_check_is_reported_not_raised(env: dict[str, Path
         "  - id: demo.error\n    ref: audiagentic.foundation.config.settings:discover_project_root\n",
         encoding="utf-8",
     )
-    monkeypatch.setenv("AUDIAGENTIC_COMPONENT_CONFIG_DIRS", f"{get_package_components_config_dir()},{extra}")
+    monkeypatch.setenv("_AUDIAGENTIC_COMPONENT_CONFIG_DIRS", f"{get_package_components_config_dir()},{extra}")
     monkeypatch.setenv("AUDIAGENTIC_PROJECT", str(env["tmp"] / "missing"))
     checks = _by_check(run_checks(DoctorContext(None)))
     assert checks["demo.crash"][0].status == FAIL and "crashed" in checks["demo.crash"][0].message

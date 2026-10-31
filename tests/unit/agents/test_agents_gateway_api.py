@@ -59,7 +59,6 @@ def _result(data: dict) -> SimpleNamespace:
 @pytest.fixture
 def bounded_workspace_discovery(tmp_path: Path, monkeypatch):
     """Exercise automatic sibling discovery without enumerating host ancestors."""
-    monkeypatch.delenv("AUDIAGENTIC_WORKSPACE_ROOTS", raising=False)
     real_iterdir = Path.iterdir
     visits: list[Path] = []
     candidates: list[Path] = []
@@ -79,7 +78,7 @@ def bounded_workspace_discovery(tmp_path: Path, monkeypatch):
 def test_workspace_name_resolves_sibling_project_root(tmp_path: Path, monkeypatch) -> None:
     current = tmp_path / "AUDiaGentic"
     target = tmp_path / "bigcherry"
-    monkeypatch.setenv("AUDIAGENTIC_WORKSPACE_ROOTS", os.pathsep.join(map(str, (current, target))))
+    monkeypatch.setattr("audiagentic.components.agents.gateway.workspace_roots.configured_workspace_roots", lambda: [current.resolve(), target.resolve()])
     for root in (current, target):
         (root / ".audiagentic" / "config").mkdir(parents=True)
     (target / ".audiagentic" / "config" / "project.yaml").write_text(
@@ -424,9 +423,9 @@ def test_active_component_profile_changes_execution_fingerprint(tmp_path: Path, 
         fake_execute_provider,
     )
 
-    monkeypatch.setenv("AUDIAGENTIC_COMPONENT_PROFILE", "benchmark-a")
+    monkeypatch.setenv("AUDIAGENTIC_PROFILE", "benchmark-a")
     first = gateway.run_execution_request(tmp_path, prompt_body="same prompt")
-    monkeypatch.setenv("AUDIAGENTIC_COMPONENT_PROFILE", "benchmark-b")
+    monkeypatch.setenv("AUDIAGENTIC_PROFILE", "benchmark-b")
     second = gateway.run_execution_request(tmp_path, prompt_body="same prompt")
 
     assert first["context-fingerprint"] != second["context-fingerprint"]

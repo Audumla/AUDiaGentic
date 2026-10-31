@@ -15,7 +15,6 @@ from __future__ import annotations
 import contextlib
 import functools
 import logging
-import os
 import threading
 import uuid
 from datetime import datetime, timezone
@@ -106,13 +105,11 @@ def _resolve_workspace_project_root(
     requested = _workspace_label(workspace_name)
     current = Path(project_root).resolve()
     candidates: list[Path] = [current]
-    configured = os.environ.get("AUDIAGENTIC_WORKSPACE_ROOTS", "")
-    if configured.strip():
-        candidates.extend(
-            Path(value).expanduser().resolve()
-            for value in configured.split(os.pathsep)
-            if value.strip()
-        )
+    from audiagentic.components.agents.gateway.workspace_roots import configured_workspace_roots
+
+    configured = configured_workspace_roots()
+    if configured:
+        candidates.extend(configured)
     else:
         search_parents = [current.parent, *list(current.parents)[1:4]]
         for parent in search_parents:

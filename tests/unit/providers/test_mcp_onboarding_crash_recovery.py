@@ -19,7 +19,7 @@ from audiagentic.foundation.contracts.errors import AudiaGenticError
 @pytest.fixture
 def root(tmp_path, monkeypatch):
     monkeypatch.setenv("AUDIAGENTIC_REPO_ROOT", str(tmp_path))
-    monkeypatch.delenv("AUDIAGENTIC_COMPONENT_PROFILE", raising=False)
+    monkeypatch.delenv("AUDIAGENTIC_PROFILE", raising=False)
     return tmp_path
 
 

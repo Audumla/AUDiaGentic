@@ -9,19 +9,21 @@ env:
   # The documented diagnostic exception: a one-shot way to raise log verbosity without editing settings.
   diagnostic:
     - AUDIAGENTIC_LOG_LEVEL
-  # Process wiring and credential references; candidates for the small public allowlist (CFG10).
-  deployment:
-    - AUDIAGENTIC_COMPONENT_CONFIG_DIRS
-    - AUDIAGENTIC_COMPONENT_PROFILE
+  # The public environment (docs/design/configuration-model.md "Environment variables").
+  public:
     - AUDIAGENTIC_CONFIG
+    - AUDIAGENTIC_PROFILE
+    - AUDIAGENTIC_PROJECT
+  # Credentials a user may export; named by `{env: ...}` references, never configuration switches.
+  credentials:
+    - AUDIAGENTIC_GITHUB_TOKEN
+    - AUDIAGENTIC_LOCAL_PROVIDER_API_KEY
+  # Deployment wiring that still needs a recorded decision (CFG10): the spec removes HOME in favour of the
+  # `home` setting, and the gateway endpoint and token file belong to the shared-gateway configuration design.
+  pending-decision:
     - AUDIAGENTIC_GATEWAY_ENDPOINT
     - AUDIAGENTIC_GATEWAY_TOKEN_FILE
-    - AUDIAGENTIC_GITHUB_CLIENT_ID
-    - AUDIAGENTIC_GITHUB_TOKEN
     - AUDIAGENTIC_HOME
-    - AUDIAGENTIC_LOCAL_PROVIDER_API_KEY
-    - AUDIAGENTIC_PROJECT
-    - AUDIAGENTIC_WORKSPACE_ROOTS
   # Set by AUDiaGentic for its own child processes; not user configuration.
   internal:
     - AUDIAGENTIC_GATEWAY_DASHBOARD_PATH

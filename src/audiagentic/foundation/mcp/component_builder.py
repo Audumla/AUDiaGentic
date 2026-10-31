@@ -30,7 +30,7 @@ def entry_from_mcp_declaration(
         env["AUDIAGENTIC_REPO_ROOT"] = repo_root
     profile = get_active_profile()
     if profile:
-        env["AUDIAGENTIC_COMPONENT_PROFILE"] = profile
+        env["AUDIAGENTIC_PROFILE"] = profile
     return McpServerEntry(
         name=decl.name,
         command=command,

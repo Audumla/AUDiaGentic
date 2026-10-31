@@ -59,10 +59,10 @@ def _write_qwen_probe(bin_dir: Path) -> None:
         "    Path('.descendant-pid').write_text(str(child.pid), encoding='utf-8')\n"
         "    time.sleep(60)\n"
         "if Path('.delay').exists():\n"
-        "    Path('.provider-start-' + os.getenv('AUDIAGENTIC_COMPONENT_PROFILE', 'base')).write_text(str(time.time()), encoding='utf-8')\n"
+        "    Path('.provider-start-' + os.getenv('AUDIAGENTIC_PROFILE', 'base')).write_text(str(time.time()), encoding='utf-8')\n"
         "    time.sleep(2)\n"
         "print('|'.join((os.getcwd(), "
-        "os.getenv('AUDIAGENTIC_COMPONENT_PROFILE', ''), "
+        "os.getenv('AUDIAGENTIC_PROFILE', ''), "
         "os.getenv('AG_SH06_SECRET_CANARY', 'absent'))))\n"
     )
     if os.name == "nt":

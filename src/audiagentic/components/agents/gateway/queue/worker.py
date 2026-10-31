@@ -194,7 +194,7 @@ def _replacement_environment(component_profile: str, private_home: Path) -> dict
         if name in os.environ:
             environment[name] = os.environ[name]
     if component_profile:
-        environment["AUDIAGENTIC_COMPONENT_PROFILE"] = component_profile
+        environment["AUDIAGENTIC_PROFILE"] = component_profile
     return environment
 
 

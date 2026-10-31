@@ -56,8 +56,8 @@ class TestProfileLayering:
     ) -> None:
         base_dir, _ = _build_layered_structure(tmp_path, "test-profile")
 
-        monkeypatch.setenv("AUDIAGENTIC_COMPONENT_PROFILE", "test-profile")
-        monkeypatch.setenv("AUDIAGENTIC_COMPONENT_CONFIG_DIRS", str(base_dir))
+        monkeypatch.setenv("AUDIAGENTIC_PROFILE", "test-profile")
+        monkeypatch.setenv("_AUDIAGENTIC_COMPONENT_CONFIG_DIRS", str(base_dir))
         monkeypatch.delenv("AUDIAGENTIC_REPO_ROOT", raising=False)
         monkeypatch.chdir(str(tmp_path))
 
@@ -84,7 +84,7 @@ class TestBaseOnly:
         base_dir = tmp_path / "base-components"
         _write(base_dir / "base-component.yaml", BASE_COMPONENT_YAML)
 
-        monkeypatch.delenv("AUDIAGENTIC_COMPONENT_PROFILE", raising=False)
+        monkeypatch.delenv("AUDIAGENTIC_PROFILE", raising=False)
         descriptors = register_all_components([base_dir])
 
         ids = [d.component_id for d in descriptors]
@@ -122,8 +122,8 @@ class TestCwdIndependentResolution:
         elsewhere = tmp_path / "elsewhere"
         elsewhere.mkdir()
 
-        monkeypatch.setenv("AUDIAGENTIC_COMPONENT_PROFILE", "env-profile")
-        monkeypatch.setenv("AUDIAGENTIC_COMPONENT_CONFIG_DIRS", str(base_dir))
+        monkeypatch.setenv("AUDIAGENTIC_PROFILE", "env-profile")
+        monkeypatch.setenv("_AUDIAGENTIC_COMPONENT_CONFIG_DIRS", str(base_dir))
         monkeypatch.setenv("AUDIAGENTIC_REPO_ROOT", str(project))
         monkeypatch.chdir(str(elsewhere))
 
@@ -142,8 +142,8 @@ class TestCwdIndependentResolution:
         nested = tmp_path / "src" / "deep"
         nested.mkdir(parents=True)
 
-        monkeypatch.setenv("AUDIAGENTIC_COMPONENT_PROFILE", "nested-profile")
-        monkeypatch.setenv("AUDIAGENTIC_COMPONENT_CONFIG_DIRS", str(base_dir))
+        monkeypatch.setenv("AUDIAGENTIC_PROFILE", "nested-profile")
+        monkeypatch.setenv("_AUDIAGENTIC_COMPONENT_CONFIG_DIRS", str(base_dir))
         monkeypatch.delenv("AUDIAGENTIC_REPO_ROOT", raising=False)
         monkeypatch.chdir(str(nested))
 
@@ -167,14 +167,14 @@ class TestCrossProfileGuard:
     def test_switching_profile_raises(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         base_dir, _ = _build_layered_structure(tmp_path, "profile-a")
 
-        monkeypatch.setenv("AUDIAGENTIC_COMPONENT_PROFILE", "profile-a")
-        monkeypatch.setenv("AUDIAGENTIC_COMPONENT_CONFIG_DIRS", str(base_dir))
+        monkeypatch.setenv("AUDIAGENTIC_PROFILE", "profile-a")
+        monkeypatch.setenv("_AUDIAGENTIC_COMPONENT_CONFIG_DIRS", str(base_dir))
         monkeypatch.delenv("AUDIAGENTIC_REPO_ROOT", raising=False)
         monkeypatch.chdir(str(tmp_path))
 
         register_all_components()
 
-        monkeypatch.setenv("AUDIAGENTIC_COMPONENT_PROFILE", "profile-b")
+        monkeypatch.setenv("AUDIAGENTIC_PROFILE", "profile-b")
 
         # Registering against the synthetic tree above replaced the error
         # catalogue with one that has no entries, and AudiaGenticError refuses
@@ -211,8 +211,8 @@ class TestIdempotentReregistration:
     ) -> None:
         base_dir, _ = _build_layered_structure(tmp_path, "stable-profile")
 
-        monkeypatch.setenv("AUDIAGENTIC_COMPONENT_PROFILE", "stable-profile")
-        monkeypatch.setenv("AUDIAGENTIC_COMPONENT_CONFIG_DIRS", str(base_dir))
+        monkeypatch.setenv("AUDIAGENTIC_PROFILE", "stable-profile")
+        monkeypatch.setenv("_AUDIAGENTIC_COMPONENT_CONFIG_DIRS", str(base_dir))
         monkeypatch.delenv("AUDIAGENTIC_REPO_ROOT", raising=False)
         monkeypatch.chdir(str(tmp_path))
 
@@ -242,8 +242,8 @@ class TestDuplicateIdResolution:
             "detection-marker: .audiagentic/components/shared-component.yaml\n",
         )
 
-        monkeypatch.setenv("AUDIAGENTIC_COMPONENT_PROFILE", "override-profile")
-        monkeypatch.setenv("AUDIAGENTIC_COMPONENT_CONFIG_DIRS", str(base_dir))
+        monkeypatch.setenv("AUDIAGENTIC_PROFILE", "override-profile")
+        monkeypatch.setenv("_AUDIAGENTIC_COMPONENT_CONFIG_DIRS", str(base_dir))
         monkeypatch.delenv("AUDIAGENTIC_REPO_ROOT", raising=False)
         monkeypatch.chdir(str(tmp_path))
 

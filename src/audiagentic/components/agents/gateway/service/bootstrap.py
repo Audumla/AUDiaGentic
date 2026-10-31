@@ -88,7 +88,7 @@ def _gateway_lifecycle() -> tuple[
             cwd=store.root,
             env={
                 "AUDIAGENTIC_REPO_ROOT": "",
-                "AUDIAGENTIC_COMPONENT_PROFILE": "",
+                "AUDIAGENTIC_PROFILE": "",
             },
             log_file=store.root / "service.log",
         ),

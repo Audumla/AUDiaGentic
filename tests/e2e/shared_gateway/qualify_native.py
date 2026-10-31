@@ -148,6 +148,12 @@ def main(args, resources):
         token_file.chmod(0o600)
         roots[name] = root
     (base / "state").mkdir(exist_ok=True)
+    workspace_config_home = base / "xdg-config"
+    (workspace_config_home / "audiagentic").mkdir(parents=True, exist_ok=True)
+    (workspace_config_home / "audiagentic" / "settings.yaml").write_text(
+        "schema_version: 1\ngateway:\n  workspace_roots:\n" + "".join(f"    - {r}\n" for r in roots.values()),
+        encoding="utf-8",
+    )
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
         backend_port = s.getsockname()[1]
@@ -288,7 +294,7 @@ def main(args, resources):
         os.environ,
         PYTHONPATH=str(package),
         PYTHONUNBUFFERED="1",
-        AUDIAGENTIC_WORKSPACE_ROOTS=os.pathsep.join(str(r) for r in roots.values()),
+        XDG_CONFIG_HOME=str(workspace_config_home),
     )
     clients = {
         name: StandaloneGatewayClient(

@@ -20,7 +20,7 @@ from audiagentic.foundation.contracts.errors import AudiaGenticError
 @pytest.fixture
 def root(tmp_path, monkeypatch):
     monkeypatch.setenv("AUDIAGENTIC_REPO_ROOT", str(tmp_path))
-    monkeypatch.delenv("AUDIAGENTIC_COMPONENT_PROFILE", raising=False)
+    monkeypatch.delenv("AUDIAGENTIC_PROFILE", raising=False)
     return tmp_path
 
 
@@ -475,14 +475,14 @@ def test_profile_launch_change_requires_explicit_install(root, monkeypatch):
     assert project.install_mcp(root, mcp_id="ag-planning", harness_ids=["pi"])["ok"]
     native = root / ".pi/mcp.json"
     before = native.read_bytes()
-    monkeypatch.setenv("AUDIAGENTIC_COMPONENT_PROFILE", "alternate")
+    monkeypatch.setenv("AUDIAGENTIC_PROFILE", "alternate")
     assert project.reconcile_mcp_bindings(root)
     assert native.read_bytes() == before
     dry = project.install_mcp(root, mcp_id="ag-planning", harness_ids=["pi"], dry_run=True)
     assert dry["planned_changes"] and not dry["changed"]
     assert project.install_mcp(root, mcp_id="ag-planning", harness_ids=["pi"])["ok"]
     entry = json.loads(native.read_text())["mcpServers"]["ag-planning"]
-    assert entry["env"]["AUDIAGENTIC_COMPONENT_PROFILE"] == "alternate"
+    assert entry["env"]["AUDIAGENTIC_PROFILE"] == "alternate"
 
 
 def test_provider_disable_prunes_and_enable_restores_persisted_selection(root):

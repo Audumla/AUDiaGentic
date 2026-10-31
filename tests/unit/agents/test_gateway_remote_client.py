@@ -143,7 +143,7 @@ def test_managed_lease_is_adopted_without_second_acquisition(monkeypatch) -> Non
 def test_submit_forwards_calling_component_profile(monkeypatch, tmp_path) -> None:
     client = StandaloneGatewayClient("http://127.0.0.1:9000", "token")
     captured: dict = {}
-    monkeypatch.setenv("AUDIAGENTIC_COMPONENT_PROFILE", "calling-profile")
+    monkeypatch.setenv("AUDIAGENTIC_PROFILE", "calling-profile")
     monkeypatch.setattr(
         client,
         "_call",

@@ -68,6 +68,19 @@ def _isolate_audiagentic_home(
     monkeypatch.setenv("AUDIAGENTIC_HOME", str(tmp_path_factory.mktemp("audiagentic-home")))
 
 
+@pytest.fixture
+def write_user_settings():
+    """Write the isolated per-test user settings file (YAML body below ``schema_version: 1``)."""
+
+    def _write(body: str) -> Path:
+        path = Path(os.environ["XDG_CONFIG_HOME"]) / "audiagentic" / "settings.yaml"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("schema_version: 1\n" + body, encoding="utf-8")
+        return path
+
+    return _write
+
+
 @pytest.fixture(autouse=True)
 def _gateway_test_port(monkeypatch: pytest.MonkeyPatch) -> None:
     """Never let a test start a gateway service on the real default port.

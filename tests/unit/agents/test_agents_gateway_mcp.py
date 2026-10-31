@@ -135,7 +135,7 @@ def test_request_status_prefers_durable_record_when_project_slug_is_ambiguous():
     request_id = "req_example_84c8ae891c30"
     with (
         _patch_root(),
-        patch.dict("os.environ", {"AUDIAGENTIC_WORKSPACE_ROOTS": str(_ROOT)}),
+        patch("audiagentic.components.agents.gateway.workspace_roots.configured_workspace_roots", return_value=[_ROOT]),
         patch("audiagentic.components.agents.gateway.store.read_record") as read,
         patch("audiagentic.components.agents.mcp.gateway_mcp.call_gateway_method") as mock_call,
     ):

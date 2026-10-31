@@ -74,3 +74,41 @@ def test_every_path_builder_is_listed() -> None:
         "new modules build .audiagentic paths themselves; use the configuration core or list them"
     )
     assert sorted(listed - found) == [], "remove modules that no longer build .audiagentic paths from the inventory"
+
+
+_PUBLIC_ENV = {"AUDIAGENTIC_CONFIG", "AUDIAGENTIC_PROFILE", "AUDIAGENTIC_PROJECT"}
+_PENDING_DECISION_ENV = {"AUDIAGENTIC_GATEWAY_ENDPOINT", "AUDIAGENTIC_GATEWAY_TOKEN_FILE", "AUDIAGENTIC_HOME"}
+
+
+def test_public_environment_is_the_documented_allowlist() -> None:
+    """CFG10: the public environment is exactly what docs/design/configuration-model.md names.
+
+    ``pending-decision`` is deployment wiring that still needs an owner decision; adding to it (or to
+    ``public``) is a deliberate change that must also update the design document.
+    """
+    env, _ = _inventory()
+    assert set(env.get("public", [])) == _PUBLIC_ENV
+    assert set(env.get("pending-decision", [])) == _PENDING_DECISION_ENV
+    assert set(env) <= {"public", "diagnostic", "credentials", "pending-decision", "internal", "test", "not-env"}
+    for name in _PUBLIC_ENV | {"AUDIAGENTIC_LOG_LEVEL"}:
+        assert name in (REPO / "docs" / "design" / "configuration-model.md").read_text(encoding="utf-8")
+
+
+_LEGACY_CONFIG_FILES = (
+    "model-sources.yaml", "provider-policy.yaml", "logging.local.yaml", "event-triggers.yaml",
+    "prompt-syntax.yaml", "event/config.yaml",
+)
+
+
+def test_legacy_configuration_files_are_only_known_to_the_migration() -> None:
+    """CFG11: nothing but ``config migrate`` may read the files that settings replaced."""
+    allowed = {"foundation/features/migration.py"}
+    offenders = []
+    for path in sorted((SOURCE / "audiagentic").rglob("*.py")):
+        relative = path.relative_to(SOURCE / "audiagentic").as_posix()
+        if relative in allowed:
+            continue
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if isinstance(node, ast.Constant) and isinstance(node.value, str) and node.value in _LEGACY_CONFIG_FILES:
+                offenders.append(f"{relative}: {node.value}")
+    assert offenders == []

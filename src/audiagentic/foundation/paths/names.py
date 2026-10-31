@@ -160,12 +160,12 @@ def home_source(config_file: Path | str | None = None) -> tuple[Path, str]:
 def get_component_config_dirs() -> list[Path]:
     """Resolve base component config directories from override sources.
 
-    Checks the AUDIAGENTIC_COMPONENT_CONFIG_DIRS env var (comma-separated
+    Checks the _AUDIAGENTIC_COMPONENT_CONFIG_DIRS env var (comma-separated
     paths) first, then falls back to the shipped package default. Single
     source of truth shared by the component loader and error-resolution
     loading so the two can never drift into different precedence.
     """
-    override = os.environ.get("AUDIAGENTIC_COMPONENT_CONFIG_DIRS")
+    override = os.environ.get("_AUDIAGENTIC_COMPONENT_CONFIG_DIRS")
     if override:
         return [Path(p.strip()) for p in override.split(",")]
     return [get_package_components_config_dir()]
@@ -208,7 +208,7 @@ def get_active_profile() -> str | None:
     Returns None when using base (default) behavior.
     The env var is set by the CLI --component-profile flag or manually.
     """
-    name = os.environ.get("AUDIAGENTIC_COMPONENT_PROFILE")
+    name = os.environ.get("AUDIAGENTIC_PROFILE")
     if not name or name == PACKAGE_ROOT_NAME:
         return None
     return name
