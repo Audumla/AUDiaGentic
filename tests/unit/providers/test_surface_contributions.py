@@ -162,7 +162,8 @@ def test_operate_provider_surfaces_only_targets_enabled_providers(tmp_path: Path
 
     assert len(results) == 2
     assert all(
-        set(result.managed_block_ids) == {"agent-ledger/process", "project/mcp-onboarding"}
+        set(result.managed_block_ids)
+        == {"agent-ledger/process", "project/mcp-onboarding", "project/worktrees"}
         for result in results
     )
 
