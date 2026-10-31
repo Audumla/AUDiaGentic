@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.52.0](https://github.com/Audumla/AUDiaGentic/compare/v0.51.0...v0.52.0) (2026-10-31)
+
+
+### Features
+
+* **worktree:** finish moves the task scratch directory aside instead of leaving it ([#305](https://github.com/Audumla/AUDiaGentic/issues/305)) ([ca5d7dc](https://github.com/Audumla/AUDiaGentic/commit/ca5d7dc918198cf0e38f7e7f8165b304993d87fa))
+
 ## [0.51.0](https://github.com/Audumla/AUDiaGentic/compare/v0.50.3...v0.51.0) (2026-10-31)
 
 
