@@ -101,6 +101,31 @@ jobs:
             }
             if (!pr.merged) {
               if (pr.state !== 'open') throw new Error('Release PR closed without merge');
+              // A pull-request run of the normal CI can still be in progress on this head (for example after a
+              // branch update); GitHub refuses the merge while a required check run is pending and a commit
+              // status does not override it. Wait for it, and never post a success over one that did not succeed.
+              const bounded = (value, fallback, max) => (Number.isFinite(Number(value)) && Number(value) > 0 ? Math.min(Number(value), max) : fallback);
+              const pollMs = bounded(process.env.RELEASE_CHECK_POLL_MS, 15000, 60000);
+              const deadline = Date.now() + bounded(process.env.RELEASE_CHECK_WAIT_MS, 600000, 1800000);
+              for (const name of ['privacy', 'tests']) {
+                for (;;) {
+                  const runs = (await github.paginate(github.rest.checks.listForRef, {owner, repo, ref: sha, per_page: 100}))
+                    .filter(run => run.name === name && run.head_sha === sha && run.app && run.app.slug === 'github-actions');
+                  if (runs.every(run => run.status === 'completed')) {
+                    const latest = runs.sort((a, b) => b.id - a.id)[0];
+                    if (latest && latest.conclusion !== 'success') {
+                      throw new Error(`Required check ${name} did not succeed on the release head (${latest.conclusion}); refusing merge`);
+                    }
+                    break;
+                  }
+                  if (Date.now() > deadline) throw new Error(`Required check ${name} still running on the release head; refusing merge`);
+                  await new Promise(resolve => setTimeout(resolve, pollMs));
+                }
+              }
+              const {data: again} = await github.rest.pulls.get({owner, repo, pull_number});
+              if (again.head.sha !== sha || again.state !== 'open') {
+                throw new Error('Release PR changed while waiting for its checks; refusing merge');
+              }
               // The reusable privacy gate validated this exact SHA; publish its
               // result on the bot PR, whose GITHUB_TOKEN push creates no PR run.
               await github.rest.repos.createCommitStatus({owner, repo, sha, state: 'success', context: 'privacy',
@@ -135,6 +160,7 @@ jobs:
     if: needs.release-please.outputs.release_created == 'true'
     outputs:
       finalized_sha: ${{ steps.finalized-sha.outputs.sha }}
+      notes_source: ${{ steps.finalize.outputs.notes_source }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -156,8 +182,10 @@ jobs:
         run: python -m pip install .
 
       - name: Finalize ledger
+        id: finalize
         run: |
           python - <<'PY'
+          import os
           from pathlib import Path
           from audiagentic.components.release import release_api
 
@@ -166,6 +194,11 @@ jobs:
               release_id="${{ needs.release-please.outputs.tag_name }}",
           )
           print(result)
+          if result["notes-source"] != "events":
+              print("::warning::No ledger events were recorded for this release; "
+                    "the release keeps the notes release-please generated")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"notes_source={result['notes-source']}\n")
           PY
 
       - name: Commit release artifacts
@@ -266,6 +299,7 @@ jobs:
             .ci-results/artifact-provenance.json
 
       - name: Update GitHub release notes from ledger
+        if: needs.finalize-ledger.outputs.notes_source == 'events'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
