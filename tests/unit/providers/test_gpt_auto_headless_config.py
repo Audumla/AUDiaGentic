@@ -17,7 +17,6 @@ def test_headless_machine_defers_implicit_browser_requirement_until_project_use(
     monkeypatch.setattr(config, "_load_machine_override", lambda *args: {})
     monkeypatch.setattr(config, "discover_browser_candidates", lambda: ())
     monkeypatch.setattr(config, "_check_gpt_auto_dependencies", lambda: None)
-    monkeypatch.setattr(provider_config, "load_provider_settings", lambda *args: {})
 
     config.validate_machine_gpt_auto_config()
     with pytest.raises(AudiaGenticError, match="browser.executable"):

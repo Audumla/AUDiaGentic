@@ -664,11 +664,11 @@ def validate_project_gpt_auto_config(project_root: Path) -> GptAutoConfig:
     compatibility from the loader's verdict, never a hand-rolled version check).
     """
     from audiagentic.components.providers.services.config.provider_config import (
-        load_provider_settings,
+        load_provider_config_lenient,
     )
 
     _check_gpt_auto_dependencies()
-    settings = load_provider_settings(project_root, "gpt-auto")
+    settings = load_provider_config_lenient(project_root)["providers"].get("gpt-auto") or {}
     return resolve_gpt_auto_config(settings, provider_id="gpt-auto")
 
 

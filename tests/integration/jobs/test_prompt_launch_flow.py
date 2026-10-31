@@ -56,16 +56,13 @@ def _write_project_and_provider_config(sandbox) -> None:
         ),
         encoding="utf-8",
     )
-    (sandbox.repo / ".audiagentic" / "config" / "runtime").mkdir(parents=True, exist_ok=True)
-    (sandbox.repo / ".audiagentic" / "config" / "runtime" / "providers.yaml").write_text(
+    (sandbox.repo / ".audiagentic" / "settings.yaml").write_text(
         "\n".join(
             [
-                "contract-version: v1",
+                "schema_version: 1",
                 "providers:",
                 "  codex:",
                 "    enabled: true",
-                "    install-mode: external-configured",
-                "    access-mode: cli",
                 "    default-model: gpt-5.4-mini",
                 "    model-aliases:",
                 "      fast: gpt-5.4-mini",
@@ -75,8 +72,6 @@ def _write_project_and_provider_config(sandbox) -> None:
                 "      max-age-hours: 168",
                 "  claude:",
                 "    enabled: true",
-                "    install-mode: external-configured",
-                "    access-mode: cli",
                 "    default-model: sonnet",
                 "    model-aliases:",
                 "      fast: sonnet",
@@ -86,8 +81,6 @@ def _write_project_and_provider_config(sandbox) -> None:
                 "      max-age-hours: 168",
                 "  cline:",
                 "    enabled: true",
-                "    install-mode: external-configured",
-                "    access-mode: cli",
                 "    default-model: gpt-5.4-mini",
                 "    model-aliases:",
                 "      fast: gpt-5.4-mini",

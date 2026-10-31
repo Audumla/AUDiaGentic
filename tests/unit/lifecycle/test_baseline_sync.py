@@ -34,12 +34,11 @@ def test_sync_managed_baseline_copies_skill_sources(tmp_path: Path) -> None:
 
 def test_sync_managed_baseline_preserves_create_if_missing_files(tmp_path: Path) -> None:
     target = tmp_path / "project"
-    target.mkdir(parents=True)
-    (target / ".audiagentic" / "config" / "providers").mkdir(parents=True)
-    provider_path = target / ".audiagentic" / "config" / "providers" / "custom.yaml"
-    provider_path.write_text("install-mode: external-configured\naccess-mode: none\n", encoding="utf-8")
+    (target / ".audiagentic" / "config").mkdir(parents=True)
+    project_path = target / ".audiagentic" / "config" / "project.yaml"
+    project_path.write_text("contract-version: v1\nproject-id: keep-me\n", encoding="utf-8")
 
     report = sync_managed_baseline(target)
 
-    assert ".audiagentic/config/providers" in report["preserved-files"]
-    assert "access-mode: none" in provider_path.read_text(encoding="utf-8")
+    assert ".audiagentic/config/project.yaml" in report["preserved-files"]
+    assert "project-id: keep-me" in project_path.read_text(encoding="utf-8")

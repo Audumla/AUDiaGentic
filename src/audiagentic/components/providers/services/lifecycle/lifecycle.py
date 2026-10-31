@@ -319,20 +319,8 @@ def _seed_provider_config(
     *,
     enabled: bool,
 ) -> None:
-    """Write a complete minimal config block for a provider being enabled for the first time.
+    """Record a provider's enablement. Its install and access modes are facts of the descriptor,
+    so nothing is written to settings."""
+    from ..config.provider_config import set_provider_enabled
 
-    Only writes fields that are absent — never overwrites existing values.
-    """
-    from ..config.provider_config import (
-        patch_provider_config,
-        set_provider_enabled,
-    )
-
-    seed: dict[str, Any] = {
-        "install-mode": descriptor.install_mode,
-        "access-mode": descriptor.access_mode,
-    }
-    # Only patch — existing keys (default-model, prompt-surface, etc.) are preserved.
-    patch_provider_config(project_root, provider_id, seed)
-    # Enablement is feature state, not a providers.yaml field.
     set_provider_enabled(project_root, provider_id, enabled=enabled)

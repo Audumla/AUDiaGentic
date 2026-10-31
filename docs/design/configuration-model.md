@@ -303,7 +303,8 @@ test-scoped. Everything else becomes settings keys
   (`enabled:<implementation>`), moved by `audiagentic config migrate`. `providers.<id>.enabled` stays
   the user's own override and wins over the observation; `auto` defers to it, then to availability.
   Component options and feature state remain in the shards until their own migration.
-- `model-sources.yaml`, `provider-policy.yaml`, `providers/<id>.yaml`, `gpt-auto*.yaml` overlays, `interoperability/*.yaml`, `.audiagentic/components/*.yaml` markers -> sections of `settings.yaml`.
+- `model-sources.yaml`, `provider-policy.yaml` (done: `reconciliation` section, decisions as local state), `providers/<id>.yaml` and
+  `runtime/providers.yaml` (done: `providers.<id>`; install and access modes come from the descriptor; `audiagentic config migrate`), `gpt-auto*.yaml` overlays, `interoperability/*.yaml`, `.audiagentic/components/*.yaml` markers -> sections of `settings.yaml`.
 - `config/providers/gpt_auto_t1.yaml`, `gpt_auto_t2.yaml` -> `gpt-auto` instances.
 - Separate shared gateway `server.yaml` / `node.yaml` schemas -> settings sections.
 - `AUDIAGENTIC_HOME`, `AUDIAGENTIC_ROOT`, `AUDIAGENTIC_REPO_ROOT`, `AUDIAGENTIC_COMPONENT_CONFIG_DIRS` and the user-configuration variables -> platform paths, discovery and settings keys.
