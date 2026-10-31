@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.54.0](https://github.com/Audumla/AUDiaGentic/compare/v0.53.1...v0.54.0) (2026-10-31)
+
+
+### ⚠ BREAKING CHANGES
+
+* **config:** home and gateway connection leave the public environment (CFG10) ([#308](https://github.com/Audumla/AUDiaGentic/issues/308))
+
+### Code Refactoring
+
+* **config:** home and gateway connection leave the public environment (CFG10) ([#308](https://github.com/Audumla/AUDiaGentic/issues/308)) ([0f63aa3](https://github.com/Audumla/AUDiaGentic/commit/0f63aa36fa02d568d0b70f47a71387c4881ba06d))
+
 ## [0.53.1](https://github.com/Audumla/AUDiaGentic/compare/v0.53.0...v0.53.1) (2026-10-31)
 
 
