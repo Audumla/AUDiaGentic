@@ -95,15 +95,7 @@ def load_event_config(root: Path | None = None) -> EventLayerConfig:
 
 
 def _find_event_root() -> Path:
-    """Find project root by walking up from current directory."""
-    import os
+    """The project being operated on (AUDIAGENTIC_REPO_ROOT, else the nearest ``.audiagentic``), else cwd."""
+    from audiagentic.foundation.paths.project import find_project_root
 
-    if os.environ.get("AUDIAGENTIC_ROOT"):
-        return Path(os.environ["AUDIAGENTIC_ROOT"]).resolve()
-
-    current = Path.cwd()
-    for parent in [current, *current.parents]:
-        if (project_marker_path(parent)).exists():
-            return parent
-
-    return current
+    return find_project_root() or Path.cwd()

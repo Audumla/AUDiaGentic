@@ -9,7 +9,7 @@ env:
   # The documented diagnostic exception: a one-shot way to raise log verbosity without editing settings.
   diagnostic:
     - AUDIAGENTIC_LOG_LEVEL
-  # Process wiring and credential references; candidates for the small public allowlist (CFG10). ROOT duplicates REPO_ROOT.
+  # Process wiring and credential references; candidates for the small public allowlist (CFG10).
   deployment:
     - AUDIAGENTIC_COMPONENT_CONFIG_DIRS
     - AUDIAGENTIC_COMPONENT_PROFILE
@@ -21,7 +21,6 @@ env:
     - AUDIAGENTIC_HOME
     - AUDIAGENTIC_LOCAL_PROVIDER_API_KEY
     - AUDIAGENTIC_PROJECT
-    - AUDIAGENTIC_ROOT
     - AUDIAGENTIC_WORKSPACE_ROOTS
   # Set by AUDiaGentic for its own child processes; not user configuration.
   internal:
