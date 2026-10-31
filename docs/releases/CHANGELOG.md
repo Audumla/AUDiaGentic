@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.50.3](https://github.com/Audumla/AUDiaGentic/compare/v0.50.2...v0.50.3) (2026-10-31)
+
+
+### Documentation
+
+* **planning:** CFG11 installed-wheel evidence for config migrate ([#300](https://github.com/Audumla/AUDiaGentic/issues/300)) ([6052af2](https://github.com/Audumla/AUDiaGentic/commit/6052af2a4c917f3ef9bf2546affb8b034595a24d))
+
 ## [0.50.2](https://github.com/Audumla/AUDiaGentic/compare/v0.50.1...v0.50.2) (2026-10-31)
 
 
