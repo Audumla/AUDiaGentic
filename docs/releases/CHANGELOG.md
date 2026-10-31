@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.50.2](https://github.com/Audumla/AUDiaGentic/compare/v0.50.1...v0.50.2) (2026-10-31)
+
+
+### Documentation
+
+* **planning:** record CFG06, CFG10 and CFG11 progress and open decisions ([#292](https://github.com/Audumla/AUDiaGentic/issues/292)) ([a46e173](https://github.com/Audumla/AUDiaGentic/commit/a46e1733800489a14eed876b16885397213a7542))
+
+## [0.50.1](https://github.com/Audumla/AUDiaGentic/compare/v0.50.0...v0.50.1) (2026-10-31)
+
+
+### Documentation
+
+* record that the shared-gateway role documents stay, add a setup checklist ([#297](https://github.com/Audumla/AUDiaGentic/issues/297)) ([246820c](https://github.com/Audumla/AUDiaGentic/commit/246820c3f4fa9e014e01df8e4c169a08f79568b6))
+
 ## [0.50.0](https://github.com/Audumla/AUDiaGentic/compare/v0.49.1...v0.50.0) (2026-10-31)
 
 

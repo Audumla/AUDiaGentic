@@ -74,6 +74,8 @@ Phase 2: deferred until needed (see 'Phasing' in docs/design/configuration-model
 
 2026-10-31 GPT on-track review (verdict ADJUST; the architecture and spec remain sound). Delivered: provider policy in settings, provider instances (replacing the t1/t2 alias descriptors), the generic settings writer and `config set`, and the harness endpoint rename. NOT delivered, and CFG06 must not be marked complete until it is: the provider feature-state shard (.audiagentic/config/runtime/features/providers.yaml) is still a second authority. It holds `enabled`, `options` (validated against the descriptor options_schema) and per-feature enable state (feature_resolution), and is the shared foundation.features mechanism also used by coding_lsp, memory, planning and gateway; the per-provider option files also still sit beside settings. Moving only `enabled` would leave two authorities. The consolidation (inventory of fields and consumers, destination keys, precedence, migration, rollback, removal criteria, GPT review) is owned by CFG11, and is a completion dependency of CFG06.
 
+Progress 2026-10-31: the provider shard's `enabled` flag is no longer configuration (local observation, #284) and provider options, policy and model sources are settings (#285, #287), so the dual authority for provider policy and options is gone. What keeps this item open: per-component options and feature state still sit in the shards (see CFG11 remaining item 3), and the qualification evidence (CFG07) is not done.
+
 ## Change Log
 
 - 2026-10-28T21:05:44.274107+00:00 (created-by): Created by claude
@@ -90,3 +92,4 @@ Phase 2: deferred until needed (see 'Phasing' in docs/design/configuration-model
 - chg_20261031_010914_settings-can-be-written-with-c_3841
 - 2026-10-31T01:09:16.752705+00:00 (updated-by): Updated: section:ledger-events
 - 2026-10-31T03:42:11.610783+00:00 (updated-by): Updated: section:notes
+- 2026-10-31T07:11:01.301957+00:00 (updated-by): Updated: section:notes
