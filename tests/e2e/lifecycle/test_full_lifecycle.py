@@ -30,7 +30,7 @@ def test_install_detect_uninstall_roundtrip(tmp_path) -> None:
         assert uninstall_result["status"] == "success"
         assert detect_installed_state(sandbox.repo).state == "installed"
         assert (sandbox.repo / ".audiagentic" / "components" / "project.yaml").exists()
-        assert (sandbox.repo / ".audiagentic" / "config" / "project.yaml").is_file()
+        assert (sandbox.repo / ".audiagentic" / "config" / "interoperability" / "config.yaml").is_file()
     finally:
         sandbox.cleanup()
 

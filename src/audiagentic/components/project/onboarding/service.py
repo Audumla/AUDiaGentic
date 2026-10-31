@@ -9,8 +9,6 @@ import uuid
 from contextvars import ContextVar
 from pathlib import Path
 
-from jsonschema import Draft202012Validator
-
 from audiagentic.components.providers import providers_api
 from audiagentic.foundation.components.loader import (
     read_component_metadata,
@@ -18,7 +16,7 @@ from audiagentic.foundation.components.loader import (
 )
 from audiagentic.foundation.components.registry import is_enabled, is_installed
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.foundation.io import atomic_write_json, load_yaml_file, save_yaml_file
+from audiagentic.foundation.io import atomic_write_json
 from audiagentic.foundation.mcp.component_builder import (
     entry_from_external_declaration,
     entry_from_mcp_declaration,
@@ -32,10 +30,6 @@ from .catalog import catalog, error
 _installing = ContextVar("project_mcp_installing", default=False)
 
 
-def _config_path(root: Path) -> Path:
-    return root / ".audiagentic/config/project.yaml"
-
-
 def _operations(root: Path) -> Path:
     return root / ".audiagentic/state/mcp-onboarding/operations"
 
@@ -45,21 +39,19 @@ def _hash(value) -> str:
 
 
 def _config(root: Path) -> dict:
-    package = Path(__file__).resolve().parents[3]
-    path = _config_path(root)
-    data = (
-        load_yaml_file(path)
-        if path.exists()
-        else load_yaml_file(package / "config/components/project/config/project.yaml")
-    )
-    schema = json.loads(
-        (Path(__file__).resolve().parents[1] / "contracts/project-config.schema.json").read_text(
-            encoding="utf8"
-        )
-    )
-    if list(Draft202012Validator(schema).iter_errors(data)):
-        raise error("Project configuration is invalid; use the owning project schema")
-    return data
+    """The recorded MCP bindings (``mcp-onboarding`` in the project settings), or ``{}`` before any install."""
+    from audiagentic.foundation.config.writer import read_scope_settings
+
+    section = read_scope_settings("project", project_root=root).get("mcp-onboarding")
+    if not isinstance(section, dict):
+        return {}
+    return {"mcp-onboarding": {"bindings": dict(section.get("bindings") or {})}}
+
+
+def _save_bindings(root: Path, bindings: dict) -> None:
+    from audiagentic.foundation.config.writer import write_settings_patch
+
+    write_settings_patch("project", {"mcp-onboarding": {"bindings": bindings}}, project_root=root)
 
 
 def _declarations(root: Path):
@@ -175,9 +167,7 @@ def install(
     root = root.resolve()
     if not root.is_dir():
         raise error("Project path must be an existing directory")
-    if not _config_path(root).resolve().is_relative_to(root) or not _operations(
-        root
-    ).resolve().is_relative_to(root):
+    if not _operations(root).resolve().is_relative_to(root):
         raise error("Project-owned configuration and recovery state must remain inside the project")
     if (
         not isinstance(harness_ids, (list, tuple))
@@ -289,10 +279,10 @@ def install(
             record.pop("error_code", None)
             record.pop("action_needed", None)
             _write_operation(root, record)
-            after = {**before, "mcp-onboarding": {"contract-version": "v1", "bindings": bindings}}
+            after = {"mcp-onboarding": {"bindings": bindings}}
             try:
                 if after != before:
-                    save_yaml_file(_config_path(root), after, atomic=True, sort_keys=False)
+                    _save_bindings(root, bindings)
                     record["changed"] = True
                 record["changed"] |= requirements.persist(root, owner.component_id, resolved)
                 record["phase"] = "intent_committed"
@@ -411,7 +401,7 @@ def install(
 
 def reconcile(root: Path) -> list[dict]:
     """Converge native selections after lifecycle events, without legacy broadcast."""
-    if _installing.get() or not _config_path(root).exists():
+    if _installing.get() or not _config(root):
         return []
     with AdvisoryLock(_operations(root) / ".run.lock"):
         return _reconcile_locked(root)
@@ -428,13 +418,6 @@ def _reconcile_locked(root: Path) -> list[dict]:
             }
         ]
     data = _config(root)
-    if "mcp-onboarding" not in data:
-        return [
-            {
-                "error_code": "VAL-MCPONB-001",
-                "action_needed": "Use an explicit install to migrate native selections.",
-            }
-        ]
     bindings = data["mcp-onboarding"]["bindings"]
     recorded_targets = providers_api.list_component_mcp_targets(root)
     if not any(bindings.values()) and not recorded_targets:

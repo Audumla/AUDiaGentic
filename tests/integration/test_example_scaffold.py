@@ -49,7 +49,7 @@ def test_seed_refuses_non_empty_target(tmp_path: Path) -> None:
 def test_seed_is_idempotent_with_overwrite(tmp_path: Path) -> None:
     target = tmp_path / "project"
     seed_example_project.seed_example_project(target)
-    project_config = target / ".audiagentic" / "config" / "project.yaml"
+    project_config = target / ".audiagentic" / "config" / "interoperability" / "config.yaml"
     first = project_config.read_text(encoding="utf-8")
     seed_example_project.seed_example_project(target, overwrite=True)
     second = project_config.read_text(encoding="utf-8")

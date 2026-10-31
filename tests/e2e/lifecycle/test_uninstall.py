@@ -43,7 +43,7 @@ def test_uninstall_default_preserves_configs(tmp_path: Path) -> None:
         result = apply_uninstall(sandbox.repo)
         assert result["status"] == "success"
         assert not runtime_dir.exists()
-        assert (sandbox.repo / ".audiagentic" / "config" / "project.yaml").is_file()
+        assert (sandbox.repo / ".audiagentic" / "config" / "interoperability" / "config.yaml").is_file()
         # project marker is removed by uninstall_component (it's a create-if-missing file)
     finally:
         sandbox.cleanup()

@@ -26,7 +26,6 @@ JSON Schema definitions for all AUDiaGentic configuration and data contracts use
 | Schema file | Validates |
 |-------------|-----------|
 | `provider-config.schema.json` | `.audiagentic/providers.yaml` |
-| `project-config.schema.json` | `.audiagentic/project.yaml` |
 | `prompt-syntax.schema.json` | `.audiagentic/prompt-syntax.yaml` |
 | `component-config.schema.json` | Component configuration |
 

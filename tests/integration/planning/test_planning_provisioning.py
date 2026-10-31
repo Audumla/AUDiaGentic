@@ -72,15 +72,13 @@ def setup_provider_surfaces(project_root: Path) -> None:
     for provider_id in ("claude", "opencode", "gemini", "continue"):
         set_provider_enabled(project_root, provider_id, enabled=True)
 
-    from audiagentic.foundation.io import load_yaml_file, save_yaml_file
+    from audiagentic.foundation.config.writer import write_settings_patch
 
-    path = project_root / ".audiagentic/config/project.yaml"
-    config = load_yaml_file(path)
-    config["mcp-onboarding"] = {
-        "contract-version": "v1",
-        "bindings": {"ag-planning": ["claude", "opencode", "gemini", "continue"]},
-    }
-    save_yaml_file(path, config, atomic=True, sort_keys=False)
+    write_settings_patch(
+        "project",
+        {"mcp-onboarding": {"bindings": {"ag-planning": ["claude", "opencode", "gemini", "continue"]}}},
+        project_root=project_root,
+    )
 
 
 def _stub(path: Path, content: str) -> None:

@@ -15,14 +15,9 @@ from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 def _setup_project(tmp_path: Path) -> Path:
     project_root = tmp_path / "project"
-    config_dir = project_root / ".audiagentic" / "config"
-    config_dir.mkdir(parents=True)
-    (config_dir / "project.yaml").write_text(
-        "contract-version: v1\nproject-id: test-project\nprompt-launch:\n  allow-adhoc-target: true\n",
-        encoding="utf-8",
-    )
+    (project_root / ".audiagentic").mkdir(parents=True)
     (project_root / ".audiagentic" / "settings.yaml").write_text(
-        "schema_version: 1\nproviders:\n  codex:\n    default-model: gpt-5.4-mini\n", encoding="utf-8",
+        "schema_version: 1\nproject:\n  id: test-project\nprompt-launch:\n  allow-adhoc-target: true\nproviders:\n  codex:\n    default-model: gpt-5.4-mini\n", encoding="utf-8",
     )
     return project_root
 

@@ -217,6 +217,44 @@ def test_event_config_triggers_and_prompt_syntax_files_move_and_roll_back(projec
     assert not ({"events", "event-triggers", "prompt-syntax"} & set(_settings(project)))
 
 
+def test_project_file_moves_identity_prompt_launch_and_bindings_and_rolls_back(project: Path) -> None:
+    legacy = _write(project / ".audiagentic" / "config" / "project.yaml", {
+        "contract-version": "v1", "project-id": "demo", "project-name": "Demo",
+        "workflow-profile": "standard", "tracked-docs-root": "docs", "runtime-root": ".audiagentic/runtime",
+        "release-strategy": "semver",
+        "prompt-launch": {"syntax": "prefix-token-v1", "allow-adhoc-target": True},
+        "mcp-onboarding": {"contract-version": "v1", "bindings": {"ag-planning": ["pi"]}},
+    })
+    original = legacy.read_bytes()
+    manifest = Path(apply_provider_config_migration(project)["manifest"])
+
+    settings = _settings(project)
+    assert settings["project"] == {"id": "demo", "name": "Demo"}
+    assert settings["prompt-launch"] == {"allow-adhoc-target": True}
+    assert settings["mcp-onboarding"] == {"bindings": {"ag-planning": ["pi"]}}
+    assert not legacy.exists()
+
+    report = rollback_provider_config_migration(project, manifest)
+    assert report["kept"] == []
+    assert legacy.read_bytes() == original
+    assert not ({"project", "prompt-launch", "mcp-onboarding"} & set(_settings(project)))
+
+
+def test_an_unfilled_project_file_migrates_to_nothing_and_is_removed(project: Path) -> None:
+    legacy = _write(project / ".audiagentic" / "config" / "project.yaml", {
+        "contract-version": "v1", "project-id": None, "project-name": None, "workflow-profile": "standard",
+        "mcp-onboarding": {"contract-version": "v1", "bindings": {}},
+    })
+    apply_provider_config_migration(project)
+    assert not legacy.exists()
+    assert "project" not in _settings(project)
+
+
+def test_a_project_file_key_without_a_home_refuses_the_migration(project: Path) -> None:
+    _write(project / ".audiagentic" / "config" / "project.yaml", {"contract-version": "v1", "surprise": 1})
+    assert plan_provider_config_migration(project).unknown
+
+
 def test_machine_provider_override_moves_to_user_settings_and_rolls_back(project: Path, tmp_path: Path) -> None:
     override = _write(tmp_path / "home" / "config" / "providers" / "gpt-auto.yaml",
                       {"settings": {"contract-version": "v1", "turn": {"response-timeout-seconds": 42}}})

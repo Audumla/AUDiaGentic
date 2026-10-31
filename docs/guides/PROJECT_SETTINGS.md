@@ -32,11 +32,10 @@ The project id names the project in every worktree and clone. It is resolved in
 this order:
 
 1. `project.id` in settings (normally the tracked `.audiagentic/settings.yaml`);
-2. `project-id` in the legacy `.audiagentic/config/project.yaml`;
-3. the repository name of the git `origin` remote;
-4. the main checkout's directory name, or this directory's name outside git.
+2. the repository name of the git `origin` remote;
+3. the main checkout's directory name, or this directory's name outside git.
 
-The last step differs between clones, and so does step 3 when remotes point at
+The last step differs between clones, and so does step 2 when remotes point at
 differently named repositories. `audiagentic doctor` warns in both cases;
 declare the id to fix it:
 

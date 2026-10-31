@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "settings: mcp-onboarding",
+  "description": "Which harnesses each project-installed MCP server is registered with, written by the explicit MCP install. The project component owns this section.",
+  "x-audiagentic-scopes": [
+    "project"
+  ],
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "bindings": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "uniqueItems": true,
+        "items": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

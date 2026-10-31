@@ -27,7 +27,6 @@ CANONICAL_SCHEMA_IDS = (
     "job-record",
     "lifecycle-plan",
     "lifecycle-result",
-    "project-config",
     "prompt-launch-request",
     "prompt-syntax",
     "provider-config",

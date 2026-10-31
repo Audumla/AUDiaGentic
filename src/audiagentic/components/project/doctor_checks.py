@@ -19,7 +19,7 @@ def check_identity(context: Any) -> list[CheckResult]:
     if root is None:
         return [CheckResult("project.identity", OK, "no project here (outside a git checkout)")]
     identity, source = project_id(root)
-    if source in {"settings", "legacy"}:
+    if source == "settings":
         return [CheckResult("project.identity", OK, f"project id {identity!r} ({source})")]
     remote_ids = git_remote_ids(root)
     if len(set(remote_ids.values())) > 1:

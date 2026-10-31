@@ -11,7 +11,7 @@ def test_sync_managed_baseline_copies_managed_assets_and_excludes_runtime(tmp_pa
 
     report = sync_managed_baseline(target)
 
-    assert ".audiagentic/config/project.yaml" in report["created-files"]
+    assert ".audiagentic/config/interoperability/config.yaml" in report["created-files"]
     assert ".github/workflows/release.yml" in report["created-files"]
     assert any("runtime" in p for p in report["excluded-paths"])
     assert (target / ".audiagentic" / "runtime").exists() is False
@@ -34,11 +34,11 @@ def test_sync_managed_baseline_copies_skill_sources(tmp_path: Path) -> None:
 
 def test_sync_managed_baseline_preserves_create_if_missing_files(tmp_path: Path) -> None:
     target = tmp_path / "project"
-    (target / ".audiagentic" / "config").mkdir(parents=True)
-    project_path = target / ".audiagentic" / "config" / "project.yaml"
-    project_path.write_text("contract-version: v1\nproject-id: keep-me\n", encoding="utf-8")
+    (target / ".audiagentic" / "config" / "interoperability").mkdir(parents=True)
+    project_path = target / ".audiagentic" / "config" / "interoperability" / "config.yaml"
+    project_path.write_text("contract-version: v1\nkeep-me: true\n", encoding="utf-8")
 
     report = sync_managed_baseline(target)
 
-    assert ".audiagentic/config/project.yaml" in report["preserved-files"]
-    assert "project-id: keep-me" in project_path.read_text(encoding="utf-8")
+    assert ".audiagentic/config/interoperability/config.yaml" in report["preserved-files"]
+    assert "keep-me: true" in project_path.read_text(encoding="utf-8")

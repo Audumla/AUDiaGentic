@@ -28,7 +28,7 @@ from audiagentic.components.agents.gateway.mapping import normalize_chat_title
 from audiagentic.components.agents.gateway.queue import dispatch as dispatch
 from audiagentic.components.agents.gateway.queue import queue as queue_mod
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.foundation.paths.names import project_marker_path
+from audiagentic.foundation.paths.names import is_managed_project
 from audiagentic.foundation.time import now_iso_z
 
 logger = logging.getLogger(__name__)
@@ -91,9 +91,7 @@ def _resolve_workspace_project_root(
         # the same project-id/name.  An explicit project root is the
         # unambiguous selector for that case; require managed project
         # metadata before accepting it.
-        if not explicit_root.is_dir() or not (
-            project_marker_path(explicit_root) / "config" / "project.yaml"
-        ).is_file():
+        if not explicit_root.is_dir() or not is_managed_project(explicit_root):
             raise AudiaGenticError(
                 code="RES-AGW-152",
                 kind="agents",
@@ -122,25 +120,23 @@ def _resolve_workspace_project_root(
             )
 
     matches: list[Path] = []
-    from audiagentic.foundation.io import load_yaml_file
-
     for candidate in candidates:
         if candidate in matches:
             continue
-        config_path = project_marker_path(candidate) / "config" / "project.yaml"
         # The parent scan can include hidden operational directories (notably
         # a sibling `.audiagentic` config folder). Their basename normalizes
         # to the project id `audiagentic`, but they are not project roots.
         # Only a directory carrying the managed project manifest can match.
-        if not config_path.is_file():
+        if not is_managed_project(candidate):
             continue
         labels: set[str] = set()
-        config = load_yaml_file(config_path)
-        if isinstance(config, dict):
-            for key in ("project-id", "project_id", "project-name", "project_name"):
-                value = config.get(key)
-                if isinstance(value, str) and value.strip():
-                    labels.add(_workspace_label(value))
+        from audiagentic.foundation.config.settings import resolve_settings_cached
+
+        settings = resolve_settings_cached(candidate)
+        for key in ("project.id", "project.name"):
+            value = settings.get(key)
+            if isinstance(value, str) and value.strip():
+                labels.add(_workspace_label(value))
         if not labels:
             labels.add(_workspace_label(candidate.name))
         if requested in labels:

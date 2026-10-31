@@ -42,7 +42,7 @@ providers:
 
 
 def test_validate_schemas_fails_on_bad_fixture() -> None:
-    bad_fixture = FIXTURES_DIR / "project-config.valid.json"
+    bad_fixture = FIXTURES_DIR / "component-config.valid.json"
     backup = bad_fixture.read_text(encoding="utf-8")
     try:
         bad_fixture.write_text("{\"contract-version\": \"v1\"}", encoding="utf-8")

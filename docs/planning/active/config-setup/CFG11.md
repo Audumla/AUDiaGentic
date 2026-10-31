@@ -135,8 +135,11 @@ Decided: the shared-gateway server, node and connector documents stay explicit r
 
 Installed-wheel evidence 2026-10-31 (audiagentic 0.50.2 built from main 4bcadf123 into a throwaway venv, isolated HOME/XDG, legacy fixture of 7 files: provider file, provider policy, model sources, logging, harness ag.yaml, two feature shards): `config migrate` previewed '13 setting(s) and 1 local-state value(s) from 7 legacy file(s)'; `doctor` raised settings.legacy-files; `--apply` wrote the project settings, the user-project file (proj.yaml) and the enabled observation and removed the sources; `config show providers.codex / harness.endpoint.url / logging.level --origin` resolved each from the project settings with file and line; `--rollback <manifest>` restored all 22 items with 0 kept and the original files returned. The CI-side gap found on the way: tests/integration/runtime/conftest.py set AUDIAGENTIC_REPO_ROOT at import time and leaked into other tests (fixed in #295).
 
+Project file 2026-10-31: `.audiagentic/config/project.yaml` is retired. Identity is `project.id` / new `project.name`; `prompt-launch` defaults are a new agent-jobs `prompt-launch` section (user, user-project, project, explicit); MCP onboarding bindings are a new project-component `mcp-onboarding` section (project scope), written by the explicit MCP install through the settings writer. The 'managed project' marker is the installation marker `.audiagentic/components/project.yaml` (`is_managed_project`). Dropped as unread: workflow-profile, tracked-docs-root, runtime-root, release-strategy, workflow-overrides (and the three matching project-context keys). The `project-config` contract (schema, canonical id, four fixtures) is retired. `config migrate` moves the file and rolls back; an unknown key refuses. Behaviour change: reconcile does nothing until bindings are recorded (no more 'use an explicit install to migrate' warning for legacy projects without a mcp-onboarding block). Remaining for CFG11: nothing in code; close once this lands.
+
 ## Change Log
 
 - 2026-10-31T03:41:56.742276+00:00 (created-by): Created by agent
 - 2026-10-31T07:10:56.461512+00:00 (updated-by): Updated: section:notes
 - 2026-10-31T09:02:09.387618+00:00 (updated-by): Updated: section:notes
+- 2026-10-31T10:51:22.402450+00:00 (updated-by): Updated: section:notes

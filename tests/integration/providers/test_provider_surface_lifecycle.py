@@ -296,14 +296,13 @@ def _installed_component_sandbox(tmp_path: Path, name: str, component_id: str):
 
 def _select_component_mcp(root: Path, component_id: str) -> None:
     """Lifecycle fixtures explicitly declare the native exposure under test."""
-    path = root / ".audiagentic/config/project.yaml"
-    data = yaml.safe_load(path.read_text(encoding="utf8"))
-    bindings = data.setdefault("mcp-onboarding", {"contract-version": "v1", "bindings": {}})[
-        "bindings"
-    ]
-    for name in _provider_mcp_server_names(component_id):
-        bindings[name] = ["claude", "codex", "opencode", "gemini", "continue"]
-    path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf8")
+    from audiagentic.foundation.config.writer import write_settings_patch
+
+    bindings = {
+        name: ["claude", "codex", "opencode", "gemini", "continue"]
+        for name in _provider_mcp_server_names(component_id)
+    }
+    write_settings_patch("project", {"mcp-onboarding": {"bindings": bindings}}, project_root=root)
 
 
 # --------------------------------------------------------------------------- #

@@ -262,7 +262,7 @@ def test_mcp_read_project_file_after_install(tmp_path, _mcp_server):
     _call(_mcp_server, "install_component", {"component_id": "project"}, project_root=tmp_path)
     result = _call(
         _mcp_server, "read_project_file",
-        {"relative_path": ".audiagentic/config/project.yaml"},
+        {"relative_path": ".audiagentic/config/interoperability/config.yaml"},
         project_root=tmp_path,
     )
     payload = result if isinstance(result, dict) else result[0]

@@ -21,11 +21,9 @@ def test_sanitize_context_section_redacts_and_bounds_values() -> None:
 
 
 def test_project_context_reads_identity(tmp_path: Path) -> None:
-    config = tmp_path / ".audiagentic" / "config"
-    config.mkdir(parents=True)
-    (config / "project.yaml").write_text(
-        "project-id: example\nproject-name: Example\nworkflow-profile: standard\n",
-        encoding="utf-8",
+    (tmp_path / ".audiagentic").mkdir()
+    (tmp_path / ".audiagentic" / "settings.yaml").write_text(
+        "schema_version: 1\nproject:\n  id: example\n  name: Example\n", encoding="utf-8"
     )
 
     result = project_api.context(tmp_path)
