@@ -20,7 +20,7 @@ def read_project_file(project_root: Path, relative_path: str) -> dict[str, Any]:
             kind="project",
             message=(
                 "path must start with .audiagentic/ (e.g. "
-                "'.audiagentic/config/runtime/features/memory.yaml'); "
+                "'.audiagentic/settings.yaml'); "
                 "pass a directory path, or '.', to list its contents"
             ),
             details={"path": relative_path},

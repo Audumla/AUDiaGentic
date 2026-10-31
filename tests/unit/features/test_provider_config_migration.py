@@ -231,3 +231,73 @@ def test_machine_provider_override_moves_to_user_settings_and_rolls_back(project
     assert report["kept"] == []
     assert override.read_bytes() == original
     assert "providers" not in yaml.safe_load((tmp_path / "xdg-config" / "audiagentic" / "settings.yaml").read_text())
+
+
+def test_feature_state_shards_move_to_the_user_project_scope_and_roll_back(project: Path, tmp_path: Path) -> None:
+    providers = _write(project / ".audiagentic" / "config" / "runtime" / "features" / "providers.yaml", {
+        "implementations": {"claude": {"enabled": True, "options": {"x": 1}}}})
+    lsp = _write(project / ".audiagentic" / "config" / "runtime" / "features" / "coding_lsp.yaml", {
+        "options": {"max": 5}, "features": {"language:python": {"enabled": True}},
+        "implementations": {"pyright": {"enabled": False, "features": {"language:go": {"enabled": True}}}}})
+    originals = [providers.read_bytes(), lsp.read_bytes()]
+    plan = plan_provider_config_migration(project)
+    assert plan.observations == {("providers", "enabled:claude"): True, ("coding_lsp", "enabled:pyright"): False}
+
+    manifest = Path(apply_provider_config_migration(project)["manifest"])
+
+    from audiagentic.foundation.features import observations
+    from audiagentic.foundation.features.state import get_component_state
+
+    assert not providers.exists() and not lsp.exists()
+    assert observations.get_observation(project, "providers", "enabled:claude") is True
+    state = get_component_state(project, "coding_lsp")
+    assert state["options"] == {"max": 5}
+    assert state["features"]["language:python"]["enabled"] is True
+    assert state["implementations"]["pyright"] == {"enabled": False, "features": {"language:go": {"enabled": True}}}
+    assert "features" not in _settings(project)  # the tracked project file is untouched
+
+    report = rollback_provider_config_migration(project, manifest)
+    assert report["kept"] == []
+    assert [providers.read_bytes(), lsp.read_bytes()] == originals
+    assert observations.observed_keys(project, "providers", "enabled:") == []
+    assert get_component_state(project, "coding_lsp") == {}
+
+
+def test_shard_with_an_unknown_key_refuses_the_migration(project: Path) -> None:
+    shard = _write(project / ".audiagentic" / "config" / "runtime" / "features" / "agents.yaml", {"surprise": 1})
+    assert any("surprise" in item for item in plan_provider_config_migration(project).unknown)
+    with pytest.raises(ValueError, match="refused"):
+        apply_provider_config_migration(project)
+    assert shard.exists()
+
+
+def test_a_shard_flag_that_disagrees_with_an_observation_is_a_conflict(project: Path) -> None:
+    from audiagentic.foundation.features import observations
+
+    _write(project / ".audiagentic" / "config" / "runtime" / "features" / "providers.yaml",
+           {"implementations": {"claude": {"enabled": True}}})
+    observations.record_observation(project, "providers", "enabled:claude", False, source="test")
+    assert ("observation", "providers", "enabled:claude") in plan_provider_config_migration(project).conflicts
+
+
+def test_config_migrate_command_previews_applies_and_rolls_back(project: Path, capsys) -> None:
+    import argparse
+
+    from audiagentic.commands.settings import run_settings_command
+
+    shard = _write(project / ".audiagentic" / "config" / "runtime" / "features" / "providers.yaml",
+                   {"implementations": {"claude": {"enabled": True, "options": {"x": 1}}}})
+
+    def run(**kw) -> dict:
+        options = {"apply": False, "rollback": None, **kw}
+        args = argparse.Namespace(config_cmd="migrate", project=project, config_file=None, as_json=True, **options)
+        assert run_settings_command(args) == 0
+        return json.loads(capsys.readouterr().out)
+
+    preview = run()
+    assert preview["applied"] is False and preview["local-state"] == 1 and preview["settings"] == 1
+    assert shard.exists()
+    applied = run(apply=True)
+    assert applied["applied"] is True and not shard.exists()
+    undone = run(rollback=applied["manifest"])
+    assert undone["kept"] == [] and shard.exists()

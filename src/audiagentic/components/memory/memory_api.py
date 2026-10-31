@@ -32,10 +32,8 @@ logger = logging.getLogger(__name__)
 
 _COMPONENT_ID = "memory"
 
-# Persisted config lives in the per-component feature state shard at:
-#   .audiagentic/config/runtime/features/memory.yaml
-# under implementations/<impl_id>/options.
-# This path is managed by the features state API — no custom file paths needed.
+# Persisted config is the ``features.memory`` settings section, under implementations/<impl_id>/options,
+# written to the user-project scope by the features state API — no custom file paths needed.
 
 
 def memory_status(project_root: Path) -> ComponentStatusPayload:

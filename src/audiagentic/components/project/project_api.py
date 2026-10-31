@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 from typing import Any
 
@@ -10,6 +9,21 @@ from audiagentic.foundation.components.registry import is_enabled, is_installed
 from audiagentic.foundation.features.registry import all_features, all_implementations
 from audiagentic.foundation.features.resolver import resolve_feature, resolve_implementation
 from audiagentic.foundation.io import load_yaml_file
+from audiagentic.foundation.paths.identity import (
+    git_common_dir as _git_common_dir,
+)
+from audiagentic.foundation.paths.identity import (
+    git_repository_identity as _git_repository_identity,
+)
+from audiagentic.foundation.paths.identity import (
+    path_safe_id as _path_safe_id,
+)
+from audiagentic.foundation.paths.identity import (
+    remote_urls as _remote_urls,
+)
+from audiagentic.foundation.paths.identity import (
+    repository_name as _repository_name,
+)
 from audiagentic.foundation.paths.names import project_marker_path
 
 from . import project_components, project_files, project_surfaces
@@ -159,77 +173,6 @@ def git_remote_ids(project_root: Path) -> dict[str, str]:
         if repo_id:
             ids[remote] = repo_id
     return ids
-
-
-def _path_safe_id(name: str) -> str | None:
-    """Restrict a name to the ``project.id`` schema: [A-Za-z0-9._-], alnum first, 64 chars."""
-    candidate = re.sub(r"[^A-Za-z0-9._-]+", "-", name.strip()).lstrip("._-")[:64].rstrip("._-")
-    return candidate or None
-
-
-def _strip_git_suffix(name: str) -> str:
-    return name[: -len(".git")] if name.endswith(".git") else name
-
-
-def _repository_name(url: str) -> str:
-    return _strip_git_suffix(url.rstrip("/").rsplit("/", 1)[-1].rsplit(":", 1)[-1])
-
-
-def _git_common_dir(project_root: Path) -> Path | None:
-    """The git common directory of project_root (shared by all its worktrees).
-
-    Reads git's own files rather than running git, so it is cheap and has no
-    process or PATH dependency. Any unreadable layout yields None.
-    """
-    try:
-        dot_git = project_root.resolve() / ".git"
-        if dot_git.is_dir():
-            git_dir = dot_git
-        elif dot_git.is_file():
-            pointer = dot_git.read_text(encoding="utf-8").strip()
-            if not pointer.startswith("gitdir:"):
-                return None
-            git_dir = (project_root.resolve() / pointer[len("gitdir:"):].strip()).resolve()
-        else:
-            return None
-        commondir = git_dir / "commondir"
-        return (git_dir / commondir.read_text(encoding="utf-8").strip()).resolve() if commondir.is_file() else git_dir
-    except OSError:
-        return None
-
-
-def _git_repository_identity(project_root: Path) -> tuple[str, str] | None:
-    """Name the git repository at project_root: origin's repo, else main checkout."""
-    common = _git_common_dir(project_root)
-    if common is None:
-        return None
-    try:
-        origin = _remote_urls(common / "config").get("origin")
-    except OSError:
-        return None
-    name = _repository_name(origin) if origin else ""
-    source = "git-remote"
-    if not name:
-        name, source = _strip_git_suffix(common.parent.name if common.name == ".git" else common.name), "main-checkout"
-    return (name.strip(), source) if name.strip() else None
-
-
-def _remote_urls(config_path: Path) -> dict[str, str]:
-    """``url`` of each ``[remote "name"]`` section in a git config file."""
-    if not config_path.is_file():
-        return {}
-    urls: dict[str, str] = {}
-    remote = None
-    for raw in config_path.read_text(encoding="utf-8").splitlines():
-        line = raw.strip()
-        if line.startswith("["):
-            section = line.strip("[]").strip()
-            remote = section[len("remote"):].strip().strip('"') if section.startswith("remote ") else None
-        elif remote and line.split("=", 1)[0].strip() == "url" and "=" in line:
-            url = line.split("=", 1)[1].strip()
-            if url:
-                urls.setdefault(remote, url)
-    return urls
 
 
 def context(

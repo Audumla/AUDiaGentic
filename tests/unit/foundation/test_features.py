@@ -28,6 +28,12 @@ def _write(path: Path, text: str) -> Path:
 
 
 @pytest.fixture(autouse=True)
+def _isolated_user_scope(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg-config"))
+    monkeypatch.delenv("AUDIAGENTIC_CONFIG", raising=False)
+
+
+@pytest.fixture(autouse=True)
 def _clear_registry(isolated_features_registry) -> None:
     """Each test runs against an empty registry; prior state is restored after."""
 
@@ -130,13 +136,16 @@ options-schema:
         )
     )
     _write(
-        tmp_path / ".audiagentic" / "config" / "runtime" / "features" / "coding-lsp.yaml",
+        tmp_path / ".audiagentic" / "settings.yaml",
         """
-options:
-  max-diagnostics: 500
+schema_version: 1
 features:
-  language:python:
-    enabled: true
+  coding-lsp:
+    options:
+      max-diagnostics: 500
+    features:
+      "language:python":
+        enabled: true
 """.strip(),
     )
 
@@ -173,7 +182,7 @@ id: python
     assert registry.get_feature("coding-lsp", "language", "python") is not None
 
 
-def test_feature_state_is_saved_under_runtime_config(tmp_path: Path) -> None:
+def test_feature_state_is_saved_in_the_user_project_settings(tmp_path: Path) -> None:
     load_feature_from_yaml(
         _write(
             tmp_path / "python.yaml",
@@ -188,22 +197,20 @@ id: python
 
     enable_feature(tmp_path, "coding-lsp", "language", "python")
 
-    # State is now sharded per component: features/{parent}.yaml.
-    shard = tmp_path / ".audiagentic" / "config" / "runtime" / "features" / "coding-lsp.yaml"
-    assert shard.exists()
+    from audiagentic.foundation.config.settings import user_project_settings_path
+
+    saved = user_project_settings_path(tmp_path).read_text(encoding="utf-8")
+    assert "coding-lsp" in saved and "language:python" in saved
+    assert not (tmp_path / ".audiagentic" / "settings.yaml").exists()  # tracked files are untouched
     state = get_component_state(tmp_path, "coding-lsp")
     assert state["features"]["language:python"]["enabled"] is True
 
 
-def test_set_component_state_isolation_does_not_rewrite_sibling_shard(tmp_path: Path) -> None:
+def test_set_component_state_isolation_does_not_change_a_sibling_component(tmp_path: Path) -> None:
     set_component_state(tmp_path, "comp-a", {"features": {"x:1": {"enabled": True}}})
-    shard_a = tmp_path / ".audiagentic" / "config" / "runtime" / "features" / "comp-a.yaml"
-    before = shard_a.read_bytes()
+    before = get_component_state(tmp_path, "comp-a")
 
-    # Writing component B must not touch component A's shard.
     set_component_state(tmp_path, "comp-b", {"features": {"y:2": {"enabled": True}}})
 
-    assert shard_a.read_bytes() == before
-    shard_b = tmp_path / ".audiagentic" / "config" / "runtime" / "features" / "comp-b.yaml"
-    assert shard_b.exists()
-    assert get_component_state(tmp_path, "comp-a") == {"features": {"x:1": {"enabled": True}}}
+    assert get_component_state(tmp_path, "comp-a") == before == {"features": {"x:1": {"enabled": True}}}
+    assert get_component_state(tmp_path, "comp-b") == {"features": {"y:2": {"enabled": True}}}

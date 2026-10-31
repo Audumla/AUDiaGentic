@@ -66,6 +66,11 @@ def _isolate_audiagentic_home(
     if request.node.get_closest_marker("mutates_host") is not None:
         return
     monkeypatch.setenv("AUDIAGENTIC_HOME", str(tmp_path_factory.mktemp("audiagentic-home")))
+    # The user and user-project settings scopes live in the platform config dir; a test must never
+    # read or write the real one (it would leak between tests and runs).
+    config_home = tmp_path_factory.mktemp("xdg-config")
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(config_home))
+    monkeypatch.setenv("XDG_STATE_HOME", str(config_home / "state"))
 
 
 @pytest.fixture(autouse=True)
