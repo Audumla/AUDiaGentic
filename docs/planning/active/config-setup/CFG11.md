@@ -15,13 +15,13 @@ priority: P1
 
 ## Description
 
-CFG09 was completed for phase 1 only (agent catalog, gateway settings). This item carries the phase 2 remainder so it has an active owner: the ~46 modules in tests/unit/architecture/config_inventory.yaml path-builders that join .audiagentic paths themselves, the remaining legacy readers (model sources PC12, provider option files, interoperability, component markers, logging, shared server/node config), `audiagentic config migrate` with backup and rollback, and user-project scope. The provider feature-state shard (providers.yaml: enabled, options, per-feature state) and the per-provider option files are one migration with one contract. Legacy readers stay only until migration and rollback tests pass; no compatibility paths without an approved obligation.
+CFG09 was completed for phase 1 only (agent catalog, gateway settings). This item carries the phase 2 remainder so it has an active owner: the ~46 modules in tests/unit/architecture/config_inventory.yaml path-builders that join .audiagentic paths themselves, the remaining legacy readers (model sources PC12, provider option files, interoperability, component markers, logging; the shared-gateway server/node/connector documents are a decided exception, see Notes), `audiagentic config migrate` with backup and rollback, and user-project scope. The provider feature-state shard (providers.yaml: enabled, options, per-feature state) and the per-provider option files are one migration with one contract. Legacy readers stay only until migration and rollback tests pass; no compatibility paths without an approved obligation.
 
 ## Steps
 
 1. Inventory the provider shard (enabled, options, per-feature state) and every consumer across providers, coding_lsp, memory, planning and gateway; define destination settings keys, precedence, migration, rollback and removal criteria; GPT review.
 2. Migrate providers (shard and option files) onto settings with config migrate.
-3. Migrate model sources, interoperability, component markers and logging, one subsystem per PR, deleting the old reader in the same PR.
+3. Migrate model sources, interoperability, component markers and logging, one subsystem per PR, deleting the old reader in the same PR. (Shared server/node/connector documents: deferred, see Notes.)
 4. Drive the path-builders list in config_inventory.yaml to empty.
 5. User-project scope and scope isolation/conflict tests.
 
@@ -127,12 +127,11 @@ Progress 2026-10-31 (merged unless stated; every move ships `audiagentic config 
 - Implementation `enabled` flags: the feature shards were gitignored per-host files, so the flag is lifecycle state, now a local observation (#284). `providers.<id>.enabled` stays the user's override; migrate never writes it.
 - Providers: options in `providers.<id>`, reconciliation mode/allowlist in `reconciliation`, install/access modes derived from the descriptor, decisions as local state (#285). Model sources (#287). Harness + Pi (`harness`, #288). Logging (`logging`, #289; `silenced`/`redact_patterns` stay additive so a redaction default cannot be dropped). Launch switches and locale (`launch`, `locale`, #290). Event layer, event triggers, prompt syntax (`events`, `event-triggers`, `prompt-syntax`, #291, in review).
 - Path-builders: the inventory list is empty; `foundation.paths.names` is the path service (#286). `load_layered_config`/`load_layered_mapping` are deleted (#290); composition is a packaged table with no override.
-Remaining, in order:
-1. project.yaml: split into `project.name`, `prompt-launch.allow-adhoc-target`, local-state MCP onboarding bindings; drop the unused constants; replace its use as the "managed project" marker; `.audiagentic/components/*.yaml` markers (lifecycle state).
-2. gpt-auto machine override file (`global_config_dir()/providers/gpt-auto.yaml`) -> user-scope `providers.gpt-auto`.
-3. Component options and feature state still live in the per-component shards (free-form data such as gateway connector selection). Decide per component whether each becomes settings (shared intent) or stays local state; do not move them blindly.
-4. User-project scope with isolation and conflict tests.
-Decisions needed from the user (recommendation first): (a) shared gateway server/node/connector files: RECOMMEND keeping them as separate explicit role documents (like a service unit: operator-authored, strict, security-checked, relative to the file) and amending the spec line; folding them into settings sections would re-implement their credential and loopback validation for little gain. (b) shard options/features: see item 3.
+Status after #294: done are the provider shard, provider options and policy, model sources, harness and Pi, logging, launch and locale, event layer/triggers/prompt syntax, the machine gpt-auto override, the per-component option/feature shards (user-project scope, #294), the user-project scope, the empty path-builders list and the deleted layered loader. Classified as state, not configuration, and left in place: the `.audiagentic/components/*.yaml` installation markers (version, installed-at, files). Still open:
+1. `.audiagentic/config/project.yaml` (project identity legacy source, `prompt-launch` defaults, MCP onboarding bindings, and its use as the "managed project" marker): not in the original list, but still a legacy reader; decide whether identity and prompt-launch policy move to `project` / `prompt-launch` settings and the bindings become local state.
+2. An installed-wheel run of `audiagentic config migrate` on a legacy project fixture (the item's validation line).
+3. Close the item once 1 and 2 are done or explicitly deferred.
+Decided: the shared-gateway server, node and connector documents stay explicit role documents (configuration-model.md, "Shared gateway role documents (kept)"; docs-only PR #297). Moving them would mean rewriting the node-grant revoke path, an explicit-scope settings writer and a gateway migration, for consistency only. Deferred, not complete; revisit if those documents must be layered or if their credential and loopback validation is ever shared. The project connector binding stays the `connector-config` path in the agents component state. Item 3 of the remaining list is done: component options and feature state are the `features` section of the user-project scope (#294); the user-project scope itself is done (#294); the machine gpt-auto override is done (#293).
 
 ## Change Log
 
