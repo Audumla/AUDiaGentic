@@ -50,6 +50,8 @@ def health(**updates):
     "https://gateway.example#fragment", "https://gateway.example:bad",
     "https://gateway.example:0", "https://", "https://gateway.example\\evil",
     "https://gateway.example\n", "https://gateway.example?", "https://gateway.example#",
+    "http://localhost:9443", "http://127.0.0.2:9443", "http://127.0.0.1", "http://[::1]:9443",
+    "http://127.0.0.1:9443/path", "http://user@127.0.0.1:9443", "http://127.0.0.1:0",
 ])
 def test_shared_rejects_unsafe_origins(endpoint):
     with pytest.raises(AudiaGenticError, match="VAL-AGSV-016"):
@@ -272,3 +274,27 @@ def test_shared_missing_project_grants_fail_closed(monkeypatch):
     with pytest.raises(AudiaGenticError, match="VAL-AGSV-005"):
         client.health()
     assert transport.call_count == 1
+
+
+def test_shared_accepts_literal_loopback_http_without_tls():
+    client = remote.StandaloneGatewayClient(
+        "http://127.0.0.1:9443", "secret", shared_server_id="server-a", shared_project_id="project-a")
+    assert client._endpoint == "http://127.0.0.1:9443"
+    assert any(type(h).__name__ == "HTTPHandler" for h in client._shared_opener.handlers)
+
+
+def test_shared_loopback_http_keeps_identity_and_redirect_rules(monkeypatch):
+    client = remote.StandaloneGatewayClient(
+        "http://127.0.0.1:9443", "secret", shared_server_id="server-a", shared_project_id="project-a")
+    requests = []
+
+    def open_request(request, **kwargs):
+        requests.append(request)
+        return Response(health(**{"server-id": "other"}))
+
+    monkeypatch.setattr(client._shared_opener, "open", open_request)
+    with pytest.raises(AudiaGenticError):
+        client.submit_execution_request(Path("/private/client/root"), prompt_body="hello")
+    assert requests[0].full_url == "http://127.0.0.1:9443/shared/v1/health"
+    assert requests[0].get_header("Authorization") == "Bearer secret"
+    assert any(type(h).__name__ == "_RejectRedirects" for h in client._shared_opener.handlers)
