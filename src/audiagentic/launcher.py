@@ -210,6 +210,9 @@ def _main(argv: list[str] | None = None) -> int:
     from audiagentic.commands.doctor import add_doctor_parsers
 
     add_doctor_parsers(subparsers)
+    from audiagentic.commands.qualify import add_qualify_parsers
+
+    add_qualify_parsers(subparsers)
 
     # Private stdio entrypoint retained for generated MCP configuration.
     mcp_parser = subparsers.add_parser(
@@ -257,6 +260,11 @@ def _main(argv: list[str] | None = None) -> int:
         print(parser.format_help())
         print(_help("root"))
         return 0
+
+    if args.command == "qualify":
+        from audiagentic.commands.qualify import run_qualify_command
+
+        return run_qualify_command(args)
 
     # doctor is read-only and setup writes only user settings: neither composes the app graph.
     if args.command in {"doctor", "setup"}:
