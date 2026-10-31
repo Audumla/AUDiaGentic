@@ -133,7 +133,10 @@ Status after #294: done are the provider shard, provider options and policy, mod
 3. Close the item once 1 and 2 are done or explicitly deferred.
 Decided: the shared-gateway server, node and connector documents stay explicit role documents (configuration-model.md, "Shared gateway role documents (kept)"; docs-only PR #297). Moving them would mean rewriting the node-grant revoke path, an explicit-scope settings writer and a gateway migration, for consistency only. Deferred, not complete; revisit if those documents must be layered or if their credential and loopback validation is ever shared. The project connector binding stays the `connector-config` path in the agents component state. Item 3 of the remaining list is done: component options and feature state are the `features` section of the user-project scope (#294); the user-project scope itself is done (#294); the machine gpt-auto override is done (#293).
 
+Installed-wheel evidence 2026-10-31 (audiagentic 0.50.2 built from main 4bcadf123 into a throwaway venv, isolated HOME/XDG, legacy fixture of 7 files: provider file, provider policy, model sources, logging, harness ag.yaml, two feature shards): `config migrate` previewed '13 setting(s) and 1 local-state value(s) from 7 legacy file(s)'; `doctor` raised settings.legacy-files; `--apply` wrote the project settings, the user-project file (proj.yaml) and the enabled observation and removed the sources; `config show providers.codex / harness.endpoint.url / logging.level --origin` resolved each from the project settings with file and line; `--rollback <manifest>` restored all 22 items with 0 kept and the original files returned. The CI-side gap found on the way: tests/integration/runtime/conftest.py set AUDIAGENTIC_REPO_ROOT at import time and leaked into other tests (fixed in #295).
+
 ## Change Log
 
 - 2026-10-31T03:41:56.742276+00:00 (created-by): Created by agent
 - 2026-10-31T07:10:56.461512+00:00 (updated-by): Updated: section:notes
+- 2026-10-31T09:02:09.387618+00:00 (updated-by): Updated: section:notes
