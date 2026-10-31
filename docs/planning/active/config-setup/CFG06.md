@@ -82,3 +82,8 @@ Phase 2: deferred until needed (see 'Phasing' in docs/design/configuration-model
 - 2026-10-29T03:06:37.786536+00:00 (state-transition): State: pending → in_progress
 - 2026-10-29T04:00:56.152954+00:00 (updated-by): Updated: section:notes
 - 2026-10-29T04:21:46.043510+00:00 (updated-by): Updated: section:standards
+
+## Ledger-events
+
+- chg_20261031_010914_settings-can-be-written-with-c_3841
+- 2026-10-31T01:09:16.752705+00:00 (updated-by): Updated: section:ledger-events
