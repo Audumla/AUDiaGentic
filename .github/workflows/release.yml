@@ -273,6 +273,7 @@ jobs:
             --notes-file docs/releases/RELEASE_NOTES.md
 
       - name: Publish to PyPI
+        if: vars.PYPI_PUBLISH == 'true'
         uses: pypa/gh-action-pypi-publish@release/v1
 
   dispatch-full-validation:

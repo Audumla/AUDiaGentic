@@ -17,7 +17,8 @@ already exists. Add a GitHub Trusted Publisher with:
 ```
 
 PyPI may label this a pending publisher until the first matching workflow run.
-No GitHub secret or `PYPI_PUBLISH` variable is required.
+No GitHub secret is required. Publishing to PyPI only happens when the repository
+variable `PYPI_PUBLISH` is `true`; the GitHub Release assets are always attached.
 
 OIDC removes the need for a stored PyPI publishing token; it does not sanitize
 source files or distribution contents. GitHub assets, PyPI packages, release
