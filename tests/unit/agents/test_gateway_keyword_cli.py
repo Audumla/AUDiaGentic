@@ -36,7 +36,8 @@ raise SystemExit(main(["gateway", *sys.argv[1:]]))
 
 @pytest.mark.parametrize("tail", [
     ["serve", "--host", "127.0.0.1"], ["status"], ["stop", "--force"],
-    ["drain"], ["resume"], ["recover"], ["serve", "config", "a", "extra"],
+    ["drain", "--force"], ["resume", "now"], ["recover"], ["recover", "reason"], ["stop", "extra"],
+    ["serve", "config", "a", "extra"],
     ["status", "config", "a", "output", "text"],
     ["connect", "config", "a", "project", ".", "dry-run", "non-interactive"],
 ])
@@ -197,9 +198,70 @@ def test_restart_reports_a_registered_error_and_fails(monkeypatch, capsys):
     assert "CON-MSVC-029" in capsys.readouterr().err
 
 
-def test_the_other_lifecycle_commands_stay_retired(capsys):
-    for retired in (["stop"], ["drain"], ["resume"], ["recover"]):
-        assert gateway.dispatch_keyword(retired) == 2
+@pytest.fixture
+def lifecycle(monkeypatch):
+    """Record every lifecycle call; nothing in these tests can touch a service."""
+    from audiagentic.components.agents.gateway import management_api
+
+    calls = []
+    for name in ("drain", "resume", "stop", "recover"):
+        monkeypatch.setattr(management_api, f"gateway_{name}",
+                            lambda *args, _n=name, **kwargs: calls.append((_n, args, kwargs)) or {"ok": _n})
+    return calls
+
+
+@pytest.mark.parametrize("tail,expected", [
+    (["drain", "non-interactive"], ("drain", {})),
+    (["resume"], ("resume", {})),
+    (["stop", "non-interactive"], ("stop", {"force": False})),
+    (["stop", "force", "non-interactive"], ("stop", {"force": True})),
+    (["recover", "reason", "owner", "hung", "non-interactive"], ("recover", {"reason": "owner hung"})),
+])
+def test_lifecycle_commands_call_their_adapter_once(tail, expected, lifecycle, capsys):
+    assert gateway.dispatch_keyword(tail) == 0
+    assert [(name, kwargs) for name, _args, kwargs in lifecycle] == [expected]
+    assert expected[0] in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("command", ["drain", "stop"])
+def test_lifecycle_asks_first_and_a_refusal_does_nothing(command, lifecycle, monkeypatch, capsys):
+    monkeypatch.setattr("builtins.input", lambda _prompt: "n")
+    assert gateway.dispatch_keyword([command]) == 1
+    assert lifecycle == []
+    monkeypatch.setattr("builtins.input", lambda _prompt: "y")
+    assert gateway.dispatch_keyword([command]) == 0 and len(lifecycle) == 1
+
+
+def test_lifecycle_json_output(lifecycle, capsys):
+    assert gateway.dispatch_keyword(["resume", "output", "json"]) == 0
+    assert '"ok": "resume"' in capsys.readouterr().out
+
+
+def test_lifecycle_adapters_attach_only_and_forward_force(monkeypatch):
+    from audiagentic.components.agents.gateway import management_api
+    from audiagentic.components.agents.gateway.service import bootstrap
+
+    client = Mock()
+    attach = Mock(return_value=client)
+    monkeypatch.setattr(bootstrap, "attach_existing_gateway", attach)
+    monkeypatch.setattr(bootstrap, "start_or_attach_gateway", Mock(side_effect=AssertionError("must not start")))
+    management_api.gateway_drain(Path("p"))
+    management_api.gateway_resume(Path("p"))
+    management_api.gateway_stop(Path("p"), force=True)
+    client.service_drain.assert_called_once_with(Path("p"))
+    client.service_resume.assert_called_once_with(Path("p"))
+    client.service_stop.assert_called_once_with(Path("p"), force=True)
+    assert client.close.call_count == 3
+
+
+def test_recover_is_confirmed_record_only(monkeypatch):
+    from audiagentic.components.agents.gateway import management_api
+    from audiagentic.components.agents.gateway.service import lifecycle
+
+    recover = Mock(return_value={"recovered": True})
+    monkeypatch.setattr(lifecycle, "recover_unprovable_owner", recover)
+    assert management_api.gateway_recover(reason="hung") == {"recovered": True}
+    recover.assert_called_once_with(confirm=True, reason="hung")
 
 
 def test_restart_help_is_startup_free_and_mentions_the_operator_rule(capsys):
