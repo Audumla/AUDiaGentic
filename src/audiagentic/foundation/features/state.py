@@ -4,9 +4,6 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
-from audiagentic.foundation.io import load_yaml_file, save_yaml_file
-from audiagentic.foundation.paths.names import PROJECT_MARKER_NAME
-
 from .base import FeatureState, ImplementationState
 from .observations import (
     clear_observation,
@@ -15,48 +12,46 @@ from .observations import (
     record_observation,
 )
 
-# Component option and feature state is sharded per component (parent), so a mutation to
-# component A never rewrites component B's data (write-scope isolation).
-RUNTIME_DIR = Path(PROJECT_MARKER_NAME) / "config" / "runtime"
-SHARD_DIR = RUNTIME_DIR / "features"
-
-# An implementation's ``enabled`` flag is lifecycle state: what enable, disable and reconciliation
-# applied on this host. It lives in the observation store, not in the shard, and is merged back
-# into the component view below. ``providers.<id>.enabled`` in settings is the separate, user-owned
-# override that wins over it.
+# Component options and feature switches are the ``features`` section of the settings, written into
+# the user-project scope (one person's untracked choices for one project); a tracked project file
+# may carry shared defaults. An implementation's ``enabled`` flag is lifecycle state, not configuration:
+# it is what enable, disable and reconciliation applied on this host, kept in the observation store and
+# merged back into the component view below. ``providers.<id>.enabled`` in settings is the separate,
+# user-owned override that wins over it.
+SECTION = "features"
+WRITE_SCOPE = "user-project"
 ENABLED_PREFIX = "enabled:"
 
 
-def shard_dir(project_root: Path) -> Path:
-    return project_root / SHARD_DIR
-
-
-def shard_path(project_root: Path, parent: str) -> Path:
-    """Deterministic per-component shard path. No index file is used."""
-    return shard_dir(project_root) / f"{parent}.yaml"
-
-
 def get_component_state(project_root: Path, parent: str) -> dict[str, Any]:
-    path = shard_path(project_root, parent)
-    component_state = load_yaml_file(path) if path.exists() else {}
-    if not isinstance(component_state, dict):
-        component_state = {}
-    component_state = deepcopy(component_state)
+    state: dict[str, Any] = {}
+    if project_root.is_dir():
+        from audiagentic.foundation.config.settings import resolve_settings_cached
+
+        section = resolve_settings_cached(project_root).get(SECTION)
+        entry = section.get(parent) if isinstance(section, dict) else None
+        state = deepcopy(entry) if isinstance(entry, dict) else {}
     for key in observed_keys(project_root, parent, ENABLED_PREFIX):
         implementation = key[len(ENABLED_PREFIX):]
-        entry = component_state.setdefault("implementations", {}).setdefault(implementation, {})
+        entry = state.setdefault("implementations", {}).setdefault(implementation, {})
         if isinstance(entry, dict):
             entry["enabled"] = bool(get_observation(project_root, parent, key))
-    return component_state
+    return state
 
 
 def set_component_state(project_root: Path, parent: str, component_state: dict[str, Any]) -> None:
     """Replace one component's state; each implementation's ``enabled`` goes to the observation store."""
-    shard = deepcopy(component_state)
+    from audiagentic.foundation.config.writer import replace_at
+
+    settings_part = deepcopy(component_state)
     enabled: dict[str, bool] = {}
-    for implementation, entry in (shard.get("implementations") or {}).items():
+    for implementation, entry in (settings_part.get("implementations") or {}).items():
         if isinstance(entry, dict) and "enabled" in entry:
             enabled[implementation] = bool(entry.pop("enabled"))
+    settings_part["implementations"] = {k: v for k, v in (settings_part.get("implementations") or {}).items() if v}
+    if not settings_part["implementations"]:
+        del settings_part["implementations"]
+    replace_at(WRITE_SCOPE, (SECTION, parent), settings_part, project_root=project_root)
     for key in observed_keys(project_root, parent, ENABLED_PREFIX):
         if key[len(ENABLED_PREFIX):] not in enabled:
             clear_observation(project_root, parent, key)
@@ -64,7 +59,6 @@ def set_component_state(project_root: Path, parent: str, component_state: dict[s
         key = ENABLED_PREFIX + implementation
         if get_observation(project_root, parent, key) is not value:
             record_observation(project_root, parent, key, value, source="feature-state")
-    save_yaml_file(shard_path(project_root, parent), shard, sort_keys=True, atomic=True)
 
 
 # ---------------------------------------------------------------------------

@@ -26,7 +26,7 @@ from .settings import SETTINGS_FILE, document_issues, raise_issues, scope_source
 from .strict_yaml import load_settings_text, settings_error
 from .yaml_edit import patch_text
 
-WRITABLE_SCOPES = ("user", "project")
+WRITABLE_SCOPES = ("user", "user-project", "project")
 BACKUPS_KEPT = 5
 _NEW_FILE = "schema_version: 1\n"
 _SHARED_FILE_MODE = 0o644
@@ -105,19 +105,34 @@ def replace_section(
     scope: str, section: str, value: dict[str, Any], *, project_root: Path | None = None,
 ) -> WriteResult:
     """Make one scope's ``section`` exactly ``value`` (an empty mapping removes it)."""
-    old = read_scope_settings(scope, project_root=project_root).get(section)
+    return replace_at(scope, (section,), value, project_root=project_root)
+
+
+def replace_at(
+    scope: str, path: tuple[str, ...], value: dict[str, Any], *, project_root: Path | None = None,
+) -> WriteResult:
+    """Make the mapping at ``path`` in one scope's file exactly ``value`` (empty removes it)."""
+    node: Any = read_scope_settings(scope, project_root=project_root)
+    for part in path:
+        node = node.get(part) if isinstance(node, dict) else None
+    old = node
     if not value:
-        patch_doc: dict[str, Any] = {section: None} if old is not None else {}
+        change: Any = None if old is not None else {}
     else:
-        patch_doc = {section: replacement_patch(old if isinstance(old, dict) else {}, value)}
+        change = replacement_patch(old if isinstance(old, dict) else {}, value)
+    patch_doc: dict[str, Any] = {}
+    if change != {} or old is not None:
+        patch_doc = change
+        for part in reversed(path):
+            patch_doc = {part: patch_doc}
     return write_settings_patch(scope, patch_doc, project_root=project_root)
 
 
 def _target(scope: str, project_root: Path | None) -> Path:
     if scope not in WRITABLE_SCOPES:
         raise settings_error(8, "Settings scope cannot be written", scope=scope, writable=list(WRITABLE_SCOPES))
-    source = next(s for s in scope_sources(project_root=project_root) if s.scope == scope)
-    if source.path is None:
+    source = next((s for s in scope_sources(project_root=project_root) if s.scope == scope), None)
+    if source is None or source.path is None:
         raise settings_error(8, "Settings scope has no file here: run inside a project checkout", scope=scope)
     for unsafe in (source.path, source.path.parent):
         if unsafe.is_symlink():
@@ -154,7 +169,7 @@ def _state_file(kind: str, path: Path, suffix: str = "") -> Path:
 def _mode(scope: str, path: Path) -> int:
     if path.is_file():
         return path.stat().st_mode & 0o777
-    return _PRIVATE_FILE_MODE if scope == "user" else _SHARED_FILE_MODE
+    return _PRIVATE_FILE_MODE if scope in ("user", "user-project") else _SHARED_FILE_MODE
 
 
 def _backup(path: Path, raw: bytes) -> Path:
@@ -169,6 +184,6 @@ def _backup(path: Path, raw: bytes) -> Path:
 
 
 __all__ = [
-    "BACKUPS_KEPT", "WRITABLE_SCOPES", "WriteResult", "read_scope_settings", "replace_section",
+    "BACKUPS_KEPT", "WRITABLE_SCOPES", "WriteResult", "read_scope_settings", "replace_at", "replace_section",
     "replacement_patch", "write_settings_patch",
 ]
