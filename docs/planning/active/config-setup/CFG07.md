@@ -66,6 +66,8 @@ Phase 2: deferred until needed (see 'Phasing' in docs/design/configuration-model
 
 2026-10-31 GPT on-track review (ADJUST): the qualification matrix must now cover provider instances (provider@instance keys), `audiagentic config set`, the endpoint-only harness (no embedded rig), the removed environment variables, and installed-wheel CLI/MCP tests. CFG08's installed-wheel qualification (0.46.0 from PyPI: setup, doctor, config set, planning/ledger/gateway MCP initialize) is completed evidence for CFG08 only; it does not satisfy CFG07's broader evidence record (versioned records, vendor evidence, scope isolation and conflict tests including user-project scope, which CFG11 delivers). Evidence collection can proceed in parallel with CFG11; do not treat CFG07 as done because CFG08 passed.
 
+2026-10-31 slice delivered: local platform qualification records (<state>/qualification/v1/<provider>/<surface>/<platform>.yaml) with fingerprint, package version, spec version, result, time, environment, evidence digest; `audiagentic qualify [PROVIDER] [--surface ID] [--json]` (default checks: CLI installed, adapter resolves); the surface resolver accepts a valid local record for the running platform when the descriptor has no vendor evidence for it and rejects stale/failed/invalid ones (reasons qualification-stale/-failed/-invalid); one platform's record never serves another. Acceptance shown by test: a platform with no vendor evidence is no-platform-match until `qualify gpt-auto`, then supported, with no package edit. Remaining: per-provider live probes beyond the default checks, removing unmeasured vendor platform claims from descriptors (decision needed: it makes those platforms unqualified until qualified), and a doctor line for unqualified surfaces / the allow-unqualified override.
+
 ## Change Log
 
 - 2026-10-28T21:05:48.895276+00:00 (created-by): Created by claude
@@ -73,3 +75,4 @@ Phase 2: deferred until needed (see 'Phasing' in docs/design/configuration-model
 - 2026-10-28T21:21:48.314949+00:00 (updated-by): Updated: section:notes
 - 2026-10-28T22:07:03.106732+00:00 (updated-by): Updated: section:notes
 - 2026-10-31T03:42:14.202506+00:00 (updated-by): Updated: section:notes
+- 2026-10-31T11:43:58.134526+00:00 (updated-by): Updated: section:notes

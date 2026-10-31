@@ -79,6 +79,9 @@ _UNSUPPORTED_REASONS = frozenset(
         "no-platform-match",
         "missing-adapter-factory",
         "no-inventory-proof",  # YAML claims validated but inventory lacks platform evidence
+        "qualification-stale",  # CFG07: the local record no longer matches the installed implementation
+        "qualification-failed",
+        "qualification-invalid",
     }
 )
 
@@ -526,13 +529,36 @@ def resolve_session_surface(
     # ── 5. Platform match (Fix 4: select before enforcement) ───────
     target_platform = _resolve_target_platform(surface_hint.platform_hint)
     matched_pe = _platform_matches(target_platform, declaration.platforms)
-    if not matched_pe and declaration.platforms:
-        return _unsupported_snapshot(
-            provider_id,
-            surface_hint.surface_id,
-            "no-platform-match",
-            requested_version=declaration.version_constraint,
+    local_qualified = False
+    if not matched_pe:
+        # CFG07: this machine's own qualification record stands in for vendor
+        # evidence on exactly this platform; stale or foreign records never do.
+        from ..qualification import platform_records
+
+        status = platform_records.check_record(
+            provider_id, declaration.surface_id, target_platform, adapter_ref=declaration.adapter_ref or None,
         )
+        if status.usable:
+            matched_pe = PlatformEvidence(
+                platform=target_platform,
+                evidence=ValidationEvidence(validated=True, reference=f"local-qualification:{status.record['evidence-digest']}"),
+            )
+            local_qualified = True
+        elif status.reason in {"stale", "failed", "invalid"}:
+            return _unsupported_snapshot(
+                provider_id,
+                surface_hint.surface_id,
+                f"qualification-{status.reason}",
+                requested_version=declaration.version_constraint,
+                outcome=SurfaceResolutionOutcome.UNPROVEN,
+            )
+        elif declaration.platforms:
+            return _unsupported_snapshot(
+                provider_id,
+                surface_hint.surface_id,
+                "no-platform-match",
+                requested_version=declaration.version_constraint,
+            )
 
     # ── 6. Effective evidence for the selected platform ─────────────
     if matched_pe:
@@ -548,7 +574,7 @@ def resolve_session_surface(
     # (provider_id, surface_id) pair. This gate applies only to observability
     # / effective lifecycle claim resolution; it does not prevent launching
     # a surface whose observer publication is unavailable.
-    if eff_evidence.validated:
+    if eff_evidence.validated and not local_qualified:
         has_inventory_proof = _get_inventory_proof(
             provider_id,
             declaration.surface_id,
