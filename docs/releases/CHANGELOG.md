@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.49.1](https://github.com/Audumla/AUDiaGentic/compare/v0.49.0...v0.49.1) (2026-10-31)
+
+
+### Bug Fixes
+
+* **release:** an empty ledger no longer blocks publication; the release merge waits for pending required checks ([#282](https://github.com/Audumla/AUDiaGentic/issues/282)) ([e2a71d9](https://github.com/Audumla/AUDiaGentic/commit/e2a71d9520a6ca4b216026788eabc688afc4e0a9))
+
+## [0.49.0](https://github.com/Audumla/AUDiaGentic/compare/v0.48.5...v0.49.0) (2026-10-31)
+
+
+### Features
+
+* **config:** feature intent in settings, observation store, shard migration with rollback (CFG11) ([#279](https://github.com/Audumla/AUDiaGentic/issues/279)) ([2732074](https://github.com/Audumla/AUDiaGentic/commit/273207442d40f3b893f8606437370c9e908a490f))
+
 ## [0.48.5](https://github.com/Audumla/AUDiaGentic/compare/v0.48.4...v0.48.5) (2026-10-31)
 
 

@@ -56,7 +56,7 @@ def test_finalize_appends_once(tmp_path: Path) -> None:
         sandbox.cleanup()
 
 
-def test_finalize_fails_with_empty_ledger(tmp_path: Path) -> None:
+def test_finalize_fails_when_the_current_ledger_file_is_missing(tmp_path: Path) -> None:
     sandbox = sandbox_helper.create(tmp_path, "finalize-empty")
     try:
         try:
@@ -65,5 +65,31 @@ def test_finalize_fails_with_empty_ledger(tmp_path: Path) -> None:
             assert exc.kind == "release"
         else:
             raise AssertionError("expected business-rule error")
+    finally:
+        sandbox.cleanup()
+
+
+def test_finalize_with_no_events_keeps_the_release_please_notes(tmp_path: Path) -> None:
+    sandbox = sandbox_helper.create(tmp_path, "finalize-empty")
+    try:
+        releases = sandbox.repo / "docs" / "releases"
+        _write_ledger(releases / "CURRENT_RELEASE_LEDGER.ndjson", [])
+        notes = releases / "RELEASE_NOTES.md"
+        notes.write_text("previous release notes\n", encoding="utf-8")
+
+        result = release_api.finalize(sandbox.repo, release_id="rel_empty")
+
+        assert result["notes-source"] == "release-please" and result["empty"] is True
+        assert notes.read_text(encoding="utf-8") == "previous release notes\n"
+        assert "rel_empty" not in (releases / "VERSION_HISTORY.md").read_text(encoding="utf-8") if (releases / "VERSION_HISTORY.md").exists() else True
+    finally:
+        sandbox.cleanup()
+
+
+def test_finalize_with_events_reports_events_as_the_notes_source(tmp_path: Path) -> None:
+    sandbox = sandbox_helper.create(tmp_path, "finalize-events")
+    try:
+        _write_ledger(sandbox.repo / "docs" / "releases" / "CURRENT_RELEASE_LEDGER.ndjson", [_load_event("chg_e1", "Add A")])
+        assert release_api.finalize(sandbox.repo, release_id="rel_events")["notes-source"] == "events"
     finally:
         sandbox.cleanup()
