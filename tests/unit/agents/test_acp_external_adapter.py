@@ -1,23 +1,32 @@
+"""SH62a: the ACP adapter over the gateway Work ports (one accepted command per prompt, durable outstanding check)."""
 from __future__ import annotations
 
 import asyncio
 from pathlib import Path
 
+import pytest
 from acp.schema import TextContentBlock
 
 from audiagentic.components.agents.protocols.acp import AcpAgent, UnsupportedAcpOperation
+from audiagentic.components.agents.protocols.acp.agent import AcpPromptError
 
 
 class FakeAgentsPort:
-    def __init__(self) -> None:
-        self.calls: list[tuple[str, object]] = []
+    """In-memory Work ports; ``rounds`` waits report ``active`` before the Work reaches ``final``."""
+
+    def __init__(self, *, final: str = "completed", rounds: int = 1) -> None:
+        self.calls: list[tuple] = []
+        self.works: dict[str, dict] = {}
+        self.final = final
+        self.rounds = rounds
+        self.waits = 0
+        self.output = {"text": "done"}
 
     def open_agent_context(self, root, agent_id, title=None):
         self.calls.append(("open", agent_id))
         return {"context_id": "ctx_1", "state": "open"}
 
     def get_agent_context(self, root, context_id):
-        self.calls.append(("get", context_id))
         return {"context_id": context_id, "state": "open"}
 
     def list_agent_contexts(self, root):
@@ -27,22 +36,38 @@ class FakeAgentsPort:
         self.calls.append(("close", context_id))
         return {"context_id": context_id, "state": "closed"}
 
-    def submit_agent_work(self, root, context_id, message, **kwargs):
-        self.calls.append(("submit", message["text"], message["message_id"], kwargs.get("work_id")))
-        return {"work_id": "work_1", "context_id": context_id, "state": "completed"}
+    def accept_agent_work_message(self, root, context_id, message, *, protocol, work_id=None):
+        self.calls.append(("accept", message["text"], message["message_id"], protocol, work_id))
+        wid = f"work_{len(self.works) + 1}"
+        self.works[wid] = {"work_id": wid, "context_id": context_id, "state": "active"}
+        return dict(self.works[wid])
+
+    def wait_agent_work(self, root, work_id, timeout_seconds=None):
+        import time
+
+        time.sleep(0.02)  # a real wait takes time; the test cancels while it is pending
+        self.waits += 1
+        if self.waits >= self.rounds and self.works[work_id]["state"] == "active":
+            self.works[work_id]["state"] = self.final
+        return {"work": dict(self.works[work_id]), "wait-outcome": "terminal"}
 
     def get_agent_work(self, root, work_id):
-        return {"work_id": work_id, "state": "completed"}
+        return dict(self.works[work_id])
 
     def list_agent_work(self, root):
-        return []
+        return [dict(w) for w in self.works.values()]
 
     def cancel_agent_work(self, root, work_id):
         self.calls.append(("cancel", work_id))
-        return {"work_id": work_id, "state": "cancelled"}
+        self.works[work_id]["state"] = "cancelled"
+        return dict(self.works[work_id])
 
     def read_agent_work_output(self, root, work_id):
-        return {"work_id": work_id, "output": "done"}
+        return self.output
+
+
+def _prompt(text="hello"):
+    return [TextContentBlock(type="text", text=text)]
 
 
 def test_acp_projects_context_and_work_through_public_ports(tmp_path: Path) -> None:
@@ -51,45 +76,119 @@ def test_acp_projects_context_and_work_through_public_ports(tmp_path: Path) -> N
 
     async def scenario():
         created = await adapter.new_session(str(tmp_path))
-        result = await adapter.prompt(
-            created.sessionId,
-            [TextContentBlock(type="text", text="hello")],
-        )
+        result = await adapter.prompt(created.sessionId, _prompt())
         await adapter.close_session(created.sessionId)
         return created, result
 
     created, result = asyncio.run(scenario())
-    assert created.sessionId == "ctx_1"
-    assert result.stopReason == "end_turn"
-    submission = next(call for call in ports.calls if call[0] == "submit")
-    assert submission[1].startswith("hello")
-    assert submission[2].startswith("acp:ctx_1:")
-    assert submission[3].startswith("work_acp_")
+    assert created.sessionId == "ctx_1" and result.stopReason == "end_turn"
+    assert result.field_meta["output"] == {"text": "done"}
+    accept = next(call for call in ports.calls if call[0] == "accept")
+    assert accept[1] == "hello" and accept[2].startswith("acp:") and accept[3] == "acp" and accept[4] is None
     assert ("close", "ctx_1") in ports.calls
 
 
 def test_acp_rejects_client_owned_extensions(tmp_path: Path) -> None:
     adapter = AcpAgent(tmp_path, "agent-test", FakeAgentsPort())
-
-    async def scenario():
-        await adapter.new_session(str(tmp_path), mcp_servers=[object()])
-
-    try:
-        asyncio.run(scenario())
-    except UnsupportedAcpOperation:
-        pass
-    else:
-        raise AssertionError("client MCP injection must be rejected")
+    with pytest.raises(UnsupportedAcpOperation):
+        asyncio.run(adapter.new_session(str(tmp_path), mcp_servers=[object()]))
 
 
-def test_acp_replay_uses_the_same_work_identity(tmp_path: Path) -> None:
+def test_identical_prompts_are_distinct_commands_never_a_silent_replay(tmp_path: Path) -> None:
     ports = FakeAgentsPort()
     adapter = AcpAgent(tmp_path, "agent-test", ports)
 
     async def scenario():
-        await adapter.prompt("ctx_1", [TextContentBlock(type="text", text="retry me")])
-        await adapter.prompt("ctx_1", [TextContentBlock(type="text", text="retry me")])
+        await adapter.prompt("ctx_1", _prompt("retry me"))
+        await adapter.prompt("ctx_1", _prompt("retry me"))
 
     asyncio.run(scenario())
-    submissions = [call for call in ports.calls if call[0] == "submit"]
-    assert submissions[0][2:] == submissions[1][2:]
+    accepts = [call for call in ports.calls if call[0] == "accept"]
+    assert len(accepts) == 2 and accepts[0][2] != accepts[1][2]
+
+
+def test_a_second_prompt_is_refused_while_one_is_outstanding_even_from_a_new_adapter(tmp_path: Path) -> None:
+    ports = FakeAgentsPort()
+    ports.works["work_9"] = {"work_id": "work_9", "context_id": "ctx_1", "state": "active"}
+    reconnected = AcpAgent(tmp_path, "agent-test", ports)  # no in-memory state: the Work record decides
+    with pytest.raises(AcpPromptError, match="outstanding"):
+        asyncio.run(reconnected.prompt("ctx_1", _prompt()))
+    assert not [call for call in ports.calls if call[0] == "accept"]
+    ports.works["work_9"]["state"] = "completed"
+    assert asyncio.run(reconnected.prompt("ctx_1", _prompt())).stopReason == "end_turn"
+
+
+def test_the_prompt_stays_open_until_the_work_is_terminal(tmp_path: Path) -> None:
+    ports = FakeAgentsPort(rounds=3)
+    result = asyncio.run(AcpAgent(tmp_path, "agent-test", ports).prompt("ctx_1", _prompt()))
+    assert ports.waits == 3 and result.stopReason == "end_turn"
+
+
+@pytest.mark.parametrize("final", ["failed", "rejected"])
+def test_a_failed_work_is_an_error_never_end_turn(tmp_path: Path, final: str) -> None:
+    ports = FakeAgentsPort(final=final)
+    with pytest.raises(AcpPromptError, match=final):
+        asyncio.run(AcpAgent(tmp_path, "agent-test", ports).prompt("ctx_1", _prompt()))
+
+
+def test_cancel_uses_durable_work_state_and_the_prompt_reports_cancelled(tmp_path: Path) -> None:
+    ports = FakeAgentsPort(rounds=10_000)
+    adapter = AcpAgent(tmp_path, "agent-test", ports)
+
+    async def scenario():
+        task = asyncio.create_task(adapter.prompt("ctx_1", _prompt()))
+        for _ in range(50):
+            await asyncio.sleep(0.01)
+            if ports.works:
+                break
+        # A different adapter instance (a reconnect) cancels through the Work record.
+        await AcpAgent(tmp_path, "agent-test", ports).cancel("ctx_1")
+        return await asyncio.wait_for(task, 5)
+
+    assert asyncio.run(scenario()).stopReason == "cancelled"
+    assert ("cancel", "work_1") in ports.calls
+
+
+def test_long_output_is_bounded_in_the_response(tmp_path: Path) -> None:
+    ports = FakeAgentsPort()
+    ports.output = {"text": "x" * 200_000}
+    result = asyncio.run(AcpAgent(tmp_path, "agent-test", ports).prompt("ctx_1", _prompt()))
+    assert len(result.field_meta["output"]["text"]) == 64_000 and result.field_meta["output"]["truncated"] is True
+
+
+# --- against the real Work owner (admission stubbed) ----------------------------------------------------
+
+from .test_context_work import _seed  # noqa: E402
+
+
+@pytest.mark.usefixtures("in_process_gateway")
+def test_the_adapter_runs_against_the_real_work_owner(tmp_path: Path) -> None:
+    from audiagentic.components.agents.context.service import open_context
+    from audiagentic.components.agents.gateway.client import get_gateway_client
+
+    _seed(tmp_path)
+    context = open_context(tmp_path, "a", "t")
+    client = get_gateway_client(tmp_path)
+    admitted: list[str] = []
+
+    def admit(_root, **kwargs):
+        admitted.append(kwargs["metadata"]["idempotency_key"])
+        return {"request-id": f"req_{len(admitted)}", "state": "queued"}
+
+    state = {"value": "running"}
+    client._application.submit_execution_request = admit  # type: ignore[method-assign]
+    client._application.wait_execution_request = lambda root, rid, t=None: (  # type: ignore[method-assign]
+        {"state": "completed"} if state["value"] == "completed" else {"wait-outcome": "timeout", "status": {"state": "running"}})
+
+    adapter = AcpAgent(tmp_path, "a", client)
+
+    async def scenario():
+        task = asyncio.create_task(adapter.prompt(context.context_id, _prompt("hello")))
+        await asyncio.sleep(0.3)
+        with pytest.raises(AcpPromptError, match="outstanding"):
+            await adapter.prompt(context.context_id, _prompt("second"))
+        state["value"] = "completed"
+        return await asyncio.wait_for(task, 10)
+
+    result = asyncio.run(scenario())
+    assert result.stopReason == "end_turn" and len(admitted) == 1
