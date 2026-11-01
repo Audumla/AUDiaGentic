@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.82.0](https://github.com/Audumla/AUDiaGentic/compare/v0.81.0...v0.82.0) (2026-11-01)
+
+
+### Features
+
+* **agents:** A2A 1.0 JSON-RPC handler on the pinned a2a-sdk; install the extra in CI (SH65) ([#405](https://github.com/Audumla/AUDiaGentic/issues/405)) ([a4c4b33](https://github.com/Audumla/AUDiaGentic/commit/a4c4b33b7af403920be04d829ac2767456735734))
+
 ## [0.81.0](https://github.com/Audumla/AUDiaGentic/compare/v0.80.1...v0.81.0) (2026-11-01)
 
 
