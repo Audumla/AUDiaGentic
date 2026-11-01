@@ -1,4 +1,5 @@
 # Agent Gateway (AGW) and Execution Profile (EXP) error resolutions
+CON-AGSV-032: "The dashboard project is not known to this gateway: refresh the dashboard so it lists the current projects, or check that the project has been seen by this gateway."
 CON-AGSV-031: "Use a request ID that resolves uniquely within the selected project; check project scope and request history."
 VAL-AGSV-035: "Provide include_response as a JSON boolean, not a string or number."
 VAL-AGSV-036: "Provide since_sequence as an integer."
