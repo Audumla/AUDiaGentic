@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.68.1](https://github.com/Audumla/AUDiaGentic/compare/v0.68.0...v0.68.1) (2026-11-01)
+
+
+### Documentation
+
+* **planning:** SH39 audit; close SH61/SH62 on the semantic adapters; split SH65/SH66 for wire and live clients ([#363](https://github.com/Audumla/AUDiaGentic/issues/363)) ([30b4497](https://github.com/Audumla/AUDiaGentic/commit/30b449745908201736813fb64cdbc71124a9dee4))
+
 ## [0.68.0](https://github.com/Audumla/AUDiaGentic/compare/v0.67.1...v0.68.0) (2026-11-01)
 
 
