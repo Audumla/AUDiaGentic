@@ -125,6 +125,15 @@
           "type": "integer",
           "minimum": 1,
           "maximum": 3650
+        },
+        "session_purge_enabled": {
+          "type": "boolean",
+          "description": "Allow the explicit session-purge operation to delete closed or expired session lineage after the inactivity period. Disabled unless set; machine scope only."
+        },
+        "session_purge_inactivity_seconds": {
+          "type": "number",
+          "minimum": 3600,
+          "description": "Seconds since a session's last accepted turn before its closed or expired lineage may be purged (recommended 604800). Required, and at least 3600, when session_purge_enabled is true."
         }
       }
     },

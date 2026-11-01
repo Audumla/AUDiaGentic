@@ -454,9 +454,23 @@ def gateway_get_retention_policy(project_root: Path) -> dict[str, Any]:
         "observation-max-bytes": policy.observation_max_bytes,
         "recovery-max-bytes": policy.recovery_max_bytes,
         "console-trace-max-bytes": policy.console_trace_max_bytes,
+        "session-purge-enabled": policy.session_purge_enabled,
+        "session-purge-inactivity-seconds": policy.session_purge_inactivity_seconds,
         "policy-id": policy.policy_id,
         "policy-digest": policy.digest,
     }
+
+
+def gateway_session_purge_report(project_root: Path) -> dict[str, Any]:
+    """Dry-run: which closed sessions the machine session-purge policy would allow to be purged.
+
+    Read-only. The policy is machine scoped (a project cannot weaken it); every block carries a
+    stable reason. Gateway-local session lineage only: remote provider conversations are never
+    touched.
+    """
+    from .session.purge_eligibility import session_purge_report
+
+    return session_purge_report(Path(project_root))
 
 
 def gateway_restart(project_root: Path, *, force: bool = False) -> dict[str, Any]:

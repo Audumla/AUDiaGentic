@@ -32,6 +32,8 @@ class RetentionPolicy:
     digest: str
     available: bool
     journal_retention_days: int = DEFAULT_JOURNAL_RETENTION_DAYS
+    session_purge_enabled: bool = False
+    session_purge_inactivity_seconds: float = 0.0
 
     @property
     def snapshot(self) -> dict[str, Any]:
@@ -47,6 +49,8 @@ class RetentionPolicy:
             "recovery-max-bytes": self.recovery_max_bytes,
             "console-trace-max-bytes": self.console_trace_max_bytes,
             "journal-retention-days": self.journal_retention_days,
+            "session-purge-enabled": self.session_purge_enabled,
+            "session-purge-inactivity-seconds": self.session_purge_inactivity_seconds,
             "available": self.available,
         }
 
@@ -92,6 +96,24 @@ def _policy_values(raw: dict[str, Any]) -> tuple[bool, float, int, int, int, int
     return enabled, minimum, batch, history_limit, timeline_max, observation_max, recovery_max, console_max
 
 
+SESSION_PURGE_MIN_INACTIVITY_SECONDS = 3600.0
+
+
+def _session_purge_values(raw: dict[str, Any]) -> tuple[bool, float]:
+    """Session-lineage purge policy: disabled unless explicit; enabling needs a threshold of at least an hour."""
+    enabled = raw.get("session-purge-enabled", False)
+    if not isinstance(enabled, bool):
+        raise ValueError
+    inactivity = raw.get("session-purge-inactivity-seconds", 0.0)
+    if isinstance(inactivity, bool) or not isinstance(inactivity, int | float) or not math.isfinite(inactivity):
+        raise ValueError
+    if enabled and inactivity < SESSION_PURGE_MIN_INACTIVITY_SECONDS:
+        raise ValueError
+    if inactivity < 0:
+        raise ValueError
+    return enabled, float(inactivity)
+
+
 def load_retention_policy() -> RetentionPolicy:
     """The ``gateway.retention`` settings as a policy; unavailable when unset, invalid when it fails validation."""
     from audiagentic.components.agents.gateway.settings import gateway_policy
@@ -121,8 +143,8 @@ def load_retention_policy() -> RetentionPolicy:
         retention_days = raw.get("journal-retention-days", DEFAULT_JOURNAL_RETENTION_DAYS)
         if isinstance(retention_days, bool) or not isinstance(retention_days, int) or not 1 <= retention_days <= 3650:
             raise ValueError
-        canonical = json.dumps(
-            {
+        session_enabled, session_inactivity = _session_purge_values(raw)
+        canonical_fields = {
                 "purge-enabled": enabled,
                 "minimum-archive-age-seconds": minimum,
                 "max-batch-size": batch,
@@ -132,10 +154,12 @@ def load_retention_policy() -> RetentionPolicy:
                 "recovery-max-bytes": recovery_max,
                 "console-trace-max-bytes": console_max,
                 "journal-retention-days": retention_days,
-            },
-            sort_keys=True,
-            separators=(",", ":"),
-        )
+        }
+        if "session-purge-enabled" in raw or "session-purge-inactivity-seconds" in raw:
+            # Present only when configured, so existing policies keep their digest.
+            canonical_fields["session-purge-enabled"] = session_enabled
+            canonical_fields["session-purge-inactivity-seconds"] = session_inactivity
+        canonical = json.dumps(canonical_fields, sort_keys=True, separators=(",", ":"))
         digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
         return RetentionPolicy(
             enabled,
@@ -150,6 +174,8 @@ def load_retention_policy() -> RetentionPolicy:
             digest,
             True,
             retention_days,
+            session_enabled,
+            session_inactivity,
         )
     except (OSError, ValueError, TypeError):
         return RetentionPolicy(
@@ -173,6 +199,7 @@ def policy_matches(snapshot: dict[str, Any]) -> bool:
 
 
 __all__ = [
+    "SESSION_PURGE_MIN_INACTIVITY_SECONDS",
     "DEFAULT_JOURNAL_RETENTION_DAYS",
     "DEFAULT_CONSOLE_TRACE_MAX_BYTES",
     "DEFAULT_OBSERVATION_MAX_BYTES",
