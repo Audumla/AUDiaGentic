@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.57.2](https://github.com/Audumla/AUDiaGentic/compare/v0.57.1...v0.57.2) (2026-11-01)
+
+
+### Documentation
+
+* **testing:** run the CI gate locally; record DW01 ship/containment and TE02 baseline ([#326](https://github.com/Audumla/AUDiaGentic/issues/326)) ([2a649ad](https://github.com/Audumla/AUDiaGentic/commit/2a649ade0118611d202c010a1569f87f7cd8eaf8))
+
 ## [0.57.1](https://github.com/Audumla/AUDiaGentic/compare/v0.57.0...v0.57.1) (2026-11-01)
 
 
