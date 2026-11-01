@@ -2454,6 +2454,31 @@ def claim_retention(project_root: Path, session_id: str, *, operation_id: str) -
             return updated
 
 
+def begin_retention_deletion(
+    project_root: Path, session_id: str, *, operation_id: str, request_ids: list[str], policy_digest: str,
+) -> dict[str, Any]:
+    """Record the deletion closure on the claim and mark destruction as begun (idempotent per operation).
+
+    From here the claim can no longer be released: a crashed operation resumes from this plan, and
+    nothing can resume or continue the partially deleted lineage. Identifiers and a digest only.
+    """
+    with session_generation_fence(project_root, session_id):
+        with _ordered_session_mutation_lock(project_root, session_id):
+            record = read_session_record(project_root, session_id)
+            claim = record.get("retention-claim")
+            if claim is None or claim.get("operation-id") != operation_id:
+                raise _retention_claimed(session_id, record)
+            if claim.get("stage") == "deleting":
+                return record
+            updated = dict(record)
+            updated["retention-claim"] = {
+                **claim, "stage": "deleting",
+                "plan": {"request-ids": sorted(set(request_ids)), "policy-digest": policy_digest},
+            }
+            write_session_record(project_root, updated)
+            return updated
+
+
 def release_retention_claim(project_root: Path, session_id: str, *, operation_id: str) -> dict[str, Any]:
     """Cancel a claim before any destructive work begins; only the claiming operation may.
 
@@ -2469,6 +2494,12 @@ def release_retention_claim(project_root: Path, session_id: str, *, operation_id
                 return record
             if claim.get("operation-id") != operation_id:
                 raise _retention_claimed(session_id, record)
+            if claim.get("stage") == "deleting":
+                raise AudiaGenticError(
+                    code="CON-AGW-168", kind="agents",
+                    message="destruction has begun under this retention claim; it can only be completed",
+                    details={"session-id": session_id},
+                )
             updated = dict(record)
             del updated["retention-claim"]
             write_session_record(project_root, updated)
