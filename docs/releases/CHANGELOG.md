@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.62.0](https://github.com/Audumla/AUDiaGentic/compare/v0.61.0...v0.62.0) (2026-11-01)
+
+
+### Features
+
+* **gateway:** gateway where and deployment-aware validate (CFG15-B) ([#343](https://github.com/Audumla/AUDiaGentic/issues/343)) ([9f2e52f](https://github.com/Audumla/AUDiaGentic/commit/9f2e52f8a4f5d8cdcf052d4d706d6b74c979fb69))
+
 ## [0.61.0](https://github.com/Audumla/AUDiaGentic/compare/v0.60.1...v0.61.0) (2026-11-01)
 
 
