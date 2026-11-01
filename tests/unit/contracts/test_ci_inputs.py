@@ -15,7 +15,19 @@ ROOT = Path(__file__).resolve().parents[3]
 @pytest.mark.parametrize("workflow", ["ci-tests", "ci-full"])
 def test_cdp_recovery_gates_install_optional_socket_dependency(workflow):
     text = (ROOT / ".github/workflows" / f"{workflow}.yml").read_text()
-    assert '.[test,acp,gpt-auto,node]' in text
+    assert '.[test,acp,a2a,gpt-auto,node]' in text
+
+
+def test_the_a2a_extra_is_installed_so_the_sdk_tests_run_instead_of_skipping():
+    """tests/unit/agents/test_a2a_sdk_handler.py importorskips the SDK; CI must have it or the wire tests never run."""
+    import tomllib
+
+    extras = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]["optional-dependencies"]
+    assert any(requirement.startswith("a2a-sdk[http-server]==") for requirement in extras["a2a"])
+    constraints = (ROOT / "tests/ci/requirements.txt").read_text()
+    assert "\na2a-sdk==" in constraints and "\nstarlette==" in constraints and "\nsse-starlette==" in constraints
+    for workflow in ("ci-tests", "ci-full"):
+        assert ",a2a," in (ROOT / ".github/workflows" / f"{workflow}.yml").read_text()
 
 
 @pytest.mark.parametrize("workflow", ["ci-tests", "ci-contracts"])
