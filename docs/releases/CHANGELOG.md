@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.72.0](https://github.com/Audumla/AUDiaGentic/compare/v0.71.0...v0.72.0) (2026-11-01)
+
+
+### Features
+
+* **gateway:** SESSION_PURGE operation, tests and operator docs; close SH32 (SH32-C/D) ([#376](https://github.com/Audumla/AUDiaGentic/issues/376)) ([35dd974](https://github.com/Audumla/AUDiaGentic/commit/35dd974ae00ae0683de5b2fe86ffab5b37d198d8))
+
 ## [0.71.0](https://github.com/Audumla/AUDiaGentic/compare/v0.70.0...v0.71.0) (2026-11-01)
 
 
