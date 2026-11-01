@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.62.0](https://github.com/Audumla/AUDiaGentic/compare/v0.61.0...v0.62.0) (2026-11-01)
+
+
+### Features
+
+* **gateway:** gateway where and deployment-aware validate (CFG15-B) ([#343](https://github.com/Audumla/AUDiaGentic/issues/343)) ([9f2e52f](https://github.com/Audumla/AUDiaGentic/commit/9f2e52f8a4f5d8cdcf052d4d706d6b74c979fb69))
+
+## [0.61.0](https://github.com/Audumla/AUDiaGentic/compare/v0.60.1...v0.61.0) (2026-11-01)
+
+
+### Features
+
+* **agents:** SH60a atomic Work command acceptance with delivery identity ([#342](https://github.com/Audumla/AUDiaGentic/issues/342)) ([fe22d23](https://github.com/Audumla/AUDiaGentic/commit/fe22d2304b356fb8e8ac970ad4c04e1c85cb8f15))
+
 ## [0.60.1](https://github.com/Audumla/AUDiaGentic/compare/v0.60.0...v0.60.1) (2026-11-01)
 
 

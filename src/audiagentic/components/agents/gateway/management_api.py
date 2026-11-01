@@ -228,6 +228,45 @@ def gateway_validate_role_config(role: str, config_path: Path) -> None:
     loaders[role](Path(config_path).resolve())
 
 
+def gateway_validate_deployment(role: str, config_path: Path, project: Path | None = None) -> dict[str, Any]:
+    """Validate a role document in its deployment context, offline.
+
+    ``server``: the loader also resolves the served roots (the omitted-roots default is the
+    ``project`` or the working-directory project), each root's declared project.id, duplicate
+    roots/ids and every principal grant. ``connector``: a shared connector also needs the
+    ``project`` (or working-directory project) to declare a project.id. ``node`` is the loader.
+    Reachability, TLS, proxies and live authentication are out of scope. Returns what was resolved.
+    """
+    from audiagentic.foundation.config.settings import discover_project_root
+
+    from .service import shared_config
+    from .settings import declared_project_id
+
+    path = Path(config_path).resolve()
+    root = discover_project_root(project, cwd=Path.cwd())
+    if role == "server":
+        server = shared_config.load_shared_server_config(path, default_root=root)
+        return {"role": role, "projects": {key: str(value) for key, value in server.projects.items()},
+                "principals": [principal.principal_id for principal in server.principals]}
+    if role == "connector":
+        connector = shared_config.load_shared_connector_config(path)
+        if connector.mode == "shared" and declared_project_id(root) is None:
+            from audiagentic.foundation.contracts.errors import make_error_factory
+
+            raise make_error_factory("CFG", "AGSV", "gateway-service")(
+                3, "a shared gateway connection needs a declared project.id in the project's settings")
+        return {"role": role, "mode": connector.mode, "project-id": declared_project_id(root)}
+    gateway_validate_role_config(role, path)
+    return {"role": role}
+
+
+def gateway_where(*, project: Path | None = None) -> dict[str, Any]:
+    """Offline report of the gateway's configuration locations, binding and project identity."""
+    from .service.where_report import gateway_where as _where
+
+    return _where(project=project)
+
+
 def gateway_init(*, directory: Path | None = None, project: Path | None = None, dry_run: bool = False) -> dict[str, Any]:
     """Generate the same-machine shared-gateway setup (server, connector, token) and bind this machine.
 
