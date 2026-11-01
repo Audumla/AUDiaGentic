@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.82.1](https://github.com/Audumla/AUDiaGentic/compare/v0.82.0...v0.82.1) (2026-11-01)
+
+
+### Bug Fixes
+
+* **agents:** ACP adapter returns correct JSON-RPC errors with the registered code (SH66) ([#407](https://github.com/Audumla/AUDiaGentic/issues/407)) ([a86dfe6](https://github.com/Audumla/AUDiaGentic/commit/a86dfe64f05511751f8095c774c8be70642c7a5d))
+
 ## [0.82.0](https://github.com/Audumla/AUDiaGentic/compare/v0.81.0...v0.82.0) (2026-11-01)
 
 
