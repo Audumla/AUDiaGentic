@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.79.0](https://github.com/Audumla/AUDiaGentic/compare/v0.78.0...v0.79.0) (2026-11-01)
+
+
+### Features
+
+* **providers:** OpenCode live qualification probe (SH56) ([#397](https://github.com/Audumla/AUDiaGentic/issues/397)) ([9a14faf](https://github.com/Audumla/AUDiaGentic/commit/9a14faf0f095f333b7bda4ef6a79a809fe000274))
+
 ## [0.78.0](https://github.com/Audumla/AUDiaGentic/compare/v0.77.0...v0.78.0) (2026-11-01)
 
 
