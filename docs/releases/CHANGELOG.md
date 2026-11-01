@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.77.0](https://github.com/Audumla/AUDiaGentic/compare/v0.76.1...v0.77.0) (2026-11-01)
+
+
+### Features
+
+* **providers:** Codex human-surface probes on the real TUI; concurrent human use proven (SH54-B) ([#393](https://github.com/Audumla/AUDiaGentic/issues/393)) ([e7999cd](https://github.com/Audumla/AUDiaGentic/commit/e7999cd9e371d9e2f2f7feb046de969526817d58))
+
 ## [0.76.1](https://github.com/Audumla/AUDiaGentic/compare/v0.76.0...v0.76.1) (2026-11-01)
 
 
