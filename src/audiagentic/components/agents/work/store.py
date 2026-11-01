@@ -5,6 +5,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from audiagentic.components.agents.agents_paths import (
+    agent_context_lock_path,
     agent_work_lock_path,
     agent_work_path,
     agent_work_root,
@@ -41,6 +42,7 @@ class AgentWorkStore:
 
     def accept_command(
         self, project_root: Path, context_id: str, *, work_id: str, command: dict, parent_work_id: str | None = None,
+        exclusive: bool = False,
     ) -> WorkCommandReceipt:
         """Commit one caller command (and the Work, when new) in a single atomic record replacement.
 
@@ -49,9 +51,28 @@ class AgentWorkStore:
         key on terminal Work is refused. Nothing else is written here: inputs, gateway admission and the
         execution link are projections rebuilt from this record.
         """
+        if exclusive:
+            # Lock order is always Context lock -> Work lock, and the Context lock is never taken while a Work lock
+            # is held. It is held only for exclusive acceptance, so concurrent Work (A2A) is unaffected.
+            agent_context_lock_path(project_root, context_id).parent.mkdir(parents=True, exist_ok=True)
+            with StartupLock(agent_context_lock_path(project_root, context_id)):
+                return self._accept_locked(project_root, context_id, work_id, command, parent_work_id, True)
+        return self._accept_locked(project_root, context_id, work_id, command, parent_work_id, False)
+
+    def _accept_locked(self, project_root, context_id, work_id, command, parent_work_id, exclusive):
         path = agent_work_path(project_root, work_id)
         path.parent.mkdir(parents=True, exist_ok=True)
         with StartupLock(agent_work_lock_path(project_root, work_id)):
+            if exclusive:
+                # A replay of an already accepted command is not a second prompt, so only a NEW command is refused.
+                known = path.exists() and any(
+                    c.get("delivery_key") == command["delivery_key"]
+                    for c in _from_mapping(load_json_file(path)).commands)
+                busy = [w.work_id for w in self.list(project_root)
+                        if w.context_id == context_id and w.work_id != work_id and w.state not in _TERMINAL]
+                if busy and not known:
+                    raise command_error(167, "The Context already has outstanding Work; this acceptance is exclusive",
+                                        context_id=context_id, work_id=busy[0])
             if path.exists():
                 current = _from_mapping(load_json_file(path))
                 if current.context_id != context_id:

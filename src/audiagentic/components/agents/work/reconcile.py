@@ -38,12 +38,17 @@ def reconcile_work(project_root: Path, work: AgentWorkRecord, *, execution_state
     }.get(normalized)
     if target is None or target == work.state:
         return work
-    return AgentWorkStore().transition(
+    updated = AgentWorkStore().transition(
         project_root,
         work.work_id,
         target,
         expected_revision=work.revision,
     )
+    if target in {AgentWorkState.COMPLETED, AgentWorkState.FAILED, AgentWorkState.CANCELLED, AgentWorkState.REJECTED}:
+        from .events import publish_work_event, topics
+
+        publish_work_event(topics.WORK_TERMINAL_TOPIC, updated.to_mapping())  # once: only the transition publishes
+    return updated
 
 
 def reconcile_linked_execution(project_root: Path, work: AgentWorkRecord) -> AgentWorkRecord:
@@ -56,6 +61,9 @@ def reconcile_linked_execution(project_root: Path, work: AgentWorkRecord) -> Age
         if any(not command.get("execution_id") for command in work.commands):
             get_gateway_client(project_root).dispatch_agent_work_commands(project_root, work.work_id)
             work = AgentWorkStore().get(project_root, work.work_id)
+            from .events import publish_work_event, topics
+
+            publish_work_event(topics.WORK_DISPATCH_REPAIRED_TOPIC, work.to_mapping())
     if not work.active_execution_id:
         # The Gateway idempotency index is the recovery authority for the
         # admitted-but-not-yet-linked crash window. Re-submit through the

@@ -587,7 +587,7 @@ class GatewayServiceApplication:
                 raise service_validation_error(32, "work message must be an object")
             return self._application.submit_agent_work(root, _required(arguments, "context_id"), message, work_id=arguments.get("work_id"))
         if operation == "accept_agent_work_message":
-            _reject_unknown(arguments, {"context_id", "message", "work_id", "protocol"})
+            _reject_unknown(arguments, {"context_id", "message", "work_id", "protocol", "exclusive"})
             message = arguments.get("message")
             if not isinstance(message, dict):
                 raise service_validation_error(32, "work message must be an object")
@@ -600,7 +600,7 @@ class GatewayServiceApplication:
             )
             return self._application.accept_agent_work_message(
                 root, _required(arguments, "context_id"), message, delivery_identity=identity,
-                work_id=arguments.get("work_id"),
+                work_id=arguments.get("work_id"), exclusive=arguments.get("exclusive") is True,
             )
         if operation == "wait_agent_work":
             _reject_unknown(arguments, {"work_id", "timeout_seconds"})

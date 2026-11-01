@@ -19,6 +19,8 @@ from acp.schema import (
     SessionInfo,
 )
 
+from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error, make_error_factory
+
 from .mapping import (
     UnsupportedAcpOperation,
     reject_client_extensions,
@@ -32,7 +34,7 @@ class AgentsPort(Protocol):
     def get_agent_context(self, root: Path, context_id: str) -> dict[str, Any]: ...
     def list_agent_contexts(self, root: Path) -> list[dict[str, Any]]: ...
     def close_agent_context(self, root: Path, context_id: str) -> dict[str, Any]: ...
-    def accept_agent_work_message(self, root: Path, context_id: str, message: dict[str, Any], *, protocol: str, work_id: str | None = None) -> dict[str, Any]: ...
+    def accept_agent_work_message(self, root: Path, context_id: str, message: dict[str, Any], *, protocol: str, work_id: str | None = None, exclusive: bool = False) -> dict[str, Any]: ...
     def wait_agent_work(self, root: Path, work_id: str, timeout_seconds: float | None = None) -> dict[str, Any]: ...
     def get_agent_work(self, root: Path, work_id: str) -> dict[str, Any]: ...
     def list_agent_work(self, root: Path) -> list[dict[str, Any]]: ...
@@ -47,8 +49,7 @@ _WAIT_ROUND_SECONDS = 120.0
 _MAX_OUTPUT_CHARS = 64_000
 
 
-class AcpPromptError(RuntimeError):
-    """The prompt did not reach a successful or cancelled terminal state."""
+_error = make_error_factory("CON", "ACP", "acp")
 
 
 class AcpAgent:
@@ -100,15 +101,23 @@ class AcpAgent:
                 if work.get("context_id") == session_id and work.get("state") not in _TERMINAL]
 
     async def prompt(self, session_id: str, prompt: list[Any], **_: Any) -> PromptResponse:
-        text = text_from_prompt(prompt)
+        try:
+            text = text_from_prompt(prompt)
+        except ValueError as error:
+            raise make_error(prefix="VAL", component="ACP", number=3, kind="acp",
+                             message="An ACP prompt must contain text", details={"session": session_id}) from error
         lock = self._session_locks.setdefault(session_id, asyncio.Lock())
-        async with lock:  # serialises prompts of this adapter; the durable check below covers other holders
-            if await asyncio.to_thread(self._outstanding, session_id):
-                raise AcpPromptError("a prompt is already outstanding for this session")
-            accepted = await asyncio.to_thread(
-                self.ports.accept_agent_work_message, self.project_root, session_id,
-                {"message_id": f"acp:{uuid.uuid4().hex}", "text": text, "inputs": {}}, protocol="acp",
-            )
+        async with lock:  # one adapter instance; the exclusive acceptance below is the cross-process guarantee
+            try:
+                accepted = await asyncio.to_thread(
+                    self.ports.accept_agent_work_message, self.project_root, session_id,
+                    {"message_id": f"acp:{uuid.uuid4().hex}", "text": text, "inputs": {}},
+                    protocol="acp", exclusive=True,
+                )
+            except AudiaGenticError as error:
+                if error.code == "CON-AGW-167":  # the Work owner refused: another prompt is outstanding
+                    raise _error(1, "A prompt is already outstanding for this session", session=session_id) from error
+                raise
         work = accepted
         while work.get("state") not in _TERMINAL:
             waited = await asyncio.to_thread(self.ports.wait_agent_work, self.project_root, accepted["work_id"], _WAIT_ROUND_SECONDS)
@@ -118,7 +127,7 @@ class AcpAgent:
             return PromptResponse(stopReason="cancelled", _meta={"work": {"work_id": work["work_id"], "state": state}})
         if state != "completed":
             # ACP has no failure stop reason: report the real outcome instead of calling it end_turn.
-            raise AcpPromptError(f"work {work['work_id']} ended {state}")
+            raise _error(2, "The prompt's Work did not complete", work_id=work["work_id"], state=state)
         output = await asyncio.to_thread(self.ports.read_agent_work_output, self.project_root, work["work_id"])
         return PromptResponse(stopReason="end_turn", _meta={
             "work": {"work_id": work["work_id"], "state": state}, "output": _bounded(output)})

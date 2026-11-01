@@ -309,3 +309,107 @@ def test_the_trusted_identity_rejects_unknown_protocols_and_carries_the_declared
     with pytest.raises(AudiaGenticError) as raised:
         trusted_delivery_identity(tmp_path, principal="alice", protocol="smtp")
     assert raised.value.code == "CON-AGW-163"
+
+
+# --- SH60d: exclusive acceptance and Work milestone events ------------------------------------------------
+
+
+def test_exclusive_acceptance_refuses_a_second_outstanding_work_but_not_concurrent_unflagged_work(tmp_path: Path, context) -> None:
+    accept_work_command(tmp_path, context.context_id, delivery_key=_key(context.context_id, "m1"),
+                        message=new_work_input("m1", "first"), exclusive=True)
+    with pytest.raises(AudiaGenticError) as raised:
+        accept_work_command(tmp_path, context.context_id, delivery_key=_key(context.context_id, "m2"),
+                            message=new_work_input("m2", "second"), exclusive=True)
+    assert raised.value.code == "CON-AGW-167"
+    other = accept_work_command(tmp_path, context.context_id, delivery_key=_key(context.context_id, "m3"),
+                                message=new_work_input("m3", "a2a-style concurrent"))  # not exclusive: allowed
+    assert not other.replayed
+
+
+def test_exclusive_acceptance_allows_a_new_prompt_once_the_earlier_work_is_terminal_and_replays_its_own(tmp_path: Path, context) -> None:
+    key = _key(context.context_id, "m1")
+    first = accept_work_command(tmp_path, context.context_id, delivery_key=key,
+                                message=new_work_input("m1", "first"), exclusive=True)
+    again = accept_work_command(tmp_path, context.context_id, delivery_key=key,
+                                message=new_work_input("m1", "first"), exclusive=True)
+    assert again.replayed and again.work.work_id == first.work.work_id  # an exact replay is not a second prompt
+    cancel_work(tmp_path, first.work.work_id)
+    second = accept_work_command(tmp_path, context.context_id, delivery_key=_key(context.context_id, "m2"),
+                                 message=new_work_input("m2", "next"), exclusive=True)
+    assert not second.replayed
+
+
+def test_simultaneous_exclusive_acceptances_commit_exactly_one(tmp_path: Path, context) -> None:
+    from concurrent.futures import ThreadPoolExecutor
+
+    def accept(n):
+        try:
+            accept_work_command(tmp_path, context.context_id, delivery_key=_key(context.context_id, f"m{n}"),
+                                message=new_work_input(f"m{n}", f"prompt {n}"), exclusive=True)
+            return "ok"
+        except AudiaGenticError as error:
+            return error.code
+
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        results = list(pool.map(accept, range(6)))
+    assert results.count("ok") == 1 and results.count("CON-AGW-167") == 5
+
+
+def _capture_events(monkeypatch):
+    seen = []
+    monkeypatch.setattr("audiagentic.components.agents.work.events.publish_work_event",
+                        lambda topic, work, **kw: seen.append((topic, dict(work), kw)))
+    return seen
+
+
+def test_acceptance_replay_and_conflict_publish_distinct_bounded_events(tmp_path: Path, context, monkeypatch) -> None:
+    from audiagentic.components.agents.work.events import topics
+
+    seen = _capture_events(monkeypatch)
+    key = _key(context.context_id, "m1")
+    accept_work_command(tmp_path, context.context_id, delivery_key=key, message=new_work_input("m1", "secret prompt"))
+    accept_work_command(tmp_path, context.context_id, delivery_key=key, message=new_work_input("m1", "secret prompt"))
+    with pytest.raises(AudiaGenticError):
+        accept_work_command(tmp_path, context.context_id, delivery_key=key, message=new_work_input("m1", "changed"))
+    assert [topic for topic, _w, _k in seen] == [topics.WORK_MESSAGE_ACCEPTED_TOPIC, topics.WORK_MESSAGE_REPLAYED_TOPIC,
+                                                 topics.WORK_MESSAGE_CONFLICT_TOPIC]
+
+
+def test_the_event_publisher_never_raises_and_carries_no_text_principal_or_inputs(monkeypatch) -> None:
+    from audiagentic.components.agents.work import events
+
+    published = []
+
+    class Bus:
+        def publish(self, topic, payload):
+            published.append((topic, payload))
+
+    monkeypatch.setattr("audiagentic.foundation.event.get_bus", lambda: Bus())
+    work = {"work_id": "w", "context_id": "c", "state": "active", "commands": [{"message": {"text": "secret"}}]}
+    events.publish_work_event(events.topics.WORK_TERMINAL_TOPIC, work, delivery_key="a" * 64, execution_id="req_1")
+    topic, payload = published[0]
+    assert payload == {"work-id": "w", "context-id": "c", "state": "active", "delivery-key": "a" * 12, "execution-id": "req_1"}
+    assert "secret" not in repr(payload)
+
+    class Broken:
+        def publish(self, topic, payload):
+            raise RuntimeError("subscriber exploded")
+
+    monkeypatch.setattr("audiagentic.foundation.event.get_bus", lambda: Broken())
+    events.publish_work_event(events.topics.WORK_TERMINAL_TOPIC, work)  # must not raise
+
+
+def test_dispatch_publishes_linked_and_reconcile_publishes_repaired_and_terminal_once(tmp_path: Path, context, monkeypatch) -> None:
+    from audiagentic.components.agents.work.events import topics
+    from audiagentic.components.agents.work.reconcile import reconcile_work
+
+    seen = _capture_events(monkeypatch)
+    app, _ = _app()
+    work = app.accept_agent_work_message(tmp_path, context.context_id, {"message_id": "m1", "text": "x"},
+                                         delivery_identity=_IDENTITY)
+    assert topics.WORK_EXECUTION_LINKED_TOPIC in [topic for topic, _w, _k in seen]
+    record = get_work(tmp_path, work["work_id"])
+    done = reconcile_work(tmp_path, record, execution_state="completed")
+    again = reconcile_work(tmp_path, done, execution_state="completed")
+    assert again.state is AgentWorkState.COMPLETED
+    assert [topic for topic, _w, _k in seen].count(topics.WORK_TERMINAL_TOPIC) == 1
