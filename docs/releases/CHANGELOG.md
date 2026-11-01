@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.76.1](https://github.com/Audumla/AUDiaGentic/compare/v0.76.0...v0.76.1) (2026-11-01)
+
+
+### Documentation
+
+* **planning:** record the Codex external-delivery ruling on SH40/51/52 ([#391](https://github.com/Audumla/AUDiaGentic/issues/391)) ([033320d](https://github.com/Audumla/AUDiaGentic/commit/033320d88099a3f8fae960bf69e5acc941c51d06))
+
 ## [0.76.0](https://github.com/Audumla/AUDiaGentic/compare/v0.75.0...v0.76.0) (2026-11-01)
 
 
