@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.60.1](https://github.com/Audumla/AUDiaGentic/compare/v0.60.0...v0.60.1) (2026-11-01)
+
+
+### Documentation
+
+* **planning:** SH60 target-state design (atomic Work command acceptance, continuation, authenticated ports) ([#339](https://github.com/Audumla/AUDiaGentic/issues/339)) ([7fea28c](https://github.com/Audumla/AUDiaGentic/commit/7fea28caae6022723d5537c21a4fc87cc9fb3fda))
+
 ## [0.60.0](https://github.com/Audumla/AUDiaGentic/compare/v0.59.1...v0.60.0) (2026-11-01)
 
 
