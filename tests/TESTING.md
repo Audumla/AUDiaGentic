@@ -566,6 +566,33 @@ make test-lsp-docker
 make test-docker
 ```
 
+### Run the same gate as CI
+
+`pytest tests` over the whole tree is not the gate. Several `tests/*/agents` packages share a
+top-level name, so one collection pass raises `ModuleNotFoundError`. Run the gate with the runner
+CI uses:
+
+```bash
+python -m tests.ci.run --tier fast --base "$(git rev-parse origin/main)" --workers 4 --results .ci-results/fast
+```
+
+`--base` must be a full commit SHA. `fast` covers the contracts, the critical gateway tests and the
+tests for the components your diff touches; `--tier full` runs every lane.
+
+Environment rules that decide whether a failure is real:
+
+- Point `TMPDIR` at an executable filesystem. Tests write small fake provider executables under the
+  pytest temp directory; on a host whose `/tmp` is mounted `noexec` they fail with
+  `EXT-PROVCLI-001` / `EXT-PI-001` and pass as soon as `TMPDIR` is moved.
+- The browser lane needs a Playwright Chromium. Without one the DOM and network-page modules fail
+  to launch (`BrowserType.launch: Executable doesn't exist`); the runner drops that lane and says so.
+- `test_concurrent_automatic_clients_share_one_managed_gateway` starts a gateway whose launcher
+  strips `PYTHONPATH`; run it against an installed build of the checkout, not `PYTHONPATH=src`.
+
+A test that writes a file named after a path (for example a stray `C:\...` log in the repository
+root) is a bug in the code under test, not noise: `tests/unit/architecture/test_no_debug_residue.py`
+forbids the known forms.
+
 ### CI event ownership
 
 Feature-branch changes are validated by the pull request event (including fork
