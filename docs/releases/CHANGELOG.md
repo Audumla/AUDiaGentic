@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.72.1](https://github.com/Audumla/AUDiaGentic/compare/v0.72.0...v0.72.1) (2026-11-01)
+
+
+### Documentation
+
+* **planning:** record explicit blockers and start triggers on the live-evidence SH items ([#378](https://github.com/Audumla/AUDiaGentic/issues/378)) ([00de2e1](https://github.com/Audumla/AUDiaGentic/commit/00de2e1f24651185fe494f4802c21f3b72e25873))
+
 ## [0.72.0](https://github.com/Audumla/AUDiaGentic/compare/v0.71.0...v0.72.0) (2026-11-01)
 
 
