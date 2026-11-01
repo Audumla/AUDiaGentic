@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.67.0](https://github.com/Audumla/AUDiaGentic/compare/v0.66.0...v0.67.0) (2026-11-01)
+
+
+### Features
+
+* **gateway:** operator ergonomics - default serve, pair check, connector implies standalone, status (CFG18) ([#355](https://github.com/Audumla/AUDiaGentic/issues/355)) ([9634739](https://github.com/Audumla/AUDiaGentic/commit/9634739486fd41984e73c18d354411e0c3642941))
+
 ## [0.66.0](https://github.com/Audumla/AUDiaGentic/compare/v0.65.0...v0.66.0) (2026-11-01)
 
 
