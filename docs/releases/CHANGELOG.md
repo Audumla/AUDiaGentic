@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.84.0](https://github.com/Audumla/AUDiaGentic/compare/v0.83.0...v0.84.0) (2026-11-01)
+
+
+### Features
+
+* **agents:** A2A facade - a loopback ASGI app that serves published agents through the shared gateway (SH65b-2) ([#411](https://github.com/Audumla/AUDiaGentic/issues/411)) ([42ee52d](https://github.com/Audumla/AUDiaGentic/commit/42ee52dfa305f090d962e5660b661dfde620288d))
+
 ## [0.83.0](https://github.com/Audumla/AUDiaGentic/compare/v0.82.1...v0.83.0) (2026-11-01)
 
 
