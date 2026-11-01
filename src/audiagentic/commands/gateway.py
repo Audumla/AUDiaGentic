@@ -130,7 +130,8 @@ _KEYWORD_HELP = {
   audiagentic gateway serve config FILE
   audiagentic gateway status config FILE [output json]
   audiagentic gateway init [dir PATH] [project PATH] [dry-run]
-  audiagentic gateway validate server|node|connector config FILE
+  audiagentic gateway validate server|node|connector config FILE [project PATH]
+  audiagentic gateway where [project PATH] [output json]
   audiagentic gateway connect config FILE [dry-run|non-interactive]
   audiagentic gateway restart [non-interactive] [output json]
   audiagentic gateway drain [non-interactive] [output json]
@@ -250,9 +251,19 @@ is never printed, and nothing existing is overwritten or rotated. The project (t
 checkout, or project PATH) gets a declared project.id in its tracked settings if it has none,
 and this machine is bound to the generated connector (gateway.connector) when none is set.
 Then run: audiagentic gateway serve config <dir>/server.yaml. dry-run writes nothing.""",
-    "validate": """Usage: audiagentic gateway validate server|node|connector config FILE
+    "where": """Usage: audiagentic gateway where [project PATH] [output json]
 
-Parse and validate one role document with the same loader the service uses, then print
+Offline report of where the gateway's configuration lives: the default gateway directory and
+whether server.yaml, connector.yaml and the token file are present and valid, the machine's
+connector binding (path, mode, endpoint, server-id, and the settings file that set it), the
+implementation, the served projects of the default server document, and this project's
+declared project.id. Never contacts a server or prints a token; missing or invalid files are
+reported, not errors.""",
+    "validate": """Usage: audiagentic gateway validate server|node|connector config FILE [project PATH]
+
+Parse and validate one role document with the same loader the service uses (a server also
+resolves its project roots, declared ids and grants; a shared connector needs the project, the
+current one or project PATH, to declare a project.id), then print
 "valid: ROLE". Nothing is started, no network is touched, token files are checked for
 mode and identity but never read, and no project is bound. Failures print the registered
 error code and message and exit 1.""",
@@ -360,6 +371,8 @@ def dispatch_keyword(tokens: list[str]) -> int:
         return _dispatch_validate(tokens[1:])
     if command == "init" and tokens[1:] != ["help"]:
         return _dispatch_init(tokens[1:])
+    if command == "where" and tokens[1:] != ["help"]:
+        return _dispatch_where(tokens[1:])
     if command in _LIFECYCLE_PROMPTS | {"resume": ""} and tokens[1:] != ["help"]:
         return _dispatch_lifecycle(command, tokens[1:])
     if command in _KEYWORD_HELP and tokens[1:] == ["help"]:
@@ -455,10 +468,50 @@ def _dispatch_init(tokens: list[str]) -> int:
     return 0
 
 
-def _dispatch_validate(tokens: list[str]) -> int:
-    """Offline check of one role document through its owning loader."""
+def _dispatch_where(tokens: list[str]) -> int:
     from audiagentic.foundation.cli_io import print_error
 
+    rest, project, as_json = list(tokens), None, False
+    while rest:
+        word = rest.pop(0)
+        if word == "project" and project is None and rest and not rest[0].startswith("--"):
+            project = Path(rest.pop(0))
+        elif word == "output" and not as_json and rest == ["json"]:
+            as_json, rest = True, []
+        else:
+            print_error("Invalid gateway where syntax. Run: audiagentic gateway where help")
+            return 2
+    from audiagentic.components.agents.gateway import management_api
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+    try:
+        report = management_api.gateway_where(project=project)
+    except AudiaGenticError as error:
+        print_error(f"{error.code}: {error.message}")
+        return 1
+    if as_json:
+        _json_out(report)
+        return 0
+
+    def show(value: Any, indent: int = 0) -> None:
+        for key, item in value.items():
+            if isinstance(item, dict):
+                print(f"{' ' * indent}{key}:")
+                show(item, indent + 2)
+            else:
+                print(f"{' ' * indent}{key}: {item}")
+
+    show(report)
+    return 0
+
+
+def _dispatch_validate(tokens: list[str]) -> int:
+    """Offline check of one role document, in its project context, through the public API."""
+    from audiagentic.foundation.cli_io import print_error
+
+    project = None
+    if len(tokens) == 5 and tokens[3] == "project" and not tokens[4].startswith("--"):
+        project, tokens = Path(tokens[4]), tokens[:3]
     if len(tokens) != 3 or tokens[0] not in {"server", "node", "connector"} or tokens[1] != "config" \
             or any(token.startswith("--") for token in tokens):
         print_error("Invalid gateway validate syntax. Run: audiagentic gateway validate help")
@@ -467,7 +520,7 @@ def _dispatch_validate(tokens: list[str]) -> int:
     from audiagentic.foundation.contracts.errors import AudiaGenticError
 
     try:
-        management_api.gateway_validate_role_config(tokens[0], Path(tokens[2]))
+        management_api.gateway_validate_deployment(tokens[0], Path(tokens[2]), project)
     except AudiaGenticError as error:
         print_error(f"{error.code}: {error.message}")
         return 1

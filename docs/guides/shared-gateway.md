@@ -37,6 +37,14 @@ tracked settings when it has none, and binds this machine to the generated conne
 (`gateway.connector`) when none is set. It never overwrites or rotates anything:
 repeating it reports the existing setup, a partial or inconsistent set is refused,
 and `dry-run` shows what would happen without writing or generating a credential.
+`audiagentic gateway where` (offline, never a token) shows where everything is: the
+default directory and whether each file is present and valid, the machine's connector
+binding with the settings file that set it, the served projects and this project's
+declared `project.id`. `audiagentic gateway validate server|node|connector config FILE
+[project PATH]` checks a document before serving; a server document also resolves its
+roots, declared ids and grants, and a shared connector needs the project to declare an
+id. Neither contacts a server, so reachability, TLS and proxies are checked by
+`gateway status` or `connect dry-run`.
 Edit the generated files by hand only to change the port (keep the connector
 endpoint in step), add projects (one root path per line) or narrow a principal's
 `projects`/`actions`. The sections below describe the files and the manual,
