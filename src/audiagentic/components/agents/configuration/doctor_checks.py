@@ -119,3 +119,75 @@ def check_gateway_port(context: Any) -> list[CheckResult]:
         "Stop the process holding the port if it is not a gateway you want, or set gateway.port to a free port "
         "in your user settings")
     return [CheckResult("agents.gateway-port", WARN, finding.detail, fix)]
+
+
+def check_a2a(context: Any) -> list[CheckResult]:
+    """The A2A facade (``a2a`` settings): read-only. Nothing is started, bound or contacted."""
+    del context
+    from audiagentic.components.agents.protocols.a2a.settings import load_settings
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+    try:
+        settings = load_settings()
+    except AudiaGenticError as error:
+        return [CheckResult("agents.a2a", FAIL, f"a2a settings are invalid: {error.message}",
+                            "Fix the a2a section (port, base_url, projects) in your user settings")]
+    if not settings.enabled:
+        return [CheckResult("agents.a2a", OK, "the A2A facade is off (a2a.enabled is not set)")]
+    results: list[CheckResult] = []
+    try:
+        import a2a.server.routes  # noqa: F401
+    except ImportError:
+        results.append(CheckResult("agents.a2a.sdk", FAIL, "the A2A SDK is not installed",
+                                   'Install it: pip install "audiagentic[a2a]"'))
+    else:
+        results.append(CheckResult("agents.a2a.sdk", OK, "the A2A SDK is installed"))
+    results.append(_a2a_connector_result())
+    results.append(_a2a_publication_result())
+    results.append(CheckResult("agents.a2a", OK, f"serving {len(settings.projects)} project(s) on 127.0.0.1:{settings.port}, "
+                                                 f"advertised as {settings.base_url}"))
+    return results
+
+
+def _a2a_connector_result() -> CheckResult:
+    from audiagentic.components.agents.gateway.settings import gateway_setting
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+    connector = gateway_setting("connector")
+    if not connector:
+        return CheckResult("agents.a2a.connector", FAIL, "no gateway connector is configured",
+                           "Connect to a shared gateway: audiagentic gateway connect config FILE")
+    try:
+        from pathlib import Path
+
+        from audiagentic.components.agents.gateway.service.shared_config import (
+            load_shared_connector_config,
+        )
+
+        document = load_shared_connector_config(Path(str(connector)).expanduser())
+    except AudiaGenticError as error:
+        return CheckResult("agents.a2a.connector", FAIL, f"the gateway connector does not load: {error.message}",
+                           "Fix or recreate the connector document")
+    if document.mode != "shared":
+        return CheckResult("agents.a2a.connector", FAIL,
+                           "the facade needs a shared connector: a plain gateway has no principals to forward",
+                           "Connect to a shared gateway (mode: shared)")
+    return CheckResult("agents.a2a.connector", OK, f"shared connector {document.server_id} is configured")
+
+
+def _a2a_publication_result() -> CheckResult:
+    from pathlib import Path
+
+    from audiagentic.components.agents.configuration.management import list_agent_definitions
+    from audiagentic.components.agents.protocols.a2a.publication import published_agents
+
+    try:
+        published = published_agents(list_agent_definitions(Path.cwd()))
+    except Exception as error:  # noqa: BLE001 - a broken catalog is reported by agents.catalog; here it is one fact
+        return CheckResult("agents.a2a.agents", WARN, f"the agent catalog could not be read ({type(error).__name__})",
+                           "See agents.catalog")
+    if not published:
+        return CheckResult("agents.a2a.agents", WARN, "no agent is published to A2A, so the facade serves nothing",
+                           "Set publication.a2a on an Agent Definition")
+    return CheckResult("agents.a2a.agents", OK, f"{len(published)} agent(s) published to A2A: "
+                                                f"{', '.join(str(d['agent_id']) for d in published)}")

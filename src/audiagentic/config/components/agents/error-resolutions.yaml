@@ -296,3 +296,10 @@ CON-ACP-001: "A prompt is already outstanding for this ACP session. Wait for it 
 CON-ACP-002: "The prompt's Work ended failed or rejected. The error details name the Work and its state; read the Work output or request diagnostics for the cause."
 VAL-ACP-003: "An ACP prompt must carry at least one non-empty text block. Send text content."
 RES-AGW-153: "No Work with this id exists in the project. Check the Work id (an A2A task id) and the project it was created in."
+VAL-A2A-001: "a2a.enabled must be true or false. Fix the a2a section of your user settings."
+VAL-A2A-002: "a2a.projects must list gateway project ids (lowercase letters, digits, - and _). Fix the a2a section of your user settings."
+VAL-A2A-003: "a2a.port is required (1-65535) when the A2A facade is enabled. Set a2a.port in your user settings."
+VAL-A2A-004: "a2a.projects must name at least one project when the A2A facade is enabled. Add a gateway project id."
+VAL-A2A-005: "a2a.base_url must be an https origin (no path, credentials or trailing slash) published by your TLS proxy, or http://127.0.0.1:PORT."
+VAL-A2A-006: "a2a.base_url is not set, so Agent Card URLs cannot be built. Enable the facade with a port, or set a2a.base_url."
+
