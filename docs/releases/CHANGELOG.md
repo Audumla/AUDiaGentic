@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.78.0](https://github.com/Audumla/AUDiaGentic/compare/v0.77.0...v0.78.0) (2026-11-01)
+
+
+### Features
+
+* **providers:** claim human_concurrency_safe for Codex app-server; adjudicate and close SH54 ([#395](https://github.com/Audumla/AUDiaGentic/issues/395)) ([4c4a374](https://github.com/Audumla/AUDiaGentic/commit/4c4a3742708c9c43d6f8196a8d42064283af7a19))
+
 ## [0.77.0](https://github.com/Audumla/AUDiaGentic/compare/v0.76.1...v0.77.0) (2026-11-01)
 
 
