@@ -169,11 +169,12 @@ system temp directory is mounted noexec.
 | safe-detach | proven | the observer holds no attachment; after the human closes the TUI the server and session survive and an observer prompt runs |
 | reconnect | proven (evidence only) | a new client resolves the same session and its history |
 | conditional-admission | proven **for `delivery: "queue"` only** | during the human's active turn a queued prompt lands in the session inbox, adds no model request, leaves the active turn's reply unchanged, runs once after it, and a retry with the same client message id returns the same message |
-| correlated-result | **unproven** (`unproven-result-linked-by-event-order-only`) | inbox events name the prompt, but step and text events carry only the assistant message id, and no assistant message references the prompt: the link is event order |
+| correlated-result | **unsupported** (`unsupported-result-not-linked-by-native-id`) | inbox events name the prompt, but step and text events carry only the assistant message id, and neither the message list, the per-message route nor the OpenAPI document offers a parent, request or prompt id on an assistant message: the link is event order, which cannot attribute a result when two callers or a human prompt interleave |
 | concurrent-human-use | proven, on the **real OpenCode TUI** | the human's independent action completes after the observer's queued prompt |
 
 The server's default delivery is `steer`, so every caller must send `delivery: "queue"` explicitly; steering was
-not measured (the stub makes no tool calls) and is not accepted. Because result correlation is unproven the
+not measured (the stub makes no tool calls) and is not accepted. `OpenCodeClient.prompt` therefore offers no delivery choice and always sends `queue` (tested), which is what the
+admission evidence is bound to. Because results cannot be attributed the
 readiness stays below a join: a prompt can be admitted safely but its output cannot be attributed natively.
 
 Pi (`pi-rpc`, measured on pi 1.4.0 linux-amd64, offline, no provider, no model): a real interactive Pi in a

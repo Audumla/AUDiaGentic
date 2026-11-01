@@ -3,7 +3,7 @@
 ``opencode serve`` exposes a session HTTP API (``/api/session``, ``/prompt``, ``/inbox``, ``/message``, ``/event``)
 guarded by HTTP Basic auth with ``OPENCODE_SERVER_PASSWORD``. This module is the one place that speaks it. The
 prompt route takes ``delivery``: ``queue`` durably enqueues the prompt behind the active turn, ``steer`` injects it
-into the running loop, and the server's own default is ``steer``, so every caller here sends ``delivery`` explicitly.
+into the running loop, and the server's own default is ``steer``, so ``OpenCodeClient.prompt`` always sends ``delivery: queue`` and offers no other mode.
 ``JOIN_ADAPTER`` is the identity qualification evidence is bound to (its source file's digest).
 """
 from __future__ import annotations
@@ -24,6 +24,7 @@ from audiagentic.components.providers.services.session.join_readiness import Joi
 
 NATIVE_SCHEMA_VERSION = "opencode-api-v2"
 JOIN_ADAPTER = JoinAdapterInfo(adapter_id="opencode-serve", adapter_version="1", native_schema_version=NATIVE_SCHEMA_VERSION)
+QUEUE_DELIVERY = "queue"
 REQUIRED_PATHS = frozenset({"/api/session", "/api/session/{sessionID}/prompt", "/api/session/{sessionID}/inbox",
                             "/api/session/{sessionID}/message", "/api/event"})
 
@@ -66,8 +67,10 @@ class OpenCodeClient:
     def create_session(self, title: str, provider: str, model: str) -> str:
         return str(self.call("POST", "/api/session", {"title": title, "model": {"providerID": provider, "id": model}})["id"])
 
-    def prompt(self, session_id: str, text: str, *, delivery: str, message_id: str | None = None) -> dict[str, Any]:
-        body: dict[str, Any] = {"text": text, "delivery": delivery}
+    def prompt(self, session_id: str, text: str, *, message_id: str | None = None) -> dict[str, Any]:
+        """Queue a prompt behind the session's active turn. Delivery is fixed to ``queue``: it is the only mode whose
+        busy-turn behaviour was measured, and the server's own default (``steer``) injects into a running turn."""
+        body: dict[str, Any] = {"text": text, "delivery": QUEUE_DELIVERY}
         if message_id:
             body["id"] = message_id
         return self.call("POST", f"/api/session/{session_id}/prompt", body)

@@ -144,8 +144,8 @@ def run(context: LiveContext) -> list[ProbeOutcome]:
         stub.wait_for_requests(before + 1, _TIMEOUT)
         at_active = stub.requests
         retry_id = "msg_" + secrets.token_hex(13)
-        queued = client.prompt(session_id, "observer queued prompt", delivery="queue", message_id=retry_id)
-        again = client.prompt(session_id, "observer queued prompt", delivery="queue", message_id=retry_id)
+        queued = client.prompt(session_id, "observer queued prompt", message_id=retry_id)
+        again = client.prompt(session_id, "observer queued prompt", message_id=retry_id)
         time.sleep(2)
         seen["observer-prompt-accepted-with-delivery"] = queued.get("delivery")
         seen["retry-same-message-id-returned-same-message"] = again.get("id") == queued.get("id")
@@ -180,15 +180,16 @@ def run(context: LiveContext) -> list[ProbeOutcome]:
         # Result attribution: is the assistant message tied to the prompt by a native id, or only by order?
         linked = any(queued.get("id") and queued["id"] in json.dumps(m) for m in client.messages(session_id) if m.get("type") == "assistant")
         outcomes["correlated-result"] = ProbeOutcome(
-            "correlated-result", bool(linked), None if linked else "unproven-result-linked-by-event-order-only",
-            {"assistant-message-references-the-prompt-id": bool(linked)})
+            "correlated-result", bool(linked), None if linked else "unsupported-result-not-linked-by-native-id",
+            {"assistant-message-references-the-prompt-id": bool(linked),
+             "message-fields-checked": "assistant-message-json-for-the-queued-message-id", "link-by": "event-order-only"})
 
         # Safe detach, both ways: the observer holds no attachment (stateless HTTP); the human closing the UI must
         # leave the session usable for the observer.
         tui.stop()
         tui = None
         survives = server.alive and _idle(client, session_id) and bool(client.messages(session_id))
-        follow = client.prompt(session_id, "observer after the human left", delivery="queue")
+        follow = client.prompt(session_id, "observer after the human left")
         ran = _wait(lambda: _idle(client, session_id) and any(
             m.get("id") == follow.get("id") for m in client.messages(session_id)))
         outcomes["safe-detach"] = ProbeOutcome(
