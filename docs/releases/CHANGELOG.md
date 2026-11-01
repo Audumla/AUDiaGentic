@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.59.0](https://github.com/Audumla/AUDiaGentic/compare/v0.58.2...v0.59.0) (2026-11-01)
+
+
+### ⚠ BREAKING CHANGES
+
+* **gateway:** server projects are a list of root paths; ids from each project's declared project.id (CFG16-A) ([#333](https://github.com/Audumla/AUDiaGentic/issues/333))
+
+### Features
+
+* **gateway:** server projects are a list of root paths; ids from each project's declared project.id (CFG16-A) ([#333](https://github.com/Audumla/AUDiaGentic/issues/333)) ([88b6e7a](https://github.com/Audumla/AUDiaGentic/commit/88b6e7a72cc9f18b47dc47683743a763eadf04c4))
+
 ## [0.58.2](https://github.com/Audumla/AUDiaGentic/compare/v0.58.1...v0.58.2) (2026-11-01)
 
 
