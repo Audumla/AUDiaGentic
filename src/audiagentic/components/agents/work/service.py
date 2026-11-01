@@ -6,10 +6,11 @@ from audiagentic.components.agents.context.service import get_context
 from audiagentic.components.agents.work.contracts import (
     AgentWorkRecord,
     AgentWorkState,
+    WorkCommandReceipt,
     WorkInputMessage,
 )
 from audiagentic.components.agents.work.inputs import append_work_input
-from audiagentic.components.agents.work.store import AgentWorkStore
+from audiagentic.components.agents.work.store import AgentWorkStore, command_error
 
 
 def submit_work(
@@ -134,3 +135,62 @@ def read_work_output(project_root: Path, work_id: str) -> dict:
     from audiagentic.components.agents.gateway.output import read_request_output
 
     return read_request_output(project_root, work.active_execution_id)
+
+
+def work_command_digest(text: str, inputs: dict, intent: dict | None = None) -> str:
+    """Canonical digest of what a command asks for (never ``created_at``)."""
+    import hashlib
+    import json
+
+    canonical = json.dumps({"text": text, "inputs": dict(inputs), "intent": dict(intent or {})},
+                           sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def work_delivery_key(*, principal: str, subject: str | None, protocol: str, project_id: str, context_id: str,
+                      target_generation: str | None, message_id: str) -> str:
+    """The canonical delivery identity (SH60): who sent which protocol message to which Context and target."""
+    import hashlib
+    import json
+
+    parts = {"principal": principal, "subject": subject, "protocol": protocol, "project": project_id,
+             "context": context_id, "generation": target_generation, "message": message_id}
+    if not all(isinstance(v, str) and v for k, v in parts.items() if k not in {"subject", "generation"}):
+        raise command_error(163, "A delivery identity needs a principal, protocol, project, context and message id")
+    return hashlib.sha256(json.dumps(parts, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
+def accept_work_command(
+    project_root: Path,
+    context_id: str,
+    *,
+    delivery_key: str,
+    message: WorkInputMessage,
+    intent: dict | None = None,
+    work_id: str | None = None,
+    parent_work_id: str | None = None,
+) -> WorkCommandReceipt:
+    """Commit one caller command to Work in a single atomic record write, then project its input.
+
+    Creates the Work when ``work_id`` is new, continues it when it exists and is not terminal. The message is
+    durable inside the record, so ``inputs.ndjson`` can be rebuilt after a crash (``append_work_input`` is
+    idempotent per message id). Returns the original acceptance for an exact replay.
+    """
+    context = get_context(project_root, context_id)
+    if context.state.value != "open":
+        raise command_error(164, "The Context is closed and accepts no new Work", context_id=context_id)
+    resolved_work_id = work_id or f"work_{delivery_key[:32]}"
+    command = {
+        "delivery_key": delivery_key,
+        "digest": work_command_digest(message.text, dict(message.inputs), intent),
+        "message": {"message_id": message.message_id, "text": message.text, "inputs": dict(message.inputs),
+                    "created_at": message.created_at},
+        "intent": dict(intent or {}),
+        "accepted_at": message.created_at,
+    }
+    receipt = AgentWorkStore().accept_command(project_root, context_id, work_id=resolved_work_id, command=command,
+                                              parent_work_id=parent_work_id)
+    stored = receipt.command["message"]
+    append_work_input(project_root, receipt.work.work_id,
+                      WorkInputMessage(stored["message_id"], stored["text"], stored["inputs"], stored["created_at"]))
+    return receipt

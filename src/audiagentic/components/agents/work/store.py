@@ -13,10 +13,15 @@ from audiagentic.components.agents.work.contracts import (
     AgentWorkRecord,
     AgentWorkState,
     AgentWorkWaitReason,
+    WorkCommandReceipt,
 )
+from audiagentic.foundation.contracts.errors import make_error_factory
 from audiagentic.foundation.io import atomic_write_json, load_json_file
 from audiagentic.foundation.system.process import StartupLock
 from audiagentic.foundation.workflow import load_workflow, transition_allowed
+
+command_error = make_error_factory("CON", "AGW", "agent-work")
+_TERMINAL = {AgentWorkState.COMPLETED, AgentWorkState.FAILED, AgentWorkState.CANCELLED, AgentWorkState.REJECTED}
 
 _WORKFLOW = load_workflow(Path(__file__).parent.parent / "workflows.yaml", "agent-work")
 
@@ -33,6 +38,40 @@ class AgentWorkStore:
                 raise FileExistsError(work_id)
             atomic_write_json(path, record.to_mapping())
         return record
+
+    def accept_command(
+        self, project_root: Path, context_id: str, *, work_id: str, command: dict, parent_work_id: str | None = None,
+    ) -> WorkCommandReceipt:
+        """Commit one caller command (and the Work, when new) in a single atomic record replacement.
+
+        ``command`` carries ``delivery_key`` and ``digest`` plus the durable payload. The same key and digest
+        is a replay and returns the first acceptance; the same key with another digest is a conflict; a new
+        key on terminal Work is refused. Nothing else is written here: inputs, gateway admission and the
+        execution link are projections rebuilt from this record.
+        """
+        path = agent_work_path(project_root, work_id)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with StartupLock(agent_work_lock_path(project_root, work_id)):
+            if path.exists():
+                current = _from_mapping(load_json_file(path))
+                if current.context_id != context_id:
+                    raise command_error(160, "The Work belongs to a different Context", work_id=work_id)
+                prior = next((c for c in current.commands if c.get("delivery_key") == command["delivery_key"]), None)
+                if prior is not None:
+                    if prior.get("digest") != command["digest"]:
+                        raise command_error(161, "The delivery identity was already accepted with a different payload",
+                                            work_id=work_id)
+                    return WorkCommandReceipt(current, prior, True)
+                if current.state in _TERMINAL:
+                    raise command_error(162, "The Work is terminal and cannot accept a new command", work_id=work_id,
+                                        state=current.state.value)
+                updated = _with_commands(current, (*current.commands, command))
+            else:
+                now = _now()
+                updated = AgentWorkRecord(work_id, context_id, AgentWorkState.SUBMITTED, None, None, parent_work_id,
+                                          None, 0, now, now, (command,))
+            atomic_write_json(path, updated.to_mapping())
+            return WorkCommandReceipt(updated, command, False)
 
     def get(self, project_root: Path, work_id: str) -> AgentWorkRecord:
         return _from_mapping(load_json_file(agent_work_path(project_root, work_id)))
@@ -51,7 +90,7 @@ class AgentWorkStore:
                 raise RuntimeError("work revision conflict")
             if not transition_allowed(_WORKFLOW, current.state.value, target.value):
                 raise ValueError("illegal work transition")
-            updated = AgentWorkRecord(current.work_id, current.context_id, target, current.wait_reason, active_execution_id or current.active_execution_id, current.parent_work_id, current.current_interaction_id, current.revision + 1, current.created_at, _now())
+            updated = AgentWorkRecord(current.work_id, current.context_id, target, current.wait_reason, active_execution_id or current.active_execution_id, current.parent_work_id, current.current_interaction_id, current.revision + 1, current.created_at, _now(), current.commands)
             atomic_write_json(path, updated.to_mapping())
             return updated
 
@@ -67,7 +106,7 @@ class AgentWorkStore:
             updated = AgentWorkRecord(
                 current.work_id, current.context_id, current.state, current.wait_reason,
                 execution_id, current.parent_work_id, current.current_interaction_id,
-                current.revision + 1, current.created_at, _now(),
+                current.revision + 1, current.created_at, _now(), current.commands,
             )
             atomic_write_json(path, updated.to_mapping())
             return updated
@@ -83,7 +122,7 @@ class AgentWorkStore:
             updated = AgentWorkRecord(
                 current.work_id, current.context_id, AgentWorkState.WAITING, reason,
                 current.active_execution_id, current.parent_work_id, interaction_id,
-                current.revision + 1, current.created_at, _now(),
+                current.revision + 1, current.created_at, _now(), current.commands,
             )
             atomic_write_json(path, updated.to_mapping())
             return updated
@@ -99,10 +138,16 @@ class AgentWorkStore:
             updated = AgentWorkRecord(
                 current.work_id, current.context_id, AgentWorkState.ACTIVE, None,
                 current.active_execution_id, current.parent_work_id, None,
-                current.revision + 1, current.created_at, _now(),
+                current.revision + 1, current.created_at, _now(), current.commands,
             )
             atomic_write_json(path, updated.to_mapping())
             return updated
+
+
+def _with_commands(current: AgentWorkRecord, commands: tuple) -> AgentWorkRecord:
+    return AgentWorkRecord(current.work_id, current.context_id, current.state, current.wait_reason,
+                           current.active_execution_id, current.parent_work_id, current.current_interaction_id,
+                           current.revision + 1, current.created_at, _now(), commands)
 
 
 def _now() -> str:
@@ -111,4 +156,4 @@ def _now() -> str:
 
 def _from_mapping(value: dict) -> AgentWorkRecord:
     reason = value.get("wait_reason")
-    return AgentWorkRecord(value["work_id"], value["context_id"], AgentWorkState(value["state"]), AgentWorkWaitReason(reason) if reason else None, value.get("active_execution_id"), value.get("parent_work_id"), value.get("current_interaction_id"), int(value["revision"]), value["created_at"], value["updated_at"])
+    return AgentWorkRecord(value["work_id"], value["context_id"], AgentWorkState(value["state"]), AgentWorkWaitReason(reason) if reason else None, value.get("active_execution_id"), value.get("parent_work_id"), value.get("current_interaction_id"), int(value["revision"]), value["created_at"], value["updated_at"], tuple(value.get("commands") or ()))
