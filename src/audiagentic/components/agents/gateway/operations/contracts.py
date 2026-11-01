@@ -14,6 +14,7 @@ class ManagementOperationKind(StrEnum):
     RECONCILE = "reconcile"
     ARCHIVE = "archive"
     PURGE = "purge"
+    SESSION_PURGE = "session-purge"
     NODE_REVOKE = "node-revoke"
 
 

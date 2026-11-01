@@ -12,6 +12,7 @@ from audiagentic.foundation.contracts.errors import AudiaGenticError
 from .archive import GatewayArchiveExecutor, GatewayPurgeExecutor
 from .contracts import ManagementOperationKind, NodeRevocationAuthority, validate_node_revoke_scope
 from .reconcile import GatewayReconcileExecutor
+from .session_purge import GatewaySessionPurgeExecutor
 
 
 class GatewayOperationExecutor:
@@ -29,6 +30,7 @@ class GatewayOperationExecutor:
         self._reconcile = GatewayReconcileExecutor(application, terminalizer=_RequestTerminalizer())
         self._archive = GatewayArchiveExecutor(application)
         self._purge = GatewayPurgeExecutor(application)
+        self._session_purge = GatewaySessionPurgeExecutor()
 
     def execute(self, operation: Mapping[str, Any]) -> Mapping[str, Any]:
         try:
@@ -54,6 +56,8 @@ class GatewayOperationExecutor:
             return self._archive.execute(operation)
         if kind is ManagementOperationKind.PURGE:
             return self._purge.execute(operation)
+        if kind is ManagementOperationKind.SESSION_PURGE:
+            return self._session_purge.execute(operation)
         raise AudiaGenticError("UNS-AGM-001", "agents", "gateway operation has no enabled executor", {"kind": kind})
 
 

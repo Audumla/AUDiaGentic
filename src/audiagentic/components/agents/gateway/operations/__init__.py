@@ -15,6 +15,7 @@ from .operation_store import ManagementOperationStore
 from .pump import ManagementOperationPump
 from .reconcile import GatewayReconcileExecutor
 from .retention_policy import RetentionPolicy, load_retention_policy
+from .session_purge import GatewaySessionPurgeExecutor
 
 __all__ = [
     "EvidenceFinding",
@@ -24,6 +25,7 @@ __all__ = [
     "GatewayWorkEvidenceReader",
     "GatewayArchiveExecutor",
     "GatewayPurgeExecutor",
+    "GatewaySessionPurgeExecutor",
     "RetentionPolicy",
     "load_retention_policy",
     "ManagementCommand",
