@@ -57,4 +57,14 @@ def test_the_evidence_is_exact_match_for_this_executable_and_adapter(tmp_path):
     assert record and record["evidence-id"] == result["evidence-id"]
     assert record["target"]["executable-version"] == facts["executable-version"]
     assert evidence.proven_capabilities(record) == {"passive-identity", "existing-session-attach", "safe-detach", "reconnect"}
-    assert "human-UI" in result["claim"]  # the record never claims more than protocol behaviour
+    assert "human-UI" in result["claim"] and "never sufficient for a join" in result["claim"]
+
+
+def test_safe_detach_is_measured_in_both_directions_and_the_last_subscriber_case_is_recorded(tmp_path):
+    result = qualify_live("codex", state_root=tmp_path / "state")
+    detach = result["observations"]["safe-detach"]
+    assert result["capabilities"]["safe-detach"] is True
+    assert detach["observer-leaves"] == {"server-alive": True, "thread-still-loaded": True, "original-client-operational": True}
+    assert detach["original-leaves"] == {"observer-reattached": True, "thread-still-loaded-for-observer": True,
+                                         "observer-can-read": True}  # the human closing their client does not end the session
+    assert detach["last-subscriber-leaves"]["resumable"] is True  # recorded, not gating

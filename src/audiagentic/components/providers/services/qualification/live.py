@@ -138,4 +138,5 @@ def qualify_live(provider_id: str, *, state_root: Path | None = None) -> dict[st
             "reasons": reasons, "evidence-id": record["evidence-id"], "path": str(path),
             "observations": observations, "cleanup-error": cleanup_error,
             "claim": "native protocol behaviour of this exact executable, adapter and schema on a disposable "
-                     "environment; not vendor-model, authentication or human-UI proof"}
+                     "environment; not vendor-model, authentication or human-UI proof, and never sufficient for a "
+                     "join on its own (the real running instance must still be inspected and matched)"}

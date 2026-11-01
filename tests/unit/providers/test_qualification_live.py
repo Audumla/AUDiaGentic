@@ -167,3 +167,12 @@ def test_a_schema_failure_proves_nothing(tmp_path, monkeypatch):
 def test_the_adapter_declares_its_identity_and_the_methods_it_relies_on():
     assert join.JOIN_ADAPTER.adapter_id == "codex-app-server" and join.JOIN_ADAPTER.native_schema_version
     assert {"thread/start", "thread/resume", "thread/unsubscribe", "thread/loaded/list"} <= join.REQUIRED_METHODS
+
+
+def test_reconnect_is_recorded_but_is_not_a_name_the_join_gate_reads():
+    """audiagentic2: join_readiness reads passive-identity, existing-session-attach, safe-detach,
+    conditional-admission, correlated-result and concurrent-human-use; `reconnect` is evidence only."""
+    from audiagentic.components.providers.services.session import join_readiness
+
+    gate_names = set(join_readiness.EVIDENCE_CAPABILITY.values()) | set(join_readiness.JOIN_PREREQUISITES)
+    assert "reconnect" in CAPABILITIES and "reconnect" not in gate_names
