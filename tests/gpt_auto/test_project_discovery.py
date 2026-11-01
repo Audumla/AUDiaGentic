@@ -97,9 +97,9 @@ async def test_initial_chat_discovers_project_by_active_project_name(monkeypatch
 def test_project_name_uses_config_then_workspace_then_directory(tmp_path: Path):
     assert resolve_project_name(tmp_path) == tmp_path.name
     assert resolve_project_name(tmp_path, workspace_name="Workspace Name") == "Workspace Name"
-    config_dir = tmp_path / ".audiagentic" / "config"
-    config_dir.mkdir(parents=True)
-    (config_dir / "project.yaml").write_text("project-name: Big Cherry\n", encoding="utf-8")
+    settings_dir = tmp_path / ".audiagentic"
+    settings_dir.mkdir(parents=True)
+    (settings_dir / "settings.yaml").write_text("schema_version: 1\nproject:\n  name: Big Cherry\n", encoding="utf-8")
     assert resolve_project_name(tmp_path) == "Big Cherry"
     assert resolve_project_name(tmp_path, workspace_name="bigcherry") == "Big Cherry"
 
@@ -247,7 +247,9 @@ async def test_page_lost_reconciles_immediately_when_turn_active():
 
     methods = [method for method, _ in runtime.bridge.calls]
     assert "list_pages" in methods
-    assert chat.state is ChatState.BUSY
+    # The in-flight turn's page is gone: the chat stays RECOVERING with its owned checkpoint until the
+    # conversation is re-proven (it is not returned to BUSY by an eager reconcile alone).
+    assert chat.state is ChatState.RECOVERING
 
 
 @pytest.mark.asyncio

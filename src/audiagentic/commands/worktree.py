@@ -15,6 +15,7 @@ _HELP = """Worktree commands (keyword syntax):
   audiagentic worktree prune [project PATH] [output json]
   audiagentic worktree sync [TARGET] [head TIP12] [dry-run yes] [project PATH] [output json]
   audiagentic worktree push [TARGET] [head TIP12] [dry-run yes] [project PATH] [output json]
+  audiagentic worktree ship [TARGET] [title TEXT] [body TEXT] [head TIP12] [project PATH] [output json]
   audiagentic worktree merge [TARGET] [title TEXT] [body TEXT] [head TIP12] [dry-run yes] [project PATH] [output json]
   audiagentic worktree finish TARGET [abandon TIP] [discard-ignored N] [project PATH] [output json]
   audiagentic worktree help
@@ -35,7 +36,7 @@ yet (it needs the forge adapter).
 
 prune is read-only: it reports, for every worktree, whether it could be finished and
 exactly what blocks it. Work counts as merged only with proof: a pull request on this
-repository whose head equals the local tip, state MERGED into the default branch,
+repository whose head equals (or contains) the local tip, state MERGED into the default branch,
 and whose merge commit is in the local default branch (run `git fetch` first when it
 says the merge commit is not fetched). It also refuses on uncommitted or untracked
 files, unknown ignored files, a process using the path, unfinished gateway work, a git
@@ -56,6 +57,11 @@ reads the remote back to confirm, and writes a receipt. It refuses when the tree
 remote is not the repository the forge reports, you cannot push, or gateway work is unfinished,
 and again if anything changed while the checks ran. `dry-run yes` lists the checks and the push
 without running or sending anything. TARGET defaults to the worktree you are in.
+
+ship is the everyday command: it runs sync, then merge, in that order, and returns without waiting. Run it
+again whenever the default branch moved (for example a release landed) and the pull request shows BEHIND: it
+syncs, pushes the new tip and keeps auto-merge on. When the pull request has merged it says so and names
+the finish command. It has no options of its own beyond the title, body and head of merge.
 
 merge publishes a worktree for merge and returns without waiting: it plans (every check of
 `dry-run yes`), pushes the tip with the same checks as `push` unless the remote already has it,
@@ -85,7 +91,7 @@ def dispatch_keyword(tokens: list[str]) -> int:
     if not tokens or tokens in (["help"], ["list", "help"], ["start", "help"]):
         print_message(_HELP)
         return 0
-    if tokens[0] not in {"list", "start", "prune", "finish", "merge", "push", "sync"} or any(token.startswith("--") for token in tokens):
+    if tokens[0] not in {"list", "start", "prune", "finish", "merge", "push", "sync", "ship"} or any(token.startswith("--") for token in tokens):
         print_error("Invalid worktree syntax. Run: audiagentic worktree help")
         return 2
     if tokens[0] == "start":
@@ -94,6 +100,8 @@ def dispatch_keyword(tokens: list[str]) -> int:
         return _prune(tokens[1:])
     if tokens[0] == "finish":
         return _finish(tokens[1:])
+    if tokens[0] == "ship":
+        return _ship(tokens[1:])
     if tokens[0] == "merge":
         return _merge(tokens[1:])
     if tokens[0] == "push":
@@ -235,6 +243,46 @@ def _push(tokens: list[str]) -> int:
     else:
         print_message(f"pushed {result['tip'][:12]} to origin/{result['branch']} (confirmed on the remote); "
                       f"{len(result['checks'])} check(s) passed")
+    return 0
+
+
+def _ship(tokens: list[str]) -> int:
+    words = {"title", "body", "head", "project", "output"}
+    target = tokens[0] if tokens and tokens[0] not in words else None
+    clauses = _clauses(tokens[1:] if target else tokens, words)
+    if clauses is None:
+        print_error("Invalid worktree ship syntax. Run: audiagentic worktree help")
+        return 2
+
+    from audiagentic.components.agents.gateway.api import worktree_active_work
+    from audiagentic.components.project.worktrees import ship as shipper
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+    from audiagentic.foundation.paths.project import discover_checkout_root
+
+    here = discover_checkout_root(Path(clauses["project"]).resolve() if "project" in clauses else None)
+    if here is None:
+        print_error("Not inside a git repository. Give project PATH or run it inside one.")
+        return 2
+    path = Path(target).expanduser().resolve() if target and "/" in target else here
+    try:
+        result = shipper.ship(here, path, title=clauses.get("title"), body=clauses.get("body"),
+                              head=clauses.get("head"), active_work=worktree_active_work)
+    except AudiaGenticError as error:
+        print_error(f"{error.code}: {error.message}")
+        return 1
+    if clauses.get("output") == "json":
+        print_json(result, sort_keys=True)
+        return 0
+    lines = []
+    if result["synced"]:
+        lines += [f"synced: {action}" for action in result["synced"]]
+    if result["state"] == "merged":
+        lines.append(f"merged: #{result['pr']} {result['url']}")
+    else:
+        lines.append(f"{'pushed ' + result['tip'][:12] if result['pushed'] else 'already on the remote'}; "
+                     f"#{result['pr']} {result['url']} is {result['state']} ({result['merge-state'] or 'pending'})")
+    lines.append(f"next: {result['next']}")
+    print_message("\n".join(lines))
     return 0
 
 

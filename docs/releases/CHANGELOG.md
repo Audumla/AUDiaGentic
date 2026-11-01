@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.57.0](https://github.com/Audumla/AUDiaGentic/compare/v0.56.0...v0.57.0) (2026-11-01)
+
+
+### Features
+
+* **worktree:** ship command, contained-tip merge proof; fix stale tests and uninstall stdout ([#320](https://github.com/Audumla/AUDiaGentic/issues/320)) ([b3f9796](https://github.com/Audumla/AUDiaGentic/commit/b3f9796cad881acbc14a6badcdb3fdb31c95429d))
+
+## [0.56.0](https://github.com/Audumla/AUDiaGentic/compare/v0.55.0...v0.56.0) (2026-10-31)
+
+
+### Features
+
+* **gateway:** shared client accepts literal loopback http (CFG14 slice 1) ([#319](https://github.com/Audumla/AUDiaGentic/issues/319)) ([407f749](https://github.com/Audumla/AUDiaGentic/commit/407f749265176144e1d00d652ee0bb7e9850650a))
+
 ## [0.55.0](https://github.com/Audumla/AUDiaGentic/compare/v0.54.2...v0.55.0) (2026-10-31)
 
 

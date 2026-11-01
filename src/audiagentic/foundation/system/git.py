@@ -202,6 +202,11 @@ def fetch(repo: Path, remote: str, branch: str, *, timeout: float = 120.0) -> No
             timeout=timeout)
 
 
+def fetch_pull_head(repo: Path, remote: str, number: int, *, timeout: float = 120.0) -> None:
+    """Fetch the objects of a pull request's head (``refs/pull/N/head``) without creating any ref."""
+    run_git(repo, "fetch", "--quiet", remote, f"refs/pull/{int(number)}/head", timeout=timeout)
+
+
 def add_worktree(repo: Path, path: Path, branch: str, base: str) -> None:
     """Create ``branch`` at ``base`` and check it out at ``path`` in one git operation (no tracking)."""
     run_git(repo, "worktree", "add", "--quiet", "--no-track", "-b", branch, str(path), base)

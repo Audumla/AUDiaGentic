@@ -62,7 +62,7 @@ def materialize_provider_config(
         load_materialize_builder,
         load_materialize_model_config_path_resolver,
     )
-    from audiagentic.foundation.cli_io import print_message
+    from audiagentic.foundation.cli_io import print_error
     builder = load_materialize_builder(provider_id)
     if builder is None:
         from audiagentic.foundation.contracts.errors import make_error
@@ -99,7 +99,7 @@ def materialize_provider_config(
                 request=request,
             )
             if not result.ok:
-                print_message(
+                print_error(
                     f"Warning: model-projection apply failed for {provider_id}: {result.error_code}",
                 )
         except Exception:  # noqa: BLE001 — materialize is best-effort
