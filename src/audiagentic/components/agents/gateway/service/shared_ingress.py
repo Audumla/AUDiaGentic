@@ -37,6 +37,14 @@ _ACTIONS = {
     "accept_agent_work_message": "submit",
     "wait_agent_work": "read",
     "get_agent_work": "read",
+    # SH65b: what an A2A/ACP facade needs and nothing more. Opening a Context creates durable state, so it is a
+    # submission; reading a Context or Work output is a read; cancelling Work is a cancel (the same action as
+    # cancelling a request). Closing or listing Contexts and listing Work stay local-only, and grants stay
+    # project-wide (collaborative), not per-caller isolation.
+    "open_agent_context": "submit",
+    "get_agent_context": "read",
+    "read_agent_work_output": "read",
+    "cancel_agent_work": "cancel",
     "cancel_execution_request": "cancel",
     "close_execution_session": "session",
     "resume_execution_session": "session",

@@ -41,10 +41,10 @@ def shared(tmp_path):
         projects[name] = tmp_path / name
         projects[name].mkdir()
     principals = []
-    for name, grants in (("alice", {"one"}), ("bob", {"two"}), ("observer", {"one"})):
+    for name, grants in (("alice", {"one"}), ("bob", {"two"}), ("observer", {"one"}), ("canceller", {"one"})):
         token_file = tmp_path / f"{name}.token"
         token_file.write_text(f"token-{name}")
-        actions = {"read"} if name == "observer" else {"read", "submit", "session"}
+        actions = {"read"} if name == "observer" else {"read", "cancel"} if name == "canceller" else {"read", "submit", "session"}
         principals.append(SharedGatewayPrincipal(name, token_file, frozenset(grants), frozenset(actions)))
     config = SharedGatewayServerConfig(server_id="test", port=0, service_root=tmp_path / "service", projects=projects, principals=tuple(principals))
     store = ManagedServiceStore(ServiceKey("gateway", "shared-test"), root=config.service_root)
@@ -430,3 +430,69 @@ def test_exclusive_acceptance_is_forwarded_only_when_the_caller_asks_for_it(shar
     assert [item["exclusive"] for item in seen] == [False, True]
     status, _ = shared("/shared/v1/call", _accept(lease, exclusive="yes"))  # only a real boolean narrows admission
     assert status == 200 and seen[-1]["exclusive"] is False
+
+
+# --- SH65b-1: the operations an A2A/ACP facade needs, scoped by the same grants -------------------------
+
+
+def _facade_app(shared):
+    seen = []
+    app = shared.application._application
+    app.open_agent_context = lambda root, agent_id, title=None: seen.append(("open", root.name, agent_id)) or {"context_id": "ctx_9"}
+    app.get_agent_context = lambda root, context_id: seen.append(("get-context", root.name, context_id)) or {"context_id": context_id}
+    app.read_agent_work_output = lambda root, work_id: seen.append(("output", root.name, work_id)) or {"text": "ok"}
+    app.cancel_agent_work = lambda root, work_id: seen.append(("cancel", root.name, work_id)) or {"work_id": work_id}
+    return seen
+
+
+def _call_op(shared, who, operation, params, project="one"):
+    lease = acquire(shared, f"token-{who}")
+    return shared("/shared/v1/call", call(lease, operation=operation, params=params, **{"project-id": project}),
+                  token=f"token-{who}")
+
+
+def test_a_submitter_can_open_a_context_and_a_reader_can_read_but_not_open(shared):
+    seen = _facade_app(shared)
+    status, response = _call_op(shared, "alice", "open_agent_context", {"agent_id": "agent-a"})
+    assert status == 200 and response["result"] == {"context_id": "ctx_9"} and seen[-1] == ("open", "one", "agent-a")
+    status, _ = _call_op(shared, "observer", "open_agent_context", {"agent_id": "agent-a"})
+    assert status >= 400 and len([e for e in seen if e[0] == "open"]) == 1  # the observer opened nothing
+    status, response = _call_op(shared, "observer", "get_agent_context", {"context_id": "ctx_9"})
+    assert status == 200 and response["result"]["context_id"] == "ctx_9"
+    status, response = _call_op(shared, "observer", "read_agent_work_output", {"work_id": "w1"})
+    assert status == 200 and response["result"] == {"text": "ok"}
+
+
+def test_cancelling_work_needs_the_cancel_action_not_submit(shared):
+    seen = _facade_app(shared)
+    status, _ = _call_op(shared, "alice", "cancel_agent_work", {"work_id": "w1"})  # submit/session, no cancel
+    assert status >= 400 and not [e for e in seen if e[0] == "cancel"]
+    status, response = _call_op(shared, "canceller", "cancel_agent_work", {"work_id": "w1"})
+    assert status == 200 and response["result"] == {"work_id": "w1"} and seen[-1] == ("cancel", "one", "w1")
+
+
+def test_the_new_operations_stay_inside_the_principals_project_grant(shared):
+    seen = _facade_app(shared)
+    for operation, params in (("open_agent_context", {"agent_id": "a"}), ("get_agent_context", {"context_id": "c"}),
+                              ("read_agent_work_output", {"work_id": "w"})):
+        status, _ = _call_op(shared, "bob", operation, params, project="one")  # bob is granted project two only
+        assert status >= 400, operation
+    assert not seen
+
+
+def test_context_close_and_listing_and_work_listing_are_not_reachable_over_shared_ingress(shared):
+    seen = _facade_app(shared)
+    for operation in ("close_agent_context", "list_agent_contexts", "list_agent_work", "submit_agent_work",
+                      "submit_agent_work_child", "dispatch_agent_work_commands"):
+        status, _ = _call_op(shared, "alice", operation, {})
+        assert status >= 400, operation
+    assert not seen
+
+
+def test_health_lists_exactly_the_operations_the_principal_may_call(shared):
+    status, response = shared("/shared/v1/health", token="token-observer")
+    capabilities = set(response["result"]["capabilities"])
+    assert {"get_agent_context", "read_agent_work_output", "get_agent_work", "wait_agent_work"} <= capabilities
+    assert not {"open_agent_context", "cancel_agent_work", "accept_agent_work_message"} & capabilities
+    status, response = shared("/shared/v1/health", token="token-canceller")
+    assert "cancel_agent_work" in response["result"]["capabilities"]
