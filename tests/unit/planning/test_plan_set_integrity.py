@@ -86,6 +86,18 @@ def validate_plan_set(
         elif path.stem != item_id:
             errors.append(f"filename/id mismatch: {path} declares {item_id}")
 
+    for path in item_paths:
+        # Two headings that normalize to the same section (for example "Acceptance Criteria" and a stray
+        # "Acceptance-criteria") hide content from every reader that takes the first or the last one.
+        keys = Counter(
+            re.sub(r"[^a-z0-9]+", " ", match.group(1).lower()).strip()
+            for match in _SECTION_RE.finditer(parsed[path][1])
+        )
+        for key, count in sorted(keys.items()):
+            # The planning tool itself appends a second 'Ledger events' heading; that is existing, harmless debt.
+            if count > 1 and key != "ledger events":
+                errors.append(f"duplicate section {key!r} ({count} headings) in {path}")
+
     item_ids = {ids_by_path[path] for path in item_paths if ids_by_path[path]}
     prefixes = sorted(
         {match.group(1) for item_id in item_ids if (match := re.fullmatch(r"([A-Z]+)\d+", item_id))},
@@ -225,3 +237,10 @@ def test_active_code_item_requires_standards(tmp_path):
     )
     errors = validate_plan_set(tmp_path)
     assert any("Standards" in error for error in errors)
+
+
+def test_a_stray_duplicate_section_heading_fails(tmp_path):
+    body = "# Item\n\n## Validation\n\nRun tests.\n\n## Acceptance Criteria\n\nTests pass.\n\n## Acceptance-criteria\n\n- stray\n"
+    _write_item(tmp_path, "SA101", body=body)
+    errors = validate_plan_set(tmp_path)
+    assert any("duplicate section 'acceptance criteria'" in error for error in errors), errors
