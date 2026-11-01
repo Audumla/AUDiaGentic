@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.76.0](https://github.com/Audumla/AUDiaGentic/compare/v0.75.0...v0.76.0) (2026-11-01)
+
+
+### Features
+
+* **providers:** Codex turn probes against a local stub model; admission measured as unsupported (SH54-C) ([#389](https://github.com/Audumla/AUDiaGentic/issues/389)) ([4e5dd88](https://github.com/Audumla/AUDiaGentic/commit/4e5dd8849241d851b80ac10692da1bc503199589))
+
 ## [0.75.0](https://github.com/Audumla/AUDiaGentic/compare/v0.74.0...v0.75.0) (2026-11-01)
 
 
