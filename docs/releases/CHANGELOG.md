@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.70.0](https://github.com/Audumla/AUDiaGentic/compare/v0.69.3...v0.70.0) (2026-11-01)
+
+
+### Features
+
+* **gateway:** machine session-purge policy and read-only eligibility report (SH32-A) ([#365](https://github.com/Audumla/AUDiaGentic/issues/365)) ([ba2445a](https://github.com/Audumla/AUDiaGentic/commit/ba2445a17c71ab71b0dd5f28fdee1c2a71fe7c37))
+
 ## [0.69.3](https://github.com/Audumla/AUDiaGentic/compare/v0.69.2...v0.69.3) (2026-11-01)
 
 
