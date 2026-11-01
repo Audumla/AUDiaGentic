@@ -207,6 +207,8 @@ NET-AGSV-001: "The gateway returned a malformed error response; verify client/se
 NET-AGSV-002: "Start the explicitly configured standalone gateway and verify its loopback endpoint."
 NET-AGSV-003: "The gateway returned an invalid response; verify client/server versions and inspect service logs."
 CFG-AGSV-001: "Standalone gateway selected but no connector is configured. Run: audiagentic gateway connect config FILE (a connector document with mode plain or shared)."
+CFG-AGSV-007: "The gateway setup in this directory is partial or inconsistent. Remove the incomplete files yourself or choose another directory with: audiagentic gateway init dir PATH. Nothing is overwritten and no token is rotated."
+CFG-AGSV-008: "gateway init needs a project with a valid gateway id: run it inside a git checkout (or give project PATH) and, if project.id is already declared, use lowercase letters, digits, - and _ (audiagentic config set --scope project project.id=NAME)."
 CFG-AGSV-003: "A shared gateway connection needs a declared project.id in the project settings. Run: audiagentic config set --scope project project.id=NAME in the project."
 CFG-AGSV-002: "Set gateway.implementation in the user settings to embedded, automatic or standalone."
 # AS19 Stage-2: harness status observer ingress error codes

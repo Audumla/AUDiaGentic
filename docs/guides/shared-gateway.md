@@ -19,6 +19,29 @@ idle grace, trace, dashboard, implementation) is the `gateway` section of
 options to the role documents. See "Shared gateway role documents" in
 `docs/design/configuration-model.md` for the decision and when to revisit it.
 
+## Quick start: `gateway init`
+
+For a shared gateway on the same machine as its client:
+
+```text
+audiagentic gateway init
+audiagentic gateway serve config <printed directory>/server.yaml
+```
+
+`init` creates, in the gateway folder of the user configuration directory (or
+`dir PATH`), `server.yaml` (a generated `server-id`, port 8765, the current project
+as the served root, one `operator` principal), `connector.yaml` (loopback, server id
+pinned) and `credentials/operator.token` (a private random file, never printed).
+It gives the current checkout (or `project PATH`) a declared `project.id` in its
+tracked settings when it has none, and binds this machine to the generated connector
+(`gateway.connector`) when none is set. It never overwrites or rotates anything:
+repeating it reports the existing setup, a partial or inconsistent set is refused,
+and `dry-run` shows what would happen without writing or generating a credential.
+Edit the generated files by hand only to change the port (keep the connector
+endpoint in step), add projects (one root path per line) or narrow a principal's
+`projects`/`actions`. The sections below describe the files and the manual,
+multi-machine setup.
+
 ## First-time setup checklist
 
 1. Create each credential as its own file readable only by its owner
