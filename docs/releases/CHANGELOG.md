@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.75.0](https://github.com/Audumla/AUDiaGentic/compare/v0.74.0...v0.75.0) (2026-11-01)
+
+
+### Features
+
+* **providers:** Codex app-server join surface declaration claiming only detach_safe (SH39) ([#386](https://github.com/Audumla/AUDiaGentic/issues/386)) ([0b9b7c8](https://github.com/Audumla/AUDiaGentic/commit/0b9b7c8b895b804de6f40a08cf6c2180b4fbc5b8))
+
+## [0.74.0](https://github.com/Audumla/AUDiaGentic/compare/v0.73.0...v0.74.0) (2026-11-01)
+
+
+### Features
+
+* **providers:** measure safe detach in both directions; document the turn-probe contract ([#385](https://github.com/Audumla/AUDiaGentic/issues/385)) ([810c41a](https://github.com/Audumla/AUDiaGentic/commit/810c41ac6151af5f5f9773f7a1b6807be2d1fc50))
+
 ## [0.73.0](https://github.com/Audumla/AUDiaGentic/compare/v0.72.2...v0.73.0) (2026-11-01)
 
 

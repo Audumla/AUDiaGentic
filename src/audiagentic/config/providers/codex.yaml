@@ -200,3 +200,41 @@ session_surfaces:
           validated: true
           reference: "tests/unit/providers/test_codex_acp_launch.py"
     adapter_ref: "audiagentic.components.providers.adapters.codex.acp:build_acp_launch"
+
+  # SH39/SH54: the human-serving Codex app-server, joined EXTERNALLY as an observer. This declares only
+  # what the protocol-level live probe has proven (providers/services/qualification/probes/codex.py):
+  # attaching to an existing thread and detaching safely. prompt_delivery, native_atomic_queue_admission,
+  # correlated_terminal_output and human_concurrency_safe stay UNCLAIMED until their turn probes pass; each
+  # is a one-line change made together with the evidence that proves it, so the declaration never runs
+  # ahead of evidence. Readiness additionally needs an exact SH53 record, so this surface is not joinable.
+  - surface_id: codex-app-server
+    version_constraint: ">=0.166"
+    identity_operations:
+      open: "unsupported"
+      attach-existing: "supported"
+      resume-by-ref: "unsupported"
+      discover: "unsupported"
+    ownership_modes:
+      - "external"
+    mapping_facts:
+      ref_scope: "provider-session"
+      ref_namespace: "codex-thread-id"
+      requires_same_project: true
+      requires_same_execution_context: false
+      concurrent_attachments: true
+      share_existing: true
+      replace_existing: false
+    lifecycle_source: "none"
+    evidence:
+      validated: false
+    platforms:
+      - platform: "linux-amd64"
+        tool_version: "0.166.0"
+        probe_artifact: "tests/integration/providers/test_codex_live_qualification.py"
+        evidence:
+          validated: true
+          reference: "tests/integration/providers/test_codex_live_qualification.py"
+    adapter_ref: "audiagentic.components.providers.adapters.codex.join:AppServerClient"
+    joined_capabilities:
+      detach_safe: true
+
