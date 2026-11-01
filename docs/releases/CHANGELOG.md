@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.69.2](https://github.com/Audumla/AUDiaGentic/compare/v0.69.1...v0.69.2) (2026-11-01)
+
+
+### Documentation
+
+* **planning:** SH43 status - delivered steps, what blocks closing it ([#369](https://github.com/Audumla/AUDiaGentic/issues/369)) ([96ff6f8](https://github.com/Audumla/AUDiaGentic/commit/96ff6f838beeb80823e04753052fbea70418901b))
+
 ## [0.69.1](https://github.com/Audumla/AUDiaGentic/compare/v0.69.0...v0.69.1) (2026-11-01)
 
 
