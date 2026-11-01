@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.73.0](https://github.com/Audumla/AUDiaGentic/compare/v0.72.2...v0.73.0) (2026-11-01)
+
+
+### Features
+
+* **providers:** qualify --live and the Codex app-server probes (CFG12-A, SH54-A) ([#383](https://github.com/Audumla/AUDiaGentic/issues/383)) ([94076d1](https://github.com/Audumla/AUDiaGentic/commit/94076d15ae996632a83fb5d1cb343dbefc26c901))
+
 ## [0.72.2](https://github.com/Audumla/AUDiaGentic/compare/v0.72.1...v0.72.2) (2026-11-01)
 
 
