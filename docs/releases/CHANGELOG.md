@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.64.0](https://github.com/Audumla/AUDiaGentic/compare/v0.63.0...v0.64.0) (2026-11-01)
+
+
+### Features
+
+* **agents:** SH60c trusted delivery identity and correlated wait port for Work ([#350](https://github.com/Audumla/AUDiaGentic/issues/350)) ([6dc4326](https://github.com/Audumla/AUDiaGentic/commit/6dc4326195b9beda66ec249d1b86fe9901d56fd3))
+
 ## [0.63.0](https://github.com/Audumla/AUDiaGentic/compare/v0.62.0...v0.63.0) (2026-11-01)
 
 
