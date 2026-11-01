@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.80.1](https://github.com/Audumla/AUDiaGentic/compare/v0.80.0...v0.80.1) (2026-11-01)
+
+
+### Bug Fixes
+
+* **providers:** OpenCode adapter fixes delivery to queue; result correlation unsupported (SH56) ([#400](https://github.com/Audumla/AUDiaGentic/issues/400)) ([3930cfe](https://github.com/Audumla/AUDiaGentic/commit/3930cfef0ebbfbbbdf02c822e49e40a1ea7997ae))
+
 ## [0.80.0](https://github.com/Audumla/AUDiaGentic/compare/v0.79.0...v0.80.0) (2026-11-01)
 
 
