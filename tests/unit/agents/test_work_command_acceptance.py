@@ -261,3 +261,51 @@ def test_a_command_keeps_its_first_execution(tmp_path: Path, context) -> None:
     with pytest.raises(AudiaGenticError) as raised:
         store.link_command_execution(tmp_path, receipt.work.work_id, key, "req_b")
     assert raised.value.code == "CON-AGW-166"
+
+
+# --- SH60c: the correlated wait port --------------------------------------------------------------------
+
+
+def test_wait_without_an_execution_is_not_terminal(tmp_path: Path, context) -> None:
+    app, _ = _app()
+    receipt = accept_work_command(tmp_path, context.context_id, delivery_key=_key(context.context_id, "m1"),
+                                  message=new_work_input("m1", "x"))
+    result = app.wait_agent_work(tmp_path, receipt.work.work_id, 1)
+    assert result["wait-outcome"] == "no-execution" and result["work"]["state"] == "submitted"
+
+
+def test_a_wait_timeout_returns_the_non_terminal_state_without_inventing_success(tmp_path: Path, context) -> None:
+    app, _ = _app()
+    work = app.accept_agent_work_message(tmp_path, context.context_id, {"message_id": "m1", "text": "x"},
+                                         delivery_identity=_IDENTITY)
+    app.wait_execution_request = lambda root, request_id, timeout: {  # type: ignore[method-assign]
+        "wait-outcome": "timeout", "status": {"state": "running"}}
+    result = app.wait_agent_work(tmp_path, work["work_id"], 0.01)
+    assert result["wait-outcome"] == "timeout" and result["work"]["state"] == "active"
+
+
+def test_a_terminal_request_is_projected_onto_the_work_and_the_wait_is_bounded(tmp_path: Path, context) -> None:
+    app, _ = _app()
+    work = app.accept_agent_work_message(tmp_path, context.context_id, {"message_id": "m1", "text": "x"},
+                                         delivery_identity=_IDENTITY)
+    seen = {}
+
+    def waited(root, request_id, timeout):
+        seen["timeout"] = timeout
+        return {"state": "completed"}
+
+    app.wait_execution_request = waited  # type: ignore[method-assign]
+    result = app.wait_agent_work(tmp_path, work["work_id"], 10_000)
+    assert result["wait-outcome"] == "terminal" and result["work"]["state"] == "completed"
+    assert seen["timeout"] <= 600.0
+    assert get_work(tmp_path, work["work_id"]).state is AgentWorkState.COMPLETED
+
+
+def test_the_trusted_identity_rejects_unknown_protocols_and_carries_the_declared_project(tmp_path: Path) -> None:
+    from audiagentic.components.agents.gateway.application import trusted_delivery_identity
+
+    identity = trusted_delivery_identity(tmp_path, principal="alice", protocol="acp")
+    assert identity["principal"] == "alice" and identity["subject"] is None and identity["project_id"]
+    with pytest.raises(AudiaGenticError) as raised:
+        trusted_delivery_identity(tmp_path, principal="alice", protocol="smtp")
+    assert raised.value.code == "CON-AGW-163"
