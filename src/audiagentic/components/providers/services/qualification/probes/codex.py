@@ -33,6 +33,7 @@ from ..live import CAPABILITIES, LiveContext, ProbeOutcome
 PROBE_VERSION = "1"
 _ENV_ALLOWLIST = ("PATH", "LANG", "LC_ALL", "LC_CTYPE", "TERM")
 _UNPROVEN_NEEDS_TURNS = "unproven-needs-turn-probe"
+_SETTLE_SECONDS = 1.5  # how long a departure is observed before the survivor is checked
 
 
 def disposable_env(root: Path) -> dict[str, str]:
@@ -147,21 +148,41 @@ async def _probe(context: LiveContext, env: dict[str, str], executable: Path) ->
         except Exception as error:  # noqa: BLE001
             outcomes["existing-session-attach"] = _failed("existing-session-attach", "attach", error)
 
-        # safe-detach: the observer leaves; the original session, client and server are undisturbed.
+        # safe-detach has two directions. (1) The observer leaves while the original client stays attached.
+        # (2) The ORIGINAL client leaves while an observer is attached (the human closes their UI): the
+        # session must survive for the observer. If either fails, detach is not safe.
         try:
             await b.request("thread/unsubscribe", {"threadId": thread_id})
             await b.close()
-            alive = server.alive
-            loaded = thread_id in _ids(await a.request("thread/loaded/list"))
-            readable = _thread_id(await a.request("thread/read", {"threadId": thread_id})) == thread_id
-            ok = alive and loaded and readable
+            observer_alive = server.alive
+            observer_loaded = thread_id in _ids(await a.request("thread/loaded/list"))
+            observer_readable = _thread_id(await a.request("thread/read", {"threadId": thread_id})) == thread_id
+            b2 = await client("B2")
+            reattached = _thread_id(await b2.request("thread/resume", {"threadId": thread_id})) == thread_id
+            await a.close()  # the human's client goes away while B2 is still attached
+            await asyncio.sleep(_SETTLE_SECONDS)
+            human_loaded = thread_id in _ids(await b2.request("thread/loaded/list"))
+            human_readable = _thread_id(await b2.request("thread/read", {"threadId": thread_id})) == thread_id
+            ok = observer_alive and observer_loaded and observer_readable and reattached and human_loaded and human_readable
             outcomes["safe-detach"] = ProbeOutcome(
                 "safe-detach", ok, None if ok else "probe-failed",
-                {"server-alive": alive, "thread-still-loaded": loaded, "original-client-operational": readable})
+                {"observer-leaves": {"server-alive": observer_alive, "thread-still-loaded": observer_loaded,
+                                     "original-client-operational": observer_readable},
+                 "original-leaves": {"observer-reattached": reattached, "thread-still-loaded-for-observer": human_loaded,
+                                     "observer-can-read": human_readable}})
+            # Informational, not gating: what a last-subscriber departure does to the session.
+            await b2.request("thread/unsubscribe", {"threadId": thread_id})
+            await asyncio.sleep(_SETTLE_SECONDS)
+            last_probe = await client("L")
+            last_loaded = thread_id in _ids(await last_probe.request("thread/loaded/list"))
+            last_resumable = _thread_id(await last_probe.request("thread/resume", {"threadId": thread_id})) == thread_id
+            outcomes["safe-detach"].observations["last-subscriber-leaves"] = {
+                "still-loaded-after-seconds": _SETTLE_SECONDS if last_loaded else None, "resumable": last_resumable}
         except Exception as error:  # noqa: BLE001
-            outcomes["safe-detach"] = _failed("safe-detach", "detach", error)
+            if "safe-detach" not in outcomes:
+                outcomes["safe-detach"] = _failed("safe-detach", "detach", error)
 
-        # reconnect: a brand-new client resolves the same thread afterwards.
+        # reconnect: a brand-new client resolves the same thread after every earlier client has left.
         try:
             c = await client("C")
             again = thread_id in _ids(await c.request("thread/loaded/list"))

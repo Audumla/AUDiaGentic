@@ -116,3 +116,23 @@ Qualification research may proceed independently. Implementation review and
 native probes gate only the applicable advertised slice; design endorsement never
 enables runtime capability. External A2A/ACP interoperability is eventual SH43
 work, not a prerequisite for native attachment qualification.
+
+## Live qualification evidence (`qualify --live`)
+
+`audiagentic qualify --live PROVIDER` runs a provider's native probes against a disposable, credential-free
+environment and records one immutable evidence record (SH53). It proves protocol behaviour of the exact
+executable, adapter and schema, never a vendor model, authentication, or a human-facing UI, and a record is never
+sufficient for a join on its own: the real running instance must still be inspected and matched.
+
+Codex (`codex-app-server`, measured on codex-cli 0.166.0 linux-amd64 over `codex app-server --listen unix://`):
+passive identity, existing-session attach, safe detach and reconnect are proven; conditional admission, correlated
+results and concurrent human use need turns and stay unproven. Safe detach is measured in both directions: an
+observer leaving while the original client stays, and the original client leaving while an observer is attached (the
+session survives for the observer). What a last-subscriber departure does is recorded, not gating. `reconnect` is
+evidence only; the join gate does not read it. A thread with no turn has no persisted history, so the probe seeds
+synthetic history through `thread/inject_items` and records that. Turn probes must show: a `turn/start` while another
+turn is active is rejected or queued and leaves the active turn untouched (never `turn/steer`); the idle case admits
+exactly once and a retry of the same client request id does not run twice; each caller's turn id is the only id on the
+notifications attributed to it, with two concurrent callers and an interleaved human turn; and the stub model is
+loopback-only on an OS-assigned port, receives nothing but the probe's requests, and is configured only in the
+disposable `CODEX_HOME`.
