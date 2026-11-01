@@ -299,6 +299,22 @@ binding is rechecked on each submit, and the node credential is sent only with
 `submit_execution_request`. Omit it for ordinary submissions, which are
 unchanged.
 
+## Projects on one server
+
+One server can serve several projects. Each runs separately: its requests, sessions,
+idempotency keys, conversations, work and context records live under its own root, so the
+same request id, conversation id or idempotency key in two projects shares nothing, and a
+request is not readable, listable or cancellable through another project. A call's root
+comes only from the server's own `projects` list, selected by the connector's project id
+(the project's declared `project.id`); caller parameters never choose it. A project's own
+settings cannot configure the gateway (the `gateway` section is read from machine scopes
+only). Grants are not a tenant boundary: a principal granted several projects is trusted
+across them, and operator views (dashboard, known projects) list all projects.
+
+This is application-level scoping. Project code runs with the server's operating-system
+identity, so filesystem and process isolation between projects are not provided; run
+mutually untrusted projects on separate servers or OS accounts.
+
 ## Updating the runtime under a running gateway
 
 The gateway service imports its code once, when it starts. If the installation it runs from is
