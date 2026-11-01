@@ -464,7 +464,8 @@ def _resolve_implementation_id(project_root: Path | None) -> tuple[str, str]:
     """Resolve which gateway implementation is active, and how it was chosen.
 
     Resolution order (SH11 Slice B), highest precedence first:
-    1. ``gateway.implementation`` in settings (CFG09).
+    1. ``gateway.implementation`` in settings (CFG09); an explicit choice always wins.
+    1b. a ``gateway.connector`` in settings (CFG18): an explicit connector is a standalone connection.
     2. the project's selected component implementation
        (``foundation.features.registry.resolve_active_implementation``),
        which itself falls through to the descriptor-declared default
@@ -474,13 +475,15 @@ def _resolve_implementation_id(project_root: Path | None) -> tuple[str, str]:
        loaded), so resolution never raises merely for lack of project context.
 
     Returns ``(implementation_id, source)`` where source is one of
-    ``settings`` / ``component-config`` / ``schema-default``.
+    ``settings`` / ``connector`` / ``component-config`` / ``schema-default``.
     """
     from audiagentic.components.agents.gateway.settings import gateway_setting
 
     configured = gateway_setting("implementation")
     if configured:
         return str(configured), "settings"
+    if gateway_setting("connector"):
+        return "standalone", "connector"  # an explicit connector is a standalone connection
 
     if project_root is not None:
         from audiagentic.foundation.features.registry import resolve_active_implementation

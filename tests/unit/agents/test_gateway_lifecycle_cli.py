@@ -109,4 +109,4 @@ class TestServeSignals:
 
     def test_serve_help_is_current_pure_keyword_route(self, capsys):
         assert gateway.dispatch_keyword(["serve", "help"]) == 0
-        assert "serve config FILE" in capsys.readouterr().out
+        assert "serve [config FILE]" in capsys.readouterr().out

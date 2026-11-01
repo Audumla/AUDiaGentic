@@ -62,11 +62,11 @@ def _user_settings(tmp_path):
 
 def test_connect_writes_one_user_setting_patch_and_no_secret(tmp_path, connector):
     result = management_api.gateway_connect_config(connector)
-    assert result == {"implementation": "standalone", "connector": str(connector.resolve())}
+    assert result == {"implementation": "standalone", "connector": str(connector.resolve())}  # implied by the connector
     import yaml
 
     text = _user_settings(tmp_path).read_text()
-    assert yaml.safe_load(text)["gateway"] == {"connector": str(connector.resolve()), "implementation": "standalone"}
+    assert yaml.safe_load(text)["gateway"] == {"connector": str(connector.resolve())}
     assert "secret-token" not in text
 
 
@@ -209,3 +209,19 @@ def test_nonshared_root_resolvers_keep_local_routing(tmp_path, connector, monkey
     assert client.resolve_session_project_root(tmp_path, "ses_local") == tmp_path
     request.assert_called_once_with(tmp_path, request_id)
     session.assert_called_once_with(tmp_path.resolve(), "ses_local")
+
+
+def test_a_connector_alone_selects_standalone_and_an_explicit_choice_still_wins(tmp_path, connector):
+    from audiagentic.components.agents.gateway.client import _resolve_implementation_id
+
+    assert _resolve_implementation_id(None) == ("automatic", "schema-default")
+    management_api.gateway_connect_config(connector)
+    assert _resolve_implementation_id(None) == ("standalone", "connector")
+    settings = tmp_path / "settings.yaml"
+    settings.write_text("schema_version: 1\ngateway:\n  implementation: embedded\n", encoding="utf-8")
+    import os
+    os.environ["AUDIAGENTIC_CONFIG"] = str(settings)
+    try:
+        assert _resolve_implementation_id(None) == ("embedded", "settings")
+    finally:
+        del os.environ["AUDIAGENTIC_CONFIG"]

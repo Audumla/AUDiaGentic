@@ -35,7 +35,7 @@ raise SystemExit(main(["gateway", *sys.argv[1:]]))
 
 
 @pytest.mark.parametrize("tail", [
-    ["serve", "--host", "127.0.0.1"], ["status"], ["stop", "--force"],
+    ["serve", "--host", "127.0.0.1"], ["status", "extra"], ["stop", "--force"],
     ["drain", "--force"], ["resume", "now"], ["recover"], ["recover", "reason"], ["stop", "extra"],
     ["serve", "config", "a", "extra"],
     ["status", "config", "a", "output", "text"],
@@ -306,3 +306,20 @@ def test_where_delegates_and_prints_json(monkeypatch, capsys, tmp_path):
 def test_where_rejects_bad_grammar(tail, capsys):
     assert gateway.dispatch_keyword(["where", *tail]) == 2
     assert "gateway where syntax" in capsys.readouterr().err
+
+
+def test_status_without_a_file_reports_the_bound_connector(monkeypatch, capsys):
+    from audiagentic.components.agents.gateway import management_api
+    report = {"connector": "/c.yaml", "mode": "shared", "endpoint": "http://127.0.0.1:8765",
+              "server-id": "gw-1", "health": {"state": "running", "projects": ["alpha"]}}
+    monkeypatch.setattr(management_api, "gateway_connection_status", lambda root=None: report)
+    assert gateway.dispatch_keyword(["status"]) == 0
+    out = capsys.readouterr().out
+    assert "connector: /c.yaml" in out and "server-id: gw-1" in out and "projects: ['alpha']" in out
+    assert gateway.dispatch_keyword(["status", "output", "json"]) == 0
+    assert '"server-id": "gw-1"' in capsys.readouterr().out
+
+
+def test_status_without_a_binding_names_the_fix(capsys):
+    assert gateway.dispatch_keyword(["status"]) == 1
+    assert "CFG-AGSV-001" in capsys.readouterr().err

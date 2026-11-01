@@ -127,8 +127,8 @@ _KEYWORD_HELP = {
     "gateway": """Shared gateway commands (keyword syntax):
   audiagentic gateway help
   audiagentic gateway serve help
-  audiagentic gateway serve config FILE
-  audiagentic gateway status config FILE [output json]
+  audiagentic gateway serve [config FILE]
+  audiagentic gateway status [config FILE] [output json]
   audiagentic gateway init [dir PATH] [project PATH] [dry-run]
   audiagentic gateway validate server|node|connector config FILE [project PATH]
   audiagentic gateway where [project PATH] [output json]
@@ -250,7 +250,7 @@ configuration directory). Ids and the token are generated, the token is a privat
 is never printed, and nothing existing is overwritten or rotated. The project (the current
 checkout, or project PATH) gets a declared project.id in its tracked settings if it has none,
 and this machine is bound to the generated connector (gateway.connector) when none is set.
-Then run: audiagentic gateway serve config <dir>/server.yaml. dry-run writes nothing.""",
+Then run: audiagentic gateway serve. dry-run writes nothing.""",
     "where": """Usage: audiagentic gateway where [project PATH] [output json]
 
 Offline report of where the gateway's configuration lives: the default gateway directory and
@@ -267,16 +267,25 @@ current one or project PATH, to declare a project.id), then print
 "valid: ROLE". Nothing is started, no network is touched, token files are checked for
 mode and identity but never read, and no project is bound. Failures print the registered
 error code and message and exit 1.""",
-    "serve": """Usage: audiagentic gateway serve config FILE
+    "serve": """Usage: audiagentic gateway serve [config FILE]
+
+With no arguments, serve the setup created by gateway init (server.yaml in the gateway folder of
+the user configuration directory; the path is printed); it fails if there is none and never
+initializes one.
 
 Run the shared gateway in the foreground. FILE is the Agents server config:
 server-id, host, port, service-root, projects and principals are validated by
-the owning shared-config loader. Projects map IDs to server-local roots.
+the owning shared-config loader. projects is a list of server-local root paths; each
+root's id is its declared project.id.
 TLS and principal credentials are server-owned; never pass client roots.
 SIGINT/SIGTERM (and SIGBREAK on Windows) use the existing stop/close lifecycle.
 No application, harness, browser or provider starts when displaying help.""",
-    "status": """Usage: audiagentic gateway status config FILE [output json]
+    "status": """Usage: audiagentic gateway status [config FILE] [output json]
 
+With no config FILE, report on the connector this machine is bound to (gateway.connector): its
+path, mode, endpoint and pinned server-id, then the gateway's health and, for the current
+project, the projects the connection can use. A missing binding, an invalid connector and an
+unreachable gateway are reported as different errors.
 FILE is an Agents connector document (mode plain or shared). Tokens remain in their
 private files. A shared connection addresses the current project's declared project.id.
 Read-only: no lease acquisition, local service discovery, startup or control.
@@ -284,7 +293,7 @@ output json emits the health response as JSON; default is human-readable.""",
     "connect": """Usage: audiagentic gateway connect config FILE [dry-run|non-interactive]
 
 Validate the connector FILE and handshake with its gateway, then select it for every
-project on this machine: gateway.connector and gateway.implementation: standalone are
+project on this machine: gateway.connector (which implies a standalone connection) is
 written to the user settings. Run it from a project with a declared project.id when the
 connector is shared. Connector fields: mode plain (endpoint http://127.0.0.1:PORT,
 token-file) or shared (endpoint https or http://127.0.0.1:PORT, server-id, token-file,
@@ -378,6 +387,18 @@ def dispatch_keyword(tokens: list[str]) -> int:
     if command in _KEYWORD_HELP and tokens[1:] == ["help"]:
         print(_KEYWORD_HELP[command])
         return 0
+    if tokens in (["status"], ["status", "output", "json"]):
+        return _status_bound(as_json=len(tokens) == 3)
+    if tokens == ["serve"]:
+        from audiagentic.components.agents.gateway.service.init_setup import default_directory
+
+        default = default_directory() / "server.yaml"
+        if not default.is_file():
+            print_error(f"No gateway setup found at {default}. Run: audiagentic gateway init "
+                        "(or: audiagentic gateway serve config FILE)")
+            return 1
+        tokens = ["serve", "config", str(default)]
+        print(f"serving {default}")
     valid = command in {"serve", "status", "connect"}
     valid = valid and len(tokens) >= 3 and tokens[1] == "config"
     if valid:
@@ -423,7 +444,7 @@ def dispatch_keyword(tokens: list[str]) -> int:
 
     management_api.gateway_connect_config(config_path)
     reset_gateway_client()
-    print("Gateway connector selected for this machine (gateway.connector, gateway.implementation: standalone).")
+    print("Gateway connector selected for this machine (gateway.connector).")
     return 0
 
 
@@ -464,7 +485,33 @@ def _dispatch_init(tokens: list[str]) -> int:
              if dry_run else (" - project.id written" if result["project-id-written"] else "")))
     print(f"binding: {result['binding']} - {result['binding-note']}")
     if not dry_run:
-        print(f"next: audiagentic gateway serve config {Path(result['directory']) / 'server.yaml'}")
+        from audiagentic.components.agents.gateway.service.init_setup import default_directory
+
+        custom = Path(result["directory"]) != default_directory()
+        print("next: audiagentic gateway serve"
+              + (f" config {Path(result['directory']) / 'server.yaml'}" if custom else ""))
+    return 0
+
+
+def _status_bound(*, as_json: bool) -> int:
+    """``status`` with no FILE: the machine's bound connector, through the public API."""
+    from audiagentic.components.agents.gateway import management_api
+    from audiagentic.foundation.cli_io import print_error
+    from audiagentic.foundation.config.settings import discover_project_root
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+    try:
+        report = management_api.gateway_connection_status(discover_project_root(None, cwd=Path.cwd()))
+    except AudiaGenticError as error:
+        print_error(f"{error.code}: {error.message}")
+        return 1
+    if as_json:
+        _json_out(report)
+        return 0
+    for key in ("connector", "mode", "endpoint", "server-id"):
+        print(f"{key}: {report[key]}")
+    for key, value in report["health"].items():
+        print(f"{key}: {value}")
     return 0
 
 

@@ -25,7 +25,7 @@ For a shared gateway on the same machine as its client:
 
 ```text
 audiagentic gateway init
-audiagentic gateway serve config <printed directory>/server.yaml
+audiagentic gateway serve
 ```
 
 `init` creates, in the gateway folder of the user configuration directory (or
@@ -34,7 +34,7 @@ as the served root, one `operator` principal), `connector.yaml` (loopback, serve
 pinned) and `credentials/operator.token` (a private random file, never printed).
 It gives the current checkout (or `project PATH`) a declared `project.id` in its
 tracked settings when it has none, and binds this machine to the generated connector
-(`gateway.connector`) when none is set. It never overwrites or rotates anything:
+(`gateway.connector`, which by itself selects a standalone connection) when none is set. It never overwrites or rotates anything:
 repeating it reports the existing setup, a partial or inconsistent set is refused,
 and `dry-run` shows what would happen without writing or generating a credential.
 `audiagentic gateway where` (offline, never a token) shows where everything is: the
@@ -45,10 +45,33 @@ declared `project.id`. `audiagentic gateway validate server|node|connector confi
 roots, declared ids and grants, and a shared connector needs the project to declare an
 id. Neither contacts a server, so reachability, TLS and proxies are checked by
 `gateway status` or `connect dry-run`.
+`gateway serve` with no arguments serves that setup (and prints the path); use
+`gateway serve config FILE` for any other server document. `gateway status` with no
+arguments reports the connector this machine is bound to, its endpoint and pinned
+server id, the gateway's health and the projects the connection can use.
 Edit the generated files by hand only to change the port (keep the connector
 endpoint in step), add projects (one root path per line) or narrow a principal's
 `projects`/`actions`. The sections below describe the files and the manual,
 multi-machine setup.
+
+### Everyday maintenance
+
+- **Change the port:** edit `listen.port` in `server.yaml` and the port in the
+  connector's `endpoint`, then `gateway validate connector config FILE` (it reports a
+  mismatch between a generated pair) and restart `gateway serve`.
+- **Add a project:** give it a `project.id` (`audiagentic config set --scope project
+  project.id=NAME` in that project), add its root path to `projects`, run
+  `gateway validate server config FILE`, restart. A principal with no `projects` list
+  gets it automatically.
+- **Remove a project:** delete its root line and restart. Its own `.audiagentic` state
+  is not touched.
+- **Add a principal:** create a private token file (mode 0600, random, never typed on a
+  command line), add a `principals` entry with its `token-file`, validate, restart.
+- **Rotate a token:** create the replacement file, point the principal's `token-file`
+  and the client connector's `token-file` at it, restart the server and reconnect
+  clients, then delete the old file. There is a brief interruption.
+- **Look around:** `gateway where` (files, binding, project id), `gateway status`
+  (connection and health), `gateway validate` (a document, before serving).
 
 ## First-time setup checklist
 
