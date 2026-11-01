@@ -35,9 +35,10 @@ _TURN_TIMEOUT = 30.0
 class HumanTui:
     """One Codex TUI process on a pty, stopped by its exact pid."""
 
-    def __init__(self, executable: Path, socket_path: Path, env: dict[str, str], cwd: Path) -> None:
-        self._argv = [str(executable), "--remote", f"unix://{socket_path}"]
-        self._env, self._cwd = env, cwd
+    def __init__(self, executable: Path, socket_path: Path, env: dict[str, str], cwd: Path, *,
+                 argv: list[str] | None = None, enter: bytes = _KITTY_ENTER) -> None:
+        self._argv = argv or [str(executable), "--remote", f"unix://{socket_path}"]
+        self._env, self._cwd, self._enter = env, cwd, enter
         self.pid: int | None = None
         self._fd: int | None = None
 
@@ -45,7 +46,7 @@ class HumanTui:
         pid, fd = pty.fork()
         if pid == 0:  # child: become the TUI
             os.chdir(self._cwd)
-            os.execve(self._argv[0], self._argv, {**self._env, "TERM": "xterm-256color", "LANG": "C.UTF-8"})
+            os.execvpe(self._argv[0], self._argv, {**self._env, "TERM": "xterm-256color", "LANG": "C.UTF-8"})
         self.pid, self._fd = pid, fd
         fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", 40, 120, 0, 0))
         self.drain(settle)
@@ -66,7 +67,7 @@ class HumanTui:
         assert self._fd is not None
         os.write(self._fd, text.encode())
         self.drain(0.7)
-        os.write(self._fd, _KITTY_ENTER)
+        os.write(self._fd, self._enter)
 
     @property
     def alive(self) -> bool:
