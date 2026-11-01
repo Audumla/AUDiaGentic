@@ -7,7 +7,11 @@ from typing import Any
 
 
 class UnsupportedAcpOperation(RuntimeError):
-    """The canonical Agents API does not support an ACP operation."""
+    """The canonical Agents API does not support an ACP operation (a whole method)."""
+
+
+class UnsupportedAcpArgument(ValueError):
+    """The method exists but the client asked for something the canonical Agents API cannot honour."""
 
 
 def validate_cwd(project_root: Path, cwd: str) -> None:
@@ -22,9 +26,9 @@ def reject_client_extensions(
     additional_directories: Iterable[str] | None,
 ) -> None:
     if mcp_servers:
-        raise UnsupportedAcpOperation("client MCP server injection is not supported")
+        raise UnsupportedAcpArgument("client MCP server injection is not supported")
     if additional_directories:
-        raise UnsupportedAcpOperation("additional_directories is not supported")
+        raise UnsupportedAcpArgument("additional_directories is not supported")
 
 
 def text_from_prompt(prompt: Iterable[Any]) -> str:

@@ -2,10 +2,13 @@
 from __future__ import annotations
 
 import asyncio
+import functools
+import logging
 import uuid
 from pathlib import Path
 from typing import Any, Protocol
 
+from acp.exceptions import RequestError
 from acp.schema import (
     AgentCapabilities,
     CloseSessionResponse,
@@ -52,6 +55,56 @@ _MAX_OUTPUT_CHARS = 64_000
 _error = make_error_factory("CON", "ACP", "acp")
 
 
+logger = logging.getLogger(__name__)
+
+#: Registered error details a client may see; everything else stays in the gateway's own diagnostics.
+_PUBLIC_DETAILS = ("session", "work_id", "state", "context_id")
+_MAX_DETAIL_CHARS = 200
+
+
+def _request_error(error: AudiaGenticError) -> RequestError:
+    """The JSON-RPC error for a registered failure, with its stable code in ``data``.
+
+    The ACP SDK turns any non-``RequestError`` into -32603 with ``str(exc)`` as the only data, which loses the
+    registered code and misreports a client mistake as an internal error. Mapping (our choice, ACP defines none):
+    validation -> invalid params; a precondition not met (outstanding prompt, exclusive admission, terminal Work,
+    closed Context) -> invalid request; a failed prompt Work and anything else -> internal error, code only.
+    """
+    data: dict[str, Any] = {"code": error.code, "message": error.message[:_MAX_DETAIL_CHARS]}
+    details = error.details if isinstance(error.details, dict) else {}
+    data.update({key: str(details[key])[:_MAX_DETAIL_CHARS] for key in _PUBLIC_DETAILS if key in details})
+    if error.code.startswith("VAL-"):
+        return RequestError.invalid_params(data)
+    if error.code in {"CON-ACP-002"}:
+        return RequestError.internal_error(data)
+    if error.code.startswith("CON-"):
+        return RequestError.invalid_request(data)
+    return RequestError.internal_error({"code": error.code})
+
+
+def _rpc(method):
+    """Translate every failure of a protocol method into the JSON-RPC error a client can act on."""
+    @functools.wraps(method)
+    async def wrapper(self, *args: Any, **kwargs: Any):
+        try:
+            return await method(self, *args, **kwargs)
+        except RequestError:
+            raise
+        except asyncio.CancelledError:
+            raise
+        except AudiaGenticError as error:
+            raise _request_error(error) from error
+        except UnsupportedAcpOperation as error:
+            raise RequestError.method_not_found(method.__name__) from error
+        except ValueError as error:  # our own validation messages (cwd outside the project, empty prompt, closed context)
+            raise RequestError.invalid_params({"message": str(error)[:_MAX_DETAIL_CHARS]}) from error
+        except Exception as error:  # noqa: BLE001 - never put an unexpected exception's text on the wire
+            logger.exception("acp %s failed", method.__name__)
+            raise RequestError.internal_error({"code": "INT-ACP-000"}) from error
+
+    return wrapper
+
+
 class AcpAgent:
     """ACP implementation bound to one project and one configured Agent (SH62a).
 
@@ -74,12 +127,14 @@ class AcpAgent:
             agentInfo=Implementation(name="audiagentic", version="0.1.0"),
         )
 
+    @_rpc
     async def new_session(self, cwd: str, additional_directories=None, mcp_servers=None, **_: Any) -> NewSessionResponse:
         validate_cwd(self.project_root, cwd)
         reject_client_extensions(mcp_servers, additional_directories)
         context = self.ports.open_agent_context(self.project_root, self.agent_id)
         return NewSessionResponse(sessionId=str(context["context_id"]))
 
+    @_rpc
     async def load_session(self, cwd: str, session_id: str, mcp_servers=None, additional_directories=None, **_: Any) -> LoadSessionResponse:
         validate_cwd(self.project_root, cwd)
         reject_client_extensions(mcp_servers, additional_directories)
@@ -88,6 +143,7 @@ class AcpAgent:
             raise ValueError("ACP can only load an OPEN Agent Context")
         return LoadSessionResponse()
 
+    @_rpc
     async def list_sessions(self, cwd: str | None = None, cursor: str | None = None, **_: Any) -> ListSessionsResponse:
         if cwd is not None:
             validate_cwd(self.project_root, cwd)
@@ -100,6 +156,7 @@ class AcpAgent:
         return [work for work in self.ports.list_agent_work(self.project_root)
                 if work.get("context_id") == session_id and work.get("state") not in _TERMINAL]
 
+    @_rpc
     async def prompt(self, session_id: str, prompt: list[Any], **_: Any) -> PromptResponse:
         try:
             text = text_from_prompt(prompt)
@@ -136,27 +193,33 @@ class AcpAgent:
         for work in await asyncio.to_thread(self._outstanding, session_id):
             await asyncio.to_thread(self.ports.cancel_agent_work, self.project_root, str(work["work_id"]))
 
+    @_rpc
     async def close_session(self, session_id: str, **_: Any) -> CloseSessionResponse:
         for work in self._outstanding(session_id):
             self.ports.cancel_agent_work(self.project_root, str(work["work_id"]))
         self.ports.close_agent_context(self.project_root, session_id)
         return CloseSessionResponse()
 
+    @_rpc
     async def resume_session(self, session_id: str, cwd: str, additional_directories=None, mcp_servers=None, **_: Any) -> ResumeSessionResponse:
         validate_cwd(self.project_root, cwd)
         reject_client_extensions(mcp_servers, additional_directories)
         await self.load_session(cwd, session_id)
         return ResumeSessionResponse()
 
+    @_rpc
     async def set_session_mode(self, *_: Any, **__: Any):
         raise UnsupportedAcpOperation("session modes are not backed by canonical Agents APIs")
 
+    @_rpc
     async def set_config_option(self, *_: Any, **__: Any):
         raise UnsupportedAcpOperation("session config options are not backed by canonical Agents APIs")
 
+    @_rpc
     async def authenticate(self, *_: Any, **__: Any):
         raise UnsupportedAcpOperation("ACP authentication is not owned by Agents")
 
+    @_rpc
     async def fork_session(self, *_: Any, **__: Any):
         raise UnsupportedAcpOperation("fork is not backed by canonical Context/Work")
 
