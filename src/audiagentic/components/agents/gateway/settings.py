@@ -17,6 +17,7 @@ once, and carry on. Destructive policies (``gateway_policy``) fail closed instea
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -81,4 +82,18 @@ def _gateway_section_or_last_valid() -> dict[str, Any]:
         return _last_valid
 
 
-__all__ = ["gateway_policy", "gateway_setting"]
+def declared_project_id(project_root: Path | None) -> str | None:
+    """The project's declared ``project.id`` from the settings resolver (any layer), or None.
+
+    The gateway authorizes and routes by this id only; the derived fallbacks used for display
+    (origin repository name, directory name) are never an authorization identity.
+    """
+    if project_root is None:
+        return None
+    from audiagentic.foundation.config.settings import resolve_settings_cached
+
+    value = resolve_settings_cached(project_root).get("project.id")
+    return value if isinstance(value, str) and value else None
+
+
+__all__ = ["declared_project_id", "gateway_policy", "gateway_setting"]

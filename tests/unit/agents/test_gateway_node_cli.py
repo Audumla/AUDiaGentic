@@ -24,14 +24,14 @@ from audiagentic.components.agents.gateway.service.host import (
 )
 from audiagentic.foundation.system.managed_service import ManagedServiceStore
 from audiagentic.launcher import main
+from tests.helpers.shared_gateway import declare_project
 
 
 @pytest.fixture
 def configured(tmp_path, monkeypatch):
     base = tmp_path / "service-base"
     base.mkdir()
-    project = tmp_path / "project"
-    project.mkdir()
+    project = declare_project(tmp_path / "project", "project")
     token = tmp_path / "principal.token"
     token.write_text("private-principal-token")
     token.chmod(0o600)
@@ -43,7 +43,7 @@ listen:
   port: 9011
 service-root: service-base
 projects:
-  project: project
+  - project
 principals:
   operator:
     token-file: principal.token

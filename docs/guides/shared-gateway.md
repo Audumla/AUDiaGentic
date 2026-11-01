@@ -49,7 +49,7 @@ listen:
   port: 8765
 service-root: ./state
 projects:
-  sample: ./projects/sample
+  - ./projects/sample
 principals:
   developer-a:
     token-file: ./secrets/developer-a.token
@@ -70,14 +70,14 @@ The mapping keys and fields above are the actual server parser contract:
 | `listen` | Required mapping; `port` is required, `host` defaults to and must equal `127.0.0.1`. Public bind addresses are rejected. |
 | `listen.port` | Integer 0–65535, excluding booleans; use a fixed nonzero port behind a proxy. Port 0 requests an ephemeral port. |
 | `service-root` | Optional existing directory; omission returns `None` to use the existing owning service default. |
-| `projects` | Nonempty map from public project IDs to existing server-local directories; resolved roots must be distinct. |
-| `principals` | Nonempty map from principal IDs to token-file, project grants and action grants. |
+| `projects` | Optional nonempty list of existing server-local project root paths; resolved roots must be distinct. Each root's public project ID is its declared `project.id` (`audiagentic config set --scope project project.id=NAME` in that project); IDs are never typed here, two roots with the same ID are refused, and the old `{id: path}` map is refused with this message. When omitted, the server serves the project containing its working directory, resolved once at start (supervised services should list their roots explicitly). `projects: []` is invalid. |
+| `principals` | Nonempty map from principal IDs to a required `token-file` and optional `projects` and `actions` grants. Omitted `projects` means every served project, `[]` none; omitted `actions` means all four actions, `[]` none. |
 
 IDs contain 1–64 lowercase ASCII letters, digits, underscores or hyphens, start
 with a letter or digit, and contain no slash. Unknown fields, duplicate YAML
 keys, unsafe YAML tags, missing required fields and wrong scalar types fail
-closed. Project and action lists must be nonempty and contain no duplicates;
-project grants must name configured projects. The action vocabulary is exactly
+closed. Grant lists contain no duplicates; project grants must name served
+projects. The action vocabulary is exactly
 `read`, `submit`, `cancel`, `session`. Grants authorize operations on those
 server project IDs; a client filesystem path cannot select a server root.
 

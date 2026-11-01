@@ -234,13 +234,14 @@ def gateway_connector_health(config_path: Path, project_root: Path | None) -> di
     A shared connection addresses the project's declared ``project.id``; a plain one needs no
     project. The client is closed before returning; nothing is bound.
     """
-    from .client import _declared_project_id, connector_client
+    from .client import connector_client
+    from .settings import declared_project_id
     from .service.shared_config import load_shared_connector_config
 
     connector = load_shared_connector_config(Path(config_path).resolve())
     project_id = None
     if connector.mode == "shared":
-        project_id = _declared_project_id(project_root)
+        project_id = declared_project_id(project_root)
         if project_id is None:
             from audiagentic.foundation.contracts.errors import make_error_factory
 

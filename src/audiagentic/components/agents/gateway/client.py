@@ -436,16 +436,6 @@ def connector_client(connector: Any, project_root: Path | None, project_id: str 
     )
 
 
-def _declared_project_id(project_root: Path | None) -> str | None:
-    """The project's declared ``project.id`` (any settings layer), or None; never a derived value."""
-    if project_root is None:
-        return None
-    from audiagentic.foundation.config.settings import resolve_settings_cached
-
-    value = resolve_settings_cached(project_root).get("project.id")
-    return value if isinstance(value, str) and value else None
-
-
 def _connector_path() -> Path | None:
     """The machine's connector document: the ``gateway.connector`` setting, or None."""
     from audiagentic.components.agents.gateway.settings import gateway_setting
@@ -512,7 +502,9 @@ def get_gateway_client(project_root: Path | None = None) -> GatewayClient:
 
         connector = load_shared_connector_config(connector_path)
         if connector.mode == "shared":
-            project_id = _declared_project_id(project_root)
+            from .settings import declared_project_id
+
+            project_id = declared_project_id(project_root)
             if project_id is None:
                 raise config_error(3, "a shared gateway connection needs a declared project.id in the project's settings")
     config = (
