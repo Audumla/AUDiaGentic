@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.59.1](https://github.com/Audumla/AUDiaGentic/compare/v0.59.0...v0.59.1) (2026-11-01)
+
+
+### Documentation
+
+* **planning:** triage 42 active items with GPT; complete 6, retire 3, add acceptance and standards ([#335](https://github.com/Audumla/AUDiaGentic/issues/335)) ([cc778b6](https://github.com/Audumla/AUDiaGentic/commit/cc778b66684541a1515671f2ced3548a851baf01))
+
 ## [0.59.0](https://github.com/Audumla/AUDiaGentic/compare/v0.58.2...v0.59.0) (2026-11-01)
 
 
