@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.72.2](https://github.com/Audumla/AUDiaGentic/compare/v0.72.1...v0.72.2) (2026-11-01)
+
+
+### Documentation
+
+* **planning:** SH16 status - stale description, one unmet smoke criterion and its start trigger ([#381](https://github.com/Audumla/AUDiaGentic/issues/381)) ([81dbc10](https://github.com/Audumla/AUDiaGentic/commit/81dbc10df8693a46bcb10c11d4914f005b159944))
+
 ## [0.72.1](https://github.com/Audumla/AUDiaGentic/compare/v0.72.0...v0.72.1) (2026-11-01)
 
 
