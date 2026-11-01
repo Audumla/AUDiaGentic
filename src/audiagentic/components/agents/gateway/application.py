@@ -68,6 +68,8 @@ class GatewayApplication(Protocol):
     def list_agent_contexts(self, project_root: Path) -> list[dict[str, Any]]: ...
     def close_agent_context(self, project_root: Path, context_id: str) -> dict[str, Any]: ...
     def submit_agent_work(self, project_root: Path, context_id: str, message: dict[str, Any], **kwargs: Any) -> dict[str, Any]: ...
+    def accept_agent_work_message(self, project_root: Path, context_id: str, message: dict[str, Any], *, delivery_identity: dict[str, Any], work_id: str | None = None, intent: dict[str, Any] | None = None) -> dict[str, Any]: ...
+    def dispatch_agent_work_commands(self, project_root: Path, work_id: str) -> dict[str, Any]: ...
     def get_agent_work(self, project_root: Path, work_id: str) -> dict[str, Any]: ...
     def list_agent_work(self, project_root: Path) -> list[dict[str, Any]]: ...
     def add_agent_work_message(self, project_root: Path, work_id: str, message: dict[str, Any]) -> dict[str, Any]: ...
@@ -264,6 +266,68 @@ class InProcessGatewayApplication:
             expected_revision=linked.revision,
         ).to_mapping()
 
+    def accept_agent_work_message(
+        self, project_root: Path, context_id: str, message: dict[str, Any], *, delivery_identity: dict[str, Any],
+        work_id: str | None = None, intent: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Accept one caller command (create or continue Work) atomically, then dispatch it idempotently.
+
+        ``delivery_identity`` is assembled by trusted ingress (principal, protocol, project id, ...); the
+        message is ``{message_id, text, inputs?}``. A replay returns the original acceptance and never
+        admits a second execution.
+        """
+        from audiagentic.components.agents.work.contracts import WorkInputMessage
+        from audiagentic.components.agents.work.service import (
+            accept_work_command,
+            work_delivery_key,
+        )
+
+        key = work_delivery_key(context_id=context_id, message_id=str(message.get("message_id") or ""),
+                                **{k: delivery_identity.get(k) for k in
+                                   ("principal", "subject", "protocol", "project_id", "target_generation")})
+        stamped = WorkInputMessage(str(message["message_id"]), str(message["text"]), dict(message.get("inputs") or {}),
+                                   message.get("created_at") or _now_iso())
+        receipt = accept_work_command(project_root, context_id, delivery_key=key, message=stamped, intent=intent,
+                                      work_id=work_id)
+        work = self.dispatch_agent_work_commands(project_root, receipt.work.work_id)
+        return {**work, "delivery_key": key, "replayed": receipt.replayed}
+
+    def dispatch_agent_work_commands(self, project_root: Path, work_id: str) -> dict[str, Any]:
+        """Admit every accepted command that has no gateway request yet, oldest first (crash repair).
+
+        Each command admits under its own stable idempotency key, so a crash between admission and the link
+        re-admits to the same request. Nothing is rebuilt from ``latest_work_input``.
+        """
+        from audiagentic.components.agents.context.service import get_context
+        from audiagentic.components.agents.work.contracts import AgentWorkState
+        from audiagentic.components.agents.work.service import get_work
+        from audiagentic.components.agents.work.store import AgentWorkStore
+
+        store = AgentWorkStore()
+        work = get_work(project_root, work_id)
+        context = get_context(project_root, work.context_id)
+        for command in work.commands:
+            if command.get("execution_id"):
+                continue
+            message = command["message"]
+            execution = self.submit_execution_request(
+                project_root,
+                execution_profile_id=context.composition.execution_profile_id,
+                prompt_body=message["text"],
+                metadata={
+                    "context-id": work.context_id,
+                    "work-id": work.work_id,
+                    "message-id": message["message_id"],
+                    "idempotency_key": f"agent-work:{work.work_id}:command:{command['delivery_key']}",
+                    "agent-config-fingerprint": context.composition.fingerprint,
+                },
+            )
+            work = store.link_command_execution(project_root, work.work_id, command["delivery_key"],
+                                                execution["request-id"])
+        if work.state is AgentWorkState.SUBMITTED and work.active_execution_id:
+            work = store.transition(project_root, work.work_id, AgentWorkState.ACTIVE, expected_revision=work.revision)
+        return work.to_mapping()
+
     def submit_agent_work_child(self, project_root: Path, parent_work_id: str, message: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
         from audiagentic.components.agents.work.service import get_work
         parent = get_work(project_root, parent_work_id)
@@ -312,3 +376,9 @@ _APPLICATION: GatewayApplication = InProcessGatewayApplication()
 def get_gateway_application() -> GatewayApplication:
     """Return this process's sole gateway control-plane application."""
     return _APPLICATION
+
+
+def _now_iso() -> str:
+    from datetime import datetime, timezone
+
+    return datetime.now(timezone.utc).isoformat()

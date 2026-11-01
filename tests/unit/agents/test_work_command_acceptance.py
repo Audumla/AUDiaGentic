@@ -152,3 +152,112 @@ def test_concurrent_acceptance_of_one_delivery_commits_once(tmp_path: Path, cont
     assert sum(1 for r in receipts if not r.replayed) == 1
     assert len({r.work.work_id for r in receipts}) == 1
     assert len(get_work(tmp_path, receipts[0].work.work_id).commands) == 1
+
+
+# --- SH60b: dispatch and continuation through the gateway application ---------------------------------
+
+
+def _app(monkeypatch=None):
+    from audiagentic.components.agents.gateway.application import InProcessGatewayApplication
+
+    app = InProcessGatewayApplication()
+    admitted: list[dict] = []
+
+    def admit(_root, **kwargs):
+        key = kwargs["metadata"]["idempotency_key"]
+        existing = next((a for a in admitted if a["key"] == key), None)
+        if existing is None:
+            existing = {"key": key, "request-id": f"req_{len(admitted) + 1}", "prompt": kwargs["prompt_body"]}
+            admitted.append(existing)
+        return {"request-id": existing["request-id"], "state": "queued"}
+
+    app.submit_execution_request = admit  # type: ignore[method-assign]
+    return app, admitted
+
+
+_IDENTITY = {"principal": "alice", "subject": None, "protocol": "a2a", "project_id": "proj", "target_generation": None}
+
+
+def test_accepting_a_message_admits_exactly_one_request_and_replays_it(tmp_path: Path, context) -> None:
+    app, admitted = _app()
+    message = {"message_id": "m1", "text": "hello", "inputs": {}}
+    first = app.accept_agent_work_message(tmp_path, context.context_id, message, delivery_identity=_IDENTITY)
+    again = app.accept_agent_work_message(tmp_path, context.context_id, message, delivery_identity=_IDENTITY)
+    assert len(admitted) == 1 and first["active_execution_id"] == "req_1" == again["active_execution_id"]
+    assert first["state"] == "active" and not first["replayed"] and again["replayed"]
+
+
+def test_identical_text_with_a_new_message_id_is_a_second_admission(tmp_path: Path, context) -> None:
+    app, admitted = _app()
+    one = app.accept_agent_work_message(tmp_path, context.context_id, {"message_id": "m1", "text": "same"},
+                                        delivery_identity=_IDENTITY)
+    two = app.accept_agent_work_message(tmp_path, context.context_id, {"message_id": "m2", "text": "same"},
+                                        delivery_identity=_IDENTITY)
+    assert len(admitted) == 2 and one["work_id"] != two["work_id"]
+
+
+def test_continuation_of_existing_work_admits_a_new_request_and_keeps_the_history(tmp_path: Path, context) -> None:
+    app, admitted = _app()
+    first = app.accept_agent_work_message(tmp_path, context.context_id, {"message_id": "m1", "text": "start"},
+                                          delivery_identity=_IDENTITY, work_id="work_c")
+    second = app.accept_agent_work_message(tmp_path, context.context_id, {"message_id": "m2", "text": "more"},
+                                           delivery_identity=_IDENTITY, work_id="work_c")
+    assert (first["work_id"], second["work_id"]) == ("work_c", "work_c")
+    assert second["active_execution_id"] == "req_2"
+    assert [c["execution_id"] for c in get_work(tmp_path, "work_c").commands] == ["req_1", "req_2"]
+    assert [a["prompt"] for a in admitted] == ["start", "more"]
+
+
+def test_a_crash_between_acceptance_and_admission_is_repaired_without_a_second_request(tmp_path: Path, context) -> None:
+    app, admitted = _app()
+    real_submit = app.submit_execution_request
+    crashed = {"done": False}
+
+    def crash_after_admit(root, **kwargs):
+        result = real_submit(root, **kwargs)
+        if not crashed["done"]:
+            crashed["done"] = True
+            raise RuntimeError("crash after admission, before the link")
+        return result
+
+    app.submit_execution_request = crash_after_admit  # type: ignore[method-assign]
+    message = {"message_id": "m1", "text": "hello"}
+    with pytest.raises(RuntimeError, match="crash after admission"):
+        app.accept_agent_work_message(tmp_path, context.context_id, message, delivery_identity=_IDENTITY)
+    work = next(w for w in __import__("audiagentic.components.agents.work.service", fromlist=["list_work"]).list_work(tmp_path))
+    assert work.commands and not work.commands[0].get("execution_id")  # accepted, not yet linked
+    repaired = app.dispatch_agent_work_commands(tmp_path, work.work_id)
+    assert repaired["active_execution_id"] == "req_1" and len(admitted) == 1
+
+
+def test_reconcile_admits_commands_that_never_reached_the_gateway(tmp_path: Path, context, monkeypatch) -> None:
+    from audiagentic.components.agents.work.reconcile import reconcile_linked_execution
+
+    app, admitted = _app()
+    receipt = accept_work_command(tmp_path, context.context_id, delivery_key=_key(context.context_id, "m1"),
+                                  message=new_work_input("m1", "lost admission"))
+
+    class _Client:
+        def dispatch_agent_work_commands(self, root, work_id):
+            return app.dispatch_agent_work_commands(root, work_id)
+
+        def get_execution_request(self, root, request_id):
+            return {"state": "running"}
+
+    monkeypatch.setattr("audiagentic.components.agents.gateway.client.get_gateway_client", lambda _root: _Client())
+    result = reconcile_linked_execution(tmp_path, receipt.work)
+    assert result.active_execution_id == "req_1" and [a["prompt"] for a in admitted] == ["lost admission"]
+
+
+def test_a_command_keeps_its_first_execution(tmp_path: Path, context) -> None:
+    from audiagentic.components.agents.work.store import AgentWorkStore
+
+    receipt = accept_work_command(tmp_path, context.context_id, delivery_key=_key(context.context_id, "m1"),
+                                  message=new_work_input("m1", "x"))
+    key = receipt.command["delivery_key"]
+    store = AgentWorkStore()
+    store.link_command_execution(tmp_path, receipt.work.work_id, key, "req_a")
+    store.link_command_execution(tmp_path, receipt.work.work_id, key, "req_a")  # idempotent
+    with pytest.raises(AudiaGenticError) as raised:
+        store.link_command_execution(tmp_path, receipt.work.work_id, key, "req_b")
+    assert raised.value.code == "CON-AGW-166"
