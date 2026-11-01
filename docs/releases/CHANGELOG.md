@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.69.1](https://github.com/Audumla/AUDiaGentic/compare/v0.69.0...v0.69.1) (2026-11-01)
+
+
+### Documentation
+
+* **planning:** SH58 audit - hermetic node fault coverage already exists; close with honest acceptance ([#366](https://github.com/Audumla/AUDiaGentic/issues/366)) ([0f0432c](https://github.com/Audumla/AUDiaGentic/commit/0f0432cbc07cbe0aedf460f5a6792f64b2250575))
+
 ## [0.69.0](https://github.com/Audumla/AUDiaGentic/compare/v0.68.1...v0.69.0) (2026-11-01)
 
 
