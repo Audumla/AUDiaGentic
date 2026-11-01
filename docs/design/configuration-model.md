@@ -323,12 +323,19 @@ Decisions:
   connector stays a five-field file checked by `gateway validate connector`;
   a `gateway connector create` command is deferred until a measured walkthrough
   needs it.
-- **One explicit connection authority: the connector document** (CFG14). The
-  settings pair `gateway.endpoint`/`gateway.token.file` and the plain
-  component-state `endpoint`/`token-file` options are deleted with a migration
-  and no compatibility reader. Automatic embedded operation needs no connector.
-  The connector also accepts `http://127.0.0.1:PORT` and `http://[::1]:PORT`
-  (the server's native loopback origin); redirects stay rejected.
+- **One explicit connection authority: the connector document** (CFG14, done).
+  The connector has `mode: plain` (local standalone: `http://127.0.0.1:PORT` and
+  a token file) or `mode: shared` (adds the pinned `server-id`; HTTPS, or the
+  literal loopback origin the shared server listens on). It carries no project
+  id: a shared connection addresses the local project's declared `project.id`,
+  so one connector serves every project on the machine. The only binding is the
+  user setting `gateway.connector` (a path), written with
+  `gateway.implementation: standalone` by `gateway connect config FILE`. The
+  settings pair `gateway.endpoint`/`gateway.token.file` and the per-project
+  `endpoint`/`token-file`/`connector-config` options are deleted, with no
+  compatibility reader and no automatic migration (the pair was hours old; an
+  existing setup writes the document once and runs `connect`). Automatic
+  embedded operation needs no connector; redirects stay rejected.
 - **Project identity is declared once.** A served project needs `project.id`
   declared in settings (read with the foundation settings resolver; no new
   reader). `gateway init` writes it into the tracked project scope when absent,
@@ -397,9 +404,9 @@ exception; `AUDIAGENTIC_GITHUB_TOKEN` and `AUDIAGENTIC_LOCAL_PROVIDER_API_KEY` a
 roots are `gateway.workspace_roots` and the GitHub OAuth client is `release.github_client_id`. No decision is pending.
 `AUDIAGENTIC_HOME` is gone as a public variable: the `home` setting (machine scope) is the home, and a service
 hands it to its children through the internal `_AUDIAGENTIC_HOME`. `AUDIAGENTIC_GATEWAY_ENDPOINT` and
-`AUDIAGENTIC_GATEWAY_TOKEN_FILE` are the `gateway.endpoint` and `gateway.token.file` settings (user or explicit
-scope; the token is a file reference, never a literal). Environment variables are not migrated by
-`config migrate`; set the new keys instead.
+`AUDIAGENTIC_GATEWAY_TOKEN_FILE` became the `gateway.endpoint` and `gateway.token.file` settings in CFG10; CFG14
+replaced those with one connector document named by `gateway.connector` (see Shared gateway setup). Environment
+variables are not migrated by `config migrate`; write the connector and run `gateway connect` instead.
 
 ## CLI
 

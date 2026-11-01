@@ -23,8 +23,8 @@ def files(tmp_path):
         "principals": {"alice": {"token-file": "token", "projects": ["project_1"],
                                   "actions": ["read", "submit", "cancel", "session"]}},
     }
-    connector = {"schema-version": 1, "endpoint": "https://gateway.example:8443",
-                 "server-id": "server-1", "project-id": "project_1", "token-file": "token"}
+    connector = {"schema-version": 1, "mode": "shared", "endpoint": "https://gateway.example:8443",
+                 "server-id": "server-1", "token-file": "token"}
     return tmp_path, server, connector
 
 
@@ -66,8 +66,8 @@ def test_connector_contract_never_reads_token(files, monkeypatch):
     monkeypatch.setattr(Path, "read_text", guarded)
     result = config.load_shared_connector_config(path)
     assert result == config.SharedGatewayConnectorConfig(
-        connector["endpoint"], "server-1", "project_1", (base / "token").resolve(),
-        (base / "ca.pem").resolve())
+        mode="shared", endpoint=connector["endpoint"], token_file=(base / "token").resolve(),
+        server_id="server-1", ca_file=(base / "ca.pem").resolve())
 
 
 @pytest.mark.parametrize("field,value", [
@@ -194,16 +194,17 @@ def test_deployment_guide_yaml_examples_match_parser(tmp_path):
     guide = Path(__file__).resolve().parents[3] / "docs/guides/shared-gateway.md"
     examples = [section.split("```", 1)[0] for section in guide.read_text(
         encoding="utf-8").split("```yaml\n")[1:]]
-    assert len(examples) == 3
+    assert len(examples) == 4
     for directory in ("state", "projects/sample", "secrets", "trust"):
         (tmp_path / directory).mkdir(parents=True, exist_ok=True)
-    for name in ("developer-a", "observer", "build-node"):
+    for name in ("developer-a", "observer", "build-node", "local"):
         token = tmp_path / f"secrets/{name}.token"
         token.write_text(f"test-{name}", encoding="utf-8")
         token.chmod(0o600)
     (tmp_path / "trust/team-ca.pem").write_text("test fixture", encoding="utf-8")
     server = yaml.safe_load(examples[0])
     server.update(yaml.safe_load(examples[1]))
+    plain = examples[3]
     examples = [examples[0], yaml.safe_dump(server), examples[2]]
     for raw, loader in zip(examples, [config.load_shared_server_config,
                                       config.load_shared_server_config,
@@ -211,11 +212,14 @@ def test_deployment_guide_yaml_examples_match_parser(tmp_path):
         path = tmp_path / "config.yaml"
         path.write_text(raw, encoding="utf-8")
         assert loader(path).server_id == "team-gateway"
+    path = tmp_path / "plain.yaml"
+    path.write_text(plain, encoding="utf-8")
+    assert config.load_shared_connector_config(path).mode == "plain"
 
 
 @pytest.mark.parametrize("field,value", [
     ("ca-file", "missing"), ("ca-file", "project"), ("token-file", "missing"),
-    ("project-id", "../project"), ("server-id", True), ("extra", "SECRET"),
+    ("project-id", "project"), ("server-id", True), ("extra", "SECRET"), ("mode", "other"), ("mode", None),
 ])
 def test_connector_fields(files, field, value):
     base, _, connector = files
@@ -261,3 +265,36 @@ def test_insecure_posix_tokens(files, mode):
         with pytest.raises(AudiaGenticError) as caught:
             loader(write(base, payload))
         assert caught.value.code == "VAL-AGSV-011"
+
+
+def test_plain_connector_is_local_loopback_http_with_a_token_only(files):
+    base, _, _ = files
+    plain = {"schema-version": 1, "mode": "plain", "endpoint": "http://127.0.0.1:9000", "token-file": "token"}
+    result = config.load_shared_connector_config(write(base, plain))
+    assert result == config.SharedGatewayConnectorConfig(
+        mode="plain", endpoint="http://127.0.0.1:9000", token_file=(base / "token").resolve())
+
+
+@pytest.mark.parametrize("extra", [{"server-id": "server-1"}, {"ca-file": "token"}, {"project-id": "p"}])
+def test_plain_connector_rejects_shared_fields(files, extra):
+    base, _, _ = files
+    plain = {"schema-version": 1, "mode": "plain", "endpoint": "http://127.0.0.1:9000", "token-file": "token", **extra}
+    with pytest.raises(AudiaGenticError):
+        config.load_shared_connector_config(write(base, plain))
+
+
+@pytest.mark.parametrize("endpoint", [
+    "https://gateway.example", "http://localhost:9000", "http://127.0.0.2:9000", "http://127.0.0.1",
+    "http://127.0.0.1:0", "http://127.0.0.1:70000", "http://[::1]:9000", "http://127.0.0.1:9000/",
+])
+def test_plain_connector_rejects_other_origins(files, endpoint):
+    base, _, _ = files
+    plain = {"schema-version": 1, "mode": "plain", "endpoint": endpoint, "token-file": "token"}
+    with pytest.raises(AudiaGenticError):
+        config.load_shared_connector_config(write(base, plain))
+
+
+def test_shared_connector_accepts_the_loopback_http_origin(files):
+    base, _, connector = files
+    connector["endpoint"] = "http://127.0.0.1:8765"
+    assert config.load_shared_connector_config(write(base, connector)).endpoint == "http://127.0.0.1:8765"

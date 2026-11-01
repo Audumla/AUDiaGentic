@@ -39,7 +39,8 @@ raise SystemExit(main(["gateway", *sys.argv[1:]]))
     ["drain", "--force"], ["resume", "now"], ["recover"], ["recover", "reason"], ["stop", "extra"],
     ["serve", "config", "a", "extra"],
     ["status", "config", "a", "output", "text"],
-    ["connect", "config", "a", "project", ".", "dry-run", "non-interactive"],
+    ["connect", "config", "a", "dry-run", "non-interactive"],
+    ["connect", "config", "a", "project", "."],
 ])
 def test_reject_retired_and_invalid_grammar(tail, capsys):
     assert gateway.dispatch_keyword(tail) == 2
@@ -48,99 +49,75 @@ def test_reject_retired_and_invalid_grammar(tail, capsys):
 
 @pytest.fixture
 def owners(monkeypatch):
-    config = SimpleNamespace(endpoint="https://example.test", server_id="server", project_id="project", token_file=Path("token"), ca_file=None)
-    loader = Mock(return_value=config)
-    module = SimpleNamespace(load_shared_connector_config=loader, load_shared_server_config=loader)
+    """The management API replaced by recorders: no connector is loaded and no network is touched."""
+    from audiagentic.components.agents.gateway import management_api
+
+    health = Mock(return_value={"healthy": True})
+    writer = Mock(return_value={})
+    monkeypatch.setattr(management_api, "gateway_connector_health", health)
+    monkeypatch.setattr(management_api, "gateway_connect_config", writer)
+    server = SimpleNamespace(server_id="server")
+    loader = Mock(return_value=server)
+    module = SimpleNamespace(load_shared_server_config=loader)
     monkeypatch.setitem(sys.modules, "audiagentic.components.agents.gateway.service.shared_config", module)
-    client = Mock()
-    client.health.return_value = {"healthy": True}
-    factory = Mock(return_value=client)
-    monkeypatch.setattr(gateway, "_shared_client", factory)
-    return config, loader, client, factory
+    return health, writer, server
 
 
 def test_status_only_health(owners, capsys):
-    _, _, client, _ = owners
+    health, _, _ = owners
     assert gateway.dispatch_keyword(["status", "config", "connector.yaml", "output", "json"]) == 0
     assert '"healthy": true' in capsys.readouterr().out
-    assert client.method_calls == [("health", (), {}), ("close", (), {})]
+    health.assert_called_once()
+    assert health.call_args.args[0] == Path("connector.yaml").resolve()
 
 
-def test_connect_dry_run(owners, tmp_path, capsys):
-    _, _, client, _ = owners
-    assert gateway.dispatch_keyword(["connect", "config", "connector.yaml", "project", str(tmp_path), "dry-run"]) == 0
-    assert "No binding written" in capsys.readouterr().out
-    assert client.method_calls == [("health", (), {}), ("close", (), {})]
-
-
-def test_health_failure_closes_client(owners):
-    _, _, client, _ = owners
-    client.health.side_effect = RuntimeError("failure")
-    with pytest.raises(RuntimeError, match="failure"):
-        gateway.dispatch_keyword(["status", "config", "connector.yaml"])
-    client.close.assert_called_once()
+def test_connect_dry_run_writes_nothing(owners, capsys):
+    health, writer, _ = owners
+    assert gateway.dispatch_keyword(["connect", "config", "connector.yaml", "dry-run"]) == 0
+    assert "Nothing written" in capsys.readouterr().out
+    health.assert_called_once()
+    writer.assert_not_called()
 
 
 def test_serve_delegates_shared_config(owners, monkeypatch):
-    config, _, _, _ = owners
+    _, _, server = owners
     serve = Mock(return_value=0)
     monkeypatch.setattr(gateway, "cmd_gateway", serve)
     assert gateway.dispatch_keyword(["serve", "config", "server.yaml"]) == 0
-    assert serve.call_args.args[0].shared_config is config
+    assert serve.call_args.args[0].shared_config is server
 
 
 def test_registered_error_uses_print_error(owners, capsys):
     from audiagentic.foundation.contracts.errors import AudiaGenticError
     from audiagentic.launcher import main
-    owners[2].health.side_effect = AudiaGenticError("VAL-AGSV-006", "validation", "invalid config")
+    owners[0].side_effect = AudiaGenticError("VAL-AGSV-006", "validation", "invalid config")
     assert main(["gateway", "status", "config", "connector.yaml"]) == 1
     assert "invalid config" in capsys.readouterr().err
 
 
-def test_shared_client_uses_token_loader_identity_and_ca(monkeypatch):
-    token = Mock(return_value="private-token")
-    constructor = Mock()
-    monkeypatch.setitem(sys.modules, "audiagentic.components.agents.gateway.remote_client", SimpleNamespace(StandaloneGatewayClient=constructor, load_auth_token=token))
-    import ssl
-    context = Mock()
-    monkeypatch.setattr(ssl, "create_default_context", context)
-    cfg = SimpleNamespace(endpoint="https://example.test", server_id="server", project_id="project", token_file=Path("token"), ca_file=Path("ca.pem"))
-    gateway._shared_client(cfg)
-    token.assert_called_once_with(cfg.token_file)
-    context.assert_called_once_with(cafile="ca.pem")
-    constructor.assert_called_once_with(cfg.endpoint, "private-token", shared_server_id="server", shared_project_id="project", ssl_context=context.return_value)
-
-
-def test_connect_persists_after_handshake(owners, tmp_path, monkeypatch):
-    from audiagentic.components.agents.gateway import management_api
+def test_connect_persists_after_handshake(owners):
+    health, writer, _ = owners
     events = []
-    owners[2].health.side_effect = lambda: events.append("health") or {"healthy": True}
-    writer = Mock(side_effect=lambda *args: events.append("write"))
-    monkeypatch.setattr(management_api, "gateway_connect_config", writer)
-    assert gateway.dispatch_keyword(["connect", "config", "connector.yaml", "project", str(tmp_path), "non-interactive"]) == 0
+    health.side_effect = lambda *_: events.append("health") or {"healthy": True}
+    writer.side_effect = lambda *_: events.append("write") or {}
+    assert gateway.dispatch_keyword(["connect", "config", "connector.yaml", "non-interactive"]) == 0
     assert events == ["health", "write"]
-    writer.assert_called_once_with(tmp_path.resolve(), Path("connector.yaml").resolve())
+    writer.assert_called_once_with(Path("connector.yaml").resolve())
 
 
 @pytest.mark.parametrize("answer,expected", [("yes", 0), ("no", 1)])
-def test_connect_confirmation(owners, tmp_path, monkeypatch, answer, expected):
-    from audiagentic.components.agents.gateway import management_api
-    writer = Mock()
-    monkeypatch.setattr(management_api, "gateway_connect_config", writer)
+def test_connect_confirmation(owners, monkeypatch, answer, expected):
     monkeypatch.setattr("builtins.input", lambda *_: answer)
-    assert gateway.dispatch_keyword(["connect", "config", "connector.yaml", "project", str(tmp_path)]) == expected
-    assert writer.call_count == (expected == 0)
+    assert gateway.dispatch_keyword(["connect", "config", "connector.yaml"]) == expected
+    assert owners[1].call_count == (expected == 0)
 
 
-def test_connect_handshake_failure_never_writes(owners, tmp_path, monkeypatch):
-    from audiagentic.components.agents.gateway import management_api
-    writer = Mock()
-    monkeypatch.setattr(management_api, "gateway_connect_config", writer)
-    owners[2].health.side_effect = RuntimeError("identity mismatch")
+def test_connect_handshake_failure_never_writes(owners):
+    health, writer, _ = owners
+    health.side_effect = RuntimeError("identity mismatch")
     with pytest.raises(RuntimeError):
-        gateway.dispatch_keyword(["connect", "config", "connector.yaml", "project", str(tmp_path), "non-interactive"])
+        gateway.dispatch_keyword(["connect", "config", "connector.yaml", "non-interactive"])
     writer.assert_not_called()
-    owners[2].close.assert_called_once()
 
 
 @pytest.fixture

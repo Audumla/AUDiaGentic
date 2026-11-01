@@ -169,34 +169,32 @@ def gateway_set_config(
             message=f"unknown gateway implementation: {implementation_id!r}",
         )
 
-    if desc.options_schema:
-        for key, value in updates.items():
-            option_schema = desc.options_schema.get(key)
-            if option_schema is None:
-                if not any(s.allow_unknown for s in desc.options_schema.values()):
-                    raise AudiaGenticError(
-                        code="VAL-AGSV-028",
-                        kind="validation",
-                        message=f"unknown option: {key!r} for gateway implementation {implementation_id!r}",
-                        details={"valid_options": list(desc.options_schema.keys())},
-                    )
-            else:
-                from audiagentic.foundation.features.options import validate_option
-                try:
-                    validate_option(key, value, option_schema)
-                except (AudiaGenticError, ValueError) as exc:
-                    raise AudiaGenticError(
-                        code="VAL-AGSV-029",
-                        kind="validation",
-                        message=f"invalid value for option {key!r}: {exc}",
-                    ) from exc
+    # An implementation that declares no options accepts none.
+    for key, value in updates.items():
+        option_schema = (desc.options_schema or {}).get(key)
+        if option_schema is None:
+            if not any(s.allow_unknown for s in (desc.options_schema or {}).values()):
+                raise AudiaGenticError(
+                    code="VAL-AGSV-028",
+                    kind="validation",
+                    message=f"unknown option: {key!r} for gateway implementation {implementation_id!r}",
+                    details={"valid_options": list((desc.options_schema or {}).keys())},
+                )
+        else:
+            from audiagentic.foundation.features.options import validate_option
+            try:
+                validate_option(key, value, option_schema)
+            except (AudiaGenticError, ValueError) as exc:
+                raise AudiaGenticError(
+                    code="VAL-AGSV-029",
+                    kind="validation",
+                    message=f"invalid value for option {key!r}: {exc}",
+                ) from exc
 
     impl_state = get_implementation_state(project_root, _COMPONENT_ID, implementation_id)
     options = dict(impl_state.options)
     options.update(updates)
 
-    if implementation_id == "standalone":
-        validate_standalone_config(options)
     new_state = ImplementationState(enabled=impl_state.enabled, options=options)
     set_implementation_state(project_root, _COMPONENT_ID, implementation_id, new_state)
 
@@ -206,26 +204,6 @@ def gateway_set_config(
         "updated_keys": list(updates.keys()),
     }
 
-
-
-def validate_standalone_config(options: dict[str, Any]) -> None:
-    """Validate the mutually exclusive local and shared connection forms."""
-    connector = options.get("connector-config")
-    if connector is not None:
-        if (
-            not isinstance(connector, str) or not connector.strip()
-            or not Path(connector).is_absolute()
-            or "endpoint" in options or "token-file" in options
-        ):
-            raise AudiaGenticError("VAL-AGSV-029", "validation",
-                                  "connector-config requires an absolute reference and excludes endpoint/token-file")
-        from .service.shared_config import load_shared_connector_config
-
-        load_shared_connector_config(Path(connector))
-    elif not all(isinstance(options.get(key), str) and options[key].strip()
-                 for key in ("endpoint", "token-file")):
-        raise AudiaGenticError("VAL-AGSV-029", "validation",
-                              "standalone requires connector-config or endpoint and token-file")
 
 
 def gateway_validate_role_config(role: str, config_path: Path) -> None:
@@ -250,38 +228,45 @@ def gateway_validate_role_config(role: str, config_path: Path) -> None:
     loaders[role](Path(config_path).resolve())
 
 
-def gateway_connect_config(project_root: Path, config_path: Path) -> dict[str, Any]:
-    """Select a validated connector through the existing Agents state owner.
+def gateway_connector_health(config_path: Path, project_root: Path | None) -> dict[str, Any]:
+    """Load a connector document, handshake with its gateway and return the health answer.
 
-    Callers must complete the TLS identity handshake before requesting this
-    write. Selection and the reference are committed in one Foundation shard
-    replacement; unrelated implementation options/features are preserved.
+    A shared connection addresses the project's declared ``project.id``; a plain one needs no
+    project. The client is closed before returning; nothing is bound.
     """
-    from copy import deepcopy
+    from .client import _declared_project_id, connector_client
+    from .service.shared_config import load_shared_connector_config
 
-    from audiagentic.foundation.features.state import (
-        get_component_state, set_component_state,
-    )
-    from audiagentic.foundation.features.observations import observations_path
-    from audiagentic.foundation.system.process import StartupLock
+    connector = load_shared_connector_config(Path(config_path).resolve())
+    project_id = None
+    if connector.mode == "shared":
+        project_id = _declared_project_id(project_root)
+        if project_id is None:
+            from audiagentic.foundation.contracts.errors import make_error_factory
 
-    reference = str(config_path.resolve(strict=True))
-    validate_standalone_config({"connector-config": reference})
-    lock = observations_path(project_root, _COMPONENT_ID).with_suffix(".selection.lock")
-    lock.parent.mkdir(parents=True, exist_ok=True)
-    with StartupLock(lock):
-        component = deepcopy(get_component_state(project_root, _COMPONENT_ID))
-        implementations = component.setdefault("implementations", {})
-        for entry in implementations.values():
-            entry["enabled"] = False
-        standalone = implementations.setdefault("standalone", {})
-        options = standalone.setdefault("options", {})
-        options.pop("endpoint", None)
-        options.pop("token-file", None)
-        options["connector-config"] = reference
-        standalone["enabled"] = True
-        set_component_state(project_root, _COMPONENT_ID, component)
-    return {"implementation": "standalone", "connector-config": reference, "enabled": True}
+            raise make_error_factory("CFG", "AGSV", "gateway-service")(
+                3, "a shared gateway connection needs a declared project.id in the project's settings")
+    client = connector_client(connector, project_root, project_id)
+    try:
+        return client.health()
+    finally:
+        client.close()
+
+
+def gateway_connect_config(config_path: Path) -> dict[str, Any]:
+    """Bind this machine to a validated connector document.
+
+    Writes ``gateway.connector`` and ``gateway.implementation: standalone`` to the user
+    settings in one patch through the settings writer, so every project on the machine
+    uses the connection. Callers complete the health handshake before requesting this
+    write. Nothing about the connection is stored in settings except the document's path.
+    """
+    from audiagentic.foundation.config.writer import write_settings_patch
+
+    reference = str(Path(config_path).resolve(strict=True))
+    gateway_validate_role_config("connector", Path(reference))
+    write_settings_patch("user", {"gateway": {"connector": reference, "implementation": "standalone"}})
+    return {"implementation": "standalone", "connector": reference}
 
 
 def gateway_create_operation(

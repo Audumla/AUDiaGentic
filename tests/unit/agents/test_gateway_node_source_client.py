@@ -116,7 +116,7 @@ def test_no_enrollment_means_explicit_node_target_cannot_fall_back(monkeypatch, 
 def test_connector_config_references_local_node_config_instead_of_recipient_defaults(configured):
     _, root, node_path, _, _ = configured
     connector = {
-        "schema-version": 1, "server-id": "server-a", "project-id": "project-a",
+        "schema-version": 1, "mode": "shared", "server-id": "server-a",
         "endpoint": "https://gateway.example", "token-file": "principal-token",
         "source-node-config": "node.yaml",
     }
