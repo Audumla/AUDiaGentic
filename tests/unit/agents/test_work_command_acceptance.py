@@ -413,3 +413,9 @@ def test_dispatch_publishes_linked_and_reconcile_publishes_repaired_and_terminal
     again = reconcile_work(tmp_path, done, execution_state="completed")
     assert again.state is AgentWorkState.COMPLETED
     assert [topic for topic, _w, _k in seen].count(topics.WORK_TERMINAL_TOPIC) == 1
+
+
+def test_a_missing_work_is_a_registered_not_found_error_not_a_bare_key_error(tmp_path: Path) -> None:
+    with pytest.raises(AudiaGenticError) as raised:
+        get_work(tmp_path, "work_does_not_exist")
+    assert raised.value.code == "RES-AGW-153" and raised.value.details["work_id"] == "work_does_not_exist"

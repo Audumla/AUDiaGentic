@@ -295,3 +295,4 @@ CON-AGW-167: "The Context already has outstanding Work and this acceptance asked
 CON-ACP-001: "A prompt is already outstanding for this ACP session. Wait for it to finish or cancel it before sending another."
 CON-ACP-002: "The prompt's Work ended failed or rejected. The error details name the Work and its state; read the Work output or request diagnostics for the cause."
 VAL-ACP-003: "An ACP prompt must carry at least one non-empty text block. Send text content."
+RES-AGW-153: "No Work with this id exists in the project. Check the Work id (an A2A task id) and the project it was created in."

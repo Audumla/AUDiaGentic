@@ -12,6 +12,7 @@ notification config and the authenticated extended card.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from typing import Any
 
 from a2a.server.context import ServerCallContext
@@ -72,20 +73,26 @@ def _task(view: dict[str, Any]) -> pb.Task:
 def _translate(error: Exception) -> Exception:
     """Map a Work/adapter failure to the SDK error a client can act on; never leak internals."""
     if isinstance(error, AudiaGenticError):
+        if error.code == "RES-AGW-153":  # no such Work: the task does not exist
+            return TaskNotFoundError()
         # Conflicts, terminal Work, closed Context and the like: the request is wrong, the server is not.
         if error.code.startswith("CON-AGW-"):
             return InvalidParamsError(error.message, data={"code": error.code})
         return InternalError()
-    if isinstance(error, (FileNotFoundError, KeyError)):
-        return TaskNotFoundError()
     if isinstance(error, ValueError):
         return InvalidParamsError(str(error))
     return InternalError()
 
 
 class A2aSdkRequestHandler(RequestHandler):
-    def __init__(self, adapter: A2aServerAdapter) -> None:
-        self._adapter = adapter
+    """``adapter`` is one fixed adapter, or a callable choosing the adapter for each call context (the facade
+    builds a per-caller adapter from the caller's own credential)."""
+
+    def __init__(self, adapter: A2aServerAdapter | Callable[[ServerCallContext], A2aServerAdapter]) -> None:
+        self._adapter_for = adapter if callable(adapter) and not isinstance(adapter, A2aServerAdapter) else (lambda _context: adapter)
+
+    def _adapter(self, context: ServerCallContext) -> A2aServerAdapter:
+        return self._adapter_for(context)
 
     async def on_message_send(self, params: pb.SendMessageRequest, context: ServerCallContext) -> pb.Task | pb.Message:
         try:
@@ -93,19 +100,19 @@ class A2aSdkRequestHandler(RequestHandler):
         except ValueError as error:  # ContentTypeNotSupportedError is an A2AError and passes through as is
             raise _translate(error) from error
         try:
-            return _task(await asyncio.to_thread(self._adapter.send_message, request))
+            return _task(await asyncio.to_thread(self._adapter(context).send_message, request))
         except Exception as error:  # noqa: BLE001 - translated, never leaked
             raise _translate(error) from error
 
     async def on_get_task(self, params: pb.GetTaskRequest, context: ServerCallContext) -> pb.Task | None:
         try:
-            return _task(await asyncio.to_thread(self._adapter.get_task, params.id))
+            return _task(await asyncio.to_thread(self._adapter(context).get_task, params.id))
         except Exception as error:  # noqa: BLE001
             raise _translate(error) from error
 
     async def on_cancel_task(self, params: pb.CancelTaskRequest, context: ServerCallContext) -> pb.Task | None:
         try:
-            return _task(await asyncio.to_thread(self._adapter.cancel, params.id))
+            return _task(await asyncio.to_thread(self._adapter(context).cancel, params.id))
         except ValueError as error:
             if "cannot be canceled" in str(error):
                 raise TaskNotCancelableError(str(error)) from error

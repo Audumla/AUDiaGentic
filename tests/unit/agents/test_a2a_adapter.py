@@ -51,6 +51,8 @@ class FakePorts:
         return {"work": dict(self.works[work_id]), "wait-outcome": "terminal"}
 
     def get_agent_work(self, root, work_id):
+        if work_id not in self.works:
+            raise AudiaGenticError("RES-AGW-153", "agent-work", "No Work with this id exists in the project")
         return dict(self.works[work_id])
 
     def cancel_agent_work(self, root, work_id):
