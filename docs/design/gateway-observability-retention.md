@@ -104,6 +104,41 @@ are no environment overrides and no separate policy file.
 Changing inherited environment overrides, or loading this implementation,
 requires a gateway restart.
 
+## Session-lineage purge
+
+An explicit, machine-policy-gated operation (`session-purge`) deletes the gateway-local data of
+closed or expired sessions that have been inactive long enough. It is **disabled by default** and
+never touches remote provider conversations.
+
+```yaml
+gateway:
+  retention:
+    session_purge_enabled: true
+    session_purge_inactivity_seconds: 604800   # at least 3600; required when enabled
+```
+
+- **Clock.** Only `timing.last-accepted-turn-at` counts. A session without it is never eligible
+  (there is no fallback: `updated-at` moves for unrelated reasons).
+- **Eligibility.** The session is closed or expired, not claimed, has no live runtime, every
+  request in its lineage is terminal and readable, and no other session shares a request. Anything
+  unknown blocks. `management_api.gateway_session_purge_report(project_root)` is the read-only
+  dry run with a stable reason per blocked session.
+- **Running it.** Create a `session-purge` operation through the usual operation API with scope
+  `{project-root, [session-ids]}`. The machine policy is snapshotted into the operation, so a
+  project or caller cannot weaken it, and a policy that is disabled or has changed since creation
+  does nothing. Without `session-ids` the executor takes the eligible sessions, bounded by
+  `max_batch_size`. There is no scheduler; run it on purpose.
+- **Safety.** Each session is claimed under the generation fence (resume and new turns are then
+  refused), rechecked, and its deletion plan (request ids and the policy digest) is recorded on the
+  claim before the first deletion; from then on the claim cannot be released. Deletion uses the one
+  shared lineage deletion with the session directory last, so a crash leaves the plan on the
+  surviving record and replaying the same operation finishes the job. A session that is already gone
+  is reported `unchanged`, never `purged`.
+- **Result.** Counts and per-session dispositions (`purged`, `blocked`, `unchanged`, with a reason),
+  bounded, no payloads.
+
+Request `purge` (archived requests) and the manual `purge-session` action are unchanged.
+
 ## Reading retained evidence
 
 Use `agent_task_observations`, request history/diagnostics and recovery-journal

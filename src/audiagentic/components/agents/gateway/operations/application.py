@@ -63,7 +63,7 @@ class GatewayOperationsApplication:
         return _project_public(self._store.create(command, local_only=True))
 
     def create_operation(self, command: ManagementCommand) -> dict[str, Any]:
-        if command.kind is ManagementOperationKind.PURGE:
+        if command.kind in (ManagementOperationKind.PURGE, ManagementOperationKind.SESSION_PURGE):
             # Snapshot machine policy into immutable operation intent.  A
             # project cannot supply or weaken this authority.
             policy = load_retention_policy()
