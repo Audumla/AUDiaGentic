@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.63.0](https://github.com/Audumla/AUDiaGentic/compare/v0.62.0...v0.63.0) (2026-11-01)
+
+
+### Features
+
+* **agents:** SH60b dispatch and continuation of accepted Work commands ([#347](https://github.com/Audumla/AUDiaGentic/issues/347)) ([c985084](https://github.com/Audumla/AUDiaGentic/commit/c985084986093b6a2ce48b5899ba784dfd69d05b))
+
 ## [0.62.0](https://github.com/Audumla/AUDiaGentic/compare/v0.61.0...v0.62.0) (2026-11-01)
 
 
