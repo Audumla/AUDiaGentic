@@ -28,3 +28,14 @@ def test_release_finalization_uses_normal_pr_and_exact_merged_source() -> None:
     assert "--admin" not in script
     assert "--force" not in script
     assert "\n          git push\n" not in script
+
+
+def test_every_package_data_pattern_matches_a_shipped_file() -> None:
+    """A pattern that matches nothing is a stale reference to a deleted path (or a typo hiding a missing asset)."""
+    import tomllib
+
+    root = Path(__file__).resolve().parents[3]
+    patterns = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))["tool"]["setuptools"]["package-data"]["audiagentic"]
+    package = root / "src" / "audiagentic"
+    dead = [pattern for pattern in patterns if not list(package.glob(pattern))]
+    assert not dead, f"package-data patterns that match no file: {dead}"
