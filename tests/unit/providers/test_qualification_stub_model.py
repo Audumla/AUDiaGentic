@@ -79,3 +79,15 @@ def test_the_config_points_only_at_the_stub_and_needs_no_sign_in(tmp_path):
         assert "api.openai.com" not in text and "http://127.0.0.1:" in text
     finally:
         stub.stop()
+
+
+def test_the_chat_completions_route_streams_a_numbered_reply_and_is_held_by_the_barrier():
+    stub = StubModel().start()
+    try:
+        connection, response = _post(stub, "/v1/chat/completions", {"messages": [{"role": "user", "content": "hi"}]})
+        text = response.read().decode()
+        assert "STUB-REPLY-1" in text and text.rstrip().endswith("data: [DONE]") and stub.requests == 1
+        assert stub.unexpected == []
+        connection.close()
+    finally:
+        stub.stop()

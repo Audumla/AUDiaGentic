@@ -154,3 +154,24 @@ human's active turn; safe delivery can only be gateway-side queueing until the t
 The probes use these rules: busy admission is never tested through `turn/steer`; the idle case must admit exactly
 once; native turn ids (never text or order) attribute results; the stub receives nothing but `POST /v1/responses`
 (any other request fails the probe closed); the stub's reply text is a protocol artefact, never a model claim.
+
+OpenCode (`opencode-serve`, measured on opencode 2.2.5 linux-amd64 over its HTTP API v2 from `opencode serve`
+on a loopback OS-assigned port, a random per-run password passed by child environment only, a local stub model
+reached through the OpenAI-compatible chat-completions protocol, configured only through an inline config, no
+credentials). The human surface is the real OpenCode TUI in a pseudo-terminal attached with `--server`; its
+`TMPDIR` must be exec-capable (the TUI maps a native library from it), which `qualify --live` provides when the
+system temp directory is mounted noexec.
+
+| Capability | Result | Why |
+|---|---|---|
+| passive-identity | proven | an independent HTTP client lists the human's session and its prompt and creates nothing |
+| existing-session-attach | proven | the client addresses the same session id while the human's TUI keeps working |
+| safe-detach | proven | the observer holds no attachment; after the human closes the TUI the server and session survive and an observer prompt runs |
+| reconnect | proven (evidence only) | a new client resolves the same session and its history |
+| conditional-admission | proven **for `delivery: "queue"` only** | during the human's active turn a queued prompt lands in the session inbox, adds no model request, leaves the active turn's reply unchanged, runs once after it, and a retry with the same client message id returns the same message |
+| correlated-result | **unproven** (`unproven-result-linked-by-event-order-only`) | inbox events name the prompt, but step and text events carry only the assistant message id, and no assistant message references the prompt: the link is event order |
+| concurrent-human-use | proven, on the **real OpenCode TUI** | the human's independent action completes after the observer's queued prompt |
+
+The server's default delivery is `steer`, so every caller must send `delivery: "queue"` explicitly; steering was
+not measured (the stub makes no tool calls) and is not accepted. Because result correlation is unproven the
+readiness stays below a join: a prompt can be admitted safely but its output cannot be attributed natively.

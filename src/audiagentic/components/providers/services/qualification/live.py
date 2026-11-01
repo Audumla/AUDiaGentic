@@ -48,6 +48,7 @@ class ProbeOutcome:
 class LiveContext:
     root: Path
     facts: dict[str, Any]
+    exec_scratch: Path | None = None  # a directory native libraries can be mapped from, when /tmp is noexec
 
 
 @dataclass(frozen=True)
@@ -68,6 +69,12 @@ LIVE_TARGETS: dict[str, LiveTarget] = {
         adapter_ref="audiagentic.components.providers.adapters.codex.join:AppServerClient",
         probe_ref="audiagentic.components.providers.services.qualification.probes.codex:run",
     ),
+    "opencode": LiveTarget(
+        surface_id="opencode-serve", native_protocol="opencode-api-v2", endpoint_kind="http",
+        fixture_id="opencode-serve-disposable",
+        adapter_ref="audiagentic.components.providers.adapters.opencode.join:OpenCodeClient",
+        probe_ref="audiagentic.components.providers.services.qualification.probes.opencode:run",
+    ),
 }
 
 
@@ -80,6 +87,22 @@ def _state(proven: set[str], reasons: list[str]) -> str:
     if proven:
         return "partial"
     return "unsupported" if reasons and all(reason.startswith("unsupported") for reason in reasons) else "inconclusive"
+
+
+def _exec_scratch(state_root: Path | None) -> Path | None:
+    """None when the system temp dir allows exec; otherwise a directory under the state dir. Harness UIs map native
+    libraries from their TMPDIR, which fails on a noexec /tmp."""
+    import os
+
+    base = Path(tempfile.gettempdir())
+    try:
+        if not os.statvfs(base).f_flag & os.ST_NOEXEC:
+            return None
+    except OSError:
+        return None
+    fallback = evidence.evidence_root(state_root).parent / "scratch"
+    fallback.mkdir(parents=True, exist_ok=True)
+    return Path(tempfile.mkdtemp(prefix="tui-", dir=fallback))
 
 
 def qualify_live(provider_id: str, *, state_root: Path | None = None) -> dict[str, Any]:
@@ -100,14 +123,17 @@ def qualify_live(provider_id: str, *, state_root: Path | None = None) -> dict[st
     probe = resolve_ref(target.probe_ref)
     root = Path(tempfile.mkdtemp(prefix="qualify-live-"))
     cleanup_error: str | None = None
+    scratch = _exec_scratch(state_root)
     try:
         try:
-            outcomes = list(probe(LiveContext(root=root, facts=facts)))
+            outcomes = list(probe(LiveContext(root=root, facts=facts, exec_scratch=scratch)))
         except Exception as error:  # noqa: BLE001 - a crashed probe proves nothing; it is reported, not raised
             outcomes = [ProbeOutcome(name, False, _REASON_FAILED, {"error": type(error).__name__}) for name in CAPABILITIES]
     finally:
         try:
             shutil.rmtree(root)
+            if scratch is not None:
+                shutil.rmtree(scratch)
         except OSError as error:
             cleanup_error = f"{type(error).__name__}"
     by_name = {outcome.capability: outcome for outcome in outcomes}

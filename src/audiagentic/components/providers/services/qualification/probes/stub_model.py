@@ -3,8 +3,10 @@
 It speaks just enough of the OpenAI Responses streaming protocol for a harness to complete a real turn:
 every request gets ``STUB-REPLY-<n>`` where ``n`` is the request's ordinal. A gate lets a probe hold a
 response open (a deterministic busy window, no sleeps) and release it. It binds loopback on an OS-assigned
-port, records only counts (never request bodies), and notes any request other than ``POST /v1/responses`` so a
-probe can fail closed if the harness reaches for anything else. Evidence produced with it is protocol
+port, records only counts (never request bodies), and notes any other request so a
+probe can fail closed if the harness reaches for anything else.
+Both ``POST /v1/responses`` and ``POST /v1/chat/completions`` are served (the two protocols the supported
+harnesses speak). Evidence produced with it is protocol
 evidence: it says nothing about a real model.
 """
 from __future__ import annotations
@@ -42,6 +44,9 @@ class StubModel:
             def do_POST(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler contract
                 length = int(self.headers.get("content-length") or 0)
                 body = self.rfile.read(length)
+                if self.path == "/v1/chat/completions":
+                    self._chat_completion(body)
+                    return
                 if self.path != "/v1/responses":
                     stub._note_unexpected(f"POST {self.path}")
                     self.send_response(404)
@@ -84,6 +89,41 @@ class StubModel:
                                   "output_tokens": 1, "output_tokens_details": {"reasoning_tokens": 0},
                                   "total_tokens": 2}}}),
                 ], start=3)
+
+            def _chat_completion(self, body: bytes) -> None:
+                """The OpenAI chat-completions stream (what OpenAI-compatible harness providers speak)."""
+                try:
+                    messages = len(json.loads(body or b"{}").get("messages") or [])
+                except ValueError:
+                    messages = -1
+                ordinal = stub._count(messages)
+                text = f"STUB-REPLY-{ordinal}"
+                self.send_response(200)
+                self.send_header("content-type", "text/event-stream")
+                self.send_header("cache-control", "no-cache")
+                self.send_header("connection", "close")
+                self.end_headers()
+
+                def chunk(delta: dict, finish: str | None = None, usage: dict | None = None) -> None:
+                    payload = {"id": f"chatcmpl-{ordinal}", "object": "chat.completion.chunk", "created": 0,
+                               "model": "stub-model", "choices": [{"index": 0, "delta": delta, "finish_reason": finish}]}
+                    if usage:
+                        payload["usage"] = usage
+                    try:
+                        self.wfile.write(f"data: {json.dumps(payload)}\n\n".encode())
+                        self.wfile.flush()
+                    except OSError:
+                        pass
+
+                chunk({"role": "assistant", "content": ""})
+                stub._gate.wait(60)  # a held gate keeps this turn demonstrably active
+                chunk({"content": text})
+                chunk({}, "stop", {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2})
+                try:
+                    self.wfile.write(b"data: [DONE]\n\n")
+                    self.wfile.flush()
+                except OSError:
+                    pass
 
             def do_GET(self) -> None:  # noqa: N802
                 stub._note_unexpected(f"GET {self.path}")
