@@ -202,7 +202,7 @@ from .test_context_work import _seed  # noqa: E402
 
 
 @pytest.mark.usefixtures("in_process_gateway")
-def test_the_adapter_runs_against_the_real_work_owner(tmp_path: Path) -> None:
+def test_the_adapter_runs_against_the_real_work_owner(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from audiagentic.components.agents.context.service import open_context
     from audiagentic.components.agents.gateway.client import get_gateway_client
 
@@ -217,8 +217,9 @@ def test_the_adapter_runs_against_the_real_work_owner(tmp_path: Path) -> None:
             admitted.append(key)
         return {"request-id": f"req_{admitted.index(key) + 1}", "state": "queued"}
 
-    client._application.submit_execution_request = admit  # type: ignore[method-assign]
-    client._application.wait_execution_request = lambda root, rid, t=None: {"wait-outcome": "timeout", "status": {"state": "running"}}  # type: ignore[method-assign]
+    # The gateway application is a process-wide singleton: patch it with monkeypatch so it is restored.
+    monkeypatch.setattr(client._application, "submit_execution_request", admit)
+    monkeypatch.setattr(client._application, "wait_execution_request", lambda root, rid, t=None: {"wait-outcome": "timeout", "status": {"state": "running"}})
 
     class Ports:
         def __getattr__(self, name):
