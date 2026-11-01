@@ -11,19 +11,21 @@ from audiagentic.components.agents.gateway.service.shared_config import (
     load_shared_server_config,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+from tests.helpers.shared_gateway import declare_project
 
 
 @pytest.fixture
 def configs(tmp_path):
     for name in ("project", "state"):
         (tmp_path / name).mkdir()
+    declare_project(tmp_path / "project", "project")
     for name in ("principal.token", "node.token", "other.token"):
         token = tmp_path / name
         token.write_text("same-bytes-startup-owner-checks", encoding="utf-8")
         token.chmod(0o600)
     server = {
         "schema-version": 1, "server-id": "server", "listen": {"port": 8000},
-        "projects": {"project": "project"},
+        "projects": ["project"],
         "principals": {"alice": {"token-file": "principal.token", "projects": ["project"], "actions": ["read"]}},
         "node-listen": {"port": 8001},
         "nodes": {"node": {"token-file": "node.token", "workspaces": {"workspace": "project"},

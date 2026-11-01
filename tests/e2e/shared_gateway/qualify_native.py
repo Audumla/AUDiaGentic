@@ -147,6 +147,8 @@ def main(args, resources):
         token_file.write_text(tokens[name])
         token_file.chmod(0o600)
         roots[name] = root
+        (root / ".audiagentic").mkdir(parents=True, exist_ok=True)
+        (root / ".audiagentic" / "settings.yaml").write_text(f"schema_version: 1\nproject:\n  id: {name}\n")
     (base / "state").mkdir(exist_ok=True)
     workspace_config_home = base / "xdg-config"
     (workspace_config_home / "audiagentic").mkdir(parents=True, exist_ok=True)
@@ -162,7 +164,7 @@ def main(args, resources):
         "server-id": "qualification-" + secrets.token_hex(6),
         "listen": {"port": backend_port},
         "service-root": "state",
-        "projects": {name: name for name in roots},
+        "projects": [name for name in roots],
         "principals": {
             name: {
                 "token-file": name + ".token",

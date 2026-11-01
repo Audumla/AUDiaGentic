@@ -36,6 +36,7 @@ from audiagentic.components.agents.gateway.service.shared_config import (
     load_shared_server_config,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+from tests.helpers.shared_gateway import declare_project
 
 
 @pytest.fixture(scope="module")
@@ -114,7 +115,7 @@ def tls(tmp_path_factory):
 
 @pytest_asyncio.fixture
 async def channel(tmp_path, tls):
-    (tmp_path / "project").mkdir()
+    declare_project(tmp_path / "project", "project")
     (tmp_path / "state").mkdir()
     (tmp_path / "node-state").mkdir()
     for name in ("principal", "node"):
@@ -127,7 +128,7 @@ async def channel(tmp_path, tls):
         "listen": {"port": 0},
         "service-root": "state",
         "node-listen": {"port": 0},
-        "projects": {"project": "project"},
+        "projects": ["project"],
         "principals": {
             "alice": {"token-file": "principal", "projects": ["project"], "actions": ["submit"]}
         },

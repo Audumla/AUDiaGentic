@@ -145,8 +145,8 @@ def _path(base: Path, value: Any, *, directory: bool = False, credential: bool =
         raise _error(11 if credential else 6, "Shared gateway path must exist with the required type") from None
 
 
-def _grants(value: Any, allowed: set[str] | frozenset[str]) -> frozenset[str]:
-    if not isinstance(value, list) or not value:
+def _grants(value: Any, allowed: set[str] | frozenset[str], *, allow_empty: bool = False) -> frozenset[str]:
+    if not isinstance(value, list) or (not value and not allow_empty):
         raise _error(6, "Shared gateway grants must be a non-empty list")
     grants = frozenset(_identifier(item) for item in value)
     if len(grants) != len(value) or not grants <= allowed:
@@ -177,11 +177,53 @@ def _listen(value: Any) -> SharedNodeListen:
     return SharedNodeListen(host, port)
 
 
-def load_shared_server_config(path: Path) -> SharedGatewayServerConfig:
-    """Load server identity, existing directories and principal grants."""
+def _served_projects(base: Path, data: dict, default_root: Path | None) -> dict[str, Path]:
+    """The served projects, id -> canonical root.
+
+    ``projects`` is an optional list of root paths; when omitted the server serves the project
+    containing ``default_root`` (else the working directory), resolved once here. Each root's
+    id is its declared ``project.id``; ids are never typed in this document.
+    """
+    from audiagentic.components.agents.gateway.settings import declared_project_id
+
+    if "projects" not in data:
+        from audiagentic.foundation.config.settings import discover_project_root
+
+        root = Path(default_root) if default_root is not None else discover_project_root(None, cwd=Path.cwd())
+        if root is None or not Path(root).is_dir():
+            raise _error(6, "Shared gateway projects are omitted and the working directory is not in a project")
+        roots = [Path(root).resolve()]
+    else:
+        listed = data["projects"]
+        if isinstance(listed, dict):
+            raise _error(6, "Shared gateway projects must be a list of project root paths; ids come from "
+                            "each project's declared project.id, not from this document")
+        if not isinstance(listed, list) or not listed:
+            raise _error(6, "Shared gateway projects must be a non-empty list of project root paths")
+        roots = [_path(base, value, directory=True) for value in listed]
+    if len(set(roots)) != len(roots):
+        raise _error(6, "Shared gateway projects must have distinct resolved roots")
+    projects: dict[str, Path] = {}
+    for root in roots:
+        project_id = declared_project_id(root)
+        if project_id is None:
+            raise _error(6, "Every served project needs a declared project.id in its settings "
+                            "(audiagentic config set --scope project project.id=NAME)")
+        project_id = _identifier(project_id)
+        if project_id in projects:
+            raise _error(6, "Two served projects declare the same project.id")
+        projects[project_id] = root
+    return projects
+
+
+def load_shared_server_config(path: Path, *, default_root: Path | None = None) -> SharedGatewayServerConfig:
+    """Load server identity, project roots and principal grants.
+
+    ``default_root`` selects the project served when the document omits ``projects``.
+    """
     base, data = _load(path)
-    _mapping(data, {"schema-version", "server-id", "listen", "projects", "principals"},
-             {"service-root", "node-listen", "nodes"})
+    _mapping(data, {"schema-version", "server-id", "listen", "principals"},
+             {"projects", "service-root", "node-listen", "nodes"})
     server_id = _identifier(data["server-id"])
     listen = _mapping(data["listen"], {"port"}, {"host"})
     host = _text(listen.get("host", "127.0.0.1"))
@@ -190,12 +232,7 @@ def load_shared_server_config(path: Path) -> SharedGatewayServerConfig:
     port = listen["port"]
     if type(port) is not int or not 0 <= port <= 65535:
         raise _error(17, "Shared gateway listen port must be an integer from 0 through 65535")
-    roots = data["projects"]
-    if not isinstance(roots, dict) or not roots:
-        raise _error(6, "Shared gateway projects must be a non-empty mapping")
-    projects = {_identifier(key): _path(base, value, directory=True) for key, value in roots.items()}
-    if len(set(projects.values())) != len(projects):
-        raise _error(6, "Shared gateway projects must have distinct resolved roots")
+    projects = _served_projects(base, data, default_root)
     entries = data["principals"]
     if not isinstance(entries, dict) or not entries:
         raise _error(6, "Shared gateway principals must be a non-empty mapping")
@@ -203,13 +240,13 @@ def load_shared_server_config(path: Path) -> SharedGatewayServerConfig:
     credential_files: list[Path] = []
     for key, value in entries.items():
         principal_id = _identifier(key)
-        item = _mapping(value, {"token-file", "projects", "actions"})
+        item = _mapping(value, {"token-file"}, {"projects", "actions"})
         token_file = _credential(base, item["token-file"], credential_files)
         principals.append(SharedGatewayPrincipal(
             principal_id=principal_id,
             token_file=token_file,
-            projects=_grants(item["projects"], set(projects)),
-            actions=_grants(item["actions"], _ACTIONS),
+            projects=_grants(item["projects"], set(projects), allow_empty=True) if "projects" in item else frozenset(projects),
+            actions=_grants(item["actions"], _ACTIONS, allow_empty=True) if "actions" in item else _ACTIONS,
         ))
     node_listen = _listen(data["node-listen"]) if "node-listen" in data else None
     nodes = []

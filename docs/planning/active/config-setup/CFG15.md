@@ -19,11 +19,14 @@ Generate setup instead of hand-writing it. `gateway init` creates the server id,
 
 ## Steps
 
-- gateway init: validate everything in memory first, then write; token by a private file (mode 0600, referenced by path); write server.yaml, connector.yaml and project.id; print the directory and next commands; dry-run
-- Existing valid configuration is preserved and reported; conflicts are reported, never overwritten; a documented short recovery for a partial write, no transaction framework
-- Extend gateway validate through a public agents API to check roots, project ids and references
-- gateway where (keyword grammar): default directory, document paths, current project's bound connector
-- Update shared-gateway.md setup checklist to the generated flow; register new error codes
+- Order: after CFG16-A/B so init writes the final server.yaml shape
+- gateway init [dir PATH] [project PATH] [dry-run] through management_api: default dir user_config_dir()/gateway/ (server.yaml, connector.yaml, credentials/ 0700 with operator.token 0600); fixed port 8765; server-id gw- plus 16 random hex; server.yaml with an explicit absolute `projects` root and a principal with projects/actions omitted; shared-mode loopback connector (http://127.0.0.1:8765, server-id pinned, token-file relative); exclusive creation, no overwrite, staged validation with the production loaders, then publish; dry-run generates and shows no credential
+- project.id: require a project root (git worktree or existing AUDiaGentic project); preserve and validate an existing declared id; otherwise show the derived suggestion in dry-run and write it once to the tracked project scope; reject collisions; a server-only host is refused with an actionable message
+- Bind: write gateway.connector and gateway.implementation=standalone to the user settings only when gateway.connector is unset (same binding: nothing; different: preserve and print the switch command; incompatible implementation: report, never silently change); no handshake in init
+- Idempotence table: all absent create; all present and consistent no-op; existing valid files with binding absent bind only; any partial, invalid or inconsistent set refuse and list; no healing, no token rotation; an interrupted run is reported by the next run, no rollback framework
+- gateway where (offline): default dir and which files exist, effective gateway.connector (path, mode, endpoint, server-id), implementation and winning scope/source, current project's declared id (or derived and not declared), served roots and ids; never a token, never the network; succeeds when files are missing or invalid
+- gateway validate server config FILE [project PATH] (roots exist, declared ids, duplicates, grants, actions, credentials, port/endpoint agreement when the pair is checked) and validate connector (loader, files, project.id presence when shared); out of scope: reachability, TLS, proxies, remote state, port availability, live authentication
+- Update shared-gateway.md setup to: gateway init, then gateway serve config FILE; register new error codes, reusing existing ones where the meaning matches
 
 ## Detailed Solution & Technical Design
 
@@ -78,3 +81,4 @@ Agreed with GPT (round 7). CFG14 is done: the connector has mode plain|shared an
 - 2026-10-31T23:30:31.272919+00:00 (updated-by): Updated: section:title, section:description, section:steps, section:validation, section:standards, section:acceptance_criteria, section:notes
 - 2026-11-01T00:32:12.911787+00:00 (updated-by): Updated: section:effort_risk
 - 2026-11-01T00:32:30.124289+00:00 (updated-by): Updated: section:notes
+- 2026-11-01T00:50:59.486071+00:00 (updated-by): Updated: section:steps

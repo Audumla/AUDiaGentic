@@ -23,6 +23,7 @@ from audiagentic.components.agents.gateway.service.shared_config import load_sha
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.io import atomic_write_json
 from audiagentic.foundation.system.managed_service import ManagedServiceStore
+from tests.helpers.shared_gateway import declare_project
 
 
 def bound_request(
@@ -127,6 +128,7 @@ def bound_request(
 def configured(tmp_path):
     for name in ("project", "state"):
         (tmp_path / name).mkdir()
+    declare_project(tmp_path / "project", "project")
     for name in ("node", "principal"):
         (tmp_path / name).write_text("token-" + name)
         (tmp_path / name).chmod(0o600)
@@ -136,7 +138,7 @@ def configured(tmp_path):
         "listen": {"port": 0},
         "node-listen": {"port": 0},
         "service-root": "state",
-        "projects": {"project": "project"},
+        "projects": ["project"],
         "principals": {
             "alice": {"token-file": "principal", "projects": ["project"], "actions": ["submit"]}
         },

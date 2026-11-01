@@ -15,6 +15,7 @@ from audiagentic.components.agents.gateway.operations import (
 )
 from audiagentic.components.agents.gateway.service.application import GatewayServiceApplication
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+from tests.helpers.shared_gateway import declare_project
 
 
 def command(operation_id="op-node-revoke", **scope):
@@ -253,8 +254,7 @@ def test_persisted_revoke_scope_is_validated_on_replay(tmp_path):
 def _revoke_server_files(tmp_path):
     import yaml
 
-    project = tmp_path / "project"
-    project.mkdir()
+    project = declare_project(tmp_path / "project", "project")
     service_root = tmp_path / "service"
     service_root.mkdir()
     for name in ("principal.token", "node.token"):
@@ -265,7 +265,7 @@ def _revoke_server_files(tmp_path):
     config_path.write_text(yaml.safe_dump({
         "schema-version": 1, "server-id": "server", "listen": {"port": 8000},
         "node-listen": {"port": 8001}, "service-root": str(service_root),
-        "projects": {"project": "project"},
+        "projects": ["project"],
         "principals": {"principal": {
             "token-file": "principal.token", "projects": ["project"], "actions": ["submit"],
         }},
