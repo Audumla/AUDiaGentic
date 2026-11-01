@@ -124,15 +124,28 @@ environment and records one immutable evidence record (SH53). It proves protocol
 executable, adapter and schema, never a vendor model, authentication, or a human-facing UI, and a record is never
 sufficient for a join on its own: the real running instance must still be inspected and matched.
 
-Codex (`codex-app-server`, measured on codex-cli 0.166.0 linux-amd64 over `codex app-server --listen unix://`):
-passive identity, existing-session attach, safe detach and reconnect are proven; conditional admission, correlated
-results and concurrent human use need turns and stay unproven. Safe detach is measured in both directions: an
-observer leaving while the original client stays, and the original client leaving while an observer is attached (the
-session survives for the observer). What a last-subscriber departure does is recorded, not gating. `reconnect` is
-evidence only; the join gate does not read it. A thread with no turn has no persisted history, so the probe seeds
-synthetic history through `thread/inject_items` and records that. Turn probes must show: a `turn/start` while another
-turn is active is rejected or queued and leaves the active turn untouched (never `turn/steer`); the idle case admits
-exactly once and a retry of the same client request id does not run twice; each caller's turn id is the only id on the
-notifications attributed to it, with two concurrent callers and an interleaved human turn; and the stub model is
-loopback-only on an OS-assigned port, receives nothing but the probe's requests, and is configured only in the
-disposable `CODEX_HOME`.
+Codex (`codex-app-server`, measured on codex-cli 0.166.0 linux-amd64 over `codex app-server --listen unix://`,
+with a local deterministic stub model, loopback on an OS-assigned port, configured only in the disposable
+`CODEX_HOME`, no credentials):
+
+| Capability | Result | Why |
+|---|---|---|
+| passive-identity | proven | an independent client sees the same native thread and creates nothing |
+| existing-session-attach | proven | a second client `thread/resume`s the thread while the original client stays operational |
+| safe-detach | proven | measured both ways: the observer leaves, and the original client leaves while an observer is attached |
+| reconnect | proven (evidence only; the join gate does not read it) | a new client resolves the same thread after every earlier client left |
+| conditional-admission | **unsupported** (`unsupported-turn-start-steers-active-turn`) | `turn/start` on a busy thread returns the active turn's own id and adds a model request to that turn: it steers, it does not admit or refuse |
+| correlated-result | **unsupported** (`unsupported-concurrent-callers-share-a-turn`) | idle turns are attributable by native turn id, but a second caller during an active turn shares the active turn's id |
+| concurrent-human-use | unproven (`unproven-needs-human-ui-probe`) | needs a human-style client; the Codex TUI can run in a pseudo-terminal against the same server once a stub provider is configured (it creates its thread on that server), but that experiment is not yet a probe |
+
+Other measured facts: a thread with no turn has no persisted history, so the attach probe seeds synthetic history
+through `thread/inject_items` and records that; `codex queue --thread T --message M --remote unix://...` returns a
+native message id and does not disturb a streaming turn, but the message is delivered into the same active turn at
+its next model request (one turn, a second request), so it is not an idle-conditional admission either. A joined
+Codex session therefore cannot be given a prompt through the app-server protocol without risking injection into a
+human's active turn; safe delivery can only be gateway-side queueing until the thread is idle, which is not atomic
+(a human may start a turn between the idle check and `turn/start`). `reconnect` is evidence only.
+
+The probes use these rules: busy admission is never tested through `turn/steer`; the idle case must admit exactly
+once; native turn ids (never text or order) attribute results; the stub receives nothing but `POST /v1/responses`
+(any other request fails the probe closed); the stub's reply text is a protocol artefact, never a model claim.

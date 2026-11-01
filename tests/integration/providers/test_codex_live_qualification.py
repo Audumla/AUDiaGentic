@@ -37,14 +37,25 @@ def _own_servers() -> list[str]:
     return found
 
 
-def test_the_installed_codex_proves_identity_attach_detach_and_reconnect_and_nothing_more(tmp_path):
+def test_the_installed_codex_proves_identity_attach_detach_reconnect_and_measures_admission_as_unsupported(tmp_path):
     result = qualify_live("codex", state_root=tmp_path / "state")
     assert result["state"] == "partial", result["observations"]
     assert result["capabilities"] == {
         "passive-identity": True, "existing-session-attach": True, "safe-detach": True, "reconnect": True,
         "conditional-admission": False, "correlated-result": False, "concurrent-human-use": False}
-    assert result["reasons"] == ["unproven-needs-turn-probe"]
+    assert result["reasons"] == ["unproven-needs-human-ui-probe", "unsupported-concurrent-callers-share-a-turn",
+                                 "unsupported-turn-start-steers-active-turn"]
     assert result["cleanup-error"] is None and not _own_servers()  # nothing left running, nothing left on disk
+
+
+def test_a_second_turn_start_on_a_busy_thread_steers_the_active_turn_and_is_not_admission(tmp_path):
+    """The decisive measurement behind the unsupported verdict (codex 0.166.0): B's turn/start while A's turn is
+    active returns A's own turn id and adds a model request to A's turn; idle admission and idle attribution work."""
+    observed = qualify_live("codex", state_root=tmp_path / "state")["observations"]["conditional-admission"]
+    assert observed["idle-admitted-exactly-once"] is True and observed["idle-callers-attributed-by-turn-id"] is True
+    assert observed["busy-second-caller-got-the-active-turn-id"] is True
+    assert observed["model-requests-added-to-the-active-turn"] >= 1 and observed["active-turn-output-unchanged"] is False
+    assert observed["stub-unexpected-requests"] == 0  # the harness reached for nothing but the stub's responses route
 
 
 def test_the_evidence_is_exact_match_for_this_executable_and_adapter(tmp_path):
@@ -57,6 +68,7 @@ def test_the_evidence_is_exact_match_for_this_executable_and_adapter(tmp_path):
     assert record and record["evidence-id"] == result["evidence-id"]
     assert record["target"]["executable-version"] == facts["executable-version"]
     assert evidence.proven_capabilities(record) == {"passive-identity", "existing-session-attach", "safe-detach", "reconnect"}
+    assert "conditional-admission" not in evidence.proven_capabilities(record)
     assert "human-UI" in result["claim"] and "never sufficient for a join" in result["claim"]
 
 

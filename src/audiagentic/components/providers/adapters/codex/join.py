@@ -82,7 +82,35 @@ class AppServerClient:
                 if "error" in message:
                     raise AppServerError("rpc-error", method, (message["error"] or {}).get("code"))
                 return message.get("result") or {}
-            self.notifications.append({"method": message.get("method"), "id": message.get("id")})
+            self.notifications.append(message)
+
+    async def wait_for(self, method: str, timeout: float, *, match: Any = None) -> dict[str, Any] | None:
+        """The next notification named ``method`` (already seen, or arriving within ``timeout``), else None.
+
+        ``match`` may filter on the notification's params. Responses to requests are not consumed here.
+        """
+        deadline = time.monotonic() + timeout
+        seen = 0
+        while True:
+            pending = list(self.notifications)
+            for message in pending[seen:]:
+                if message.get("method") == method and (match is None or match(message.get("params") or {})):
+                    return message
+            seen = len(pending)
+            remaining = deadline - time.monotonic()
+            if remaining <= 0 or self._ws is None:
+                return None
+            try:
+                raw = await asyncio.wait_for(self._ws.recv(), remaining)
+            except TimeoutError:
+                return None
+            except Exception:  # noqa: BLE001 - a closed socket ends the wait
+                return None
+            message = json.loads(raw)
+            if "method" in message:
+                self.notifications.append(message)
+                if len(self.notifications) == self.notifications.maxlen:
+                    seen = max(0, seen - 1)
 
     async def initialize(self) -> dict[str, Any]:
         result = await self.request("initialize", {
