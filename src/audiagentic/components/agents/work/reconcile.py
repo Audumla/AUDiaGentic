@@ -48,6 +48,14 @@ def reconcile_work(project_root: Path, work: AgentWorkRecord, *, execution_state
 
 def reconcile_linked_execution(project_root: Path, work: AgentWorkRecord) -> AgentWorkRecord:
     """Read gateway status and project it onto Work after restart/recovery."""
+    if work.commands:
+        # Accepted commands are durable in the Work record: admit any that never reached the gateway.
+        # Dispatch uses each command's own stable idempotency key, so a replay returns the original request.
+        from audiagentic.components.agents.gateway.client import get_gateway_client
+
+        if any(not command.get("execution_id") for command in work.commands):
+            get_gateway_client(project_root).dispatch_agent_work_commands(project_root, work.work_id)
+            work = AgentWorkStore().get(project_root, work.work_id)
     if not work.active_execution_id:
         # The Gateway idempotency index is the recovery authority for the
         # admitted-but-not-yet-linked crash window. Re-submit through the

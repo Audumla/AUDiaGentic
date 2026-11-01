@@ -73,6 +73,37 @@ class AgentWorkStore:
             atomic_write_json(path, updated.to_mapping())
             return WorkCommandReceipt(updated, command, False)
 
+    def link_command_execution(
+        self, project_root: Path, work_id: str, delivery_key: str, execution_id: str,
+    ) -> AgentWorkRecord:
+        """Record the gateway request that carries one accepted command (idempotent per command).
+
+        A command keeps the first execution it was linked to; a second, different one is refused. The Work's
+        ``active_execution_id`` follows the newest command, so the history of every execution stays in the
+        commands while the existing single-slot readers keep working.
+        """
+        path = agent_work_path(project_root, work_id)
+        with StartupLock(agent_work_lock_path(project_root, work_id)):
+            current = _from_mapping(load_json_file(path))
+            commands = list(current.commands)
+            index = next((i for i, c in enumerate(commands) if c.get("delivery_key") == delivery_key), None)
+            if index is None:
+                raise command_error(165, "The command is not part of this Work", work_id=work_id)
+            linked = commands[index].get("execution_id")
+            if linked == execution_id:
+                return current
+            if linked:
+                raise command_error(166, "The command is already linked to a different execution", work_id=work_id)
+            commands[index] = {**commands[index], "execution_id": execution_id}
+            newest = max(i for i, c in enumerate(commands) if c.get("execution_id"))
+            updated = AgentWorkRecord(
+                current.work_id, current.context_id, current.state, current.wait_reason,
+                commands[newest]["execution_id"], current.parent_work_id, current.current_interaction_id,
+                current.revision + 1, current.created_at, _now(), tuple(commands),
+            )
+            atomic_write_json(path, updated.to_mapping())
+            return updated
+
     def get(self, project_root: Path, work_id: str) -> AgentWorkRecord:
         return _from_mapping(load_json_file(agent_work_path(project_root, work_id)))
 

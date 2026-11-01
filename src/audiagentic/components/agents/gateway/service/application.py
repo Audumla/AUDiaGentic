@@ -584,6 +584,9 @@ class GatewayServiceApplication:
             if not isinstance(message, dict):
                 raise service_validation_error(32, "work message must be an object")
             return self._application.submit_agent_work(root, _required(arguments, "context_id"), message, work_id=arguments.get("work_id"))
+        if operation == "dispatch_agent_work_commands":
+            _reject_unknown(arguments, {"work_id"})
+            return self._application.dispatch_agent_work_commands(root, _required(arguments, "work_id"))
         if operation == "submit_agent_work_child":
             message = arguments.get("message")
             if not isinstance(message, dict):
@@ -855,7 +858,7 @@ def _canonical_root(value: str) -> Path:
 
 
 _WORK_PRODUCING_OPERATIONS = frozenset(
-    {"submit_execution_request", "run_execution_request", "resume_execution_session", "submit_agent_work"}
+    {"submit_execution_request", "run_execution_request", "resume_execution_session", "submit_agent_work", "dispatch_agent_work_commands"}
 )
 
 

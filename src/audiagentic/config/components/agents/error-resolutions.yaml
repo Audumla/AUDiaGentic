@@ -286,3 +286,5 @@ CON-AGW-161: "This delivery identity was already accepted with a different paylo
 CON-AGW-162: "The Work is terminal and cannot take another command. Start new Work in the Context."
 CON-AGW-163: "A delivery identity needs a principal, protocol, project, Context and message id. Supply the missing field."
 CON-AGW-164: "The Context is closed. Open a new Context to submit Work."
+CON-AGW-165: "The command is not part of this Work. Check the delivery identity and Work id."
+CON-AGW-166: "The command is already linked to a different gateway request. Do not relink; read the Work to see the request that carries it."

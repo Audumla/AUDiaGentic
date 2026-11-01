@@ -445,6 +445,9 @@ class StandaloneGatewayClient:
     def submit_agent_work_child(self, project_root: Path, parent_work_id: str, message: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
         return cast(dict[str, Any], self._call("submit_agent_work_child", project_root, {"parent_work_id": parent_work_id, "message": message, **kwargs}))
 
+    def dispatch_agent_work_commands(self, project_root: Path, work_id: str) -> dict[str, Any]:
+        return cast(dict[str, Any], self._call("dispatch_agent_work_commands", project_root, {"work_id": work_id}))
+
     def get_agent_work(self, project_root: Path, work_id: str) -> dict[str, Any]:
         return cast(dict[str, Any], self._call("get_agent_work", project_root, {"work_id": work_id}))
 
