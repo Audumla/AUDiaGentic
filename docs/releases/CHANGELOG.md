@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.58.2](https://github.com/Audumla/AUDiaGentic/compare/v0.58.1...v0.58.2) (2026-11-01)
+
+
+### Documentation
+
+* **planning:** detail the empty shared-gateway slices with GPT; close SH63 ([#331](https://github.com/Audumla/AUDiaGentic/issues/331)) ([328e12a](https://github.com/Audumla/AUDiaGentic/commit/328e12a5f126f2d91dcb4f0f373472830bb30544))
+
+## [0.58.1](https://github.com/Audumla/AUDiaGentic/compare/v0.58.0...v0.58.1) (2026-11-01)
+
+
+### Documentation
+
+* **planning:** close CFG14, add the end-to-end gate to CFG16 and risks to CFG15-17 ([#329](https://github.com/Audumla/AUDiaGentic/issues/329)) ([6028222](https://github.com/Audumla/AUDiaGentic/commit/6028222e8f6ab73c7d898d5756994adbbedd4c7d))
+
 ## [0.58.0](https://github.com/Audumla/AUDiaGentic/compare/v0.57.2...v0.58.0) (2026-11-01)
 
 
