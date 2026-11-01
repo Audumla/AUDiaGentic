@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.69.3](https://github.com/Audumla/AUDiaGentic/compare/v0.69.2...v0.69.3) (2026-11-01)
+
+
+### Bug Fixes
+
+* **planning:** repair 57 items whose acceptance criteria landed in a stray section; add a duplicate-section guard ([#371](https://github.com/Audumla/AUDiaGentic/issues/371)) ([28b5422](https://github.com/Audumla/AUDiaGentic/commit/28b5422e81b09ced2c0644d3a0852d638311c0ee))
+
 ## [0.69.2](https://github.com/Audumla/AUDiaGentic/compare/v0.69.1...v0.69.2) (2026-11-01)
 
 
