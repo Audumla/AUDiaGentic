@@ -342,6 +342,10 @@ Decisions:
   suggesting a value from the git origin name or directory, and never changes
   an existing value. Duplicate ids among served roots are an error. The
   connector takes the id from the local project.
+- **Order.** CFG16 (server document shape) precedes CFG15 (init), so init writes
+  the final shape once; `gateway init` writes an explicit absolute root because a
+  persistent server cannot rely on its launch directory. The end-to-end gate runs
+  after CFG15.
 - **Roots are paths in the server document** (CFG16). `projects` is an
   optional list of root paths; when omitted the server serves the project
   containing its working directory, resolved once at start. A principal's

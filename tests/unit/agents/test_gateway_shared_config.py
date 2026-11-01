@@ -8,18 +8,19 @@ import yaml
 
 from audiagentic.components.agents.gateway.service import shared_config as config
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+from tests.helpers.shared_gateway import declare_project
 
 
 @pytest.fixture
 def files(tmp_path):
-    (tmp_path / "project").mkdir()
+    declare_project(tmp_path / "project", "project_1")
     (tmp_path / "service").mkdir()
     token = tmp_path / "token"
     token.write_text("SECRET-NOT-TO-BE-READ", encoding="utf-8")
     token.chmod(0o600)
     server = {
         "schema-version": 1, "server-id": "server-1", "listen": {"port": 8443},
-        "projects": {"project_1": "project"}, "service-root": "service",
+        "projects": ["project"], "service-root": "service",
         "principals": {"alice": {"token-file": "token", "projects": ["project_1"],
                                   "actions": ["read", "submit", "cancel", "session"]}},
     }
@@ -73,7 +74,7 @@ def test_connector_contract_never_reads_token(files, monkeypatch):
 @pytest.mark.parametrize("field,value", [
     ("schema-version", True), ("schema-version", 2), ("server-id", "../server"),
     ("server-id", "A"), ("server-id", "a" * 65), ("server-id", False),
-    ("projects", {}), ("principals", {}), ("service-root", "missing"),
+    ("projects", {}), ("projects", {"project_1": "project"}), ("principals", {}), ("service-root", "missing"),
     ("service-root", None), ("unexpected", "SECRET"),
 ])
 def test_server_invalid_top_level(files, field, value):
@@ -105,7 +106,7 @@ def test_server_rejects_noncanonical_loopback_host(files, host):
 
 
 @pytest.mark.parametrize("field,value", [
-    ("projects", ["unknown"]), ("projects", []), ("projects", "project_1"),
+    ("projects", ["unknown"]), ("projects", "project_1"),
     ("actions", ["admin"]), ("actions", ["read", "read"]),
     ("token-file", "missing"), ("token-file", "project"), ("extra", True),
 ])
@@ -118,7 +119,7 @@ def test_principal_validation(files, field, value):
 
 def test_duplicate_resolved_roots(files):
     base, server, _ = files
-    server["projects"]["alias"] = "project/../project"
+    server["projects"].append("project/../project")
     with pytest.raises(AudiaGenticError):
         config.load_shared_server_config(write(base, server))
 
@@ -195,8 +196,9 @@ def test_deployment_guide_yaml_examples_match_parser(tmp_path):
     examples = [section.split("```", 1)[0] for section in guide.read_text(
         encoding="utf-8").split("```yaml\n")[1:]]
     assert len(examples) == 4
-    for directory in ("state", "projects/sample", "secrets", "trust"):
+    for directory in ("state", "secrets", "trust"):
         (tmp_path / directory).mkdir(parents=True, exist_ok=True)
+    declare_project(tmp_path / "projects/sample", "sample")
     for name in ("developer-a", "observer", "build-node", "local"):
         token = tmp_path / f"secrets/{name}.token"
         token.write_text(f"test-{name}", encoding="utf-8")
@@ -298,3 +300,63 @@ def test_shared_connector_accepts_the_loopback_http_origin(files):
     base, _, connector = files
     connector["endpoint"] = "http://127.0.0.1:8765"
     assert config.load_shared_connector_config(write(base, connector)).endpoint == "http://127.0.0.1:8765"
+
+
+def test_server_roots_come_from_declared_project_ids(files):
+    base, server, _ = files
+    declare_project(base / "second", "second")
+    server["projects"].append("second")
+    result = config.load_shared_server_config(write(base, server))
+    assert result.projects == {"project_1": (base / "project").resolve(), "second": (base / "second").resolve()}
+
+
+def test_old_project_map_is_refused_with_the_fix(files):
+    base, server, _ = files
+    server["projects"] = {"project_1": "project"}
+    with pytest.raises(AudiaGenticError, match="declared project.id"):
+        config.load_shared_server_config(write(base, server))
+
+
+def test_root_without_a_declared_id_or_with_a_duplicate_id_is_refused(files):
+    base, server, _ = files
+    (base / "bare").mkdir()
+    server["projects"].append("bare")
+    with pytest.raises(AudiaGenticError, match="declared project.id"):
+        config.load_shared_server_config(write(base, server))
+    declare_project(base / "bare", "project_1")
+    with pytest.raises(AudiaGenticError, match="same project.id"):
+        config.load_shared_server_config(write(base, server))
+
+
+def test_omitted_projects_serve_the_default_root(files):
+    base, server, _ = files
+    del server["projects"]
+    result = config.load_shared_server_config(write(base, server), default_root=base / "project")
+    assert result.projects == {"project_1": (base / "project").resolve()}
+
+
+def test_omitted_projects_use_the_working_directory_project(files, monkeypatch):
+    base, server, _ = files
+    del server["projects"]
+    (base / "project" / ".git").mkdir()
+    monkeypatch.chdir(base / "project")
+    assert config.load_shared_server_config(write(base, server)).projects == {"project_1": (base / "project").resolve()}
+    monkeypatch.chdir(base / "service")
+    with pytest.raises(AudiaGenticError):
+        config.load_shared_server_config(write(base, server))
+
+
+def test_principal_defaults_and_empty_grants(files):
+    base, server, _ = files
+    declare_project(base / "second", "second")
+    server["projects"].append("second")
+    alice = server["principals"]["alice"]
+    del alice["projects"], alice["actions"]
+    principal = config.load_shared_server_config(write(base, server)).principals[0]
+    assert principal.projects == {"project_1", "second"}
+    assert principal.actions == {"read", "submit", "cancel", "session"}
+    alice["projects"], alice["actions"] = [], []
+    principal = config.load_shared_server_config(write(base, server)).principals[0]
+    assert principal.projects == frozenset() and principal.actions == frozenset()
+    alice["projects"] = ["second"]
+    assert config.load_shared_server_config(write(base, server)).principals[0].projects == {"second"}

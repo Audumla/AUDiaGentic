@@ -20,12 +20,16 @@ from audiagentic.components.agents.gateway.service.shared_config import load_sha
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.io import atomic_write_json
 from audiagentic.foundation.system.managed_service import ManagedServiceStore
+from tests.helpers.shared_gateway import declare_project
 
 
 @pytest.fixture
 def configured(tmp_path):
     for name in ("one", "two", "replacement", "service-base"):
         (tmp_path / name).mkdir()
+    declare_project(tmp_path / "one", "one")
+    declare_project(tmp_path / "two", "two")
+    declare_project(tmp_path / "replacement", "one")  # same id, different root
     for name in ("alice", "bob", "observer", "single", "node"):
         token = tmp_path / f"{name}.token"
         token.write_text(f"credential-{name}", encoding="utf-8")
@@ -33,7 +37,7 @@ def configured(tmp_path):
     raw = {
         "schema-version": 1, "server-id": "configured-server", "listen": {"port": 8000},
         "service-root": "service-base", "node-listen": {"port": 8001},
-        "projects": {"one": "one", "two": "two"},
+        "projects": ["one", "two"],
         "principals": {
             "alice": {"token-file": "alice.token", "projects": ["one", "two"], "actions": ["submit"]},
             "bob": {"token-file": "bob.token", "projects": ["one", "two"], "actions": ["submit"]},
@@ -196,7 +200,7 @@ def test_unsupported_config_drift_poisoned_without_admission(configured, change)
     if change == "server":
         raw["server-id"] = "changed-server"
     elif change == "project":
-        raw["projects"]["one"] = "replacement"
+        raw["projects"][0] = "replacement"
     elif change == "principal":
         raw["principals"]["alice"]["actions"] = ["read"]
     elif change == "workspace":

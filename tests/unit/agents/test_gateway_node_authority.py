@@ -16,18 +16,19 @@ from audiagentic.components.agents.gateway.node.authority import (
 from audiagentic.components.agents.gateway.node.contracts import CommandIdentity
 from audiagentic.components.agents.gateway.service.shared_config import load_shared_server_config
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+from tests.helpers.shared_gateway import declare_project
 
 
 @pytest.fixture
 def setup(tmp_path):
-    (tmp_path / "project").mkdir()
+    declare_project(tmp_path / "project", "project")
     for name in ("principal", "node"):
         path = tmp_path / name
         path.write_text(f"token-{name}", encoding="utf-8")
         path.chmod(0o600)
     raw = {
         "schema-version": 1, "server-id": "server", "listen": {"port": 8000},
-        "node-listen": {"port": 8001}, "projects": {"project": "project"},
+        "node-listen": {"port": 8001}, "projects": ["project"],
         "principals": {"alice": {"token-file": "principal", "projects": ["project"], "actions": ["submit"]}},
         "nodes": {"node": {"token-file": "node", "workspaces": {"workspace": "project"},
                            "principals": ["alice"], "revision": 1, "enabled": True}},

@@ -14,11 +14,13 @@ from audiagentic.components.agents.gateway.operations import (
 from audiagentic.components.agents.gateway.service.host import GatewayServiceHost
 from audiagentic.components.agents.gateway.service.shared_config import load_shared_server_config
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+from tests.helpers.shared_gateway import declare_project
 
 
 def _config(tmp_path, *, duplicate_token=False):
     for name in ("project", "state"):
         (tmp_path / name).mkdir()
+    declare_project(tmp_path / "project", "project")
     for name, text in (("principal", "principal-credential"),
                        ("node", "principal-credential" if duplicate_token else "node-credential")):
         token = tmp_path / f"{name}.token"
@@ -27,7 +29,7 @@ def _config(tmp_path, *, duplicate_token=False):
     path = tmp_path / "server.yaml"
     path.write_text(yaml.safe_dump({
         "schema-version": 1, "server-id": "server", "listen": {"port": 0},
-        "service-root": "state", "projects": {"project": "project"},
+        "service-root": "state", "projects": ["project"],
         "principals": {"alice": {"token-file": "principal.token", "projects": ["project"],
                                  "actions": ["read", "submit"]}},
         "node-listen": {"port": 0},

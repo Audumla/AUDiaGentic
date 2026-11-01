@@ -31,11 +31,12 @@ from audiagentic.components.agents.models.execution_profile import ExecutionProf
 from audiagentic.components.agents.models.prompt_definition import PromptDefinition, PromptTextPart
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.system.managed_service import ManagedServiceStore
+from tests.helpers.shared_gateway import declare_project
 
 
 @pytest.fixture
 def admission(tmp_path, monkeypatch):
-    (tmp_path / "project").mkdir()
+    declare_project(tmp_path / "project", "project")
     (tmp_path / "service").mkdir()
     for name in ("caller", "node"):
         path = tmp_path / f"{name}.token"
@@ -43,7 +44,7 @@ def admission(tmp_path, monkeypatch):
         path.chmod(0o600)
     raw = {"schema-version": 1, "server-id": "server", "listen": {"port": 8000},
         "service-root": "service", "node-listen": {"port": 8001},
-        "projects": {"project": "project"},
+        "projects": ["project"],
         "principals": {"caller": {"token-file": "caller.token", "projects": ["project"], "actions": ["submit"]}},
         "nodes": {"node": {"token-file": "node.token", "workspaces": {"workspace": "project"},
                            "principals": ["caller"], "revision": 1, "enabled": True}}}

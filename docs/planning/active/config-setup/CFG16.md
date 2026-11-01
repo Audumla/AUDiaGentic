@@ -67,6 +67,8 @@ Trigger: roots and ids are typed per project and repeated in grants, node worksp
 
 Agreed with GPT (round 7). Trusted operators on a shared server: grants are not a tenant boundary. Depends on CFG15.
 
+Agreed with GPT (rounds 7 and 9). ORDER CHANGE: CFG16 now precedes CFG15 so `gateway init` writes the final server.yaml shape once. Slices: CFG16-A server model (done in this change: `projects` is an optional list of root paths, ids from each root's declared project.id, duplicate roots/ids and the old {id: path} map refused with the fix, principal projects/actions optional with [] = none, load_shared_server_config(path, default_root=...)); CFG16-B runtime integration (confirm startup/authorization/routing consume the normalized model, cwd default resolved once; revoke keeps roots); CFG15-A init; CFG15-B where + extended validate; CFG16-C the end-to-end gate (init -> validate -> serve -> request, restart, negative cross-project case), which runs after CFG15 and is required before CFG16 is closed. No automatic migration of the old map: the loader refuses it with the exact fix (a documented one-line-per-project edit). Cwd omission is for the simplest local case; `gateway init` writes explicit absolute roots because a persistent server cannot rely on the launch directory.
+
 ## Change Log
 
 - 2026-10-31T23:04:07.737996+00:00 (created-by): Created by claude
@@ -76,3 +78,4 @@ Agreed with GPT (round 7). Trusted operators on a shared server: grants are not 
 - 2026-10-31T23:14:30.183054+00:00 (updated-by): Updated: section:description, section:steps, section:standards, section:acceptance_criteria
 - 2026-10-31T23:30:33.748431+00:00 (updated-by): Updated: section:title, priority='P1', section:description, section:steps, section:validation, section:standards, section:acceptance_criteria, section:notes
 - 2026-11-01T00:32:10.458439+00:00 (updated-by): Updated: section:effort_risk, section:acceptance_criteria
+- 2026-11-01T00:50:56.841012+00:00 (updated-by): Updated: section:notes
