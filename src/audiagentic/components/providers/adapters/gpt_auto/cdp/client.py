@@ -30,25 +30,8 @@ async def connect(*args: Any, **kwargs: Any) -> Any:
     return await websocket_connect(*args, **kwargs)
 
 
-# TEMPORARY GP18 debug instrumentation -- tests the event-loop-ownership
-# hypothesis (the singleton CdpClient's reader task may outlive the asyncio
-# event loop of the pytest test that created it, becoming pending-forever
-# rather than dead once a later test's loop tries to reuse it). Writes
-# directly to disk since the gateway subprocess's stdout/stderr are
-# discarded and no log file handler is configured. Remove once GP18's
-# mechanism is confirmed or ruled out.
-_GP18_TRACE_PATH = r"C:\example-home\AppData\Local\Temp\claude\h--development-projects-AUDia-AUDiaGentic\00000000-0000-4000-8000-21d26ba52ce6\scratchpad\gp18_trace.log"
 
 
-def _gp18_trace(message: str) -> None:
-    import datetime
-    import os
-
-    try:
-        with open(_GP18_TRACE_PATH, "a", encoding="utf-8") as f:
-            f.write(f"{datetime.datetime.now(datetime.UTC).isoformat()} pid={os.getpid()} {message}\n")
-    except OSError:
-        pass
 
 
 class CdpError(RuntimeError):
@@ -163,11 +146,6 @@ class CdpClient:
                 )
                 if not stale:
                     return
-                _gp18_trace(
-                    f"_ensure_connected() detected STALE client (reader_done={self._reader_task.done() if self._reader_task else None}) "
-                    f"-- forcing reconnect instead of reuse; current_loop={id(current_loop)} "
-                    f"owner_loop={id(self._owner_loop) if self._owner_loop else None} pending={tuple(self._pending)}"
-                )
                 stale_error = CdpError("CDP reader task was found dead on reuse; connection was stale")
                 for future in tuple(self._pending.values()):
                     if not future.done():
@@ -190,10 +168,6 @@ class CdpClient:
             self._owner_thread = threading.get_ident()
             self._reader_task = asyncio.create_task(self._read_loop())
             self.connection_generation += 1
-            _gp18_trace(
-                f"_ensure_connected() fresh connect: owner_loop={id(current_loop)} owner_thread={threading.get_ident()} "
-                f"reader_task_loop={id(self._reader_task.get_loop())} generation={self.connection_generation}"
-            )
 
     def _discover_websocket_url(self, timeout: float | None = None) -> str:
         if self.endpoint.startswith(("ws://", "wss://")):
@@ -257,32 +231,14 @@ class CdpClient:
         message: dict[str, Any] = {"id": request_id, "method": method, "params": params or {}}
         if session_id is not None:
             message["sessionId"] = session_id
-        t0 = time.monotonic()
-        reader_loop = self._reader_task.get_loop() if self._reader_task else None
-        _gp18_trace(
-            f"cdp.command.begin id={request_id} method={method} current_loop={id(current_loop)} "
-            f"owner_loop={id(self._owner_loop) if self._owner_loop else None} reader_loop={id(reader_loop) if reader_loop else None} "
-            f"loops_match={current_loop is reader_loop} reader_done={self._reader_task.done() if self._reader_task else None} "
-            f"pending={tuple(self._pending)}"
-        )
         try:
-            lock_t = time.monotonic()
             async with self._send_lock:
-                _gp18_trace(f"cdp.send_lock.acquired id={request_id} waited={time.monotonic() - lock_t:.4f}")
-                send_t = time.monotonic()
                 await socket.send(json.dumps(message, separators=(",", ":")))
-                _gp18_trace(f"cdp.send.returned id={request_id} duration={time.monotonic() - send_t:.4f}")
-            wait_t = time.monotonic()
             try:
                 result = await asyncio.wait_for(future, timeout or self.default_timeout)
-                _gp18_trace(f"cdp.command.completed id={request_id} total={time.monotonic() - t0:.4f}")
                 return result
             except TimeoutError:
                 self._timed_out_ids[request_id] = time.monotonic()
-                _gp18_trace(
-                    f"cdp.command.timeout id={request_id} waited={time.monotonic() - wait_t:.4f} "
-                    f"total={time.monotonic() - t0:.4f} pending={tuple(self._pending)}"
-                )
                 raise
         finally:
             self._pending.pop(request_id, None)
@@ -294,18 +250,12 @@ class CdpClient:
         failure: Exception | None = None
         try:
             async for raw in socket:
-                _gp18_trace(f"cdp.raw.received len={len(raw)} loop={id(asyncio.get_running_loop())}")
                 value = json.loads(raw)
                 if "id" in value:
                     response_id = int(value["id"])
                     future = self._pending.get(response_id)
                     if response_id in self._timed_out_ids:
-                        latency = time.monotonic() - self._timed_out_ids.pop(response_id)
-                        _gp18_trace(f"LATE_CDP_RESPONSE id={response_id} latency={latency:.4f}")
-                    _gp18_trace(
-                        f"cdp.response.correlate id={response_id} pending_found={future is not None} "
-                        f"future_done={future.done() if future else None} pending_ids={tuple(self._pending)}"
-                    )
+                        self._timed_out_ids.pop(response_id)
                     if future is None or future.done():
                         continue
                     if "error" in value:
