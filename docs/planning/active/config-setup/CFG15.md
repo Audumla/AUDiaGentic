@@ -71,6 +71,8 @@ Agreed with GPT (round 7). Base security only: authentication required, 0600 tok
 
 Agreed with GPT (round 7). CFG14 is done: the connector has mode plain|shared and no project-id; `gateway connect config FILE` sets the machine-level gateway.connector. So init writes a shared-mode loopback connector (http://127.0.0.1:PORT, server-id pinned, token-file) and project.id into the project's tracked scope when absent; init then runs or prints connect. Base security only: authentication required, 0600 token files, loopback bind, no overwrite of credentials. Served projects need a declared project.id read with foundation resolve_settings_cached(root).get('project.id') (any layer); no new reader. Deferred: connector create, node enrollment, registry, discovery.
 
+Agreed with GPT (rounds 7 and 9). CFG15-A (init) implemented in this change: management_api.gateway_init -> service/init_setup.py; CLI `gateway init [dir PATH] [project PATH] [dry-run]`; codes CFG-AGSV-007 (partial/inconsistent existing setup) and CFG-AGSV-008 (needs a project / invalid id) registered. Creation is create-then-validate with removal of only this run's files on failure (not a transaction; an interrupted run is reported by the next). CFG15-B (gateway where + validate extension) and CFG16-C (end-to-end gate) follow. Known limit: if the files already exist but the project has no declared project.id, the existing-file check reports the missing id (declare it with config set, then rerun). A declared project.id that is not a valid gateway id (lowercase) is refused with the fix. Base security only: authentication required, 0600 token files in a 0700 directory, loopback bind, no overwrite of credentials. Deferred: connector create, node enrollment, registry, discovery.
+
 ## Change Log
 
 - 2026-10-31T23:04:05.088135+00:00 (created-by): Created by claude
@@ -82,3 +84,4 @@ Agreed with GPT (round 7). CFG14 is done: the connector has mode plain|shared an
 - 2026-11-01T00:32:12.911787+00:00 (updated-by): Updated: section:effort_risk
 - 2026-11-01T00:32:30.124289+00:00 (updated-by): Updated: section:notes
 - 2026-11-01T00:50:59.486071+00:00 (updated-by): Updated: section:steps
+- 2026-11-01T01:04:59.559061+00:00 (updated-by): Updated: section:notes
