@@ -40,9 +40,10 @@ class TestLoadOpenCodeDescriptor:
 
     def test_opencode_has_session_surfaces(self):
         desc = _load_opencode()
-        assert len(desc.session_surfaces) == 2, (
-            "OpenCode should have exactly 2 session surfaces: ACP + CLI"
-        )
+        owned = [s for s in desc.session_surfaces if s.surface_id != "opencode-app"]
+        assert len(owned) == 2, "OpenCode should have exactly 2 owned session surfaces: ACP + CLI"
+        # The EXTERNAL join surface (SH39/SH56) is separate and covered by test_sh39_opencode_surface.py.
+        assert [s.surface_id for s in desc.session_surfaces if s.surface_id == "opencode-app"] == ["opencode-app"]
 
     def test_opencode_acp_surface_id(self):
         desc = _load_opencode()

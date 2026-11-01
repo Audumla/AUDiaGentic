@@ -293,6 +293,48 @@ session_surfaces:
       validated: false
       reference: ""
 
+  # SH39/SH56: the human-serving OpenCode server, joined EXTERNALLY as an observer. Claims only what the
+  # live probes proved on opencode 2.2.5 (providers/services/qualification/probes/opencode.py): attach,
+  # safe detach, the human's UI staying usable, and conditional admission FOR delivery="queue" ONLY. The
+  # server default is delivery="steer"; OpenCodeClient.prompt fixes "queue" and offers no other mode
+  # (tests/unit/providers/test_opencode_join_adapter.py), and the evidence is bound to that adapter's digest.
+  # correlated_terminal_output is UNCLAIMED: assistant messages carry no native link to the prompt that
+  # caused them (unsupported-result-not-linked-by-native-id), so readiness stays UNSUPPORTED on that one
+  # mandatory claim. Readiness also needs an exact SH53 record, so this surface is not joinable today.
+  - surface_id: opencode-app
+    version_constraint: ">=2.2"
+    identity_operations:
+      open: "unsupported"
+      attach-existing: "supported"
+      resume-by-ref: "unsupported"
+      discover: "unsupported"
+    ownership_modes:
+      - "external"
+    mapping_facts:
+      ref_scope: "provider-session"
+      ref_namespace: "opencode-session-id"
+      requires_same_project: true
+      requires_same_execution_context: false
+      concurrent_attachments: true
+      share_existing: true
+      replace_existing: false
+    lifecycle_source: "none"
+    evidence:
+      validated: false
+    platforms:
+      - platform: "linux-amd64"
+        tool_version: "2.2.5"
+        probe_artifact: "tests/integration/providers/test_opencode_live_qualification.py"
+        evidence:
+          validated: true
+          reference: "tests/integration/providers/test_opencode_live_qualification.py"
+    adapter_ref: "audiagentic.components.providers.adapters.opencode.join:OpenCodeClient"
+    joined_capabilities:
+      detach_safe: true
+      prompt_delivery: true
+      native_atomic_queue_admission: true
+      human_concurrency_safe: true
+
 # CC53: AS27 harness-observability inventory (this provider's own facts —
 # see harness_observability_inventory.py for the domain semantics).
 harness_observability:
