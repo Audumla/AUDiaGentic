@@ -2,7 +2,7 @@
 id: CFG15
 order: 0
 plan: config-setup
-state: pending
+state: completed
 created-at: '2026-10-31T23:04:05.088135+00:00'
 breadth: ''
 skill: advanced
@@ -88,3 +88,4 @@ Agreed with GPT (rounds 7 and 9). CFG15-A (gateway init, #338) merged. CFG15-B i
 - 2026-11-01T00:50:59.486071+00:00 (updated-by): Updated: section:steps
 - 2026-11-01T01:04:59.559061+00:00 (updated-by): Updated: section:notes
 - 2026-11-01T01:30:37.720099+00:00 (updated-by): Updated: section:notes
+- 2026-11-01T01:45:21.423904+00:00 (state-transition): State: pending → completed
