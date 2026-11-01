@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "x-audiagentic-scopes": ["user", "explicit"],
+  "title": "settings: a2a",
+  "description": "A2A facade settings, owned by the agents component. The facade serves published agents to A2A clients through the shared gateway; it is off unless enabled and binds loopback only.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "enabled": {
+      "type": "boolean",
+      "description": "Serve the facade. Off by default."
+    },
+    "port": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 65535,
+      "description": "Loopback port the facade listens on."
+    },
+    "base_url": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The origin clients use to reach the facade, put in Agent Cards: an HTTPS origin served by a TLS reverse proxy, or http://127.0.0.1:PORT. Defaults to http://127.0.0.1:<port>."
+    },
+    "projects": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
+      },
+      "description": "Gateway project ids to serve. Every agent published to A2A in the machine-global catalog is served in each."
+    }
+  }
+}

@@ -12,3 +12,5 @@ checks:
     ref: audiagentic.components.agents.configuration.doctor_checks:check_gateway_code_drift
   - id: agents.gateway-port
     ref: audiagentic.components.agents.configuration.doctor_checks:check_gateway_port
+  - id: agents.a2a
+    ref: audiagentic.components.agents.configuration.doctor_checks:check_a2a
