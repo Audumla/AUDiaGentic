@@ -250,19 +250,21 @@ def test_restart_help_is_startup_free_and_mentions_the_operator_rule(capsys):
 def test_validate_delegates_to_the_public_api(monkeypatch, capsys, tmp_path):
     from audiagentic.components.agents.gateway import management_api
     seen = []
-    monkeypatch.setattr(management_api, "gateway_validate_role_config", lambda role, path: seen.append((role, path)))
+    monkeypatch.setattr(management_api, "gateway_validate_deployment",
+                        lambda role, path, project=None: seen.append((role, path, project)))
     assert gateway.dispatch_keyword(["validate", "node", "config", str(tmp_path / "n.yaml")]) == 0
     assert capsys.readouterr().out.strip() == "valid: node"
-    assert seen == [("node", tmp_path / "n.yaml")]
+    assert gateway.dispatch_keyword(["validate", "server", "config", "s.yaml", "project", str(tmp_path)]) == 0
+    assert seen == [("node", tmp_path / "n.yaml", None), ("server", Path("s.yaml"), tmp_path)]
 
 
 def test_validate_reports_registered_errors(monkeypatch, capsys, tmp_path):
     from audiagentic.components.agents.gateway import management_api
     from audiagentic.foundation.contracts.errors import AudiaGenticError
 
-    def boom(_role, _path):
+    def boom(_role, _path, _project=None):
         raise AudiaGenticError("VAL-AGSV-006", "validation", "invalid config")
-    monkeypatch.setattr(management_api, "gateway_validate_role_config", boom)
+    monkeypatch.setattr(management_api, "gateway_validate_deployment", boom)
     assert gateway.dispatch_keyword(["validate", "server", "config", str(tmp_path / "s.yaml")]) == 1
     assert "VAL-AGSV-006: invalid config" in capsys.readouterr().err
 
@@ -279,7 +281,8 @@ def test_validate_api_runs_the_real_loader_and_rejects_unknown_role(tmp_path):
 
 
 @pytest.mark.parametrize("tail", [["validate"], ["validate", "other", "config", "a"], ["validate", "server", "a"],
-                                  ["validate", "server", "config", "a", "extra"], ["validate", "server", "config", "--x"]])
+                                  ["validate", "server", "config", "a", "extra"], ["validate", "server", "config", "--x"],
+                                  ["validate", "server", "config", "a", "project"]])
 def test_validate_rejects_bad_grammar(tail, capsys):
     assert gateway.dispatch_keyword(tail) == 2
     assert "Invalid gateway" in capsys.readouterr().err
@@ -288,3 +291,18 @@ def test_validate_rejects_bad_grammar(tail, capsys):
 def test_validate_help_is_pure(capsys):
     assert gateway.dispatch_keyword(["validate", "help"]) == 0
     assert "validate server|node|connector" in capsys.readouterr().out
+
+
+def test_where_delegates_and_prints_json(monkeypatch, capsys, tmp_path):
+    from audiagentic.components.agents.gateway import management_api
+    seen = []
+    monkeypatch.setattr(management_api, "gateway_where", lambda project=None: seen.append(project) or {"directory": "d"})
+    assert gateway.dispatch_keyword(["where", "project", str(tmp_path), "output", "json"]) == 0
+    assert '"directory": "d"' in capsys.readouterr().out and seen == [tmp_path]
+    assert gateway.dispatch_keyword(["where"]) == 0 and capsys.readouterr().out.strip() == "directory: d"
+
+
+@pytest.mark.parametrize("tail", [["x"], ["project"], ["output"], ["output", "text"], ["--project", "a"], ["project", "a", "project", "b"]])
+def test_where_rejects_bad_grammar(tail, capsys):
+    assert gateway.dispatch_keyword(["where", *tail]) == 2
+    assert "gateway where syntax" in capsys.readouterr().err
