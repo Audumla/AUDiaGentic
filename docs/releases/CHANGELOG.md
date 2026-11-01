@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.81.0](https://github.com/Audumla/AUDiaGentic/compare/v0.80.1...v0.81.0) (2026-11-01)
+
+
+### Features
+
+* **providers:** OpenCode app-server join surface, admission claim bound to queue delivery (SH39) ([#403](https://github.com/Audumla/AUDiaGentic/issues/403)) ([425cc71](https://github.com/Audumla/AUDiaGentic/commit/425cc713a8fd8daead6e4235267ccae91448c877))
+
 ## [0.80.1](https://github.com/Audumla/AUDiaGentic/compare/v0.80.0...v0.80.1) (2026-11-01)
 
 
