@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.85.0](https://github.com/Audumla/AUDiaGentic/compare/v0.84.0...v0.85.0) (2026-11-01)
+
+
+### Features
+
+* **agents:** A2A facade settings, published-agent Agent Cards and a doctor check (SH65b-3a) ([#413](https://github.com/Audumla/AUDiaGentic/issues/413)) ([9eb54ae](https://github.com/Audumla/AUDiaGentic/commit/9eb54aefe90f351b06e443cc30737a4675f02735))
+
 ## [0.84.0](https://github.com/Audumla/AUDiaGentic/compare/v0.83.0...v0.84.0) (2026-11-01)
 
 
