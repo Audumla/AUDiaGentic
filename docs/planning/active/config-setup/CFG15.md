@@ -43,7 +43,7 @@ Fresh init, repeat init, dry-run, conflict, project rename, validate and local s
 
 ## Effort & Risk
 
-
+Size M. Risk: surprising writes to tracked project settings (project.id) and to credentials; init must never overwrite or rotate existing identity or credentials; a partial multi-file write needs a documented short recovery, not a transaction framework.
 
 ## Standards
 
@@ -66,6 +66,8 @@ Depends on CFG13 and CFG14. Trigger: every setup needs the generated files; hand
 
 Agreed with GPT (round 7). Base security only: authentication required, 0600 token files, loopback bind, no overwrite of credentials. Served projects need a declared project.id read with foundation resolve_settings_cached(root).get('project.id') (any layer); no new reader. Depends on CFG14. Deferred: connector create, node enrollment, registry, discovery.
 
+Agreed with GPT (round 7). CFG14 is done: the connector has mode plain|shared and no project-id; `gateway connect config FILE` sets the machine-level gateway.connector. So init writes a shared-mode loopback connector (http://127.0.0.1:PORT, server-id pinned, token-file) and project.id into the project's tracked scope when absent; init then runs or prints connect. Base security only: authentication required, 0600 token files, loopback bind, no overwrite of credentials. Served projects need a declared project.id read with foundation resolve_settings_cached(root).get('project.id') (any layer); no new reader. Deferred: connector create, node enrollment, registry, discovery.
+
 ## Change Log
 
 - 2026-10-31T23:04:05.088135+00:00 (created-by): Created by claude
@@ -74,3 +76,5 @@ Agreed with GPT (round 7). Base security only: authentication required, 0600 tok
 - 2026-10-31T23:09:49.552513+00:00 (updated-by): Updated: section:description, section:steps, section:validation, section:acceptance_criteria, section:notes
 - 2026-10-31T23:14:27.715171+00:00 (updated-by): Updated: section:steps, section:acceptance_criteria
 - 2026-10-31T23:30:31.272919+00:00 (updated-by): Updated: section:title, section:description, section:steps, section:validation, section:standards, section:acceptance_criteria, section:notes
+- 2026-11-01T00:32:12.911787+00:00 (updated-by): Updated: section:effort_risk
+- 2026-11-01T00:32:30.124289+00:00 (updated-by): Updated: section:notes

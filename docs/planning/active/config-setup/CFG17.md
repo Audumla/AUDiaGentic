@@ -42,7 +42,7 @@ Focused unit tests plus a two-project integration smoke test with independent se
 
 ## Effort & Risk
 
-
+Size S unless defects are found. Risk: existing runtime state may be shared across projects in a way that needs a real fix; project code runs with the server's OS identity, which is documented as a non-guarantee.
 
 ## Standards
 
@@ -68,3 +68,4 @@ Agreed with GPT (round 7). The inventory can start now; final two-project sign-o
 - 2026-10-31T23:14:22.736586+00:00 (created-by): Created by claude
 - 2026-10-31T23:14:32.639039+00:00 (updated-by): Updated: section:description, section:steps, section:validation, section:standards, section:acceptance_criteria, section:notes
 - 2026-10-31T23:30:36.227952+00:00 (updated-by): Updated: section:title, work='S', priority='P2', section:description, section:steps, section:validation, section:standards, section:acceptance_criteria, section:notes
+- 2026-11-01T00:32:15.350417+00:00 (updated-by): Updated: section:effort_risk

@@ -2,7 +2,7 @@
 id: CFG14
 order: 0
 plan: config-setup
-state: pending
+state: completed
 created-at: '2026-10-31T23:04:02.314327+00:00'
 breadth: ''
 skill: advanced
@@ -82,3 +82,4 @@ Agreed with GPT (round 8). Slice 1 merged (#319): the shared client accepts lite
 - 2026-10-31T23:50:15.340783+00:00 (updated-by): Updated: section:steps, section:notes
 - 2026-11-01T00:05:05.972156+00:00 (updated-by): Updated: section:notes
 - 2026-11-01T00:10:24.818590+00:00 (updated-by): Updated: section:effort_risk, section:acceptance_criteria
+- 2026-11-01T00:32:17.808181+00:00 (state-transition): State: pending → completed
