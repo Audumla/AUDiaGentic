@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.83.0](https://github.com/Audumla/AUDiaGentic/compare/v0.82.1...v0.83.0) (2026-11-01)
+
+
+### Features
+
+* **gateway:** shared ingress allows the Context/Work operations an A2A or ACP facade needs (SH65b-1) ([#409](https://github.com/Audumla/AUDiaGentic/issues/409)) ([bb4f2cb](https://github.com/Audumla/AUDiaGentic/commit/bb4f2cbe721737655417c36d51f400a05e764426))
+
 ## [0.82.1](https://github.com/Audumla/AUDiaGentic/compare/v0.82.0...v0.82.1) (2026-11-01)
 
 
