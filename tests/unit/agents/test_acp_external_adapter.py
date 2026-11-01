@@ -162,7 +162,7 @@ from .test_context_work import _seed  # noqa: E402
 
 
 @pytest.mark.usefixtures("in_process_gateway")
-def test_the_adapter_runs_against_the_real_work_owner(tmp_path: Path) -> None:
+def test_the_adapter_runs_against_the_real_work_owner(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from audiagentic.components.agents.context.service import open_context
     from audiagentic.components.agents.gateway.client import get_gateway_client
 
@@ -176,9 +176,15 @@ def test_the_adapter_runs_against_the_real_work_owner(tmp_path: Path) -> None:
         return {"request-id": f"req_{len(admitted)}", "state": "queued"}
 
     state = {"value": "running"}
-    client._application.submit_execution_request = admit  # type: ignore[method-assign]
-    client._application.wait_execution_request = lambda root, rid, t=None: (  # type: ignore[method-assign]
-        {"state": "completed"} if state["value"] == "completed" else {"wait-outcome": "timeout", "status": {"state": "running"}})
+    # The gateway application is a process-wide singleton: patch it with monkeypatch so it is restored.
+    monkeypatch.setattr(client._application, "submit_execution_request", admit)
+
+    def wait(root, rid, timeout=None):
+        if state["value"] == "completed":
+            return {"state": "completed"}
+        return {"wait-outcome": "timeout", "status": {"state": "running"}}
+
+    monkeypatch.setattr(client._application, "wait_execution_request", wait)
 
     adapter = AcpAgent(tmp_path, "a", client)
 
