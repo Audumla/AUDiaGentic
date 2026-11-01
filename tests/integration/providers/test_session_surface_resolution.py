@@ -42,7 +42,8 @@ def test_pi_acp_surface_resolves_through_public_api(tmp_path: Path) -> None:
             surface_id="pi-community-acp",
             platform_hint="linux-amd64",
         ),
-        model_id="audiagentic/audiagentic-rig",
+        model_id="audiagentic-rig",
+        model_selector="audiagentic/audiagentic-rig",
         request_runtime_root=tmp_path / "runtime",
     )
 

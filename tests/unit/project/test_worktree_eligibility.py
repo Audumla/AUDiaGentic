@@ -76,7 +76,7 @@ def test_squash_merged_clean_worktree_is_eligible(repo, merged) -> None:
 
 @pytest.mark.parametrize("prs, code, unknown", [
     ([], "unmerged", False),
-    ([_pr("0" * 40, None)], "tip-differs-from-pr", False),
+    ([_pr("0" * 40, None)], "pr-head-not-fetched", True),
     ([_pr("TIP", "SQUASH", state="OPEN")], "pr-open", False),
     ([_pr("TIP", "SQUASH", state="CLOSED")], "pr-closed", False),
     ([_pr("TIP", "SQUASH", base="release")], "pr-wrong-base", False),
@@ -198,3 +198,29 @@ def test_ancestry_distinguishes_no_from_cannot_tell(repo, merged) -> None:
     assert git.is_ancestor(repo, tip, "origin/main") is False
     assert git.is_ancestor(repo, "1" * 40, "origin/main") is None
     assert git.is_ancestor(repo, tip, "origin/nope") is None
+
+
+def _child(feature: Path, parent: str) -> str:
+    """A commit object on top of ``parent`` that no branch points at (the pull request's later head)."""
+    return _git(feature, "commit-tree", f"{parent}^{{tree}}", "-p", parent, "-m", "pushed later")
+
+
+def test_tip_contained_in_the_merged_pull_request_head_is_proof(repo, merged) -> None:
+    feature, tip, squash = merged
+    row = _verdict(repo, feature, [_pr(_child(feature, tip), squash)])
+    assert row["verdict"] == "eligible" and row["pr"] == 7
+
+
+def test_local_commits_beyond_the_merged_head_still_block(repo, merged) -> None:
+    feature, tip, squash = merged
+    (feature / "more.txt").write_text("local only\n")
+    _git(feature, "add", "more.txt")
+    _git(feature, "commit", "-q", "-m", "never pushed")
+    row = _verdict(repo, feature, [_pr(tip, squash)])
+    assert row["verdict"] == "blocked" and "tip-differs-from-pr" in _codes(row)
+
+
+def test_an_unmerged_pull_request_head_never_proves_containment(repo, merged) -> None:
+    feature, tip, squash = merged
+    row = _verdict(repo, feature, [_pr(_child(feature, tip), None, state="OPEN")])
+    assert row["verdict"] == "blocked" and "tip-differs-from-pr" in _codes(row)

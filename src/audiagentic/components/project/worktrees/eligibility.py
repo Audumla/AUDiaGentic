@@ -97,12 +97,27 @@ def _merge_proof(repo: Path, entry: git.WorktreeEntry, base: str | None,
     if not own:
         return [Blocker("unmerged", "no pull request exists for this branch")], None
     matching = [pr for pr in own if pr.head_sha == entry.head]
+    unfetched: list[forge.PullRequest] = []
+    if not matching:
+        # A squash merge records the pull request's final head; a local tip that is an ancestor of that
+        # head has nothing the merged pull request does not contain (for example a commit pushed after
+        # the local branch moved on). A tip that is not contained, or extra commits, still block.
+        contained = []
+        for pr in (p for p in own if p.state == "MERGED"):
+            inside = git.is_ancestor(repo, entry.head or "", pr.head_sha)
+            if inside:
+                contained.append(pr)
+            elif inside is None:
+                unfetched.append(pr)
+        matching = contained[-1:]
     if not matching:
         numbers = ", ".join(f"#{pr.number}" for pr in own)
-        merged = [pr for pr in own if pr.state == "MERGED"]
-        hint = (f"; if this branch is already merged, fast-forward it to the pull request head: "
-                f"git fetch origin refs/pull/{merged[-1].number}/head && git merge --ff-only FETCH_HEAD") if merged else ""
-        return [Blocker("tip-differs-from-pr", f"local tip is not the head of {numbers}; commits would be lost{hint}")], None
+        if unfetched:
+            return [Blocker("pr-head-not-fetched",
+                            f"the head of merged #{unfetched[-1].number} is not in the local repository; "
+                            f"`worktree finish` fetches it", True)], None
+        return [Blocker("tip-differs-from-pr",
+                        f"local tip is not the head of {numbers} and is not contained in a merged one; commits would be lost")], None
     if len(matching) > 1:
         numbers = ", ".join(f"#{pr.number}" for pr in matching)
         return [Blocker("pr-ambiguous", f"several pull requests share this tip: {numbers}", True)], None

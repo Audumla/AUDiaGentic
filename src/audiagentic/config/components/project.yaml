@@ -99,13 +99,13 @@ contributions:
         - `audiagentic worktree start SLUG [item ID]` creates branch OWNER/SLUG from the fresh
           remote default branch and prints the worktree path. Pass that path as the `worktree`
           argument of the planning, ledger and gateway tools.
-        - Publish with `audiagentic worktree merge title "type(scope): subject" body TEXT`. It runs
-          the pre-push checks the project names, pushes the exact checked commit without force,
-          opens or reuses the pull request and asks GitHub to auto-merge, then returns. Use
-          `dry-run yes` first to see what blocks it. `push` publishes without the pull request.
-        - A pull request that falls behind the default branch: `audiagentic worktree sync`, then
-          `merge` again. It never rebases and aborts on a conflict.
-        - After the pull request merges, `audiagentic worktree finish BRANCH` preserves the work
+        - Publish with `audiagentic worktree ship title "type(scope): subject" body TEXT`. It syncs the
+          branch with the default branch, runs the pre-push checks the project names, pushes the exact
+          checked commit without force, opens or reuses the pull request and asks GitHub to
+          auto-merge, then returns. It never rebases and aborts on a conflict. Run `ship` again
+          whenever the default branch moved (a release landed) and the pull request shows BEHIND;
+          it reports `merged` when done. `sync`, `push` and `merge [dry-run yes]` are the single steps.
+        - After `ship` reports merged, `audiagentic worktree finish BRANCH` preserves the work
           (quarantine ref, archive) and removes the worktree and branch. It refuses unmerged work;
           `abandon TIP12` discards it only after a verified bundle. `prune` reports what is eligible.
         - Never use `git worktree remove --force`, force-push, or edit the primary checkout.
