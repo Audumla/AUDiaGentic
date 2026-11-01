@@ -188,6 +188,46 @@ class GatewayServiceApplication:
             }
         return self._application.focus_execution_session(matches[0], session_id)
 
+    def _dashboard_project_root(self, project_id: str) -> Path:
+        """The known project whose dashboard ``project-id`` (hash of its root) is ``project_id``.
+
+        The dashboard row names its project explicitly; nothing is searched across projects and no
+        filesystem path is accepted from the caller.
+        """
+        from audiagentic.components.agents.gateway.service.dashboard_images import project_image_id
+        from audiagentic.components.agents.gateway.service.known_projects import load_known_projects
+
+        registry = load_known_projects(self._service_store.root / "known-projects.json")
+        matches = [known.project_root for known in registry.projects
+                   if known.project_root.exists() and project_image_id(known.project_root) == project_id]
+        if len(matches) != 1:
+            raise service_conflict_error(32, "dashboard project is not known to this gateway")
+        return matches[0]
+
+    def close_dashboard_session(self, project_id: str, session_id: str) -> dict[str, Any]:
+        """Close one live session through the public session API (not a purge)."""
+        return self._application.close_execution_session(self._dashboard_project_root(project_id), session_id)
+
+    def archive_dashboard_request(self, project_id: str, request_id: str) -> dict[str, Any]:
+        """Create the existing archive operation for one request; the executor owns the terminal-state fence."""
+        return self._dashboard_operation("archive", project_id, request_id)
+
+    def _dashboard_operation(self, kind: str, project_id: str, request_id: str) -> dict[str, Any]:
+        import uuid
+
+        from audiagentic.components.agents.gateway.operations import ManagementCommand, ManagementOperationKind
+
+        root = self._dashboard_project_root(project_id)
+        command = ManagementCommand(
+            operation_id=f"op_{uuid.uuid4().hex}", kind=ManagementOperationKind(kind),
+            scope={"project-root": str(root), "request-ids": [request_id]},
+        )
+        return self._operations.create_operation(command)
+
+    def dashboard_operation_status(self, operation_id: str) -> dict[str, Any]:
+        """Bounded public status of one operation (accepted, running, succeeded, failed)."""
+        return self._operations.get_operation(operation_id)
+
     def cancel_dashboard_request(self, request_id: str) -> dict[str, Any]:
         """Cancel through the canonical API; never accept a client-supplied root."""
         matches = self._dashboard_request_projects(request_id)
