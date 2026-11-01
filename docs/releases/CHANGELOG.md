@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.69.0](https://github.com/Audumla/AUDiaGentic/compare/v0.68.1...v0.69.0) (2026-11-01)
+
+
+### Features
+
+* **gateway:** dashboard close-session and archive-request actions with operation polling (SH30) ([#362](https://github.com/Audumla/AUDiaGentic/issues/362)) ([14804fa](https://github.com/Audumla/AUDiaGentic/commit/14804fa16e6373363a7ce7f02093831c9659f681))
+
 ## [0.68.1](https://github.com/Audumla/AUDiaGentic/compare/v0.68.0...v0.68.1) (2026-11-01)
 
 
