@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.65.0](https://github.com/Audumla/AUDiaGentic/compare/v0.64.0...v0.65.0) (2026-11-01)
+
+
+### Features
+
+* **agents:** SH61a A2A adapter on the canonical Work ports ([#352](https://github.com/Audumla/AUDiaGentic/issues/352)) ([0bf8a5e](https://github.com/Audumla/AUDiaGentic/commit/0bf8a5ea109e571ac6393b06dd6133879b30b1e1))
+
 ## [0.64.0](https://github.com/Audumla/AUDiaGentic/compare/v0.63.0...v0.64.0) (2026-11-01)
 
 
