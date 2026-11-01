@@ -8,7 +8,7 @@ import pytest
 from acp.schema import TextContentBlock
 
 from audiagentic.components.agents.protocols.acp import AcpAgent, UnsupportedAcpOperation
-from audiagentic.components.agents.protocols.acp.agent import AcpPromptError
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 
 class FakeAgentsPort:
@@ -36,8 +36,10 @@ class FakeAgentsPort:
         self.calls.append(("close", context_id))
         return {"context_id": context_id, "state": "closed"}
 
-    def accept_agent_work_message(self, root, context_id, message, *, protocol, work_id=None):
+    def accept_agent_work_message(self, root, context_id, message, *, protocol, work_id=None, exclusive=False):
         self.calls.append(("accept", message["text"], message["message_id"], protocol, work_id))
+        if exclusive and any(w["context_id"] == context_id and w["state"] not in {"completed", "failed", "cancelled", "rejected"} for w in self.works.values()):
+            raise AudiaGenticError("CON-AGW-167", "constraint", "outstanding")
         wid = f"work_{len(self.works) + 1}"
         self.works[wid] = {"work_id": wid, "context_id": context_id, "state": "active"}
         return dict(self.works[wid])
@@ -111,9 +113,9 @@ def test_a_second_prompt_is_refused_while_one_is_outstanding_even_from_a_new_ada
     ports = FakeAgentsPort()
     ports.works["work_9"] = {"work_id": "work_9", "context_id": "ctx_1", "state": "active"}
     reconnected = AcpAgent(tmp_path, "agent-test", ports)  # no in-memory state: the Work record decides
-    with pytest.raises(AcpPromptError, match="outstanding"):
+    with pytest.raises(AudiaGenticError) as raised:
         asyncio.run(reconnected.prompt("ctx_1", _prompt()))
-    assert not [call for call in ports.calls if call[0] == "accept"]
+    assert raised.value.code == "CON-ACP-001"
     ports.works["work_9"]["state"] = "completed"
     assert asyncio.run(reconnected.prompt("ctx_1", _prompt())).stopReason == "end_turn"
 
@@ -127,8 +129,9 @@ def test_the_prompt_stays_open_until_the_work_is_terminal(tmp_path: Path) -> Non
 @pytest.mark.parametrize("final", ["failed", "rejected"])
 def test_a_failed_work_is_an_error_never_end_turn(tmp_path: Path, final: str) -> None:
     ports = FakeAgentsPort(final=final)
-    with pytest.raises(AcpPromptError, match=final):
+    with pytest.raises(AudiaGenticError) as raised:
         asyncio.run(AcpAgent(tmp_path, "agent-test", ports).prompt("ctx_1", _prompt()))
+    assert raised.value.code == "CON-ACP-002" and raised.value.details["state"] == final
 
 
 def test_cancel_uses_durable_work_state_and_the_prompt_reports_cancelled(tmp_path: Path) -> None:
@@ -191,10 +194,17 @@ def test_the_adapter_runs_against_the_real_work_owner(tmp_path: Path, monkeypatc
     async def scenario():
         task = asyncio.create_task(adapter.prompt(context.context_id, _prompt("hello")))
         await asyncio.sleep(0.3)
-        with pytest.raises(AcpPromptError, match="outstanding"):
+        with pytest.raises(AudiaGenticError) as raised:
             await adapter.prompt(context.context_id, _prompt("second"))
+        assert raised.value.code == "CON-ACP-001"
         state["value"] = "completed"
         return await asyncio.wait_for(task, 10)
 
     result = asyncio.run(scenario())
     assert result.stopReason == "end_turn" and len(admitted) == 1
+
+
+def test_a_prompt_without_text_is_a_registered_validation_error(tmp_path: Path) -> None:
+    with pytest.raises(AudiaGenticError) as raised:
+        asyncio.run(AcpAgent(tmp_path, "agent-test", FakeAgentsPort()).prompt("ctx_1", []))
+    assert raised.value.code == "VAL-ACP-003"

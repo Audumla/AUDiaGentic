@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.68.0](https://github.com/Audumla/AUDiaGentic/compare/v0.67.1...v0.68.0) (2026-11-01)
+
+
+### Features
+
+* **agents:** SH60d Work milestone events, registered ACP errors, exclusive acceptance; close SH60 ([#360](https://github.com/Audumla/AUDiaGentic/issues/360)) ([5dd9f87](https://github.com/Audumla/AUDiaGentic/commit/5dd9f87a79653e595d2702de48372e16c6caef38))
+
+## [0.67.1](https://github.com/Audumla/AUDiaGentic/compare/v0.67.0...v0.67.1) (2026-11-01)
+
+
+### Documentation
+
+* **planning:** close SH44 and SH53; regression tests for RV1261 ([#358](https://github.com/Audumla/AUDiaGentic/issues/358)) ([44420dc](https://github.com/Audumla/AUDiaGentic/commit/44420dc3a2d87043c17bf8010f54699b398aa097))
+
 ## [0.67.0](https://github.com/Audumla/AUDiaGentic/compare/v0.66.0...v0.67.0) (2026-11-01)
 
 

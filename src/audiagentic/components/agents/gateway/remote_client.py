@@ -445,10 +445,12 @@ class StandaloneGatewayClient:
     def submit_agent_work_child(self, project_root: Path, parent_work_id: str, message: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
         return cast(dict[str, Any], self._call("submit_agent_work_child", project_root, {"parent_work_id": parent_work_id, "message": message, **kwargs}))
 
-    def accept_agent_work_message(self, project_root: Path, context_id: str, message: dict[str, Any], *, protocol: str, work_id: str | None = None) -> dict[str, Any]:
+    def accept_agent_work_message(self, project_root: Path, context_id: str, message: dict[str, Any], *, protocol: str, work_id: str | None = None, exclusive: bool = False) -> dict[str, Any]:
         arguments: dict[str, Any] = {"context_id": context_id, "message": message, "protocol": protocol}
         if work_id is not None:
             arguments["work_id"] = work_id
+        if exclusive:
+            arguments["exclusive"] = True
         return cast(dict[str, Any], self._call("accept_agent_work_message", project_root, arguments))
 
     def wait_agent_work(self, project_root: Path, work_id: str, timeout_seconds: float | None = None) -> dict[str, Any]:

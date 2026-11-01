@@ -202,3 +202,51 @@ agents.turn.tool.completed:
   metadata-keys: ["correlation_id"]
   delivery: async
   since: v1.0.0
+
+agents.work.message-accepted:
+  description: "A caller command was committed to Work (bounded ids only; never text, inputs or principal)"
+  payload-required: ["work-id", "context-id", "state"]
+  payload-optional: ["delivery-key", "execution-id"]
+  metadata-keys: []
+  delivery: async
+  since: v1.0.0
+
+agents.work.message-replayed:
+  description: "An already accepted command was presented again and returned its original acceptance (bounded ids only; never text, inputs or principal)"
+  payload-required: ["work-id", "context-id", "state"]
+  payload-optional: ["delivery-key", "execution-id"]
+  metadata-keys: []
+  delivery: async
+  since: v1.0.0
+
+agents.work.message-conflict:
+  description: "A command reused an accepted delivery identity with a different payload and was refused (bounded ids only; never text, inputs or principal)"
+  payload-required: ["work-id", "context-id", "state"]
+  payload-optional: ["delivery-key", "execution-id"]
+  metadata-keys: []
+  delivery: async
+  since: v1.0.0
+
+agents.work.dispatch-repaired:
+  description: "Accepted commands that never reached the gateway were admitted during reconciliation (bounded ids only; never text, inputs or principal)"
+  payload-required: ["work-id", "context-id", "state"]
+  payload-optional: ["delivery-key", "execution-id"]
+  metadata-keys: []
+  delivery: async
+  since: v1.0.0
+
+agents.work.execution-linked:
+  description: "An accepted command was linked to its gateway request (bounded ids only; never text, inputs or principal)"
+  payload-required: ["work-id", "context-id", "state"]
+  payload-optional: ["delivery-key", "execution-id"]
+  metadata-keys: []
+  delivery: async
+  since: v1.0.0
+
+agents.work.terminal:
+  description: "Work reached a terminal state (bounded ids only; never text, inputs or principal)"
+  payload-required: ["work-id", "context-id", "state"]
+  payload-optional: ["delivery-key", "execution-id"]
+  metadata-keys: []
+  delivery: async
+  since: v1.0.0
