@@ -130,7 +130,7 @@ _KEYWORD_HELP = {
   audiagentic gateway serve config FILE
   audiagentic gateway status config FILE [output json]
   audiagentic gateway validate server|node|connector config FILE
-  audiagentic gateway connect config FILE project PATH [dry-run|non-interactive]
+  audiagentic gateway connect config FILE [dry-run|non-interactive]
   audiagentic gateway restart [non-interactive] [output json]
   audiagentic gateway drain [non-interactive] [output json]
   audiagentic gateway resume [output json]
@@ -148,7 +148,7 @@ node revoke queues local operator intent; its status reads the local queue.
 serve runs an independent foreground service using a server configuration.
 validate checks one role document offline: no service, network, token read or project binding.
 status reads remote health only; it never starts or controls a local service.
-connect validates a connector and checks remote health before binding a project.
+connect validates a connector and checks remote health before selecting it for this machine.
 Use COMMAND help for configuration and credential details.
 drain/resume/stop/recover act on the already running service (they never start one). stop refuses while
 work is in flight unless force; recover only records a failed owner and never signals a pid.
@@ -256,40 +256,20 @@ SIGINT/SIGTERM (and SIGBREAK on Windows) use the existing stop/close lifecycle.
 No application, harness, browser or provider starts when displaying help.""",
     "status": """Usage: audiagentic gateway status config FILE [output json]
 
-FILE is an Agents connector config with an HTTPS endpoint, server-id,
-project-id, token-file and ca-file. Tokens remain in their private files.
-Uses the configured CA trust and authenticated shared-client health endpoint.
+FILE is an Agents connector document (mode plain or shared). Tokens remain in their
+private files. A shared connection addresses the current project's declared project.id.
 Read-only: no lease acquisition, local service discovery, startup or control.
 output json emits the health response as JSON; default is human-readable.""",
-    "connect": """Usage: audiagentic gateway connect config FILE project PATH [dry-run|non-interactive]
+    "connect": """Usage: audiagentic gateway connect config FILE [dry-run|non-interactive]
 
-Validate the Agents connector FILE and handshake with its HTTPS gateway.
-Connector fields: endpoint, server-id, project-id, token-file and ca-file.
-PATH must be an existing local project directory; it is never sent as a remote
-server project root. The connector project-id selects the server project.
-dry-run checks configuration, credentials, CA trust and remote health without
-persisting any binding. non-interactive explicitly requests binding persistence.
-A persisted binding must use the Agents implementation configuration owner and
-reference the connector file; inline tokens are never written or displayed.
-Without either keyword, confirmation is required before persistence.""",
+Validate the connector FILE and handshake with its gateway, then select it for every
+project on this machine: gateway.connector and gateway.implementation: standalone are
+written to the user settings. Run it from a project with a declared project.id when the
+connector is shared. Connector fields: mode plain (endpoint http://127.0.0.1:PORT,
+token-file) or shared (endpoint https or http://127.0.0.1:PORT, server-id, token-file,
+optional ca-file). dry-run checks and handshakes without writing. non-interactive
+writes without asking. Inline tokens are never written or displayed.""",
 }
-
-
-def _shared_client(config: Any) -> StandaloneGatewayClient:
-    import ssl
-
-    from audiagentic.components.agents.gateway.remote_client import (
-        StandaloneGatewayClient,
-        load_auth_token,
-    )
-
-    return StandaloneGatewayClient(
-        config.endpoint,
-        load_auth_token(config.token_file),
-        shared_server_id=config.server_id,
-        shared_project_id=config.project_id,
-        ssl_context=ssl.create_default_context(cafile=str(config.ca_file) if config.ca_file else None),
-    )
 
 
 _LIFECYCLE_PROMPTS = {
@@ -382,32 +362,20 @@ def dispatch_keyword(tokens: list[str]) -> int:
         elif command == "status":
             valid = tail in ([], ["output", "json"])
         else:
-            valid = (len(tail) in {2, 3} and tail[0] == "project"
-                     and (len(tail) == 2 or tail[2] in {"dry-run", "non-interactive"}))
+            valid = tail in ([], ["dry-run"], ["non-interactive"])
     if not valid or any(token.startswith("--") for token in tokens):
         print_error("Invalid gateway syntax. Run: audiagentic gateway help")
         return 2
     config_path = Path(tokens[2]).resolve()
-    from audiagentic.components.agents.gateway.service.shared_config import (
-        load_shared_connector_config,
-        load_shared_server_config,
-    )
-
     if command == "serve":
+        from audiagentic.components.agents.gateway.service.shared_config import load_shared_server_config
+
         config = load_shared_server_config(config_path)
         return cmd_gateway(argparse.Namespace(gateway_cmd="serve", shared_config=config), Path.cwd())
-    config = load_shared_connector_config(config_path)
-    root = None
-    if command == "connect":
-        root = Path(tail[1]).resolve()
-        if not root.is_dir():
-            print_error("project PATH must be an existing directory")
-            return 2
-    client = _shared_client(config)
-    try:
-        health = client.health()
-    finally:
-        client.close()
+    from audiagentic.components.agents.gateway import management_api
+    from audiagentic.foundation.config.settings import discover_project_root
+
+    health = management_api.gateway_connector_health(config_path, discover_project_root(None))
     if command == "status":
         if tail:
             _json_out(health)
@@ -415,23 +383,22 @@ def dispatch_keyword(tokens: list[str]) -> int:
             for key, value in health.items():
                 print(f"{key}: {value}")
         return 0
-    if tail[-1] == "dry-run":
-        print("Gateway connector validated; health handshake succeeded. No binding written.")
+    if tail == ["dry-run"]:
+        print("Gateway connector validated; health handshake succeeded. Nothing written.")
         return 0
-    if tail[-1] != "non-interactive":
+    if tail != ["non-interactive"]:
         try:
-            accepted = input(f"Connect project {root} using {config_path}? [y/N] ").strip().lower()
+            accepted = input(f"Use {config_path} for every project on this machine? [y/N] ").strip().lower()
         except (EOFError, OSError):
             accepted = ""
         if accepted not in {"y", "yes"}:
-            print("Gateway connector not selected. No binding written.")
+            print("Gateway connector not selected. Nothing written.")
             return 1
     from audiagentic.components.agents.gateway.client import reset_gateway_client
-    from audiagentic.components.agents.gateway.management_api import gateway_connect_config
 
-    gateway_connect_config(root, config_path)
+    management_api.gateway_connect_config(config_path)
     reset_gateway_client()
-    print("Gateway connector selected for project.")
+    print("Gateway connector selected for this machine (gateway.connector, gateway.implementation: standalone).")
     return 0
 
 

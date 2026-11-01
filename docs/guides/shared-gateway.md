@@ -26,11 +26,11 @@ options to the role documents. See "Shared gateway role documents" in
    line or committed. One file per principal, node and connector.
 2. Create the state and workspace directories the documents name with mode `0700`;
    the node receipt store refuses group/other-readable directories.
-3. Write the role document, then check it before serving: `gateway connect config
-   connector.yaml project PATH dry-run` validates a connector and the health
-   handshake. A server or node document is validated when it is served; fix
-   permission and path errors it reports (they never print the credential or its
-   path).
+3. Write the role document, then check it before serving:
+   `gateway validate server|node|connector config FILE` validates a document
+   offline, and `gateway connect config connector.yaml dry-run` also does the
+   health handshake. Fix permission and path errors they report (they never print
+   the credential or its path).
 4. Start the role (`gateway serve config server.yaml`, `gateway node serve config
    node.yaml`).
 
@@ -227,22 +227,38 @@ credential assigned to `developer-a`, using the same private-file rules.
 
 ```yaml
 schema-version: 1
+mode: shared
 endpoint: https://gateway.example.com
 server-id: team-gateway
-project-id: sample
 token-file: ./secrets/developer-a.token
 ca-file: ./trust/team-ca.pem
 ```
 
-The endpoint is an HTTPS origin only: no userinfo, path (including `/`), query
-or fragment. An explicit port such as `:443` is allowed. Do not append
-`/shared/v1`; the client owns protocol routes. `server-id` and `project-id` are
-required safe IDs; the latter selects the server's configured project.
-`token-file` must exist as a regular file. Optional `ca-file` must exist as a
-regular file and resolves relative to the connector YAML; omit it to use the
-client's default system CA trust. The config parser does not parse certificates
-or prove TLS reachability. The client builds the TLS context and validates trust
-during connection startup; do not disable certificate verification.
+The connector is the one place a client's connection is defined. `mode` is
+`shared` (above) or `plain`, a local standalone gateway:
+
+```yaml
+schema-version: 1
+mode: plain
+endpoint: http://127.0.0.1:9000
+token-file: ./secrets/local.token
+```
+
+A `shared` endpoint is an HTTPS origin (no userinfo, path including `/`, query
+or fragment; an explicit port such as `:443` is allowed) or the literal loopback
+origin `http://127.0.0.1:PORT` the shared server itself listens on, for a client
+on the same machine. A `plain` endpoint is always `http://127.0.0.1:PORT`. Do not
+append `/shared/v1`; the client owns protocol routes. `server-id` is a required
+safe ID in shared mode. The project a shared connection addresses is the
+current project's declared `project.id` (`audiagentic config set --scope project
+project.id=NAME`); it is not in the document, so one connector serves every
+project on the machine. A plain connection serves one project.
+`token-file` must exist as a regular file. Optional `ca-file` (shared, https
+only) must exist as a regular file and resolves relative to the connector YAML;
+omit it to use the client's default system CA trust. The config parser does not
+parse certificates or prove TLS reachability. The client builds the TLS context
+and validates trust during connection startup; do not disable certificate
+verification.
 
 Optional `source-node-config` (experimental) names this machine's NODE
 configuration and makes the connector a node-enrolled caller: **every**
@@ -284,27 +300,27 @@ audiagentic gateway serve help
 audiagentic gateway serve config server.yaml
 audiagentic gateway status config connector.yaml
 audiagentic gateway status config connector.yaml output json
-audiagentic gateway connect config connector.yaml project ./local-project dry-run
-audiagentic gateway connect config connector.yaml project ./local-project non-interactive
+audiagentic gateway connect config connector.yaml dry-run
+audiagentic gateway connect config connector.yaml non-interactive
 ```
 
 Use keywords, not `--config` or other option aliases. `serve` takes the server
 configuration and is the foreground service route; supervise it with the
 deployment OS. `status` takes connector configuration and requests authenticated
-remote health; it does not start a local service. `connect` requires an existing
-local project directory. That directory is the local binding destination and is
-never sent as the remote execution root.
+remote health for the current project; it does not start a local service.
 
 `dry-run` performs connector/credential/trust setup and the remote health
-handshake without writing a binding. `non-interactive` expresses an explicit
-request to persist the binding through the Agents configuration owner after a
-successful TLS/server identity handshake. It selects the standalone
-implementation and stores an absolute connector-config reference in one existing
-component-state shard replacement, preserving unrelated configuration. It never
-copies token contents into project configuration. The bare connect form asks for
-confirmation; refusal writes nothing. Neither form installs a server locally or
-falls back to embedded execution. A complete explicit local endpoint/token-file
-environment override remains supported; partial overrides are rejected.
+handshake without writing. `non-interactive` writes without asking: after a
+successful identity handshake it sets `gateway.connector` (the connector's
+absolute path) and `gateway.implementation: standalone` in the user settings, in
+one settings-writer patch, so every project on the machine uses the connection.
+Nothing else about the connection is stored in settings, and token contents are
+never copied. The bare connect form asks for confirmation; refusal writes nothing.
+A shared connector needs a project with a declared `project.id` for the
+handshake. Neither form installs a server locally or falls back to embedded
+execution. The former `gateway.endpoint`/`gateway.token.file` settings and the
+per-project `endpoint`/`token-file`/`connector-config` options no longer exist:
+to move an old setup, write the connector document once and run `connect`.
 
 ## HTTPS front door and loopback boundary
 

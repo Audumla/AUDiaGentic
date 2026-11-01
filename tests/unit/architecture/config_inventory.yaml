@@ -18,8 +18,8 @@ env:
   credentials:
     - AUDIAGENTIC_GITHUB_TOKEN
     - AUDIAGENTIC_LOCAL_PROVIDER_API_KEY
-  # Decided (CFG10): nothing is pending. The home is the `home` setting; the gateway connection is
-  # `gateway.endpoint` and `gateway.token.file`.
+  # Decided (CFG10, CFG14): nothing is pending. The home is the `home` setting; the gateway connection is
+  # the connector document named by `gateway.connector`.
   pending-decision: []
   # Set by AUDiaGentic for its own child processes; not user configuration.
   internal:

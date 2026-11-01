@@ -80,9 +80,9 @@ def test_get_config_exposes_option_schema_for_automatic(tmp_path: Path) -> None:
     assert config["config"]["startup-timeout-seconds"] == 30  # schema default
 
 
-def test_get_config_exposes_option_schema_for_standalone(tmp_path: Path) -> None:
+def test_standalone_declares_no_options_the_connection_is_the_connector(tmp_path: Path) -> None:
     config = gateway_get_config(tmp_path, "standalone")
-    assert set(config["schema"].keys()) == {"endpoint", "token-file", "connector-config"}
+    assert config["schema"] == {}
 
 
 def test_get_config_defaults_to_active_implementation(tmp_path: Path) -> None:

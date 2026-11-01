@@ -37,17 +37,17 @@ def validate_node_selectors(node_id: Any, workspace_id: Any) -> tuple[str, str]:
 
 def _uses_shared_connector(root: Path) -> bool:
     """Inspect selection only; never construct or discover a gateway client."""
-    if all(_explicit_connection()):
-        return False
-    from audiagentic.foundation.features.state import get_component_state
-
-    # The one implementation resolver (settings, then the project's selection);
-    # selection logic is not duplicated here.
     if _resolve_implementation_id(root)[0] != "standalone":
         return False
-    component = get_component_state(root, _COMPONENT_ID)
-    standalone = (component.get("implementations") or {}).get("standalone") or {}
-    return bool((standalone.get("options") or {}).get("connector-config"))
+    path = _connector_path()
+    if path is None:
+        return False
+    from .service.shared_config import load_shared_connector_config
+
+    try:
+        return load_shared_connector_config(path).mode == "shared"
+    except Exception:  # noqa: BLE001 - routing never fails on a bad document; get_gateway_client reports it
+        return False
 
 
 def resolve_request_project_root(root: Path, request_id: str) -> Path:
@@ -411,16 +411,47 @@ def _resolve_embedded_coexistence_policy(project_root: Path | None) -> str:
     return "refuse"
 
 
-def _explicit_connection() -> tuple[str | None, str | None]:
-    """The user's explicit standalone connection: ``gateway.endpoint`` and ``gateway.token.file``."""
+def connector_client(connector: Any, project_root: Path | None, project_id: str | None):
+    """The standalone client a loaded connector document describes."""
+    from audiagentic.components.agents.gateway.remote_client import (
+        StandaloneGatewayClient,
+        load_auth_token,
+    )
+
+    token = load_auth_token(connector.token_file)
+    if connector.mode == "plain":
+        return StandaloneGatewayClient(connector.endpoint, token)
+    ssl_context = None
+    if connector.endpoint.startswith("https://"):
+        import ssl
+
+        ssl_context = ssl.create_default_context(cafile=str(connector.ca_file) if connector.ca_file else None)
+    return StandaloneGatewayClient(
+        connector.endpoint, token,
+        shared_server_id=connector.server_id, shared_project_id=project_id,
+        **({"shared_source_node_config": connector.source_node_config_file,
+            "shared_caller_root": project_root}
+           if connector.source_node_config_file is not None else {}),
+        ssl_context=ssl_context,
+    )
+
+
+def _declared_project_id(project_root: Path | None) -> str | None:
+    """The project's declared ``project.id`` (any settings layer), or None; never a derived value."""
+    if project_root is None:
+        return None
+    from audiagentic.foundation.config.settings import resolve_settings_cached
+
+    value = resolve_settings_cached(project_root).get("project.id")
+    return value if isinstance(value, str) and value else None
+
+
+def _connector_path() -> Path | None:
+    """The machine's connector document: the ``gateway.connector`` setting, or None."""
     from audiagentic.components.agents.gateway.settings import gateway_setting
 
-    endpoint = gateway_setting("endpoint")
-    token = gateway_setting("token")
-    token_file = token.get("file") if isinstance(token, dict) else None
-    if token_file:
-        token_file = str(Path(str(token_file)).expanduser())
-    return (str(endpoint) if endpoint else None), (token_file or None)
+    value = gateway_setting("connector")
+    return Path(str(value)).expanduser() if value else None
 
 
 def _resolve_implementation_id(project_root: Path | None) -> tuple[str, str]:
@@ -470,30 +501,23 @@ def get_gateway_client(project_root: Path | None = None) -> GatewayClient:
 
     config_error = make_error_factory("CFG", "AGSV", "gateway-service")
     mode, _source = _resolve_implementation_id(project_root)
-    endpoint, token_file = _explicit_connection()
     connector = None
     connector_path = None
-    if mode == "standalone" and project_root is not None:
-        from .management_api import gateway_get_config, validate_standalone_config
+    project_id = None
+    if mode == "standalone":
+        connector_path = _connector_path()
+        if connector_path is None:
+            raise config_error(1, "standalone gateway selected but no connector is configured")
+        from .service.shared_config import load_shared_connector_config
 
-        options = gateway_get_config(project_root, "standalone")["config"]
-        # An explicit local override is a complete pair, never a partial mix
-        # with a shared connector's identity or credentials.
-        if endpoint is not None or token_file is not None:
-            if not endpoint or not token_file:
-                raise config_error(1, "standalone gateway requires explicit endpoint and token file")
-        else:
-            validate_standalone_config(options)
-            connector_path = options.get("connector-config")
-            if connector_path:
-                from .service.shared_config import load_shared_connector_config
-
-                connector = load_shared_connector_config(Path(connector_path))
-            else:
-                endpoint, token_file = options["endpoint"], options["token-file"]
+        connector = load_shared_connector_config(connector_path)
+        if connector.mode == "shared":
+            project_id = _declared_project_id(project_root)
+            if project_id is None:
+                raise config_error(3, "a shared gateway connection needs a declared project.id in the project's settings")
     config = (
         str(project_root) if project_root is not None else None,
-        mode, endpoint, token_file, connector_path, connector,
+        mode, str(connector_path) if connector_path else None, connector, project_id,
     )
     global _CLIENT, _CLIENT_CONFIG
     with _CLIENT_LOCK:
@@ -524,32 +548,7 @@ def get_gateway_client(project_root: Path | None = None) -> GatewayClient:
                     )
             client: GatewayClient = EmbeddedGatewayClient()
         elif mode == "standalone":
-            if connector is None and (not endpoint or not token_file):
-                raise config_error(
-                    1,
-                    "standalone gateway requires explicit endpoint and token file",
-                )
-            from audiagentic.components.agents.gateway.remote_client import (
-                StandaloneGatewayClient,
-                load_auth_token,
-            )
-
-            if connector is not None:
-                import ssl
-
-                client = StandaloneGatewayClient(
-                    connector.endpoint, load_auth_token(connector.token_file),
-                    shared_server_id=connector.server_id,
-                    shared_project_id=connector.project_id,
-                    **({"shared_source_node_config": connector.source_node_config_file,
-                        "shared_caller_root": project_root}
-                       if connector.source_node_config_file is not None else {}),
-                    ssl_context=ssl.create_default_context(
-                        cafile=str(connector.ca_file) if connector.ca_file else None
-                    ),
-                )
-            else:
-                client = StandaloneGatewayClient(endpoint, load_auth_token(Path(token_file)))
+            client = connector_client(connector, project_root, project_id)
         elif mode == "automatic":
             from audiagentic.components.agents.gateway.service.bootstrap import (
                 start_or_attach_gateway,

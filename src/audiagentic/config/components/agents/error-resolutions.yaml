@@ -206,7 +206,8 @@ INT-AGSV-001: "Inspect the standalone gateway's redacted service logs; an intern
 NET-AGSV-001: "The gateway returned a malformed error response; verify client/server versions and inspect service logs."
 NET-AGSV-002: "Start the explicitly configured standalone gateway and verify its loopback endpoint."
 NET-AGSV-003: "The gateway returned an invalid response; verify client/server versions and inspect service logs."
-CFG-AGSV-001: "Set gateway.endpoint and gateway.token.file in your user settings when gateway.implementation is standalone."
+CFG-AGSV-001: "Standalone gateway selected but no connector is configured. Run: audiagentic gateway connect config FILE (a connector document with mode plain or shared)."
+CFG-AGSV-003: "A shared gateway connection needs a declared project.id in the project settings. Run: audiagentic config set --scope project project.id=NAME in the project."
 CFG-AGSV-002: "Set gateway.implementation in the user settings to embedded, automatic or standalone."
 # AS19 Stage-2: harness status observer ingress error codes
 CON-AGW-OBS-001: "Session already has an active observer binding; only one observer binding per session is allowed."
