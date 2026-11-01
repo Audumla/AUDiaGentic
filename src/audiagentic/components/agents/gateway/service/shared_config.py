@@ -83,10 +83,16 @@ class SharedGatewayNodeConfig:
 
 @dataclass(frozen=True)
 class SharedGatewayConnectorConfig:
+    """One explicit gateway connection: ``plain`` (local standalone) or ``shared``.
+
+    The project a shared connection addresses is the local project's declared
+    ``project.id``; it is not part of the document.
+    """
+
+    mode: str
     endpoint: str
-    server_id: str
-    project_id: str
     token_file: Path
+    server_id: str | None = None
     ca_file: Path | None = None
     source_node_config_file: Path | None = field(default=None, repr=False)
 
@@ -235,25 +241,45 @@ def load_shared_server_config(path: Path) -> SharedGatewayServerConfig:
     )
 
 
+def _loopback_origin(endpoint: str) -> bool:
+    """Whether ``endpoint`` is exactly ``http://127.0.0.1:PORT`` (the only plain-http origin)."""
+    match = re.fullmatch(r"http://127\.0\.0\.1:([0-9]{1,5})", endpoint)
+    return match is not None and 1 <= int(match.group(1)) <= 65535
+
+
 def load_shared_connector_config(path: Path) -> SharedGatewayConnectorConfig:
-    """Load an HTTPS origin with no path, userinfo, query or fragment."""
+    """Load one connector document: ``mode: plain`` or ``mode: shared``.
+
+    ``plain`` is a local standalone gateway: literal ``http://127.0.0.1:PORT`` and a
+    token file. ``shared`` adds the pinned ``server-id`` and takes an HTTPS origin
+    (no path, userinfo, query or fragment) or the literal loopback http origin.
+    """
     base, data = _load(path)
-    _mapping(data, {"schema-version", "endpoint", "server-id", "project-id", "token-file"},
-             {"ca-file", "source-node-config"})
+    mode = data.get("mode")
+    if mode == "plain":
+        _mapping(data, {"schema-version", "mode", "endpoint", "token-file"})
+    elif mode == "shared":
+        _mapping(data, {"schema-version", "mode", "endpoint", "server-id", "token-file"},
+                 {"ca-file", "source-node-config"})
+    else:
+        raise _error(6, "Connector mode must be plain or shared")
     endpoint = _text(data["endpoint"])
-    try:
-        parsed = urlsplit(endpoint)
-        if (parsed.scheme != "https" or not parsed.hostname or parsed.username is not None
-                or parsed.password is not None or parsed.path or "?" in endpoint or "#" in endpoint
-                or "\\" in endpoint or any(c.isspace() for c in endpoint)
-                or (parsed.port is not None and not 1 <= parsed.port <= 65535)
-                or parsed.netloc.endswith(":")):
-            raise ValueError
-    except ValueError:
-        raise _error(6, "Shared gateway endpoint must be an HTTPS origin without path or credentials") from None
+    if not _loopback_origin(endpoint):
+        if mode == "plain":
+            raise _error(6, "A plain connector endpoint must be http://127.0.0.1:PORT")
+        try:
+            parsed = urlsplit(endpoint)
+            if (parsed.scheme != "https" or not parsed.hostname or parsed.username is not None
+                    or parsed.password is not None or parsed.path or "?" in endpoint or "#" in endpoint
+                    or "\\" in endpoint or any(c.isspace() for c in endpoint)
+                    or (parsed.port is not None and not 1 <= parsed.port <= 65535)
+                    or parsed.netloc.endswith(":")):
+                raise ValueError
+        except ValueError:
+            raise _error(6, "Shared gateway endpoint must be an HTTPS origin or http://127.0.0.1:PORT") from None
     return SharedGatewayConnectorConfig(
-        endpoint=endpoint, server_id=_identifier(data["server-id"]),
-        project_id=_identifier(data["project-id"]),
+        mode=mode, endpoint=endpoint,
+        server_id=_identifier(data["server-id"]) if mode == "shared" else None,
         token_file=_path(base, data["token-file"], credential=True),
         ca_file=_path(base, data["ca-file"]) if "ca-file" in data else None,
         source_node_config_file=_path(base, data["source-node-config"]) if "source-node-config" in data else None,

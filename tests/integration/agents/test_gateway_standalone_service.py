@@ -834,9 +834,10 @@ def test_explicit_composition_mode_selects_standalone_without_fallback(
 ) -> None:
     application = SharedApplication()
     host, thread, _service_root, token_path = _start_host(tmp_path, application)
-    use_gateway_settings(
-        monkeypatch, tmp_path, implementation="standalone", endpoint=host.endpoint, token={"file": str(token_path)},
-    )
+    connector = tmp_path / "connector.yaml"
+    connector.write_text(
+        f"schema-version: 1\nmode: plain\nendpoint: {host.endpoint}\ntoken-file: {token_path}\n", encoding="utf-8")
+    use_gateway_settings(monkeypatch, tmp_path, implementation="standalone", connector=str(connector))
     reset_gateway_client()
     try:
         client = get_gateway_client()

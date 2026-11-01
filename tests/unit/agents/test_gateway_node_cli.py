@@ -53,7 +53,7 @@ principals:
     start = Mock(side_effect=AssertionError("service startup is forbidden"))
     monkeypatch.setattr(GatewayServiceHost, "create", start)
     network = Mock(side_effect=AssertionError("network client is forbidden"))
-    monkeypatch.setattr(gateway, "_shared_client", network)
+    monkeypatch.setattr("audiagentic.components.agents.gateway.client.connector_client", network)
     service = ManagedServiceStore(GATEWAY_SERVICE_KEY, root=base)
     store = ManagementOperationStore(service.root)
     return config, service, store, start, network

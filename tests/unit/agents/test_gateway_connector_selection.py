@@ -27,52 +27,57 @@ def clean_client(monkeypatch, tmp_path):
     client.reset_gateway_client()
 
 
-@pytest.fixture
-def connector(tmp_path):
+def _write_connector(tmp_path, **fields):
     token = tmp_path / "token"
     token.write_text("secret-token")
     token.chmod(0o600)
     path = tmp_path / "connector.yaml"
-    save_yaml_file(path, {
-        "schema-version": 1, "endpoint": "https://gateway.example",
-        "server-id": "shared", "project-id": "project", "token-file": "token",
-    })
+    document = {"schema-version": 1, "mode": "shared", "endpoint": "https://gateway.example",
+                "server-id": "shared", "token-file": "token"}
+    document.update(fields)
+    save_yaml_file(path, document)
     return path
 
 
-def test_connect_atomic_selection_preserves_other_configuration(tmp_path, connector, monkeypatch):
-    original = {
-        "options": {"unrelated": True}, "features": {"language:x": {"enabled": True}},
-        "implementations": {
-            "automatic": {"enabled": True, "options": {"startup-timeout-seconds": 42}},
-            "standalone": {"enabled": False, "options": {"endpoint": "http://127.0.0.1:1", "token-file": "old"},
-                           "features": {"mcp:retained": {"enabled": True}}},
-        },
-    }
-    state.set_component_state(tmp_path, "agents", original)
-    state.set_component_state(tmp_path, "planning", {"options": {"untouched": True}})
-    planning = state.get_component_state(tmp_path, "planning")
-    real_write = state.set_component_state
-    writes = Mock(wraps=real_write)
-    monkeypatch.setattr(state, "set_component_state", writes)
-    management_api.gateway_connect_config(tmp_path, connector)
-    assert writes.call_count == 1
-    result = state.get_component_state(tmp_path, "agents")
-    assert result["options"] == original["options"]
-    assert result["features"] == original["features"]
-    assert result["implementations"]["automatic"] == {
-        "enabled": False, "options": {"startup-timeout-seconds": 42},
-    }
-    assert result["implementations"]["standalone"] == {
-        "enabled": True, "options": {"connector-config": str(connector.resolve())},
-        "features": {"mcp:retained": {"enabled": True}},
-    }
-    assert registry.resolve_active_implementation(tmp_path, "agents") == "standalone"
-    assert state.get_component_state(tmp_path, "planning") == planning
-    assert "secret-token" not in _settings_file(tmp_path).read_text()
+@pytest.fixture
+def connector(tmp_path):
+    return _write_connector(tmp_path)
 
 
-def test_selected_connector_builds_shared_tls_client(tmp_path, connector, monkeypatch):
+@pytest.fixture
+def project(tmp_path):
+    """A project that declares its id, as a shared connection requires."""
+    root = tmp_path / "project"
+    (root / ".audiagentic").mkdir(parents=True)
+    (root / ".audiagentic" / "settings.yaml").write_text("schema_version: 1\nproject:\n  id: project\n")
+    (root / ".git").mkdir()
+    return root
+
+
+def _user_settings(tmp_path):
+    from audiagentic.foundation.paths.home import user_config_dir
+
+    return user_config_dir() / "settings.yaml"
+
+
+def test_connect_writes_one_user_setting_patch_and_no_secret(tmp_path, connector):
+    result = management_api.gateway_connect_config(connector)
+    assert result == {"implementation": "standalone", "connector": str(connector.resolve())}
+    import yaml
+
+    text = _user_settings(tmp_path).read_text()
+    assert yaml.safe_load(text)["gateway"] == {"connector": str(connector.resolve()), "implementation": "standalone"}
+    assert "secret-token" not in text
+
+
+def test_connect_rejects_an_invalid_connector_without_writing(tmp_path, connector):
+    connector.write_text("schema-version: 1\nmode: other\n")
+    with pytest.raises(AudiaGenticError):
+        management_api.gateway_connect_config(connector)
+    assert not _user_settings(tmp_path).exists()
+
+
+def test_selected_shared_connector_builds_the_shared_client(tmp_path, connector, project, monkeypatch):
     import ssl
 
     from audiagentic.components.agents.gateway import remote_client
@@ -80,76 +85,97 @@ def test_selected_connector_builds_shared_tls_client(tmp_path, connector, monkey
     ca = tmp_path / "ca.pem"
     ca.write_text("test CA path; SSL construction mocked")
     connector.write_text(connector.read_text() + "ca-file: ca.pem\n")
-    management_api.gateway_connect_config(tmp_path, connector)
+    management_api.gateway_connect_config(connector)
     constructor = Mock()
     context = Mock()
     monkeypatch.setattr(remote_client, "StandaloneGatewayClient", constructor)
     monkeypatch.setattr(ssl, "create_default_context", context)
-    monkeypatch.setattr(client, "resolve_request_project_root", Mock(side_effect=AssertionError("sibling resolver")))
-    assert client.get_gateway_client(tmp_path) is constructor.return_value
+    assert client.get_gateway_client(project) is constructor.return_value
     constructor.assert_called_once_with(
         "https://gateway.example", "secret-token", shared_server_id="shared",
         shared_project_id="project", ssl_context=context.return_value,
     )
     context.assert_called_once_with(cafile=str(ca))
-    assert client.get_gateway_client(tmp_path) is constructor.return_value
+    assert client.get_gateway_client(project) is constructor.return_value
     assert constructor.call_count == 1
 
 
-def test_local_standalone_options_remain_supported(tmp_path, connector, monkeypatch):
+def test_shared_connection_needs_a_declared_project_id(tmp_path, connector):
+    management_api.gateway_connect_config(connector)
+    bare = tmp_path / "bare"
+    bare.mkdir()
+    with pytest.raises(AudiaGenticError, match="CFG-AGSV-003"):
+        client.get_gateway_client(bare)
+
+
+def test_shared_loopback_http_connector_builds_a_tlsless_client(tmp_path, project, monkeypatch):
     from audiagentic.components.agents.gateway import remote_client
-    management_api.gateway_set_config(tmp_path, "standalone", {
-        "endpoint": "http://127.0.0.1:9000", "token-file": str(connector.parent / "token"),
-    })
-    management_api.gateway_select_implementation(tmp_path, "standalone")
+
+    path = _write_connector(tmp_path, endpoint="http://127.0.0.1:8765")
+    management_api.gateway_connect_config(path)
+    constructor = Mock()
+    monkeypatch.setattr(remote_client, "StandaloneGatewayClient", constructor)
+    client.get_gateway_client(project)
+    constructor.assert_called_once_with(
+        "http://127.0.0.1:8765", "secret-token", shared_server_id="shared",
+        shared_project_id="project", ssl_context=None,
+    )
+
+
+def test_plain_connector_needs_no_project_and_no_ids(tmp_path, monkeypatch):
+    from audiagentic.components.agents.gateway import remote_client
+
+    token = tmp_path / "token"
+    token.write_text("secret-token")
+    token.chmod(0o600)
+    path = tmp_path / "plain.yaml"
+    save_yaml_file(path, {"schema-version": 1, "mode": "plain", "endpoint": "http://127.0.0.1:9000",
+                          "token-file": "token"})
+    management_api.gateway_connect_config(path)
     constructor = Mock()
     monkeypatch.setattr(remote_client, "StandaloneGatewayClient", constructor)
     client.get_gateway_client(tmp_path)
     constructor.assert_called_once_with("http://127.0.0.1:9000", "secret-token")
 
 
-@pytest.mark.parametrize("invalid", ["relative", "mixed", "missing", "malformed"])
-def test_invalid_connector_never_changes_selection(tmp_path, connector, invalid):
-    management_api.gateway_select_implementation(tmp_path, "automatic")
-    before = _settings_file(tmp_path).read_bytes()
-    options = {"connector-config": str(connector)}
-    if invalid == "relative":
-        options["connector-config"] = "connector.yaml"
-    elif invalid == "mixed":
-        options["endpoint"] = "http://127.0.0.1:1"
-    elif invalid == "missing":
-        connector.unlink()
-    else:
-        connector.write_text("schema-version: 100")
-    with pytest.raises(AudiaGenticError):
-        management_api.gateway_set_config(tmp_path, "standalone", options)
-    assert _settings_file(tmp_path).read_bytes() == before
+def test_standalone_without_a_connector_fails_with_the_fix(tmp_path):
+    settings = tmp_path / "settings.yaml"
+    settings.write_text("schema_version: 1\ngateway:\n  implementation: standalone\n")
+    import os
+    os.environ["AUDIAGENTIC_CONFIG"] = str(settings)
+    try:
+        with pytest.raises(AudiaGenticError, match="CFG-AGSV-001"):
+            client.get_gateway_client(tmp_path)
+    finally:
+        del os.environ["AUDIAGENTIC_CONFIG"]
 
 
-def test_missing_selected_connector_never_bootstraps(tmp_path, connector, monkeypatch):
+def test_standalone_options_no_longer_carry_a_connection(tmp_path):
+    for key in ("endpoint", "token-file", "connector-config"):
+        with pytest.raises(AudiaGenticError):
+            management_api.gateway_set_config(tmp_path, "standalone", {key: "x"})
+
+
+def test_missing_selected_connector_never_bootstraps(tmp_path, connector, project, monkeypatch):
     from audiagentic.components.agents.gateway.service import bootstrap
-    management_api.gateway_connect_config(tmp_path, connector)
+
+    management_api.gateway_connect_config(connector)
     connector.unlink()
     start = Mock(side_effect=AssertionError("discovery forbidden"))
     monkeypatch.setattr(bootstrap, "start_or_attach_gateway", start)
     with pytest.raises(AudiaGenticError):
-        client.get_gateway_client(tmp_path)
+        client.get_gateway_client(project)
     start.assert_not_called()
 
 
-@pytest.mark.parametrize("partial_override", [None, "ENDPOINT", "TOKEN_FILE"])
-def test_shared_root_resolvers_skip_all_local_discovery(tmp_path, connector, monkeypatch, partial_override):
+def test_shared_root_resolvers_skip_all_local_discovery(tmp_path, connector, project, monkeypatch):
     from pathlib import Path
 
     from audiagentic.components.agents.gateway import api, store
-    from audiagentic.components.agents.gateway.service import bootstrap, shared_config
+    from audiagentic.components.agents.gateway.service import bootstrap
     from audiagentic.components.agents.gateway.session import sessions_store
 
-    management_api.gateway_connect_config(tmp_path, connector)
-    # Routing must not even load connector contents; getclient validates them.
-    connector.unlink()
-    if partial_override:
-        monkeypatch.setenv("AUDIAGENTIC_GATEWAY_" + partial_override, "explicit-partial")
+    management_api.gateway_connect_config(connector)
     forbidden = Mock(side_effect=AssertionError("local discovery or runtime touched"))
     monkeypatch.setattr(Path, "iterdir", forbidden)
     monkeypatch.setattr(store, "read_record", forbidden)
@@ -157,24 +183,20 @@ def test_shared_root_resolvers_skip_all_local_discovery(tmp_path, connector, mon
     monkeypatch.setattr(api, "_resolve_workspace_project_root", forbidden)
     monkeypatch.setattr(client, "get_gateway_client", forbidden)
     monkeypatch.setattr(bootstrap, "start_or_attach_gateway", forbidden)
-    monkeypatch.setattr(shared_config, "load_shared_connector_config", forbidden)
     request_id = "req_remote_" + "0" * 12
-    assert client.resolve_request_project_root(tmp_path, request_id) is tmp_path
-    assert client.resolve_session_project_root(tmp_path, "ses_remote") is tmp_path
+    assert client.resolve_request_project_root(project, request_id) is project
+    assert client.resolve_session_project_root(project, "ses_remote") is project
     forbidden.assert_not_called()
 
 
-@pytest.mark.parametrize("mode,local_override", [("embedded", False), ("automatic", False), ("standalone", True)])
-def test_nonshared_root_resolvers_keep_local_routing(tmp_path, connector, monkeypatch, mode, local_override):
+@pytest.mark.parametrize("mode", ["embedded", "automatic"])
+def test_nonshared_root_resolvers_keep_local_routing(tmp_path, connector, monkeypatch, mode):
     from audiagentic.components.agents.gateway import store
     from audiagentic.components.agents.gateway.session import sessions_store
 
-    management_api.gateway_connect_config(tmp_path, connector)
-    settings_file = connector.parent / "settings.yaml"  # machine-scope gateway section, outside the project
-    override = (
-        f"  endpoint: http://127.0.0.1:9000\n  token:\n    file: {connector.parent / 'token'}\n" if local_override else ""
-    )
-    settings_file.write_text(f"schema_version: 1\ngateway:\n  implementation: {mode}\n{override}", encoding="utf-8")
+    management_api.gateway_connect_config(connector)
+    settings_file = connector.parent / "settings.yaml"
+    settings_file.write_text(f"schema_version: 1\ngateway:\n  implementation: {mode}\n", encoding="utf-8")
     monkeypatch.setenv("AUDIAGENTIC_CONFIG", str(settings_file))
     monkeypatch.setattr("audiagentic.components.agents.gateway.workspace_roots.configured_workspace_roots", lambda: [tmp_path.resolve()])
     request = Mock(return_value={})

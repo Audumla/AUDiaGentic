@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.58.1](https://github.com/Audumla/AUDiaGentic/compare/v0.58.0...v0.58.1) (2026-11-01)
+
+
+### Documentation
+
+* **planning:** close CFG14, add the end-to-end gate to CFG16 and risks to CFG15-17 ([#329](https://github.com/Audumla/AUDiaGentic/issues/329)) ([6028222](https://github.com/Audumla/AUDiaGentic/commit/6028222e8f6ab73c7d898d5756994adbbedd4c7d))
+
+## [0.58.0](https://github.com/Audumla/AUDiaGentic/compare/v0.57.2...v0.58.0) (2026-11-01)
+
+
+### ⚠ BREAKING CHANGES
+
+* **gateway:** the connector document is the single connection authority (CFG14) ([#324](https://github.com/Audumla/AUDiaGentic/issues/324))
+
+### Features
+
+* **gateway:** the connector document is the single connection authority (CFG14) ([#324](https://github.com/Audumla/AUDiaGentic/issues/324)) ([cfeb5bf](https://github.com/Audumla/AUDiaGentic/commit/cfeb5bf7e7c15769273c7bb769b61d4cc7fd74ce))
+
 ## [0.57.2](https://github.com/Audumla/AUDiaGentic/compare/v0.57.1...v0.57.2) (2026-11-01)
 
 

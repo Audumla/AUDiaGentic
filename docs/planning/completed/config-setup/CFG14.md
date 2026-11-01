@@ -2,7 +2,7 @@
 id: CFG14
 order: 0
 plan: config-setup
-state: pending
+state: completed
 created-at: '2026-10-31T23:04:02.314327+00:00'
 breadth: ''
 skill: advanced
@@ -45,7 +45,7 @@ Configuration migration tests, connection tests, repository-wide search for the 
 
 ## Effort & Risk
 
-
+Size M. Risk: callers that pass no project root cannot use a shared connection; plain mode serves one project and a mismatch is not detected; existing connector documents need mode added and project-id removed by hand.
 
 ## Standards
 
@@ -53,12 +53,12 @@ docs/design/configuration-model.md (Shared gateway setup); docs/standards/ARCHIT
 
 ## Acceptance Criteria
 
-- Exactly one explicit client connection authority remains
-- Obsolete settings, component-state options and callers are removed
-- Embedded and automatic operation are unchanged
-- Loopback http and existing https connections work
-- Migration handles unambiguous configurations and explains ambiguous ones
-- Existing tests and documentation reflect the new contract
+- Exactly one explicit client connection authority remains: the connector document named by the gateway.connector setting
+- The settings pair, the component-state endpoint/token-file/connector-config options, the standalone option schema keys and every reader and writer of them are gone (repository-wide search finds none)
+- Embedded and automatic operation are unchanged and need no connector
+- A plain connector (local, one project) and a shared connector (https or loopback http, server-id, project id from the local project's declared project.id) both connect; a missing connector gives CFG-AGSV-001 with the fix, a missing project.id gives CFG-AGSV-003
+- gateway connect config FILE writes gateway.connector and gateway.implementation in one patch only after a successful handshake; dry-run and refusal write nothing; one connect serves every project on the machine
+- There is no automatic migration; the documented path for an existing setup is to write the connector once and run connect. Docs and tests reflect the new contract
 
 ## Notes
 
@@ -70,6 +70,8 @@ Agreed with GPT (round 7). Partly reverses the settings half of CFG10 (#308). Re
 
 Design agreed with GPT in round 8 (Option B: one machine-level connector pointer, project id from the local project; explicit mode field; shared over loopback http). Differences from GPT's slice order: its order put the connect command after the cutover, which would leave no way to bind a connection; connect and the setting ship in the cutover PR. [::1] is not accepted: the server only binds 127.0.0.1. Pre-implementation checks done for slice 1: shared identity headers/health server-id check are transport-independent; get_gateway_client is called with a project root almost everywhere. Still to verify in slice 2: resolve_settings_cached invalidation after the connect write, gateway_connect_config lock scope, callers that pass no project root.
 
+Agreed with GPT (round 8). Slice 1 merged (#319): the shared client accepts literal loopback http. Slice 2 (this change, the cutover): connector `mode: plain|shared` without project-id; user setting `gateway.connector`; `gateway connect config FILE [dry-run|non-interactive]` (no project PATH) writes gateway.connector and gateway.implementation=standalone in one settings-writer patch after the health handshake; shared connections use the local project's declared project.id (CFG-AGSV-003 when absent); CFG-AGSV-001 rewritten; the settings pair, the component-state endpoint/token-file/connector-config options, the standalone option schema and their readers/writers are deleted; gateway_set_config accepts no options for an implementation that declares none. Docs (shared-gateway.md, configuration-model.md, config_inventory.yaml) updated; there is no automatic migration: an existing setup writes the connector once and runs connect. Differences from GPT's slice order: connect ships in the cutover. [::1] not accepted (the server binds 127.0.0.1 only). Plain mode serves one project: documented, mismatch not detected. Known gap kept out of scope: `gateway connect` for a shared connector needs a project with a declared project.id for the handshake; CFG15 init writes it.
+
 ## Change Log
 
 - 2026-10-31T23:04:02.314327+00:00 (created-by): Created by claude
@@ -78,3 +80,6 @@ Design agreed with GPT in round 8 (Option B: one machine-level connector pointer
 - 2026-10-31T23:09:46.806307+00:00 (updated-by): Updated: section:notes
 - 2026-10-31T23:30:28.805567+00:00 (updated-by): Updated: section:title, section:description, section:steps, section:validation, section:standards, section:acceptance_criteria, section:notes
 - 2026-10-31T23:50:15.340783+00:00 (updated-by): Updated: section:steps, section:notes
+- 2026-11-01T00:05:05.972156+00:00 (updated-by): Updated: section:notes
+- 2026-11-01T00:10:24.818590+00:00 (updated-by): Updated: section:effort_risk, section:acceptance_criteria
+- 2026-11-01T00:32:17.808181+00:00 (state-transition): State: pending → completed

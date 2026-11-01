@@ -42,7 +42,7 @@ def test_protocol_mismatch_is_rejected_before_lease_acquisition(monkeypatch) -> 
         client.connect()
 
 
-def test_standalone_mode_requires_explicit_endpoint_and_token_file(monkeypatch, tmp_path) -> None:
+def test_standalone_mode_requires_a_connector(monkeypatch, tmp_path) -> None:
     reset_gateway_client()
     use_gateway_settings(monkeypatch, tmp_path, implementation="standalone")
 
