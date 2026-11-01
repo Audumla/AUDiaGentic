@@ -175,3 +175,11 @@ system temp directory is mounted noexec.
 The server's default delivery is `steer`, so every caller must send `delivery: "queue"` explicitly; steering was
 not measured (the stub makes no tool calls) and is not accepted. Because result correlation is unproven the
 readiness stays below a join: a prompt can be admitted safely but its output cannot be attributed natively.
+
+Pi (`pi-rpc`, measured on pi 1.4.0 linux-amd64, offline, no provider, no model): a real interactive Pi in a
+pseudo-terminal opens **no listening TCP socket and no unix socket**. Its only control protocol, `pi --mode rpc`
+(`get_state`, `prompt`, `steer`, `follow_up` as JSONL), runs on the stdin/stdout of a process the caller starts, so it
+reaches a Pi the caller owns and never a human's running session (the remaining listeners in the distribution are
+OAuth callback servers). Every join capability is therefore recorded false with
+`unsupported-no-existing-session-endpoint` and the evidence state is `unsupported`. No bridge or extension is built
+(SH41); an owned RPC child remains an independent caller-node delivery path, not a joined session.
