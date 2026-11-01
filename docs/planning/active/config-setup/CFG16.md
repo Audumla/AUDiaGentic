@@ -43,7 +43,7 @@ One-project and two-project configuration tests, duplicate-id tests, permission-
 
 ## Effort & Risk
 
-
+Size M. Risk: accidentally broadening a principal's permissions in migration; wrong-root selection from the working-directory default; revoke rewriting the server document must keep the root list under its existing lock.
 
 ## Standards
 
@@ -57,6 +57,7 @@ docs/design/configuration-model.md (Shared gateway setup); docs/standards/ARCHIT
 - Omitted permission fields have deterministic documented meanings
 - Unknown project ids and actions are rejected
 - Existing explicit permissions are not broadened by migration
+- END-TO-END GATE for the whole CFG14-CFG17 aim, hermetic (temporary directories, ephemeral ports, isolated gateway): from a clean state run gateway init, gateway validate, gateway serve, gateway connect and one request through the connector; then add a second project with one root line and use both. Record the measured counts: hand-edited files (target 0), setup commands (target <= 2), values typed, and for the second project the edits (target 1). Every gateway fact has one authoritative home per the design record's table
 
 ## Notes
 
@@ -74,3 +75,4 @@ Agreed with GPT (round 7). Trusted operators on a shared server: grants are not 
 - 2026-10-31T23:09:52.257948+00:00 (updated-by): Updated: section:notes
 - 2026-10-31T23:14:30.183054+00:00 (updated-by): Updated: section:description, section:steps, section:standards, section:acceptance_criteria
 - 2026-10-31T23:30:33.748431+00:00 (updated-by): Updated: section:title, priority='P1', section:description, section:steps, section:validation, section:standards, section:acceptance_criteria, section:notes
+- 2026-11-01T00:32:10.458439+00:00 (updated-by): Updated: section:effort_risk, section:acceptance_criteria
