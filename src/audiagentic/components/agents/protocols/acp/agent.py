@@ -1,7 +1,8 @@
 """Thin ACP 0.11 adapter over the public Agents GatewayClient seam."""
 from __future__ import annotations
 
-import hashlib
+import asyncio
+import uuid
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -31,21 +32,39 @@ class AgentsPort(Protocol):
     def get_agent_context(self, root: Path, context_id: str) -> dict[str, Any]: ...
     def list_agent_contexts(self, root: Path) -> list[dict[str, Any]]: ...
     def close_agent_context(self, root: Path, context_id: str) -> dict[str, Any]: ...
-    def submit_agent_work(self, root: Path, context_id: str, message: dict[str, Any], **kwargs: Any) -> dict[str, Any]: ...
+    def accept_agent_work_message(self, root: Path, context_id: str, message: dict[str, Any], *, protocol: str, work_id: str | None = None) -> dict[str, Any]: ...
+    def wait_agent_work(self, root: Path, work_id: str, timeout_seconds: float | None = None) -> dict[str, Any]: ...
     def get_agent_work(self, root: Path, work_id: str) -> dict[str, Any]: ...
     def list_agent_work(self, root: Path) -> list[dict[str, Any]]: ...
     def cancel_agent_work(self, root: Path, work_id: str) -> dict[str, Any]: ...
     def read_agent_work_output(self, root: Path, work_id: str) -> dict[str, Any]: ...
 
 
+#: Work states that end a prompt; anything else keeps the prompt open (ACP has no "still working" reply).
+_TERMINAL = frozenset({"completed", "failed", "cancelled", "rejected"})
+#: One bounded wait per round; the prompt loops until the Work is terminal, so no wait ever returns early.
+_WAIT_ROUND_SECONDS = 120.0
+_MAX_OUTPUT_CHARS = 64_000
+
+
+class AcpPromptError(RuntimeError):
+    """The prompt did not reach a successful or cancelled terminal state."""
+
+
 class AcpAgent:
-    """ACP implementation bound to one project and one configured Agent."""
+    """ACP implementation bound to one project and one configured Agent (SH62a).
+
+    A prompt is a command the gateway accepts exactly once. ACP 0.11 carries no client retry identity, so
+    each prompt gets a fresh owner-side message id: a transport retry is a new prompt, never a silent replay
+    of one that may already have had an effect. At most one prompt per session is outstanding, decided from
+    durable Work state (so it survives a reconnect), never from an in-memory map.
+    """
 
     def __init__(self, project_root: Path, agent_id: str, ports: AgentsPort) -> None:
         self.project_root = project_root.resolve()
         self.agent_id = agent_id
         self.ports = ports
-        self._active_work: dict[str, str] = {}
+        self._session_locks: dict[str, asyncio.Lock] = {}
 
     async def initialize(self, protocol_version: int, **_: Any) -> InitializeResponse:
         return InitializeResponse(
@@ -76,35 +95,41 @@ class AcpAgent:
             sessions=[SessionInfo(sessionId=str(item["context_id"]), cwd=str(self.project_root)) for item in contexts if item.get("state") == "open"],
         )
 
+    def _outstanding(self, session_id: str) -> list[dict[str, Any]]:
+        return [work for work in self.ports.list_agent_work(self.project_root)
+                if work.get("context_id") == session_id and work.get("state") not in _TERMINAL]
+
     async def prompt(self, session_id: str, prompt: list[Any], **_: Any) -> PromptResponse:
         text = text_from_prompt(prompt)
-        # ACP retries must address the same canonical Work.  The adapter does
-        # not own a retry counter or a second lifecycle; identity is derived
-        # solely from the protocol session and message content.
-        digest = hashlib.sha256(text.encode("utf-8")).hexdigest()[:24]
-        message_id = f"acp:{session_id}:{digest}"
-        work_id = f"work_acp_{hashlib.sha256(message_id.encode('utf-8')).hexdigest()[:24]}"
-        work = self.ports.submit_agent_work(
-            self.project_root,
-            session_id,
-            {"message_id": message_id, "text": text, "inputs": {}, "source": "acp"},
-            work_id=work_id,
-        )
-        work_id = str(work["work_id"])
-        self._active_work[session_id] = work_id
-        output = self.ports.read_agent_work_output(self.project_root, work_id)
-        self._active_work.pop(session_id, None)
-        return PromptResponse(stopReason="cancelled" if work.get("state") == "cancelled" else "end_turn", _meta={"work": work, "output": output})
+        lock = self._session_locks.setdefault(session_id, asyncio.Lock())
+        async with lock:  # serialises prompts of this adapter; the durable check below covers other holders
+            if await asyncio.to_thread(self._outstanding, session_id):
+                raise AcpPromptError("a prompt is already outstanding for this session")
+            accepted = await asyncio.to_thread(
+                self.ports.accept_agent_work_message, self.project_root, session_id,
+                {"message_id": f"acp:{uuid.uuid4().hex}", "text": text, "inputs": {}}, protocol="acp",
+            )
+        work = accepted
+        while work.get("state") not in _TERMINAL:
+            waited = await asyncio.to_thread(self.ports.wait_agent_work, self.project_root, accepted["work_id"], _WAIT_ROUND_SECONDS)
+            work = waited["work"]
+        state = work["state"]
+        if state == "cancelled":
+            return PromptResponse(stopReason="cancelled", _meta={"work": {"work_id": work["work_id"], "state": state}})
+        if state != "completed":
+            # ACP has no failure stop reason: report the real outcome instead of calling it end_turn.
+            raise AcpPromptError(f"work {work['work_id']} ended {state}")
+        output = await asyncio.to_thread(self.ports.read_agent_work_output, self.project_root, work["work_id"])
+        return PromptResponse(stopReason="end_turn", _meta={
+            "work": {"work_id": work["work_id"], "state": state}, "output": _bounded(output)})
 
     async def cancel(self, session_id: str, **_: Any) -> None:
-        work_id = self._active_work.get(session_id)
-        if work_id:
-            self.ports.cancel_agent_work(self.project_root, work_id)
+        for work in await asyncio.to_thread(self._outstanding, session_id):
+            await asyncio.to_thread(self.ports.cancel_agent_work, self.project_root, str(work["work_id"]))
 
     async def close_session(self, session_id: str, **_: Any) -> CloseSessionResponse:
-        for work in self.ports.list_agent_work(self.project_root):
-            if work.get("context_id") == session_id and work.get("state") not in {"completed", "failed", "cancelled"}:
-                self.ports.cancel_agent_work(self.project_root, str(work["work_id"]))
+        for work in self._outstanding(session_id):
+            self.ports.cancel_agent_work(self.project_root, str(work["work_id"]))
         self.ports.close_agent_context(self.project_root, session_id)
         return CloseSessionResponse()
 
@@ -125,3 +150,12 @@ class AcpAgent:
 
     async def fork_session(self, *_: Any, **__: Any):
         raise UnsupportedAcpOperation("fork is not backed by canonical Context/Work")
+
+
+def _bounded(output: Any) -> Any:
+    """Keep a prompt response small: long text is cut, the full output stays in the gateway output store."""
+    if isinstance(output, dict):
+        text = output.get("text")
+        if isinstance(text, str) and len(text) > _MAX_OUTPUT_CHARS:
+            return {**output, "text": text[:_MAX_OUTPUT_CHARS], "truncated": True}
+    return output
