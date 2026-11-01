@@ -27,5 +27,5 @@ def test_the_installed_opencode_proves_queue_admission_and_leaves_result_correla
     assert result["capabilities"] == {
         "passive-identity": True, "existing-session-attach": True, "safe-detach": True, "reconnect": True,
         "conditional-admission": True, "correlated-result": False, "concurrent-human-use": True}
-    assert result["reasons"] == ["unproven-result-linked-by-event-order-only"]
+    assert result["reasons"] == ["unsupported-result-not-linked-by-native-id"]
     assert result["cleanup-error"] is None
