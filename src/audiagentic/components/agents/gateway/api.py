@@ -2409,16 +2409,11 @@ def purge_execution_session(project_root: Path, session_id: str) -> dict[str, An
     bindings, and relocated-root lineage.  Non-terminal requests block the
     destructive operation so a queue worker can never race the deletion.
     """
-    import shutil
-
     from audiagentic.components.agents.agents_paths import (
-        gateway_request_dir,
         gateway_retention_lock_path,
         gateway_root,
-        gateway_session_dir,
     )
     from audiagentic.components.agents.gateway.session import bindings as binding_store
-    from audiagentic.components.agents.gateway.session import root_registry
     from audiagentic.components.agents.gateway.session import sessions_store as session_store
     from audiagentic.foundation.contracts.errors import AudiaGenticError
     from audiagentic.foundation.system.process import StartupLock
@@ -2522,12 +2517,11 @@ def purge_execution_session(project_root: Path, session_id: str) -> dict[str, An
                         "reason": "session-has-active-requests",
                         "request-count": len(current_ids),
                     }
-            for request_id in current_ids:
-                shutil.rmtree(gateway_request_dir(project_root, request_id), ignore_errors=True)
-                shutil.rmtree(root / "archive" / request_id, ignore_errors=True)
-            shutil.rmtree(gateway_session_dir(project_root, session_id), ignore_errors=True)
-            binding_store.purge_binding(project_root, current)
-            root_registry.unregister_session_root(project_root, session_id=session_id)
+            from audiagentic.components.agents.gateway.session.lineage_delete import (
+                delete_session_lineage,
+            )
+
+            delete_session_lineage(project_root, session_id, current_ids, current, strict=False)
 
     return {
         "session-id": session_id,

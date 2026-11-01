@@ -129,7 +129,18 @@
       "additionalProperties": false,
       "properties": {
         "operation-id": {"type": "string", "minLength": 1, "maxLength": 128},
-        "claimed-at": {"type": "string"}
+        "claimed-at": {"type": "string"},
+        "stage": {"enum": ["claimed", "deleting"], "description": "claimed: nothing destroyed yet and the claim may be released; deleting: destruction has begun and the claim is kept until the session record itself is removed."},
+        "plan": {
+          "type": "object",
+          "description": "The deletion closure recorded before destruction so a crashed operation can resume it. Identifiers and a digest only; no payloads.",
+          "required": ["request-ids", "policy-digest"],
+          "additionalProperties": false,
+          "properties": {
+            "request-ids": {"type": "array", "maxItems": 10000, "items": {"type": "string", "minLength": 1, "maxLength": 128}},
+            "policy-digest": {"type": "string", "maxLength": 128}
+          }
+        }
       }
     },
     "close-reason": {

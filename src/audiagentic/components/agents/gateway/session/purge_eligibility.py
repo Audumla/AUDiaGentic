@@ -63,7 +63,9 @@ def _shared_blocker(project_root: Path, session_id: str, request_ids: set[str], 
 
 def session_purge_report(project_root: Path, *, policy: Any | None = None, now: datetime | None = None) -> dict[str, Any]:
     """Eligibility of every session in ``project_root`` under the machine policy, without mutating anything."""
-    from audiagentic.components.agents.gateway.operations.retention_policy import load_retention_policy
+    from audiagentic.components.agents.gateway.operations.retention_policy import (
+        load_retention_policy,
+    )
     from audiagentic.components.agents.gateway.session import sessions_store
     from audiagentic.components.agents.gateway.session.sessions import peek_session_runtime
 
@@ -83,7 +85,7 @@ def session_purge_report(project_root: Path, *, policy: Any | None = None, now: 
     records = sessions_store.list_session_records(project_root)
     for record in sorted(records, key=lambda item: str(item.get("session-id"))):
         session_id = str(record.get("session-id"))
-        reason = _first_blocker(project_root, session_id, record, records, live, policy, now)
+        reason = session_blocker(project_root, session_id, record, records, live, policy, now)
         if reason is None:
             report["eligible"].append(session_id)
         else:
@@ -91,13 +93,15 @@ def session_purge_report(project_root: Path, *, policy: Any | None = None, now: 
     return report
 
 
-def _first_blocker(project_root: Path, session_id: str, record: dict[str, Any], records: list[dict[str, Any]],
-                   live: set[str], policy: Any, now: datetime) -> str | None:
+def session_blocker(project_root: Path, session_id: str, record: dict[str, Any], records: list[dict[str, Any]],
+                    live: set[str], policy: Any, now: datetime, *, own_operation: str | None = None) -> str | None:
+    """The first reason this session may not be purged now, or None. A claim by ``own_operation`` is not a blocker."""
     from audiagentic.components.agents.gateway.session import sessions_store
 
     if record.get("state") not in PURGEABLE_SESSION_STATES:
         return "session-not-closed"
-    if record.get("retention-claim") is not None:
+    claim = record.get("retention-claim")
+    if claim is not None and claim.get("operation-id") != own_operation:
         return "retention-claimed"
     if session_id in live:
         return "session-live"
