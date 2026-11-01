@@ -60,21 +60,8 @@ def _snapshot_has_positive_conversation_evidence(snapshot: ChatSnapshot) -> bool
         )
     )
 
-# TEMPORARY GP31 debug instrumentation -- gateway subprocess stdout/stderr
-# are redirected to DEVNULL and no file log handler is configured, so
-# logger calls are unrecoverable. Writes directly to disk instead. Remove
-# once GP31's browser-kill mechanism is found.
-_GP31_TRACE_PATH = r"C:\example-home\AppData\Local\Temp\claude\h--development-projects-AUDia-AUDiaGentic\00000000-0000-4000-8000-21d26ba52ce6\scratchpad\gp31_trace.log"
 
 
-def _gp31_trace(message: str) -> None:
-    import datetime
-
-    try:
-        with open(_GP31_TRACE_PATH, "a", encoding="utf-8") as f:
-            f.write(f"{datetime.datetime.now(datetime.UTC).isoformat()} pid={__import__('os').getpid()} {message}\n")
-    except OSError:
-        pass
 
 
 class ProviderState(StrEnum):
@@ -178,10 +165,8 @@ class GptAutoProviderRuntime:
 
     async def ensure_available(self) -> None:
         self._owner_loop = asyncio.get_running_loop()
-        _gp31_trace(f"ensure_available() entered, state={self.state.value}, bridge={self._bridge is not None}")
         async with self._lifecycle_lock:
             if self.state is ProviderState.AVAILABLE and self._bridge:
-                _gp31_trace("ensure_available() early-return: already AVAILABLE with bridge")
                 return
             if self.state in {ProviderState.STOPPED, ProviderState.FAILED}:
                 self._move(ProviderState.CONNECTING)
@@ -189,16 +174,13 @@ class GptAutoProviderRuntime:
                 self._move(ProviderState.CONNECTING)
             try:
                 cdp_ok = await self._cdp_available()
-                _gp31_trace(f"_cdp_available() returned {cdp_ok}")
                 if not cdp_ok:
                     if self.config.cdp.is_remote:
                         raise RuntimeError(
                             f"configured remote CDP endpoint is unavailable: {self.config.cdp_url}"
                         )
                     self._move(ProviderState.STARTING)
-                    _gp31_trace("calling ensure_browser_for_cdp() -- CDP was NOT available")
-                    evidence = await self._browser.ensure_browser_for_cdp()
-                    _gp31_trace(f"ensure_browser_for_cdp() returned pid={evidence.pid} launched_by_provider={evidence.launched_by_provider}")
+                    await self._browser.ensure_browser_for_cdp()
                     self._move(ProviderState.CONNECTING)
                 bridge = await self._connect_bridge()
                 self._bridge = bridge
