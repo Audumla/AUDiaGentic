@@ -199,3 +199,114 @@ def test_late_failure_does_not_overwrite_replacement(tmp_path):
     assert defaults._read(path)["session-id"] == "ses_replacement"
     assert attach.call_args.args[2] == "ses_old"
     assert "private" not in str(attach.call_args)
+
+
+# --- SH33 acceptance evidence: concurrent first selections, restart durability, multi-process serialization ---
+
+import json
+import subprocess
+import sys
+import threading
+from pathlib import Path
+
+
+def test_concurrent_first_selections_establish_one_binding_and_everyone_reuses_it(tmp_path):
+    """Many first calls race for a blank selection: exactly one creates the default, the rest reuse it."""
+    barrier = threading.Barrier(8)
+    outcomes: list[tuple[str, bool]] = []
+    guard = threading.Lock()
+
+    def first_call(index: int) -> None:
+        barrier.wait()
+        with selection(tmp_path) as chosen:
+            created = chosen.session_id is None
+            if created:
+                chosen.session_id = f"ses_created_by_{index}"
+                chosen.commit({"session-id": chosen.session_id})
+            with guard:
+                outcomes.append((chosen.session_id, created))
+
+    threads = [threading.Thread(target=first_call, args=(index,)) for index in range(8)]
+    # The default's session must look present (the design replaces a missing one by intent).
+    with patch("audiagentic.components.agents.gateway.session.sessions_store.read_session_record", return_value={}):
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=30)
+    assert len(outcomes) == 8
+    assert sum(1 for _, created in outcomes if created) == 1  # one atomic establishment
+    assert len({session_id for session_id, _ in outcomes}) == 1  # and everyone resolved to it
+    with patch("audiagentic.components.agents.gateway.session.sessions_store.read_session_record", return_value={}):
+        with selection(tmp_path) as chosen:
+            assert chosen.session_id == outcomes[0][0] and chosen.automatic
+
+
+def test_an_explicit_override_during_a_race_never_changes_the_default(tmp_path):
+    with selection(tmp_path, session_id="ses_default") as chosen:
+        chosen.commit({"session-id": "ses_default"})
+    barrier = threading.Barrier(6)
+
+    def override(index: int) -> None:
+        barrier.wait()
+        with selection(tmp_path, session_id=f"ses_explicit_{index}") as chosen:
+            chosen.commit({"session-id": f"ses_explicit_{index}"})
+
+    threads = [threading.Thread(target=override, args=(index,)) for index in range(6)]
+    with patch("audiagentic.components.agents.gateway.session.sessions_store.read_session_record", return_value={}):
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=30)
+        with selection(tmp_path) as chosen:
+            assert chosen.session_id == "ses_default"
+
+
+def test_the_default_survives_a_process_restart(tmp_path):
+    """A brand-new interpreter reads the durable binding and reuses the same session (client defaults need not
+    survive the client process, but the gateway-owned binding must survive the gateway process)."""
+    with selection(tmp_path, session_id="ses_before_restart") as chosen:
+        chosen.commit({"session-id": "ses_before_restart"})
+    script = (
+        "import json,sys\n"
+        "from pathlib import Path\n"
+        "from unittest.mock import patch\n"
+        "from audiagentic.components.agents.gateway.session import client_defaults as d\n"
+        "root=Path(sys.argv[1])\n"
+        "with patch('audiagentic.components.agents.gateway.session.sessions_store.read_session_record', return_value={}):\n"
+        "    with d.select(root, service_root=str(root/'service'), client_id='client-a', agent_id='gpt-agent',\n"
+        "                  provider_id='gpt-auto', session_id=None, provider_chat_url=None, new_session=False) as s:\n"
+        "        print(json.dumps([s.session_id, s.automatic]))\n"
+    )
+    env = {**__import__("os").environ, "PYTHONPATH": str(Path(defaults.__file__).resolve().parents[5])}
+    result = subprocess.run([sys.executable, "-c", script, str(tmp_path)], capture_output=True, text=True,
+                            env=env, timeout=60)
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout.strip().splitlines()[-1]) == ["ses_before_restart", True]
+
+
+def test_two_processes_selecting_at_once_still_establish_one_binding(tmp_path):
+    script = (
+        "import sys,time\n"
+        "from pathlib import Path\n"
+        "from unittest.mock import patch\n"
+        "from audiagentic.components.agents.gateway.session import client_defaults as d\n"
+        "root=Path(sys.argv[1]); name=sys.argv[2]\n"
+        "patch('audiagentic.components.agents.gateway.session.sessions_store.read_session_record', return_value={}).start()\n"
+        "with d.select(root, service_root=str(root/'service'), client_id='client-a', agent_id='gpt-agent',\n"
+        "              provider_id='gpt-auto', session_id=None, provider_chat_url=None, new_session=False) as s:\n"
+        "    if s.session_id is None:\n"
+        "        time.sleep(0.3)\n"
+        "        s.commit({'session-id': 'ses_by_'+name}); print('created')\n"
+        "    else:\n"
+        "        print('reused:'+s.session_id)\n"
+    )
+    env = {**__import__("os").environ, "PYTHONPATH": str(Path(defaults.__file__).resolve().parents[5])}
+    procs = [subprocess.Popen([sys.executable, "-c", script, str(tmp_path), name], stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE, text=True, env=env) for name in ("a", "b")]
+    results = [process.communicate(timeout=90) for process in procs]
+    assert all(process.returncode == 0 for process in procs), [r[1] for r in results]
+    lines = sorted(out.strip().splitlines()[-1] for out, _ in results)
+    created = [line for line in lines if line == "created"]
+    reused = [line for line in lines if line.startswith("reused:")]
+    assert len(created) == 1 and len(reused) == 1  # the second waited for the first and reused its session
+    assert reused[0].split(":", 1)[1] in {"ses_by_a", "ses_by_b"}
