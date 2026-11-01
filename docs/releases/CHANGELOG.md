@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.80.0](https://github.com/Audumla/AUDiaGentic/compare/v0.79.0...v0.80.0) (2026-11-01)
+
+
+### Features
+
+* **providers:** Pi live qualification probe (SH56) ([#399](https://github.com/Audumla/AUDiaGentic/issues/399)) ([29513b5](https://github.com/Audumla/AUDiaGentic/commit/29513b51accd2a22733461749589e5f9d00ff95d))
+
 ## [0.79.0](https://github.com/Audumla/AUDiaGentic/compare/v0.78.0...v0.79.0) (2026-11-01)
 
 
