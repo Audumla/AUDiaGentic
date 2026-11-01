@@ -228,6 +228,16 @@ def gateway_validate_role_config(role: str, config_path: Path) -> None:
     loaders[role](Path(config_path).resolve())
 
 
+def gateway_init(*, directory: Path | None = None, project: Path | None = None, dry_run: bool = False) -> dict[str, Any]:
+    """Generate the same-machine shared-gateway setup (server, connector, token) and bind this machine.
+
+    Never overwrites or rotates existing files; the result never contains a token.
+    """
+    from .service.init_setup import gateway_init as _init
+
+    return _init(directory=directory, project=project, dry_run=dry_run)
+
+
 def gateway_connector_health(config_path: Path, project_root: Path | None) -> dict[str, Any]:
     """Load a connector document, handshake with its gateway and return the health answer.
 

@@ -129,6 +129,7 @@ _KEYWORD_HELP = {
   audiagentic gateway serve help
   audiagentic gateway serve config FILE
   audiagentic gateway status config FILE [output json]
+  audiagentic gateway init [dir PATH] [project PATH] [dry-run]
   audiagentic gateway validate server|node|connector config FILE
   audiagentic gateway connect config FILE [dry-run|non-interactive]
   audiagentic gateway restart [non-interactive] [output json]
@@ -240,6 +241,15 @@ budget or deferred terminal boundaries exit nonzero. Retry uses finite fixed del
 and a stable-connection reset, not automatic prompt replay. A new boot requires a
 new OS process: use explicit OS supervision, never same-process restart.
 Help starts no endpoint, configuration loader, provider, catalog or application.""",
+    "init": """Usage: audiagentic gateway init [dir PATH] [project PATH] [dry-run]
+
+Generate a working same-machine shared gateway: server.yaml, connector.yaml and
+credentials/operator.token in one directory (default: the gateway folder of the user
+configuration directory). Ids and the token are generated, the token is a private file and
+is never printed, and nothing existing is overwritten or rotated. The project (the current
+checkout, or project PATH) gets a declared project.id in its tracked settings if it has none,
+and this machine is bound to the generated connector (gateway.connector) when none is set.
+Then run: audiagentic gateway serve config <dir>/server.yaml. dry-run writes nothing.""",
     "validate": """Usage: audiagentic gateway validate server|node|connector config FILE
 
 Parse and validate one role document with the same loader the service uses, then print
@@ -348,6 +358,8 @@ def dispatch_keyword(tokens: list[str]) -> int:
         return _dispatch_node_keyword(tokens[1:])
     if command == "validate" and tokens[1:] != ["help"]:
         return _dispatch_validate(tokens[1:])
+    if command == "init" and tokens[1:] != ["help"]:
+        return _dispatch_init(tokens[1:])
     if command in _LIFECYCLE_PROMPTS | {"resume": ""} and tokens[1:] != ["help"]:
         return _dispatch_lifecycle(command, tokens[1:])
     if command in _KEYWORD_HELP and tokens[1:] == ["help"]:
@@ -399,6 +411,47 @@ def dispatch_keyword(tokens: list[str]) -> int:
     management_api.gateway_connect_config(config_path)
     reset_gateway_client()
     print("Gateway connector selected for this machine (gateway.connector, gateway.implementation: standalone).")
+    return 0
+
+
+def _dispatch_init(tokens: list[str]) -> int:
+    """``init [dir PATH] [project PATH] [dry-run]``: parse, delegate, print."""
+    from audiagentic.foundation.cli_io import print_error
+
+    options: dict[str, str] = {}
+    rest = list(tokens)
+    dry_run = False
+    while rest:
+        word = rest.pop(0)
+        if word == "dry-run" and not dry_run:
+            dry_run = True
+        elif word in ("dir", "project") and word not in options and rest and not rest[0].startswith("--"):
+            options[word] = rest.pop(0)
+        else:
+            print_error("Invalid gateway init syntax. Run: audiagentic gateway init help")
+            return 2
+    from audiagentic.components.agents.gateway import management_api
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+    try:
+        result = management_api.gateway_init(
+            directory=Path(options["dir"]) if "dir" in options else None,
+            project=Path(options["project"]) if "project" in options else None,
+            dry_run=dry_run,
+        )
+    except AudiaGenticError as error:
+        print_error(f"{error.code}: {error.message}")
+        return 1
+    print(f"gateway setup: {result['state']}")
+    print(f"directory: {result['directory']}")
+    for path in result["files"]:
+        print(f"  {path}")
+    print(f"project: {result['project-id']} ({result['project-root']})"
+          + (" - project.id " + ("will be written" if result.get("project-id-would-write") else "declared")
+             if dry_run else (" - project.id written" if result["project-id-written"] else "")))
+    print(f"binding: {result['binding']} - {result['binding-note']}")
+    if not dry_run:
+        print(f"next: audiagentic gateway serve config {Path(result['directory']) / 'server.yaml'}")
     return 0
 
 
