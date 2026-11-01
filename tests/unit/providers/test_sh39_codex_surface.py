@@ -33,11 +33,11 @@ def test_the_declaration_is_an_external_attach_surface_and_leaves_the_owned_acp_
     assert acp.ownership_modes == (SessionOwnershipMode.OWNED,) and not acp.joined_capabilities.claimed
 
 
-def test_it_claims_only_what_the_protocol_probe_proved() -> None:
+def test_it_claims_only_what_the_live_probes_proved() -> None:
     claims = _surface().joined_capabilities
-    assert claims.detach_safe is True
-    assert not (claims.prompt_delivery or claims.native_atomic_queue_admission
-                or claims.correlated_terminal_output or claims.human_concurrency_safe)
+    assert claims.detach_safe is True and claims.human_concurrency_safe is True
+    # Measured on codex 0.166.0 (SH54-C): turn/start while a turn is active steers it, so these are never claimed.
+    assert not (claims.prompt_delivery or claims.native_atomic_queue_admission or claims.correlated_terminal_output)
     assert not claims.qualified
 
 
@@ -49,7 +49,7 @@ def test_without_an_exact_record_the_surface_is_unproven(tmp_path: Path) -> None
 
 def _partial_record(adapter, state_root: Path) -> None:
     caps = {"passive-identity": True, "existing-session-attach": True, "safe-detach": True, "reconnect": True,
-            "conditional-admission": False, "correlated-result": False, "concurrent-human-use": False}
+            "concurrent-human-use": True, "conditional-admission": False, "correlated-result": False}
     record = evidence.build_record(
         producer={"component": "providers", "qualifier-version": "1", "suite-digest": "sha256:" + "5" * 64,
                   "adapter-id": adapter.adapter_id, "adapter-version": "1", "adapter-digest": adapter.adapter_digest},
@@ -64,13 +64,16 @@ def _partial_record(adapter, state_root: Path) -> None:
     evidence.write_evidence(record, state_root=state_root)
 
 
-def test_a_partial_protocol_record_is_not_enough_to_join(tmp_path: Path) -> None:
+def test_the_final_five_of_seven_record_is_not_enough_to_join(tmp_path: Path) -> None:
     adapter = join_readiness.adapter_identity(ADAPTER_REF)
     _partial_record(adapter, tmp_path)
     readiness = resolve_join_readiness("codex", "codex-app-server", facts=FACTS, adapter=adapter, state_root=tmp_path)
     assert not readiness.ready and readiness.outcome is SurfaceResolutionOutcome.UNSUPPORTED
     assert "unproven-prompt_delivery" in readiness.reasons
     assert "unproven-correlated_terminal_output" in readiness.reasons
+    # The final measured record (5/7) satisfies concurrency; only the delivery claims keep it unsupported.
+    assert "unproven-concurrency-safe-admission" not in readiness.reasons
+    assert set(readiness.reasons) == {"unproven-prompt_delivery", "unproven-correlated_terminal_output"}
 
 
 def test_a_different_executable_or_version_never_reuses_the_record(tmp_path: Path) -> None:

@@ -202,11 +202,12 @@ session_surfaces:
     adapter_ref: "audiagentic.components.providers.adapters.codex.acp:build_acp_launch"
 
   # SH39/SH54: the human-serving Codex app-server, joined EXTERNALLY as an observer. This declares only
-  # what the protocol-level live probe has proven (providers/services/qualification/probes/codex.py):
-  # attaching to an existing thread and detaching safely. prompt_delivery, native_atomic_queue_admission,
-  # correlated_terminal_output and human_concurrency_safe stay UNCLAIMED until their turn probes pass; each
-  # is a one-line change made together with the evidence that proves it, so the declaration never runs
-  # ahead of evidence. Readiness additionally needs an exact SH53 record, so this surface is not joinable.
+  # what the live probes have proven (providers/services/qualification/probes/codex.py): attaching to an
+  # existing thread, detaching safely in both directions, and the human's UI staying usable (SH54-A/B).
+  # prompt_delivery, native_atomic_queue_admission and correlated_terminal_output are UNCLAIMED and stay so:
+  # SH54-C measured that a second client's turn/start while a turn is active STEERS that turn (native-start-
+  # steers-active-turn), so external delivery is unsupported on this surface. Each claim changes only
+  # together with the evidence that proves it, so the declaration never runs ahead of evidence. Readiness additionally needs an exact SH53 record, so this surface is not joinable.
   - surface_id: codex-app-server
     version_constraint: ">=0.166"
     identity_operations:
@@ -237,4 +238,5 @@ session_surfaces:
     adapter_ref: "audiagentic.components.providers.adapters.codex.join:AppServerClient"
     joined_capabilities:
       detach_safe: true
+      human_concurrency_safe: true  # proven on a real Codex TUI in a pty (SH54-B)
 
