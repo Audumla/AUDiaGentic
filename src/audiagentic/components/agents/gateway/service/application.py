@@ -86,6 +86,8 @@ CAPABILITIES = (
     "work.message",
     "work.cancel",
     "work.output",
+    "work.accept.v1",  # SH60: atomic, replay-safe command acceptance with a trusted delivery identity
+    "work.wait",
 )
 
 
@@ -584,6 +586,25 @@ class GatewayServiceApplication:
             if not isinstance(message, dict):
                 raise service_validation_error(32, "work message must be an object")
             return self._application.submit_agent_work(root, _required(arguments, "context_id"), message, work_id=arguments.get("work_id"))
+        if operation == "accept_agent_work_message":
+            _reject_unknown(arguments, {"context_id", "message", "work_id", "protocol"})
+            message = arguments.get("message")
+            if not isinstance(message, dict):
+                raise service_validation_error(32, "work message must be an object")
+            from audiagentic.components.agents.gateway.application import trusted_delivery_identity
+
+            # Identity comes from the authenticated lease, never from the request body.
+            identity = trusted_delivery_identity(
+                root, principal=str((lease.facts or {}).get("shared-principal-id") or "local"),
+                protocol=str(arguments.get("protocol") or ""),
+            )
+            return self._application.accept_agent_work_message(
+                root, _required(arguments, "context_id"), message, delivery_identity=identity,
+                work_id=arguments.get("work_id"),
+            )
+        if operation == "wait_agent_work":
+            _reject_unknown(arguments, {"work_id", "timeout_seconds"})
+            return self._application.wait_agent_work(root, _required(arguments, "work_id"), arguments.get("timeout_seconds"))
         if operation == "dispatch_agent_work_commands":
             _reject_unknown(arguments, {"work_id"})
             return self._application.dispatch_agent_work_commands(root, _required(arguments, "work_id"))
@@ -858,7 +879,7 @@ def _canonical_root(value: str) -> Path:
 
 
 _WORK_PRODUCING_OPERATIONS = frozenset(
-    {"submit_execution_request", "run_execution_request", "resume_execution_session", "submit_agent_work", "dispatch_agent_work_commands"}
+    {"submit_execution_request", "run_execution_request", "resume_execution_session", "submit_agent_work", "dispatch_agent_work_commands", "accept_agent_work_message"}
 )
 
 

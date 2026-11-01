@@ -356,3 +356,66 @@ def test_definition_discovery_requires_project_read_grant_and_no_parameters(shar
         **{"project-id": "two"}), "token-observer")[0] == 401
     assert shared("/shared/v1/call", call(observer, operation="list_agent_definition_cards",
         params={"include_config": True}), "token-observer")[0] == 400
+
+
+# --- SH60c: Work acceptance takes its identity from the lease, never from the body ---------------------
+
+
+def _work_app(shared):
+    seen = []
+
+    def accept(root, context_id, message, *, delivery_identity, work_id=None, intent=None):
+        seen.append({"root": root, "context": context_id, "message": message, "identity": delivery_identity})
+        return {"work_id": "work_1", "replayed": False}
+
+    def wait(root, work_id, timeout_seconds=None):
+        seen.append({"wait": work_id, "timeout": timeout_seconds})
+        return {"wait-outcome": "timeout", "work": {"work_id": work_id}}
+
+    shared.application._application.accept_agent_work_message = accept
+    shared.application._application.wait_agent_work = wait
+    return seen
+
+
+def _accept(lease, **params):
+    base = {"context_id": "ctx_1", "message": {"message_id": "m1", "text": "hi"}, "protocol": "a2a"}
+    return call(lease, operation="accept_agent_work_message", params={**base, **params})
+
+
+def test_work_acceptance_identity_comes_from_the_authenticated_lease(shared, tmp_path):
+    seen = _work_app(shared)
+    lease = acquire(shared)
+    status, response = shared("/shared/v1/call", _accept(lease))
+    assert status == 200, response
+    identity = seen[0]["identity"]
+    assert (identity["principal"], identity["protocol"], identity["subject"]) == ("alice", "a2a", None)
+    assert identity["project_id"]  # the served root's declared identity, not a caller value
+
+
+def test_a_caller_cannot_assert_a_delivery_identity_or_an_unknown_protocol(shared):
+    _work_app(shared)
+    lease = acquire(shared)
+    status, _ = shared("/shared/v1/call", _accept(lease, delivery_identity={"principal": "root"}))
+    assert status >= 400
+    status, _ = shared("/shared/v1/call", _accept(lease, protocol="made-up"))
+    assert status >= 400
+
+
+def test_work_acceptance_needs_submit_and_the_project_grant(shared):
+    seen = _work_app(shared)
+    observer = acquire(shared, "token-observer")
+    status, _ = shared("/shared/v1/call", _accept(observer), token="token-observer")
+    assert status == 403 or status >= 400
+    bob = acquire(shared, "token-bob")
+    status, _ = shared("/shared/v1/call", _accept(bob), token="token-bob")  # bob is granted project two only
+    assert status >= 400 and not seen
+
+
+def test_waiting_on_work_is_a_read_and_returns_the_non_terminal_state(shared):
+    seen = _work_app(shared)
+    observer = acquire(shared, "token-observer")
+    status, response = shared("/shared/v1/call", call(
+        observer, operation="wait_agent_work", params={"work_id": "work_1", "timeout_seconds": 1}),
+        token="token-observer")
+    assert status == 200, response
+    assert response["result"]["wait-outcome"] == "timeout" and seen == [{"wait": "work_1", "timeout": 1}]

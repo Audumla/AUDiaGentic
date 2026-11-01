@@ -32,6 +32,11 @@ _ACTIONS = {
         "request_runtime_status", "get_execution_observations", "get_execution_evidence",
     ), "read"),
     "submit_execution_request": "submit",
+    # Work (SH60c): acceptance is a submission, waiting and reading are reads. The closed action set is
+    # unchanged, so an omitted `actions` grants nothing new beyond what submit/read already mean.
+    "accept_agent_work_message": "submit",
+    "wait_agent_work": "read",
+    "get_agent_work": "read",
     "cancel_execution_request": "cancel",
     "close_execution_session": "session",
     "resume_execution_session": "session",

@@ -70,6 +70,7 @@ class GatewayApplication(Protocol):
     def submit_agent_work(self, project_root: Path, context_id: str, message: dict[str, Any], **kwargs: Any) -> dict[str, Any]: ...
     def accept_agent_work_message(self, project_root: Path, context_id: str, message: dict[str, Any], *, delivery_identity: dict[str, Any], work_id: str | None = None, intent: dict[str, Any] | None = None) -> dict[str, Any]: ...
     def dispatch_agent_work_commands(self, project_root: Path, work_id: str) -> dict[str, Any]: ...
+    def wait_agent_work(self, project_root: Path, work_id: str, timeout_seconds: float | None = None) -> dict[str, Any]: ...
     def get_agent_work(self, project_root: Path, work_id: str) -> dict[str, Any]: ...
     def list_agent_work(self, project_root: Path) -> list[dict[str, Any]]: ...
     def add_agent_work_message(self, project_root: Path, work_id: str, message: dict[str, Any]) -> dict[str, Any]: ...
@@ -328,6 +329,27 @@ class InProcessGatewayApplication:
             work = store.transition(project_root, work.work_id, AgentWorkState.ACTIVE, expected_revision=work.revision)
         return work.to_mapping()
 
+    def wait_agent_work(self, project_root: Path, work_id: str, timeout_seconds: float | None = None) -> dict[str, Any]:
+        """Wait for the newest command's gateway request, then project its state onto Work.
+
+        Waits through the existing request wait, holding no Work lock and no store lock. A timeout returns the
+        non-terminal state (``wait-outcome: timeout``); success is never inferred.
+        """
+        from audiagentic.components.agents.work.reconcile import reconcile_work
+        from audiagentic.components.agents.work.service import get_work
+
+        bound = _WAIT_MAX_SECONDS if timeout_seconds is None else max(0.0, min(float(timeout_seconds), _WAIT_MAX_SECONDS))
+        work = get_work(project_root, work_id)
+        execution_id = work.active_execution_id
+        if not execution_id:
+            return {"work": work.to_mapping(), "execution-id": None, "wait-outcome": "no-execution", "state": None}
+        waited = self.wait_execution_request(project_root, execution_id, bound)
+        outcome = "timeout" if waited.get("wait-outcome") == "timeout" else "terminal"
+        state = (waited.get("status") or {}).get("state") if outcome == "timeout" else waited.get("state")
+        if state:
+            work = reconcile_work(project_root, get_work(project_root, work_id), execution_state=str(state))
+        return {"work": work.to_mapping(), "execution-id": execution_id, "wait-outcome": outcome, "state": state}
+
     def submit_agent_work_child(self, project_root: Path, parent_work_id: str, message: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
         from audiagentic.components.agents.work.service import get_work
         parent = get_work(project_root, parent_work_id)
@@ -376,6 +398,30 @@ _APPLICATION: GatewayApplication = InProcessGatewayApplication()
 def get_gateway_application() -> GatewayApplication:
     """Return this process's sole gateway control-plane application."""
     return _APPLICATION
+
+
+_DELIVERY_PROTOCOLS = frozenset({"a2a", "acp", "mcp", "cli"})
+
+
+def trusted_delivery_identity(project_root: Path, *, principal: str, protocol: str) -> dict[str, Any]:
+    """Build the delivery identity from facts the gateway established, never from caller assertions.
+
+    ``principal`` is the authenticated shared principal (or ``local`` for the in-process owner); the project
+    id is the declared identity of the served root; ``protocol`` is the adapter label, limited to a closed set.
+    No delegated ``subject`` is accepted until a verified delegation mechanism exists.
+    """
+    from audiagentic.components.project.project_api import project_id as declared_project_id
+    from audiagentic.foundation.contracts.errors import make_error
+
+    if protocol not in _DELIVERY_PROTOCOLS:
+        raise make_error(prefix="CON", component="AGW", number=163, kind="agent-work",
+                         message="A delivery identity needs a principal, protocol, project, Context and message id",
+                         details={"protocol": protocol})
+    return {"principal": principal, "subject": None, "protocol": protocol,
+            "project_id": declared_project_id(project_root)[0], "target_generation": None}
+
+
+_WAIT_MAX_SECONDS = 600.0
 
 
 def _now_iso() -> str:
