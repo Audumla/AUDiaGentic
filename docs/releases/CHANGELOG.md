@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.71.0](https://github.com/Audumla/AUDiaGentic/compare/v0.70.0...v0.71.0) (2026-11-01)
+
+
+### Features
+
+* **gateway:** shared session-lineage deletion engine with a recoverable plan (SH32-B) ([#374](https://github.com/Audumla/AUDiaGentic/issues/374)) ([c3b5dec](https://github.com/Audumla/AUDiaGentic/commit/c3b5dec222cfb9fd8985c4de345acea4109ab235))
+
 ## [0.70.0](https://github.com/Audumla/AUDiaGentic/compare/v0.69.3...v0.70.0) (2026-11-01)
 
 
