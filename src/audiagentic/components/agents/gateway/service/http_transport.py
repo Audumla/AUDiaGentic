@@ -60,6 +60,9 @@ class GatewayHTTPServer(ThreadingHTTPServer):
         self.dashboard_restart_path = f"{self.dashboard_path}/restart"
         self.dashboard_cancel_path = f"{self.dashboard_path}/cancel-request"
         self.dashboard_complete_path = f"{self.dashboard_path}/complete-from-provider"
+        self.dashboard_close_session_path = f"{self.dashboard_path}/close-session"
+        self.dashboard_archive_path = f"{self.dashboard_path}/archive-request"
+        self.dashboard_operation_path = f"{self.dashboard_path}/operation-status"
         self.dashboard_image_path = f"{self.dashboard_path}/project-image"
         self.dashboard_recent_seconds = dashboard_recent_seconds
         super().__init__(address, GatewayHTTPRequestHandler)
@@ -137,6 +140,26 @@ class GatewayHTTPRequestHandler(BaseHTTPRequestHandler):
                 if set(body) != {"request-id"}:
                     raise transport_error(23, "dashboard cancel body must contain request-id only")
                 result = self.server.application.cancel_dashboard_request(_string(body, "request-id"))
+                self._write_json(200, {"ok": True, "result": result})
+                return
+            for route, shape, action in (
+                (self.server.dashboard_close_session_path, {"project-id", "session-id"}, "close_dashboard_session"),
+                (self.server.dashboard_archive_path, {"project-id", "request-id"}, "archive_dashboard_request"),
+            ):
+                if method == "POST" and parsed.path == route:
+                    self._authenticate_dashboard_action()
+                    body = self._read_body()
+                    if set(body) != shape:
+                        raise transport_error(23, f"dashboard action body must contain exactly {sorted(shape)}")
+                    result = getattr(self.server.application, action)(*(_string(body, key) for key in sorted(shape)))
+                    self._write_json(202 if action != "close_dashboard_session" else 200, {"ok": True, "result": result})
+                    return
+            if method == "POST" and parsed.path == self.server.dashboard_operation_path:
+                self._authenticate_dashboard_action()
+                body = self._read_body()
+                if set(body) != {"operation-id"}:
+                    raise transport_error(23, "dashboard operation status body must contain operation-id only")
+                result = self.server.application.dashboard_operation_status(_string(body, "operation-id"))
                 self._write_json(200, {"ok": True, "result": result})
                 return
             if method == "POST" and parsed.path == self.server.dashboard_complete_path:
