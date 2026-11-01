@@ -364,8 +364,9 @@ def test_definition_discovery_requires_project_read_grant_and_no_parameters(shar
 def _work_app(shared):
     seen = []
 
-    def accept(root, context_id, message, *, delivery_identity, work_id=None, intent=None):
-        seen.append({"root": root, "context": context_id, "message": message, "identity": delivery_identity})
+    def accept(root, context_id, message, *, delivery_identity, work_id=None, intent=None, exclusive=False):
+        seen.append({"root": root, "context": context_id, "message": message, "identity": delivery_identity,
+                     "exclusive": exclusive})
         return {"work_id": "work_1", "replayed": False}
 
     def wait(root, work_id, timeout_seconds=None):
@@ -419,3 +420,13 @@ def test_waiting_on_work_is_a_read_and_returns_the_non_terminal_state(shared):
         token="token-observer")
     assert status == 200, response
     assert response["result"]["wait-outcome"] == "timeout" and seen == [{"wait": "work_1", "timeout": 1}]
+
+
+def test_exclusive_acceptance_is_forwarded_only_when_the_caller_asks_for_it(shared):
+    seen = _work_app(shared)
+    lease = acquire(shared)
+    shared("/shared/v1/call", _accept(lease))
+    shared("/shared/v1/call", _accept(lease, exclusive=True))
+    assert [item["exclusive"] for item in seen] == [False, True]
+    status, _ = shared("/shared/v1/call", _accept(lease, exclusive="yes"))  # only a real boolean narrows admission
+    assert status == 200 and seen[-1]["exclusive"] is False

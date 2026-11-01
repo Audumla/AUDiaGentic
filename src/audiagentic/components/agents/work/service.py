@@ -11,6 +11,7 @@ from audiagentic.components.agents.work.contracts import (
 )
 from audiagentic.components.agents.work.inputs import append_work_input
 from audiagentic.components.agents.work.store import AgentWorkStore, command_error
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 
 def submit_work(
@@ -169,6 +170,7 @@ def accept_work_command(
     intent: dict | None = None,
     work_id: str | None = None,
     parent_work_id: str | None = None,
+    exclusive: bool = False,
 ) -> WorkCommandReceipt:
     """Commit one caller command to Work in a single atomic record write, then project its input.
 
@@ -188,8 +190,18 @@ def accept_work_command(
         "intent": dict(intent or {}),
         "accepted_at": message.created_at,
     }
-    receipt = AgentWorkStore().accept_command(project_root, context_id, work_id=resolved_work_id, command=command,
-                                              parent_work_id=parent_work_id)
+    from audiagentic.components.agents.work.events import publish_work_event, topics
+
+    try:
+        receipt = AgentWorkStore().accept_command(project_root, context_id, work_id=resolved_work_id, command=command,
+                                                  parent_work_id=parent_work_id, exclusive=exclusive)
+    except AudiaGenticError as error:
+        if error.code == "CON-AGW-161":
+            known = AgentWorkStore().get(project_root, resolved_work_id)
+            publish_work_event(topics.WORK_MESSAGE_CONFLICT_TOPIC, known.to_mapping(), delivery_key=delivery_key)
+        raise
+    publish_work_event(topics.WORK_MESSAGE_REPLAYED_TOPIC if receipt.replayed else topics.WORK_MESSAGE_ACCEPTED_TOPIC,
+                       receipt.work.to_mapping(), delivery_key=delivery_key)
     stored = receipt.command["message"]
     append_work_input(project_root, receipt.work.work_id,
                       WorkInputMessage(stored["message_id"], stored["text"], stored["inputs"], stored["created_at"]))

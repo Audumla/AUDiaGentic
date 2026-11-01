@@ -17,6 +17,14 @@ EXECUTION_CANCELLED_TOPIC = "agents.execution.cancelled"
 EXECUTION_REJECTED_TOPIC = "agents.execution.rejected"
 EXECUTION_INTERRUPTED_TOPIC = "agents.execution.interrupted"
 
+# SH60: Work milestones. Best-effort observations, never receipts; reconciliation does not depend on them.
+WORK_MESSAGE_ACCEPTED_TOPIC = "agents.work.message-accepted"
+WORK_MESSAGE_REPLAYED_TOPIC = "agents.work.message-replayed"
+WORK_MESSAGE_CONFLICT_TOPIC = "agents.work.message-conflict"
+WORK_DISPATCH_REPAIRED_TOPIC = "agents.work.dispatch-repaired"
+WORK_EXECUTION_LINKED_TOPIC = "agents.work.execution-linked"
+WORK_TERMINAL_TOPIC = "agents.work.terminal"
+
 SESSION_OPENED_TOPIC = "agents.session.opened"
 SESSION_RESUMED_TOPIC = "agents.session.resumed"  # AS49: explicit resume-after-death
 SESSION_TURN_FINISHED_TOPIC = "agents.session.turn-finished"

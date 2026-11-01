@@ -68,7 +68,7 @@ class GatewayApplication(Protocol):
     def list_agent_contexts(self, project_root: Path) -> list[dict[str, Any]]: ...
     def close_agent_context(self, project_root: Path, context_id: str) -> dict[str, Any]: ...
     def submit_agent_work(self, project_root: Path, context_id: str, message: dict[str, Any], **kwargs: Any) -> dict[str, Any]: ...
-    def accept_agent_work_message(self, project_root: Path, context_id: str, message: dict[str, Any], *, delivery_identity: dict[str, Any], work_id: str | None = None, intent: dict[str, Any] | None = None) -> dict[str, Any]: ...
+    def accept_agent_work_message(self, project_root: Path, context_id: str, message: dict[str, Any], *, delivery_identity: dict[str, Any], work_id: str | None = None, intent: dict[str, Any] | None = None, exclusive: bool = False) -> dict[str, Any]: ...
     def dispatch_agent_work_commands(self, project_root: Path, work_id: str) -> dict[str, Any]: ...
     def wait_agent_work(self, project_root: Path, work_id: str, timeout_seconds: float | None = None) -> dict[str, Any]: ...
     def get_agent_work(self, project_root: Path, work_id: str) -> dict[str, Any]: ...
@@ -269,7 +269,7 @@ class InProcessGatewayApplication:
 
     def accept_agent_work_message(
         self, project_root: Path, context_id: str, message: dict[str, Any], *, delivery_identity: dict[str, Any],
-        work_id: str | None = None, intent: dict[str, Any] | None = None,
+        work_id: str | None = None, intent: dict[str, Any] | None = None, exclusive: bool = False,
     ) -> dict[str, Any]:
         """Accept one caller command (create or continue Work) atomically, then dispatch it idempotently.
 
@@ -289,7 +289,7 @@ class InProcessGatewayApplication:
         stamped = WorkInputMessage(str(message["message_id"]), str(message["text"]), dict(message.get("inputs") or {}),
                                    message.get("created_at") or _now_iso())
         receipt = accept_work_command(project_root, context_id, delivery_key=key, message=stamped, intent=intent,
-                                      work_id=work_id)
+                                      work_id=work_id, exclusive=exclusive)
         work = self.dispatch_agent_work_commands(project_root, receipt.work.work_id)
         return {**work, "delivery_key": key, "replayed": receipt.replayed}
 
@@ -325,6 +325,10 @@ class InProcessGatewayApplication:
             )
             work = store.link_command_execution(project_root, work.work_id, command["delivery_key"],
                                                 execution["request-id"])
+            from audiagentic.components.agents.work.events import publish_work_event, topics
+
+            publish_work_event(topics.WORK_EXECUTION_LINKED_TOPIC, work.to_mapping(),
+                               delivery_key=command["delivery_key"], execution_id=execution["request-id"])
         if work.state is AgentWorkState.SUBMITTED and work.active_execution_id:
             work = store.transition(project_root, work.work_id, AgentWorkState.ACTIVE, expected_revision=work.revision)
         return work.to_mapping()
