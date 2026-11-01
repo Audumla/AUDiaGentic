@@ -144,7 +144,7 @@ def gateway_init(*, directory: Path | None = None, project: Path | None = None, 
     if action == "bind":
         from audiagentic.foundation.config.writer import write_settings_patch
 
-        write_settings_patch("user", {"gateway": {"connector": str(connector_path), "implementation": "standalone"}})
+        write_settings_patch("user", {"gateway": {"connector": str(connector_path)}})
         result["binding"] = "bound"
     return result
 

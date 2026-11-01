@@ -44,7 +44,7 @@ def test_where_after_init_shows_binding_roots_and_never_the_token(project):
     assert report["connection"]["mode"] == "shared" and report["connection"]["endpoint"] == "http://127.0.0.1:8765"
     assert report["connection"]["server-id"] == init["server-id"] == report["server-id"]
     assert report["connection"]["source"].startswith("user")
-    assert report["implementation"]["value"] == "standalone"
+    assert report["implementation"]["effective"] == "standalone"
     assert report["project"]["id"] == "app" and report["project"]["source"].startswith("project")
     token = (Path(report["directory"]) / "credentials" / "operator.token").read_text().strip()
     assert token not in repr(report)

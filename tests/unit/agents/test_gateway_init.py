@@ -54,7 +54,7 @@ def test_fresh_init_creates_a_valid_private_setup(project, target, tmp_path):
     assert document["projects"] == [str(project.resolve())]
     assert "projects" not in document["principals"]["operator"]  # omitted: all served projects and actions
     assert "my_project" in (project / ".audiagentic" / "settings.yaml").read_text()
-    assert _user_gateway_settings(tmp_path) == {"connector": str(target / "connector.yaml"), "implementation": "standalone"}
+    assert _user_gateway_settings(tmp_path) == {"connector": str(target / "connector.yaml")}
     assert token.read_text().strip() not in repr(result)
 
 
@@ -169,3 +169,58 @@ def test_cli_reports_registered_errors(tmp_path, capsys):
 def test_init_help_is_pure(capsys):
     assert cli.dispatch_keyword(["init", "help"]) == 0
     assert "gateway init [dir PATH]" in capsys.readouterr().out
+
+
+def test_serve_without_arguments_uses_the_default_setup(project, monkeypatch, capsys):
+    from unittest.mock import Mock
+
+    assert cli.dispatch_keyword(["serve"]) == 1
+    assert "gateway init" in capsys.readouterr().err
+    management_api.gateway_init(project=project)
+    serve = Mock(return_value=0)
+    monkeypatch.setattr(cli, "cmd_gateway", serve)
+    monkeypatch.chdir(project)
+    assert cli.dispatch_keyword(["serve"]) == 0
+    assert "serving" in capsys.readouterr().out
+    assert serve.call_args.args[0].shared_config.projects == {"my_project": project.resolve()}
+
+
+def test_init_next_command_is_plain_serve_for_the_default_directory(project, capsys):
+    assert cli.dispatch_keyword(["init", "project", str(project)]) == 0
+    assert "next: audiagentic gateway serve\n" in capsys.readouterr().out
+
+
+def test_validate_catches_a_port_mismatch_of_the_generated_pair_without_rewriting(project):
+    management_api.gateway_init(project=project)
+    from audiagentic.components.agents.gateway.service.init_setup import default_directory
+
+    directory = default_directory()
+    connector = yaml.safe_load((directory / "connector.yaml").read_text())
+    connector["endpoint"] = "http://127.0.0.1:9999"
+    (directory / "connector.yaml").write_text(yaml.safe_dump(connector))
+    before = (directory / "server.yaml").read_bytes(), (directory / "connector.yaml").read_bytes()
+    for role in ("server", "connector"):
+        with pytest.raises(AudiaGenticError, match="CFG-AGSV-009"):
+            management_api.gateway_validate_deployment(role, directory / f"{role}.yaml", project)
+    assert ((directory / "server.yaml").read_bytes(), (directory / "connector.yaml").read_bytes()) == before
+
+
+def test_a_remote_connector_is_not_compared_with_an_unrelated_local_server(project, tmp_path):
+    management_api.gateway_init(project=project)
+    remote = tmp_path / "remote.yaml"
+    token = tmp_path / "t"
+    token.write_text("x")
+    token.chmod(0o600)
+    remote.write_text(yaml.safe_dump({"schema-version": 1, "mode": "shared", "endpoint": "http://127.0.0.1:9999",
+                                      "server-id": "someone-else", "token-file": str(token)}))
+    assert management_api.gateway_validate_deployment("connector", remote, project)["mode"] == "shared"
+
+
+def test_status_reports_the_bound_connector_and_distinguishes_failures(project, monkeypatch):
+    with pytest.raises(AudiaGenticError, match="CFG-AGSV-001"):
+        management_api.gateway_connection_status(project)  # configuration: nothing bound
+    management_api.gateway_init(project=project)
+    monkeypatch.setattr(management_api, "gateway_connector_health", lambda path, root: {"state": "running"})
+    report = management_api.gateway_connection_status(project)
+    assert report["mode"] == "shared" and report["health"] == {"state": "running"}
+    assert report["server-id"].startswith("gw-") and "operator.token" not in repr(report)

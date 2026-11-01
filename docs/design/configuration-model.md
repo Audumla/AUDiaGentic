@@ -376,6 +376,20 @@ reference (for example the port inside a connector endpoint, or a token path on
 both server and client) is generated and checked by `gateway validate`, not a
 second authority.
 
+Target state (reviewed with GPT after CFG14-CFG17, CFG18): one tracked `project.id`;
+one layered settings system; one machine connector binding (`gateway.connector`,
+which selects a standalone connection by itself; an explicit `gateway.implementation`
+still wins); separate generated server, connector and node documents with one
+responsibility each; `init` provisions, `serve` starts (default path), `status`
+diagnoses, `validate` checks. Accepted as generated references, not duplicated
+authority: the port inside the connector endpoint, the token-file path and the
+server id on both server and client. Deferred until usage shows a need:
+`gateway.workspace_roots` derivation from served roots, `gateway connector create`,
+token-rotation and port-change commands (documented procedures instead), and
+merging the role documents into settings (revisit only on repeated defects from
+cross-document coordination or substantial parser duplication that can be removed
+without weakening role boundaries).
+
 Not doing: node enrollment, settings consolidation of the role documents, a
 project registry, directory discovery, tenant-style grants and automated
 remote token transfer.

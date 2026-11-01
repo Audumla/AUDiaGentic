@@ -51,7 +51,11 @@ def gateway_where(*, project: Path | None = None) -> dict[str, Any]:
         report["settings"] = f"invalid: {error.message}"
         return report
     bound = settings.get("gateway.connector")
-    report["implementation"] = {"value": settings.get("gateway.implementation"),
+    from ..client import _resolve_implementation_id
+
+    effective, why = _resolve_implementation_id(root)
+    report["implementation"] = {"effective": effective, "decided-by": why,
+                                "explicit-setting": settings.get("gateway.implementation"),
                                 "source": _origin(settings, "gateway.implementation")}
     connection: dict[str, Any] = {"connector": bound, "source": _origin(settings, "gateway.connector")}
     if bound:

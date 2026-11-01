@@ -228,6 +228,38 @@ def gateway_validate_role_config(role: str, config_path: Path) -> None:
     loaders[role](Path(config_path).resolve())
 
 
+def _default_document(loader: Any, name: str, **kwargs: Any) -> Any:
+    """The document of that name in the default gateway directory, or None if absent or unloadable."""
+    from .service.init_setup import default_directory
+
+    path = default_directory() / name
+    if not path.is_file():
+        return None
+    try:
+        return loader(path, **kwargs)
+    except AudiaGenticError:
+        return None
+
+
+def _check_generated_pair(server: Any, connector: Any) -> None:
+    """A connector and server that name the same server-id must agree on the loopback port.
+
+    Only a pair that identifies itself (same server-id) is compared; a remote connector is never
+    checked against an unrelated local server. Neither file is rewritten.
+    """
+    if server is None or connector is None or connector.server_id != server.server_id:
+        return
+    from urllib.parse import urlsplit
+
+    parsed = urlsplit(connector.endpoint)
+    if parsed.scheme == "http" and parsed.port != server.port:
+        from audiagentic.foundation.contracts.errors import make_error_factory
+
+        raise make_error_factory("CFG", "AGSV", "gateway-service")(
+            9, "the connector endpoint port does not match the server's listen.port; edit one so they agree",
+            connector_port=parsed.port, server_port=server.port)
+
+
 def gateway_validate_deployment(role: str, config_path: Path, project: Path | None = None) -> dict[str, Any]:
     """Validate a role document in its deployment context, offline.
 
@@ -246,10 +278,13 @@ def gateway_validate_deployment(role: str, config_path: Path, project: Path | No
     root = discover_project_root(project, cwd=Path.cwd())
     if role == "server":
         server = shared_config.load_shared_server_config(path, default_root=root)
+        _check_generated_pair(server, _default_document(shared_config.load_shared_connector_config, "connector.yaml"))
         return {"role": role, "projects": {key: str(value) for key, value in server.projects.items()},
                 "principals": [principal.principal_id for principal in server.principals]}
     if role == "connector":
         connector = shared_config.load_shared_connector_config(path)
+        _check_generated_pair(_default_document(shared_config.load_shared_server_config, "server.yaml",
+                                                default_root=root), connector)
         if connector.mode == "shared" and declared_project_id(root) is None:
             from audiagentic.foundation.contracts.errors import make_error_factory
 
@@ -303,10 +338,32 @@ def gateway_connector_health(config_path: Path, project_root: Path | None) -> di
         client.close()
 
 
+def gateway_connection_status(project_root: Path | None = None) -> dict[str, Any]:
+    """Explain this machine's gateway connection: the bound connector, its target and the live answer.
+
+    Reads the ``gateway.connector`` binding, loads that document (a configuration failure raises
+    its own error), then asks the gateway for its health (a connection failure raises its own
+    error). The result never contains a token.
+    """
+    from .client import _connector_path
+    from .service.shared_config import load_shared_connector_config
+
+    path = _connector_path()
+    if path is None:
+        from audiagentic.foundation.contracts.errors import make_error_factory
+
+        raise make_error_factory("CFG", "AGSV", "gateway-service")(
+            1, "standalone gateway selected but no connector is configured")
+    connector = load_shared_connector_config(path.resolve())
+    health = gateway_connector_health(path, project_root)
+    return {"connector": str(path), "mode": connector.mode, "endpoint": connector.endpoint,
+            "server-id": connector.server_id, "health": health}
+
+
 def gateway_connect_config(config_path: Path) -> dict[str, Any]:
     """Bind this machine to a validated connector document.
 
-    Writes ``gateway.connector`` and ``gateway.implementation: standalone`` to the user
+    Writes ``gateway.connector`` (which implies a standalone connection) to the user
     settings in one patch through the settings writer, so every project on the machine
     uses the connection. Callers complete the health handshake before requesting this
     write. Nothing about the connection is stored in settings except the document's path.
@@ -315,8 +372,11 @@ def gateway_connect_config(config_path: Path) -> dict[str, Any]:
 
     reference = str(Path(config_path).resolve(strict=True))
     gateway_validate_role_config("connector", Path(reference))
-    write_settings_patch("user", {"gateway": {"connector": reference, "implementation": "standalone"}})
-    return {"implementation": "standalone", "connector": reference}
+    write_settings_patch("user", {"gateway": {"connector": reference}})
+    from .client import _resolve_implementation_id
+
+    effective = _resolve_implementation_id(None)[0]
+    return {"implementation": effective, "connector": reference}
 
 
 def gateway_create_operation(
