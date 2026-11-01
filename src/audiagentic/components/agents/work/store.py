@@ -22,6 +22,7 @@ from audiagentic.foundation.system.process import StartupLock
 from audiagentic.foundation.workflow import load_workflow, transition_allowed
 
 command_error = make_error_factory("CON", "AGW", "agent-work")
+work_not_found = make_error_factory("RES", "AGW", "agent-work")
 _TERMINAL = {AgentWorkState.COMPLETED, AgentWorkState.FAILED, AgentWorkState.CANCELLED, AgentWorkState.REJECTED}
 
 _WORKFLOW = load_workflow(Path(__file__).parent.parent / "workflows.yaml", "agent-work")
@@ -126,7 +127,12 @@ class AgentWorkStore:
             return updated
 
     def get(self, project_root: Path, work_id: str) -> AgentWorkRecord:
-        return _from_mapping(load_json_file(agent_work_path(project_root, work_id)))
+        path = agent_work_path(project_root, work_id)
+        if not path.exists():
+            # A missing record used to surface as a bare KeyError from the mapping reader; callers (and the
+            # shared gateway's error envelope) need a registered, stable code.
+            raise work_not_found(153, "No Work with this id exists in the project", work_id=work_id)
+        return _from_mapping(load_json_file(path))
 
     def list(self, project_root: Path) -> tuple[AgentWorkRecord, ...]:
         root = agent_work_root(project_root)
