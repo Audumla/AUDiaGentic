@@ -281,3 +281,8 @@ CON-XSR-009: "Only the current writer at the current generation can release the 
 CON-XSR-010: "This writer does not hold the external session; it must claim it before sending."
 VAL-XSR-011: "The external session is not registered. Register it through the Provider join authority first."
 CON-XSR-012: "The writer claim on this external session belongs to a gateway owner epoch that is no longer current. Claim it again from the current owner; that increases the generation and fences the retired owner out."
+CON-AGW-160: "The Work belongs to a different Context than the one named. Use the Context the Work was created in."
+CON-AGW-161: "This delivery identity was already accepted with a different payload. A retry must resend the identical message; a new message needs a new message id."
+CON-AGW-162: "The Work is terminal and cannot take another command. Start new Work in the Context."
+CON-AGW-163: "A delivery identity needs a principal, protocol, project, Context and message id. Supply the missing field."
+CON-AGW-164: "The Context is closed. Open a new Context to submit Work."
