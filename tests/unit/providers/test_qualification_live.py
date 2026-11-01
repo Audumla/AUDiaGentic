@@ -176,3 +176,18 @@ def test_reconnect_is_recorded_but_is_not_a_name_the_join_gate_reads():
 
     gate_names = set(join_readiness.EVIDENCE_CAPABILITY.values()) | set(join_readiness.JOIN_PREREQUISITES)
     assert "reconnect" in CAPABILITIES and "reconnect" not in gate_names
+
+
+def test_the_human_tui_helper_signals_only_its_own_pid_and_tolerates_being_stopped_twice():
+    from audiagentic.components.providers.services.qualification.probes.codex_tui import HumanTui
+
+    tui = HumanTui(Path("/nonexistent/codex"), Path("/nonexistent.sock"), {}, Path("/"))
+    assert tui.alive is False and tui.pid is None
+    tui.stop()
+    tui.stop()  # nothing started, nothing signalled
+
+
+def test_list_helpers_of_the_human_probe_accept_bare_ids_and_objects():
+    from audiagentic.components.providers.services.qualification.probes import codex_tui
+
+    assert codex_tui._ids({"data": ["a", {"id": "b"}]}) == ["a", "b"] and codex_tui._ids({}) == []

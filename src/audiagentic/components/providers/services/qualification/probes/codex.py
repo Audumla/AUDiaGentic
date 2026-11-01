@@ -30,6 +30,7 @@ from audiagentic.components.providers.adapters.codex.join import (
 )
 
 from ..live import CAPABILITIES, LiveContext, ProbeOutcome
+from .codex_tui import probe_human_surface
 from .stub_model import StubModel
 
 PROBE_VERSION = "1"
@@ -304,7 +305,17 @@ def run(context: LiveContext) -> list[ProbeOutcome]:
         (context.root / "workspace").mkdir(parents=True, exist_ok=True)
         outcomes = asyncio.run(_probe(context, env, executable, stub))
     except Exception as error:  # noqa: BLE001
+        stub.stop()
         return [_failed(name, "server", error) for name in CAPABILITIES]
+    try:
+        # The real Codex TUI as the human surface (its own server, same stub, same disposable home).
+        human = asyncio.run(probe_human_surface(executable, env, context.root / "workspace", context.root, stub))
+        outcomes.update(human)
+        steered = (human["concurrent-human-use"].observations or {}).get("observer-turn-start-returned-the-human-turn-id")
+        if "conditional-admission" in outcomes:
+            outcomes["conditional-admission"].observations["human-turn-steered-by-observer"] = steered
+    except Exception as error:  # noqa: BLE001
+        outcomes["concurrent-human-use"] = _failed("concurrent-human-use", "human-surface", error)
     finally:
         stub.stop()
     result = []

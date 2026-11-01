@@ -136,7 +136,12 @@ with a local deterministic stub model, loopback on an OS-assigned port, configur
 | reconnect | proven (evidence only; the join gate does not read it) | a new client resolves the same thread after every earlier client left |
 | conditional-admission | **unsupported** (`unsupported-turn-start-steers-active-turn`) | `turn/start` on a busy thread returns the active turn's own id and adds a model request to that turn: it steers, it does not admit or refuse |
 | correlated-result | **unsupported** (`unsupported-concurrent-callers-share-a-turn`) | idle turns are attributable by native turn id, but a second caller during an active turn shares the active turn's id |
-| concurrent-human-use | unproven (`unproven-needs-human-ui-probe`) | needs a human-style client; the Codex TUI can run in a pseudo-terminal against the same server once a stub provider is configured (it creates its thread on that server), but that experiment is not yet a probe |
+| concurrent-human-use | proven, on the **real Codex TUI** | the TUI runs in a pseudo-terminal with `--remote unix://` against the same server; the human's UI keeps working while an observer attaches and after it detaches, an observer's idle turn completes while the TUI is attached, and the human then completes an independent action |
+
+The human-surface experiment (probes/codex_tui.py) also measured the decisive case on a real human turn: while the
+human's turn is active an observer's `turn/start` returns **the human's own turn id** and adds model requests to it
+(reproduced across runs). It steers the human's turn, so external-session delivery to Codex stays unsupported
+(`native-start-steers-active-turn`) even though the human UI otherwise coexists safely with an observer.
 
 Other measured facts: a thread with no turn has no persisted history, so the attach probe seeds synthetic history
 through `thread/inject_items` and records that; `codex queue --thread T --message M --remote unix://...` returns a

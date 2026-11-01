@@ -37,14 +37,13 @@ def _own_servers() -> list[str]:
     return found
 
 
-def test_the_installed_codex_proves_identity_attach_detach_reconnect_and_measures_admission_as_unsupported(tmp_path):
+def test_the_installed_codex_proves_identity_attach_detach_reconnect_human_coexistence_and_measures_admission_as_unsupported(tmp_path):
     result = qualify_live("codex", state_root=tmp_path / "state")
     assert result["state"] == "partial", result["observations"]
     assert result["capabilities"] == {
         "passive-identity": True, "existing-session-attach": True, "safe-detach": True, "reconnect": True,
-        "conditional-admission": False, "correlated-result": False, "concurrent-human-use": False}
-    assert result["reasons"] == ["unproven-needs-human-ui-probe", "unsupported-concurrent-callers-share-a-turn",
-                                 "unsupported-turn-start-steers-active-turn"]
+        "conditional-admission": False, "correlated-result": False, "concurrent-human-use": True}
+    assert result["reasons"] == ["unsupported-concurrent-callers-share-a-turn", "unsupported-turn-start-steers-active-turn"]
     assert result["cleanup-error"] is None and not _own_servers()  # nothing left running, nothing left on disk
 
 
@@ -67,7 +66,8 @@ def test_the_evidence_is_exact_match_for_this_executable_and_adapter(tmp_path):
                                  native_schema_version=adapter.native_schema_version, state_root=tmp_path / "state")
     assert record and record["evidence-id"] == result["evidence-id"]
     assert record["target"]["executable-version"] == facts["executable-version"]
-    assert evidence.proven_capabilities(record) == {"passive-identity", "existing-session-attach", "safe-detach", "reconnect"}
+    assert evidence.proven_capabilities(record) == {"passive-identity", "existing-session-attach", "safe-detach", "reconnect",
+                                                    "concurrent-human-use"}
     assert "conditional-admission" not in evidence.proven_capabilities(record)
     assert "human-UI" in result["claim"] and "never sufficient for a join" in result["claim"]
 
@@ -80,3 +80,18 @@ def test_safe_detach_is_measured_in_both_directions_and_the_last_subscriber_case
     assert detach["original-leaves"] == {"observer-reattached": True, "thread-still-loaded-for-observer": True,
                                          "observer-can-read": True}  # the human closing their client does not end the session
     assert detach["last-subscriber-leaves"]["resumable"] is True  # recorded, not gating
+
+
+def test_a_real_codex_tui_is_the_human_surface_and_an_observer_start_steers_its_active_turn(tmp_path):
+    """SH54-B on the real TUI (pseudo-terminal, `--remote unix://`): the human's UI keeps working while an observer
+    attaches, takes an idle turn and detaches; but an observer's turn/start DURING the human's active turn returns the
+    human's own turn id and adds model requests, i.e. it steers the human (so external delivery stays unsupported)."""
+    seen = qualify_live("codex", state_root=tmp_path / "state")["observations"]["concurrent-human-use"]
+    assert seen["human-surface"] == "real-codex-tui-in-pty"
+    for step in ("human-first-turn-completed", "human-works-while-observer-attached", "human-works-after-observer-detached",
+                 "observer-idle-turn-completed", "human-independent-action-after-observer-turn",
+                 "human-turn-completed-after-release", "tui-alive-at-end"):
+        assert seen[step] is True, step
+    assert seen["human-turn-id-observed"] is True
+    assert seen["observer-turn-start-returned-the-human-turn-id"] is True  # the steer, measured on a real human turn
+    assert seen["model-requests-added-by-the-observer-start"] >= 1 and seen["stub-unexpected-requests"] == 0
