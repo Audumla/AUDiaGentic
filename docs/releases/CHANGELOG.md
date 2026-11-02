@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.87.0](https://github.com/Audumla/AUDiaGentic/compare/v0.86.0...v0.87.0) (2026-11-02)
+
+
+### Features
+
+* **runtime:** install prunes old versions and build leftovers; add runtime prune ([#420](https://github.com/Audumla/AUDiaGentic/issues/420)) ([03c583e](https://github.com/Audumla/AUDiaGentic/commit/03c583efe8727ca26cf84954d478126e6fa18e5e))
+
 ## [0.86.0](https://github.com/Audumla/AUDiaGentic/compare/v0.85.1...v0.86.0) (2026-11-02)
 
 
