@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.93.0](https://github.com/Audumla/AUDiaGentic/compare/v0.92.0...v0.93.0) (2026-11-02)
+
+
+### Features
+
+* **providers:** Claude Code live qualification probe (SH55) ([#435](https://github.com/Audumla/AUDiaGentic/issues/435)) ([85e9869](https://github.com/Audumla/AUDiaGentic/commit/85e9869f5ddb5ba08c9ddc60856ff73aeb93c4b7))
+
 ## [0.92.0](https://github.com/Audumla/AUDiaGentic/compare/v0.91.0...v0.92.0) (2026-11-02)
 
 
