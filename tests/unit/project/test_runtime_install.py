@@ -96,3 +96,24 @@ def test_restart_request_needs_the_supervisor_folder(tmp_path) -> None:
     (tmp_path / "cmd").mkdir()
     assert runtime.request_gateway_restart(tmp_path / "cmd" / "x.restart") is True
     assert (tmp_path / "cmd" / "x.restart").exists()
+
+
+def test_prune_keeps_current_previous_and_the_newest_and_skips_folders_in_use(tmp_path, monkeypatch) -> None:
+    import os
+
+    root = tmp_path / "runtime"
+    root.mkdir()
+    names = [f"1.{index}.0-aaaaaaa{index}" for index in range(6)]
+    for index, name in enumerate(names):
+        (root / name).mkdir()
+        os.utime(root / name, (1000 + index, 1000 + index))
+    (root / "current").symlink_to(names[1])     # old but live
+    (root / "previous").symlink_to(names[0])
+    (root / ".build").mkdir()
+    monkeypatch.setattr("audiagentic.foundation.system.process.pids_referencing_path",
+                        lambda path: [1] if path.name == names[2] else [])
+    result = runtime.prune(root, keep=1)
+    left = {p.name for p in root.iterdir() if p.is_dir() and not p.is_symlink()}
+    assert left == {names[0], names[1], names[2], names[5]}   # pinned two, in use, newest one
+    assert sorted(result["removed"]) == [names[3], names[4]]
+    assert not (root / ".build").exists()
