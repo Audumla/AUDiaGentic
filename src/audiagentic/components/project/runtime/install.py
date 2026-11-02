@@ -33,7 +33,9 @@ def default_root(home: Path) -> Path:
 
 
 def _run(runner: Runner, command: Sequence[str | Path], **kwargs: Any) -> subprocess.CompletedProcess:
-    result = runner([str(part) for part in command], capture_output=True, text=True, **kwargs)
+    # The caller's active venv must never steer a build or install into another environment.
+    env = {key: value for key, value in os.environ.items() if key not in {"VIRTUAL_ENV", "PYTHONPATH", "PYTHONHOME"}}
+    result = runner([str(part) for part in command], capture_output=True, text=True, env=env, **kwargs)
     if result.returncode != 0:
         tail = (result.stderr or result.stdout or "").strip().splitlines()[-3:]
         raise RuntimeInstallError(f"{Path(str(command[0])).name} failed: {' | '.join(tail) or result.returncode}")
@@ -56,7 +58,7 @@ def _set_link(link: Path, target: Path) -> None:
 
 
 def status(root: Path) -> dict[str, Any]:
-    versions = sorted(p.name for p in root.iterdir() if p.is_dir() and not p.is_symlink()) if root.is_dir() else []
+    versions = sorted(p.name for p in root.iterdir() if p.is_dir() and not p.is_symlink() and not p.name.startswith(".")) if root.is_dir() else []
     current, previous = _link_target(root / "current"), _link_target(root / "previous")
     return {
         "root": str(root),
