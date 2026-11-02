@@ -18,7 +18,7 @@ from typing import Any
 
 from audiagentic.foundation.paths.names import project_marker_path
 from audiagentic.foundation.system import forge, git
-from audiagentic.foundation.system.process import pids_referencing_path
+from audiagentic.foundation.system.process import editable_sources_of_running_processes, pids_referencing_path
 
 from . import service
 
@@ -182,6 +182,14 @@ def assess_one(repo: Path, entry: git.WorktreeEntry, *, primary: bool, protected
         blockers.append(Blocker("processes-unknown", "this platform cannot list processes using the path", True))
     elif users:
         blockers.append(Blocker("in-use", f"{len(users)} process(es) use this path, this command included if run from inside it"))
+
+    sources = editable_sources_of_running_processes()
+    if sources is None:
+        blockers.append(Blocker("processes-unknown", "this platform cannot list the sources running processes import", True))
+    else:
+        live = [str(source) for source in sources if source == entry.path or entry.path in source.parents]
+        if live:
+            blockers.append(Blocker("runtime-source", f"a running environment imports its code from {live[0]} (editable install)"))
 
     try:
         active = active_work(entry.path)

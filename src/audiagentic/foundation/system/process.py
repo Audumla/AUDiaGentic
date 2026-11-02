@@ -155,6 +155,43 @@ def pids_referencing_path(path: Path) -> list[int] | None:
     return sorted(found)
 
 
+def editable_sources_of_running_processes() -> list[Path] | None:
+    """Source directories that running Python processes import through an editable install.
+
+    For each process whose interpreter or script sits in a virtual environment (a
+    ``pyvenv.cfg`` beside its ``bin`` or ``Scripts`` folder), the environment's
+    ``__editable__*.pth`` files name the source trees it runs from. A checkout that
+    holds such a tree is live runtime even when no process has it as its working
+    directory. ``None`` means ``/proc`` cannot be read, which callers treat as unknown.
+    """
+    proc = Path("/proc")
+    if os.name == "nt" or not proc.is_dir():
+        return None
+    environments: set[Path] = set()
+    for entry in proc.iterdir():
+        if not entry.name.isdigit():
+            continue
+        try:
+            arguments = (entry / "cmdline").read_bytes().split(b"\0")[:3]
+            candidates = [Path(os.readlink(entry / "exe"))] + [Path(a.decode()) for a in arguments if a.startswith(b"/")]
+        except OSError:
+            continue
+        for candidate in candidates:
+            # No resolve(): a venv interpreter is usually a symlink out of the venv.
+            parent = candidate.parent.parent
+            if candidate.parent.name in {"bin", "Scripts"} and (parent / "pyvenv.cfg").is_file():
+                environments.add(parent)
+    sources: set[Path] = set()
+    for environment in environments:
+        for pth in environment.glob("lib*/python*/site-packages/__editable__*.pth"):
+            try:
+                lines = pth.read_text(encoding="utf-8").splitlines()
+            except OSError:
+                continue
+            sources.update(Path(line).resolve() for line in lines if line.startswith("/"))
+    return sorted(sources)
+
+
 def _open_file_links(process: Path) -> list[Path]:
     try:
         return [process / "fd" / name for name in os.listdir(process / "fd")]
