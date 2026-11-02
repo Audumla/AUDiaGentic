@@ -30,6 +30,7 @@ _ACTIONS = {
         "get_execution_response_payload", "get_execution_failure_response",
         "wait_execution_request", "list_execution_requests", "list_execution_sessions",
         "request_runtime_status", "get_execution_observations", "get_execution_evidence",
+        "gateway_dispatch_health",
     ), "read"),
     "submit_execution_request": "submit",
     # Work (SH60c): acceptance is a submission, waiting and reading are reads. The closed action set is

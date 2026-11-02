@@ -226,6 +226,9 @@ class StandaloneGatewayClient:
     def list_agent_definition_cards(self, project_root: Path) -> list[dict[str, Any]]:
         return cast(list[dict[str, Any]], self._call("list_agent_definition_cards", project_root, {}))
 
+    def gateway_dispatch_health(self, project_root: Path) -> dict[str, Any]:
+        return cast(dict[str, Any], self._call("gateway_dispatch_health", project_root, {}))
+
     def submit_execution_request(self, project_root: Path, **kwargs: Any) -> dict[str, Any]:
         if "source_workspace" in kwargs:
             raise client_validation_error(22, "caller workspace is connector-owned, not a tool parameter")

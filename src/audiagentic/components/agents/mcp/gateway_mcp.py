@@ -47,6 +47,13 @@ def agent_task_list_definitions() -> list[dict[str, Any]]:
 
 @mcp.tool()
 @tool_boundary
+def agent_dispatch_health() -> dict[str, Any]:
+    """Dispatch readiness per provider surface. Check before submitting: an unavailable surface refuses new work with its cause."""
+    return call_gateway_method("gateway_dispatch_health", project_root_from_env())
+
+
+@mcp.tool()
+@tool_boundary
 def agent_task_status(request_id: str, include_response: bool = False) -> dict[str, Any]:
     """Poll compact lifecycle status; use diagnostics or response for terminal detail."""
     project_root = _request_project_root(request_id)

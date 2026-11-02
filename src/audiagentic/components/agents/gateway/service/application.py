@@ -111,6 +111,11 @@ class GatewayServiceApplication:
         self._dashboard_recent_seconds = dashboard_recent_seconds
         self._node_admission = node_admission
         self._dashboard_action_token = _load_dashboard_action_token(service_store.root)
+        from ..health import get_dispatch_health
+
+        # Dispatch readiness is established by the service process at start: a runtime missing a provider module is
+        # alive and unable to run that provider, which port/lease health cannot show.
+        get_dispatch_health().refresh_dependencies()
         # A distinct durable authority for gateway operator operations.  It
         # deliberately does not own request/session state or the work queue.
         self._operations = GatewayOperationsApplication(
@@ -396,6 +401,11 @@ class GatewayServiceApplication:
             return result
         if operation in _WORK_PRODUCING_OPERATIONS:
             self._record_project_encounter(root)
+        if operation == "gateway_dispatch_health":
+            _reject_unknown(arguments, set())
+            from ..health import get_dispatch_health
+
+            return get_dispatch_health().snapshot()
         if operation == "list_agent_definition_cards":
             _reject_unknown(arguments, set())
             from audiagentic.components.agents.configuration.management import (
