@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.89.0](https://github.com/Audumla/AUDiaGentic/compare/v0.88.2...v0.89.0) (2026-11-02)
+
+
+### Features
+
+* **worktrees:** a worktree a running venv imports from is never removable (DW01) ([#416](https://github.com/Audumla/AUDiaGentic/issues/416)) ([3d66789](https://github.com/Audumla/AUDiaGentic/commit/3d66789278884a44db9df738fc974926b6bed45b))
+
 ## [0.88.2](https://github.com/Audumla/AUDiaGentic/compare/v0.88.1...v0.88.2) (2026-11-02)
 
 
