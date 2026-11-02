@@ -64,3 +64,48 @@ def test_doctor_reports_a_gateway_runtime_missing_a_provider_module(monkeypatch,
     monkeypatch.setattr(subprocess, "run", lambda cmd, **_k: subprocess.CompletedProcess(cmd, 0, "", ""))
     [result] = doctor_checks._gateway_runtime_modules(store)
     assert result.status == doctor_checks.OK
+
+
+def test_the_watchdog_records_suspicion_once_and_clears_it_on_recovery(tmp_path: Path) -> None:
+    from audiagentic.components.agents.gateway.health import QUEUE, DispatchHealth
+
+    changes = []
+    health = DispatchHealth(finder=lambda name: object(), on_change=changes.append)
+    folder = tmp_path / "active-work"
+    folder.mkdir()
+    (folder / "req_a.json").write_text(json.dumps(_entry("req_a", "admitted", admitted=600)))
+    stuck.scan_once(tmp_path, health, NOW.timestamp())
+    stuck.scan_once(tmp_path, health, NOW.timestamp())  # unchanged verdict: no second event
+    snapshot = health.snapshot()
+    assert snapshot["suspected"] == [QUEUE] and snapshot["ready"] is True  # suspicion warns, never refuses
+    assert [c.status for c in changes] == ["suspected"]
+    (folder / "req_a.json").unlink()
+    stuck.scan_once(tmp_path, health, NOW.timestamp())
+    assert health.snapshot()["suspected"] == [] and [c.status for c in changes] == ["suspected", "available"]
+
+
+def test_a_failing_listener_or_pass_never_stops_the_watchdog(tmp_path: Path) -> None:
+    import threading
+
+    from audiagentic.components.agents.gateway.health import DispatchHealth
+
+    def boom(_change):
+        raise RuntimeError("subscriber down")
+
+    health = DispatchHealth(finder=lambda name: object(), on_change=boom)
+    (tmp_path / "active-work").mkdir()
+    stuck.scan_once(tmp_path, health, NOW.timestamp())  # the listener fault is swallowed
+
+    calls = []
+    stop = threading.Event()
+
+    class Flaky:
+        def observe_queue(self, findings):
+            calls.append(1)
+            if len(calls) == 1:
+                raise RuntimeError("first pass fails")
+            if len(calls) >= 3:
+                stop.set()
+
+    stuck.run_watchdog(tmp_path, Flaky(), stop, interval_seconds=0.01)
+    assert len(calls) >= 3

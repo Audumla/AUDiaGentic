@@ -86,6 +86,8 @@ class GatewayServiceHost:
         self._ingress_stop = threading.Event()
         self._ingress_thread: threading.Thread | None = None
         self._operations_stop = threading.Event()
+        self._watchdog_stop = threading.Event()
+        self._watchdog_thread: threading.Thread | None = None
         self._operations_thread: threading.Thread | None = None
         self._journal_maintenance_at = 0.0
         # AS60 step 7 / RV888: this process's own composition root. Shutdown
@@ -367,6 +369,7 @@ class GatewayServiceHost:
             self.service_store.heartbeat({"ready": True}, expected_epoch=self.owner_epoch)
         self._start_ingress_poller()
         self._start_operations_poller()
+        self._start_dispatch_watchdog()
         if self.lifecycle is not None:
             self.lifecycle.start()  # type: ignore[attr-defined]
         serving_failed = False
@@ -442,7 +445,34 @@ class GatewayServiceHost:
         )
         self._ingress_thread.start()
 
+    def _start_dispatch_watchdog(self, interval_seconds: float = 30.0) -> None:
+        """Watch the work index for requests that cannot start; publish readiness changes."""
+        if self._application is None or self._service_root is None or self._watchdog_thread is not None:
+            return
+        from audiagentic.components.agents.gateway import event_topics as topics
+        from audiagentic.components.agents.gateway.health import get_dispatch_health
+        from audiagentic.components.agents.gateway.stuck import run_watchdog
+
+        health = get_dispatch_health()
+
+        def _publish(change: Any) -> None:
+            from audiagentic.foundation.event import get_bus
+
+            get_bus().publish(topics.GATEWAY_HEALTH_CHANGED_TOPIC, {
+                "surface": change.surface_id, "status": change.status,
+                "reason-code": change.reason_code, "since": change.since})
+
+        health.set_listener(_publish)
+        self._watchdog_thread = threading.Thread(
+            target=run_watchdog, args=(self._service_root, health, self._watchdog_stop),
+            kwargs={"interval_seconds": interval_seconds}, name="gateway-dispatch-watchdog", daemon=True)
+        self._watchdog_thread.start()
+
     def _stop_background(self) -> None:
+        self._watchdog_stop.set()
+        if self._watchdog_thread is not None:
+            self._watchdog_thread.join(timeout=5.0)
+            self._watchdog_thread = None
         self._ingress_stop.set()
         if self._ingress_thread is not None:
             self._ingress_thread.join(timeout=5.0)

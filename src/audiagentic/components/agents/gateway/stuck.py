@@ -15,8 +15,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-ADMISSION_STALL_SECONDS = 120.0   # admitted, lane idle, nobody claimed it
-START_STALL_SECONDS = 900.0       # claimed, never reached running (cold browser tab included)
+# Initial values, to be tuned by measurement. A first gpt-auto job after a gateway restart was measured at about
+# three minutes between claim and running (it opens a browser tab), so the claim threshold sits well above that.
+ADMISSION_STALL_SECONDS = 90.0    # admitted, lane idle, nobody claimed it
+START_STALL_SECONDS = 420.0       # claimed, never reached running
 
 
 @dataclass(frozen=True)
@@ -76,3 +78,24 @@ def classify(entries: list[dict[str, Any]], now: float) -> DispatchReport:
                 findings.append(Finding("start-stalled", request_id, now - claimed,
                                         f"claimed {int(now - claimed)} s ago and never started running"))
     return DispatchReport(len(entries), len(running), queued, tuple(findings))
+
+
+def scan_once(service_root: Path, health: Any, now: float) -> DispatchReport:
+    """One watchdog pass: classify the index and record the verdict. Reads only; never touches a request."""
+    report = classify(read_entries(service_root), now)
+    health.observe_queue(list(report.findings))
+    return report
+
+
+def run_watchdog(service_root: Path, health: Any, stop: Any, *, interval_seconds: float = 30.0,
+                 clock: Any = None) -> None:
+    """Loop until ``stop`` is set. A failing pass is logged and retried, never fatal to the gateway."""
+    import logging
+    import time
+
+    clock = clock or time.time
+    while not stop.wait(interval_seconds):
+        try:
+            scan_once(service_root, health, clock())
+        except Exception:  # noqa: BLE001 - the watchdog must outlive its own faults
+            logging.getLogger(__name__).warning("dispatch watchdog pass failed", exc_info=True)
