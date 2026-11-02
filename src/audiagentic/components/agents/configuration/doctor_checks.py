@@ -191,3 +191,64 @@ def _a2a_publication_result() -> CheckResult:
                            "Set publication.a2a on an Agent Definition")
     return CheckResult("agents.a2a.agents", OK, f"{len(published)} agent(s) published to A2A: "
                                                 f"{', '.join(str(d['agent_id']) for d in published)}")
+
+
+# Modules a provider surface needs inside the GATEWAY's interpreter (not the caller's). A surface missing here
+# fails at attach time with "CDP endpoint did not become ready", which looks like a browser fault.
+_SURFACE_IMPORTS = {"gpt-auto-cdp": ("websockets",)}
+
+
+def check_gateway_dispatch(context: Any) -> list[CheckResult]:
+    """The gateway can start work: no request is stuck in admission or start, and its runtime has the provider modules."""
+    del context
+    import time
+
+    from audiagentic.components.agents.gateway.service.contract import GATEWAY_SERVICE_KEY
+    from audiagentic.components.agents.gateway.stuck import classify, read_entries
+    from audiagentic.foundation.system.managed_service import ManagedServiceStore
+
+    store = ManagedServiceStore(GATEWAY_SERVICE_KEY)
+    results: list[CheckResult] = []
+    report = classify(read_entries(store.root), time.time())
+    if report.findings:
+        worst = max(report.findings, key=lambda f: f.age_seconds)
+        results.append(CheckResult(
+            "agents.gateway-dispatch", WARN,
+            f"{len(report.findings)} request(s) are stuck; {worst.request_id}: {worst.detail}",
+            "Run the agents.gateway-runtime check, read the gateway service log, and restart the gateway service "
+            "if it cannot start work; do not resubmit until it can"))
+    else:
+        results.append(CheckResult(
+            "agents.gateway-dispatch", OK,
+            f"{report.entries} active request(s): {report.running} running, {report.queued_behind} queued behind them; none stuck"))
+    results.extend(_gateway_runtime_modules(store))
+    return results
+
+
+def _gateway_runtime_modules(store: Any) -> list[CheckResult]:
+    import subprocess
+    from pathlib import Path
+
+    try:
+        record = store.read()
+    except Exception:  # noqa: BLE001 - no record, no service to inspect
+        return []
+    if record.state != "running" or record.process is None:
+        return []
+    try:
+        argv = Path(f"/proc/{record.process.pid}/cmdline").read_bytes().split(b"\0")
+        interpreter = argv[0].decode()
+    except (OSError, IndexError, UnicodeDecodeError):
+        return [CheckResult("agents.gateway-runtime", OK, "the gateway's interpreter cannot be read on this platform; modules not checked")]
+    missing: dict[str, list[str]] = {}
+    for surface, modules in _SURFACE_IMPORTS.items():
+        for module in modules:
+            probe = subprocess.run([interpreter, "-I", "-c", f"import {module}"], capture_output=True, text=True, check=False, timeout=30)
+            if probe.returncode != 0:
+                missing.setdefault(surface, []).append(module)
+    if not missing:
+        return [CheckResult("agents.gateway-runtime", OK, f"{interpreter} has the modules its provider surfaces need")]
+    named = "; ".join(f"{surface} needs {', '.join(mods)}" for surface, mods in missing.items())
+    return [CheckResult(
+        "agents.gateway-runtime", WARN, f"the gateway's runtime ({interpreter}) is missing modules: {named}",
+        "Install a runtime with the provider extras (audiagentic runtime install ref origin/main restart yes)")]
