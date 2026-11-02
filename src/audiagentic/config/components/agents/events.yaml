@@ -250,3 +250,11 @@ agents.work.terminal:
   metadata-keys: []
   delivery: async
   since: v1.0.0
+
+agents.gateway.health.changed:
+  description: "Dispatch readiness of one provider surface or the dispatch queue changed (bounded ids and reason codes only; never prompts, request text or paths)"
+  payload-required: ["surface", "status", "reason-code", "since"]
+  payload-optional: []
+  metadata-keys: []
+  delivery: async
+  since: v1.0.0

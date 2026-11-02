@@ -25,6 +25,9 @@ WORK_DISPATCH_REPAIRED_TOPIC = "agents.work.dispatch-repaired"
 WORK_EXECUTION_LINKED_TOPIC = "agents.work.execution-linked"
 WORK_TERMINAL_TOPIC = "agents.work.terminal"
 
+# Dispatch readiness changed for one surface (bounded ids and reason codes only).
+GATEWAY_HEALTH_CHANGED_TOPIC = "agents.gateway.health.changed"
+
 SESSION_OPENED_TOPIC = "agents.session.opened"
 SESSION_RESUMED_TOPIC = "agents.session.resumed"  # AS49: explicit resume-after-death
 SESSION_TURN_FINISHED_TOPIC = "agents.session.turn-finished"
