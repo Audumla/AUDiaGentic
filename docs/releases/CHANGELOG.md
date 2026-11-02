@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.92.0](https://github.com/Audumla/AUDiaGentic/compare/v0.91.0...v0.92.0) (2026-11-02)
+
+
+### Features
+
+* **agents:** gateway watchdog flags requests that cannot start and publishes readiness changes ([#433](https://github.com/Audumla/AUDiaGentic/issues/433)) ([dd2164f](https://github.com/Audumla/AUDiaGentic/commit/dd2164fc666a9707a17182779f65363818d64568))
+
 ## [0.91.0](https://github.com/Audumla/AUDiaGentic/compare/v0.90.0...v0.91.0) (2026-11-02)
 
 
