@@ -548,6 +548,9 @@ def resolve_for_admission(
             message="execution profile names a session surface that is not resolvable or not validated",
             details={"provider_id": snapshot.provider_id, "surface_id": surface_id},
         )
+    from .health import get_dispatch_health
+
+    get_dispatch_health().require_available(resolved_surface.ref.surface_id)
     return replace(
         snapshot,
         resolved_surface_id=resolved_surface.ref.surface_id,

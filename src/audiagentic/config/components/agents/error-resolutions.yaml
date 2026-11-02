@@ -302,4 +302,4 @@ VAL-A2A-003: "a2a.port is required (1-65535) when the A2A facade is enabled. Set
 VAL-A2A-004: "a2a.projects must name at least one project when the A2A facade is enabled. Add a gateway project id."
 VAL-A2A-005: "a2a.base_url must be an https origin (no path, credentials or trailing slash) published by your TLS proxy, or http://127.0.0.1:PORT."
 VAL-A2A-006: "a2a.base_url is not set, so Agent Card URLs cannot be built. Enable the facade with a port, or set a2a.base_url."
-
+RES-AGW-154: "The provider surface this agent runs on is unavailable in the gateway, so the request was refused instead of queued. The message names the cause (for example a module the gateway runtime lacks); fix it and resubmit. agent_gateway_health lists every surface."

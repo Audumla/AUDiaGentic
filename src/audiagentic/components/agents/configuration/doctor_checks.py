@@ -193,11 +193,6 @@ def _a2a_publication_result() -> CheckResult:
                                                 f"{', '.join(str(d['agent_id']) for d in published)}")
 
 
-# Modules a provider surface needs inside the GATEWAY's interpreter (not the caller's). A surface missing here
-# fails at attach time with "CDP endpoint did not become ready", which looks like a browser fault.
-_SURFACE_IMPORTS = {"gpt-auto-cdp": ("websockets",)}
-
-
 def check_gateway_dispatch(context: Any) -> list[CheckResult]:
     """The gateway can start work: no request is stuck in admission or start, and its runtime has the provider modules."""
     del context
@@ -241,7 +236,9 @@ def _gateway_runtime_modules(store: Any) -> list[CheckResult]:
     except (OSError, IndexError, UnicodeDecodeError):
         return [CheckResult("agents.gateway-runtime", OK, "the gateway's interpreter cannot be read on this platform; modules not checked")]
     missing: dict[str, list[str]] = {}
-    for surface, modules in _SURFACE_IMPORTS.items():
+    from audiagentic.components.agents.gateway.health import SURFACE_IMPORTS
+
+    for surface, modules in SURFACE_IMPORTS.items():
         for module in modules:
             probe = subprocess.run([interpreter, "-I", "-c", f"import {module}"], capture_output=True, text=True, check=False, timeout=30)
             if probe.returncode != 0:

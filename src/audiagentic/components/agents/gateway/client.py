@@ -245,6 +245,14 @@ class EmbeddedGatewayClient:
 
         return list_agent_definition_cards(project_root)
 
+    def gateway_dispatch_health(self, project_root: Path) -> dict[str, Any]:
+        del project_root
+        from .health import get_dispatch_health
+
+        health = get_dispatch_health()
+        health.refresh_dependencies()
+        return health.snapshot()
+
     def submit_execution_request(self, project_root: Path, **kwargs: Any) -> dict[str, Any]:
         if self._logical_client_id is not None:
             kwargs.setdefault("logical_client_id", self._logical_client_id)
@@ -592,6 +600,7 @@ def reset_gateway_client() -> None:
 # client is always safe, but replaying a mutation blindly is not.
 _READ_ONLY_GATEWAY_METHODS = frozenset({
     "list_agent_definition_cards",
+    "gateway_dispatch_health",
     "get_execution_request",
     "get_execution_diagnostics",
     "get_execution_observations",
