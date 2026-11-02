@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.88.2](https://github.com/Audumla/AUDiaGentic/compare/v0.88.1...v0.88.2) (2026-11-02)
+
+
+### Bug Fixes
+
+* **runtime:** default runtime extras include gpt-auto and node ([#426](https://github.com/Audumla/AUDiaGentic/issues/426)) ([4b5a27c](https://github.com/Audumla/AUDiaGentic/commit/4b5a27c0642620d477db2cbaff17b479105543a5))
+
 ## [0.88.1](https://github.com/Audumla/AUDiaGentic/compare/v0.88.0...v0.88.1) (2026-11-02)
 
 
