@@ -110,7 +110,15 @@ def _stop_leaked_gateway_services(
     Never acts on a home outside pytest's temp tree, so a real or ``mutates_host``
     home and other sessions' services are untouched.
     """
-    from tests.helpers.gateway_service_cleanup import stop_gateway_services
+    try:
+        from tests.helpers.gateway_service_cleanup import stop_gateway_services
+    except ModuleNotFoundError as exc:
+        # Docker suites install the wheel without the dev extras (no psutil); they
+        # have no host services to leak, so the safety net is simply absent there.
+        if exc.name != "psutil":
+            raise
+        yield
+        return
 
     yield
     home = os.environ.get("_AUDIAGENTIC_HOME", "")

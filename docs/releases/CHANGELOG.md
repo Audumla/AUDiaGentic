@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.87.0](https://github.com/Audumla/AUDiaGentic/compare/v0.86.0...v0.87.0) (2026-11-02)
+
+
+### Features
+
+* **runtime:** install prunes old versions and build leftovers; add runtime prune ([#420](https://github.com/Audumla/AUDiaGentic/issues/420)) ([03c583e](https://github.com/Audumla/AUDiaGentic/commit/03c583efe8727ca26cf84954d478126e6fa18e5e))
+
+## [0.86.0](https://github.com/Audumla/AUDiaGentic/compare/v0.85.1...v0.86.0) (2026-11-02)
+
+
+### Features
+
+* **runtime:** versioned non-editable service runtime with install, rollback and status ([#418](https://github.com/Audumla/AUDiaGentic/issues/418)) ([aceb4d8](https://github.com/Audumla/AUDiaGentic/commit/aceb4d85daf390ccb04489bd37d6a6369dd64c7f))
+
+## [0.85.1](https://github.com/Audumla/AUDiaGentic/compare/v0.85.0...v0.85.1) (2026-11-02)
+
+
+### Bug Fixes
+
+* **tests:** conftest tolerates a missing psutil so Docker suites run again ([#415](https://github.com/Audumla/AUDiaGentic/issues/415)) ([3857cae](https://github.com/Audumla/AUDiaGentic/commit/3857caef52cde9925ed91d838dab1b5948f7508c))
+
 ## [0.85.0](https://github.com/Audumla/AUDiaGentic/compare/v0.84.0...v0.85.0) (2026-11-01)
 
 
