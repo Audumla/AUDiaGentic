@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.86.0](https://github.com/Audumla/AUDiaGentic/compare/v0.85.1...v0.86.0) (2026-11-02)
+
+
+### Features
+
+* **runtime:** versioned non-editable service runtime with install, rollback and status ([#418](https://github.com/Audumla/AUDiaGentic/issues/418)) ([aceb4d8](https://github.com/Audumla/AUDiaGentic/commit/aceb4d85daf390ccb04489bd37d6a6369dd64c7f))
+
 ## [0.85.1](https://github.com/Audumla/AUDiaGentic/compare/v0.85.0...v0.85.1) (2026-11-02)
 
 
