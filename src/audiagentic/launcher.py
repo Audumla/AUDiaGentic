@@ -52,6 +52,10 @@ def _main(argv: list[str] | None = None) -> int:
         from audiagentic.commands.gateway import dispatch_keyword
 
         return dispatch_keyword(tokens[1:])
+    if tokens and tokens[0] == "runtime":
+        from audiagentic.commands.runtime import dispatch_keyword as dispatch_runtime
+
+        return dispatch_runtime(tokens[1:])
     if tokens and tokens[0] == "worktree":
         from audiagentic.commands.worktree import dispatch_keyword as dispatch_worktree
 
