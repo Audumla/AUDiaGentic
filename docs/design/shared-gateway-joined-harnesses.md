@@ -184,3 +184,27 @@ reaches a Pi the caller owns and never a human's running session (the remaining 
 OAuth callback servers). Every join capability is therefore recorded false with
 `unsupported-no-existing-session-endpoint` and the evidence state is `unsupported`. No bridge or extension is built
 (SH41); an owned RPC child remains an independent caller-node delivery path, not a joined session.
+
+Claude Code (`claude-agents-list`, measured on claude 2.1.316 linux-amd64 with a fake API key and a loopback stub
+for the Anthropic Messages protocol, `--bare`, a disposable HOME, no sign-in and no vendor call). The human surface is
+the real Claude Code TUI in a pseudo-terminal.
+
+| Capability | Result | Why |
+|---|---|---|
+| passive-identity | proven | `claude agents --json` lists the running interactive session (pid, session id, status); the id is stable across listings, the listing creates nothing, and the human's turn completed (the session transcript holds the stub reply) |
+| existing-session-attach | **unsupported** (`unsupported-no-existing-session-endpoint`) | no native route attaches to or sends into a running interactive session; `attach` and `logs` address background sessions |
+| safe-detach | unproven (`unproven-no-attachment-to-detach`) | the observer's listing is read-only, so there is nothing to detach from |
+| reconnect | unproven (`unproven-no-attachment-to-reconnect`) | re-listing the same pid shows a stable identity (recorded under passive-identity) but there is no attachment to re-establish |
+| conditional-admission | **unsupported** (`unsupported-no-existing-session-endpoint`) | with a human turn held busy no outside route reaches the session; the observer added no model request |
+| correlated-result | **unsupported** (`unsupported-no-existing-session-endpoint`) | nothing can be submitted, so no result can be attributed |
+| concurrent-human-use | unproven (`unproven-no-observer-action-to-coexist-with`) | the listing reports the session busy while the human's turn is held and the turn completes, but the observer never acts, so this shows passive observation coexists with the human, not that two callers can |
+
+The negative findings (no route into a running interactive session) were established by inspecting 2.1.316; the
+probe applies them only to versions in `REVIEWED_VERSIONS` and leaves every capability `unproven-version-not-reviewed`
+on any other version. Observations are reduced to finite values (the listing is bounded, must exit 0 and be a JSON
+list of objects).
+
+Channels (an MCP server the session launches that pushes events into it) were **not measured**: with
+`--dangerously-load-development-channels` an API-key session prints "Channels are not currently available" and ignores
+the server, so channel delivery needs a signed-in subscription session and stays unmeasured, never assumed. Claude
+Code's own background mode (`claude --bg`, `attach`, `logs`) is a different thing: a session the caller starts.

@@ -22,26 +22,18 @@ from audiagentic.components.providers.adapters.opencode.join import (
 
 from ..live import CAPABILITIES, LiveContext, ProbeOutcome
 from .codex_tui import HumanTui
+from .env import disposable_env as shared_env
 from .stub_model import StubModel
 
 PROBE_VERSION = "1"
-_ENV_ALLOWLIST = ("PATH", "LANG", "LC_ALL", "LC_CTYPE")
 _TIMEOUT = 40.0
 _STUB_REPLY = "STUB-REPLY-"
 
 
 def disposable_env(root: Path, config: dict[str, Any], password: str, tmp: Path | None = None) -> dict[str, str]:
-    """Allowlisted environment: nothing inherited that could carry a credential, everything rooted in ``root``."""
-    import os
-
-    for name in ("home", "xdg-config", "xdg-data", "xdg-cache", "xdg-state", "tmp"):
-        (root / name).mkdir(parents=True, exist_ok=True)
-    env = {key: os.environ[key] for key in _ENV_ALLOWLIST if key in os.environ}
-    env.update({"HOME": str(root / "home"), "XDG_CONFIG_HOME": str(root / "xdg-config"),
-                "XDG_DATA_HOME": str(root / "xdg-data"), "XDG_CACHE_HOME": str(root / "xdg-cache"),
-                "XDG_STATE_HOME": str(root / "xdg-state"), "TMPDIR": str(tmp or root / "tmp"),
-                "OPENCODE_CONFIG_CONTENT": json.dumps(config), "OPENCODE_SERVER_PASSWORD": password})
-    return env
+    """The shared disposable environment plus the inline config and the server password (child environment only)."""
+    return shared_env(root, tmp=tmp, extra={"OPENCODE_CONFIG_CONTENT": json.dumps(config),
+                                            "OPENCODE_SERVER_PASSWORD": password})
 
 
 def stub_config(base_url: str) -> dict[str, Any]:
