@@ -131,7 +131,9 @@ def install(root: Path, wheel: Path, *, extras: Sequence[str] = DEFAULT_EXTRAS,
     if before is not None and before != Path(destination.name):
         _set_link(root / "previous", before)
     _set_link(root / "current", Path(destination.name))
-    return {**status(root), "installed": destination.name, "switched-from": str(before) if before else None}
+    pruned = prune(root)
+    return {**status(root), "installed": destination.name, "switched-from": str(before) if before else None,
+            "pruned": pruned["removed"]}
 
 
 def rollback(root: Path, *, runner: Runner = subprocess.run) -> dict[str, Any]:
@@ -143,6 +145,33 @@ def rollback(root: Path, *, runner: Runner = subprocess.run) -> dict[str, Any]:
         _set_link(root / "previous", current)
     _set_link(root / "current", previous)
     return {**status(root), "rolled-back-to": str(previous)}
+
+
+def prune(root: Path, *, keep: int = 2) -> dict[str, Any]:
+    """Remove old version folders and build leftovers; never ``current``, ``previous`` or one in use.
+
+    ``keep`` counts the newest folders retained besides those two. A folder a running process
+    uses (its cwd, open files or interpreter) is skipped, so a service that has not restarted
+    onto the new runtime keeps its files. An unknown process list skips everything.
+    """
+    from audiagentic.foundation.system.process import pids_referencing_path
+
+    shutil.rmtree(root / ".build", ignore_errors=True)
+    pinned = {t.parts[0] if not t.is_absolute() else t.name for t in (_link_target(root / "current"), _link_target(root / "previous")) if t}
+    folders = sorted((p for p in root.iterdir() if p.is_dir() and not p.is_symlink() and not p.name.startswith(".")),
+                     key=lambda p: p.stat().st_mtime, reverse=True) if root.is_dir() else []
+    removed, kept = [], []
+    for folder in folders:
+        if folder.name in pinned or len([k for k in kept if k not in pinned]) < keep:
+            kept.append(folder.name)
+            continue
+        users = pids_referencing_path(folder)
+        if users is None or users:
+            kept.append(folder.name)
+            continue
+        shutil.rmtree(folder)
+        removed.append(folder.name)
+    return {"removed": removed, "kept": kept}
 
 
 def request_gateway_restart(path: Path = RESTART_FILE) -> bool:

@@ -10,7 +10,7 @@ audiagentic runtime install ref origin/main [extras acp,a2a] [restart yes]   # o
 audiagentic runtime rollback [restart yes]
 ```
 
-`install` exports the ref with `git archive` (never the working tree), builds a wheel with `uv`, installs it
+`install` also runs `prune` (keeps `current`, `previous` and the 2 newest others; never a folder a process uses; clears `.build`). `install` exports the ref with `git archive` (never the working tree), builds a wheel with `uv`, installs it
 into a new folder, imports the gateway from that folder as a health check, and only then repoints `current`.
 Any failure removes the half-built folder and leaves `current` as it was. `rollback` swaps `current` and
 `previous` after the same check. `restart yes` drops `/control/cmd/audiagentic-gateway.restart`, which the

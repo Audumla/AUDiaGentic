@@ -8,6 +8,7 @@ from audiagentic.foundation.cli_io import print_error, print_json, print_message
 _HELP = """Runtime commands (keyword syntax):
   audiagentic runtime status [root PATH]
   audiagentic runtime install (wheel PATH | ref GITREF) [extras acp,a2a] [restart yes] [root PATH] [project PATH]
+  audiagentic runtime prune [keep N] [root PATH]
   audiagentic runtime rollback [restart yes] [root PATH]
   audiagentic runtime help
 
@@ -18,13 +19,15 @@ folder defaults to a sibling of the AUDiaGentic home (<home>/../runtime).
 install builds a wheel of GITREF from a clean git export (or takes WHEEL), installs it into a new
 folder, imports the gateway from that folder as a health check, and only then repoints `current`
 (keeping the old target as `previous`). A failed build or check leaves `current` untouched.
+install also prunes: it keeps `current`, `previous` and the 2 newest other folders, removes the
+rest and the build folder, and never removes a folder a running process uses (`prune keep N` does it on demand).
 rollback swaps `current` and `previous` after the same health check.
 `restart yes` asks the container supervisor to restart only the gateway (it does not touch
 the MCP servers: running clients keep the old runtime until they reconnect).
 Options beginning with -- are not accepted; use the keywords shown above."""
 
 _ALLOWED = {"status": {"root"}, "install": {"wheel", "ref", "extras", "restart", "root", "project"},
-            "rollback": {"restart", "root"}}
+            "rollback": {"restart", "root"}, "prune": {"keep", "root"}}
 
 
 def _clauses(rest: list[str], allowed: set[str]) -> dict[str, str] | None:
@@ -58,6 +61,11 @@ def dispatch_keyword(tokens: list[str]) -> int:
     try:
         if verb == "status":
             result = runtime.status(root)
+        elif verb == "prune":
+            if not clauses.get("keep", "2").isdigit():
+                print_error("Invalid runtime prune syntax. Run: audiagentic runtime help")
+                return 2
+            result = runtime.prune(root, keep=int(clauses.get("keep", "2")))
         else:
             if verb == "rollback":
                 result = runtime.rollback(root)
