@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.88.1](https://github.com/Audumla/AUDiaGentic/compare/v0.88.0...v0.88.1) (2026-11-02)
+
+
+### Bug Fixes
+
+* **ci:** provider probes signal through the foundation seam; refresh two stale provisioning tests ([#424](https://github.com/Audumla/AUDiaGentic/issues/424)) ([87c55a7](https://github.com/Audumla/AUDiaGentic/commit/87c55a78329679468a359f8fb0f8edae7fbc383f))
+
 ## [0.88.0](https://github.com/Audumla/AUDiaGentic/compare/v0.87.0...v0.88.0) (2026-11-02)
 
 
