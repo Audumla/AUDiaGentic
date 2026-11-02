@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any
 
 Runner = Callable[..., subprocess.CompletedProcess]
-DEFAULT_EXTRAS = ("acp", "a2a")
+DEFAULT_EXTRAS = ("acp", "a2a", "gpt-auto", "node")
 RESTART_FILE = Path("/control/cmd/audiagentic-gateway.restart")
 _WHEEL = re.compile(r"^(?P<name>[A-Za-z0-9_.]+)-(?P<version>[0-9][^-]*)-.+\.whl$")
 _EXTRA = re.compile(r"^[a-z0-9][a-z0-9._-]*$")

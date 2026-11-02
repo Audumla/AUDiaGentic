@@ -44,7 +44,7 @@ def test_install_creates_a_version_folder_and_switches_current_keeping_previous(
     runner = FakeRunner()
     first = runtime.install(root, _wheel(tmp_path, "1.0.0"), runner=runner)
     assert (root / "current").is_symlink() and first["switched-from"] is None
-    assert any("[acp,a2a]" in part for call in runner.calls for part in call)
+    assert any("[acp,a2a,gpt-auto,node]" in part for call in runner.calls for part in call)
     second = runtime.install(root, _wheel(tmp_path, "1.1.0"), runner=runner)
     assert second["switched-from"] == first["installed"]
     assert (root / "previous").resolve().name == first["installed"]
