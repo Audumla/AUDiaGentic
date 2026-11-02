@@ -214,6 +214,7 @@ mcp-servers:
     worktree-scoped: true
     direct-tools:
       - agent_task_list_definitions
+      - agent_dispatch_health
       - agent_task_submit
       - agent_task_status
       - agent_task_response
@@ -244,6 +245,9 @@ mcp-servers:
       agent_task_list_definitions: >
         List agents (agent_id, name, description, skills); the valid agent_id
         values for agent_task_submit.
+      agent_dispatch_health: >
+        Dispatch readiness per provider surface; check before submitting. An
+        unavailable surface refuses new work with its cause (RES-AGW-154).
       agent_task_submit: >
         Submit an async request to agent_id; returns request-id, state and
         session-id. Set session_keep_alive to open a session; pass session_id to

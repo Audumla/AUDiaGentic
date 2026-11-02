@@ -47,7 +47,7 @@ def agent_task_list_definitions() -> list[dict[str, Any]]:
 
 @mcp.tool()
 @tool_boundary
-def agent_gateway_health() -> dict[str, Any]:
+def agent_dispatch_health() -> dict[str, Any]:
     """Dispatch readiness per provider surface. Check before submitting: an unavailable surface refuses new work with its cause."""
     return call_gateway_method("gateway_dispatch_health", project_root_from_env())
 
