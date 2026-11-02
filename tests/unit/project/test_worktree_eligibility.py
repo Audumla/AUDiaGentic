@@ -163,6 +163,39 @@ def test_process_using_the_path_blocks_and_unknown_platform_is_unknown(repo, mer
     assert row["verdict"] == "unknown" and "processes-unknown" in _codes(row)
 
 
+def test_worktree_that_a_running_environment_imports_from_is_blocked(repo, merged, monkeypatch) -> None:
+    feature, tip, squash = merged
+    monkeypatch.setattr(eligibility, "editable_sources_of_running_processes", lambda: [feature / "src"])
+    assert "runtime-source" in _codes(_verdict(repo, feature, [_pr(tip, squash)]))
+    monkeypatch.setattr(eligibility, "editable_sources_of_running_processes", lambda: [repo / "src"])
+    assert "runtime-source" not in _codes(_verdict(repo, feature, [_pr(tip, squash)]))
+
+
+def test_editable_sources_are_found_from_a_running_venv_process(tmp_path) -> None:
+    import shutil
+    import subprocess as sp
+    import sys
+
+    from audiagentic.foundation.system.process import editable_sources_of_running_processes
+
+    venv = tmp_path / "venv"
+    (venv / "bin").mkdir(parents=True)
+    (venv / "pyvenv.cfg").write_text("home = /usr\n")
+    site = venv / "lib" / "python3" / "site-packages"
+    site.mkdir(parents=True)
+    source = tmp_path / "wt" / "src"
+    source.mkdir(parents=True)
+    (site / "__editable__.demo-1.pth").write_text(f"{source}\n")
+    interpreter = venv / "bin" / "python"
+    interpreter.symlink_to(shutil.which("sleep"))
+    child = sp.Popen([str(interpreter), "30"])
+    try:
+        assert source.resolve() in (editable_sources_of_running_processes() or [])
+    finally:
+        child.kill()
+        child.wait()
+
+
 def test_assessment_never_modifies_the_repository(repo, merged) -> None:
     feature, tip, squash = merged
     before = (_git(repo, "worktree", "list", "--porcelain"), _git(repo, "branch", "--list"), _git(feature, "status", "--porcelain"))
