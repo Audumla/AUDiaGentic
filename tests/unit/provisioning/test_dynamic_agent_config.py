@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from audiagentic import launcher
+from audiagentic.commands.component import _cmd_component
 from audiagentic.foundation.components.loader import register_all_components
 from audiagentic.foundation.components.registry import get_mcp_server_declaration
 from audiagentic.foundation.lifecycle.components import install_component
@@ -115,7 +115,7 @@ def test_component_mcp_metadata_loads_from_yaml() -> None:
     ledger_decl = get_mcp_server_declaration("agent-ledger", "ag-ledger")
 
     assert project_decl is not None
-    assert "list_components" in project_decl.instructions
+    assert "list_mcp_catalog" in project_decl.instructions
     assert "project_status" in project_decl.tool_descriptions
 
     assert session_decl is not None
@@ -157,7 +157,7 @@ def test_component_install_refreshes_materialized_agent_config(
 
     args = argparse.Namespace(component_cmd="install", component_id="coding-lsp")
 
-    rc = launcher._cmd_component(args, project_root)
+    rc = _cmd_component(args, project_root)
 
     assert rc == 0
     assert refresh_calls
