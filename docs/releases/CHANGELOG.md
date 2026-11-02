@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.85.1](https://github.com/Audumla/AUDiaGentic/compare/v0.85.0...v0.85.1) (2026-11-02)
+
+
+### Bug Fixes
+
+* **tests:** conftest tolerates a missing psutil so Docker suites run again ([#415](https://github.com/Audumla/AUDiaGentic/issues/415)) ([3857cae](https://github.com/Audumla/AUDiaGentic/commit/3857caef52cde9925ed91d838dab1b5948f7508c))
+
 ## [0.85.0](https://github.com/Audumla/AUDiaGentic/compare/v0.84.0...v0.85.0) (2026-11-01)
 
 
