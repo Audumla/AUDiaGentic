@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.91.0](https://github.com/Audumla/AUDiaGentic/compare/v0.90.0...v0.91.0) (2026-11-02)
+
+
+### Features
+
+* **agents:** gateway dispatch readiness per provider surface, refused up front with the cause ([#431](https://github.com/Audumla/AUDiaGentic/issues/431)) ([ba11671](https://github.com/Audumla/AUDiaGentic/commit/ba11671319236738cacd110390d1a9a07dca32c1))
+
 ## [0.90.0](https://github.com/Audumla/AUDiaGentic/compare/v0.89.0...v0.90.0) (2026-11-02)
 
 
