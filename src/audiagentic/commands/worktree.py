@@ -17,6 +17,7 @@ _HELP = """Worktree commands (keyword syntax):
   audiagentic worktree push [TARGET] [head TIP12] [dry-run yes] [project PATH] [output json]
   audiagentic worktree ship [TARGET] [title TEXT] [body TEXT] [head TIP12] [project PATH] [output json]
   audiagentic worktree merge [TARGET] [title TEXT] [body TEXT] [head TIP12] [dry-run yes] [project PATH] [output json]
+  audiagentic worktree tidy [apply yes] [project PATH] [output json]
   audiagentic worktree finish TARGET [abandon TIP] [discard-ignored N] [project PATH] [output json]
   audiagentic worktree help
 
@@ -72,6 +73,10 @@ replaces a closed pull request, never waits for CI. Run it again after any failu
 converges. `dry-run yes` only reports what it would do and what blocks it. TARGET defaults to the
 worktree you are in. The body is `body TEXT` plus the project's worktrees.pr-trailer, if set.
 
+tidy reports (and, with `apply yes`, does) the routine cleanup: it drops records whose directory is gone and
+git no longer lists, and finishes every worktree that prune marks ELIGIBLE (merge proven, clean, unused),
+one at a time through the same finish. Anything else is listed with its blockers and left alone.
+
 finish removes exactly one worktree whose work is merged (TARGET is its absolute path, or
 its branch or directory name when that is unique). It fetches the default branch, fences
 new work, runs the same checks as prune twice and compares them, writes an immutable
@@ -91,7 +96,7 @@ def dispatch_keyword(tokens: list[str]) -> int:
     if not tokens or tokens in (["help"], ["list", "help"], ["start", "help"]):
         print_message(_HELP)
         return 0
-    if tokens[0] not in {"list", "start", "prune", "finish", "merge", "push", "sync", "ship"} or any(token.startswith("--") for token in tokens):
+    if tokens[0] not in {"list", "start", "prune", "finish", "merge", "push", "sync", "ship", "tidy"} or any(token.startswith("--") for token in tokens):
         print_error("Invalid worktree syntax. Run: audiagentic worktree help")
         return 2
     if tokens[0] == "start":
@@ -100,6 +105,8 @@ def dispatch_keyword(tokens: list[str]) -> int:
         return _prune(tokens[1:])
     if tokens[0] == "finish":
         return _finish(tokens[1:])
+    if tokens[0] == "tidy":
+        return _tidy(tokens[1:])
     if tokens[0] == "ship":
         return _ship(tokens[1:])
     if tokens[0] == "merge":
@@ -333,6 +340,30 @@ def _merge(tokens: list[str]) -> int:
     lines += [f"  {'?' if b['unknown'] else '-'} {b['code']}: {b['detail']}" for b in result["blockers"]]
     lines += [f"  would: {op['action']} ({op['detail']})" for op in result["operations"]]
     print_message("\n".join(lines))
+    return 0
+
+
+def _tidy(tokens: list[str]) -> int:
+    clauses = _clauses(tokens, {"apply", "project", "output"})
+    if clauses is None or clauses.get("apply", "yes") != "yes":
+        print_error("Invalid worktree tidy syntax. Run: audiagentic worktree help")
+        return 2
+
+    from audiagentic.components.agents.gateway.api import worktree_active_work
+    from audiagentic.components.project.worktrees.tidy import tidy
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+    from audiagentic.foundation.paths.project import discover_checkout_root
+
+    repo = discover_checkout_root(Path(clauses["project"]).resolve() if "project" in clauses else None)
+    if repo is None:
+        print_error("Not inside a git repository. Give project PATH or run it inside one.")
+        return 2
+    try:
+        result = tidy(repo, active_work=worktree_active_work, apply="apply" in clauses)
+    except AudiaGenticError as error:
+        print_error(f"{error.code}: {error.message}")
+        return 1
+    print_json(result, sort_keys=True)
     return 0
 
 
