@@ -380,6 +380,33 @@ def kill_pid(pid: int) -> None:
             pass
 
 
+def signal_pid(pid: int, sig: int) -> bool:
+    """Send ``sig`` to one PID; False when it is already gone (POSIX only)."""
+    try:
+        os.kill(pid, sig)
+    except ProcessLookupError:
+        return False
+    return True
+
+
+def terminate_process_group(process: subprocess.Popen, *, term_wait: float, kill_wait: float | None = None) -> bool:
+    """Stop a child that leads its own process group: SIGTERM, then SIGKILL; True when it is gone.
+
+    ``kill_wait`` defaults to ``term_wait``. Components use this instead of ``os.killpg`` so every
+    signal goes through the foundation seam (see test_process_signal_boundaries).
+    """
+    waits = ((signal.SIGTERM, term_wait), (signal.SIGKILL, term_wait if kill_wait is None else kill_wait))
+    for sig, wait in waits:
+        if process.poll() is not None:
+            break
+        try:
+            os.killpg(process.pid, sig)
+            process.wait(timeout=wait)
+        except (ProcessLookupError, subprocess.TimeoutExpired):
+            continue
+    return process.poll() is not None
+
+
 def _descendant_pids_posix(root: int) -> list[int]:
     """Return all transitive child PIDs of *root* (deepest first), via ``ps``."""
     result = subprocess.run(

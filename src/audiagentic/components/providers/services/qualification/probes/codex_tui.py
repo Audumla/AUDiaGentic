@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any
 
 from audiagentic.components.providers.adapters.codex.join import AppServerClient, AppServerError, OwnedAppServer
+from audiagentic.foundation.system.process import signal_pid
 
 from ..live import ProbeOutcome
 from .stub_model import StubModel
@@ -82,9 +83,7 @@ class HumanTui:
         if self.pid is None:
             return
         for sig in (signal.SIGTERM, signal.SIGKILL):
-            try:
-                os.kill(self.pid, sig)
-            except ProcessLookupError:
+            if not signal_pid(self.pid, sig):
                 break
             time.sleep(0.8)
             try:
