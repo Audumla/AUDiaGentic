@@ -114,7 +114,7 @@ def test_host_startup_defers_node_work_without_interrupting_or_local_dispatch(tm
     monkeypatch.setattr(providers_api, "validate_gpt_auto_configuration", lambda *args: None)
     from audiagentic.components.agents.gateway.service import known_projects
     monkeypatch.setattr(known_projects, "scan_known_gpt_auto_projects", lambda *args, **kwargs: None)
-    for name in ("_start_ingress_poller", "_start_operations_poller", "_stop_background"):
+    for name in ("_start_ingress_poller", "_start_operations_poller", "_start_dispatch_watchdog", "_stop_background"):
         monkeypatch.setattr(host, name, lambda: None)
     monkeypatch.setattr(host.lifecycle, "start", lambda: None)
     served = []
