@@ -75,6 +75,12 @@ LIVE_TARGETS: dict[str, LiveTarget] = {
         adapter_ref="audiagentic.components.providers.adapters.opencode.join:OpenCodeClient",
         probe_ref="audiagentic.components.providers.services.qualification.probes.opencode:run",
     ),
+    "claude": LiveTarget(
+        surface_id="claude-agents-list", native_protocol="claude-agents-json", endpoint_kind="other",
+        fixture_id="claude-interactive-disposable",
+        adapter_ref="audiagentic.components.providers.adapters.claude.join:list_sessions",
+        probe_ref="audiagentic.components.providers.services.qualification.probes.claude:run",
+    ),
     "pi": LiveTarget(
         surface_id="pi-rpc", native_protocol="pi-rpc-jsonl", endpoint_kind="stdio",
         fixture_id="pi-interactive-disposable",

@@ -5,8 +5,8 @@ every request gets ``STUB-REPLY-<n>`` where ``n`` is the request's ordinal. A ga
 response open (a deterministic busy window, no sleeps) and release it. It binds loopback on an OS-assigned
 port, records only counts (never request bodies), and notes any other request so a
 probe can fail closed if the harness reaches for anything else.
-Both ``POST /v1/responses`` and ``POST /v1/chat/completions`` are served (the two protocols the supported
-harnesses speak). Evidence produced with it is protocol
+``POST /v1/responses``, ``POST /v1/chat/completions`` and ``POST /v1/messages`` (Anthropic Messages) are served,
+the protocols the supported harnesses speak; token counting returns a fixed count. Evidence produced with it is protocol
 evidence: it says nothing about a real model.
 """
 from __future__ import annotations
@@ -32,6 +32,11 @@ class StubModel:
         assert self._httpd is not None
         return f"http://127.0.0.1:{self._httpd.server_address[1]}/v1"
 
+    @property
+    def root_url(self) -> str:
+        """The server root, for harnesses that append ``/v1/...`` themselves."""
+        return self.base_url.removesuffix("/v1")
+
     def start(self) -> StubModel:
         stub = self
 
@@ -46,6 +51,12 @@ class StubModel:
                 body = self.rfile.read(length)
                 if self.path == "/v1/chat/completions":
                     self._chat_completion(body)
+                    return
+                if self.path.split("?")[0] == "/v1/messages":
+                    self._anthropic_message(body)
+                    return
+                if self.path.split("?")[0] == "/v1/messages/count_tokens":
+                    self._json({"input_tokens": 1})
                     return
                 if self.path != "/v1/responses":
                     stub._note_unexpected(f"POST {self.path}")
@@ -124,6 +135,47 @@ class StubModel:
                     self.wfile.flush()
                 except OSError:
                     pass
+
+            def _json(self, payload: dict) -> None:
+                data = json.dumps(payload).encode()
+                self.send_response(200)
+                self.send_header("content-type", "application/json")
+                self.send_header("content-length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+
+            def _anthropic_message(self, body: bytes) -> None:
+                """The Anthropic Messages stream, one text block."""
+                try:
+                    messages = len(json.loads(body or b"{}").get("messages") or [])
+                except ValueError:
+                    messages = -1
+                ordinal = stub._count(messages)
+                self.send_response(200)
+                self.send_header("content-type", "text/event-stream")
+                self.send_header("cache-control", "no-cache")
+                self.send_header("connection", "close")
+                self.end_headers()
+
+                def event(name: str, data: dict) -> None:
+                    try:
+                        self.wfile.write(f"event: {name}\ndata: {json.dumps(data)}\n\n".encode())
+                        self.wfile.flush()
+                    except OSError:
+                        pass
+
+                event("message_start", {"type": "message_start", "message": {
+                    "id": f"msg_{ordinal}", "type": "message", "role": "assistant", "model": "stub-model",
+                    "content": [], "stop_reason": None, "usage": {"input_tokens": 1, "output_tokens": 1}}})
+                event("content_block_start", {"type": "content_block_start", "index": 0,
+                                              "content_block": {"type": "text", "text": ""}})
+                stub._gate.wait(60)  # a held gate keeps this turn demonstrably active
+                event("content_block_delta", {"type": "content_block_delta", "index": 0,
+                                              "delta": {"type": "text_delta", "text": f"STUB-REPLY-{ordinal}"}})
+                event("content_block_stop", {"type": "content_block_stop", "index": 0})
+                event("message_delta", {"type": "message_delta", "delta": {"stop_reason": "end_turn"},
+                                        "usage": {"output_tokens": 1}})
+                event("message_stop", {"type": "message_stop"})
 
             def do_GET(self) -> None:  # noqa: N802
                 stub._note_unexpected(f"GET {self.path}")

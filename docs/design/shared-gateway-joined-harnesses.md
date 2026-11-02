@@ -184,3 +184,22 @@ reaches a Pi the caller owns and never a human's running session (the remaining 
 OAuth callback servers). Every join capability is therefore recorded false with
 `unsupported-no-existing-session-endpoint` and the evidence state is `unsupported`. No bridge or extension is built
 (SH41); an owned RPC child remains an independent caller-node delivery path, not a joined session.
+
+Claude Code (`claude-agents-list`, measured on claude 2.1.316 linux-amd64 with a fake API key and a loopback stub
+for the Anthropic Messages protocol, `--bare`, a disposable HOME, no sign-in and no vendor call). The human surface is
+the real Claude Code TUI in a pseudo-terminal.
+
+| Capability | Result | Why |
+|---|---|---|
+| passive-identity | proven | `claude agents --json` lists the running interactive session (pid, session id, cwd, status) and the listing creates nothing |
+| existing-session-attach | **unsupported** (`unsupported-no-existing-session-endpoint`) | no native route attaches to or sends into a running interactive session; `attach` and `logs` address background sessions |
+| safe-detach | unproven (`unproven-no-attachment-to-detach`) | the observer's listing is read-only, so there is nothing to detach from |
+| reconnect | proven (evidence only) | a new listing resolves the same session id |
+| conditional-admission | **unsupported** (`unsupported-no-existing-session-endpoint`) | with a human turn held busy no outside route reaches the session; the observer added no model request |
+| correlated-result | **unsupported** (`unsupported-no-existing-session-endpoint`) | nothing can be submitted, so no result can be attributed |
+| concurrent-human-use | proven, on the **real Claude Code TUI** | the listing reports the session busy while the human's turn is held, and the human's turn completes after the observer polled |
+
+Channels (an MCP server the session launches that pushes events into it) were **not measured**: with
+`--dangerously-load-development-channels` an API-key session prints "Channels are not currently available" and ignores
+the server, so channel delivery needs a signed-in subscription session and stays unmeasured, never assumed. Claude
+Code's own background mode (`claude --bg`, `attach`, `logs`) is a different thing: a session the caller starts.

@@ -91,3 +91,18 @@ def test_the_chat_completions_route_streams_a_numbered_reply_and_is_held_by_the_
         connection.close()
     finally:
         stub.stop()
+
+
+def test_the_anthropic_messages_route_streams_a_numbered_reply_and_counts_tokens():
+    stub = StubModel().start()
+    try:
+        connection, response = _post(stub, "/v1/messages?beta=true", {"messages": [{"role": "user", "content": "hi"}]})
+        text = response.read().decode()
+        assert "STUB-REPLY-1" in text and "event: message_stop" in text and stub.requests == 1
+        connection.close()
+        connection, response = _post(stub, "/v1/messages/count_tokens", {"messages": []})
+        assert json.loads(response.read()) == {"input_tokens": 1} and stub.requests == 1
+        assert stub.unexpected == [] and stub.root_url + "/v1" == stub.base_url
+        connection.close()
+    finally:
+        stub.stop()
