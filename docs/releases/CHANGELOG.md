@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.90.0](https://github.com/Audumla/AUDiaGentic/compare/v0.89.0...v0.90.0) (2026-11-02)
+
+
+### Features
+
+* **agents:** doctor detects stuck dispatch and a gateway runtime missing provider modules ([#429](https://github.com/Audumla/AUDiaGentic/issues/429)) ([5ef06b4](https://github.com/Audumla/AUDiaGentic/commit/5ef06b4c9dbc45996bdf9186cd6601a412672a6a))
+
 ## [0.89.0](https://github.com/Audumla/AUDiaGentic/compare/v0.88.2...v0.89.0) (2026-11-02)
 
 
