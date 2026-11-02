@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.88.0](https://github.com/Audumla/AUDiaGentic/compare/v0.87.0...v0.88.0) (2026-11-02)
+
+
+### Features
+
+* **worktrees:** tidy retires dead records and finishes proven-merged worktrees (DW01) ([#421](https://github.com/Audumla/AUDiaGentic/issues/421)) ([547c0e3](https://github.com/Audumla/AUDiaGentic/commit/547c0e34c90376cba0cdc97ba65b896f31a68108))
+
 ## [0.87.0](https://github.com/Audumla/AUDiaGentic/compare/v0.86.0...v0.87.0) (2026-11-02)
 
 
