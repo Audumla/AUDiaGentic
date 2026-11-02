@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.88.2](https://github.com/Audumla/AUDiaGentic/compare/v0.88.1...v0.88.2) (2026-11-02)
+
+
+### Bug Fixes
+
+* **runtime:** default runtime extras include gpt-auto and node ([#426](https://github.com/Audumla/AUDiaGentic/issues/426)) ([4b5a27c](https://github.com/Audumla/AUDiaGentic/commit/4b5a27c0642620d477db2cbaff17b479105543a5))
+
+## [0.88.1](https://github.com/Audumla/AUDiaGentic/compare/v0.88.0...v0.88.1) (2026-11-02)
+
+
+### Bug Fixes
+
+* **ci:** provider probes signal through the foundation seam; refresh two stale provisioning tests ([#424](https://github.com/Audumla/AUDiaGentic/issues/424)) ([87c55a7](https://github.com/Audumla/AUDiaGentic/commit/87c55a78329679468a359f8fb0f8edae7fbc383f))
+
+## [0.88.0](https://github.com/Audumla/AUDiaGentic/compare/v0.87.0...v0.88.0) (2026-11-02)
+
+
+### Features
+
+* **worktrees:** tidy retires dead records and finishes proven-merged worktrees (DW01) ([#421](https://github.com/Audumla/AUDiaGentic/issues/421)) ([547c0e3](https://github.com/Audumla/AUDiaGentic/commit/547c0e34c90376cba0cdc97ba65b896f31a68108))
+
 ## [0.87.0](https://github.com/Audumla/AUDiaGentic/compare/v0.86.0...v0.87.0) (2026-11-02)
 
 

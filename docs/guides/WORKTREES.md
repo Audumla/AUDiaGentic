@@ -201,3 +201,10 @@ or diverged. It reports only; it never changes anything.
 - Only GitHub through `gh` is supported as a forge.
 - Checks run in the live worktree and are trusted code; another writer can still advance the
   remote branch after the final check (a non-force push cannot overwrite it).
+
+## Routine cleanup: tidy
+
+`audiagentic worktree tidy` reports, and with `apply yes` does, the routine cleanup: it drops records whose
+directory is gone and git no longer lists, then finishes each worktree that `prune` marks ELIGIBLE, one at a
+time through the ordinary `finish` (merge proven, clean, unused, and never a worktree a running venv imports
+from). Everything else is listed with its blockers and left alone. Run it after a batch of merges.

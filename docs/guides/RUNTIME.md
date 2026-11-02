@@ -6,7 +6,7 @@ non-editable venv `<runtime>/<version>-<id>`; `previous` is the one before it.
 
 ```
 audiagentic runtime status
-audiagentic runtime install ref origin/main [extras acp,a2a] [restart yes]   # or: wheel PATH
+audiagentic runtime install ref origin/main [extras acp,a2a,gpt-auto,node] [restart yes]   # or: wheel PATH
 audiagentic runtime rollback [restart yes]
 ```
 
@@ -19,3 +19,7 @@ client reconnects. A fresh container seeds `current` to the image's `/opt/venv` 
 
 Cleanup tooling treats any worktree a running venv imports from as in use, so an editable development
 install cannot be pruned from under a live service.
+
+The default extras are `acp,a2a,gpt-auto,node`: the gateway needs them to run the providers it serves (the gpt-auto
+browser provider imports `websockets`). The image's stock venv has none of them, so a gateway left on it cannot
+dispatch gpt-auto work: install a runtime before pointing a service at `current`.

@@ -423,3 +423,27 @@ def test_finish_refuses_when_the_local_branch_has_commits_the_merged_head_lacks(
         _run(repo, state, feature, pr)
     assert raised.value.code == "CON-WTFIN-002" and "tip-differs-from-pr" in raised.value.details["blockers"]
     assert feature.is_dir() and git.branch_exists(repo, "me/feature")
+
+
+def test_tidy_reports_by_default_and_applies_only_proven_work_and_dead_records(repo, merged, state) -> None:
+    from audiagentic.components.project.worktrees import tidy as tidier
+
+    feature, tip, pr = merged
+    other = (repo.parent / "unmerged").resolve()
+    _git(repo, "worktree", "add", "-q", "-b", "me/unmerged", str(other), "origin/main")
+    (other / "u.txt").write_text("u\n")
+    _git(other, "add", "u.txt")
+    _git(other, "commit", "-q", "-m", "unmerged")
+    records.register(repo, records.WorktreeRecord("wt_dead00000000", str(repo.parent / "gone"), "me/gone", {"session": "s"}, "2026-01-01T00:00:00Z"),
+                     state_root=state)
+    feed = lambda _r, branch: (pr,) if branch == "me/feature" else ()  # noqa: E731
+
+    preview = tidier.tidy(repo, active_work=IDLE, pull_requests=feed, state_root=state)
+    assert preview["applied"] is False and feature.exists()
+    assert preview["worktrees-finished"] == [str(feature)] and preview["records-retired"] == [str(repo.parent / "gone")]
+
+    done = tidier.tidy(repo, active_work=IDLE, pull_requests=feed, apply=True, state_root=state)
+    assert not feature.exists() and other.exists()               # only the proven one went
+    assert done["worktrees-finished"] == [str(feature)]
+    assert "wt_dead00000000" not in records.read_records(repo, state_root=state)
+    assert any(row["path"] == str(other) for row in done["left"])

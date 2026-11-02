@@ -10,8 +10,6 @@ from __future__ import annotations
 
 import base64
 import json
-import os
-import signal
 import socket
 import subprocess
 import time
@@ -21,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from audiagentic.components.providers.services.session.join_readiness import JoinAdapterInfo
+from audiagentic.foundation.system.process import terminate_process_group
 
 NATIVE_SCHEMA_VERSION = "opencode-api-v2"
 JOIN_ADAPTER = JoinAdapterInfo(adapter_id="opencode-serve", adapter_version="1", native_schema_version=NATIVE_SCHEMA_VERSION)
@@ -119,12 +118,5 @@ class OwnedOpenCodeServer:
     def stop(self) -> bool:
         if self.process is None:
             return True
-        for sig in (signal.SIGTERM, signal.SIGKILL):
-            if self.process.poll() is not None:
-                break
-            try:
-                os.killpg(self.process.pid, sig)
-                self.process.wait(timeout=8)
-            except (ProcessLookupError, subprocess.TimeoutExpired):
-                continue
+        terminate_process_group(self.process, term_wait=8)
         return self.process.poll() is not None

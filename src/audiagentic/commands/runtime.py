@@ -7,7 +7,7 @@ from audiagentic.foundation.cli_io import print_error, print_json, print_message
 
 _HELP = """Runtime commands (keyword syntax):
   audiagentic runtime status [root PATH]
-  audiagentic runtime install (wheel PATH | ref GITREF) [extras acp,a2a] [restart yes] [root PATH] [project PATH]
+  audiagentic runtime install (wheel PATH | ref GITREF) [extras acp,a2a,gpt-auto,node] [restart yes] [root PATH] [project PATH]
   audiagentic runtime prune [keep N] [root PATH]
   audiagentic runtime rollback [restart yes] [root PATH]
   audiagentic runtime help

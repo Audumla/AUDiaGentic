@@ -12,8 +12,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
-import signal
 import subprocess
 import time
 from collections import deque
@@ -21,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from audiagentic.components.providers.services.session.join_readiness import JoinAdapterInfo
+from audiagentic.foundation.system.process import terminate_process_group
 
 #: The Codex app-server protocol generation this adapter speaks (``codex app-server generate-json-schema``).
 NATIVE_SCHEMA_VERSION = "app-server-v2"
@@ -156,14 +155,5 @@ class OwnedAppServer:
         """Terminate the owned process group; True when it is gone."""
         if self.process is None:
             return True
-        if self.process.poll() is None:
-            try:
-                os.killpg(self.process.pid, signal.SIGTERM)
-                self.process.wait(timeout=10)
-            except (ProcessLookupError, subprocess.TimeoutExpired):
-                try:
-                    os.killpg(self.process.pid, signal.SIGKILL)
-                    self.process.wait(timeout=5)
-                except (ProcessLookupError, subprocess.TimeoutExpired):
-                    pass
+        terminate_process_group(self.process, term_wait=10, kill_wait=5)
         return self.process.poll() is not None
