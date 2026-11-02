@@ -101,6 +101,17 @@ def _state(proven: set[str], reasons: list[str]) -> str:
     return "unsupported" if reasons and all(reason.startswith("unsupported") for reason in reasons) else "inconclusive"
 
 
+#: Helpers every live probe runs on: changing one changes what a probe proves, so each is part of the suite identity.
+_SHARED_PROBE_FILES = ("env.py", "stub_model.py", "codex_tui.py")
+
+
+def _suite_digest(probe_file: Path) -> str:
+    """One digest over the probe and the shared probe helpers beside it."""
+    parts = [evidence.file_digest(probe_file)] + [
+        evidence.file_digest(probe_file.parent / name) for name in _SHARED_PROBE_FILES if (probe_file.parent / name).is_file()]
+    return "sha256:" + hashlib.sha256("\n".join(parts).encode()).hexdigest()
+
+
 def _exec_scratch(state_root: Path | None) -> Path | None:
     """None when the system temp dir allows exec; otherwise a directory under the state dir. Harness UIs map native
     libraries from their TMPDIR, which fails on a noexec /tmp."""
@@ -157,7 +168,7 @@ def qualify_live(provider_id: str, *, state_root: Path | None = None) -> dict[st
     observations = {name: (by_name[name].observations if name in by_name else {}) for name in CAPABILITIES}
     canonical = json.dumps({"capabilities": capabilities, "observations": observations}, sort_keys=True,
                            separators=(",", ":"), default=str).encode()
-    suite_digest = evidence.file_digest(Path(inspect.getsourcefile(probe)))
+    suite_digest = _suite_digest(Path(inspect.getsourcefile(probe)))
     record = evidence.build_record(
         producer={"component": "providers", "qualifier-version": QUALIFIER_VERSION,
                   "suite-digest": suite_digest, "adapter-id": adapter.adapter_id, "adapter-version": "1",

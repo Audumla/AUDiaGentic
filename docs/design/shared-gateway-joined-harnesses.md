@@ -191,13 +191,18 @@ the real Claude Code TUI in a pseudo-terminal.
 
 | Capability | Result | Why |
 |---|---|---|
-| passive-identity | proven | `claude agents --json` lists the running interactive session (pid, session id, cwd, status) and the listing creates nothing |
+| passive-identity | proven | `claude agents --json` lists the running interactive session (pid, session id, status); the id is stable across listings, the listing creates nothing, and the human's turn completed (the session transcript holds the stub reply) |
 | existing-session-attach | **unsupported** (`unsupported-no-existing-session-endpoint`) | no native route attaches to or sends into a running interactive session; `attach` and `logs` address background sessions |
 | safe-detach | unproven (`unproven-no-attachment-to-detach`) | the observer's listing is read-only, so there is nothing to detach from |
-| reconnect | proven (evidence only) | a new listing resolves the same session id |
+| reconnect | unproven (`unproven-no-attachment-to-reconnect`) | re-listing the same pid shows a stable identity (recorded under passive-identity) but there is no attachment to re-establish |
 | conditional-admission | **unsupported** (`unsupported-no-existing-session-endpoint`) | with a human turn held busy no outside route reaches the session; the observer added no model request |
 | correlated-result | **unsupported** (`unsupported-no-existing-session-endpoint`) | nothing can be submitted, so no result can be attributed |
-| concurrent-human-use | proven, on the **real Claude Code TUI** | the listing reports the session busy while the human's turn is held, and the human's turn completes after the observer polled |
+| concurrent-human-use | unproven (`unproven-no-observer-action-to-coexist-with`) | the listing reports the session busy while the human's turn is held and the turn completes, but the observer never acts, so this shows passive observation coexists with the human, not that two callers can |
+
+The negative findings (no route into a running interactive session) were established by inspecting 2.1.316; the
+probe applies them only to versions in `REVIEWED_VERSIONS` and leaves every capability `unproven-version-not-reviewed`
+on any other version. Observations are reduced to finite values (the listing is bounded, must exit 0 and be a JSON
+list of objects).
 
 Channels (an MCP server the session launches that pushes events into it) were **not measured**: with
 `--dangerously-load-development-channels` an API-key session prints "Channels are not currently available" and ignores

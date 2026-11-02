@@ -15,6 +15,7 @@ from audiagentic.components.providers.services.qualification.live import (
     qualify_live,
 )
 from audiagentic.components.providers.services.qualification.probes import codex as codex_probe
+from audiagentic.components.providers.services.qualification.probes.env import ENV_ALLOWLIST
 
 FACTS = {"platform": "linux-amd64", "executable-version": "9.9.9", "executable-digest": "sha256:" + "c" * 64,
          "executable": "/nonexistent/fake"}
@@ -136,7 +137,7 @@ def test_the_disposable_environment_inherits_no_credentials_and_roots_everything
         monkeypatch.setenv(key, "secret-value")
     env = codex_probe.disposable_env(tmp_path)
     assert not any("secret-value" in value for value in env.values())
-    assert set(env) <= {*codex_probe._ENV_ALLOWLIST, "HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME",
+    assert set(env) <= {*ENV_ALLOWLIST, "TERM", "HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME",
                         "XDG_STATE_HOME", "CODEX_HOME", "TMPDIR"}
     for key in ("HOME", "CODEX_HOME", "XDG_CONFIG_HOME", "TMPDIR"):
         assert Path(env[key]).resolve().is_relative_to(tmp_path.resolve())

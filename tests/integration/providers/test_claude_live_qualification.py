@@ -22,10 +22,13 @@ def _only_when_asked(request):
         pytest.skip("claude is not installed")
 
 
-def test_the_installed_claude_code_is_seen_but_cannot_be_sent_to(tmp_path):
+def test_the_installed_claude_code_is_identified_but_cannot_be_sent_to(tmp_path):
     result = qualify_live("claude", state_root=tmp_path / "state")
     assert result["capabilities"] == {
-        "passive-identity": True, "existing-session-attach": False, "safe-detach": False, "reconnect": True,
-        "conditional-admission": False, "correlated-result": False, "concurrent-human-use": True}, result["observations"]
-    assert result["reasons"] == ["unproven-no-attachment-to-detach", "unsupported-no-existing-session-endpoint"]
+        "passive-identity": True, "existing-session-attach": False, "safe-detach": False, "reconnect": False,
+        "conditional-admission": False, "correlated-result": False, "concurrent-human-use": False}, result["observations"]
+    assert result["state"] == "partial"
+    assert result["reasons"] == ["unproven-no-attachment-to-detach", "unproven-no-attachment-to-reconnect",
+                                 "unproven-no-observer-action-to-coexist-with", "unsupported-no-existing-session-endpoint"]
+    assert result["observations"]["concurrent-human-use"]["listing-reported-busy-during-held-turn"] is True
     assert result["cleanup-error"] is None

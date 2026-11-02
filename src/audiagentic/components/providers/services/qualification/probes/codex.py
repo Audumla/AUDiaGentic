@@ -17,7 +17,6 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
-import os
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -31,24 +30,17 @@ from audiagentic.components.providers.adapters.codex.join import (
 
 from ..live import CAPABILITIES, LiveContext, ProbeOutcome
 from .codex_tui import probe_human_surface
+from .env import disposable_env as shared_env
 from .stub_model import StubModel
 
 PROBE_VERSION = "1"
-_ENV_ALLOWLIST = ("PATH", "LANG", "LC_ALL", "LC_CTYPE", "TERM")
 _UNPROVEN_NEEDS_HUMAN_UI = "unproven-needs-human-ui-probe"
 _SETTLE_SECONDS = 1.5  # how long a departure is observed before the survivor is checked
 
 
 def disposable_env(root: Path) -> dict[str, str]:
-    """An allowlisted environment rooted in the disposable directory: nothing inherited that could carry a credential."""
-    home = root / "home"
-    for name in ("home", "xdg-config", "xdg-data", "xdg-cache", "xdg-state", "codex-home", "tmp"):
-        (root / name).mkdir(parents=True, exist_ok=True)
-    env = {key: os.environ[key] for key in _ENV_ALLOWLIST if key in os.environ}
-    env.update({"HOME": str(home), "XDG_CONFIG_HOME": str(root / "xdg-config"), "XDG_DATA_HOME": str(root / "xdg-data"),
-                "XDG_CACHE_HOME": str(root / "xdg-cache"), "XDG_STATE_HOME": str(root / "xdg-state"),
-                "CODEX_HOME": str(root / "codex-home"), "TMPDIR": str(root / "tmp")})
-    return env
+    """An allowlisted environment rooted in the disposable directory, with the Codex home inside it."""
+    return shared_env(root, extra_dirs=("codex-home",), keep=("TERM",), extra={"CODEX_HOME": str(root / "codex-home")})
 
 
 def _protocol_methods(executable: Path, env: dict[str, str], out: Path) -> tuple[set[str], str]:

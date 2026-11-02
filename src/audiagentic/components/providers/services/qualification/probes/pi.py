@@ -15,20 +15,14 @@ from audiagentic.components.providers.adapters.pi.join import rpc_get_state
 
 from ..live import CAPABILITIES, LiveContext, ProbeOutcome
 from .codex_tui import HumanTui
+from .env import disposable_env as shared_env
 
 PROBE_VERSION = "1"
 REASON = "unsupported-no-existing-session-endpoint"
-_ENV_ALLOWLIST = ("PATH", "LANG", "LC_ALL", "LC_CTYPE")
 
 
 def _env(root: Path) -> dict[str, str]:
-    for name in ("home", "xdg-config", "xdg-data", "xdg-cache", "xdg-state", "tmp"):
-        (root / name).mkdir(parents=True, exist_ok=True)
-    env = {key: os.environ[key] for key in _ENV_ALLOWLIST if key in os.environ}
-    env.update({"HOME": str(root / "home"), "XDG_CONFIG_HOME": str(root / "xdg-config"),
-                "XDG_DATA_HOME": str(root / "xdg-data"), "XDG_CACHE_HOME": str(root / "xdg-cache"),
-                "XDG_STATE_HOME": str(root / "xdg-state"), "TMPDIR": str(root / "tmp"), "PI_OFFLINE": "1"})
-    return env
+    return shared_env(root, extra={"PI_OFFLINE": "1"})
 
 
 def _children(pid: int) -> list[int]:
