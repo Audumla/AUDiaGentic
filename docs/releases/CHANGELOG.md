@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.97.0](https://github.com/Audumla/AUDiaGentic/compare/v0.96.0...v0.97.0) (2026-11-04)
+
+
+### Features
+
+* **ledger:** release flow, legacy baseline conversion and migration guide (LE03 slice 3) ([#447](https://github.com/Audumla/AUDiaGentic/issues/447)) ([bb91004](https://github.com/Audumla/AUDiaGentic/commit/bb91004f3af0cf0b18445666116c838150a7cf1b))
+
 ## [0.96.0](https://github.com/Audumla/AUDiaGentic/compare/v0.95.0...v0.96.0) (2026-11-04)
 
 
