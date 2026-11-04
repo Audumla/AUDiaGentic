@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.94.1](https://github.com/Audumla/AUDiaGentic/compare/v0.94.0...v0.94.1) (2026-11-04)
+
+
+### Bug Fixes
+
+* **gateway:** the watchdog's uncorrelated-provider-terminal write now passes the record schema ([#441](https://github.com/Audumla/AUDiaGentic/issues/441)) ([edf10f1](https://github.com/Audumla/AUDiaGentic/commit/edf10f1f52d13340fac0a2f95d09b4ce32fea760))
+
 ## [0.94.0](https://github.com/Audumla/AUDiaGentic/compare/v0.93.0...v0.94.0) (2026-11-04)
 
 
