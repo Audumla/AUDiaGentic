@@ -104,7 +104,7 @@ def test_queue_fairness_key_is_logical_but_depths_remain_checkout_scoped(tmp_pat
     def submit(root: Path):
         record = store.build_record(execution_profile_id="gpt-auto", prompt_body="x")
         store.write_record(root, record)
-        manager.enqueue(root, record, {"virtual-capacity": 1}, runner)
+        manager.enqueue(root, record, {"virtual-capacity": 2, "project-capacity": 1}, runner)
         return record["request-id"]
 
     try:
