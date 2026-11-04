@@ -1,8 +1,0 @@
-# Event topics owned by the ledger component (BU01 registry; RV392 ownership fix)
-ledger.event.recorded:
-  description: "Ledger change event recorded (drives plan-item linkage)"
-  payload-required: ["event-id", "plan-item-ids"]
-  payload-optional: ["project_root"]
-  metadata-keys: []
-  delivery: async
-  since: v1.0.0

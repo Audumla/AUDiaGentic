@@ -55,7 +55,6 @@ __all__ = [
     "initial_state",
     "placement_for_state",
     "append_change_log",
-    "append_ledger_event",
     "append_review_link",
     "remove_review_link",
     "item_identity_write_lock",
@@ -136,7 +135,6 @@ _ITEM_ID_RE = re.compile(r"^([A-Z]+)(\d+)$", re.IGNORECASE)
 _CHANGE_LOG_HEADING = "## Change Log"
 _CHANGE_ENTRY_RE = re.compile(r"^- (\S+) \(([^)]+)\): (.*)$")
 _HEADING_RE = re.compile(r"^##\s+(.+?)\s*$")
-_LEDGER_ENTRY_RE = re.compile(r"^\s*[-+*]\s+(chg_[^\s]+)\s*$")
 
 _ITEM_LOCKS: dict[tuple[Path, str], threading.RLock] = {}
 _ITEM_LOCKS_GUARD = threading.Lock()
@@ -765,76 +763,6 @@ def append_change_log(
     else:
         # Create the section after all existing content
         return body.rstrip() + f"\n\n{_CHANGE_LOG_HEADING}\n\n{entry}\n"
-
-
-def _heading_key(heading: str) -> str:
-    """Return a stable key for headings written with legacy punctuation."""
-    return re.sub(r"[^a-z0-9]+", "-", heading.lower()).strip("-")
-
-
-def append_ledger_event(body: str, event_id: str) -> tuple[str, bool]:
-    """Append one ledger event while canonicalizing legacy duplicate sections.
-
-    ``Ledger-events`` was historically an unconfigured custom heading.  A
-    generic read/modify/write therefore parsed only the last occurrence and
-    could either discard older links or recreate the section.  This helper
-    treats all punctuation/case variants as one logical section, preserves
-    every existing bullet, removes duplicate headings, and reports whether the
-    event was newly linked.
-    """
-    lines = body.splitlines()
-    starts: list[tuple[int, str]] = []
-    for index, line in enumerate(lines):
-        match = _HEADING_RE.match(line)
-        if match:
-            starts.append((index, match.group(1)))
-
-    ledger_ranges: list[tuple[int, int]] = []
-    ledger_values: list[str] = []
-    for position, (start, heading) in enumerate(starts):
-        if _heading_key(heading) != "ledger-events":
-            continue
-        end = starts[position + 1][0] if position + 1 < len(starts) else len(lines)
-        ledger_ranges.append((start, end))
-        ledger_values.extend(lines[start + 1 : end])
-
-    entry = f"- {event_id}"
-    normalized_values: list[str] = []
-    seen_event_ids: set[str] = set()
-    for line in ledger_values:
-        match = _LEDGER_ENTRY_RE.match(line)
-        if match:
-            existing_id = match.group(1)
-            if existing_id in seen_event_ids:
-                continue
-            seen_event_ids.add(existing_id)
-            normalized_values.append(f"- {existing_id}")
-        else:
-            normalized_values.append(line)
-    ledger_values = normalized_values
-    already_present = event_id in seen_event_ids
-    if not already_present:
-        ledger_values.append(entry)
-
-    if not ledger_ranges:
-        updated = body.rstrip() + f"\n\n## Ledger-events\n\n{entry}\n"
-        return updated, True
-
-    first_start = ledger_ranges[0][0]
-    rebuilt: list[str] = []
-    index = 0
-    while index < len(lines):
-        matching = next((end for start, end in ledger_ranges if start == index), None)
-        if matching is not None:
-            if index == first_start:
-                rebuilt.extend(["## Ledger-events", "", *ledger_values])
-            index = matching
-            continue
-        rebuilt.append(lines[index])
-        index += 1
-
-    updated = "\n".join(rebuilt).rstrip() + "\n"
-    return updated, not already_present
 
 
 _REVIEW_LINK_HEADING = "## Reviews"

@@ -9,13 +9,10 @@ from typing import Any
 
 from audiagentic.components.ledger.current_events import (
     event_identity,
+    event_write_lock,
     released_events,
     write_event,
 )
-from audiagentic.components.ledger.event_outbox import drain as drain_event_outbox
-from audiagentic.components.ledger.event_outbox import enqueue as enqueue_event_delivery
-from audiagentic.components.ledger.event_outbox import event_write_lock
-from audiagentic.components.ledger.events import publish_ledger_event_recorded
 from audiagentic.components.ledger.validation import validate_persisted_event
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.contracts.schema_registry import validate_with_schema
@@ -63,13 +60,7 @@ def record_change_event(project_root: Path, event: dict[str, Any]) -> dict[str, 
     _validate_change_event(event)
     event_id = event["event-id"]
     with event_write_lock(project_root, event_id):
-        result = _record_change_event_locked(project_root, event)
-
-    # Drain only after releasing the event lock. The drain path uses the
-    # same per-event lock while materializing/verifying the event file.
-    if isinstance(event.get("plan-item-ids"), list) and event["plan-item-ids"]:
-        drain_event_outbox(project_root, publisher=publish_ledger_event_recorded)
-    return result
+        return _record_change_event_locked(project_root, event)
 
 
 def _record_change_event_locked(project_root: Path, event: dict[str, Any]) -> dict[str, Any]:
@@ -81,18 +72,6 @@ def _record_change_event_locked(project_root: Path, event: dict[str, Any]) -> di
             code="CON-ARCHIVE-003", kind="release",
             message="event-id is already released with different content",
             details={"event-id": event_id},
-        )
-    plan_item_ids = event.get("plan-item-ids")
-    if isinstance(plan_item_ids, list) and plan_item_ids:
-        # Persist the projection intent first. If the process dies before the event file is written, the outbox
-        # remains and its drain materializes the event (unless the historical ledger already released it).
-        enqueue_event_delivery(
-            project_root,
-            event_id,
-            plan_item_ids,
-            source=event.get("source"),
-            timestamp_utc=event.get("timestamp-utc"),
-            event=event,
         )
     path, status = write_event(project_root, event)
     return {"event-path": str(path), "event-id": event_id, "status": status}

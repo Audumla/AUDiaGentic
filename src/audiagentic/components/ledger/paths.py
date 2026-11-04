@@ -40,6 +40,11 @@ def _resolve(project_root: Path, key: str) -> Path:
     return resolve_component_path(project_root, "agent-ledger", key, _DEFAULT_PATHS)
 
 
+def ledger_runtime_dir(project_root: Path) -> Path:
+    """Return the ledger's runtime directory (locks, generated projections)."""
+    return _resolve(project_root, "ledger-runtime")
+
+
 def ledger_sync_dir(project_root: Path) -> Path:
     """Return .audiagentic/runtime/ledger/sync."""
     return _resolve(project_root, "sync-dir")

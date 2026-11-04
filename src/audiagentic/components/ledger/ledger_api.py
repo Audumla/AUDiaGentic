@@ -10,9 +10,12 @@ from typing import Any
 
 from audiagentic.components.ledger.archive import archive_current_ledger
 from audiagentic.components.ledger.audit import generate_audit_and_checkin
-from audiagentic.components.ledger.current_events import iter_events, pending_events
+from audiagentic.components.ledger.current_events import (
+    iter_events,
+    pending_events,
+    reconcile,
+)
 from audiagentic.components.ledger.current_summary import regenerate_current_release
-from audiagentic.components.ledger.event_outbox import drain as drain_event_outbox
 from audiagentic.components.ledger.paths import (
     ledger_component_marker,
     ledger_events_dir,
@@ -25,14 +28,12 @@ from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 def record_change(project_root: Path, event: dict[str, Any]) -> dict[str, Any]:
     """Validate and record one change event as its own tracked, write-once event file."""
-    drain_event_outbox(project_root)
     result = _record(project_root, event)
     return {**result, "pending-count": len(pending_events(project_root))}
 
 
 def record_changes(project_root: Path, events: list[dict[str, Any]]) -> dict[str, Any]:
     """Record multiple change events."""
-    drain_event_outbox(project_root)
     results = [_record(project_root, event) for event in events]
     return {"count": len(results), "results": results, "pending-count": len(pending_events(project_root))}
 
@@ -51,7 +52,7 @@ def get_current_summary(project_root: Path) -> str:
 def sync(project_root: Path) -> dict[str, Any]:
     """Validate every current ledger source through the one loader and report the pending count."""
     result = check_current_ledger(project_root)
-    return {"pending-count": result.pending_count, "warning": result.warning}
+    return {"pending-count": result.pending_count, "migrated-legacy-events": result.migrated, "warning": result.warning}
 
 
 def generate_audit(project_root: Path) -> dict[str, Any]:
@@ -219,9 +220,34 @@ def get_fragment(event_id: str, project_root: Path) -> dict[str, Any]:
     )
 
 
+def plan_item_events(project_root: Path, item_id: str) -> list[dict[str, Any]]:
+    """Every recorded event linked to a plan item, derived from ``plan-item-ids`` (the only authoritative link).
+
+    Recording an event never edits a plan file, so nothing here can conflict between branches. Covers current
+    events (baseline and event files) and released ones (the historical ledger), oldest first; a current event
+    whose identity conflicts with the historical ledger fails closed instead of being listed.
+    """
+    events, released = reconcile(project_root)
+    linked = {
+        event["event-id"]: event
+        for event in [*released.values(), *events]
+        if item_id in (event.get("plan-item-ids") or [])
+    }
+    return [
+        {
+            "event-id": event["event-id"],
+            "change-class": event.get("change-class", ""),
+            "user-summary-candidate": event.get("user-summary-candidate", ""),
+            "timestamp-utc": event.get("timestamp-utc", ""),
+            "status": "released" if event["event-id"] in released else "unreleased",
+            "release-id": released.get(event["event-id"], {}).get("release-id"),
+        }
+        for event in sorted(linked.values(), key=lambda e: (str(e.get("timestamp-utc") or ""), e["event-id"]))
+    ]
+
+
 def get_status(project_root: Path) -> dict[str, Any]:
     """Return ledger installation state and the recorded-event counts."""
-    drain_event_outbox(project_root)
     marker = ledger_component_marker(project_root)
     events_dir = ledger_events_dir(project_root)
     return {

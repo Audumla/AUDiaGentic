@@ -295,16 +295,13 @@ class TestAssertEventPayload:
     def test_valid_payload_passes(self):
         from audiagentic.foundation.event.topic_registry import assert_event_payload
 
-        assert_event_payload(
-            "ledger.event.recorded",
-            {"event-id": "chg_x", "plan-item-ids": ["MA00"]},
-        )
+        assert_event_payload("planning.item.created", {"item-id": "MA00"})
 
     def test_missing_required_key_fails_naming_it(self):
         from audiagentic.foundation.event.topic_registry import assert_event_payload
 
-        with pytest.raises(AssertionError, match="plan-item-ids"):
-            assert_event_payload("ledger.event.recorded", {"event-id": "chg_x"})
+        with pytest.raises(AssertionError, match="item-id"):
+            assert_event_payload("planning.item.created", {})
 
     def test_unregistered_topic_fails(self):
         from audiagentic.foundation.event.topic_registry import assert_event_payload

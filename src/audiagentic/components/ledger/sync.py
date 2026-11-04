@@ -20,6 +20,7 @@ from audiagentic.foundation.system.process import StartupLock
 class SyncResult:
     pending_count: int
     warning: str | None
+    migrated: int = 0
 
 
 def _acquire_lock(project_root: Path) -> tuple[StartupLock, str | None]:
@@ -55,9 +56,9 @@ def ledger_write_lock(project_root: Path):
 
 
 def check_current_ledger(project_root: Path) -> SyncResult:
-    """Deliver pending projection intents, then validate every current source and count the pending events."""
-    from audiagentic.components.ledger.event_outbox import drain as drain_event_outbox
+    """Validate every current source through the loader and count the pending events."""
+    from audiagentic.components.ledger.legacy_runtime import migrate_legacy_runtime
 
-    drain_event_outbox(project_root)
     with ledger_write_lock(project_root) as warning:
-        return SyncResult(pending_count=len(pending_events(project_root)), warning=warning)
+        migrated = migrate_legacy_runtime(project_root)["migrated"]
+        return SyncResult(pending_count=len(pending_events(project_root)), warning=warning, migrated=migrated)

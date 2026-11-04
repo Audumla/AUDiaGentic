@@ -37,6 +37,13 @@ def get_fragment(event_id: str) -> dict:
 
 @mcp.tool()
 @tool_boundary
+def get_plan_item_events(item_id: str) -> dict:
+    """List the recorded events whose plan-item-ids name a plan item (derived; no plan file is edited)."""
+    return {"item-id": item_id, "events": ledger_api.plan_item_events(project_root_from_env(), item_id)}
+
+
+@mcp.tool()
+@tool_boundary
 def get_current_summary() -> str:
     """Return the generated current-release summary."""
     return ledger_api.get_current_summary(project_root_from_env())

@@ -110,8 +110,9 @@ link is part of the local repository integrity contract: review mutations fail
 closed when the review, parent, plan, or backlink disagree. Planning writes use
 a local roll-forward journal under `.audiagentic/runtime/planning/`; a later
 planning API use reconciles prepared moves before serving the request. Planning
-events and ledger-to-plan projections use durable outboxes with at-least-once
-delivery; consumers must be idempotent.
+events use a durable outbox with at-least-once delivery; consumers must be idempotent.
+Recording a ledger event never edits a plan file: the ledger derives a plan item's events from each event's
+`plan-item-ids` (`get_plan_item_events`).
 
 ## Implementations
 

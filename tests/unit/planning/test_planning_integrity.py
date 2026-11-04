@@ -5,23 +5,12 @@ from pathlib import Path
 
 import pytest
 
-from audiagentic.components.ledger import archive as ledger_archive
-from audiagentic.components.ledger import current_events as ledger_events
-from audiagentic.components.ledger import event_outbox as ledger_outbox
 from audiagentic.components.ledger import paths as ledger_paths
 from audiagentic.components.ledger import recorder as ledger_recorder
-from audiagentic.components.ledger import sync as ledger_sync
 from audiagentic.components.planning import durability, integrity, item_store, planning_api
 from audiagentic.components.planning import events as planning_events
 from audiagentic.components.planning.contracts import PlanningIntegrityError
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-
-
-@pytest.fixture(autouse=True)
-def _register_planning_projection():
-    # Other suites can reset the process-global bus after module import.
-    # These integration-style tests require the real projection subscription.
-    planning_events.register()
 
 
 def _item(root: Path, item_id: str = "TST01") -> Path:
@@ -107,19 +96,10 @@ def test_runtime_roots_reject_ancestor_symlink_escape(tmp_path: Path) -> None:
     with pytest.raises(AudiaGenticError):
         planning_events._outbox_dir(project)
     with pytest.raises(AudiaGenticError):
-        ledger_outbox.outbox_dir(project)
-    with pytest.raises(AudiaGenticError):
         item_store._lock_path(project, "item-TST01")
     with pytest.raises(AudiaGenticError):
         ledger_paths.ledger_generated_dir(project)
 
-
-def test_ledger_projection_failure_remains_retryable(tmp_path: Path) -> None:
-    ledger_outbox.enqueue(tmp_path, "chg_projection", ["MISSING01"])
-    planning_events.register()
-
-    assert ledger_outbox.drain(tmp_path) == {"delivered": 0, "failed": 1}
-    assert (ledger_outbox.outbox_dir(tmp_path) / "chg_projection.json").exists()
 
 
 def test_prepared_move_rolls_forward_on_reconciliation(tmp_path: Path, monkeypatch) -> None:
@@ -175,37 +155,6 @@ def test_manifestless_staging_is_discarded_on_reconciliation(tmp_path: Path, mon
     assert durability.reconcile_pending_mutations(tmp_path) == 0
     assert not legacy.exists()
 
-
-def test_ledger_projection_intent_precedes_the_event_file_and_waits_for_it(tmp_path: Path, monkeypatch) -> None:
-    from audiagentic.components.ledger import recorder as fragments
-
-    real_write = ledger_events.atomic_write_text
-
-    def crash_event_write(*args, **kwargs):
-        raise RuntimeError("simulated event-file termination")
-
-    monkeypatch.setattr(ledger_events, "atomic_write_text", crash_event_write)
-    with pytest.raises(RuntimeError, match="event-file termination"):
-        fragments.record_change_event(
-            tmp_path,
-            {
-                "change-class": "audit",
-                "files": ["tests/unit/planning/test_planning_integrity.py"],
-                "technical-summary": "test",
-                "user-summary-candidate": "test",
-                "status": "unreleased",
-                "plan-item-ids": ["TST01"],
-            },
-        )
-    assert list(ledger_outbox.outbox_dir(tmp_path).glob("*.json"))
-    event_file = ledger_events.event_path(tmp_path, next(ledger_outbox.outbox_dir(tmp_path).glob("*.json")).stem)
-    assert not event_file.exists()
-    monkeypatch.setattr(ledger_events, "atomic_write_text", real_write)
-    # The drain materializes the event file from the outbox payload, but cannot deliver until the item exists.
-    assert ledger_outbox.drain(tmp_path) == {"delivered": 0, "failed": 1}
-    assert event_file.exists()
-    _item(tmp_path)
-    assert ledger_outbox.drain(tmp_path) == {"delivered": 1, "failed": 0}
 
 
 def test_reconciliation_materializes_journaled_event_after_crash(tmp_path: Path, monkeypatch) -> None:
@@ -371,121 +320,14 @@ def test_integrity_reports_unknown_review_state(tmp_path: Path) -> None:
     assert any("review has invalid identity" in error for error in errors)
 
 
-def test_ledger_projection_reconciles_pending_planning_journal_first(tmp_path: Path, monkeypatch) -> None:
-    path = _item(tmp_path)
-    fm, body = item_store.parse_frontmatter(path.read_text(encoding="utf-8"))
-    updated_body = item_store.append_change_log(body, "now", "test", "journaled update")
-    real_apply = durability._apply_manifest
-
-    def apply_then_crash(root: Path, tx_dir: Path, manifest):
-        real_apply(root, tx_dir, manifest)
-        raise RuntimeError("simulated pending journal")
-
-    monkeypatch.setattr(durability, "_apply_manifest", apply_then_crash)
-    with pytest.raises(RuntimeError, match="pending journal"):
-        durability.commit_mutation(
-            tmp_path,
-            {path: item_store.render_item(fm, updated_body)},
-            operation="test.pending-projection",
-        )
-    monkeypatch.setattr(durability, "_apply_manifest", real_apply)
-
-    planning_events._on_ledger_event_recorded(
-        "ledger.event.recorded",
-        {"project_root": tmp_path, "event-id": "chg_pending_projection", "plan-item-ids": ["TST01"]},
-        {},
-    )
-
-    result = path.read_text(encoding="utf-8")
-    assert "journaled update" in result
-    assert "- chg_pending_projection" in result
-    assert not list(durability.transaction_root(tmp_path).iterdir())
 
 
-def test_ledger_projection_drains_after_fragment_lock_is_released(tmp_path: Path) -> None:
-    _item(tmp_path)
-    result = ledger_recorder.record_change_event(
-        tmp_path,
-        {
-            "event-id": "chg_immediate_projection",
-            "change-class": "audit",
-            "files": ["tests/unit/planning/test_planning_integrity.py"],
-            "technical-summary": "immediate projection",
-            "user-summary-candidate": "immediate projection",
-            "status": "unreleased",
-            "plan-item-ids": ["TST01"],
-        },
-    )
-
-    assert result["status"] == "created"
-    assert not list(ledger_outbox.outbox_dir(tmp_path).glob("*.json"))
-    item_path = tmp_path / "docs" / "planning" / "active" / "test-plan" / "TST01.md"
-    assert "- chg_immediate_projection" in item_path.read_text(encoding="utf-8")
 
 
-def test_check_drains_authoritative_ledger_outbox_before_counting_events(tmp_path: Path) -> None:
-    _item(tmp_path)
-    event = {
-        "event-id": "chg_sync_recovery",
-        "change-class": "audit",
-        "files": ["tests/unit/planning/test_planning_integrity.py"],
-        "technical-summary": "sync recovery",
-        "user-summary-candidate": "sync recovery",
-        "status": "unreleased",
-        "plan-item-ids": ["TST01"],
-    }
-    ledger_outbox.enqueue(tmp_path, event["event-id"], ["TST01"], event=event)
-
-    result = ledger_sync.check_current_ledger(tmp_path)
-
-    assert result.pending_count == 1
-    assert ledger_events.event_path(tmp_path, event["event-id"]).is_file()
-    assert not list(ledger_outbox.outbox_dir(tmp_path).glob("*.json"))
 
 
-def test_archive_recovers_outbox_only_event_before_archiving(tmp_path: Path) -> None:
-    _item(tmp_path)
-    event = {
-        "event-id": "chg_archive_recovery",
-        "change-class": "audit",
-        "files": ["tests/unit/planning/test_planning_integrity.py"],
-        "technical-summary": "archive recovery",
-        "user-summary-candidate": "archive recovery",
-        "status": "unreleased",
-        "plan-item-ids": ["TST01"],
-    }
-    ledger_outbox.enqueue(tmp_path, event["event-id"], ["TST01"], event=event)
 
-    result = ledger_archive.archive_current_ledger(tmp_path, "release-archive-recovery")
-
-    historical = tmp_path / "docs" / "releases" / "LEDGER.ndjson"
-    assert result["archived-events"] == 1
-    assert event["event-id"] in historical.read_text(encoding="utf-8")
-    assert not list(ledger_outbox.outbox_dir(tmp_path).glob("*.json"))
-
-
-def test_ledger_outbox_same_id_different_content_is_serialized(tmp_path: Path) -> None:
-    from concurrent.futures import ThreadPoolExecutor
-
-    def enqueue(summary: str):
-        try:
-            ledger_outbox.enqueue(
-                tmp_path,
-                "chg_concurrent",
-                ["TST01"],
-                event={"event-id": "chg_concurrent", "technical-summary": summary},
-            )
-        except ValueError:
-            return "conflict"
-        return "accepted"
-
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        outcomes = list(pool.map(enqueue, ["first", "second"]))
-
-    assert sorted(outcomes) == ["accepted", "conflict"]
-
-
-def test_fragment_creation_same_id_different_content_is_serialized(tmp_path: Path) -> None:
+def test_event_creation_same_id_different_content_is_serialized(tmp_path: Path) -> None:
     from concurrent.futures import ThreadPoolExecutor
 
     def record(summary: str):
