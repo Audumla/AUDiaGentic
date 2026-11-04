@@ -2,8 +2,9 @@
 from __future__ import annotations
 
 import json
+import shutil
+import subprocess
 import threading
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
 from urllib.error import HTTPError
@@ -13,6 +14,7 @@ import pytest
 
 from audiagentic.components.agents.gateway.service import known_projects
 from audiagentic.components.agents.gateway.service.application import GatewayServiceApplication
+from audiagentic.components.agents.gateway.service.dashboard import render_dashboard_html
 from audiagentic.components.agents.gateway.service.dashboard_images import project_image_id
 from audiagentic.components.agents.gateway.service.http_transport import GatewayHTTPServer
 from audiagentic.foundation.contracts.errors import AudiaGenticError
@@ -113,10 +115,6 @@ def test_routes_need_the_token_an_exact_body_and_call_the_application(action, go
 
 # --- SH30-B: dashboard controls (rendered markup and the real action functions run under node) ---
 
-import shutil
-import subprocess
-
-from audiagentic.components.agents.gateway.service.dashboard import render_dashboard_html
 
 
 def _action_source() -> str:
@@ -202,7 +200,12 @@ def test_snapshot_rows_carry_the_project_id_the_buttons_post(tmp_path, monkeypat
     store.transition_record(project, record["request-id"], "completed")
     snapshot = dashboard_snapshot(service_root)
     (entry,) = snapshot["projects"]
+    from audiagentic.components.agents.gateway.service.dashboard_images import (
+        project_group_image_id,
+    )
+    from audiagentic.components.project.project_api import project_id
+
     expected = project_image_id(project)
-    assert entry["project-id"] == expected
+    assert entry["project-id"] == project_group_image_id(project_id(project)[0])
     assert [row["project-id"] for row in entry["requests"]] == [expected]
     assert [row["project-id"] for row in snapshot["requests"]] == [expected]

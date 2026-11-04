@@ -157,13 +157,18 @@ class GatewayServiceApplication:
     def dashboard_project_image(self, project_id: str, encoded: str | None = None) -> bytes:
         from audiagentic.components.agents.gateway.service.dashboard_images import (
             image_path,
-            project_image_id,
+            project_group_image_id,
             save_image,
         )
         from audiagentic.components.agents.gateway.service.known_projects import load_known_projects
+        from audiagentic.components.project.project_api import project_id as resolve_project_id
 
         known = load_known_projects(self._service_store.root / "known-projects.json")
-        if not any(project_image_id(p.project_root) == project_id for p in known.projects):
+        if not any(
+            p.project_root.exists()
+            and project_group_image_id(resolve_project_id(p.project_root)[0]) == project_id
+            for p in known.projects
+        ):
             raise service_validation_error(23, "dashboard project not found")
         if encoded is not None:
             save_image(self._service_store.root, project_id, encoded)
@@ -220,7 +225,10 @@ class GatewayServiceApplication:
     def _dashboard_operation(self, kind: str, project_id: str, request_id: str) -> dict[str, Any]:
         import uuid
 
-        from audiagentic.components.agents.gateway.operations import ManagementCommand, ManagementOperationKind
+        from audiagentic.components.agents.gateway.operations import (
+            ManagementCommand,
+            ManagementOperationKind,
+        )
 
         root = self._dashboard_project_root(project_id)
         command = ManagementCommand(

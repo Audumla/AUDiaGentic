@@ -20,6 +20,11 @@ def project_image_id(project_root: Path) -> str:
     return hashlib.sha256(os.path.normcase(str(project_root.resolve())).encode("utf-8")).hexdigest()
 
 
+def project_group_image_id(logical_project_id: str) -> str:
+    """Stable project avatar across worktrees, distinct from checkout IDs."""
+    return hashlib.sha256(f"project:{logical_project_id}".encode()).hexdigest()
+
+
 def image_path(service_root: Path, project_id: str) -> Path:
     if len(project_id) != 64 or any(c not in "0123456789abcdef" for c in project_id):
         raise error(23, "invalid dashboard project identity")

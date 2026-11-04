@@ -64,6 +64,7 @@ from audiagentic.components.agents.gateway.queue.pending import PendingAuthority
 from audiagentic.components.agents.gateway.queue.recovery_control import RecoveryDeferred
 from audiagentic.components.agents.gateway.queue.session_order import SessionDispatchOrder
 from audiagentic.components.agents.gateway.queue.watchdog_registry import watchdog_registry
+from audiagentic.components.project.project_api import project_id
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.time import now_iso_z
 from audiagentic.foundation.transports.agent_session import is_meaningful_activity
@@ -740,7 +741,7 @@ class GatewayQueueManager:
         ):
             raise ValueError("node queue entry does not match canonical admission")
         entry = NodeQueuedDispatch(
-            current["request-id"], root, policy.profile_id, str(root), placement,
+            current["request-id"], root, policy.profile_id, project_id(root)[0], placement,
             policy, runner, dispatch_owner_epoch, dispatch_service_root,
         )
         pq = self._entry_runtime_state(entry)
@@ -804,7 +805,8 @@ class GatewayQueueManager:
         # Observation must bypass a fresh same-project head waiting for the
         # very command this observer needs to settle. Keep one pending
         # authority, with an independent fair rotation key for observation.
-        project_key = f"{root}:node-reconcile" if reconcile_only else str(root)
+        logical_project = project_id(root)[0]
+        project_key = f"{logical_project}:node-reconcile" if reconcile_only else logical_project
         entry = NodeQueuedDispatch(
             current["request-id"], root, policy.profile_id, project_key, placement,
             policy, runner, dispatch_owner_epoch, dispatch_service_root,
@@ -971,8 +973,8 @@ class GatewayQueueManager:
             snapshot=snapshot,
             instance_facts=instance_facts,
             # Resolve once so relative/symlinked callers cannot accidentally
-            # bypass a per-project limit for the same physical project.
-            project_key=str(project_root.resolve()),
+            # bypass shared limits and fairness across worktrees of one project.
+            project_key=project_id(project_root)[0],
             session_key=str(record.get("session-id")) if record.get("session-id") else None,
             runner=runner,
             owner_epoch=owner_epoch,
@@ -1163,7 +1165,7 @@ class GatewayQueueManager:
             execution_profile_id=record["execution-profile-id"],
             snapshot=snapshot,
             instance_facts=instance_facts,
-            project_key=str(project_root.resolve()),
+            project_key=project_id(project_root)[0],
             session_key=str(record.get("session-id")) if record.get("session-id") else None,
             runner=runner,
             owner_epoch=dispatch_owner_epoch,
@@ -1278,7 +1280,7 @@ class GatewayQueueManager:
             execution_profile_id=record["execution-profile-id"],
             snapshot=snapshot,
             instance_facts=resolve_instance_facts(project_root, snapshot.instances),
-            project_key=str(project_root.resolve()),
+            project_key=project_id(project_root)[0],
             session_key=str(record.get("session-id")) if record.get("session-id") else None,
             runner=runner,
             owner_epoch=dispatch_owner_epoch,
@@ -2802,7 +2804,7 @@ class GatewayQueueManager:
         result: dict[str, dict[str, int]] = {}
         pending_by_profile = self._pending_authority.count_by(
             lambda request: (
-                request.project_key,
+                str(request.value.project_root.resolve()),
                 request.value.execution_profile_id,
             )
         )
