@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.94.0](https://github.com/Audumla/AUDiaGentic/compare/v0.93.0...v0.94.0) (2026-11-04)
+
+
+### Features
+
+* **agents:** project-capacity counts per profile definition with per-definition pending lanes ([#437](https://github.com/Audumla/AUDiaGentic/issues/437)) ([a3b04d2](https://github.com/Audumla/AUDiaGentic/commit/a3b04d27578239ada054d9419f1ea8950a5486c4))
+
 ## [0.93.0](https://github.com/Audumla/AUDiaGentic/compare/v0.92.0...v0.93.0) (2026-11-02)
 
 
