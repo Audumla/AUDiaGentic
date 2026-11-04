@@ -17,8 +17,8 @@ def record_change_event(event: dict | list[dict]) -> dict:
     """Record one change event or a batch."""
     project_root = project_root_from_env()
     if isinstance(event, list):
-        return ledger_api.record_changes(project_root, event, sync=True)
-    return ledger_api.record_change(project_root, event, sync=True)
+        return ledger_api.record_changes(project_root, event)
+    return ledger_api.record_change(project_root, event)
 
 
 @mcp.tool()
@@ -31,7 +31,7 @@ def get_pending_events(group_by: str = "plan-items") -> dict:
 @mcp.tool()
 @tool_boundary
 def get_fragment(event_id: str) -> dict:
-    """Return one current-ledger event by event-id."""
+    """Return one recorded event by event-id."""
     return ledger_api.get_fragment(event_id, project_root_from_env())
 
 
@@ -45,7 +45,7 @@ def get_current_summary() -> str:
 @mcp.tool()
 @tool_boundary
 def sync_ledger() -> dict:
-    """Merge pending fragments into the current ledger."""
+    """Validate every current ledger source and report the pending count."""
     return ledger_api.sync(project_root_from_env())
 
 

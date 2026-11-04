@@ -1,14 +1,12 @@
-"""Current release summary regeneration."""
+"""Current release summary projection (untracked; the tracked release document is written only at finalize)."""
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
 
-from audiagentic.components.ledger.paths import (
-    current_ledger_path,
-    releases_dir,
-)
-from audiagentic.foundation.io import atomic_write_text, load_ndjson
+from audiagentic.components.ledger.current_events import pending_events
+from audiagentic.components.ledger.paths import generated_current_summary_path
+from audiagentic.foundation.io import atomic_write_text
 
 
 def _render_markdown(entries: list[dict[str, Any]]) -> str:
@@ -29,8 +27,6 @@ def _render_markdown(entries: list[dict[str, Any]]) -> str:
 
 
 def regenerate_current_release(project_root: Path) -> Path:
-    ledger_path = current_ledger_path(project_root)
-    output_path = releases_dir(project_root) / "CURRENT_RELEASE.md"
-    entries = load_ndjson(ledger_path)
-    atomic_write_text(output_path, _render_markdown(entries))
+    output_path = generated_current_summary_path(project_root)
+    atomic_write_text(output_path, _render_markdown(pending_events(project_root)))
     return output_path

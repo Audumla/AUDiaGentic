@@ -5,7 +5,7 @@ Release management, audit, and change tracking for the system.
 ## Purpose
 
 Governs the release lifecycle:
-- Release ledger and fragment management
+- Per-event ledger storage and release archiving
 - Change event recording
 - Audit and checkin report generation
 - Release finalization
@@ -13,8 +13,7 @@ Governs the release lifecycle:
 
 ## Owns
 
-- Release ledger (NDJSON format)
-- Change event fragments
+- Tracked per-event records (`docs/releases/events/`), the frozen legacy baseline and the historical ledger (NDJSON)
 - Audit and release summary generation
 - Release bootstrap and lifecycle
 - History import from legacy formats
@@ -22,8 +21,9 @@ Governs the release lifecycle:
 
 ## Key modules
 
+- **current_events.py**: the one reader/writer of current events (write-once event files, frozen baseline, git-ref reads)
 - **fragments.py**: Change event recording
-- **sync.py**: Ledger merge and sync
+- **sync.py**: Ledger write lock and current-ledger validation
 - **audit.py**: Audit and checkin report generation
 - **current_summary.py**: Release summary generation
 - **ledger_bootstrap.py**: Release workflow initialization
@@ -32,14 +32,25 @@ Governs the release lifecycle:
 - **ledger_api.py**: Ledger API surface
 - **archive.py**: Ledger history archiving
 
+## Storage
+
+Each recorded event is its own tracked, write-once file `docs/releases/events/<sha256(event-id)>.json`, so two
+branches that record different events never touch the same path and git needs no merge driver (GitHub's mergeability
+ignores custom merge drivers). The old shared `CURRENT_RELEASE_LEDGER.ndjson` is a **frozen legacy baseline**: read by
+the loader, written by nothing. `iter_events(project_root, ref=None)` returns the baseline (tolerant of legacy
+anomalies; a row without an `event-id` gets a deterministic synthetic `legacy-line-<n>-<digest>` id on read) followed
+by the event files ordered by `(timestamp-utc, event-id)`, from the working tree or from any git ref, so a tagged
+release is reproducible. Summaries and audit/check-in documents are untracked projections under
+`.audiagentic/runtime/ledger/generated/`; no normal operation writes a tracked file other than the event file itself.
+
 ## Release boundary
 
-`archive_for_release(project_root, release_id)` is the only release archival
-boundary. It synchronizes pending fragments, stamps the selected current
-events, and returns their immutable event IDs for release rendering. A retry
-for an already archived release is read-only and cannot claim events that
-arrived for the next release. Conflicting historical event IDs and malformed
-persisted records fail closed with typed ledger errors.
+`archive_for_release(project_root, release_id)` is the only release archival boundary. Pending means "not in the
+historical ledger", so a release writes only `LEDGER.ndjson` (and resets the release summary): it never edits or
+deletes an event file or the baseline, and a stale branch carrying an already released event cannot make it pending
+again. A retry for an already archived release returns its immutable event IDs and cannot claim events that arrived
+for the next release. A legacy row the strict contract rejects, a conflicting historical identity or a malformed
+persisted record fails closed with a typed ledger error before anything is written.
 
 Source-control commit stamping is deliberately disabled by default. Release
 finalization must never stamp its own generated commit back into the ledger;

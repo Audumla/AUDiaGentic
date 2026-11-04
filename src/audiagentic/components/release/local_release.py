@@ -60,7 +60,6 @@ def _archive_ledger_locally(project_root: Path, release_id: str) -> dict[str, An
     return {
         **result,
         "ledger": result["historical-ledger"],
-        "cleared-current": True,
     }
 
 

@@ -10,8 +10,12 @@ behavior.
 - [Release notes](RELEASE_NOTES.md) — published release history.
 - [Changelog](CHANGELOG.md) — changelog entries and comparison links.
 - [Audit summary](AUDIT_SUMMARY.md) — generated ledger audit view.
-- [Current release ledger](CURRENT_RELEASE_LEDGER.ndjson) — current pending
-  and released event records.
+- [Event records](events/) — one tracked, write-once file per recorded change
+  event (`<sha256-of-event-id>.json`); two branches never share a path.
+- [Frozen baseline](CURRENT_RELEASE_LEDGER.ndjson) — legacy pre-per-event
+  records, read-only; no tool writes it.
+- [Released ledger](LEDGER.ndjson) — released events, written only at release
+  finalize.
 - [Publishing guide](PYPI_PUBLISHING.md) — PyPI trusted-publishing setup.
 
 Before changing release notes, changelog fragments, or generated summaries:
@@ -19,7 +23,7 @@ Before changing release notes, changelog fragments, or generated summaries:
 1. Inspect the current ledger state.
 2. Record substantive changes with `record_change_event` and the related plan
    item IDs.
-3. Synchronize generated release outputs through the release workflow.
+3. Generated summaries and the audit view are untracked projections; release outputs are written by the release workflow.
 4. Verify that implementation files, plan records, and release records agree.
 
 Do not hand-edit generated output to conceal a missing or incorrect ledger

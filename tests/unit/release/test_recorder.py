@@ -3,7 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from audiagentic.components.ledger.fragments import record_change_event
+from audiagentic.components.ledger.current_events import event_file_name
+from audiagentic.components.ledger.recorder import record_change_event
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.paths.package import REPO_ROOT
 
@@ -14,13 +15,13 @@ def _load(name: str) -> dict:
     return json.loads((FIXTURES / name).read_text(encoding="utf-8"))
 
 
-def test_record_fragment_creates_file(tmp_path: Path) -> None:
+def test_record_creates_one_event_file(tmp_path: Path) -> None:
     event = _load("change-event.valid.json")
     result = record_change_event(tmp_path, event)
     assert result["status"] == "created"
-    fragment = tmp_path / ".audiagentic" / "runtime" / "ledger" / "fragments" / f"{event['event-id']}.json"
-    assert fragment.is_file()
-    payload = json.loads(fragment.read_text(encoding="utf-8"))
+    path = tmp_path / "docs" / "releases" / "events" / event_file_name(event["event-id"])
+    assert path.is_file() and result["event-path"] == str(path)
+    payload = json.loads(path.read_text(encoding="utf-8"))
     assert payload == event
 
 
@@ -37,7 +38,6 @@ def test_record_fragment_invalid_event(tmp_path: Path) -> None:
         record_change_event(tmp_path, event)
     except AudiaGenticError as exc:
         assert exc.kind == "release"
-        fragment_dir = tmp_path / ".audiagentic" / "runtime" / "ledger" / "fragments"
-        assert not fragment_dir.exists()
+        assert not (tmp_path / "docs" / "releases" / "events").exists()
     else:
         raise AssertionError("expected validation error")

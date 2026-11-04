@@ -5,50 +5,36 @@ Internal modules (fragments, sync, audit, etc.) are implementation details.
 """
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
 from audiagentic.components.ledger.archive import archive_current_ledger
 from audiagentic.components.ledger.audit import generate_audit_and_checkin
+from audiagentic.components.ledger.current_events import iter_events, pending_events
 from audiagentic.components.ledger.current_summary import regenerate_current_release
 from audiagentic.components.ledger.event_outbox import drain as drain_event_outbox
-from audiagentic.components.ledger.fragments import record_change_event as _record
 from audiagentic.components.ledger.paths import (
-    current_ledger_path,
     ledger_component_marker,
-    ledger_fragments_dir,
-    ledger_manifest_path,
-    releases_dir,
+    ledger_events_dir,
+    ledger_generated_dir,
 )
-from audiagentic.components.ledger.sync import ledger_write_lock, sync_current_release_ledger
-from audiagentic.components.ledger.validation import load_persisted_events, validate_release_id
+from audiagentic.components.ledger.recorder import record_change_event as _record
+from audiagentic.components.ledger.sync import check_current_ledger
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.foundation.io import load_ndjson
 
 
-def record_change(project_root: Path, event: dict[str, Any], *, sync: bool = False) -> dict[str, Any]:
-    """Validate and record a change event fragment, optionally syncing the current ledger."""
+def record_change(project_root: Path, event: dict[str, Any]) -> dict[str, Any]:
+    """Validate and record one change event as its own tracked, write-once event file."""
     drain_event_outbox(project_root)
     result = _record(project_root, event)
-    if not sync:
-        return result
-    sync_result = sync_current_release_ledger(project_root)
-    return {**result, "ledger-count": sync_result.fragment_count, "purged-fragments": sync_result.purged_fragment_count}
+    return {**result, "pending-count": len(pending_events(project_root))}
 
 
-def record_changes(project_root: Path, events: list[dict[str, Any]], *, sync: bool = False) -> dict[str, Any]:
-    """Record multiple change event fragments, optionally syncing once at the end."""
+def record_changes(project_root: Path, events: list[dict[str, Any]]) -> dict[str, Any]:
+    """Record multiple change events."""
     drain_event_outbox(project_root)
     results = [_record(project_root, event) for event in events]
-    payload: dict[str, Any] = {
-        "count": len(results),
-        "results": results,
-    }
-    if not sync:
-        return payload
-    sync_result = sync_current_release_ledger(project_root)
-    return {**payload, "ledger-count": sync_result.fragment_count, "purged-fragments": sync_result.purged_fragment_count}
+    return {"count": len(results), "results": results, "pending-count": len(pending_events(project_root))}
 
 
 def refresh_current_summary(project_root: Path) -> str:
@@ -58,22 +44,14 @@ def refresh_current_summary(project_root: Path) -> str:
 
 
 def get_current_summary(project_root: Path) -> str:
-    """Return current release summary markdown, regenerating only if missing."""
-    path = releases_dir(project_root) / "CURRENT_RELEASE.md"
-    if not path.exists():
-        return refresh_current_summary(project_root)
-    return path.read_text(encoding="utf-8")
+    """Return the current release summary, rendered from the pending events (an untracked projection)."""
+    return refresh_current_summary(project_root)
 
 
 def sync(project_root: Path) -> dict[str, Any]:
-    """Merge all fragments into the current release ledger."""
-    result = sync_current_release_ledger(project_root)
-    return {
-        "fragment-count": result.fragment_count,
-        "purged-fragment-count": result.purged_fragment_count,
-        "ledger-path": str(result.ledger_path),
-        "warning": result.warning,
-    }
+    """Validate every current ledger source through the one loader and report the pending count."""
+    result = check_current_ledger(project_root)
+    return {"pending-count": result.pending_count, "warning": result.warning}
 
 
 def generate_audit(project_root: Path) -> dict[str, Any]:
@@ -86,69 +64,13 @@ def generate_audit(project_root: Path) -> dict[str, Any]:
 
 
 def archive_current(project_root: Path, release_id: str) -> dict[str, Any]:
-    """Merge current ledger into historical and reset current. Called before release finalization."""
+    """Release the pending events into the historical ledger. Called before release finalization."""
     return archive_current_ledger(project_root, release_id)
 
 
 def archive_for_release(project_root: Path, release_id: str) -> dict[str, Any]:
-    """Atomically recover, sync, and archive the current ledger."""
-    validate_release_id(release_id)
-    historical_path = releases_dir(project_root) / "LEDGER.ndjson"
-    # The existence check, retry projection, outbox drain, sync, and archive
-    # decision share one non-reentrant critical section. This prevents an
-    # overlapping retry from absorbing events that arrived for the next
-    # release after the first retry archived its snapshot.
-    from audiagentic.components.ledger.archive import (
-        _archive_current_ledger_locked,
-        _archive_identity,
-        _merge_historical_events,
-        _purge_fragments,
-    )
-    from audiagentic.foundation.io import atomic_write_ndjson, atomic_write_text
-
-    with ledger_write_lock(project_root) as warning:
-        historical = load_persisted_events(historical_path, role="historical")
-        historical = _merge_historical_events(historical, [])
-        snapshot = {
-            event["event-id"]: event for event in historical
-            if event.get("release-id") == release_id
-        }
-        if snapshot:
-            current_path = current_ledger_path(project_root)
-            current = load_persisted_events(current_path, role="current")
-            archived_current = [event for event in current if event.get("event-id") in snapshot]
-            remaining = [event for event in current if event.get("event-id") not in snapshot]
-            for event in archived_current:
-                if _archive_identity(event) != _archive_identity(snapshot[event["event-id"]]):
-                    raise AudiaGenticError(
-                        code="CON-ARCHIVE-003", kind="release",
-                        message="current ledger conflicts with an archived event identity",
-                        details={"event-id": event["event-id"]},
-                    )
-            if archived_current:
-                if remaining:
-                    atomic_write_ndjson(current_path, remaining)
-                else:
-                    atomic_write_text(current_path, "[]\n")
-                purged = _purge_fragments(project_root, set(snapshot))
-            else:
-                purged = 0
-            return {
-                "release-id": release_id,
-                "archived-events": len(snapshot),
-                "purged-fragments": purged,
-                "historical-ledger": str(historical_path),
-                "released-event-ids": sorted(snapshot),
-                "idempotent-retry": True,
-                "recovered-current": bool(archived_current),
-            }
-
-        drain_event_outbox(project_root)
-        from audiagentic.components.ledger.sync import _sync_current_release_ledger_locked
-        _sync_current_release_ledger_locked(project_root, warning)
-        return _archive_current_ledger_locked(project_root, release_id)
-
-
+    """Release every pending event under ``release_id`` (idempotent), writing only the historical ledger."""
+    return archive_current_ledger(project_root, release_id)
 
 
 def release_events(
@@ -192,10 +114,13 @@ def _union_find_cluster(keys: list[frozenset[str]]) -> list[list[int]]:
         if root_i != root_j:
             parent[root_i] = root_j
 
-    for i in range(len(keys)):
-        for j in range(i + 1, len(keys)):
-            if keys[i] & keys[j]:  # non-empty intersection
-                union(i, j)
+    first_with_key: dict[str, int] = {}
+    for i, event_keys in enumerate(keys):
+        for key in event_keys:
+            if key in first_with_key:
+                union(i, first_with_key[key])  # shares this key with an earlier event
+            else:
+                first_with_key[key] = i
 
     groups: dict[int, list[int]] = {}
     for i in range(len(keys)):
@@ -225,8 +150,7 @@ def get_pending_events(
       - "files": cluster by file overlap via union-find.
       - "flat": no grouping, raw list.
     """
-    entries = load_ndjson(current_ledger_path(project_root))
-    pending = [e for e in entries if e.get("status") == "unreleased"]
+    pending = pending_events(project_root)
 
     if not pending:
         return {"groups": [], "ungrouped": []} if group_by != "flat" else {"events": []}
@@ -279,13 +203,12 @@ def get_pending_events(
 
 
 def get_fragment(event_id: str, project_root: Path) -> dict[str, Any]:
-    """Retrieve a single change event by event-id.
+    """Retrieve a single recorded change event by event-id.
 
-    Looks in the current ledger NDJSON.  Returns the full event dict or
-    raises AudiaGenticError (CON-LEDGER-001) if not found.
+    Searches every recorded event (working tree). Returns the full event dict or raises
+    AudiaGenticError (CON-LEDGER-001) if not found.
     """
-    entries = load_ndjson(current_ledger_path(project_root))
-    for entry in entries:
+    for entry in iter_events(project_root):
         if entry.get("event-id") == event_id:
             return entry
     raise AudiaGenticError(
@@ -297,24 +220,14 @@ def get_fragment(event_id: str, project_root: Path) -> dict[str, Any]:
 
 
 def get_status(project_root: Path) -> dict[str, Any]:
-    """Return ledger installation state and current fragment/sync status."""
+    """Return ledger installation state and the recorded-event counts."""
     drain_event_outbox(project_root)
     marker = ledger_component_marker(project_root)
-    manifest = ledger_manifest_path(project_root)
-    fragments_dir = ledger_fragments_dir(project_root)
-
-    fragment_count = len(list(fragments_dir.glob("*.json"))) if fragments_dir.exists() else 0
-    last_synced: str | None = None
-    if manifest.exists():
-        try:
-            data = json.loads(manifest.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            data = {}
-        last_synced = data.get("synced-at")
-
+    events_dir = ledger_events_dir(project_root)
     return {
         "installed": marker.exists(),
-        "fragment-count": fragment_count,
-        "last-synced": last_synced,
-        "current-ledger": str(current_ledger_path(project_root)),
+        "event-file-count": len(list(events_dir.glob("*.json"))) if events_dir.exists() else 0,
+        "pending-count": len(pending_events(project_root)),
+        "events-dir": str(events_dir),
+        "generated-dir": str(ledger_generated_dir(project_root)),
     }

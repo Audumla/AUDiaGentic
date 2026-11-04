@@ -20,7 +20,7 @@ def test_get_fragment_finds_event(tmp_path: Path):
         "files": ["src/thing.py"],
         "status": "unreleased",
     }
-    ledger_api.record_change(tmp_path, event, sync=True)
+    ledger_api.record_change(tmp_path, event)
 
     result = ledger_api.get_fragment("chg_findme", tmp_path)
     assert result["event-id"] == "chg_findme"

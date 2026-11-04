@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from audiagentic.components.ledger.fragments import record_change_event
 from audiagentic.components.ledger.ledger_events import register
+from audiagentic.components.ledger.recorder import record_change_event
 from audiagentic.components.release.events import RELEASE_LEDGER_ARCHIVE_REQUESTED
 from audiagentic.foundation.event import DeliveryMode, get_bus
 

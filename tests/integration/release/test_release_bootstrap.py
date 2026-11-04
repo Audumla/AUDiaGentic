@@ -14,7 +14,7 @@ for path in (str(ROOT), str(SRC)):
 
 from tests.helpers import sandbox as sandbox_helper  # noqa: E402
 
-from audiagentic.components.ledger.fragments import record_change_event  # noqa: E402
+from audiagentic.components.ledger.recorder import record_change_event  # noqa: E402
 
 
 def test_release_bootstrap_creates_install_and_release_artifacts(tmp_path: Path) -> None:
@@ -88,22 +88,21 @@ def test_release_bootstrap_creates_install_and_release_artifacts(tmp_path: Path)
         payload = json.loads(result.stdout)
         assert payload["status"] == "success"
         assert payload["installed-state"] == "installed"
-        assert payload["synced-fragments"] == 1
+        assert payload["pending-events"] == 1
 
         assert provider_path.is_file()
         assert (sandbox.repo / ".audiagentic" / "components" / "project.yaml").is_file()
         assert (sandbox.repo / ".github" / "workflows" / "release.yml").is_file()
-        assert (sandbox.repo / "docs" / "releases" / "AUDIT_SUMMARY.md").is_file()
-        assert (sandbox.repo / "docs" / "releases" / "CHECKIN.md").is_file()
+        generated = sandbox.repo / ".audiagentic" / "runtime" / "ledger" / "generated"
+        assert (generated / "AUDIT_SUMMARY.md").is_file()
+        assert (generated / "CHECKIN.md").is_file()
         assert any(
             path.startswith(".audiagentic/runtime/")
             for path in payload["baseline-sync-report"]["excluded-paths"]
         )
         assert "codex" in provider_path.read_text(encoding="utf-8")
 
-        current_release = (sandbox.repo / "docs" / "releases" / "CURRENT_RELEASE.md").read_text(
-            encoding="utf-8"
-        )
+        current_release = (generated / "CURRENT_RELEASE.md").read_text(encoding="utf-8")
         assert "Seeded a project release bootstrap event." in current_release
     finally:
         sandbox.cleanup()

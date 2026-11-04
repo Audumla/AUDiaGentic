@@ -6,9 +6,15 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
-from audiagentic.components.ledger.paths import ledger_fragments_dir
+from audiagentic.components.ledger.current_events import (
+    event_identity,
+    event_path,
+    parse_event_file,
+    released_events,
+    write_event,
+)
 from audiagentic.foundation.event import DeliveryMode
-from audiagentic.foundation.io import atomic_write_json, atomic_write_text
+from audiagentic.foundation.io import atomic_write_json
 from audiagentic.foundation.paths.names import RUNTIME_RELATIVE
 from audiagentic.foundation.paths.safety import resolve_user_path
 from audiagentic.foundation.system.process import StartupLock
@@ -29,12 +35,12 @@ def _outbox_lock(project_root: Path, event_id: str) -> StartupLock:
 
 
 @contextmanager
-def fragment_write_lock(project_root: Path, event_id: str):
-    """Serialize fragment existence checks and writes for one event ID."""
+def event_write_lock(project_root: Path, event_id: str):
+    """Serialize event-file existence checks and writes for one event ID."""
     directory = resolve_user_path(
-        RUNTIME_RELATIVE / "ledger" / "fragment-locks",
+        RUNTIME_RELATIVE / "ledger" / "event-locks",
         project_root=project_root,
-        field_name="Ledger fragment lock",
+        field_name="Ledger event lock",
     )
     directory.mkdir(parents=True, exist_ok=True)
     with StartupLock(directory / f"{event_id}.lock", timeout=30.0):
@@ -95,24 +101,25 @@ def drain(project_root: Path, *, publisher: Any | None = None) -> dict[str, int]
                 raise ValueError("ledger event outbox project root mismatch")
             event_id = str(record["event-id"])
             event = record.get("event")
-            with fragment_write_lock(root, event_id):
-                fragment = ledger_fragments_dir(root) / f"{event_id}.json"
-                if not fragment.exists():
-                    if not isinstance(event, dict) or event.get("event-id") != event_id:
-                        # Legacy intents without the authoritative event cannot
-                        # safely be materialized; retain them for explicit retry.
+            with event_write_lock(root, event_id):
+                path_on_disk = event_path(root, event_id)
+                released = released_events(root).get(event_id)
+                if not path_on_disk.exists():
+                    if released is not None:
+                        # The release already owns this event: never resurrect it as pending, but its planning
+                        # projection is still owed, so keep going and deliver it (after an identity check).
+                        if isinstance(event, dict) and event_identity(released) != event_identity(event):
+                            raise ValueError(f"ledger event ID is released with different content: {event_id}")
+                    elif not isinstance(event, dict) or event.get("event-id") != event_id:
+                        # Intents without the authoritative event cannot safely be materialized.
                         failed += 1
                         break
-                    atomic_write_text(fragment, json.dumps(event, indent=2, sort_keys=True))
+                    else:
+                        write_event(root, event)
                 elif isinstance(event, dict):
-                    try:
-                        existing_fragment = json.loads(fragment.read_text(encoding="utf-8"))
-                    except (OSError, json.JSONDecodeError) as exc:
-                        raise ValueError(f"ledger fragment is corrupt: {fragment}") from exc
-                    if existing_fragment != event:
-                        raise ValueError(
-                            f"ledger fragment ID already exists with different content: {event_id}"
-                        )
+                    existing = parse_event_file(path_on_disk, path_on_disk.read_text(encoding="utf-8"))
+                    if event_identity(existing) != event_identity(event):
+                        raise ValueError(f"ledger event ID already exists with different content: {event_id}")
             publisher(
                 event_id,
                 list(record["plan-item-ids"]),
@@ -131,4 +138,4 @@ def drain(project_root: Path, *, publisher: Any | None = None) -> dict[str, int]
     return {"delivered": delivered, "failed": failed}
 
 
-__all__ = ["drain", "enqueue", "fragment_write_lock", "outbox_dir"]
+__all__ = ["drain", "enqueue", "event_write_lock", "outbox_dir"]

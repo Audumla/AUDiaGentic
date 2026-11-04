@@ -2,14 +2,14 @@ type: component
 contract-version: v1
 id: agent-ledger
 display-name: Agent Ledger
-description: Change ledger — fragment recording, sync, audit summaries, and release archiving
+description: Change ledger — per-event records, audit summaries, and release archiving
 lifecycle-observer: audiagentic.components.ledger.ledger_events
 paths:
   ledger-runtime: .audiagentic/runtime/ledger
   sync-dir: .audiagentic/runtime/ledger/sync
   lock-file: lock.json
-  manifest-file: manifest.json
-  fragments-dir: .audiagentic/runtime/ledger/fragments
+  events-dir: docs/releases/events
+  generated-dir: .audiagentic/runtime/ledger/generated
   releases-dir: docs/releases
   current-ledger: CURRENT_RELEASE_LEDGER.ndjson
   historical-ledger: LEDGER.ndjson
@@ -20,7 +20,7 @@ files:
   - path: .audiagentic/runtime/ledger
     lifecycle: runtime-only
     recursive: true
-    description: Ledger fragments and sync state
+    description: Ledger locks, projection outbox and generated summaries
   - path: .audiagentic/skills/ag-ledger/skill.md
     lifecycle: required-managed
     description: ag-ledger skill source
@@ -33,19 +33,19 @@ mcp-servers:
     propagate: providers
     instructions: >
       The ledger is the authoritative release record. Record an event after substantive
-      implementation work; sync pending fragments before a release or audit. The worktree argument selects the git worktree (root path); default: the server's.
+      implementation work; each event is its own tracked file, so concurrent branches never conflict; validate with sync_ledger before a release or audit. The worktree argument selects the git worktree (root path); default: the server's.
     tool-descriptions:
-      record_change_event: "Record one event or a batch (syncs automatically). Keys: change-class, files (list), technical-summary, user-summary-candidate, status=unreleased; optional plan-item-ids."
-      get_current_summary: Return the current release summary markdown.
-      sync_ledger: Merge all pending fragments into the current release ledger.
-      get_audit_report: Regenerate audit and check-in docs; return their paths.
+      record_change_event: "Record one event or a batch (each becomes its own tracked, write-once file under docs/releases/events). Keys: change-class, files (list), technical-summary, user-summary-candidate, status=unreleased; optional plan-item-ids."
+      get_current_summary: Return the current release summary markdown (rendered, not written to a tracked file).
+      sync_ledger: Validate every current ledger source and report the pending event count.
+      get_audit_report: Regenerate the audit and check-in projections (untracked); return their paths.
   - name: ag-ledger-mgmt
     module: audiagentic.components.ledger.ledger_manage_mcp
     direct-tools: [get_ledger_status]
-    description: Ledger component health — installation state and fragment count
+    description: Ledger component health — installation state and event counts
     propagate: audiagentic
     tool-descriptions:
-       get_ledger_status: Return installation state, fragment count, and last sync time.
+       get_ledger_status: Return installation state and the recorded and pending event counts.
 
 contributions:
   - id: agent-ledger/process
