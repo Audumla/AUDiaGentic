@@ -7,7 +7,6 @@ import pytest
 from tests.helpers import sandbox as sandbox_helper
 
 from audiagentic.components.release import release_api
-from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.paths.package import REPO_ROOT
 
 FIXTURES = REPO_ROOT / "docs" / "examples" / "fixtures"
@@ -52,19 +51,6 @@ def test_finalize_appends_once(tmp_path: Path) -> None:
 
         changelog = sandbox.repo / "docs" / "releases" / "CHANGELOG.md"
         assert "rel_001" in changelog.read_text(encoding="utf-8")
-    finally:
-        sandbox.cleanup()
-
-
-def test_finalize_fails_when_the_current_ledger_file_is_missing(tmp_path: Path) -> None:
-    sandbox = sandbox_helper.create(tmp_path, "finalize-empty")
-    try:
-        try:
-            release_api.finalize(sandbox.repo, release_id="rel_002")
-        except AudiaGenticError as exc:
-            assert exc.kind == "release"
-        else:
-            raise AssertionError("expected business-rule error")
     finally:
         sandbox.cleanup()
 

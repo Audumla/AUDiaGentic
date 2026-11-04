@@ -64,14 +64,14 @@ class TestArchiveLedgerLocally:
 
         assert result["release-id"] == "rel_0001"
         assert result["archived-events"] == 1
-        assert result["cleared-current"] is True
 
         historical = project_with_ledger / "docs" / "releases" / "LEDGER.ndjson"
         assert historical.exists()
 
-        current = project_with_ledger / "docs" / "releases" / "CURRENT_RELEASE_LEDGER.ndjson"
-        current_data = json.loads(current.read_text())
-        assert current_data == []
+        # The frozen baseline is never rewritten: a release only adds to the historical ledger, and the
+        # released event is no longer pending because its id is in the historical ledger.
+        from audiagentic.components.ledger.current_events import pending_events
+        assert pending_events(project_with_ledger) == []
 
     def test_appends_to_existing_historical(self, project_with_ledger):
         historical = project_with_ledger / "docs" / "releases" / "LEDGER.ndjson"
@@ -92,12 +92,13 @@ class TestArchiveLedgerLocally:
         assert stored[0]["event-id"] == "evt_old"
         assert stored[1]["event-id"] == "evt_001"
 
-    def test_raises_when_current_ledger_missing(self, tmp_path):
+    def test_a_release_with_no_ledger_events_is_empty_not_an_error(self, tmp_path):
         releases = tmp_path / "docs" / "releases"
         releases.mkdir(parents=True)
 
-        with pytest.raises(Exception):
-            _archive_ledger_locally(tmp_path, "rel_0001")
+        result = _archive_ledger_locally(tmp_path, "rel_0001")
+
+        assert result["empty"] is True and result["released-event-ids"] == []
 
 
 class TestRunBuild:

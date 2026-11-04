@@ -5,12 +5,7 @@ All ledger-specific paths are loaded from the component configuration file
 """
 from __future__ import annotations
 
-import json
-import logging
 from pathlib import Path
-from typing import Any
-
-logger = logging.getLogger(__name__)
 
 # Component config path
 _COMPONENT_CONFIG = ".audiagentic/components/agent-ledger.yaml"
@@ -20,8 +15,8 @@ _DEFAULT_PATHS = {
     "ledger-runtime": ".audiagentic/runtime/ledger",
     "sync-dir": ".audiagentic/runtime/ledger/sync",
     "lock-file": "lock.json",
-    "manifest-file": "manifest.json",
-    "fragments-dir": ".audiagentic/runtime/ledger/fragments",
+    "events-dir": "docs/releases/events",
+    "generated-dir": ".audiagentic/runtime/ledger/generated",
     "releases-dir": "docs/releases",
     "current-ledger": "CURRENT_RELEASE_LEDGER.ndjson",
     "historical-ledger": "LEDGER.ndjson",
@@ -55,14 +50,14 @@ def ledger_lock_path(project_root: Path) -> Path:
     return ledger_sync_dir(project_root) / _load_paths(project_root).get("lock-file", "lock.json")
 
 
-def ledger_manifest_path(project_root: Path) -> Path:
-    """Return .audiagentic/runtime/ledger/sync/manifest.json."""
-    return ledger_sync_dir(project_root) / _load_paths(project_root).get("manifest-file", "manifest.json")
+def ledger_events_dir(project_root: Path) -> Path:
+    """Return docs/releases/events: one tracked, write-once file per recorded event."""
+    return _resolve(project_root, "events-dir")
 
 
-def ledger_fragments_dir(project_root: Path) -> Path:
-    """Return .audiagentic/runtime/ledger/fragments."""
-    return _resolve(project_root, "fragments-dir")
+def ledger_generated_dir(project_root: Path) -> Path:
+    """Return the untracked directory for derived projections (summaries, audit, check-in)."""
+    return _resolve(project_root, "generated-dir")
 
 
 def releases_dir(project_root: Path) -> Path:
@@ -71,7 +66,7 @@ def releases_dir(project_root: Path) -> Path:
 
 
 def current_ledger_path(project_root: Path) -> Path:
-    """Return docs/releases/CURRENT_RELEASE_LEDGER.ndjson."""
+    """Return docs/releases/CURRENT_RELEASE_LEDGER.ndjson: the frozen, read-only legacy baseline."""
     return releases_dir(project_root) / _load_paths(project_root).get("current-ledger", "CURRENT_RELEASE_LEDGER.ndjson")
 
 
@@ -81,32 +76,25 @@ def historical_ledger_path(project_root: Path) -> Path:
 
 
 def current_release_md_path(project_root: Path) -> Path:
-    """Return docs/releases/CURRENT_RELEASE.md."""
+    """Return docs/releases/CURRENT_RELEASE.md: the tracked release document, written only at release finalize."""
     return releases_dir(project_root) / _load_paths(project_root).get("current-summary", "CURRENT_RELEASE.md")
 
 
+def generated_current_summary_path(project_root: Path) -> Path:
+    """Return the untracked current-release summary projection."""
+    return ledger_generated_dir(project_root) / _load_paths(project_root).get("current-summary", "CURRENT_RELEASE.md")
+
+
 def audit_summary_md_path(project_root: Path) -> Path:
-    """Return docs/releases/AUDIT_SUMMARY.md."""
-    return releases_dir(project_root) / _load_paths(project_root).get("audit-summary", "AUDIT_SUMMARY.md")
+    """Return the untracked audit summary projection."""
+    return ledger_generated_dir(project_root) / _load_paths(project_root).get("audit-summary", "AUDIT_SUMMARY.md")
 
 
 def checkin_md_path(project_root: Path) -> Path:
-    """Return docs/releases/CHECKIN.md."""
-    return releases_dir(project_root) / _load_paths(project_root).get("checkin", "CHECKIN.md")
+    """Return the untracked check-in projection."""
+    return ledger_generated_dir(project_root) / _load_paths(project_root).get("checkin", "CHECKIN.md")
 
 
 def ledger_component_marker(project_root: Path) -> Path:
     """Return .audiagentic/components/agent-ledger.yaml."""
     return project_root / _COMPONENT_CONFIG
-
-
-def safe_json_load(path: Path) -> Any:
-    """Load JSON from a file, returning None on any error.
-
-    Logs a warning on failure for observability.
-    """
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        logger.warning("Failed to load JSON from %s: %s", path, exc)
-        return None

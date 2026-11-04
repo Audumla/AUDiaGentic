@@ -8,3 +8,6 @@ CON-ARCHIVE-002: "A historical ledger entry is missing a valid event ID. Repair 
 CON-ARCHIVE-003: "Two ledger records use the same event ID with different content. Resolve the conflict before retrying archival."
 CON-ARCHIVE-004: "An event ID is already assigned to another release. Do not reassign released ledger history."
 CON-ARCHIVE-005: "The release ID is not a safe identifier. Use a short alphanumeric, dot, dash, or underscore value."
+CON-LEDGER-007: "An event file's name is not the SHA-256 of its event-id. Event files are named by digest and must not be renamed or edited; restore the file from git."
+CON-LEDGER-008: "Two ledger sources (the frozen baseline and the event files) hold different content for one event-id. Keep one version and remove the other from git."
+CON-LEDGER-009: "The ledger could not be read at the requested git ref. Check that the ref exists and contains the ledger paths."

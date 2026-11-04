@@ -3,7 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from audiagentic.components.ledger import fragments
+from audiagentic.components.ledger import recorder as fragments
+from audiagentic.components.ledger.current_events import event_file_name
 
 
 def _event() -> dict:
@@ -19,11 +20,11 @@ def _event() -> dict:
     }
 
 
-def test_existing_fragment_republishes_projection(monkeypatch, tmp_path: Path):
-    fragment_dir = tmp_path / ".audiagentic" / "runtime" / "ledger" / "fragments"
-    fragment_dir.mkdir(parents=True)
+def test_existing_event_republishes_projection(monkeypatch, tmp_path: Path):
     event = _event()
-    (fragment_dir / "chg_existing.json").write_text(json.dumps(event), encoding="utf-8")
+    path = tmp_path / "docs" / "releases" / "events" / event_file_name("chg_existing")
+    path.parent.mkdir(parents=True)
+    path.write_text(json.dumps(event), encoding="utf-8")
     published: list[tuple] = []
     monkeypatch.setattr(
         fragments,

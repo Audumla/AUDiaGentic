@@ -21,5 +21,5 @@ Do:
 Do not:
 - never use `git stash`, under any circumstance — this repo is a shared, multi-agent working tree and a stash can silently swallow or collide with another session's live edits; if work needs to be set aside, split it into its own deliberate group or leave it uncommitted and say so
 - do not use destructive git operations (reset --hard, clean -f, checkout/restore discarding edits) as a shortcut to get to a clean tree
-- do not commit generated release artifacts or ledger fragments directly — those are owned by the release and ledger components
+- do not commit generated release artifacts directly — those are owned by the release and ledger components; DO commit the change-event files `record_change_event` wrote under `docs/releases/events/` with the work they describe
 - do not broaden scope beyond the tagged request

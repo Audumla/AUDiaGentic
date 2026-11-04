@@ -5,8 +5,9 @@ files, appends the commit SHA to that event's git-commits list. An event can
 accumulate multiple SHAs if its files were committed in stages — this is
 correct.
 
-Only the current (unreleased) ledger is stamped; the historical ledger holds
-released events, which must not be rewritten.
+Only the tracked files of events this commit introduced are annotated; the
+frozen baseline, the historical ledger, every shared file and every event file
+added by an earlier commit are never rewritten.
 
 Called from post_commit_ledger_hook.sh, not from Python. That shell-only entry
 point is why an importer scan reports this module as unreferenced; it is not.
@@ -17,8 +18,8 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from audiagentic.components.ledger.paths import current_ledger_path
-from audiagentic.foundation.io import atomic_write_ndjson, load_ndjson
+from audiagentic.components.ledger.current_events import event_files_in_tree, event_text
+from audiagentic.foundation.io import atomic_write_text
 
 
 def _get_head_sha(project_root: Path) -> str | None:
@@ -29,6 +30,17 @@ def _get_head_sha(project_root: Path) -> str | None:
         text=True,
     )
     return result.stdout.strip() if result.returncode == 0 else None
+
+
+def _events_added_by_head(project_root: Path) -> set[str]:
+    """Names of event files this commit introduced (a stamp never rewrites an older, already shared event file)."""
+    result = subprocess.run(
+        ["git", "diff-tree", "--no-commit-id", "--name-only", "--diff-filter=A", "-r", "HEAD"],
+        cwd=project_root, capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        return set()
+    return {Path(line.strip()).name for line in result.stdout.splitlines() if line.strip().endswith(".json")}
 
 
 def _get_committed_files(project_root: Path) -> set[str]:
@@ -65,27 +77,17 @@ def stamp_ledger_for_commit(project_root: Path) -> dict[str, list[str]]:
     if not committed_files:
         return {}
 
-    ledger_path = current_ledger_path(project_root)
-    if not ledger_path.exists():
-        return {}
-
-    entries = load_ndjson(ledger_path)
-    if not entries:
-        return {}
-
+    # Annotate only the events' own files: the frozen baseline and any shared file are never rewritten.
     stamped: list[str] = []
-    for entry in entries:
-        if not set(entry.get("files") or []).intersection(committed_files):
+    introduced = _events_added_by_head(project_root)
+    for path, event in event_files_in_tree(project_root):
+        if path.name not in introduced or not set(event.get("files") or []).intersection(committed_files):
             continue
-        commits: list[str] = list(entry.get("git-commits") or [])
+        commits: list[str] = list(event.get("git-commits") or [])
         if sha in commits:
             continue
         commits.append(sha)
-        entry["git-commits"] = commits
-        stamped.append(entry.get("event-id"))
+        atomic_write_text(path, event_text({**event, "git-commits": commits}))
+        stamped.append(event["event-id"])
 
-    if not stamped:
-        return {}
-
-    atomic_write_ndjson(ledger_path, entries)
-    return {sha: stamped}
+    return {sha: stamped} if stamped else {}

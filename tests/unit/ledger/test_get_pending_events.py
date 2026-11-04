@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -51,7 +52,7 @@ def seeded(tmp_path: Path) -> list[str]:
         },
     ]
     for event in events:
-        ledger_api.record_change(tmp_path, event, sync=True)
+        ledger_api.record_change(tmp_path, event)
     return [e["event-id"] for e in events]
 
 
@@ -108,7 +109,7 @@ def test_files_clustering(tmp_path: Path):
         },
     ]
     for event in events:
-        ledger_api.record_change(tmp_path, event, sync=True)
+        ledger_api.record_change(tmp_path, event)
 
     result = ledger_api.get_pending_events(tmp_path, group_by="files")
 
@@ -140,34 +141,21 @@ def test_flat_mode(seeded: list[str], tmp_path: Path):
 
 
 def test_released_events_excluded(tmp_path: Path):
-    """Only unreleased events appear in pending results."""
-    ledger_api.record_change(
-        tmp_path,
-        {
-            "event-id": "chg_pending",
-            "change-class": "feature",
-            "technical-summary": "pending event",
-            "user-summary-candidate": "pending",
-            "plan-item-ids": ["X01"],
-            "files": ["src/x.py"],
-            "status": "unreleased",
-        },
-        sync=True,
-    )
-    ledger_api.record_change(
-        tmp_path,
-        {
-            "event-id": "chg_released",
-            "change-class": "feature",
-            "technical-summary": "released event",
-            "user-summary-candidate": "released",
-            "plan-item-ids": ["X01"],
-            "files": ["src/y.py"],
-            "status": "released",
-            "release-id": "rel_existing",
-        },
-        sync=True,
-    )
+    """Only events absent from the historical ledger are pending."""
+    event = {
+        "change-class": "feature",
+        "plan-item-ids": ["X01"],
+        "status": "unreleased",
+    }
+    ledger_api.record_change(tmp_path, {
+        **event, "event-id": "chg_pending", "technical-summary": "pending event",
+        "user-summary-candidate": "pending", "files": ["src/x.py"]})
+    released = {**event, "event-id": "chg_released", "technical-summary": "released event",
+                "user-summary-candidate": "released", "files": ["src/y.py"]}
+    ledger_api.record_change(tmp_path, released)
+    historical = tmp_path / "docs" / "releases" / "LEDGER.ndjson"
+    historical.write_text(
+        json.dumps({**released, "status": "released", "release-id": "rel_existing"}) + "\n", encoding="utf-8")
 
     result = ledger_api.get_pending_events(tmp_path, group_by="flat")
     assert len(result["events"]) == 1

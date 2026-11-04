@@ -19,8 +19,9 @@ from audiagentic.components.ledger.audit import generate_audit_and_checkin  # no
 from audiagentic.components.ledger.current_summary import (
     regenerate_current_release,  # noqa: E402
 )
-from audiagentic.components.ledger.fragments import record_change_event  # noqa: E402
-from audiagentic.components.ledger.sync import sync_current_release_ledger  # noqa: E402
+from audiagentic.components.ledger.recorder import record_change_event  # noqa: E402
+from audiagentic.components.ledger.current_events import pending_events  # noqa: E402
+from audiagentic.components.ledger.sync import check_current_ledger  # noqa: E402
 from audiagentic.components.release import release_api  # noqa: E402
 
 FIXTURES = ROOT / "docs" / "examples" / "fixtures"
@@ -41,15 +42,14 @@ def test_end_to_end_release_flow(tmp_path: Path) -> None:
         record_change_event(sandbox.repo, _load_event("chg_001", "Add A"))
         record_change_event(sandbox.repo, _load_event("chg_002", "Fix B"))
 
-        sync_current_release_ledger(sandbox.repo)
+        check_current_ledger(sandbox.repo)
         regenerate_current_release(sandbox.repo)
         generate_audit_and_checkin(sandbox.repo)
 
-        current_ledger = sandbox.repo / "docs" / "releases" / "CURRENT_RELEASE_LEDGER.ndjson"
         historical = sandbox.repo / "docs" / "releases" / "LEDGER.ndjson"
         historical_events = [
             {**event, "status": "released", "release-id": "rel_e2e"}
-            for event in (json.loads(line) for line in current_ledger.read_text(encoding="utf-8").splitlines() if line.strip())
+            for event in pending_events(sandbox.repo)
         ]
         historical.write_text("\n".join(json.dumps(event) for event in historical_events) + "\n", encoding="utf-8")
 

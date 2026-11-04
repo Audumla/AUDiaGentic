@@ -6,7 +6,7 @@ from typing import Any
 
 from audiagentic.components.ledger.audit import generate_audit_and_checkin
 from audiagentic.components.ledger.current_summary import regenerate_current_release
-from audiagentic.components.ledger.sync import sync_current_release_ledger
+from audiagentic.components.ledger.sync import check_current_ledger
 from audiagentic.foundation.components.ids import COMPONENT_PROJECT
 from audiagentic.foundation.io import load_yaml_file, save_yaml_file
 from audiagentic.foundation.lifecycle.baseline_sync import (
@@ -44,7 +44,7 @@ def bootstrap_ledger(project_root: Path) -> dict[str, Any]:
     }
     save_yaml_file(marker_path, updated_marker, sort_keys=True)
 
-    sync_result = sync_current_release_ledger(project_root)
+    check = check_current_ledger(project_root)
     summary_path = regenerate_current_release(project_root)
     audit_path, checkin_path = generate_audit_and_checkin(project_root)
 
@@ -55,7 +55,7 @@ def bootstrap_ledger(project_root: Path) -> dict[str, Any]:
         "created-files": created_files,
         "baseline-sync-report": sync_report,
         "marker-path": str(marker_path),
-        "synced-fragments": sync_result.fragment_count,
+        "pending-events": check.pending_count,
         "current-release-path": str(summary_path),
         "audit-path": str(audit_path),
         "checkin-path": str(checkin_path),

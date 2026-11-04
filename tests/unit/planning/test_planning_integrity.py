@@ -6,8 +6,10 @@ from pathlib import Path
 import pytest
 
 from audiagentic.components.ledger import archive as ledger_archive
+from audiagentic.components.ledger import current_events as ledger_events
 from audiagentic.components.ledger import event_outbox as ledger_outbox
-from audiagentic.components.ledger import fragments as ledger_fragments
+from audiagentic.components.ledger import paths as ledger_paths
+from audiagentic.components.ledger import recorder as ledger_recorder
 from audiagentic.components.ledger import sync as ledger_sync
 from audiagentic.components.planning import durability, integrity, item_store, planning_api
 from audiagentic.components.planning import events as planning_events
@@ -109,7 +111,7 @@ def test_runtime_roots_reject_ancestor_symlink_escape(tmp_path: Path) -> None:
     with pytest.raises(AudiaGenticError):
         item_store._lock_path(project, "item-TST01")
     with pytest.raises(AudiaGenticError):
-        ledger_fragments._fragment_dir(project)
+        ledger_paths.ledger_generated_dir(project)
 
 
 def test_ledger_projection_failure_remains_retryable(tmp_path: Path) -> None:
@@ -174,16 +176,16 @@ def test_manifestless_staging_is_discarded_on_reconciliation(tmp_path: Path, mon
     assert not legacy.exists()
 
 
-def test_ledger_projection_intent_precedes_fragment_and_waits_for_fragment(tmp_path: Path, monkeypatch) -> None:
-    from audiagentic.components.ledger import fragments
+def test_ledger_projection_intent_precedes_the_event_file_and_waits_for_it(tmp_path: Path, monkeypatch) -> None:
+    from audiagentic.components.ledger import recorder as fragments
 
-    real_write = fragments.atomic_write_text
+    real_write = ledger_events.atomic_write_text
 
-    def crash_fragment_write(*args, **kwargs):
-        raise RuntimeError("simulated fragment termination")
+    def crash_event_write(*args, **kwargs):
+        raise RuntimeError("simulated event-file termination")
 
-    monkeypatch.setattr(fragments, "atomic_write_text", crash_fragment_write)
-    with pytest.raises(RuntimeError, match="fragment termination"):
+    monkeypatch.setattr(ledger_events, "atomic_write_text", crash_event_write)
+    with pytest.raises(RuntimeError, match="event-file termination"):
         fragments.record_change_event(
             tmp_path,
             {
@@ -196,10 +198,12 @@ def test_ledger_projection_intent_precedes_fragment_and_waits_for_fragment(tmp_p
             },
         )
     assert list(ledger_outbox.outbox_dir(tmp_path).glob("*.json"))
+    event_file = ledger_events.event_path(tmp_path, next(ledger_outbox.outbox_dir(tmp_path).glob("*.json")).stem)
+    assert not event_file.exists()
+    monkeypatch.setattr(ledger_events, "atomic_write_text", real_write)
+    # The drain materializes the event file from the outbox payload, but cannot deliver until the item exists.
     assert ledger_outbox.drain(tmp_path) == {"delivered": 0, "failed": 1}
-    fragment = ledger_fragments._fragment_dir(tmp_path) / f"{next(ledger_outbox.outbox_dir(tmp_path).glob('*.json')).stem}.json"
-    assert fragment.exists()
-    monkeypatch.setattr(fragments, "atomic_write_text", real_write)
+    assert event_file.exists()
     _item(tmp_path)
     assert ledger_outbox.drain(tmp_path) == {"delivered": 1, "failed": 0}
 
@@ -400,7 +404,7 @@ def test_ledger_projection_reconciles_pending_planning_journal_first(tmp_path: P
 
 def test_ledger_projection_drains_after_fragment_lock_is_released(tmp_path: Path) -> None:
     _item(tmp_path)
-    result = ledger_fragments.record_change_event(
+    result = ledger_recorder.record_change_event(
         tmp_path,
         {
             "event-id": "chg_immediate_projection",
@@ -419,7 +423,7 @@ def test_ledger_projection_drains_after_fragment_lock_is_released(tmp_path: Path
     assert "- chg_immediate_projection" in item_path.read_text(encoding="utf-8")
 
 
-def test_sync_drains_authoritative_ledger_outbox_before_consuming_fragments(tmp_path: Path) -> None:
+def test_check_drains_authoritative_ledger_outbox_before_counting_events(tmp_path: Path) -> None:
     _item(tmp_path)
     event = {
         "event-id": "chg_sync_recovery",
@@ -432,10 +436,10 @@ def test_sync_drains_authoritative_ledger_outbox_before_consuming_fragments(tmp_
     }
     ledger_outbox.enqueue(tmp_path, event["event-id"], ["TST01"], event=event)
 
-    result = ledger_sync.sync_current_release_ledger(tmp_path)
+    result = ledger_sync.check_current_ledger(tmp_path)
 
-    assert result.fragment_count == 1
-    assert event["event-id"] in (tmp_path / "docs" / "releases" / "CURRENT_RELEASE_LEDGER.ndjson").read_text(encoding="utf-8")
+    assert result.pending_count == 1
+    assert ledger_events.event_path(tmp_path, event["event-id"]).is_file()
     assert not list(ledger_outbox.outbox_dir(tmp_path).glob("*.json"))
 
 
@@ -486,7 +490,7 @@ def test_fragment_creation_same_id_different_content_is_serialized(tmp_path: Pat
 
     def record(summary: str):
         try:
-            ledger_fragments.record_change_event(
+            ledger_recorder.record_change_event(
                 tmp_path,
                 {
                     "event-id": "chg_fragment_concurrent",
