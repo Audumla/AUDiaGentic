@@ -1241,23 +1241,29 @@ def test_project_capacity_still_serializes_same_project(tmp_path: Path):
     assert manager.wait(project, second["request-id"], timeout_seconds=5)["state"] == "completed"
 
 
-def test_project_capacity_is_shared_across_profile_lanes(tmp_path: Path):
+def test_project_capacity_is_per_profile_definition(tmp_path: Path):
+    """Two definitions of one backend (two accounts) each get their own per-project allowance."""
     manager = queue_mod.GatewayQueueManager()
     project = tmp_path / "project"
     project.mkdir()
     hold = threading.Event()
-    started = threading.Event()
-    runner = _blocking_runner(hold, started)
+    started: dict[str, threading.Event] = {}
     params = {"global-capacity": "unlimited", "project-capacity": 1}
 
-    first = _submit(manager, project, "profile-a", params, runner)
-    assert started.wait(timeout=2)
-    second = _submit(manager, project, "profile-b", params, runner)
-    assert manager.queue_depth("profile-b")["pending"] == 1
+    def runner_for(name: str):
+        started[name] = threading.Event()
+        return _blocking_runner(hold, started[name])
+
+    first = _submit(manager, project, "profile-a", params, runner_for("a1"))
+    assert started["a1"].wait(timeout=2)
+    same = _submit(manager, project, "profile-a", params, runner_for("a2"))
+    other = _submit(manager, project, "profile-b", params, runner_for("b1"))
+    assert started["b1"].wait(timeout=2)  # a different definition is not held by profile-a's allowance
+    assert not started["a2"].is_set()  # the same definition is held to its own allowance of one
 
     hold.set()
-    assert manager.wait(project, first["request-id"], timeout_seconds=5)["state"] == "completed"
-    assert manager.wait(project, second["request-id"], timeout_seconds=5)["state"] == "completed"
+    for result in (first, same, other):
+        assert manager.wait(project, result["request-id"], timeout_seconds=5)["state"] == "completed"
 
 
 def test_invalid_capacity_rejects_admitted_record_instead_of_stranding_it(tmp_path: Path):

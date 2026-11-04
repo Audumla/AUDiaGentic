@@ -16,6 +16,7 @@ native effects; a future NodeRunner must enforce the owner/auth/occupancy gate.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import math
 import threading
@@ -470,6 +471,13 @@ class NodeQueuedDispatch:
 QueuedEntry = QueuedDispatch | NodeQueuedDispatch
 
 
+def _pending_lane(entry: QueuedEntry) -> tuple[str, str]:
+    """The FIFO lane of a pending entry: one profile definition within one project, so a backed-up definition
+    (for example one account at its limit) never holds back another definition's requests. A tuple, so no
+    profile id or project path can collide with another pair."""
+    return (_entry_profile_identity(entry).profile_id, entry.project_key)
+
+
 def _entry_profile_identity(entry: QueuedEntry) -> ProfileGenerationIdentity:
     policy = entry.policy if isinstance(entry, NodeQueuedDispatch) else entry.snapshot
     return ProfileGenerationIdentity(policy.profile_id, policy.generation, policy.config_digest)
@@ -743,6 +751,7 @@ class GatewayQueueManager:
             if not queue_full:
                 self._pending_authority.enqueue(
                     request_id=entry.request_id, project_key=entry.project_key, value=entry,
+                    lane=_pending_lane(entry),
                 )
         if queue_full:
             rejected = store.transition_record(root, entry.request_id, "rejected", updates={
@@ -809,6 +818,7 @@ class GatewayQueueManager:
                 return current
             self._pending_authority.enqueue(
                 request_id=entry.request_id, project_key=entry.project_key, value=entry,
+                lane=_pending_lane(entry),
             )
         self._drain_all()
         return store.read_record(root, entry.request_id)
@@ -983,6 +993,7 @@ class GatewayQueueManager:
                     request_id=entry.request_id,
                     project_key=entry.project_key,
                     value=entry,
+                    lane=_pending_lane(entry),
                 )
                 pending_count = self._pending_authority.count(
                     lambda request: (
@@ -1284,6 +1295,7 @@ class GatewayQueueManager:
                 request_id=entry.request_id,
                 project_key=entry.project_key,
                 value=entry,
+                lane=_pending_lane(entry),
             )
         self._drain_all()
 
@@ -1419,7 +1431,11 @@ class GatewayQueueManager:
         if bool(limits["global-explicit"]) and limits["global"] is not None:
             keys.append(("global", int(limits["global"])))
         if limits["project"] is not None:
-            keys.append((f"project:{entry.project_key}", int(limits["project"])))
+            # Per profile definition: two definitions of one backend (for example two accounts) each get their own
+            # per-project allowance. The stable profile id (never the generation) is part of the key, and the pair is
+            # JSON-encoded so no id or path can collide with another pair.
+            profile_id = (entry.policy if isinstance(entry, NodeQueuedDispatch) else entry.snapshot).profile_id
+            keys.append((f"project:{json.dumps([profile_id, entry.project_key])}", int(limits["project"])))
         return limits, keys
 
     def _try_reserve_specific_source(

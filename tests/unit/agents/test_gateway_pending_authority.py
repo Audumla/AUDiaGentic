@@ -40,3 +40,69 @@ def test_pending_authority_cancellation_clears_index_and_keeps_fifo() -> None:
     next_request = pending.claim_next(lambda _: True)
     assert next_request is not None and next_request.request_id == "a-2"
     assert pending.depths() == {}
+
+
+def test_a_blocked_head_in_one_lane_does_not_hold_back_another_lane_of_the_same_project() -> None:
+    pending: PendingAuthority[str] = PendingAuthority()
+    pending.enqueue(request_id="a-1", project_key="project", value="blocked", lane="account-a|project")
+    pending.enqueue(request_id="b-1", project_key="project", value="ready", lane="account-b|project")
+
+    claimed = pending.claim_next(lambda request: request.value == "ready")
+    assert claimed is not None and claimed.request_id == "b-1"
+    assert pending.count(lambda request: request.project_key == "project") == 1  # counting stays per project
+
+
+def test_structured_lanes_cannot_collide_across_projects_or_profiles() -> None:
+    pending: PendingAuthority[str] = PendingAuthority()
+    # A string join of these two pairs would be identical ("a|b|c"); as tuples they are distinct lanes.
+    pending.enqueue(request_id="x", project_key="b|c", value="x", lane=("a", "b|c"))
+    pending.enqueue(request_id="y", project_key="c", value="y", lane=("a|b", "c"))
+
+    assert pending.depths() == {"b|c": 1, "c": 1}
+    assert pending.claim_next(lambda request: request.value == "y").request_id == "y"  # type: ignore[union-attr]
+    assert pending.remove("x") is not None and pending.depths() == {}
+
+
+def test_depths_aggregate_all_lanes_of_a_project() -> None:
+    pending: PendingAuthority[str] = PendingAuthority()
+    pending.enqueue(request_id="a-1", project_key="p", value="1", lane=("one", "p"))
+    pending.enqueue(request_id="a-2", project_key="p", value="2", lane=("two", "p"))
+    pending.enqueue(request_id="q-1", project_key="q", value="3", lane=("one", "q"))
+
+    assert pending.depths() == {"p": 2, "q": 1}
+
+
+def test_cancelling_the_last_request_of_a_lane_leaves_other_lanes_and_projects_served() -> None:
+    pending: PendingAuthority[str] = PendingAuthority()
+    pending.enqueue(request_id="a-1", project_key="p", value="1", lane=("one", "p"))
+    pending.enqueue(request_id="a-2", project_key="p", value="2", lane=("two", "p"))
+    pending.enqueue(request_id="q-1", project_key="q", value="3", lane=("one", "q"))
+
+    assert pending.remove("a-1") is not None
+    assert [head.request_id for head in pending.candidates()] == ["a-2", "q-1"]
+    assert pending.remove("a-2") is not None
+    assert [head.request_id for head in pending.candidates()] == ["q-1"]
+
+
+def test_projects_rotate_fairly_while_blocked_and_eligible_lanes_share_a_project() -> None:
+    pending: PendingAuthority[str] = PendingAuthority()
+    for index in range(2):
+        pending.enqueue(request_id=f"p-blocked-{index}", project_key="p", value="blocked", lane=("one", "p"))
+        pending.enqueue(request_id=f"p-ready-{index}", project_key="p", value="ready", lane=("two", "p"))
+        pending.enqueue(request_id=f"q-ready-{index}", project_key="q", value="ready", lane=("one", "q"))
+
+    claimed = [pending.claim_next(lambda request: request.value == "ready").request_id for _ in range(4)]  # type: ignore[union-attr]
+    # Projects alternate; the blocked lane's heads are never taken and never stop the project's other lane.
+    assert claimed == ["p-ready-0", "q-ready-0", "p-ready-1", "q-ready-1"]
+    assert pending.depths() == {"p": 2}
+
+
+def test_a_replenished_lane_cannot_overtake_an_older_eligible_head_of_another_lane() -> None:
+    pending: PendingAuthority[str] = PendingAuthority()
+    pending.enqueue(request_id="old", project_key="p", value="x", lane=("one", "p"))
+    pending.enqueue(request_id="busy-1", project_key="p", value="x", lane=("two", "p"))
+    order = []
+    for index in range(3):
+        order.append(pending.claim_next(lambda _: True).request_id)  # type: ignore[union-attr]
+        pending.enqueue(request_id=f"busy-{index + 2}", project_key="p", value="x", lane=("two", "p"))
+    assert order[0] == "old" and order[1] == "busy-1" and order[2] == "busy-2"  # strictly oldest-head first

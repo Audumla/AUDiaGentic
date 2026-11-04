@@ -123,10 +123,13 @@ defaulting) — resolved via `agents_gateway_queue.resolve_*` / `agents_gateway_
 - `global-capacity` (int or `unlimited`, optional) — explicit gateway-wide overlay;
   when omitted, legacy `virtual-capacity`/`max-concurrency` behavior remains.
 - `project-capacity` (int or `unlimited`, optional) — active turns allowed per
-  canonical project root. Missing means unlimited.
+  canonical project root **for this profile definition**: two definitions of one
+  backend (for example one per account) each get their own allowance. Missing means unlimited.
 - Persistent sessions have no configurable capacity dimension. The queue keeps
   one in-flight turn per durable session for correctness, while
-  `project-capacity` limits active provider tasks for the canonical project.
+  `project-capacity` limits active provider tasks for the canonical project and profile definition.
+  A reload that changes the value keeps counting only through generations that set a finite limit; a generation
+  with `unlimited` holds no slot, so work it already started is not counted against a newly set limit.
 - `retry-count` (int, default 1) — additional attempts after a transient failure, per profile.
 - `session-turn-timeout-seconds` (number, default 0 = disabled) — optional
   explicit absolute deadline for one session turn. Activity observations do
