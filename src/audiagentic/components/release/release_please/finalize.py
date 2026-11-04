@@ -4,12 +4,14 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from audiagentic.components.ledger.ledger_api import release_events
-from audiagentic.components.ledger.validation import load_persisted_events
+from audiagentic.components.ledger.ledger_api import (
+    historical_ledger_file,
+    release_events,
+    released_ledger,
+    releases_directory,
+)
 from audiagentic.foundation.contracts.errors import make_error
 from audiagentic.foundation.io import atomic_write_text
-
-_RELEASES_DIR = ("docs", "releases")
 
 
 def render_release_docs(
@@ -18,8 +20,8 @@ def render_release_docs(
     released_event_ids: list[str] | None = None,
 ) -> dict[str, Any]:
     """Render CHANGELOG.md, RELEASE_NOTES.md, VERSION_HISTORY.md from LEDGER.ndjson."""
-    releases = project_root.joinpath(*_RELEASES_DIR)
-    historical_path = releases / "LEDGER.ndjson"
+    releases = releases_directory(project_root)
+    historical_path = historical_ledger_file(project_root)
     if not historical_path.exists():
         raise make_error(
             prefix="VAL", component="release", number=3,
@@ -27,7 +29,7 @@ def render_release_docs(
             message="LEDGER.ndjson not found — ledger may not have been archived",
             details={"path": str(historical_path)},
         )
-    events = load_persisted_events(historical_path, role="historical")
+    events = released_ledger(project_root)
     selected = release_events(events, release_id, released_event_ids)
     labels = {
         "feature": "Features", "code-fix": "Fixes", "refactor": "Improvements",

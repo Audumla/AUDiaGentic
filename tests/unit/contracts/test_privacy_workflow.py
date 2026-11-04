@@ -46,7 +46,7 @@ def test_release_and_ledger_pr_statuses_require_real_exact_head_scans():
 # trigger CI, so release automation must report each one itself, on the exact commit it validated.
 REQUIRED_CONTEXTS = ("privacy", "tests")
 LEDGER_ARTIFACTS = (
-    "docs/releases/LEDGER.ndjson", "docs/releases/CURRENT_RELEASE_LEDGER.ndjson", "docs/releases/RELEASE_NOTES.md",
+    "docs/releases/LEDGER.ndjson", "docs/releases/RELEASE_NOTES.md",
     "docs/releases/VERSION_HISTORY.md", "docs/releases/CURRENT_RELEASE.md",
 )
 
@@ -66,8 +66,12 @@ def test_ledger_pr_reports_every_required_context_only_after_proving_it_is_gener
     workflow = yaml.safe_load((ROOT / '.github/workflows/release.yml').read_text())
     step = next(s for s in workflow['jobs']['finalize-ledger']['steps'] if s.get('name') == 'Commit release artifacts')
     script = step['run']
-    for artifact in LEDGER_ARTIFACTS:  # the same five files are staged and allow-listed
+    for artifact in LEDGER_ARTIFACTS:  # the same four files are staged and allow-listed
         assert script.count(artifact) >= 2, artifact
+    # Finalize releases by event id and writes only LEDGER.ndjson: the frozen baseline and the event files are
+    # never staged, so the release commit cannot conflict with a branch that records a new event.
+    assert 'CURRENT_RELEASE_LEDGER' not in script and 'docs/releases/events' not in script
+    assert 'if [ -e "$artifact" ]; then git add "$artifact"; fi' in script  # an empty first release has no ledger file
     guard = script.index('unexpected=$(')
     assert script.index('python tools/privacy_guard.py --base') < guard < script.index('git push')
     assert 'exit 1' in script[guard:script.index('git push')]

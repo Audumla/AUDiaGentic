@@ -10,6 +10,7 @@ from typing import Any
 
 from audiagentic.components.ledger.archive import archive_current_ledger
 from audiagentic.components.ledger.audit import generate_audit_and_checkin
+from audiagentic.components.ledger.conversion import convert_baseline_appends
 from audiagentic.components.ledger.current_events import (
     iter_events,
     pending_events,
@@ -17,12 +18,15 @@ from audiagentic.components.ledger.current_events import (
 )
 from audiagentic.components.ledger.current_summary import regenerate_current_release
 from audiagentic.components.ledger.paths import (
+    historical_ledger_path,
     ledger_component_marker,
     ledger_events_dir,
     ledger_generated_dir,
+    releases_dir,
 )
 from audiagentic.components.ledger.recorder import record_change_event as _record
 from audiagentic.components.ledger.sync import check_current_ledger
+from audiagentic.components.ledger.validation import load_persisted_events
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 
@@ -52,7 +56,12 @@ def get_current_summary(project_root: Path) -> str:
 def sync(project_root: Path) -> dict[str, Any]:
     """Validate every current ledger source through the one loader and report the pending count."""
     result = check_current_ledger(project_root)
-    return {"pending-count": result.pending_count, "migrated-legacy-events": result.migrated, "warning": result.warning}
+    return {
+        "pending-count": result.pending_count,
+        "migrated-legacy-events": result.migrated,
+        "legacy-left-in-place": list(result.left_in_place),
+        "warning": result.warning,
+    }
 
 
 def generate_audit(project_root: Path) -> dict[str, Any]:
@@ -72,6 +81,20 @@ def archive_current(project_root: Path, release_id: str) -> dict[str, Any]:
 def archive_for_release(project_root: Path, release_id: str) -> dict[str, Any]:
     """Release every pending event under ``release_id`` (idempotent), writing only the historical ledger."""
     return archive_current_ledger(project_root, release_id)
+
+
+def released_ledger(project_root: Path) -> list[dict[str, Any]]:
+    """The validated historical ledger (released events), through the configured historical path."""
+    return load_persisted_events(historical_ledger_path(project_root), role="historical")
+
+
+def releases_directory(project_root: Path) -> Path:
+    """The configured directory release documents are written to."""
+    return releases_dir(project_root)
+
+
+def historical_ledger_file(project_root: Path) -> Path:
+    return historical_ledger_path(project_root)
 
 
 def release_events(
@@ -218,6 +241,11 @@ def get_fragment(event_id: str, project_root: Path) -> dict[str, Any]:
         message=f"no event found with id '{event_id}'",
         details={"event-id": event_id},
     )
+
+
+def convert_legacy_baseline(project_root: Path, base_ref: str = "origin/main") -> dict[str, Any]:
+    """Move rows a branch appended to the frozen baseline into per-event files and restore the baseline."""
+    return convert_baseline_appends(project_root, base_ref)
 
 
 def plan_item_events(project_root: Path, item_id: str) -> list[dict[str, Any]]:

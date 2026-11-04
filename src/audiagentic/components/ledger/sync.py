@@ -21,6 +21,7 @@ class SyncResult:
     pending_count: int
     warning: str | None
     migrated: int = 0
+    left_in_place: tuple[str, ...] = ()
 
 
 def _acquire_lock(project_root: Path) -> tuple[StartupLock, str | None]:
@@ -60,5 +61,8 @@ def check_current_ledger(project_root: Path) -> SyncResult:
     from audiagentic.components.ledger.legacy_runtime import migrate_legacy_runtime
 
     with ledger_write_lock(project_root) as warning:
-        migrated = migrate_legacy_runtime(project_root)["migrated"]
-        return SyncResult(pending_count=len(pending_events(project_root)), warning=warning, migrated=migrated)
+        migration = migrate_legacy_runtime(project_root)
+        return SyncResult(
+            pending_count=len(pending_events(project_root)), warning=warning,
+            migrated=migration["migrated"], left_in_place=tuple(migration["left-in-place"]),
+        )

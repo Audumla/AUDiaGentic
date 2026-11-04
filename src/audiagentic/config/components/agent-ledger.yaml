@@ -42,11 +42,13 @@ mcp-servers:
       get_audit_report: Regenerate the audit and check-in projections (untracked); return their paths.
   - name: ag-ledger-mgmt
     module: audiagentic.components.ledger.ledger_manage_mcp
-    direct-tools: [get_ledger_status]
+    worktree-scoped: true
+    direct-tools: [get_ledger_status, convert_legacy_ledger]
     description: Ledger component health — installation state and event counts
     propagate: audiagentic
     tool-descriptions:
        get_ledger_status: Return installation state and the recorded and pending event counts.
+       convert_legacy_ledger: Move rows this branch appended to the frozen CURRENT_RELEASE_LEDGER.ndjson since base_ref into per-event files and restore the baseline (use after rebasing an older branch).
 
 contributions:
   - id: agent-ledger/process
