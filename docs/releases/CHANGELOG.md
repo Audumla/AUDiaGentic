@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.95.0](https://github.com/Audumla/AUDiaGentic/compare/v0.94.1...v0.95.0) (2026-11-04)
+
+
+### Features
+
+* **ledger:** per-event tracked ledger store; no shared append file (LE03 slice 1) ([#443](https://github.com/Audumla/AUDiaGentic/issues/443)) ([3bbded3](https://github.com/Audumla/AUDiaGentic/commit/3bbded38303a49728ea97119971f27fae5370e58))
+
 ## [0.94.1](https://github.com/Audumla/AUDiaGentic/compare/v0.94.0...v0.94.1) (2026-11-04)
 
 
