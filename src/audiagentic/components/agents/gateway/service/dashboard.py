@@ -98,15 +98,17 @@ def dashboard_snapshot(
     from audiagentic.components.agents.gateway import api
     from audiagentic.components.agents.gateway.service.dashboard_images import (
         image_path,
+        project_group_image_id,
         project_image_id,
     )
     from audiagentic.components.agents.gateway.service.known_projects import load_known_projects
     from audiagentic.components.agents.gateway.session.sessions import peek_session_runtime
+    from audiagentic.components.project.project_api import project_id, resolve_project_name
 
     registry = load_known_projects(service_root / "known-projects.json")
     runtime = peek_session_runtime()
     live = runtime.session_snapshot_all() if runtime is not None else {}
-    projects: list[dict[str, Any]] = []
+    grouped_projects: dict[str, dict[str, Any]] = {}
     failures: list[dict[str, Any]] = []
     requests: list[dict[str, Any]] = []
     effective_window = _valid_override(recent_seconds)
@@ -119,6 +121,23 @@ def dashboard_snapshot(
         root = known.project_root
         if not root.exists():
             continue
+        logical_id = project_id(root)[0]
+        display_name = resolve_project_name(root)
+        project = grouped_projects.get(logical_id)
+        if project is None:
+            avatar_id = project_group_image_id(logical_id)
+            avatar_file = image_path(service_root, avatar_id)
+            project = {
+                "name": display_name,
+                "project-id": avatar_id,
+                "image-version": str(avatar_file.stat().st_mtime_ns) if avatar_file.is_file() else "",
+                "config-status": known.config_status,
+                "last-seen-at": known.last_seen_at.isoformat(),
+                "queues": {},
+                "sessions": [],
+                "requests": [],
+            }
+            grouped_projects[logical_id] = project
         # The MCP list operation is deliberately the compact V4 task-status
         # projection.  The dashboard has its own bounded operator projection
         # so request identity, lifecycle, and live activity evidence remain
@@ -139,6 +158,7 @@ def dashboard_snapshot(
         owning_project_id = project_image_id(root)
         for session_row in all_session_rows:
             session_row["project-id"] = owning_project_id
+            session_row["worktree"] = root.name
             if session_row["session-id"] in caller_titles:
                 session_row["provider-chat-title"] = caller_titles[session_row["session-id"]]
         # Keep active/non-terminal sessions ahead of closed history.  The
@@ -158,32 +178,37 @@ def dashboard_snapshot(
         )
         for request_row in all_request_rows:
             request_row["project-id"] = owning_project_id
+            request_row["worktree"] = root.name
         request_rows = [row for row in all_request_rows if _is_visible_in_window(row, cutoff)]
         recent_request_ids = {row.get("session-id") for row in request_rows}
         session_rows = [
             row for row in all_session_rows
             if _is_visible_in_window(row, cutoff) or row.get("session-id") in recent_request_ids
         ]
-        requests.extend({**row, "project": root.name} for row in request_rows)
+        requests.extend({**row, "project": display_name} for row in request_rows)
         failures.extend(
-            {**row, "project": root.name}
+            {**row, "project": display_name}
             for row in request_rows
             if row["state"] in _FAILED_REQUEST_STATES
         )
-        projects.append(
-            {
-                "name": root.name,
-                "project-id": project_image_id(root),
-                "image-version": str(image_path(service_root, project_image_id(root)).stat().st_mtime_ns) if image_path(service_root, project_image_id(root)).is_file() else "",
-                "config-status": known.config_status,
-                "last-seen-at": known.last_seen_at.isoformat(),
-                "queues": api.get_queue_manager().project_queue_depths(root),
-                "sessions": session_rows,
-                "requests": request_rows,
-            }
-        )
+        project["sessions"].extend(session_rows)
+        project["requests"].extend(request_rows)
+        project["last-seen-at"] = max(project["last-seen-at"], known.last_seen_at.isoformat())
+        status_rank = {"compatible": 0, "unknown": 1, "incompatible": 2}
+        if status_rank.get(known.config_status, 1) > status_rank.get(project["config-status"], 1):
+            project["config-status"] = known.config_status
+        for profile, depth in api.get_queue_manager().project_queue_depths(root).items():
+            totals = project["queues"].setdefault(
+                profile, {"pending": 0, "running": 0, "active_running": 0, "idle": 0}
+            )
+            for metric in totals:
+                totals[metric] += depth.get(metric, 0)
 
-    projects.sort(key=lambda project: project["name"].casefold())
+    projects = list(grouped_projects.values())
+    for project in projects:
+        project["sessions"].sort(key=_session_sort_key)
+        project["requests"].sort(key=_request_sort_key)
+    projects.sort(key=lambda project: (project["name"].casefold(), project["project-id"]))
     requests.sort(key=_request_sort_key)
     failures.sort(key=_request_sort_key)
     counts = Counter(row["state"] for row in requests)
@@ -534,6 +559,7 @@ function sessionShouldOpen(session,rows) {
 }
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const dateTimeFmt=new Intl.DateTimeFormat(undefined,{day:'numeric',month:'short',hour:'numeric',minute:'2-digit'}); const clockFmt=new Intl.DateTimeFormat(undefined,{timeStyle:'medium'}); const stamp=x=>{if(x===undefined||x===null||x===''||(typeof x==='number'&&!Number.isFinite(x)))return ''; const d=new Date(x); return Number.isFinite(d.getTime())?dateTimeFmt.format(d):''}; const isClosed=s=>['closed','expired'].includes(s?.state); const timestamp=x=>{const value=Date.parse(x||''); return Number.isFinite(value)?value:-Infinity}; const recent=x=>Math.max(...['updated-at','last-activity-at','closed-at','created-at'].map(key=>timestamp(x?.[key])));
+const sessionKey=row=>JSON.stringify([String(row?.['project-id']||''),String(row?.['session-id']||'')]);
 const bySessionId=(a,b)=>String(a?.['session-id']||'').localeCompare(String(b?.['session-id']||'')); const byRequestId=(a,b)=>String(a?.['request-id']||'').localeCompare(String(b?.['request-id']||'')); const byRequestNewest=(a,b)=>timestamp(b?.['created-at'])-timestamp(a?.['created-at'])||byRequestId(a,b); const groupCreated=g=>Math.max(...(g[1]||[]).map(row=>timestamp(row?.['created-at']))); const groupUpdated=g=>Math.max(timestamp(g[0]?.['updated-at']),...(g[1]||[]).map(row=>timestamp(row?.['updated-at']))); const byGroupNewest=(a,b)=>groupCreated(b)-groupCreated(a)||bySessionThenRequest(a,b); const byGroupUpdated=(a,b)=>groupUpdated(b)-groupUpdated(a)||bySessionThenRequest(a,b); const SESSION_TERMINAL_STATES=new Set(['closed','expired','failed']); const bySessionStateThenId=(a,b)=>{const stateOrder=Number(SESSION_TERMINAL_STATES.has(a?.state))-Number(SESSION_TERMINAL_STATES.has(b?.state)); return stateOrder||bySessionId(a,b)}; const bySessionThenRequest=(a,b)=>{const sessionOrder=bySessionId(a?.[0],b?.[0]); return sessionOrder||byRequestId(a?.[1]?.[0],b?.[1]?.[0])}; const stateClass=s=>'state-'+String(s||'').replaceAll('_','-');
 const ACTIVE_REQUEST_STATES=new Set(['queued','dispatching','running']); const FAILED_REQUEST_STATES=new Set(['failed','rejected','interrupted','timed-out','expired','abandoned']);
 function badge(state) { return `<span class="badge ${stateClass(state)}">${esc(state||'unknown')}</span>`; }
@@ -646,7 +672,7 @@ function requestRows(rows, includeExecution=true) {
     const execution=includeExecution?executionSummary(r['execution-profile-id'],r['resolved-provider-id'],r['resolved-model-id']):'';
     const title=r.title||(includeExecution&&r['provider-chat-title']?r['provider-chat-title']:'');
     const diagnostic=requestDiagnostic(r);
-     return `<div class="request-row"><div class="request-identity">${clientIcon(r)}<code class="request-id">${esc(r['request-id'])}</code>${title?`<span class="request-title" title="${esc(title)}">${esc(title)}</span>`:''}${execution?`<span class="request-execution" title="${esc(execution)}">${esc(execution)}</span>`:''}</div><div class="request-state">${badge(r.state)}${sideEffectFlag(r)}</div><div class="request-meta">${activityLabel(r)}</div><div class="request-meta request-updated">${stamp(recent(r))}</div><div class="request-actions">${completeControl(r)}${cancelControl(r)}${archiveControl(r)}</div>${diagnostic?`<div class="request-diagnostic" tabindex="0" title="${esc(diagnostic)}" aria-label="${esc(diagnostic)}">${esc(diagnostic)}</div>`:''}</div>`;
+     return `<div class="request-row"><div class="request-identity">${clientIcon(r)}<code class="request-id">${esc(r['request-id'])}</code>${r.worktree?`<span class="request-execution">${esc(r.worktree)}</span>`:''}${title?`<span class="request-title" title="${esc(title)}">${esc(title)}</span>`:''}${execution?`<span class="request-execution" title="${esc(execution)}">${esc(execution)}</span>`:''}</div><div class="request-state">${badge(r.state)}${sideEffectFlag(r)}</div><div class="request-meta">${activityLabel(r)}</div><div class="request-meta request-updated">${stamp(recent(r))}</div><div class="request-actions">${completeControl(r)}${cancelControl(r)}${archiveControl(r)}</div>${diagnostic?`<div class="request-diagnostic" tabindex="0" title="${esc(diagnostic)}" aria-label="${esc(diagnostic)}">${esc(diagnostic)}</div>`:''}</div>`;
   }).join('');
 }
 function sessionActivitySummary(session) {
@@ -655,19 +681,19 @@ function sessionActivitySummary(session) {
 }
 function matchesState(session, rows) { const wanted=stateFilter.value; return wanted==='all'||session.state===wanted||rows.some(r=>r.state===wanted); }
 function matchesRequest(row) { return stateFilter.value==='all'||row.state===stateFilter.value; }
-function sessionCard(session, rows, empty=false, allRows=rows, project=null) { const sessionId=String(session['session-id']||''); const open=sessionShouldOpen(session,allRows)?' open':''; const purgeable=!allRows.some(r=>ACTIVE_REQUEST_STATES.has(r.state))&&!session['turn-active']&&!(session['pending-turns']>0); const purge=purgeable?`<button type="button" class="action-button icon-button purge-session" data-session-id="${esc(sessionId)}" aria-label="Purge session" title="Permanently remove this session and all gateway data">${purgeIcon}</button>`:''; const execution=executionSummary(esc(session['execution-profile-id']||''),esc(session['provider-id']||''),esc(session['model-id']||'')); const title=session['provider-chat-title']?`<div class="session-chat-title" title="${esc(session['provider-chat-title'])}">${esc(session['provider-chat-title'])}</div>`:''; return `<details class="session ${stateClass(session.state)}" data-session-id="${esc(sessionId)}"${open}><summary><div class="session-head"><div class="session-identity${project?' session-identity-with-icon':''}">${project?projectAvatar(project):''}<div class="session-text">${title}<div class="${title?'session-technical':'session-primary'}"><code>${esc(sessionId)}</code>${execution?` <span class="session-profile"> · ${execution}</span>`:''}</div></div></div><div class="session-actions">${badge(session.state)} <span class="muted">${esc(sessionActivitySummary(session))}</span>${sessionChatControl(session)}${closeControl(session)}${purge}</div></div></summary><div class="session-body"><div class="request-grid">${empty?'<div class="muted">No matching requests</div>':requestRows(rows,false)}</div></div></details>`; }
+function sessionCard(session, rows, empty=false, allRows=rows, project=null) { const sessionId=String(session['session-id']||''); const open=sessionShouldOpen(session,allRows)?' open':''; const purgeable=!allRows.some(r=>ACTIVE_REQUEST_STATES.has(r.state))&&!session['turn-active']&&!(session['pending-turns']>0); const purge=purgeable?`<button type="button" class="action-button icon-button purge-session" data-session-id="${esc(sessionId)}" aria-label="Purge session" title="Permanently remove this session and all gateway data">${purgeIcon}</button>`:''; const execution=executionSummary(esc(session['execution-profile-id']||''),esc(session['provider-id']||''),esc(session['model-id']||'')); const workspace=session.worktree?` <span class="session-profile"> · ${esc(session.worktree)}</span>`:''; const title=session['provider-chat-title']?`<div class="session-chat-title" title="${esc(session['provider-chat-title'])}">${esc(session['provider-chat-title'])}</div>`:''; return `<details class="session ${stateClass(session.state)}" data-session-id="${esc(sessionId)}"${open}><summary><div class="session-head"><div class="session-identity${project?' session-identity-with-icon':''}">${project?projectAvatar(project):''}<div class="session-text">${title}<div class="${title?'session-technical':'session-primary'}"><code>${esc(sessionId)}</code>${workspace}${execution?` <span class="session-profile"> · ${execution}</span>`:''}</div></div></div><div class="session-actions">${badge(session.state)} <span class="muted">${esc(sessionActivitySummary(session))}</span>${sessionChatControl(session)}${closeControl(session)}${purge}</div></div></summary><div class="session-body"><div class="request-grid">${empty?'<div class="muted">No matching requests</div>':requestRows(rows,false)}</div></div></details>`; }
 function requestGroup(state) { if(ACTIVE_REQUEST_STATES.has(state)) return 'active'; if(FAILED_REQUEST_STATES.has(state)) return 'failed'; return 'completed'; }
 function projectView(project) {
   const grouped=new Map(); const requests=(project.requests||[]);
-  requests.forEach(r=>{const id=r['session-id']; if(id){const existing=grouped.get(id)||[]; existing.push(r); grouped.set(id,existing)}});
-  const knownSessionIds=new Set((project.sessions||[]).map(s=>s['session-id'])); const wanted=stateFilter.value;
-  const sessionGroups=(project.sessions||[]).map(s=>{const allRows=grouped.get(s['session-id'])||[]; const sessionMatches=wanted==='all'||s.state===wanted; const rows=sessionMatches?allRows:allRows.filter(r=>r.state===wanted); return {session:s,allRows,rows}}).filter(group=>{const s=group.session; const hasRows=group.rows.length>0; return hasRows&& (wanted==='all'||s.state===wanted||hasRows)});
+  requests.forEach(r=>{const id=r['session-id']; if(id){const key=sessionKey(r);const existing=grouped.get(key)||[]; existing.push(r); grouped.set(key,existing)}});
+  const knownSessionIds=new Set((project.sessions||[]).map(sessionKey)); const wanted=stateFilter.value;
+  const sessionGroups=(project.sessions||[]).map(s=>{const allRows=grouped.get(sessionKey(s))||[]; const sessionMatches=wanted==='all'||s.state===wanted; const rows=sessionMatches?allRows:allRows.filter(r=>r.state===wanted); return {session:s,allRows,rows}}).filter(group=>{const s=group.session; const hasRows=group.rows.length>0; return hasRows&& (wanted==='all'||s.state===wanted||hasRows)});
   const sections={active:[],closed:[],expired:[]};
   sessionGroups.forEach(({session,rows,allRows})=>{
     const section=session.state==='expired'?'expired':SESSION_TERMINAL_STATES.has(session.state)?'closed':'active';
     sections[section].push([session,rows,allRows]);
   });
-  const unbound=requests.filter(r=>(!r['session-id']||!knownSessionIds.has(r['session-id']))&&matchesRequest(r));
+  const unbound=requests.filter(r=>(!r['session-id']||!knownSessionIds.has(sessionKey(r)))&&matchesRequest(r));
   if(!Object.values(sections).some(groups=>groups.length)&&!unbound.length)return '';
   const tally={}; requests.forEach(r=>{const group=requestGroup(r.state);tally[group]=(tally[group]||0)+1}); const pills=Object.entries(tally).map(([state,n])=>`<span class="pill ${stateClass(state)}">${n} ${esc(state)}</span>`).join('');
   const section=(title,groups)=>{
@@ -685,10 +711,10 @@ function rowView(projects) {
   const unassigned=[];
   projects.forEach(project=>{
     const grouped=new Map();
-    (project.requests||[]).forEach(row=>{const id=row['session-id'];if(!grouped.has(id))grouped.set(id,[]);grouped.get(id).push(row)});
+    (project.requests||[]).forEach(row=>{const id=sessionKey(row);if(!grouped.has(id))grouped.set(id,[]);grouped.get(id).push(row)});
     (project.sessions||[]).forEach(session=>{
-      const allRows=grouped.get(session['session-id'])||[];
-      grouped.delete(session['session-id']);
+      const allRows=grouped.get(sessionKey(session))||[];
+      grouped.delete(sessionKey(session));
       const rows=stateFilter.value==='all'||session.state===stateFilter.value?allRows:allRows.filter(matchesRequest);
       if(!rows.length)return;
       const section=session.state==='expired'?'Expired':SESSION_TERMINAL_STATES.has(session.state)?'Closed':'Active';
