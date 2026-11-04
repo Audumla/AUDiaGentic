@@ -1720,3 +1720,24 @@ def test_list_records_keeps_existing_reserved_directory_exclusions(tmp_path, cap
         assert store.list_records(tmp_path) == []
     assert not caplog.records
     assert path.read_bytes() == before
+
+
+def test_uncorrelated_provider_terminal_is_a_valid_owned_terminal_write(tmp_path: Path) -> None:
+    """The watchdog's real payload must pass the record schema; otherwise the request stays running forever."""
+    from types import SimpleNamespace
+
+    from audiagentic.components.agents.gateway.service.host import uncorrelated_terminal_updates
+
+    record = store.build_record(execution_profile_id="default", prompt_body="hello")
+    store.write_record(tmp_path, record)
+    claimed = store.claim_dispatch(tmp_path, record["request-id"], owner_epoch="service-a", expected_revision=0)
+    running = store.start_owned_attempt(tmp_path, record["request-id"], owner_epoch="service-a", worker_id="worker-a", expected_revision=claimed["revision"])
+    terminal = store.transition_owned_terminal(
+        tmp_path, record["request-id"], "interrupted",
+        owner_epoch="service-a", worker_id="worker-a", attempt_epoch=running["attempt-epoch"],
+        updates=uncorrelated_terminal_updates(SimpleNamespace(code="CON-AGW-156", message="not request-owned")),
+        expected_revision=running["revision"],
+    )
+    assert terminal["state"] == "interrupted"
+    assert terminal["terminal-classification"] == "uncorrelated-provider-terminal"
+    assert terminal["recovery"]["outcome"] == "provider-terminal-uncorrelated"
