@@ -201,7 +201,10 @@ def test_local_and_node_share_capacity_overlays(tmp_path, scope):
     a, b = tmp_path / "a", tmp_path / "b"
     manager = ready_manager(node_project_roots=(a, b), node_server_id="server")
     hold, local_started, node_started = threading.Event(), threading.Event(), threading.Event()
-    local = store.build_record(execution_profile_id="local-profile", prompt_body="x")
+    # The project allowance is per profile definition, so local and node work share it under one definition;
+    # the global bucket is shared across definitions.
+    local = store.build_record(execution_profile_id="node-profile" if scope == "project" else "local-profile",
+                               prompt_body="x")
     store.write_record(a, local)
     def local_runner(root, record):
         local_started.set()
