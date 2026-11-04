@@ -4,7 +4,6 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -27,9 +26,6 @@ PLANNING_REVIEW_UPDATED = "planning.review.updated"
 PLANNING_REVIEW_STATE_CHANGED = "planning.review.state.changed"
 PLANNING_REVIEW_DELETED = "planning.review.deleted"
 
-LEDGER_EVENT_RECORDED = "ledger.event.recorded"
-
-_registered_bus: Any | None = None
 
 _OUTBOX_RELATIVE = RUNTIME_RELATIVE / "planning" / "outbox"
 
@@ -196,104 +192,3 @@ def publish_planning_event_intent(project_root: Path, intent: dict[str, Any]) ->
         project_root=project_root,
         event_id=str(intent["event-id"]),
     )
-
-
-def _on_ledger_event_recorded(
-    event_type: str,
-    payload: dict[str, Any],
-    metadata: dict[str, Any],
-) -> None:
-    """Handle ledger.event.recorded — append ledger event ID to plan item's ledger-events section.
-
-    For each plan-item-id in the payload, validates the item exists and appends
-    the ledger event ID as a list item (e.g. '- chg_...') under the ledger-events
-    body section. Bad IDs are logged and skipped; valid IDs are linked.
-    """
-    project_root = payload.get("project_root")
-    if not isinstance(project_root, Path):
-        logger.error(
-            "ledger.event.recorded missing or invalid project_root",
-            extra={"event_type": event_type},
-        )
-        return
-
-    event_id = payload.get("event-id")
-    plan_item_ids = payload.get("plan-item-ids", [])
-    durable_projection = payload.get("durable-projection") is True
-
-    if not isinstance(event_id, str) or not isinstance(plan_item_ids, list):
-        logger.error(
-            "ledger.event.recorded missing event-id or plan-item-ids",
-            extra={"event_type": event_type},
-        )
-        return
-
-    from audiagentic.components.planning import item_store
-    from audiagentic.foundation.io import atomic_write_text
-
-    failures: list[str] = []
-    for item_id in plan_item_ids:
-        if not isinstance(item_id, str):
-            continue
-        try:
-            with item_store.planning_collection_item_write_lock(project_root, item_id):
-                from audiagentic.components.planning.durability import reconcile_pending_mutations
-
-                # Projection is a planning write boundary. Recover any
-                # prepared move before reading the item so this subscriber
-                # cannot overwrite a transaction's expected preimage.
-                reconcile_pending_mutations(project_root)
-                item_path = item_store.require_item(project_root, item_id)
-                fm, body = item_store.parse_frontmatter(
-                    item_path.read_text(encoding="utf-8")
-                )
-                item_store.ensure_not_review(fm, item_id, "VAL-PLN-020")
-                updated_body, linked = item_store.append_ledger_event(
-                    body,
-                    event_id,
-                )
-                normalized = updated_body != body
-                if not linked and not normalized:
-                    logger.debug(
-                        "ledger event already linked to plan item",
-                        extra={"item_id": item_id, "event_id": event_id},
-                    )
-                    continue
-                if linked:
-                    updated_body = item_store.append_change_log(
-                        updated_body,
-                        datetime.now(timezone.utc).isoformat(),
-                        "updated-by",
-                        "Updated: section:ledger-events",
-                    )
-                atomic_write_text(item_path, item_store.render_item(fm, updated_body))
-            logger.info(
-                "linked ledger event to plan item",
-                extra={"item_id": item_id, "event_id": event_id},
-            )
-        except Exception:  # noqa: BLE001
-            failures.append(str(item_id))
-            logger.error(
-                "failed to link ledger event to plan item — skipping",
-                extra={"item_id": item_id, "event_id": event_id},
-                exc_info=True,
-            )
-    if failures and durable_projection:
-        raise RuntimeError(f"ledger projection failed for item IDs: {', '.join(failures)}")
-
-
-def register() -> None:
-    """Register the ledger.event.recorded subscription on the event bus."""
-    global _registered_bus
-    try:
-        bus = get_bus()
-        if _registered_bus is bus:
-            return
-        bus.subscribe(LEDGER_EVENT_RECORDED, _on_ledger_event_recorded)
-        _registered_bus = bus
-        logger.debug("subscribed to ledger.event.recorded")
-    except Exception:  # noqa: BLE001
-        logger.warning("failed to subscribe to ledger.event.recorded", exc_info=True)
-
-
-register()

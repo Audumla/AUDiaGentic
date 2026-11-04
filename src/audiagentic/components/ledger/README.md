@@ -22,7 +22,7 @@ Governs the release lifecycle:
 ## Key modules
 
 - **current_events.py**: the one reader/writer of current events (write-once event files, frozen baseline, git-ref reads)
-- **fragments.py**: Change event recording
+- **recorder.py**: Change event recording
 - **sync.py**: Ledger write lock and current-ledger validation
 - **audit.py**: Audit and checkin report generation
 - **current_summary.py**: Release summary generation

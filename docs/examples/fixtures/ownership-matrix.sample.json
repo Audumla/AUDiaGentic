@@ -1,6 +1,7 @@
 {
   "ownership": [
-    {"path": "docs/releases/CURRENT_RELEASE_LEDGER.ndjson", "owner": "sync-current-release-ledger"},
+    {"path": "docs/releases/events", "owner": "record-change-event"},
+    {"path": "docs/releases/LEDGER.ndjson", "owner": "archive-for-release"},
     {"path": "docs/releases/CURRENT_RELEASE.md", "owner": "sync-current-release-summary"}
   ]
 }

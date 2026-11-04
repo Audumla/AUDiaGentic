@@ -268,21 +268,6 @@ def test_a_symlinked_or_nested_event_file_is_refused_or_ignored_the_same_in_tree
         iter_events(repo)
 
 
-def test_the_outbox_still_delivers_a_projection_for_an_event_that_is_already_released(tmp_path: Path) -> None:
-    from audiagentic.components.ledger import event_outbox
-
-    event = _event("chg_rel", **{"plan-item-ids": ["TST01"]})
-    historical = tmp_path / "docs" / "releases" / "LEDGER.ndjson"
-    historical.parent.mkdir(parents=True)
-    historical.write_text(json.dumps({**event, "status": "released", "release-id": "r1"}) + "\n")
-    event_outbox.enqueue(tmp_path, "chg_rel", ["TST01"], event=event)
-    delivered: list[str] = []
-
-    result = event_outbox.drain(tmp_path, publisher=lambda event_id, *a, **k: delivered.append(event_id))
-
-    assert result == {"delivered": 1, "failed": 0} and delivered == ["chg_rel"]
-    assert not event_path(tmp_path, "chg_rel").exists()  # never resurrected as a pending event file
-
 
 def test_stamping_touches_only_event_files_the_commit_introduced(tmp_path: Path, monkeypatch) -> None:
     from audiagentic.components.source_control import source_control_bootstrap

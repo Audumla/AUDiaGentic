@@ -13,6 +13,8 @@ from __future__ import annotations
 import hashlib
 import json
 import subprocess
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -20,14 +22,25 @@ from audiagentic.components.ledger.paths import (
     current_ledger_path,
     historical_ledger_path,
     ledger_events_dir,
+    ledger_runtime_dir,
 )
 from audiagentic.components.ledger.validation import load_persisted_events, validate_persisted_event
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.io import atomic_write_text
+from audiagentic.foundation.system.process import StartupLock
 
 #: Lifecycle annotations that are not part of an event's immutable identity.
 _ANNOTATIONS = frozenset({"status", "release-id", "git-commits"})
 _LEGACY_ID = "legacy-line-{line}-{digest}"
+
+
+@contextmanager
+def event_write_lock(project_root: Path, event_id: str) -> Iterator[None]:
+    """Serialize the existence check and write of one event file across processes."""
+    directory = ledger_runtime_dir(project_root) / "event-locks"
+    directory.mkdir(parents=True, exist_ok=True)
+    with StartupLock(directory / f"{event_file_name(event_id)}.lock", timeout=30.0):
+        yield
 
 
 def event_identity(event: dict[str, Any]) -> dict[str, Any]:
@@ -257,25 +270,29 @@ def released_events(project_root: Path, *, ref: str | None = None) -> dict[str, 
     return released
 
 
-def pending_events(project_root: Path, *, ref: str | None = None) -> list[dict[str, Any]]:
-    """Events not yet released: every event whose id is absent from the historical ledger.
+def reconcile(project_root: Path, *, ref: str | None = None) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]]]:
+    """Every recorded event plus the released ones, with the cross-source identity rules enforced once.
 
-    The historical ledger is authoritative. An id present there with different content is a conflict, never a
-    silent resurrection of the event as pending.
+    The historical ledger is authoritative: an id present there with different immutable content than a recorded
+    event is a conflict, never a silent resurrection or a mislabelled link. Returns ``(events, released_by_id)``.
     """
     released = released_events(project_root, ref=ref)
-    pending: list[dict[str, Any]] = []
-    for event in iter_events(project_root, ref=ref):
+    events = iter_events(project_root, ref=ref)
+    for event in events:
         prior = released.get(event["event-id"])
-        if prior is None:
-            pending.append(event)
-        elif event_identity(prior) != event_identity(event):
+        if prior is not None and event_identity(prior) != event_identity(event):
             raise AudiaGenticError(
                 code="CON-ARCHIVE-003", kind="release",
                 message="current ledger has conflicting content for an archived event identity",
                 details={"event-id": event["event-id"]},
             )
-    return pending
+    return events, released
+
+
+def pending_events(project_root: Path, *, ref: str | None = None) -> list[dict[str, Any]]:
+    """Events not yet released: every event whose id is absent from the historical ledger."""
+    events, released = reconcile(project_root, ref=ref)
+    return [event for event in events if event["event-id"] not in released]
 
 
 def anomalies(project_root: Path, *, ref: str | None = None) -> list[dict[str, str]]:
@@ -306,6 +323,6 @@ def event_files_in_tree(project_root: Path) -> list[tuple[Path, dict[str, Any]]]
 
 
 __all__: list[str] = [
-    "anomalies", "event_file_name", "event_files_in_tree", "event_identity", "event_path", "event_text",
-    "iter_events", "parse_event_file", "pending_events", "released_events", "write_event",
+    "anomalies", "event_file_name", "event_write_lock", "event_files_in_tree", "event_identity", "event_path", "event_text",
+    "iter_events", "parse_event_file", "pending_events", "reconcile", "released_events", "write_event",
 ]

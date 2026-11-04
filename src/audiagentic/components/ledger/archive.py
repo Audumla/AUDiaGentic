@@ -64,12 +64,11 @@ def _merge_historical_events(
 
 def archive_current_ledger(project_root: Path, release_id: str) -> dict[str, Any]:
     validate_release_id(release_id)
-    # Direct archive callers must observe the same authoritative outbox boundary as archive-for-release.
-    from audiagentic.components.ledger.event_outbox import drain as drain_event_outbox
+    from audiagentic.components.ledger.legacy_runtime import migrate_legacy_runtime
     from audiagentic.components.ledger.sync import ledger_write_lock
 
     with ledger_write_lock(project_root):
-        drain_event_outbox(project_root)
+        migrate_legacy_runtime(project_root)  # events an older layout left behind must not miss the release
         return _archive_current_ledger_locked(project_root, release_id)
 
 
