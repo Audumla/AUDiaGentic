@@ -54,6 +54,33 @@ def bind_with_wait(make: Callable[[], _T], wait_seconds: float, *, sleep: Callab
             sleep(_BIND_RETRY_SECONDS)
 
 
+def uncorrelated_terminal_updates(capture_error: Any) -> dict[str, Any]:
+    """The record updates for a provider terminal that cannot be proven to belong to the request.
+
+    Kept as one function so a test can validate exactly what the watchdog writes against the real record schema:
+    a write the schema rejects leaves the request ``running`` and the watchdog retrying forever.
+    """
+    return {
+        "error": {
+            "code": capture_error.code,
+            "kind": "agents",
+            "message": "provider terminal evidence could not be correlated to the request",
+            "details": {
+                "capture-error": capture_error.message,
+                "watchdog-classification": "uncorrelated-provider-terminal",
+                "recovery-action": "reconciliation-stopped",
+            },
+        },
+        "recovery": {
+            "reason": "unproven-execution",
+            "outcome": "provider-terminal-uncorrelated",
+            "phase": "watchdog-reconciliation",
+            "next-retry-at": None,
+        },
+        "finished-at": now_iso_z(),
+    }
+
+
 class GatewayServiceHost:
     """Own the HTTP adapter and publish this process through foundation lifecycle."""
 
@@ -856,24 +883,7 @@ class GatewayServiceHost:
                                 project_root,
                                 updated["request-id"],
                                 "interrupted",
-                                updates={
-                                    "error": {
-                                        "code": capture_error.code,
-                                        "kind": "agents",
-                                        "message": "provider terminal evidence could not be correlated to the request",
-                                        "details": {
-                                            "capture-error": capture_error.message,
-                                            "watchdog-classification": "uncorrelated-provider-terminal",
-                                            "recovery-action": "reconciliation-stopped",
-                                        },
-                                    },
-                                    "recovery": {
-                                        "outcome": "provider-terminal-uncorrelated",
-                                        "phase": "watchdog-reconciliation",
-                                        "next-retry-at": None,
-                                    },
-                                    "finished-at": now_iso_z(),
-                                },
+                                updates=uncorrelated_terminal_updates(capture_error),
                                 owner_epoch=updated["dispatch-owner-epoch"],
                                 worker_id=updated["worker-id"],
                                 attempt_epoch=updated["attempt-epoch"],
