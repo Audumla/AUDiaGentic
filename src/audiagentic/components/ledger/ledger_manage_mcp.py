@@ -17,6 +17,12 @@ def get_ledger_status() -> dict:
     return ledger_api.get_status(project_root_from_env())
 
 
+@mcp.tool()
+@tool_boundary
+def convert_legacy_ledger(base_ref: str = "origin/main") -> dict:
+    return ledger_api.convert_legacy_baseline(project_root_from_env(), base_ref)
+
+
 def main() -> None:
     from audiagentic.foundation.logging import bootstrap
     bootstrap("ledger-manage")

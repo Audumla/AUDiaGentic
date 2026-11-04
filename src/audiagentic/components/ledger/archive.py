@@ -68,7 +68,14 @@ def archive_current_ledger(project_root: Path, release_id: str) -> dict[str, Any
     from audiagentic.components.ledger.sync import ledger_write_lock
 
     with ledger_write_lock(project_root):
-        migrate_legacy_runtime(project_root)  # events an older layout left behind must not miss the release
+        left = migrate_legacy_runtime(project_root)["left-in-place"]
+        if left:
+            # An event an older layout left behind must not silently miss the release.
+            raise AudiaGenticError(
+                code="CON-LEDGER-011", kind="release",
+                message="retained events could not be migrated; release refused",
+                details={"left-in-place": left},
+            )
         return _archive_current_ledger_locked(project_root, release_id)
 
 

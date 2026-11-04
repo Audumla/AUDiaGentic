@@ -4,8 +4,8 @@ Before LE03 an event first lived as a runtime fragment (``fragments/<event-id>.j
 full event inside a durable outbox intent (``event-outbox/<event-id>.json``), and only then reached the shared ledger.
 An upgraded machine can still hold events that never got that far. Each one is materialized as a tracked event file
 (unless the historical ledger already released it), verified, and only then deleted; anything that cannot be migrated
-is left in place and reported, never discarded. Once a release has shipped, a project with nothing left here makes
-this a no-op, and it can be removed in a later release.
+is left in place and reported, never discarded. This is a bounded exception to the no-compatibility-paths rule: plan item LE04 removes this module once
+the release after the cutover has shipped.
 """
 from __future__ import annotations
 

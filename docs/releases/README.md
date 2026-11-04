@@ -16,6 +16,7 @@ behavior.
   records, read-only; no tool writes it.
 - [Released ledger](LEDGER.ndjson) — released events, written only at release
   finalize.
+- [Moving to the per-event ledger](../guides/LEDGER_MIGRATION.md) — cutover and migration for consumers.
 - [Publishing guide](PYPI_PUBLISHING.md) — PyPI trusted-publishing setup.
 
 Before changing release notes, changelog fragments, or generated summaries:

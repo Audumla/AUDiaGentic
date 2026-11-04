@@ -61,5 +61,19 @@ def test_unparseable_records_are_left_in_place_and_sync_and_release_migrate_firs
     assert (_runtime(tmp_path) / "fragments" / "junk.json").exists()
     assert [e["event-id"] for e in pending_events(tmp_path)] == ["chg_ok"]
 
+    (_runtime(tmp_path) / "fragments" / "junk.json").unlink()
     (_runtime(tmp_path) / "fragments" / "chg_late.json").write_text(json.dumps(_event("chg_late")))
     assert ledger_api.archive_for_release(tmp_path, "rel_1")["released-event-ids"] == ["chg_late", "chg_ok"]
+
+
+def test_a_release_is_refused_while_a_retained_event_cannot_be_migrated(tmp_path: Path) -> None:
+    import pytest
+
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+    (_runtime(tmp_path) / "fragments").mkdir(parents=True)
+    (_runtime(tmp_path) / "fragments" / "junk.json").write_text("{not json")
+    assert ledger_api.sync(tmp_path)["legacy-left-in-place"] == ["fragments/junk.json"]  # surfaced, not dropped
+    with pytest.raises(AudiaGenticError, match="release refused"):
+        ledger_api.archive_for_release(tmp_path, "rel_1")
+    assert not (tmp_path / "docs" / "releases" / "LEDGER.ndjson").exists()

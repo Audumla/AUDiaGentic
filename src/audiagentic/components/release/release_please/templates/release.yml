@@ -77,11 +77,11 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add docs/releases/LEDGER.ndjson \
-                  docs/releases/CURRENT_RELEASE_LEDGER.ndjson \
-                  docs/releases/RELEASE_NOTES.md \
-                  docs/releases/VERSION_HISTORY.md \
-                  docs/releases/CURRENT_RELEASE.md
+          # An empty first release writes no ledger file; stage only what finalize produced.
+          for artifact in docs/releases/LEDGER.ndjson docs/releases/RELEASE_NOTES.md \
+                          docs/releases/VERSION_HISTORY.md docs/releases/CURRENT_RELEASE.md; do
+            if [ -e "$artifact" ]; then git add "$artifact"; fi
+          done
           if ! git diff --cached --quiet; then
             branch="release-ledger/${RELEASE_TAG}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
             git switch -c "$branch"

@@ -11,3 +11,5 @@ CON-ARCHIVE-005: "The release ID is not a safe identifier. Use a short alphanume
 CON-LEDGER-007: "An event file's name is not the SHA-256 of its event-id. Event files are named by digest and must not be renamed or edited; restore the file from git."
 CON-LEDGER-008: "Two ledger sources (the frozen baseline and the event files) hold different content for one event-id. Keep one version and remove the other from git."
 CON-LEDGER-009: "The ledger could not be read at the requested git ref. Check that the ref exists and contains the ledger paths."
+CON-LEDGER-010: "The legacy baseline conversion refused: the baseline was edited rather than appended to, or an appended row is invalid or conflicts with a known event. Restore the baseline to the merge base and re-record the rows."
+CON-LEDGER-011: "Events an older ledger layout left in the runtime directory could not be migrated, so the release was refused. Repair or remove the named records, then retry."
