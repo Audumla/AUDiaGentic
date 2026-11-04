@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.96.0](https://github.com/Audumla/AUDiaGentic/compare/v0.95.0...v0.96.0) (2026-11-04)
+
+
+### Features
+
+* **ledger:** plan-item links derived from plan-item-ids; recording never edits a plan file (LE03 slice 2) ([#445](https://github.com/Audumla/AUDiaGentic/issues/445)) ([d520f1a](https://github.com/Audumla/AUDiaGentic/commit/d520f1ad575bdae108688d62f31627f41b10fcee))
+
 ## [0.95.0](https://github.com/Audumla/AUDiaGentic/compare/v0.94.1...v0.95.0) (2026-11-04)
 
 
