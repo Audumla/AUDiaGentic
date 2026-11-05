@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.98.1](https://github.com/Audumla/AUDiaGentic/compare/v0.98.0...v0.98.1) (2026-11-05)
+
+
+### Documentation
+
+* **planning:** DW02 move git and forge access from foundation to source_control ([#453](https://github.com/Audumla/AUDiaGentic/issues/453)) ([3bfdac9](https://github.com/Audumla/AUDiaGentic/commit/3bfdac9d6cdc9badc7eebb01499bb1a1e01e8159))
+
 ## [0.98.0](https://github.com/Audumla/AUDiaGentic/compare/v0.97.1...v0.98.0) (2026-11-05)
 
 
