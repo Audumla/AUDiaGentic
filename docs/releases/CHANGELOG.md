@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.97.1](https://github.com/Audumla/AUDiaGentic/compare/v0.97.0...v0.97.1) (2026-11-05)
+
+
+### Bug Fixes
+
+* **ledger:** convert_legacy_ledger accepts union-merged branches; ordered check, duplicate report, ledger lock; document loader API ([#449](https://github.com/Audumla/AUDiaGentic/issues/449)) ([cf26cf3](https://github.com/Audumla/AUDiaGentic/commit/cf26cf39bfd88d934be5c986e1eab9b6bbfebc49))
+
 ## [0.97.0](https://github.com/Audumla/AUDiaGentic/compare/v0.96.0...v0.97.0) (2026-11-04)
 
 
