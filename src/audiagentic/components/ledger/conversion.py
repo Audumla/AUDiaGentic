@@ -5,10 +5,16 @@ A branch cut before the per-event store, or recorded by an older ledger tool, ca
 what the branch's merge base with ``base_ref`` holds, so the branch no longer changes that file and merges with no
 ledger conflict.
 
-It refuses rather than guesses: the working baseline must be the merge base's content plus appended rows only (an
-edited, deleted or reordered row, or conflict markers, stop it), every appended row must pass the strict event
-contract and not conflict with any baseline, event or released identity, and nothing is written until the whole set
-is proven convertible. Run it before merging or rebasing onto the frozen main, while the branch's rows are intact.
+It refuses rather than guesses: the merge base's baseline rows must all still be present, unchanged and in their original
+relative order (a union-merge resolution may interleave the branch's rows among main's; an edited, deleted or reordered
+base row, or conflict markers, stop it), every added row must pass the strict event contract and not conflict with any
+baseline, event or released identity, and nothing is written until the whole set is proven convertible.
+
+Guarantees and limits: validation is all-or-nothing. After it, event files are written one at a time and each is verified,
+so a failure part-way leaves only complete, verified, write-once event files and the baseline untouched; running the tool
+again converges. Writers that do not take the ledger write lock (older ledger tools) are not excluded, so stop recording
+on the branch while converting; a change to the baseline is detected just before it is restored and aborts the restore. A
+row that is a byte-identical copy of a base row is dropped with the restore and reported as ``already-present``. Run it before merging or rebasing onto the frozen main, while the branch's rows are intact.
 """
 from __future__ import annotations
 
@@ -26,6 +32,7 @@ from audiagentic.components.ledger.current_events import (
     write_event,
 )
 from audiagentic.components.ledger.paths import current_ledger_path
+from audiagentic.components.ledger.sync import ledger_write_lock
 from audiagentic.components.ledger.validation import validate_persisted_event
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.io import atomic_write_text
@@ -66,16 +73,28 @@ def convert_baseline_appends(project_root: Path, base_ref: str = "origin/main") 
     """Move rows appended to the baseline since the merge base into event files; restore the baseline."""
     baseline = current_ledger_path(project_root)
     if not baseline.exists():
-        return {"converted": [], "rejected": [], "restored": False}
+        return {"converted": [], "rejected": [], "already-present": [], "restored": False}
+    with ledger_write_lock(project_root):
+        return _convert_locked(project_root, base_ref, baseline)
+
+
+def _convert_locked(project_root: Path, base_ref: str, baseline: Path) -> dict[str, Any]:
     base = _merge_base(project_root, base_ref)
     base_text = _base_text(project_root, base, baseline)
     base_lines = _lines(base_text or "")
     observed = baseline.read_bytes()
     working = _lines(observed.decode("utf-8"))
-    if working[:len(base_lines)] != base_lines:
-        raise _refuse("the baseline was edited, not only appended to (rows changed, were removed or reordered, or a "
-                      "merge left markers); restore it to the merge base and re-record the new rows", ref=base)
-    appended = working[len(base_lines):]
+    appended: list[tuple[int, str]] = []  # (1-based line among the non-blank rows, text) of rows the base lacks
+    matched = 0
+    for number, line in enumerate(working, 1):
+        if matched < len(base_lines) and line == base_lines[matched]:
+            matched += 1
+        else:
+            appended.append((number, line))
+    if matched != len(base_lines):
+        raise _refuse("the baseline lost, changed or reordered rows that the merge base holds (an edit, a deletion, a "
+                      "reorder, or a merge that left markers); restore it to the merge base and re-record the new rows",
+                      ref=base)
 
     # Prove the whole set before writing anything.
     base_ids = {json.loads(line).get("event-id"): json.loads(line) for line in base_lines}
@@ -83,7 +102,8 @@ def convert_baseline_appends(project_root: Path, base_ref: str = "origin/main") 
     plan: list[dict[str, Any]] = []
     rejected: list[dict[str, str]] = []
     seen: dict[str, dict[str, Any]] = {}
-    for number, line in enumerate(appended, len(base_lines) + 1):
+    already_present: list[str] = []
+    for number, line in appended:
         try:
             row = json.loads(line)
         except json.JSONDecodeError:
@@ -104,11 +124,13 @@ def convert_baseline_appends(project_root: Path, base_ref: str = "origin/main") 
         except AudiaGenticError as error:
             rejected.append({"line": str(number), "event-id": str(event_id or ""), "reason": error.code})
             continue
+        if event_id in base_ids or event_id in seen:
+            already_present.append(event_id)  # an identical copy of a row already held: the restore drops it
+            continue
         seen[event_id] = row
-        if event_id not in base_ids:
-            plan.append(row)
+        plan.append(row)
     if rejected:
-        return {"converted": [], "rejected": rejected, "restored": False}
+        return {"converted": [], "rejected": rejected, "already-present": already_present, "restored": False}
 
     for row in plan:
         with event_write_lock(project_root, row["event-id"]):
@@ -120,7 +142,8 @@ def convert_baseline_appends(project_root: Path, base_ref: str = "origin/main") 
         baseline.unlink()  # the merge base never had a baseline: restore its absence
     else:
         atomic_write_text(baseline, base_text)
-    return {"converted": [row["event-id"] for row in plan], "rejected": [], "restored": True}
+    return {"converted": [row["event-id"] for row in plan], "rejected": [], "already-present": already_present,
+            "restored": True}
 
 
 __all__ = ["convert_baseline_appends"]

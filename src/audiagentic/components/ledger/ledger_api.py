@@ -12,9 +12,12 @@ from audiagentic.components.ledger.archive import archive_current_ledger
 from audiagentic.components.ledger.audit import generate_audit_and_checkin
 from audiagentic.components.ledger.conversion import convert_baseline_appends
 from audiagentic.components.ledger.current_events import (
+    anomalies,
+    event_file_name,
     iter_events,
     pending_events,
     reconcile,
+    released_events,
 )
 from audiagentic.components.ledger.current_summary import regenerate_current_release
 from audiagentic.components.ledger.paths import (
@@ -285,3 +288,14 @@ def get_status(project_root: Path) -> dict[str, Any]:
         "events-dir": str(events_dir),
         "generated-dir": str(ledger_generated_dir(project_root)),
     }
+
+
+# Read surface for release tooling: the same stable functions as current_events, re-exported so an in-repo component
+# imports only this module.
+__all__ = [
+    "anomalies",
+    "event_file_name",
+    "iter_events",
+    "pending_events",
+    "released_events",
+]
