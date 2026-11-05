@@ -33,14 +33,18 @@ and its rows are not split into files. Nothing needs to be rewritten to adopt th
 A branch that appended rows to the baseline conflicts when it meets a main that froze it. Convert it **before** merging or
 rebasing, while its appended rows are intact: fetch the target base, then run the `convert_legacy_ledger` tool of the
 `ag-ledger-mgmt` MCP server (pass the `worktree` of the branch; or `ledger_api.convert_legacy_baseline`) with the base ref
-(default `origin/main`). The rows the branch added are those after the content at the branch's merge base with that ref. The
+(default `origin/main`). The rows the branch added are those that are not in the baseline at the branch's merge base with that ref; their position does not
+matter, so a branch that already merged main once with a union resolution (its rows interleaved before main's) converts normally. The
 tool moves each into its own event file, verifies them, and restores the baseline to the merge base's content (or removes it if
 the base never had one), so the branch no longer changes that file. Commit the event files and the restored baseline, then
 rebase or merge; there is no ledger conflict left.
 
-It refuses, changing nothing, when the baseline was edited rather than only appended to (rows changed, removed or reordered, or
-a merge left conflict markers), or when any appended row is invalid or conflicts with a known event id. Rejected rows are listed
-with their line numbers; fix or re-record them and run the tool again. Nothing is written until every row is proven convertible.
+It refuses, changing nothing, when the baseline lost, changed or reordered a row the merge base holds (an edit, a deletion, a
+reorder, or a merge that left conflict markers), or when any appended row is invalid or conflicts with a known event id. Rejected rows are listed
+with their line numbers; fix or re-record them and run the tool again. Nothing is written until every row is proven convertible. A byte-identical copy of a row the base already holds is dropped by
+the restore and listed as `already-present`. **Stop recording on the branch while you convert**: the tool takes the ledger lock,
+but an older ledger tool appending to the baseline at the same moment would not be excluded. If it fails while writing, only
+complete, verified event files remain and the baseline is untouched; run it again to finish.
 
 **A branch that is already conflicted:** abort the merge or rebase, then convert as above. If you must resolve in place, take the
 branch's own version of `CURRENT_RELEASE_LEDGER.ndjson` (`git checkout --ours` during a merge into the branch,

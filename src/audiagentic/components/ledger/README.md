@@ -43,6 +43,21 @@ by the event files ordered by `(timestamp-utc, event-id)`, from the working tree
 release is reproducible. Summaries and audit/check-in documents are untracked projections under
 `.audiagentic/runtime/ledger/generated/`; no normal operation writes a tracked file other than the event file itself.
 
+## Public API for downstream consumers
+
+Downstream release tooling (for example release-notes generators) reads events through the ledger's read functions and
+nothing else; reimplementing the file layout is unsupported. They are defined in
+`audiagentic.components.ledger.current_events` and re-exported from `audiagentic.components.ledger.ledger_api` (an in-repo
+component imports `ledger_api`; an external consumer may import either module). From 0.97 these are the stable names: `iter_events(project_root, *, ref=None)`, `pending_events(project_root, *, ref=None)`,
+`released_events(project_root, *, ref=None)`, `anomalies(project_root, *, ref=None)` and `event_file_name(event_id)`. A change to
+a signature, to the returned dict contents, or to the order guarantee is a breaking change and is called out in the release
+notes. `project_root` is the repository root; no `.audiagentic/` directory is needed (the default layout applies, and a
+`paths:` block in `.audiagentic/components/agent-ledger.yaml` overrides it if present). Reads with `ref` need `git` on the
+`PATH` and take a ref name or a full sha; they resolve the ledger paths from the working tree's configuration, not from the
+ref, so they are reproducible only while those paths have not changed since the ref (a path missing at the ref reads as
+empty). The default layout has never changed. The module imports the audiagentic package, so a consumer installs `audiagentic`
+(`pip install "audiagentic>=0.97"`); there is no slimmer distribution of the loader.
+
 ## Release boundary
 
 `archive_for_release(project_root, release_id)` is the only release archival boundary. Pending means "not in the
