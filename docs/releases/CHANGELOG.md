@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.98.0](https://github.com/Audumla/AUDiaGentic/compare/v0.97.1...v0.98.0) (2026-11-05)
+
+
+### Features
+
+* **gpt-auto:** report why each leased tab is kept or closed ([#451](https://github.com/Audumla/AUDiaGentic/issues/451)) ([8f4aa88](https://github.com/Audumla/AUDiaGentic/commit/8f4aa88ef7c9e5fd1d8811b2acfefd8c59cde094))
+
 ## [0.97.1](https://github.com/Audumla/AUDiaGentic/compare/v0.97.0...v0.97.1) (2026-11-05)
 
 
