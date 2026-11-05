@@ -105,7 +105,12 @@ async def test_restarted_reaper_closes_only_owned_unchanged_idle_target(tmp_path
     runtime._detached_tab_closing = set()
     runtime._detached_tab_leases = {}
     runtime.config = SimpleNamespace(workflow=SimpleNamespace(bridge_signals=lambda: []))
-    await runtime._reap_durable_tabs(7200)
+    outcomes = await runtime._reap_durable_tabs(7200)
+    assert outcomes == {
+        'idle': {'closed-idle': 1}, 'changed': {'kept-content-changed': 1},
+        'foreign': {'forgot-missing-or-repurposed': 1}, 'owned': {'kept-owned-by-live-session': 1},
+        'absent': {'forgot-missing-or-repurposed': 1},
+    }[condition]
     if condition == 'idle':
         browser.close.assert_awaited_once_with(page)
     else:
