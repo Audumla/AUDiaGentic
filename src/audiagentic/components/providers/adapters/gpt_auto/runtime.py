@@ -872,24 +872,34 @@ class GptAutoProviderRuntime:
         )
         return "v2:" + hashlib.sha256(repr(material).encode()).hexdigest()
 
-    async def _reap_durable_tabs(self, threshold: float) -> None:
+    async def _reap_durable_tabs(self, threshold: float) -> dict[str, int]:
+        """Sweep leased tabs; return how many ended in each outcome."""
+        outcomes: dict[str, int] = {}
+
+        def note(reason: str) -> None:
+            outcomes[reason] = outcomes.get(reason, 0) + 1
+
         store = self._tab_lease_store
         if store is None or threshold <= 0:
-            return
+            return outcomes
         pages = {page.target_id: page for page in await self.gpt_browser.pages()}
         for target, session, url, activity, digest in store.entries():
             if target in self._tab_lease_unsafe_targets:
+                note("kept-lease-renewal-failed")
                 continue
             page = pages.get(target)
             if page is None or not same_chat_identity(page.url, url):
                 # Missing/repurposed targets are not ours to recreate or close.
                 store.forget(target)
+                note("forgot-missing-or-repurposed")
                 continue
             if page.handle in getattr(self, "_detached_tab_protected", set()):
                 # The logical session is detached but its provider turn is
                 # unresolved; preserve the tab for dashboard recovery.
+                note("kept-protected-unresolved")
                 continue
             if page.handle in self._page_owners:
+                note("kept-owned-by-live-session")
                 continue
             self._detached_tab_closing.add(page.handle)
             try:
@@ -897,6 +907,7 @@ class GptAutoProviderRuntime:
                     page, signals=self.config.workflow.bridge_signals()))
                 if not same_chat_identity(snapshot.url, url):
                     store.forget(target)
+                    note("forgot-navigated-away")
                     continue
                 observed_digest = self._tab_digest(snapshot)
                 if observed_digest != digest:
@@ -909,23 +920,29 @@ class GptAutoProviderRuntime:
                         store.observe(target, session, url, activity, observed_digest)
                     else:
                         store.observe(target, session, url, time.time(), observed_digest)
+                        note("kept-content-changed")
                         continue
                 if time.time() - activity < threshold:
+                    note("kept-not-idle-yet")
                     continue
                 # Recheck after observation; never close a target re-admitted
                 # during the CDP await or navigated into a different conversation.
                 current = await self.gpt_browser.page_by_handle(page.handle)
                 if current.target_id != target or not same_chat_identity(current.url, url):
+                    note("kept-changed-during-check")
                     continue
                 await self.gpt_browser.close(current)
                 store.forget(target)
                 self._detached_tab_leases.pop(page.handle, None)
                 self._tab_lease_cache.pop(target, None)
+                note("closed-idle")
             except Exception:
+                note("kept-cleanup-failed")
                 # A broken target must not starve every later retained tab.
                 logger.warning("gpt-auto owned tab cleanup failed", exc_info=True)
             finally:
                 self._detached_tab_closing.discard(page.handle)
+        return outcomes
 
     def release_page(self, chat: PersistentChat, page_handle: str | None) -> None:
         if page_handle and self._page_owners.get(page_handle) == chat.ag_session_id:
@@ -1009,7 +1026,9 @@ class GptAutoProviderRuntime:
                 now = asyncio.get_running_loop().time()
                 if self._tab_lease_store is not None:
                     try:
-                        await self._reap_durable_tabs(threshold)
+                        outcomes = await self._reap_durable_tabs(threshold)
+                        if outcomes:
+                            logger.info("gpt-auto durable tab sweep: %s", dict(sorted(outcomes.items())))
                     except Exception:
                         logger.warning("gpt-auto durable tab sweep failed", exc_info=True)
                 for chat in tuple(self._chats.values()):
