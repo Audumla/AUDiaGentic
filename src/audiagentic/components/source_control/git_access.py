@@ -1,4 +1,7 @@
-"""Git queries and the few named mutators worktree management needs (DW01).
+"""Git queries and the few named mutators worktree management needs (DW01, DW02).
+
+Internal to source_control: other components use ``git_api``, which names the
+operations they may call. ``run_git`` is deliberately not part of that API.
 
 One runner for the git facts worktree tooling needs. Queries are read-only and
 a fact git cannot report is ``None``, never a guess. The only mutators are the
@@ -16,7 +19,7 @@ from pathlib import Path
 
 from audiagentic.foundation.contracts.errors import make_error_factory
 
-git_error = make_error_factory("EXT", "GIT", "foundation")
+git_error = make_error_factory("EXT", "GIT", "source-control")
 
 _TIMEOUT_SECONDS = 30.0
 
@@ -308,3 +311,13 @@ def push_commit(repo: Path, remote: str, commit: str, branch: str) -> None:
     """
     run_git(repo, "-c", "core.hooksPath=/dev/null", "-c", "push.followTags=false", "push", "--porcelain", "--no-verify",
             "--no-follow-tags", remote, f"{commit}:refs/heads/{branch}", timeout=180.0)
+
+
+def merge_base(repo: Path, first: str, second: str) -> str:
+    """The best common ancestor of two refs or commits."""
+    return run_git(repo, "merge-base", first, second).strip()
+
+
+def bundle_heads(repo: Path, bundle: Path) -> str:
+    """The ``git bundle list-heads`` listing of ``bundle`` (one ``<oid> <ref>`` per line)."""
+    return run_git(repo, "bundle", "list-heads", str(bundle))

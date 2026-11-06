@@ -8,7 +8,8 @@ from pathlib import Path
 import pytest
 
 from audiagentic.components.project.worktrees import eligibility
-from audiagentic.foundation.system import forge, git
+from audiagentic.components.source_control import forge_access, forge_api as forge
+from audiagentic.components.source_control import git_api as git
 
 
 def _git(cwd: Path, *args: str) -> str:
@@ -102,7 +103,7 @@ def test_pull_request_from_a_fork_is_not_proof(repo, merged) -> None:
 
 def test_forge_failure_is_unknown_not_merged(repo, merged) -> None:
     feature, _tip, _squash = merged
-    row = _verdict(repo, feature, forge.forge_error(2, "gh failed"))
+    row = _verdict(repo, feature, forge_access.forge_error(2, "gh failed"))
     assert row["verdict"] == "unknown" and "forge-unavailable" in _codes(row)
 
 
@@ -215,13 +216,13 @@ def test_a_full_page_of_pull_requests_is_incomplete_not_proof(monkeypatch, tmp_p
     import subprocess
 
     rows = [{"number": n, "state": "MERGED", "baseRefName": "main", "headRefName": "f", "headRefOid": "a" * 40,
-             "mergeCommit": {"oid": "b" * 40}, "isCrossRepository": False, "url": ""} for n in range(forge._LIMIT)]
-    monkeypatch.setattr(forge.shutil, "which", lambda _name: "/usr/bin/gh")
-    monkeypatch.setattr(forge.subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(a, 0, json.dumps(rows), ""))
+             "mergeCommit": {"oid": "b" * 40}, "isCrossRepository": False, "url": ""} for n in range(forge_access._LIMIT)]
+    monkeypatch.setattr(forge_access.shutil, "which", lambda _name: "/usr/bin/gh")
+    monkeypatch.setattr(forge_access.subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(a, 0, json.dumps(rows), ""))
     with pytest.raises(Exception) as raised:
         forge.pull_requests_for_branch(tmp_path, "f")
     assert getattr(raised.value, "code", "") == "EXT-FORGE-005"
-    monkeypatch.setattr(forge.subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(a, 0, json.dumps(rows[:2]), ""))
+    monkeypatch.setattr(forge_access.subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(a, 0, json.dumps(rows[:2]), ""))
     assert [pr.number for pr in forge.pull_requests_for_branch(tmp_path, "f")] == [0, 1]
 
 

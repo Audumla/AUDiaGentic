@@ -15,7 +15,7 @@ from pathlib import Path
 
 from audiagentic.foundation.contracts.errors import make_error_factory
 
-forge_error = make_error_factory("EXT", "FORGE", "foundation")
+forge_error = make_error_factory("EXT", "FORGE", "source-control")
 
 _TIMEOUT_SECONDS = 60.0
 _LIMIT = 100

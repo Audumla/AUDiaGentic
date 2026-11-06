@@ -20,7 +20,8 @@ from typing import Any
 from audiagentic.foundation.config.settings import resolve_settings_cached
 from audiagentic.foundation.contracts.errors import make_error_factory
 from audiagentic.foundation.paths.home import user_state_dir
-from audiagentic.foundation.system import forge, git
+from audiagentic.components.source_control import forge_api as forge
+from audiagentic.components.source_control import git_api as git
 from audiagentic.foundation.time import now_iso_z
 
 from . import merge_plan, publish

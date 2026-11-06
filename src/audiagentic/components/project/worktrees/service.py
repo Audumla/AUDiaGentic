@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from audiagentic.foundation.config.settings import resolve_settings_cached
-from audiagentic.foundation.system import git
+from audiagentic.components.source_control import git_api as git
 from audiagentic.foundation.system.process import pids_referencing_path
 
 from . import records

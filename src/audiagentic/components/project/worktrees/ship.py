@@ -18,7 +18,9 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from audiagentic.foundation.system import forge, git
+from audiagentic.components.source_control import forge_api as forge
+
+from audiagentic.components.source_control import git_api as git
 
 from . import merge as merger
 from . import sync as syncer

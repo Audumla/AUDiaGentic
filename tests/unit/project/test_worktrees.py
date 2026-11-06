@@ -13,7 +13,7 @@ from audiagentic.components.project.doctor_checks import check_primary_checkout
 from audiagentic.components.project.worktrees import records, service
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.lifecycle.doctor import OK, WARN
-from audiagentic.foundation.system import git
+from audiagentic.components.source_control import git_api as git
 from audiagentic.foundation.system.process import pids_referencing_path
 
 

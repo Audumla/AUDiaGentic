@@ -10,7 +10,7 @@ import pytest
 
 from audiagentic.components.project.worktrees import merge, merge_plan, publish
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.foundation.system import forge
+from audiagentic.components.source_control import forge_access, forge_api as forge
 
 IDLE = lambda _path: {"requests": [], "sessions": []}  # noqa: E731
 ME = forge.RepositoryIdentity("Acme/Widget", "main", True)
@@ -244,8 +244,8 @@ def test_the_real_gh_arguments_are_shell_free_pinned_and_head_bound(monkeypatch,
         seen.append((argv, kwargs.get("input")))
         return subprocess.CompletedProcess(argv, 0, "https://github.com/acme/widget/pull/5\n", "")
 
-    monkeypatch.setattr(forge.shutil, "which", lambda _n: "/usr/bin/gh")
-    monkeypatch.setattr(forge.subprocess, "run", fake_run)
+    monkeypatch.setattr(forge_access.shutil, "which", lambda _n: "/usr/bin/gh")
+    monkeypatch.setattr(forge_access.subprocess, "run", fake_run)
     url = forge.create_pull_request(tmp_path, head="me/feature", base="main", title="feat: x", body="-- starts with dashes",
                                     repository="Acme/Widget")
     forge.enable_auto_merge(tmp_path, 5, head_sha="a" * 40, repository="Acme/Widget")

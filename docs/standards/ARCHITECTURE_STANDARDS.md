@@ -37,6 +37,7 @@ imports of the platform component's internals.
 | Owner | Public module | Permitted callers | Boundary |
 |---|---|---|---|
 | `providers` | `audiagentic.components.providers.providers_api` | Product components, runtime orchestration, composition root | Provider-owned operations and reads only; no recipes, registries, adapters, serializers, or requester-domain imports. |
+| `source-control` | `audiagentic.components.source_control.git_api`, `audiagentic.components.source_control.forge_api` | Product components, runtime orchestration, composition root | Git and forge operations by name, as listed in each module's `__all__`; no arbitrary command execution (`run_git` stays internal), no worktree, release or ledger policy, and no imports of `git_access` or `forge_access`. `source_control_api` (repository context and dependency status) is a separate module with its own callers and is not covered by this entry. |
 
 Future platform APIs require the same narrow, documented approval. They are
 shared lower-layer seams, not general component-to-component exceptions.
