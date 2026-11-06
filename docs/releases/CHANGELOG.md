@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.98.2](https://github.com/Audumla/AUDiaGentic/compare/v0.98.1...v0.98.2) (2026-11-06)
+
+
+### Documentation
+
+* **planning:** DW02 fold in GPT design review findings ([#455](https://github.com/Audumla/AUDiaGentic/issues/455)) ([e08f369](https://github.com/Audumla/AUDiaGentic/commit/e08f369f6209e44a1a2f6b6fbc6a2ba0f32156a4))
+
 ## [0.98.1](https://github.com/Audumla/AUDiaGentic/compare/v0.98.0...v0.98.1) (2026-11-05)
 
 
