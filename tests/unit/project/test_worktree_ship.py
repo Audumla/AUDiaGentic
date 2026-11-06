@@ -9,7 +9,7 @@ import pytest
 
 from audiagentic.components.project.worktrees import ship as shipper
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.foundation.system import forge
+from audiagentic.components.source_control import forge_api as forge
 
 IDLE = lambda _path: {"requests": [], "sessions": []}  # noqa: E731
 

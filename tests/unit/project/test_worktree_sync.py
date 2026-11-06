@@ -9,7 +9,7 @@ import pytest
 
 from audiagentic.components.project.worktrees import sync
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.foundation.system import git
+from audiagentic.components.source_control import git_api as git
 
 IDLE = lambda _path: {"requests": [], "sessions": []}  # noqa: E731
 

@@ -17,7 +17,8 @@ from pathlib import Path
 from typing import Any
 
 from audiagentic.foundation.paths.names import project_marker_path
-from audiagentic.foundation.system import forge, git
+from audiagentic.components.source_control import forge_api as forge
+from audiagentic.components.source_control import git_api as git
 from audiagentic.foundation.system.process import editable_sources_of_running_processes, pids_referencing_path
 
 from . import service

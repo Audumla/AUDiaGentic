@@ -11,7 +11,7 @@ import pytest
 
 from audiagentic.components.project.worktrees import merge_plan, publish
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.foundation.system import forge
+from audiagentic.components.source_control import forge_api as forge
 
 IDLE = lambda _path: {"requests": [], "sessions": []}  # noqa: E731
 ME = forge.RepositoryIdentity("Acme/Widget", "main", True)
@@ -196,10 +196,11 @@ def test_repository_hooks_do_not_run_on_the_push(world) -> None:
 
 
 def test_remote_readback_is_strict(monkeypatch, tmp_path) -> None:
-    from audiagentic.foundation.system import git
+    from audiagentic.components.source_control import git_api as git
+    from audiagentic.components.source_control import git_access
 
     def answer(text):
-        monkeypatch.setattr(git, "run_git", lambda *a, **k: text)
+        monkeypatch.setattr(git_access, "run_git", lambda *a, **k: text)
         return git.remote_branch_commit(tmp_path, "origin", "me/feature")
 
     good = "a" * 40

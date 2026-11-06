@@ -31,7 +31,9 @@ from typing import Any
 from audiagentic.foundation.contracts.errors import make_error_factory
 from audiagentic.foundation.io import atomic_write_json
 from audiagentic.foundation.paths.home import user_state_dir
-from audiagentic.foundation.system import forge, git, worktree_drain
+from audiagentic.components.source_control import forge_api as forge
+from audiagentic.components.source_control import git_api as git
+from audiagentic.foundation.system import worktree_drain
 from audiagentic.foundation.system.advisory_lock import AdvisoryLock
 from audiagentic.foundation.time import now_iso_z
 
@@ -226,7 +228,7 @@ def _bundle_tip(main: Path, reference: str, tip: str, base: str | None, destinat
     except Exception as error:
         raise refuse_error(5, "The bundle of the unmerged commits could not be created and verified; "
                               "nothing was removed", reason=getattr(error, "details", None)) from error
-    if tip not in git.run_git(main, "bundle", "list-heads", str(staging)):
+    if tip not in git.bundle_heads(main, staging):
         raise refuse_error(5, "The bundle does not contain the worktree tip; nothing was removed")
     checksum = hashlib.sha256(staging.read_bytes()).hexdigest()
     if destination.exists():

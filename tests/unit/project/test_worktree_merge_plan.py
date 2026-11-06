@@ -10,7 +10,7 @@ import pytest
 from audiagentic.commands import worktree as worktree_command
 from audiagentic.components.project.worktrees import merge_plan
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.foundation.system import forge
+from audiagentic.components.source_control import forge_access, forge_api as forge
 
 IDLE = lambda _path: {"requests": [], "sessions": []}  # noqa: E731
 ME = forge.RepositoryIdentity("Acme/Widget", "main", True)
@@ -137,7 +137,7 @@ def test_remote_must_be_this_repository(repo, feature) -> None:
 def test_no_push_permission_and_forge_failures(repo, feature) -> None:
     assert "no-push-permission" in _codes(_plan(repo, feature, title="feat(x): y",
                                                 identity=forge.RepositoryIdentity("Acme/Widget", "main", False)))
-    down = _plan(repo, feature, title="feat(x): y", identity=forge.forge_error(2, "gh failed"))
+    down = _plan(repo, feature, title="feat(x): y", identity=forge_access.forge_error(2, "gh failed"))
     assert down["verdict"] == "unknown" and "forge-unavailable" in _codes(down)
 
 

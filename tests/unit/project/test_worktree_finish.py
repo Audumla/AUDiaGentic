@@ -10,7 +10,9 @@ import pytest
 from audiagentic.components.project.worktrees import finish as finisher
 from audiagentic.components.project.worktrees import records
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.foundation.system import forge, git, worktree_drain
+from audiagentic.components.source_control import forge_access, forge_api as forge
+from audiagentic.components.source_control import git_api as git
+from audiagentic.foundation.system import worktree_drain
 
 IDLE = lambda _path: {"requests": [], "sessions": []}  # noqa: E731
 
@@ -335,7 +337,7 @@ def test_abandon_works_without_the_forge_and_on_a_detached_head(repo, unmerged, 
     _git(feature, "checkout", "-q", "--detach")
 
     def forge_down(_repo, _branch):
-        raise forge.forge_error(2, "gh failed")
+        raise forge_access.forge_error(2, "gh failed")
 
     result = finisher.finish(repo, str(feature), active_work=IDLE, pull_requests=forge_down, state_root=state,
                              abandon=tip[:12])

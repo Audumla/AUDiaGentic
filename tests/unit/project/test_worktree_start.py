@@ -12,7 +12,7 @@ import pytest
 from audiagentic.commands import worktree as worktree_command
 from audiagentic.components.project.worktrees import lifecycle, records
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.foundation.system import git
+from audiagentic.components.source_control import git_api as git
 
 ENV = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.invalid",
        "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@example.invalid"}

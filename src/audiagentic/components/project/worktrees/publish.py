@@ -26,7 +26,8 @@ from audiagentic.foundation.config.settings import resolve_settings_cached
 from audiagentic.foundation.contracts.errors import make_error_factory
 from audiagentic.foundation.io import atomic_write_json
 from audiagentic.foundation.paths.home import user_state_dir
-from audiagentic.foundation.system import forge, git
+from audiagentic.components.source_control import forge_api as forge
+from audiagentic.components.source_control import git_api as git
 from audiagentic.foundation.time import now_iso_z
 
 from . import merge_plan, records
@@ -111,7 +112,7 @@ def push(repo: Path, path: Path, *, head: str | None = None, active_work: Active
                            blockers=[b.code for b in blockers])
     checks = configured_checks(repo)
     try:
-        base_commit = git.run_git(path, "merge-base", tip, found.base or "").strip()
+        base_commit = git.merge_base(path, tip, found.base or "")
     except Exception as error:
         raise refuse_error(1, "The commit range to publish cannot be established (no merge base with the remote "
                               "default branch); refusing without it") from error
@@ -136,7 +137,7 @@ def push(repo: Path, path: Path, *, head: str | None = None, active_work: Active
 
     again = merge_plan.preconditions(repo, path, head=head, active_work=active_work, identity=identity)
     try:
-        base_again = git.run_git(path, "merge-base", again.tip, again.base or "").strip()
+        base_again = git.merge_base(path, again.tip, again.base or "")
     except Exception:  # noqa: BLE001 - an unreadable base is a changed plan
         base_again = ""
     if (again.blockers or again.tip != tip or again.entry.branch != entry.branch or base_again != base_commit

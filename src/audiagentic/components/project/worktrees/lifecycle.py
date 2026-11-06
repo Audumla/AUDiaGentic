@@ -17,7 +17,7 @@ from pathlib import Path
 from audiagentic.foundation.config.settings import resolve_settings_cached
 from audiagentic.foundation.contracts.errors import make_error_factory
 from audiagentic.foundation.paths.home import user_state_dir
-from audiagentic.foundation.system import git
+from audiagentic.components.source_control import git_api as git
 from audiagentic.foundation.system.advisory_lock import AdvisoryLock
 from audiagentic.foundation.time import now_iso_z
 
