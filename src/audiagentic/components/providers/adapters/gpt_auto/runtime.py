@@ -8,7 +8,7 @@ import logging
 import time
 from collections.abc import Callable
 from enum import StrEnum
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
 from urllib.parse import urlparse
 
 from audiagentic.foundation.workflow import TransitionConfig, TransitionEngine
@@ -19,7 +19,13 @@ from .config import GptAutoConfig
 from .gpt_auto_cdp import GptAutoCdpBrowserController
 from .snapshot import ChatSnapshot
 from .tab_leases import TabLeaseStore
-from .urls import canonical_chat_url, same_chat_identity, url_matches_provider_session
+from .urls import (
+    canonical_chat_url,
+    parse_project_id,
+    parse_provider_session_id,
+    same_chat_identity,
+    url_matches_provider_session,
+)
 from .window_anchor import (
     gateway_dashboard_anchor_url,
     is_gateway_dashboard_anchor_url,
@@ -872,6 +878,33 @@ class GptAutoProviderRuntime:
         )
         return "v2:" + hashlib.sha256(repr(material).encode()).hexdigest()
 
+    def _adopt_project_tabs(self, store: TabLeaseStore, pages: dict[str, Any]) -> None:
+        """Own every conversation tab of the configured project, including tabs restored after a restart.
+
+        Target ids change when the browser restarts, so recorded leases alone never see restored tabs. The browser
+        is dedicated to this provider, so a project conversation tab is ours. A tab adopted here starts its idle
+        clock now (its real age is unknowable); the normal guards and recheck still decide whether it is closed.
+        """
+        browser = getattr(self.config, "browser", None)
+        if getattr(browser, "physical_tab_ownership_mode", "recorded-only") != "project-conversations":
+            return
+        project = parse_project_id(getattr(self.config, "project_url", None) or "")
+        if not project:
+            return
+        known = {entry[0] for entry in store.entries()}
+        for target, page in pages.items():
+            url = page.url
+            if (
+                target in known
+                or target in self._tab_lease_unsafe_targets
+                or page.handle in self._page_owners
+                or page.handle in getattr(self, "_detached_tab_protected", set())
+                or parse_project_id(url) != project
+                or not parse_provider_session_id(url)
+            ):
+                continue
+            store.observe(target, "adopted", url, time.time(), "")
+
     async def _reap_durable_tabs(self, threshold: float) -> dict[str, int]:
         """Sweep leased tabs; return how many ended in each outcome."""
         outcomes: dict[str, int] = {}
@@ -883,6 +916,7 @@ class GptAutoProviderRuntime:
         if store is None or threshold <= 0:
             return outcomes
         pages = {page.target_id: page for page in await self.gpt_browser.pages()}
+        self._adopt_project_tabs(store, pages)
         for target, session, url, activity, digest in store.entries():
             if target in self._tab_lease_unsafe_targets:
                 note("kept-lease-renewal-failed")
@@ -908,6 +942,9 @@ class GptAutoProviderRuntime:
                 if not same_chat_identity(snapshot.url, url):
                     store.forget(target)
                     note("forgot-navigated-away")
+                    continue
+                if snapshot.generating:
+                    note("kept-generating")
                     continue
                 observed_digest = self._tab_digest(snapshot)
                 if observed_digest != digest:
