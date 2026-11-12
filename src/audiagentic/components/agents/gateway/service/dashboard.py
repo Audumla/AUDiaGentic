@@ -9,6 +9,7 @@ request metadata are never included in its public payload.
 from __future__ import annotations
 
 import json
+import re
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -510,6 +511,7 @@ html[data-theme]:not([data-theme=default]) :is(.cancel-request,.purge-session) {
 <section class="toolbar"><label>Request / session state <select id="state-filter"><option value="all">All states</option></select></label><label>Layout <select id="layout-filter"><option value="columns">Columns</option><option value="rows">Rows</option></select></label><label>Recent window <input id="recent-window" type="number" min="1" step="1" aria-label="Recent window in seconds"> sec</label><button id="apply-window" type="button">Apply</button><label>Auto-collapse after <input id="collapse-hours" type="number" min="0" max="8760" step="0.5" aria-label="Auto-collapse inactive sessions after hours"> hours (0 = off)</label><span class="muted" id="visible-summary"></span></section>
 <div id="request-action-feedback" role="status" aria-live="polite"></div><section id="projects"></section></main>
 <script>
+const ls=(()=>{try{const t=window.localStorage;t.getItem('x');return t;}catch(_){return {getItem:()=>null,setItem(){},removeItem(){}};}})();
 const endpoint=new URL(__SNAPSHOT_PATH__,window.location.href);
 function clientIcon(r) {
   const id=r['client-icon'];
@@ -528,17 +530,17 @@ function applyTheme(value) {
   document.documentElement.dataset.theme=theme;
   themeFilter.value=theme;
 }
-try { applyTheme(localStorage.getItem('gateway-dashboard-theme')); } catch (_) { applyTheme('default'); }
-themeFilter.addEventListener('change',()=>{applyTheme(themeFilter.value);try{localStorage.setItem('gateway-dashboard-theme',themeFilter.value);}catch(_){} });
-const COLLAPSED_SESSIONS_KEY='gateway-dashboard-collapsed-sessions'; let collapsedSessionIds=new Set(); try { const saved=JSON.parse(localStorage.getItem(COLLAPSED_SESSIONS_KEY)||'[]'); if(Array.isArray(saved)) collapsedSessionIds=new Set(saved.filter(id=>typeof id==='string').slice(-500)); } catch (_) {}
-function persistCollapsedSessions() { try { localStorage.setItem(COLLAPSED_SESSIONS_KEY,JSON.stringify([...collapsedSessionIds].slice(-500))); } catch (_) {} }
+try { applyTheme(ls.getItem('gateway-dashboard-theme')); } catch (_) { applyTheme('default'); }
+themeFilter.addEventListener('change',()=>{applyTheme(themeFilter.value);try{ls.setItem('gateway-dashboard-theme',themeFilter.value);}catch(_){} });
+const COLLAPSED_SESSIONS_KEY='gateway-dashboard-collapsed-sessions'; let collapsedSessionIds=new Set(); try { const saved=JSON.parse(ls.getItem(COLLAPSED_SESSIONS_KEY)||'[]'); if(Array.isArray(saved)) collapsedSessionIds=new Set(saved.filter(id=>typeof id==='string').slice(-500)); } catch (_) {}
+function persistCollapsedSessions() { try { ls.setItem(COLLAPSED_SESSIONS_KEY,JSON.stringify([...collapsedSessionIds].slice(-500))); } catch (_) {} }
 const EXPANDED_SESSIONS_KEY='gateway-dashboard-expanded-sessions'; const COLLAPSE_HOURS_KEY='gateway-dashboard-collapse-hours';
 let expandedSessionIds=new Set(); let collapseHours=2;
 const SECTION_CHOICES_KEY='gateway-dashboard-section-choices';let sectionChoices=new Map();
-try{const saved=JSON.parse(localStorage.getItem(SECTION_CHOICES_KEY)||'[]');if(Array.isArray(saved))sectionChoices=new Map(saved.filter(x=>Array.isArray(x)&&typeof x[0]==='string'&&typeof x[1]==='boolean').slice(-500));const old=JSON.parse(localStorage.getItem('gateway-dashboard-expanded-expired-projects')||'[]');if(Array.isArray(old))for(const id of old){const key=JSON.stringify([id,'Expired']);if(typeof id==='string'&&!sectionChoices.has(key))sectionChoices.set(key,true);}localStorage.setItem(SECTION_CHOICES_KEY,JSON.stringify([...sectionChoices].slice(-500)));localStorage.removeItem('gateway-dashboard-expanded-expired-projects');}catch(_){}
+try{const saved=JSON.parse(ls.getItem(SECTION_CHOICES_KEY)||'[]');if(Array.isArray(saved))sectionChoices=new Map(saved.filter(x=>Array.isArray(x)&&typeof x[0]==='string'&&typeof x[1]==='boolean').slice(-500));const old=JSON.parse(ls.getItem('gateway-dashboard-expanded-expired-projects')||'[]');if(Array.isArray(old))for(const id of old){const key=JSON.stringify([id,'Expired']);if(typeof id==='string'&&!sectionChoices.has(key))sectionChoices.set(key,true);}ls.setItem(SECTION_CHOICES_KEY,JSON.stringify([...sectionChoices].slice(-500)));ls.removeItem('gateway-dashboard-expanded-expired-projects');}catch(_){}
 function bindSectionToggles(){document.querySelectorAll('.section-toggle').forEach(button=>button.addEventListener('click',event=>{
   event.preventDefault();sectionChoices.set(button.dataset.sectionKey,button.getAttribute('aria-expanded')!=='true');
-  try{localStorage.setItem(SECTION_CHOICES_KEY,JSON.stringify([...sectionChoices].slice(-500)));}catch(_){}
+  try{ls.setItem(SECTION_CHOICES_KEY,JSON.stringify([...sectionChoices].slice(-500)));}catch(_){}
   if(latest)draw(latest);
 }));}
 function collapsibleSection(project,title,heading,body){
@@ -546,9 +548,9 @@ function collapsibleSection(project,title,heading,body){
   const expanded=sectionChoices.has(key)?sectionChoices.get(key):title==='Active';
   return `<section class="work-section work-section-${title.toLowerCase().replaceAll(' ','-')}"><button type="button" class="work-section-head section-toggle" style="width:100%" data-section-key="${esc(key)}" aria-expanded="${expanded}"><span aria-hidden="true">${expanded?'▾':'▸'}</span>${heading}</button><div${expanded?'':' hidden'}>${body}</div></section>`;
 }
-try { const saved=JSON.parse(localStorage.getItem(EXPANDED_SESSIONS_KEY)||'[]');if(Array.isArray(saved))expandedSessionIds=new Set(saved.filter(id=>typeof id==='string').slice(-500));const hours=localStorage.getItem(COLLAPSE_HOURS_KEY);if(hours!==null&&hours.trim()!==''&&Number.isFinite(Number(hours))&&Number(hours)>=0&&Number(hours)<=8760)collapseHours=Number(hours); }catch(_){}
+try { const saved=JSON.parse(ls.getItem(EXPANDED_SESSIONS_KEY)||'[]');if(Array.isArray(saved))expandedSessionIds=new Set(saved.filter(id=>typeof id==='string').slice(-500));const hours=ls.getItem(COLLAPSE_HOURS_KEY);if(hours!==null&&hours.trim()!==''&&Number.isFinite(Number(hours))&&Number(hours)>=0&&Number(hours)<=8760)collapseHours=Number(hours); }catch(_){}
 const collapseInput=document.getElementById('collapse-hours');collapseInput.value=collapseHours;
-collapseInput.addEventListener('change',()=>{const hours=Number(collapseInput.value);if(!collapseInput.value.trim()||!Number.isFinite(hours)||hours<0||hours>8760){collapseInput.value=collapseHours;return;}if(hours===collapseHours)return;collapseHours=hours;try{localStorage.setItem(COLLAPSE_HOURS_KEY,String(hours));}catch(_){}if(latest)draw(latest);});
+collapseInput.addEventListener('change',()=>{const hours=Number(collapseInput.value);if(!collapseInput.value.trim()||!Number.isFinite(hours)||hours<0||hours>8760){collapseInput.value=collapseHours;return;}if(hours===collapseHours)return;collapseHours=hours;try{ls.setItem(COLLAPSE_HOURS_KEY,String(hours));}catch(_){}if(latest)draw(latest);});
 function sessionShouldOpen(session,rows) {
   const id=String(session['session-id']||'');
   if(collapsedSessionIds.has(id))return false;
@@ -658,7 +660,7 @@ function setFeedback(button, text) { button.classList.add('feedback'); button.ti
 async function focusChat(button) { const id=button.dataset.sessionId; button.disabled=true; try { const response=await fetch(focusEndpoint,{method:'POST',headers:{'Content-Type':'application/json','X-AudiaGentic-Dashboard-Token':focusToken},body:JSON.stringify({'session-id':id})}); const body=await response.json(); const result=body.result||{}; setFeedback(button,result.reason==='conversation-tab-opened'?'GPT tab opened':(result.outcome==='focused'?'GPT tab focused':(result.reason||result.outcome||'GPT tab unavailable'))); } catch(error) { setFeedback(button,'GPT tab unavailable'); } finally { setTimeout(()=>{button.disabled=false;},1200); } }
 async function purgeSession(button) { const id=button.dataset.sessionId; if(!window.confirm('Purge this session and all gateway request data? This cannot be undone.')) return; button.disabled=true; try { const response=await fetch(purgeEndpoint,{method:'POST',headers:{'Content-Type':'application/json','X-AudiaGentic-Dashboard-Token':focusToken},body:JSON.stringify({'session-id':id})}); const body=await response.json(); const result=body.result||{}; setFeedback(button,result.outcome==='purged'?'Session purged':(result.reason||result.outcome||'Purge unavailable')); if(result.outcome==='purged') setTimeout(refresh,400); } catch(error) { setFeedback(button,'Purge unavailable'); } finally { setTimeout(()=>{button.disabled=false;},1200); } }
  function bindFocusButtons() { document.querySelectorAll('.cancel-request').forEach(button=>button.addEventListener('click',()=>cancelRequest(button))); document.querySelectorAll('.complete-provider').forEach(button=>button.addEventListener('click',()=>completeFromProvider(button))); document.querySelectorAll('.archive-request').forEach(button=>button.addEventListener('click',()=>archiveRequest(button))); document.querySelectorAll('.close-session').forEach(button=>button.addEventListener('click',()=>closeSession(button))); document.querySelectorAll('.focus-chat').forEach(button=>button.addEventListener('click',()=>focusChat(button))); document.querySelectorAll('.purge-session').forEach(button=>button.addEventListener('click',()=>purgeSession(button))); }
-function bindSessionToggles() { document.querySelectorAll('details.session[data-session-id] > summary').forEach(summary=>summary.addEventListener('click',event=>{if(event.target.closest('button,a'))return; event.preventDefault(); const session=summary.parentElement; const id=session.dataset.sessionId; const opening=!session.open; if(opening){collapsedSessionIds.delete(id);expandedSessionIds.add(id);}else{expandedSessionIds.delete(id);collapsedSessionIds.add(id);} persistCollapsedSessions(); try{localStorage.setItem(EXPANDED_SESSIONS_KEY,JSON.stringify([...expandedSessionIds].slice(-500)));}catch(_){} if(latest)draw(latest); })); }
+function bindSessionToggles() { document.querySelectorAll('details.session[data-session-id] > summary').forEach(summary=>summary.addEventListener('click',event=>{if(event.target.closest('button,a'))return; event.preventDefault(); const session=summary.parentElement; const id=session.dataset.sessionId; const opening=!session.open; if(opening){collapsedSessionIds.delete(id);expandedSessionIds.add(id);}else{expandedSessionIds.delete(id);collapsedSessionIds.add(id);} persistCollapsedSessions(); try{ls.setItem(EXPANDED_SESSIONS_KEY,JSON.stringify([...expandedSessionIds].slice(-500)));}catch(_){} if(latest)draw(latest); })); }
 function executionSummary(profile, provider, model) { const identity=[]; if(profile)identity.push(profile); if(provider&&provider!==profile)identity.push(provider); const left=identity.join(' · '); return model&&!identity.includes(model)?left+(left?' / ':'')+model:left; }
 function requestDiagnostic(r) {
   if(r.state==='completed') return '';
@@ -735,7 +737,7 @@ function rowView(projects) {
 function populateStates(snapshot) { const prior=stateFilter.value; const states=new Set(); (snapshot.projects||[]).forEach(p=>{(p.sessions||[]).forEach(s=>states.add(s.state));(p.requests||[]).forEach(r=>states.add(r.state))}); stateFilter.innerHTML='<option value="all">All states</option>'+[...states].filter(Boolean).sort().map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join(''); stateFilter.value=[...stateFilter.options].some(o=>o.value===prior)?prior:'all'; }
 function draw(snapshot) {
   latest=snapshot; populateStates(snapshot);
-  const chosenLayout=localStorage.getItem('gateway-dashboard-layout')||'columns'; layoutFilter.value=chosenLayout;
+  const chosenLayout=ls.getItem('gateway-dashboard-layout')||'columns'; layoutFilter.value=chosenLayout;
   const dashboard=snapshot.dashboard||{}; if(document.activeElement!==recentWindow) recentWindow.value=dashboard['recent-window-seconds']??'';
   document.getElementById('updated').textContent='Updated '+clockFmt.format(new Date());
   const diag=snapshot['provider-diagnostics']||{}; const errorCount=(diag['provider-load-errors']||[]).length;
@@ -759,9 +761,89 @@ function draw(snapshot) {
 }
 async function refresh(){if(refreshInFlight)return; const generation=++refreshGeneration; refreshInFlight=true; try{const response=await fetch(endpoint,{cache:'no-store'}); const snapshot=await response.json(); if(generation===refreshGeneration) draw(snapshot);}catch(error){if(generation===refreshGeneration){document.getElementById('health').classList.add('stale');document.getElementById('updated').textContent='Dashboard refresh failed: '+error}}finally{refreshInFlight=false;}}
 function applyWindow(){const value=recentWindow.value.trim(); if(value){const parsed=Number.parseInt(value,10); if(!Number.isInteger(parsed)||parsed<1)return; endpoint.searchParams.set('recent-seconds',String(parsed));}else endpoint.searchParams.delete('recent-seconds'); const pageUrl=new URL(window.location.href); if(endpoint.searchParams.has('recent-seconds')) pageUrl.searchParams.set('recent-seconds',endpoint.searchParams.get('recent-seconds')); else pageUrl.searchParams.delete('recent-seconds'); window.history.replaceState(null,'',pageUrl.pathname+(pageUrl.search?`?${pageUrl.searchParams}`:'')+pageUrl.hash); refresh();}
-stateFilter.addEventListener('change',()=>latest&&draw(latest)); layoutFilter.addEventListener('change',()=>{localStorage.setItem('gateway-dashboard-layout',layoutFilter.value); latest&&draw(latest)}); document.getElementById('apply-window').addEventListener('click',applyWindow); refresh(); setInterval(refresh,3000);
+stateFilter.addEventListener('change',()=>latest&&draw(latest)); layoutFilter.addEventListener('change',()=>{ls.setItem('gateway-dashboard-layout',layoutFilter.value); latest&&draw(latest)}); document.getElementById('apply-window').addEventListener('click',applyWindow); refresh(); setInterval(refresh,3000);
 </script></main>""".replace("__SNAPSHOT_PATH__", source).replace("__FOCUS_PATH__", focus_source).replace("__PURGE_PATH__", purge_source).replace("__FOCUS_TOKEN__", token_source).replace("__COMPLETE_PATH__", complete_source)
     return html.encode("utf-8")
+
+
+_STYLE_RE = re.compile(r"<style>(.*?)</style>", re.S)
+_SCRIPT_RE = re.compile(r"<script>(.*)</script>", re.S)
+
+EMBED_STATIC_PREFIX = "static/"
+EMBED_ASSETS = {
+    "dashboard.css": "text/css; charset=utf-8",
+    "embed.css": "text/css; charset=utf-8",
+    "dashboard.js": "text/javascript; charset=utf-8",
+    "embed.js": "text/javascript; charset=utf-8",
+}
+
+_EMBED_CSS = """
+html[data-embed] body { background:transparent!important; padding:6px; margin:0; min-height:0; height:auto }
+html[data-embed] main { max-width:none; margin:0 }
+html[data-embed] .top, html[data-embed] #restart-gateway, html[data-embed] #restart-feedback,
+html[data-embed] #request-action-feedback, html[data-embed] .action-button,
+html[data-embed] #theme-filter, html[data-embed] label:has(#theme-filter),
+html[data-embed] #apply-window { display:none!important }
+html[data-embed] div:has(> #restart-gateway) { display:none!important }
+html[data-embed] .toolbar { margin:4px 0; padding:6px 8px }
+html[data-embed] .cards { margin:6px 0 }
+html[data-embed] h2 { margin:12px 0 6px }
+"""
+
+_EMBED_JS = """(()=>{
+  const root=document.documentElement; const q=new URLSearchParams(location.search);
+  const t=q.get('theme');
+  const dark=t==='dark'||(t!=='light'&&window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches);
+  root.dataset.theme=dark?'dark':'light';
+  let last=-1;
+  const post=()=>{const h=Math.ceil(Math.max(document.documentElement.scrollHeight,document.body.scrollHeight));
+    if(h===last)return;last=h;try{window.parent.postMessage({type:'agent-gateway-embed',height:h},'*');}catch(_){}};
+  if(window.ResizeObserver){new ResizeObserver(post).observe(document.body);}
+  new MutationObserver(post).observe(document.body,{childList:true,subtree:true});
+  window.addEventListener('load',post); post();
+})();
+"""
+
+
+def _page_parts(snapshot_path: str, **kwargs: str) -> tuple[str, str, str]:
+    """Split the page into (css, body markup, script) so embed mode can serve them as files."""
+    html = render_dashboard_html(snapshot_path, **kwargs).decode("utf-8")
+    css = "\n".join(_STYLE_RE.findall(html))
+    script_match = _SCRIPT_RE.search(html)
+    script = script_match.group(1) if script_match else ""
+    body = _SCRIPT_RE.sub("", _STYLE_RE.sub("", html))
+    body = body.replace("<!doctype html>", "").replace('<meta charset="utf-8">', "")
+    body = re.sub(r"<title>.*?</title>", "", body, flags=re.S)
+    body = re.sub(r"</main>\s*</main>", "</main>", body)
+    return css, body.strip(), script
+
+
+def render_embed_html(theme: str = "") -> bytes:
+    """Read-only embeddable page: no inline script/style, relative URLs, no action token."""
+    _, body, _ = _page_parts("dashboard/snapshot")
+    attrs = ' data-embed="1"' + (f' data-theme="{theme}"' if theme in {"dark", "light"} else "")
+    page = (
+        f'<!doctype html><html{attrs}><head><meta charset="utf-8"><title>Agent gateway</title>'
+        f'<meta name="viewport" content="width=device-width,initial-scale=1">'
+        f'<link rel="stylesheet" href="dashboard/{EMBED_STATIC_PREFIX}dashboard.css">'
+        f'<link rel="stylesheet" href="dashboard/{EMBED_STATIC_PREFIX}embed.css"></head><body>{body}'
+        f'<script src="dashboard/{EMBED_STATIC_PREFIX}dashboard.js"></script>'
+        f'<script src="dashboard/{EMBED_STATIC_PREFIX}embed.js"></script></body></html>'
+    )
+    return page.encode("utf-8")
+
+
+def render_embed_asset(name: str) -> tuple[str, bytes] | None:
+    """Static file for the embed page; the action token is never rendered into it."""
+    kind = EMBED_ASSETS.get(name)
+    if kind is None:
+        return None
+    if name == "embed.css":
+        return kind, _EMBED_CSS.encode("utf-8")
+    if name == "embed.js":
+        return kind, _EMBED_JS.encode("utf-8")
+    css, _, script = _page_parts("dashboard/snapshot")
+    return kind, (css if name == "dashboard.css" else script).encode("utf-8")
 
 
 __all__ = ["dashboard_snapshot", "render_dashboard_html"]
