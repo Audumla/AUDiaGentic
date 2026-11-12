@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.99.0](https://github.com/Audumla/AUDiaGentic/compare/v0.98.3...v0.99.0) (2026-11-12)
+
+
+### Features
+
+* **gateway:** read-only embeddable dashboard (embed=1) with external assets ([#460](https://github.com/Audumla/AUDiaGentic/issues/460)) ([aace4fa](https://github.com/Audumla/AUDiaGentic/commit/aace4fa551d9b7210ec2ada331a22a0d8ad5c19d))
+
 ## [0.98.3](https://github.com/Audumla/AUDiaGentic/compare/v0.98.2...v0.98.3) (2026-11-12)
 
 
