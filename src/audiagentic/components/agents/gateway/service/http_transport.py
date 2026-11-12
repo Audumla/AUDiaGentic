@@ -93,6 +93,20 @@ class GatewayHTTPRequestHandler(BaseHTTPRequestHandler):
                 icon = read_client_icon(parse_qs(parsed.query).get("id", [""])[0])
                 self._write_bytes(200 if icon else 404, "image/png", icon)
                 return
+            if method == "GET" and parsed.path.startswith(f"{self.server.dashboard_path}/static/"):
+                from audiagentic.components.agents.gateway.service.dashboard import render_embed_asset
+
+                asset = render_embed_asset(parsed.path.rsplit("/", 1)[-1])
+                if asset is None:
+                    self._write_bytes(404, "text/plain; charset=utf-8", b"not found")
+                else:
+                    self._write_bytes(200, asset[0], asset[1])
+                return
+            if method == "GET" and parsed.path == self.server.dashboard_path and parse_qs(parsed.query).get("embed") == ["1"]:
+                from audiagentic.components.agents.gateway.service.dashboard import render_embed_html
+
+                self._write_bytes(200, "text/html; charset=utf-8", render_embed_html(parse_qs(parsed.query).get("theme", [""])[0]))
+                return
             if method == "GET" and parsed.path == self.server.dashboard_path:
                 from audiagentic.components.agents.gateway.service.dashboard import (
                     render_dashboard_html,
