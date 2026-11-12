@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.99.1](https://github.com/Audumla/AUDiaGentic/compare/v0.99.0...v0.99.1) (2026-11-12)
+
+
+### Bug Fixes
+
+* **gpt-auto:** reclaim restored project tabs and never close a tab with an unresolved turn ([#463](https://github.com/Audumla/AUDiaGentic/issues/463)) ([3030ede](https://github.com/Audumla/AUDiaGentic/commit/3030ede6817b7e9d4e036eef873c71bd9fd4dd9b))
+
 ## [0.99.0](https://github.com/Audumla/AUDiaGentic/compare/v0.98.3...v0.99.0) (2026-11-12)
 
 
