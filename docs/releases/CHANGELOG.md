@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.98.3](https://github.com/Audumla/AUDiaGentic/compare/v0.98.2...v0.98.3) (2026-11-12)
+
+
+### Bug Fixes
+
+* **worktrees:** keep the drain fence in one state directory so the MCP resolver always sees it ([#458](https://github.com/Audumla/AUDiaGentic/issues/458)) ([1de02d8](https://github.com/Audumla/AUDiaGentic/commit/1de02d8b9e4d422fdd814154f300511b629a5d60))
+
 ## [0.98.2](https://github.com/Audumla/AUDiaGentic/compare/v0.98.1...v0.98.2) (2026-11-06)
 
 
