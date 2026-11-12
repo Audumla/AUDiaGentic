@@ -81,7 +81,14 @@ def classify(entries: list[dict[str, Any]], now: float) -> DispatchReport:
 
 
 def scan_once(service_root: Path, health: Any, now: float) -> DispatchReport:
-    """One watchdog pass: classify the index and record the verdict. Reads only; never touches a request."""
+    """One watchdog pass: drop index entries of vanished projects, classify the rest, record the verdict.
+
+    Request records are never touched; only index entries whose project root is gone are removed, because they
+    could otherwise count as running work forever.
+    """
+    from audiagentic.components.agents.gateway.queue.work_index import clear_orphaned_index_entries
+
+    clear_orphaned_index_entries(service_root)
     report = classify(read_entries(service_root), now)
     health.observe_queue(list(report.findings))
     return report

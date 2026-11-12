@@ -407,6 +407,37 @@ def clear_work_index_entry(
         return False
 
 
+def clear_orphaned_index_entries(service_root: Path) -> list[str]:
+    """Drop index entries whose project root no longer exists; return the request ids dropped.
+
+    A deleted worktree takes its request records with it, so nothing can ever finish or reconcile these entries;
+    they would otherwise count as running work forever and hide real stalls. Only an entry whose root is gone while
+    the root's parent directory still exists is dropped, so an unmounted volume is never mistaken for a deletion.
+    Entries for existing roots are never touched here. Never raises.
+    """
+    idx_dir = _index_dir(service_root)
+    if not idx_dir.is_dir():
+        return []
+    dropped: list[str] = []
+    for path in sorted(idx_dir.glob("*.json")):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            root = payload.get("project-root")
+            request_id = payload.get("request-id")
+            if not isinstance(root, str) or not root or not isinstance(request_id, str):
+                continue
+            root_path = Path(root)
+            if root_path.exists() or not root_path.parent.is_dir():
+                continue
+            path.unlink(missing_ok=True)
+            dropped.append(request_id)
+        except (OSError, ValueError, AttributeError):
+            continue
+    if dropped:
+        logger.info("dropped %d work-index entries whose project root no longer exists", len(dropped))
+    return dropped
+
+
 def recover_work_index_entries(
     service_root: Path,
     *,

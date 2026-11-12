@@ -109,3 +109,36 @@ def test_a_failing_listener_or_pass_never_stops_the_watchdog(tmp_path: Path) -> 
 
     stuck.run_watchdog(tmp_path, Flaky(), stop, interval_seconds=0.01)
     assert len(calls) >= 3
+
+
+def test_an_entry_of_a_deleted_project_is_dropped_so_it_cannot_hide_a_stall(tmp_path: Path) -> None:
+    from audiagentic.components.agents.gateway.queue import work_index
+
+    class _Health:
+        def observe_queue(self, findings: list) -> None:
+            self.findings = findings
+
+    folder = tmp_path / "service" / "active-work"
+    folder.mkdir(parents=True)
+    live = tmp_path / "projects" / "alive"
+    live.mkdir(parents=True)
+    gone = tmp_path / "projects" / "deleted-worktree"  # parent exists, folder does not
+    unmounted = tmp_path / "missing-volume" / "worktree"  # parent missing too: not proof of deletion
+
+    def write(name: str, root: Path, request_id: str, phase: str, admitted: int) -> None:
+        entry = _entry(request_id, phase, admitted=admitted, claimed=admitted)
+        (folder / name).write_text(json.dumps({**entry, "project-root": str(root)}))
+
+    write("req_orphan.json", gone, "req_orphan", "running", 90000)
+    write("req_unmounted.json", unmounted, "req_unmounted", "running", 90000)
+    write("req_alive.json", live, "req_alive", "admitted", 600)
+    (folder / ("a" * 64 + ".json")).write_text(json.dumps({"request-id": "req_hashed", "project-root": str(gone)}))
+
+    assert sorted(work_index.clear_orphaned_index_entries(tmp_path / "service")) == ["req_hashed", "req_orphan"]
+    assert sorted(p.name for p in folder.glob("*.json")) == ["req_alive.json", "req_unmounted.json"]
+
+    health = _Health()
+    report = stuck.scan_once(tmp_path / "service", health, NOW.timestamp())
+    # the orphan no longer makes the lane look busy; the live request waiting on an idle lane is still seen
+    # (the unmounted entry keeps the lane "running", so assert only that the orphan is gone)
+    assert report.entries == 2
