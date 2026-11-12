@@ -21,6 +21,8 @@ settings:
     close-tabs-on-session-close: false
     physical-tab-idle-timeout-seconds: 7200
     physical-tab-reaper-interval-seconds: 300
+    # recorded-only | project-conversations (this browser is dedicated to the provider)
+    physical-tab-ownership-mode: project-conversations
   cdp:
     # CDP target location. For a remote browser use e.g.
     # http://browser.example.test:9222 and set up private transport (SSH/VPN).
