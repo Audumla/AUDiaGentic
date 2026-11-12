@@ -12,6 +12,7 @@ from audiagentic.components.project.worktrees import records
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.components.source_control import forge_access, forge_api as forge
 from audiagentic.components.source_control import git_api as git
+from audiagentic.foundation.mcp.worktree import resolve_worktree
 from audiagentic.foundation.system import worktree_drain
 
 IDLE = lambda _path: {"requests": [], "sessions": []}  # noqa: E731
@@ -82,7 +83,7 @@ def test_finish_preserves_then_removes_and_cleans_up(repo, merged, state) -> Non
     assert git.resolve_commit(repo, result["quarantine-ref"]) == tip
     archived = Path(result["archive"]) / ".audiagentic" / "runtime" / "req.json"
     assert archived.read_text() == '{"a": 1}'
-    assert not worktree_drain.is_draining(feature, state_root=state)
+    assert not worktree_drain.is_draining(feature)
     journal = finisher._read_journal(finisher._journal_path(state, repo, feature))
     assert journal["phase"] == "COMPLETE" and journal["proof"]["pr"] == 9
 
@@ -93,7 +94,7 @@ def test_finish_refuses_unmerged_and_leaves_everything_in_place(repo, merged, st
         finisher.finish(repo, str(feature), active_work=IDLE, pull_requests=lambda _r, _b: (), state_root=state)
     assert raised.value.code == "CON-WTFIN-002"
     assert feature.is_dir() and git.branch_exists(repo, "me/feature")
-    assert not worktree_drain.is_draining(feature, state_root=state)
+    assert not worktree_drain.is_draining(feature)
     assert git.resolve_commit(repo, "refs/quarantine/x") is None
 
 
@@ -133,7 +134,7 @@ def test_a_change_between_the_two_checks_aborts_before_removal(repo, merged, sta
         finisher.finish(repo, str(feature), active_work=IDLE, pull_requests=changing, state_root=state)
     assert raised.value.code == "CON-WTFIN-004"
     assert feature.is_dir() and git.branch_exists(repo, "me/feature")
-    assert not worktree_drain.is_draining(feature, state_root=state)
+    assert not worktree_drain.is_draining(feature)
 
 
 def test_branch_that_moved_is_left_in_place(repo, merged, state, monkeypatch) -> None:
@@ -193,12 +194,12 @@ def test_crash_between_intent_and_removal_resumes(repo, merged, state, monkeypat
         _run(repo, state, feature, pr)
     assert not feature.exists()
     assert finisher._read_journal(finisher._journal_path(state, repo, feature))["phase"] == "REMOVING"
-    assert worktree_drain.is_draining(feature, state_root=state)  # ambiguous: the fence stays
+    assert worktree_drain.is_draining(feature)  # ambiguous: the fence stays
 
     monkeypatch.undo()
     result = finisher.finish(repo, str(feature), active_work=IDLE, pull_requests=lambda _r, _b: (), state_root=state)
     assert result["tip"] == tip and not git.branch_exists(repo, "me/feature")
-    assert not worktree_drain.is_draining(feature, state_root=state)
+    assert not worktree_drain.is_draining(feature)
 
 
 def test_a_journal_from_another_repository_is_not_resumed(repo, merged, state, tmp_path) -> None:
@@ -264,7 +265,7 @@ def test_ambiguous_removal_failure_keeps_the_fence(repo, merged, state, monkeypa
     with pytest.raises(AudiaGenticError) as raised:
         _run(repo, state, feature, pr)
     assert raised.value.code == "CON-WTFIN-007"
-    assert worktree_drain.is_draining(feature, state_root=state)
+    assert worktree_drain.is_draining(feature)
 
 
 def test_an_earlier_journal_is_kept_not_overwritten(repo, merged, state) -> None:
@@ -449,3 +450,19 @@ def test_tidy_reports_by_default_and_applies_only_proven_work_and_dead_records(r
     assert done["worktrees-finished"] == [str(feature)]
     assert "wt_dead00000000" not in records.read_records(repo, state_root=state)
     assert any(row["path"] == str(other) for row in done["left"])
+
+
+def test_the_mcp_resolver_refuses_the_worktree_while_finish_runs_with_a_separate_state_root(repo, merged, state) -> None:
+    feature, _tip, pr = merged
+    assert not (state / "worktrees" / "draining").exists()
+    seen: list[str] = []
+
+    def active_work(_path):
+        with pytest.raises(AudiaGenticError) as raised:
+            resolve_worktree(str(feature))
+        seen.append(raised.value.code)
+        return IDLE(_path)
+
+    finisher.finish(repo, str(feature), active_work=active_work, pull_requests=lambda _r, _b: (pr,), state_root=state)
+    assert seen and set(seen) == {"CFG-MCPWT-006"}
+    assert not (state / "worktrees" / "draining").exists()  # the fence never lives in the finish state root
