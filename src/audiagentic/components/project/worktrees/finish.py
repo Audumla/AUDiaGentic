@@ -302,7 +302,7 @@ def finish(repo: Path, target: str, *, active_work, discard_ignored: int | None 
         pull_requests = _fetch_merged_pull_heads(main, repo, path, pull_requests, remote)
         if journal:  # an earlier transaction's evidence is kept, never overwritten
             journal_file.rename(journal_file.with_name(f"{journal_file.stem}.{journal.get('transaction', 'old')}.json"))
-        worktree_drain.begin(path, reason="finish", state_root=state)
+        worktree_drain.begin(path, reason="finish")
         removed = False
         try:
             _, first = _assess(repo, path, active_work=active_work, pull_requests=pull_requests)
@@ -352,7 +352,7 @@ def finish(repo: Path, target: str, *, active_work, discard_ignored: int | None 
             _write_journal(journal_file, body, "WORKTREE_REMOVED")
         finally:
             if not removed:
-                worktree_drain.end(path, state_root=state)
+                worktree_drain.end(path)
         return _finish_tail(main, repo, path, body, journal_file, state, scratch_root)
 
 
@@ -422,7 +422,7 @@ def _finish_tail(main: Path, repo: Path, path: Path, body: dict[str, Any], journ
     if recorded is not None and Path(recorded.path).resolve() == path:
         records.forget(repo, recorded.worktree_id, state_root=state)
     _write_journal(journal_file, body, "COMPLETE")
-    worktree_drain.end(path, state_root=state)
+    worktree_drain.end(path)
     scratch = retire_scratch(scratch_root or default_scratch_root(main), branch)
     if scratch:
         notes.append(f"task scratch moved to {scratch}; the scratch sweep removes it")
