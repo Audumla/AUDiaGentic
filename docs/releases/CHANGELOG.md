@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.99.2](https://github.com/Audumla/AUDiaGentic/compare/v0.99.1...v0.99.2) (2026-11-12)
+
+
+### Documentation
+
+* **planning:** DW03 worktree provenance gaps ([#466](https://github.com/Audumla/AUDiaGentic/issues/466)) ([25713cf](https://github.com/Audumla/AUDiaGentic/commit/25713cf411624b6d7e48b165af8cd6cbeca632da))
+
 ## [0.99.1](https://github.com/Audumla/AUDiaGentic/compare/v0.99.0...v0.99.1) (2026-11-12)
 
 
