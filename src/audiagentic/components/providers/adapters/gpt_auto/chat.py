@@ -1013,6 +1013,7 @@ class PersistentChat:
                 # validated-DOM inactivity clock may reclaim the tab again.
                 or self.active_turn_id is not None
                 or self.pending_turns > 0
+                or self.unresolved_turn_pending
                 or now - self._last_validated_activity_monotonic < idle_timeout_seconds
             ):
                 return False
@@ -1033,6 +1034,7 @@ class PersistentChat:
                 handle != self.page_handle
                 or self.active_turn_id is not None
                 or self.pending_turns > 0
+                or self.unresolved_turn_pending
                 or now - self._last_validated_activity_monotonic < idle_timeout_seconds
             ):
                 return False

@@ -124,6 +124,11 @@ class BrowserConfig:
     close_tabs_on_session_close: bool
     physical_tab_idle_timeout_seconds: float = 7200.0
     physical_tab_reaper_interval_seconds: float = 300.0
+    # "project-conversations": every conversation tab of the configured ChatGPT
+    # project is provider-owned, so tabs restored by a browser restart (new CDP
+    # target ids) are reclaimed too. Only safe when the browser is dedicated to
+    # this provider. "recorded-only" closes just tabs this runtime recorded.
+    physical_tab_ownership_mode: str = "project-conversations"
 
 
 @dataclass(frozen=True)
@@ -319,6 +324,7 @@ class GptAutoConfig:
                 "close-tabs-on-session-close",
                 "physical-tab-idle-timeout-seconds",
                 "physical-tab-reaper-interval-seconds",
+                "physical-tab-ownership-mode",
             },
             "browser",
             required={
@@ -361,6 +367,7 @@ class GptAutoConfig:
             physical_tab_reaper_interval_seconds=_optional_positive(
                 browser_data, "physical-tab-reaper-interval-seconds", default=300.0
             ),
+            physical_tab_ownership_mode=_ownership_mode(browser_data),
         )
 
         cdp_data = _mapping(settings, "cdp")
@@ -739,6 +746,13 @@ def _optional_boolean(data: dict[str, Any], key: str, *, default: bool) -> bool:
     if not isinstance(value, bool):
         _invalid(f"{key} must be a boolean")
     return value
+
+
+def _ownership_mode(data: dict[str, Any]) -> str:
+    value = data.get("physical-tab-ownership-mode", "project-conversations")
+    if value not in {"recorded-only", "project-conversations"}:
+        _invalid("physical-tab-ownership-mode must be recorded-only or project-conversations")
+    return str(value)
 
 
 def _optional_non_negative(data: dict[str, Any], key: str, *, default: float) -> float:
