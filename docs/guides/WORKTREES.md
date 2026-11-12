@@ -183,6 +183,7 @@ In `.audiagentic/settings.yaml` (see [PROJECT_SETTINGS](PROJECT_SETTINGS.md)):
 |---|---|---|
 | `worktrees.root` | `<main worktree>.worktrees` beside the main worktree | where `start` creates worktrees |
 | `worktrees.branch-prefix` | `{owner}/` | prefix of new branch names |
+| `worktrees.require-purpose` | `false` | when `true`, `start` refuses without a non-empty `purpose TEXT` |
 | `worktrees.protected` | none | name to path map of worktrees that are never removed |
 | `worktrees.pre-push` | none | ids of the checks `push` and `merge` must pass before publishing (the union of your list and the project's) |
 | `worktrees.checks` | none | **user settings only**: id to a fixed command list (`{tip}`, `{base}`, `{worktree}`) |
