@@ -37,3 +37,14 @@ def test_embed_assets_are_read_only_and_post_height() -> None:
     assert "localStorage." not in script.replace("window.localStorage", "")
     assert 'new URL("dashboard/snapshot"' in script
     assert render_embed_asset("../secret") is None
+
+
+def test_dashboard_health_reports_surface_state_without_secrets() -> None:
+    from audiagentic.components.agents.gateway.health import get_dispatch_health
+    from audiagentic.components.agents.gateway.service.dashboard import dashboard_health
+
+    body = dashboard_health()
+    assert body["schema"] == 1 and body["generated-at"].endswith("Z")
+    snap = get_dispatch_health().snapshot()
+    assert body["dispatch"]["ready"] == snap["ready"]
+    assert body["dispatch"]["surfaces"] == snap["surfaces"]

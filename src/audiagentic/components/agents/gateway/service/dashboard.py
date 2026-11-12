@@ -848,3 +848,21 @@ def render_embed_asset(name: str) -> tuple[str, bytes] | None:
 
 __all__ = ["dashboard_snapshot", "render_dashboard_html"]
 
+
+
+def dashboard_health(now: datetime | None = None) -> dict[str, Any]:
+    """Read-only dispatch readiness for the dashboard: surfaces, why a surface is down, and the queue verdict."""
+    from audiagentic.components.agents.gateway.health import get_dispatch_health
+
+    snapshot = get_dispatch_health().snapshot()
+    stamp = (now or datetime.now(timezone.utc)).isoformat().replace("+00:00", "Z")
+    return {
+        "schema": 1,
+        "generated-at": stamp,
+        "dispatch": {
+            "ready": snapshot["ready"],
+            "degraded": snapshot["degraded"],
+            "suspected": snapshot["suspected"],
+            "surfaces": snapshot["surfaces"],
+        },
+    }
