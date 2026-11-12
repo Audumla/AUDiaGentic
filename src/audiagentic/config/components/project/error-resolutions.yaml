@@ -14,5 +14,6 @@ VAL-WTSTART-001: "A worktree slug is 1-48 lowercase letters, digits or hyphens s
 VAL-WTSTART-002: "git does not accept the resulting branch name. Choose another slug or change worktrees.branch-prefix in the project settings."
 VAL-WTSTART-003: "The remote default branch is not known locally. Fetch the remote or set origin/HEAD (git remote set-head origin -a), then retry."
 VAL-WTSTART-004: "The remote default branch could not be fetched, so no worktree was created: starting from a stale base causes conflicts. Check network and credentials, then retry."
+VAL-WTSTART-005: "This project sets worktrees.require-purpose, so a worktree needs a reason. Retry with purpose TEXT (why this worktree exists)."
 CON-WTSTART-001: "A branch with this name already exists. Pick another slug, or finish the existing worktree first (list shows it)."
 CON-WTSTART-002: "That worktree path is already in use. Pick another slug, or finish or remove the existing worktree first."

@@ -77,6 +77,9 @@ def start(repo: Path, slug: str, *, plan_item: str | None = None, purpose: str =
         raise invalid_error(1, "The owner account name is not usable in a branch name", account=owner["account"])
     if plan_item is not None and not re.fullmatch(r"[A-Z]+\d+", plan_item):
         raise invalid_error(1, "A plan item id looks like DW01", plan_item=plan_item)
+    purpose = purpose.strip()
+    if not purpose and resolve_settings_cached(repo).get("worktrees.require-purpose"):
+        raise invalid_error(5, "This project requires a purpose for every new worktree", slug=slug)
     branch = branch_name(repo, slug, owner)
     if not git.valid_branch_name(repo, branch):
         raise invalid_error(2, "git does not accept this branch name", branch=branch)
