@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.100.0](https://github.com/Audumla/AUDiaGentic/compare/v0.99.2...v0.100.0) (2026-11-12)
+
+
+### Features
+
+* **worktrees:** worktrees.require-purpose makes start refuse without a purpose (DW03 slice 1) ([#468](https://github.com/Audumla/AUDiaGentic/issues/468)) ([7d986c3](https://github.com/Audumla/AUDiaGentic/commit/7d986c3dfdc5d60df14fd9b1b8e072ff9d96e4ce))
+
 ## [0.99.2](https://github.com/Audumla/AUDiaGentic/compare/v0.99.1...v0.99.2) (2026-11-12)
 
 
