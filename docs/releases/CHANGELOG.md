@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.102.0](https://github.com/Audumla/AUDiaGentic/compare/v0.101.0...v0.102.0) (2026-11-13)
+
+
+### Features
+
+* **gateway:** GET /dashboard/health with dispatch readiness per surface ([#462](https://github.com/Audumla/AUDiaGentic/issues/462)) ([cb7dcdf](https://github.com/Audumla/AUDiaGentic/commit/cb7dcdf55a917a6ed7a67cf70e33bce63ef3102f))
+
 ## [0.101.0](https://github.com/Audumla/AUDiaGentic/compare/v0.100.0...v0.101.0) (2026-11-13)
 
 
