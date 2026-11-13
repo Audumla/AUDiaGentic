@@ -21,7 +21,7 @@ from audiagentic.components.source_control import forge_api as forge
 from audiagentic.components.source_control import git_api as git
 from audiagentic.foundation.system.process import editable_sources_of_running_processes, pids_referencing_path
 
-from . import service
+from . import records, service
 
 #: Caches git ignores that are safe to lose with the worktree.
 DISPOSABLE_CACHES = frozenset({"__pycache__", ".pytest_cache", ".ruff_cache", ".mypy_cache"})
@@ -138,8 +138,15 @@ def _merge_proof(repo: Path, entry: git.WorktreeEntry, base: str | None,
     return [], pr
 
 
+def evidence_holds(repo: Path, state_root: Path | None = None) -> dict[Path, str]:
+    """Worktree path to the reason its record holds evidence."""
+    return {Path(record.path).resolve(): record.evidence
+            for record in records.read_records(repo, state_root=state_root).values() if record.evidence}
+
+
 def assess_one(repo: Path, entry: git.WorktreeEntry, *, primary: bool, protected: dict[Path, str],
-               base: str | None, active_work: ActiveWork, pull_requests: PullRequests) -> Assessment:
+               base: str | None, active_work: ActiveWork, pull_requests: PullRequests,
+               holds: dict[Path, str] | None = None) -> Assessment:
     blockers: list[Blocker] = []
     notes: list[str] = []
     if primary:
@@ -148,6 +155,8 @@ def assess_one(repo: Path, entry: git.WorktreeEntry, *, primary: bool, protected
         blockers.append(Blocker("bare", "a bare repository has no worktree to remove"))
     if entry.path in protected:
         blockers.append(Blocker("protected", f"declared protected as {protected[entry.path]}"))
+    if holds and entry.path in holds:
+        blockers.append(Blocker("evidence-hold", f"holds evidence not yet preserved: {holds[entry.path]}"))
     if entry.prunable:
         blockers.append(Blocker("missing-path", "the directory is gone; `git worktree prune` clears the entry"))
     if blockers:
@@ -209,14 +218,16 @@ def assess_one(repo: Path, entry: git.WorktreeEntry, *, primary: bool, protected
 
 
 def assess_all(repo: Path, *, active_work: ActiveWork,
-               pull_requests: PullRequests = forge.pull_requests_for_branch) -> dict[str, Any]:
+               pull_requests: PullRequests = forge.pull_requests_for_branch,
+               state_root: Path | None = None) -> dict[str, Any]:
     """Assess every worktree of the repository; nothing is fetched, written or removed."""
     entries = git.list_worktrees(repo)
     base = git.default_branch(repo)
     protected = service.protected_paths(repo)
+    holds = evidence_holds(repo, state_root)
     results = [
         assess_one(repo, entry, primary=index == 0, protected=protected, base=base,
-                   active_work=active_work, pull_requests=pull_requests)
+                   active_work=active_work, pull_requests=pull_requests, holds=holds)
         for index, entry in enumerate(entries)
     ]
     return {"default-branch": base, "worktrees": [result.to_dict() for result in results]}

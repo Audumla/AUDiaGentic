@@ -21,7 +21,7 @@ def tidy(repo: Path, *, active_work, apply: bool = False, pull_requests=forge.pu
     entries = git.list_worktrees(repo)
     live = {entry.path for entry in entries}
     stale = [record for record in records.read_records(repo, state_root=state_root).values()
-             if Path(record.path) not in live and not Path(record.path).exists()]
+             if Path(record.path) not in live and not Path(record.path).exists() and not record.evidence]
     retired = []
     for record in stale:
         if apply and records.forget(repo, record.worktree_id, state_root=state_root):
@@ -29,7 +29,8 @@ def tidy(repo: Path, *, active_work, apply: bool = False, pull_requests=forge.pu
         elif not apply:
             retired.append(record.path)
 
-    assessed = eligibility.assess_all(repo, active_work=active_work, pull_requests=pull_requests)["worktrees"]
+    assessed = eligibility.assess_all(repo, active_work=active_work, pull_requests=pull_requests,
+                                    state_root=state_root)["worktrees"]
     finished, left = [], []
     for row in assessed:
         if row["verdict"] != "eligible":

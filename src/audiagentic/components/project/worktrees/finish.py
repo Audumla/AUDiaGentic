@@ -37,7 +37,7 @@ from audiagentic.foundation.system import worktree_drain
 from audiagentic.foundation.system.advisory_lock import AdvisoryLock
 from audiagentic.foundation.time import now_iso_z
 
-from . import eligibility, records
+from . import audit, eligibility, records
 
 refuse_error = make_error_factory("CON", "WTFIN", "project")
 
@@ -175,14 +175,15 @@ def _proof(assessment: eligibility.Assessment, repo: Path, abandon: bool = False
             "records": sorted(records_found)}
 
 
-def _assess(repo: Path, path: Path, *, active_work, pull_requests) -> tuple[git.WorktreeEntry, eligibility.Assessment]:
+def _assess(repo: Path, path: Path, *, active_work, pull_requests, state_root: Path | None = None) -> tuple[git.WorktreeEntry, eligibility.Assessment]:
     entries = git.list_worktrees(repo)
     entry = next((e for e in entries if e.path == path), None)
     if entry is None or entry == entries[0]:
         raise refuse_error(1, "That path is not a removable worktree of this repository", path=str(path))
     assessment = eligibility.assess_one(
         repo, entry, primary=False, protected=eligibility.service.protected_paths(repo),
-        base=git.default_branch(repo), active_work=active_work, pull_requests=pull_requests)
+        base=git.default_branch(repo), active_work=active_work, pull_requests=pull_requests,
+        holds=eligibility.evidence_holds(repo, state_root))
     return entry, assessment
 
 
@@ -305,7 +306,7 @@ def finish(repo: Path, target: str, *, active_work, discard_ignored: int | None 
         worktree_drain.begin(path, reason="finish")
         removed = False
         try:
-            _, first = _assess(repo, path, active_work=active_work, pull_requests=pull_requests)
+            _, first = _assess(repo, path, active_work=active_work, pull_requests=pull_requests, state_root=state)
             _require_eligible(path, first, discard_ignored, abandon)
             paired = records.reconcile(git.list_worktrees(repo), records.read_records(repo, state_root=state)).paired
             record = paired.get(path)
@@ -332,7 +333,7 @@ def finish(repo: Path, target: str, *, active_work, discard_ignored: int | None 
                 os.sync()  # archive and ref reach disk before anything is removed
             _write_journal(journal_file, body, "PRESERVED")
 
-            _, second = _assess(repo, path, active_work=active_work, pull_requests=pull_requests)
+            _, second = _assess(repo, path, active_work=active_work, pull_requests=pull_requests, state_root=state)
             _require_eligible(path, second, discard_ignored, abandon)
             if _proof(second, repo, abandon is not None) != body["proof"]:
                 raise refuse_error(4, "The worktree changed while it was being finished; nothing was removed",
@@ -426,6 +427,9 @@ def _finish_tail(main: Path, repo: Path, path: Path, body: dict[str, Any], journ
     scratch = retire_scratch(scratch_root or default_scratch_root(main), branch)
     if scratch:
         notes.append(f"task scratch moved to {scratch}; the scratch sweep removes it")
+    audit.append(repo, "finish", state_root=state, worktree_id=body.get("record-id"), path=str(path), branch=branch,
+                 tip=tip, pr=proof["pr"], abandoned=bool(body.get("abandon")),
+                 quarantine_ref=body.get("quarantine-ref"))
     return {"path": str(path), "branch": branch, "tip": tip, "pr": proof["pr"],
             "quarantine-ref": body.get("quarantine-ref"), "archive": body.get("archive"),
             "bundle": body.get("bundle"), "abandoned": bool(body.get("abandon")), "notes": notes}

@@ -21,7 +21,7 @@ from audiagentic.components.source_control import git_api as git
 from audiagentic.foundation.system.advisory_lock import AdvisoryLock
 from audiagentic.foundation.time import now_iso_z
 
-from . import records
+from . import audit, records
 
 invalid_error = make_error_factory("VAL", "WTSTART", "project")
 conflict_error = make_error_factory("CON", "WTSTART", "project")
@@ -117,6 +117,8 @@ def start(repo: Path, slug: str, *, plan_item: str | None = None, purpose: str =
         except BaseException:
             _roll_back(main, path, branch, created, record.worktree_id, repo, state_root)
             raise
+    audit.append(repo, "start", state_root=state_root, worktree_id=record.worktree_id, path=str(path.resolve()),
+                 branch=branch, tip=head, owner=owner, purpose=purpose, plan_item=plan_item)
     return StartedWorktree(record.worktree_id, path.resolve(), branch, base, head)
 
 
