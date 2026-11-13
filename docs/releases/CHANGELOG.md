@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.102.1](https://github.com/Audumla/AUDiaGentic/compare/v0.102.0...v0.102.1) (2026-11-13)
+
+
+### Bug Fixes
+
+* **gateway:** the watchdog drops work-index entries whose project root no longer exists ([#465](https://github.com/Audumla/AUDiaGentic/issues/465)) ([545410d](https://github.com/Audumla/AUDiaGentic/commit/545410d548ef59e3fd3a2e6d72124b9b988908c0))
+
 ## [0.102.0](https://github.com/Audumla/AUDiaGentic/compare/v0.101.0...v0.102.0) (2026-11-13)
 
 
