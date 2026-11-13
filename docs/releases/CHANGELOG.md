@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.101.0](https://github.com/Audumla/AUDiaGentic/compare/v0.100.0...v0.101.0) (2026-11-13)
+
+
+### Features
+
+* **worktrees:** audit trail, evidence hold and adopt (DW03 slices 2-4) ([#470](https://github.com/Audumla/AUDiaGentic/issues/470)) ([4719c9c](https://github.com/Audumla/AUDiaGentic/commit/4719c9c6b4a9ab6d2ffc17b6de69a6373bb5abe9))
+
 ## [0.100.0](https://github.com/Audumla/AUDiaGentic/compare/v0.99.2...v0.100.0) (2026-11-12)
 
 
