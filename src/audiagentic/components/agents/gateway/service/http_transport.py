@@ -114,6 +114,11 @@ class GatewayHTTPRequestHandler(BaseHTTPRequestHandler):
 
                 self._write_bytes(200, "text/html; charset=utf-8", render_dashboard_html(self.server.dashboard_snapshot_path, focus_path=self.server.dashboard_focus_path, purge_session_path=self.server.dashboard_purge_session_path, focus_token=self.server.application.dashboard_action_token, complete_path=self.server.dashboard_complete_path))
                 return
+            if method == "GET" and parsed.path == f"{self.server.dashboard_path}/health":
+                from audiagentic.components.agents.gateway.service.dashboard import dashboard_health
+
+                self._write_json(200, dashboard_health())
+                return
             if method == "GET" and parsed.path == self.server.dashboard_snapshot_path:
                 query = parse_qs(parsed.query, keep_blank_values=True)
                 raw_recent = query.get("recent-seconds", [None])[0]
