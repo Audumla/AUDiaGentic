@@ -14,6 +14,9 @@ audiagentic worktree push   [TARGET] [head TIP12] [dry-run yes] [project PATH] [
 audiagentic worktree ship   [TARGET] [title TEXT] [body TEXT] [head TIP12] [project PATH] [output json]
 audiagentic worktree merge  [TARGET] [title TEXT] [body TEXT] [head TIP12] [dry-run yes] [project PATH] [output json]
 audiagentic worktree finish TARGET [abandon TIP12] [discard-ignored N] [project PATH] [output json]
+audiagentic worktree adopt  PATH purpose TEXT [item ID] [owner NAME] [project PATH] [output json]
+audiagentic worktree evidence PATH (set TEXT | clear) [project PATH] [output json]
+audiagentic worktree audit  [project PATH] [output json]
 ```
 
 Arguments are keywords (no `--` options). `audiagentic worktree help` prints the same text.
@@ -161,6 +164,18 @@ of the tip you would discard. Repeating that token abandons the work. Only the m
 request proof is waived; every other check still applies, and uncommitted changes still
 refuse (commit them first). Before removal the full history of the tip is written to a
 self-contained, verified `git bundle` with its checksum.
+
+## Provenance: adopt, evidence, audit
+
+- **adopt** records a worktree git already has but that has no record (made by plain `git worktree add`). It needs a
+  purpose; the record says it was adopted (creation time is the adoption time), never that you created it. The main
+  worktree is never adopted.
+- **evidence PATH set TEXT** marks a worktree as holding work not yet preserved. `finish`, `tidy` and `prune` refuse it, no
+  argument overrides that, and its record is never retired (even when the directory is gone) until `evidence PATH clear`.
+  This is enforced by these commands only: plain `git worktree remove` cannot be stopped.
+- **audit** prints the append-only trail (`start`, `adopt`, `evidence-set`, `evidence-cleared`, `finish`), kept under
+  `worktrees/audit/` in the user state directory. It outlives the records. A failed write is logged and never stops the
+  action (the finish journal remains the recovery authority); a damaged line is reported, never skipped.
 
 ## Where things are kept
 
