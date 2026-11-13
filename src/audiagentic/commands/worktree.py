@@ -19,6 +19,9 @@ _HELP = """Worktree commands (keyword syntax):
   audiagentic worktree merge [TARGET] [title TEXT] [body TEXT] [head TIP12] [dry-run yes] [project PATH] [output json]
   audiagentic worktree tidy [apply yes] [project PATH] [output json]
   audiagentic worktree finish TARGET [abandon TIP] [discard-ignored N] [project PATH] [output json]
+  audiagentic worktree adopt PATH purpose TEXT [item ID] [owner NAME] [project PATH] [output json]
+  audiagentic worktree evidence PATH (set TEXT | clear) [project PATH] [output json]
+  audiagentic worktree audit [project PATH] [output json]
   audiagentic worktree help
 
 start fetches the remote default branch (and refuses to continue if it cannot, so a
@@ -88,6 +91,11 @@ resumes from a journal; a refusal before removal leaves everything untouched. Un
 work is refused unless you repeat the tip the refusal printed as `abandon TIP`: its full
 history is then written to a self-contained git bundle, verified and checksummed in the central archive before the worktree is removed. Uncommitted changes
 still refuse; commit them first.
+adopt records a worktree git already has but that has no ownership record (a plain `git worktree add`),
+with the adopter and a purpose; the record says it was adopted, never that you created it. evidence marks a
+worktree as holding work not yet preserved: finish, tidy and prune refuse it (no argument overrides the
+hold) until `evidence PATH clear`. audit prints the append-only event trail (start, adopt, evidence, finish),
+which outlives the records.
 Options beginning with -- are not accepted; use the keywords shown above."""
 
 
@@ -96,7 +104,7 @@ def dispatch_keyword(tokens: list[str]) -> int:
     if not tokens or tokens in (["help"], ["list", "help"], ["start", "help"]):
         print_message(_HELP)
         return 0
-    if tokens[0] not in {"list", "start", "prune", "finish", "merge", "push", "sync", "ship", "tidy"} or any(token.startswith("--") for token in tokens):
+    if tokens[0] not in {"list", "start", "prune", "finish", "merge", "push", "sync", "ship", "tidy", "adopt", "evidence", "audit"} or any(token.startswith("--") for token in tokens):
         print_error("Invalid worktree syntax. Run: audiagentic worktree help")
         return 2
     if tokens[0] == "start":
@@ -107,6 +115,8 @@ def dispatch_keyword(tokens: list[str]) -> int:
         return _finish(tokens[1:])
     if tokens[0] == "tidy":
         return _tidy(tokens[1:])
+    if tokens[0] in {"adopt", "evidence", "audit"}:
+        return _provenance(tokens[0], tokens[1:])
     if tokens[0] == "ship":
         return _ship(tokens[1:])
     if tokens[0] == "merge":
@@ -457,3 +467,60 @@ def _table(result: dict) -> str:
     for orphan in result["orphan-records"]:
         lines.append(f"orphan record {orphan['worktree-id']}: {orphan['path']} is no longer a git worktree")
     return "\n".join(lines)
+
+
+def _provenance(command: str, tokens: list[str]) -> int:
+    """adopt, evidence and audit: thin adapter over components/project/worktrees."""
+    target = None
+    if command != "audit":
+        if not tokens:
+            print_error(f"worktree {command} needs a PATH. Run: audiagentic worktree help")
+            return 2
+        target, *tokens = tokens
+    action = None
+    if command == "evidence":
+        if not tokens or tokens[0] not in {"set", "clear"}:
+            print_error("worktree evidence needs `set TEXT` or `clear`. Run: audiagentic worktree help")
+            return 2
+        action, *tokens = tokens
+        if action == "set":
+            if not tokens:
+                print_error("worktree evidence set needs the reason TEXT")
+                return 2
+            reason, *tokens = tokens
+    clauses = _clauses(tokens, {"purpose", "item", "owner", "project", "output"} if command == "adopt"
+                       else {"project", "output"})
+    if clauses is None or (command == "adopt" and "purpose" not in clauses):
+        print_error(f"Invalid worktree {command} syntax. Run: audiagentic worktree help")
+        return 2
+
+    from audiagentic.components.project.worktrees import audit, provenance
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+    from audiagentic.foundation.paths.project import discover_checkout_root
+
+    repo = discover_checkout_root(Path(clauses["project"]).resolve() if "project" in clauses else None)
+    if repo is None:
+        print_error("Not inside a git repository. Give project PATH or run it inside one.")
+        return 2
+    try:
+        if command == "audit":
+            result = {"events": audit.read(repo)}
+        else:
+            path = Path(target)
+            if not path.is_absolute():
+                print_error(f"worktree {command} needs the absolute PATH of the worktree")
+                return 2
+            if command == "adopt":
+                record = provenance.adopt(repo, path, purpose=clauses["purpose"], plan_item=clauses.get("item"),
+                                          owner={"account": clauses["owner"]} if "owner" in clauses else None)
+            elif action == "set":
+                record = provenance.set_evidence(repo, path, reason)
+            else:
+                record = provenance.clear_evidence(repo, path)
+            result = {"worktree-id": record.worktree_id, "path": record.path, "branch": record.branch,
+                      "purpose": record.purpose, "evidence": record.evidence, "adopted": record.adopted}
+    except AudiaGenticError as error:
+        print_error(f"{error.code}: {error.message}")
+        return 1
+    print_json(result, sort_keys=True)
+    return 0

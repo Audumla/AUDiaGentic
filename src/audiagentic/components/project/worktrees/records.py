@@ -11,7 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -37,6 +37,9 @@ class WorktreeRecord:
     created_at: str
     purpose: str = ""
     plan_item: str | None = None
+    evidence: str | None = None  # why this worktree holds work not yet preserved; set means finish/tidy refuse
+    adopted: bool = False  # recorded after the fact: created_at is when it was adopted, not when git made it
+    adopted_by: str | None = None
 
 
 @dataclass(frozen=True)
@@ -111,10 +114,28 @@ def forget(repo: Path, worktree_id: str, *, state_root: Path | None = None) -> b
         return False
     with AdvisoryLock(path.with_suffix(".lock")):
         records = read_records(repo, state_root=state_root)
+        held = records.get(worktree_id)
+        if held is not None and held.evidence:
+            raise record_error(4, "This worktree holds evidence; clear the hold before its record is removed",
+                               worktree_id=worktree_id, evidence=held.evidence)
         if records.pop(worktree_id, None) is None:
             return False
         _write(path, identity, records)
         return True
+
+
+def update(repo: Path, worktree_id: str, *, state_root: Path | None = None, **changes: Any) -> WorktreeRecord:
+    """Change fields of one record under the store lock."""
+    identity = repo_id(repo)
+    path = _store_path(identity, state_root)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with AdvisoryLock(path.with_suffix(".lock")):
+        records = read_records(repo, state_root=state_root)
+        if worktree_id not in records:
+            raise record_error(5, "No such worktree record", worktree_id=worktree_id)
+        records[worktree_id] = replace(records[worktree_id], **changes)
+        _write(path, identity, records)
+        return records[worktree_id]
 
 
 def _write(path: Path, identity: str, records: dict[str, WorktreeRecord]) -> None:

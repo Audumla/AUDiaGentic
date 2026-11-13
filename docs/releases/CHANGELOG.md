@@ -1,5 +1,40 @@
 # Changelog
 
+## [0.101.0](https://github.com/Audumla/AUDiaGentic/compare/v0.100.0...v0.101.0) (2026-11-13)
+
+
+### Features
+
+* **worktrees:** audit trail, evidence hold and adopt (DW03 slices 2-4) ([#470](https://github.com/Audumla/AUDiaGentic/issues/470)) ([4719c9c](https://github.com/Audumla/AUDiaGentic/commit/4719c9c6b4a9ab6d2ffc17b6de69a6373bb5abe9))
+
+## [0.100.0](https://github.com/Audumla/AUDiaGentic/compare/v0.99.2...v0.100.0) (2026-11-12)
+
+
+### Features
+
+* **worktrees:** worktrees.require-purpose makes start refuse without a purpose (DW03 slice 1) ([#468](https://github.com/Audumla/AUDiaGentic/issues/468)) ([7d986c3](https://github.com/Audumla/AUDiaGentic/commit/7d986c3dfdc5d60df14fd9b1b8e072ff9d96e4ce))
+
+## [0.99.2](https://github.com/Audumla/AUDiaGentic/compare/v0.99.1...v0.99.2) (2026-11-12)
+
+
+### Documentation
+
+* **planning:** DW03 worktree provenance gaps ([#466](https://github.com/Audumla/AUDiaGentic/issues/466)) ([25713cf](https://github.com/Audumla/AUDiaGentic/commit/25713cf411624b6d7e48b165af8cd6cbeca632da))
+
+## [0.99.1](https://github.com/Audumla/AUDiaGentic/compare/v0.99.0...v0.99.1) (2026-11-12)
+
+
+### Bug Fixes
+
+* **gpt-auto:** reclaim restored project tabs and never close a tab with an unresolved turn ([#463](https://github.com/Audumla/AUDiaGentic/issues/463)) ([3030ede](https://github.com/Audumla/AUDiaGentic/commit/3030ede6817b7e9d4e036eef873c71bd9fd4dd9b))
+
+## [0.99.0](https://github.com/Audumla/AUDiaGentic/compare/v0.98.3...v0.99.0) (2026-11-12)
+
+
+### Features
+
+* **gateway:** read-only embeddable dashboard (embed=1) with external assets ([#460](https://github.com/Audumla/AUDiaGentic/issues/460)) ([aace4fa](https://github.com/Audumla/AUDiaGentic/commit/aace4fa551d9b7210ec2ada331a22a0d8ad5c19d))
+
 ## [0.98.3](https://github.com/Audumla/AUDiaGentic/compare/v0.98.2...v0.98.3) (2026-11-12)
 
 
