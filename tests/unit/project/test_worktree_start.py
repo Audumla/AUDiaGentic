@@ -155,3 +155,21 @@ def test_command_prints_the_path_and_json(repo: Path, capsys) -> None:
     capsys.readouterr()
     assert worktree_command.dispatch_keyword(["start", "help"]) == 0
     assert "worktree start" in capsys.readouterr().out
+
+
+def test_a_project_can_require_a_purpose(repo: Path) -> None:
+    (repo / ".audiagentic").mkdir()
+    (repo / ".audiagentic" / "settings.yaml").write_text("schema_version: 1\nworktrees:\n  require-purpose: true\n")
+    for blank in ("", "   "):
+        with pytest.raises(AudiaGenticError) as raised:
+            lifecycle.start(repo, "needs-why", purpose=blank)
+        assert raised.value.code == "VAL-WTSTART-005"
+    assert not git.branch_exists(repo, "alice/needs-why")  # refused before any git change
+
+    started = lifecycle.start(repo, "needs-why", purpose="  because  ")
+    assert records.read_records(repo)[started.worktree_id].purpose == "because"
+
+
+def test_purpose_stays_optional_by_default(repo: Path) -> None:
+    started = lifecycle.start(repo, "no-why")
+    assert records.read_records(repo)[started.worktree_id].purpose == ""
