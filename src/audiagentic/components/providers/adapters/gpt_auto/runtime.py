@@ -39,6 +39,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Bound for each CDP step of the durable tab sweep (pages, snapshot, close).
+_TAB_STEP_TIMEOUT_SECONDS = 30.0
+
 PageHealth = Literal["healthy", "failed", "unknown"]
 
 
@@ -915,7 +918,10 @@ class GptAutoProviderRuntime:
         store = self._tab_lease_store
         if store is None or threshold <= 0:
             return outcomes
-        pages = {page.target_id: page for page in await self.gpt_browser.pages()}
+        pages = {
+            page.target_id: page
+            for page in await asyncio.wait_for(self.gpt_browser.pages(), _TAB_STEP_TIMEOUT_SECONDS)
+        }
         self._adopt_project_tabs(store, pages)
         for target, session, url, activity, digest in store.entries():
             if target in self._tab_lease_unsafe_targets:
@@ -937,8 +943,12 @@ class GptAutoProviderRuntime:
                 continue
             self._detached_tab_closing.add(page.handle)
             try:
-                snapshot = ChatSnapshot.from_bridge(await self.gpt_browser.snapshot(
-                    page, signals=self.config.workflow.bridge_signals()))
+                # Every CDP step is bounded: one unresponsive tab must not
+                # stall the sweep and leave every later idle tab open.
+                snapshot = ChatSnapshot.from_bridge(await asyncio.wait_for(
+                    self.gpt_browser.snapshot(
+                        page, signals=self.config.workflow.bridge_signals()),
+                    _TAB_STEP_TIMEOUT_SECONDS))
                 if not same_chat_identity(snapshot.url, url):
                     store.forget(target)
                     note("forgot-navigated-away")
@@ -964,11 +974,12 @@ class GptAutoProviderRuntime:
                     continue
                 # Recheck after observation; never close a target re-admitted
                 # during the CDP await or navigated into a different conversation.
-                current = await self.gpt_browser.page_by_handle(page.handle)
+                current = await asyncio.wait_for(
+                    self.gpt_browser.page_by_handle(page.handle), _TAB_STEP_TIMEOUT_SECONDS)
                 if current.target_id != target or not same_chat_identity(current.url, url):
                     note("kept-changed-during-check")
                     continue
-                await self.gpt_browser.close(current)
+                await asyncio.wait_for(self.gpt_browser.close(current), _TAB_STEP_TIMEOUT_SECONDS)
                 store.forget(target)
                 self._detached_tab_leases.pop(page.handle, None)
                 self._tab_lease_cache.pop(target, None)
@@ -976,7 +987,7 @@ class GptAutoProviderRuntime:
             except Exception:
                 note("kept-cleanup-failed")
                 # A broken target must not starve every later retained tab.
-                logger.warning("gpt-auto owned tab cleanup failed", exc_info=True)
+                logger.warning("gpt-auto owned tab cleanup failed", extra={"target": target}, exc_info=True)
             finally:
                 self._detached_tab_closing.discard(page.handle)
         return outcomes

@@ -260,3 +260,50 @@ async def test_active_chat_reaper_keeps_a_tab_with_an_unresolved_turn():
     chat.unresolved_turn_pending = True
     chat._last_validated_activity_monotonic = 0.0
     assert await chat.close_physical_page_if_idle(now=10**6, idle_timeout_seconds=7200) is False
+
+
+@pytest.mark.asyncio
+async def test_one_unresponsive_tab_does_not_stall_the_sweep(tmp_path, monkeypatch):
+    import asyncio
+
+    from audiagentic.components.providers.adapters.gpt_auto import runtime as runtime_mod
+
+    monkeypatch.setattr(runtime_mod, '_TAB_STEP_TIMEOUT_SECONDS', 0.05)
+    raw = {'url': URL, 'latestAssistantText': 'answer'}
+    other_url = URL + '2'
+    digest = GptAutoProviderRuntime._tab_digest(ChatSnapshot.from_bridge(raw))
+    other_digest = GptAutoProviderRuntime._tab_digest(
+        ChatSnapshot.from_bridge({**raw, 'url': other_url}))
+    store = TabLeaseStore(tmp_path / 'tabs.sqlite3')
+    store.observe('hung', 'session-a', URL, time.time() - 8000, digest)
+    store.observe('fine', 'session-b', other_url, time.time() - 8000, other_digest)
+    hung = SimpleNamespace(target_id='hung', handle='h1', url=URL)
+    fine = SimpleNamespace(target_id='fine', handle='h2', url=other_url)
+
+    async def snapshot(page, signals=None):
+        if page is hung:
+            await asyncio.sleep(60)
+        return {**raw, 'url': page.url}
+
+    async def by_handle(handle):
+        return hung if handle == 'h1' else fine
+
+    browser = SimpleNamespace(
+        pages=AsyncMock(return_value=[hung, fine]),
+        snapshot=snapshot, page_by_handle=by_handle, close=AsyncMock(),
+    )
+    runtime = object.__new__(GptAutoProviderRuntime)
+    runtime._tab_lease_store = TabLeaseStore(store.path)
+    runtime._tab_lease_cache = {}
+    runtime._tab_lease_unsafe_targets = set()
+    runtime._gpt_browser = browser
+    runtime._page_owners = {}
+    runtime._detached_tab_closing = set()
+    runtime._detached_tab_leases = {}
+    runtime.config = SimpleNamespace(workflow=SimpleNamespace(bridge_signals=lambda: []))
+
+    outcomes = await runtime._reap_durable_tabs(7200)
+
+    assert outcomes == {'kept-cleanup-failed': 1, 'closed-idle': 1}
+    browser.close.assert_awaited_once_with(fine)
+    assert runtime._detached_tab_closing == set()
