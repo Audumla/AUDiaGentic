@@ -49,3 +49,12 @@ def test_preparation_spans_round_trip_core_journal(tmp_path):
     assert [r["facts"]["action"]["outcome"] for r in rows] == ["begin", "completed"]
     assert all(r["facts"]["diagnostic-facts"]["phase"] == "transport-open" for r in rows)
     assert all(r["attempt_epoch"] == 3 and r["facts"]["activity"] == {} for r in rows)
+
+
+def test_turn_hand_off_marker_is_journaled(tmp_path):
+    from audiagentic.components.agents.gateway.session.dispatch import _preparation_marker
+
+    record = {"request-id": "req_marker", "session-id": "ses_marker", "attempt-epoch": 1}
+    _preparation_marker(tmp_path, record, "session-turn-submit")
+    rows = observability.read_observation_page(tmp_path, "req_marker", limit=10)["items"]
+    assert [r["facts"]["diagnostic-facts"]["phase"] for r in rows] == ["session-turn-submit"] * 2
