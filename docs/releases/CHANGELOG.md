@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.103.2](https://github.com/Audumla/AUDiaGentic/compare/v0.103.1...v0.103.2) (2026-11-18)
+
+
+### Documentation
+
+* **plan:** GA29 active-versus-stuck page-load budget ([#483](https://github.com/Audumla/AUDiaGentic/issues/483)) ([642d42f](https://github.com/Audumla/AUDiaGentic/commit/642d42f3a231c1c7225e012e31b666c94e8964de))
+
 ## [0.103.1](https://github.com/Audumla/AUDiaGentic/compare/v0.103.0...v0.103.1) (2026-11-18)
 
 
