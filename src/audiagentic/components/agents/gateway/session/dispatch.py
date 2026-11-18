@@ -73,6 +73,12 @@ def _preparation_span(project_root: Path, record: dict[str, Any], phase: str):
     emit("completed")
 
 
+def _preparation_marker(project_root: Path, record: dict[str, Any], phase: str) -> None:
+    """Journal that a preparation phase was reached (begin only; no duration)."""
+    with _preparation_span(project_root, record, phase):
+        pass
+
+
 def _timed_preparation_call(
     project_root: Path, record: dict[str, Any], phase: str,
     operation: Any, *args: Any, **kwargs: Any,
@@ -1916,8 +1922,10 @@ def _dispatch_session_request(
                 # completed. Reconcile that proven predecessor fence before
                 # admitting the next prompt; never fork the conversation just
                 # because stale checkpoint metadata was reasserted.
-                cleared = _clear_terminal_predecessor_fence(
-                    project_root, record, session_store=session_store
+                cleared = _timed_preparation_call(
+                    project_root, record, "predecessor-fence",
+                    _clear_terminal_predecessor_fence,
+                    project_root, record, session_store=session_store,
                 )
                 if cleared is not None:
                     record = cleared
@@ -2203,6 +2211,9 @@ def _dispatch_session_request(
                 record,
                 session_id=session_id,
             )
+        # Journal that the turn hand-off was reached. Without this marker a
+        # request that never submits looks identical to one still preparing.
+        _preparation_marker(project_root, record, "session-turn-submit")
         result = runtime.prompt_in_session(
             project_root,
             session_id,
