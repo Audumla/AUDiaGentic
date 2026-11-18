@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.103.0](https://github.com/Audumla/AUDiaGentic/compare/v0.102.3...v0.103.0) (2026-11-18)
+
+
+### Features
+
+* **gateway:** journal predecessor-fence and turn-submit dispatch phases ([#479](https://github.com/Audumla/AUDiaGentic/issues/479)) ([b3c62f8](https://github.com/Audumla/AUDiaGentic/commit/b3c62f810883119e110616eb9feb07b3884a5be6))
+
 ## [0.102.3](https://github.com/Audumla/AUDiaGentic/compare/v0.102.2...v0.102.3) (2026-11-18)
 
 
