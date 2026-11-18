@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.102.2](https://github.com/Audumla/AUDiaGentic/compare/v0.102.1...v0.102.2) (2026-11-18)
+
+
+### Documentation
+
+* **plan:** GA28 central gateway request lifecycle state ([#475](https://github.com/Audumla/AUDiaGentic/issues/475)) ([7feba83](https://github.com/Audumla/AUDiaGentic/commit/7feba83337eb6289e7cd8b4d17f57bf6cdbd464e))
+
 ## [0.102.1](https://github.com/Audumla/AUDiaGentic/compare/v0.102.0...v0.102.1) (2026-11-13)
 
 
