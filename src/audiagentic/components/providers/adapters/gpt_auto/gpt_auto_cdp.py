@@ -302,6 +302,18 @@ _COMPOSER_VALIDATE_FN = r"""(text) => {
 }"""
 
 
+_COMPOSER_SELECT_ALL_FN = r"""(text) => {
+  const editor = document.querySelector('#prompt-textarea') || Array.from(
+    document.querySelectorAll('[contenteditable="true"]')
+  ).find(el => /^(new chat in\b|ask chatgpt$|message chatgpt$)/i.test(String(el.getAttribute('aria-label') || '').trim()));
+  if (!editor) throw new Error('composer not found');
+  editor.focus();
+  const selection = window.getSelection(); selection.removeAllRanges();
+  const range = document.createRange(); range.selectNodeContents(editor); selection.addRange(range);
+  return true;
+}"""
+
+
 class ComposerSubmissionTimeout(TimeoutError):
     """Preserve whether a send-capable operation was dispatched before timeout."""
 
@@ -1958,6 +1970,8 @@ class GptAutoCdpBrowserController(CdpBrowserController):
     # insertion and the synthetic Send click.  Keeping this outside the DOM
     # evaluator avoids batching both browser actions into one CDP task.
     _SUBMIT_DEFAULT_TIMEOUT_SECONDS = 15.0
+    # Re-entries of the exact prompt allowed when the composer holds other text.
+    _MAX_COMPOSER_REINSERTS = 3
 
     async def submit(
         self,
@@ -1992,16 +2006,7 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                 draft_present = isinstance(existing, dict) and existing.get("validated") is True
                 await self.evaluate(
                     page,
-                    r"""(text) => {
-                       const editor = document.querySelector('#prompt-textarea') || Array.from(
-                         document.querySelectorAll('[contenteditable="true"]')
-                       ).find(el => /^(new chat in\b|ask chatgpt$|message chatgpt$)/i.test(String(el.getAttribute('aria-label') || '').trim()));
-                      if (!editor) throw new Error('composer not found');
-                      editor.focus();
-                      const selection = window.getSelection(); selection.removeAllRanges();
-                      const range = document.createRange(); range.selectNodeContents(editor); selection.addRange(range);
-                      return true;
-                    }""",
+                    _COMPOSER_SELECT_ALL_FN,
                     text,
                 )
                 await notify_stage("composer-focused")
@@ -2031,6 +2036,7 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                 # here only adds another CDP race window.
                 typed = text
                 composer_validation_recorded = False
+                reinserts = 0
                 while True:
                     # One synchronous DOM operation verifies both readiness
                     # conditions and clicks once. No browser-side timer survives
@@ -2050,6 +2056,21 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                     ):
                         send_attempted = False
                         stage = "composer-readiness"
+                        if (
+                            isinstance(validation, dict)
+                            and validation.get("reason") == "composer-text-mismatch"
+                            and reinserts < self._MAX_COMPOSER_REINSERTS
+                        ):
+                            # ChatGPT keeps one composer draft per project and
+                            # syncs it between tabs, so another tab's text can
+                            # replace this prompt. Never click Send on foreign
+                            # text; replace it with this exact prompt, bounded.
+                            reinserts += 1
+                            await self.evaluate(page, _COMPOSER_SELECT_ALL_FN, text)
+                            async with asyncio.timeout(self._INSERT_TEXT_ACK_TIMEOUT_SECONDS):
+                                await self.insert_text(page, text)
+                            await asyncio.sleep(self._TYPED_PAUSE_SECONDS)
+                            continue
                         await asyncio.sleep(self._SUBMIT_POLL_SECONDS)
                         continue
                     if not composer_validation_recorded:
