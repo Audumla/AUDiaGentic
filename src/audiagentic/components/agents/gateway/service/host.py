@@ -474,7 +474,10 @@ class GatewayServiceHost:
 
     def _start_dispatch_watchdog(self, interval_seconds: float = 30.0) -> None:
         """Watch the work index for requests that cannot start; publish readiness changes."""
-        if self._application is None or self._service_root is None or self._watchdog_thread is not None:
+        # The managed launch passes no --service-root, so the watchdog must use the
+        # store's own root; requiring an explicit root left it silently not running.
+        service_root = self._service_root if self._service_root is not None else self.service_store.root
+        if self._application is None or self._watchdog_thread is not None:
             return
         from audiagentic.components.agents.gateway import event_topics as topics
         from audiagentic.components.agents.gateway.health import get_dispatch_health
@@ -491,7 +494,7 @@ class GatewayServiceHost:
 
         health.set_listener(_publish)
         self._watchdog_thread = threading.Thread(
-            target=run_watchdog, args=(self._service_root, health, self._watchdog_stop),
+            target=run_watchdog, args=(service_root, health, self._watchdog_stop),
             kwargs={"interval_seconds": interval_seconds}, name="gateway-dispatch-watchdog", daemon=True)
         self._watchdog_thread.start()
 
