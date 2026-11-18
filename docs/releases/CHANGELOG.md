@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.103.1](https://github.com/Audumla/AUDiaGentic/compare/v0.103.0...v0.103.1) (2026-11-18)
+
+
+### Bug Fixes
+
+* **gpt-auto:** replace a foreign project draft in the composer instead of waiting for it ([#481](https://github.com/Audumla/AUDiaGentic/issues/481)) ([2500bda](https://github.com/Audumla/AUDiaGentic/commit/2500bda5271b5de7c42f22bd180fcc735cfa7f41))
+
 ## [0.103.0](https://github.com/Audumla/AUDiaGentic/compare/v0.102.3...v0.103.0) (2026-11-18)
 
 
