@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.103.3](https://github.com/Audumla/AUDiaGentic/compare/v0.103.2...v0.103.3) (2026-11-18)
+
+
+### Bug Fixes
+
+* **gateway:** drop index entries of terminal or record-less requests ([#485](https://github.com/Audumla/AUDiaGentic/issues/485)) ([1ea36fb](https://github.com/Audumla/AUDiaGentic/commit/1ea36fb5b4ca53eec1edb7cd97a5c0bef83fdbdc))
+
 ## [0.103.2](https://github.com/Audumla/AUDiaGentic/compare/v0.103.1...v0.103.2) (2026-11-18)
 
 
