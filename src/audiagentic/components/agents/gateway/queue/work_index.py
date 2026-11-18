@@ -438,6 +438,59 @@ def clear_orphaned_index_entries(service_root: Path) -> list[str]:
     return dropped
 
 
+# An entry is written when a request is admitted; give a request this long to get its record before an
+# entry without one is treated as dead (the admission-before-claim window is seconds, not half an hour).
+_DEAD_ENTRY_GRACE_SECONDS = 1800.0
+
+
+def clear_dead_index_entries(service_root: Path, now_epoch_s: float) -> list[str]:
+    """Drop index entries whose request can no longer run; return the request ids dropped.
+
+    Two cases that ``clear_orphaned_index_entries`` cannot see because the project root still exists: the
+    request record is gone (and the entry is older than the admission grace), or the record is already terminal.
+    Neither can ever be finished or reconciled, yet both count as active work. Entries whose record is merely
+    unreadable are kept. Never raises.
+    """
+    from datetime import datetime
+
+    from audiagentic.components.agents.agents_paths import gateway_request_dir
+    from audiagentic.components.agents.gateway.store._shared import TERMINAL_STATES
+
+    idx_dir = _index_dir(service_root)
+    if not idx_dir.is_dir():
+        return []
+    dropped: list[str] = []
+    for path in sorted(idx_dir.glob("req_*.json")):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            root = payload.get("project-root")
+            request_id = payload.get("request-id")
+            if not isinstance(root, str) or not root or not isinstance(request_id, str):
+                continue
+            record_path = gateway_request_dir(Path(root), request_id) / "record.json"
+            if record_path.exists():
+                state = json.loads(record_path.read_text(encoding="utf-8")).get("state")
+                dead = state in TERMINAL_STATES
+            else:
+                if not Path(root).is_dir():
+                    continue  # a vanished project root is clear_orphaned_index_entries' decision
+                admitted = payload.get("admitted-at")
+                age = (
+                    now_epoch_s - datetime.fromisoformat(admitted.replace("Z", "+00:00")).timestamp()
+                    if isinstance(admitted, str) else 0.0
+                )
+                dead = age > _DEAD_ENTRY_GRACE_SECONDS
+            if not dead:
+                continue
+            path.unlink(missing_ok=True)
+            dropped.append(request_id)
+        except (OSError, ValueError, AttributeError, TypeError):
+            continue
+    if dropped:
+        logger.info("dropped %d work-index entries of terminal or record-less requests", len(dropped))
+    return dropped
+
+
 def recover_work_index_entries(
     service_root: Path,
     *,
