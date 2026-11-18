@@ -142,3 +142,31 @@ def test_an_entry_of_a_deleted_project_is_dropped_so_it_cannot_hide_a_stall(tmp_
     # the orphan no longer makes the lane look busy; the live request waiting on an idle lane is still seen
     # (the unmounted entry keeps the lane "running", so assert only that the orphan is gone)
     assert report.entries == 2
+
+
+def test_entries_of_terminal_or_record_less_requests_are_dropped(tmp_path: Path) -> None:
+    from audiagentic.components.agents.agents_paths import gateway_request_dir
+    from audiagentic.components.agents.gateway.queue import work_index
+
+    folder = tmp_path / "service" / "active-work"
+    folder.mkdir(parents=True)
+    project = tmp_path / "project"
+    project.mkdir()
+
+    def write(request_id: str, *, admitted_seconds_ago: int, state: str | None) -> None:
+        entry = _entry(request_id, "running", admitted=admitted_seconds_ago, claimed=admitted_seconds_ago)
+        (folder / f"{request_id}.json").write_text(json.dumps({**entry, "project-root": str(project)}))
+        if state is not None:
+            record_dir = gateway_request_dir(project, request_id)
+            record_dir.mkdir(parents=True)
+            (record_dir / "record.json").write_text(json.dumps({"state": state}))
+
+    write("req_done", admitted_seconds_ago=60, state="completed")        # terminal: dead at any age
+    write("req_lost", admitted_seconds_ago=7200, state=None)             # no record, long past admission
+    write("req_fresh", admitted_seconds_ago=60, state=None)              # no record yet, inside admission grace
+    write("req_running", admitted_seconds_ago=7200, state="running")     # real work is never touched
+
+    dropped = work_index.clear_dead_index_entries(tmp_path / "service", NOW.timestamp())
+
+    assert sorted(dropped) == ["req_done", "req_lost"]
+    assert sorted(p.name for p in folder.glob("*.json")) == ["req_fresh.json", "req_running.json"]
