@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.102.3](https://github.com/Audumla/AUDiaGentic/compare/v0.102.2...v0.102.3) (2026-11-18)
+
+
+### Bug Fixes
+
+* **gateway:** start the dispatch watchdog without an explicit service root ([#477](https://github.com/Audumla/AUDiaGentic/issues/477)) ([eeaa321](https://github.com/Audumla/AUDiaGentic/commit/eeaa321fdf8d1d7edb8cfcfed18055ba4c09d591))
+
 ## [0.102.2](https://github.com/Audumla/AUDiaGentic/compare/v0.102.1...v0.102.2) (2026-11-18)
 
 
