@@ -737,6 +737,10 @@ class SessionRuntime:
             asyncio.run_coroutine_threadsafe(_start_reaper(), loop).result(timeout=10)
             return loop
 
+    def run_on_loop(self, coro: Any, timeout: float | None) -> Any:
+        """Run a coroutine on the runtime loop, so loop-bound provider state keeps one owner loop."""
+        return self._call(coro, timeout)
+
     def _call(self, coro: Any, timeout: float | None) -> Any:
         """Run *coro* on the runtime loop, cancelling it if *timeout* expires.
 

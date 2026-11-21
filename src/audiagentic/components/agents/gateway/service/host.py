@@ -115,6 +115,7 @@ class GatewayServiceHost:
         self._operations_stop = threading.Event()
         self._watchdog_stop = threading.Event()
         self._watchdog_thread: threading.Thread | None = None
+        self._tab_maintenance_thread: threading.Thread | None = None
         self._operations_thread: threading.Thread | None = None
         self._journal_maintenance_at = 0.0
         # AS60 step 7 / RV888: this process's own composition root. Shutdown
@@ -397,6 +398,7 @@ class GatewayServiceHost:
         self._start_ingress_poller()
         self._start_operations_poller()
         self._start_dispatch_watchdog()
+        self._start_tab_maintenance()
         if self.lifecycle is not None:
             self.lifecycle.start()  # type: ignore[attr-defined]
         serving_failed = False
@@ -498,8 +500,41 @@ class GatewayServiceHost:
             kwargs={"interval_seconds": interval_seconds}, name="gateway-dispatch-watchdog", daemon=True)
         self._watchdog_thread.start()
 
+    def _start_tab_maintenance(self, interval_seconds: float = 60.0) -> None:
+        """Attach to a running browser so the idle-tab reaper runs even when no request arrives."""
+        if self._application is None or self._tab_maintenance_thread is not None:
+            return
+        known_projects = self.service_store.root / "known-projects.json"
+
+        def _pass() -> None:
+            from audiagentic.components.agents.gateway.service.known_projects import load_known_projects
+            from audiagentic.components.agents.gateway.session.sessions import get_session_runtime
+            from audiagentic.components.providers.adapters.gpt_auto.tab_maintenance import (
+                attach_for_tab_maintenance,
+            )
+
+            projects = sorted(load_known_projects(known_projects).projects,
+                              key=lambda p: p.last_seen_at, reverse=True)
+            roots = [p.project_root for p in projects if p.config_status == "compatible" and p.project_root.exists()]
+            if roots:
+                get_session_runtime().run_on_loop(attach_for_tab_maintenance(roots), 30.0)
+
+        def _loop() -> None:
+            while not self._watchdog_stop.is_set():
+                try:
+                    _pass()
+                except Exception:  # noqa: BLE001 - maintenance must never take the gateway down
+                    logger.warning("gateway tab maintenance pass failed", exc_info=True)
+                self._watchdog_stop.wait(interval_seconds)
+
+        self._tab_maintenance_thread = threading.Thread(target=_loop, name="gateway-tab-maintenance", daemon=True)
+        self._tab_maintenance_thread.start()
+
     def _stop_background(self) -> None:
         self._watchdog_stop.set()
+        if self._tab_maintenance_thread is not None:
+            self._tab_maintenance_thread.join(timeout=5.0)
+            self._tab_maintenance_thread = None
         if self._watchdog_thread is not None:
             self._watchdog_thread.join(timeout=5.0)
             self._watchdog_thread = None
