@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.103.4](https://github.com/Audumla/AUDiaGentic/compare/v0.103.3...v0.103.4) (2026-11-21)
+
+
+### Bug Fixes
+
+* **gpt-auto:** start the idle-tab reaper at gateway start ([#487](https://github.com/Audumla/AUDiaGentic/issues/487)) ([a24fca7](https://github.com/Audumla/AUDiaGentic/commit/a24fca7bf61cf620fb093f01083462e8f4794e9f))
+
 ## [0.103.3](https://github.com/Audumla/AUDiaGentic/compare/v0.103.2...v0.103.3) (2026-11-18)
 
 
