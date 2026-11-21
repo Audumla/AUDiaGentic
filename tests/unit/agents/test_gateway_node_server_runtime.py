@@ -199,7 +199,7 @@ def test_host_startup_orders_provider_checks_listener_readiness_and_http(tmp_pat
         order.append("listener")
         start()
     monkeypatch.setattr(host._node_runtime, "start", started)
-    for name in ("_start_ingress_poller", "_start_operations_poller", "_start_dispatch_watchdog"):
+    for name in ("_start_ingress_poller", "_start_operations_poller", "_start_dispatch_watchdog", "_start_tab_maintenance"):
         monkeypatch.setattr(host, name, lambda: None)
     monkeypatch.setattr(host.lifecycle, "start", lambda: None)
     def served(**kwargs):
@@ -338,6 +338,7 @@ def test_host_seeds_running_nodes_before_queued_then_starts_listener(runtime, ad
     monkeypatch.setattr(host, "_start_ingress_poller", lambda: None)
     monkeypatch.setattr(host, "_start_operations_poller", lambda: None)
     monkeypatch.setattr(host, "_start_dispatch_watchdog", lambda: None)
+    monkeypatch.setattr(host, "_start_tab_maintenance", lambda: None)
     host.serve_forever()
     assert events == ["running", "queued", "providers", "listener", "http"]
 
