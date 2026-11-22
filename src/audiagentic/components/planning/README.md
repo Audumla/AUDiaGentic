@@ -61,6 +61,7 @@ Criteria, Effort & Risk, Standards, and Notes.
 |---|---|---|
 | `pending` | `active/` | Work not yet started |
 | `in_progress` | `active/` | Active implementation |
+| `deferred` | `completed/` | Paused, resumable after explicit re-entry; **not completed** |
 | `completed` | `completed/` | Work finished |
 | `superseded` | `completed/` | Replaced by another item |
 | `deprecated` | `completed/` | Outdated but retained for reference |
@@ -91,16 +92,9 @@ transitions, and reviews start in `created` and follow the declared
 special case, selects `active/` versus `completed/`.
 Items start in `pending`; reviews start in `created`.
 
-Item placement mapping: `pending` → `active/`; `in_progress` → `active/`;
-`completed` → `completed/`; `superseded` → `completed/`; `deprecated` →
-`completed/`. Review placement mapping: `created` → `active/`; `considered` →
-`active/`; `closed` → `completed/`.
+Item placement mapping: `pending` → `active/`; `in_progress` → `active/`; `deferred` → `completed/`; `completed` → `completed/`; `superseded` → `completed/`; `deprecated` → `completed/`. Review placement mapping: `created` → `active/`; `considered` → `active/`; `closed` → `completed/`.
 
-Item transitions: `pending` → `in_progress`, `completed`, `superseded`,
-`deprecated`; `in_progress` → `pending`, `completed`, `superseded`,
-`deprecated`; `completed` → `pending`, `in_progress`, `superseded`,
-`deprecated`; `superseded` → `pending`, `in_progress`; `deprecated` →
-`pending`, `in_progress`.
+Item transitions: `pending` → `in_progress`, `deferred`, `completed`, `superseded`, `deprecated`; `in_progress` → `pending`, `deferred`, `completed`, `superseded`, `deprecated`; `deferred` → `pending`, `in_progress`, `completed`, `superseded`, `deprecated`; `completed` → `pending`, `in_progress`, `deferred`, `superseded`, `deprecated`; `superseded` → `pending`, `in_progress`, `deferred`; `deprecated` → `pending`, `in_progress`, `deferred`.
 
 Review transitions: `created` → `considered`, `closed`; `considered` →
 `created`, `closed`; `closed` → `created`, `considered`.

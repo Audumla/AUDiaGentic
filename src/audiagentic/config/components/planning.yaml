@@ -6,6 +6,9 @@ description: >
   Plan item management — track multi-step implementation work across sessions.
   The supported implementation currently stores records in local Markdown files;
   additional stores require their own registered adapter and contract.
+  Item states include pending, in_progress, deferred, completed, superseded,
+  deprecated; review states are created, considered, closed. A deferred plan
+  is paused and resumable, not complete.
 implementation-cardinality: exclusive
 status-hook: audiagentic.components.planning.planning_api.planning_status
 lifecycle-observer: audiagentic.components.planning.events

@@ -88,25 +88,13 @@ Keep actionable unfinished work pending; park authorised-but-paused work as `def
 
 The exact workflow contract is:
 
-- Item initial state: `pending`. `pending`/`in_progress` are active;
-  `deferred`/`completed`/`superseded`/`deprecated` are stored in the
-  historical `completed/` tree (the storage directory does **not** mean
-  all these items passed their Definition of Done).
-- `deferred` means **paused and resumable**, not implemented, superseded or
-  abandoned. Enter it only with a documented pause reason and re-entry gate;
-  transition back to `pending`/`in_progress` before adding reviews or
-  implementation. Other terminal states can also transition to `deferred`.
-- The authoritative allowed transitions and placements are defined once in
-  `src/audiagentic/components/planning/workflows.yaml`; do not duplicate
-  the matrix in other tools.
-
+- Item initial state: `pending`; `deferred` means paused and resumable, not accepted, deprecated or completed. Store it in `completed/` as a non-active record.
+- Item transitions: `pending` → `in_progress`, `deferred`, `completed`, `superseded`, `deprecated`; `in_progress` → `pending`, `deferred`, `completed`, `superseded`, `deprecated`; `deferred` → `pending`, `in_progress`, `completed`, `superseded`, `deprecated`; `completed` → `pending`, `in_progress`, `deferred`, `superseded`, `deprecated`; `superseded` → `pending`, `in_progress`, `deferred`; `deprecated` → `pending`, `in_progress`, `deferred`.
 - Review initial state: `created`; placements are `created`/`considered` in
   `active/` and `closed` in `completed/`.
 - Review transitions: `created` → `considered`, `closed`; `considered` →
   `created`, `closed`; `closed` → `created`, `considered`.
-- Item placement: active states in `active/`; deferred and other
-  terminal states in `completed/`. Review placement: created/considered in
-  `active/`, closed in `completed/`.
+- Item placement mapping: `pending` → `active/`; `in_progress` → `active/`; `deferred` → `completed/`; `completed` → `completed/`; `superseded` → `completed/`; `deprecated` → `completed/`. Review placement mapping: `created` → `active/`; `considered` → `active/`; `closed` → `completed/`.
 - Completion requires non-empty `Validation` and `Acceptance Criteria`, with
   all linked reviews `closed`.
 
