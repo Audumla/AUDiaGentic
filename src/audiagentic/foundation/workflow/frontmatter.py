@@ -168,14 +168,14 @@ def parse_custom_headings(body: str, heading_to_field: dict[str, str]) -> dict[s
     """
     result: dict[str, str] = {}
     tokens = _MD.parse(body)
-    for token in tokens:
+    for token_idx, token in enumerate(tokens):
         if token.type != "heading_open":
             continue
         # Only consider h2+ headings (same as parse_sections).
         level = _heading_level(token)
         if level != 2:
             continue
-        heading_text = _extract_heading_text(tokens, tokens.index(token))
+        heading_text = _extract_heading_text(tokens, token_idx)
         if heading_text in heading_to_field:
             continue
         result[_slugify_heading(heading_text)] = heading_text
