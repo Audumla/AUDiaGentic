@@ -675,6 +675,47 @@ def test_list_items_superseded_filter_returns_only_superseded(tmp_path):
     assert items[0]["id"] == "B01"
 
 
+def test_deferred_item_is_nonactive_and_resumable_without_data_loss(tmp_path):
+    item = planning_api.create_item(
+        tmp_path, _make_item(id="DE01", plan="deferred-work")
+    )
+    before = planning_api.get_item(tmp_path, "DE01")
+    assert before["state"] == "pending"
+    moved = planning_api.set_state(tmp_path, "DE01", "deferred")
+    assert moved["state"] == "deferred"
+    path = tmp_path / moved["path"]
+    assert path.exists()
+    assert path.parent.parent.name == "completed"
+
+    assert "DE01" not in {
+        row["id"] for row in planning_api.list_items(tmp_path, state="active")
+    }
+    assert [row["id"] for row in planning_api.list_items(tmp_path, state="deferred")] == ["DE01"]
+    assert planning_api.get_item(tmp_path, "DE01")["state"] == "deferred"
+
+    resumed = planning_api.set_state(tmp_path, "DE01", "pending")
+    assert resumed["state"] == "pending"
+    assert (tmp_path / resumed["path"]).exists()
+    assert resumed["path"].startswith("docs/planning/active/")
+    assert planning_api.get_item(tmp_path, "DE01")["title"] == before["title"]
+    assert "DE01" in {
+        row["id"] for row in planning_api.list_items(tmp_path, state="active")
+    }
+
+
+def test_deferred_item_rejects_new_review_until_reopened(tmp_path):
+    planning_api.create_item(tmp_path, _make_item(id="DE02"))
+    planning_api.set_state(tmp_path, "DE02", "deferred")
+    with pytest.raises(AudiaGenticError) as exc:
+        planning_api.create_review(tmp_path, {"review-of": "DE02", "title": "Deferred"})
+    assert exc.value.code == "VAL-PLN-041"
+    planning_api.set_state(tmp_path, "DE02", "pending")
+    created = planning_api.create_review(
+        tmp_path, {"review-of": "DE02", "title": "Resume decision"}
+    )
+    assert created["review-of"] == "DE02"
+
+
 def test_list_items_deprecated_filter_returns_only_deprecated(tmp_path):
     planning_api.create_item(tmp_path, _make_item(id="B01"))
     planning_api.create_item(tmp_path, _make_item(id="B02"))

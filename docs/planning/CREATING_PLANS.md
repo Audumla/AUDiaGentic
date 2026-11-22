@@ -80,28 +80,33 @@ to verify against.
 3. Close handled reviews with `plan_set_review_state(review_id, 'closed')`
 4. Mark done with `plan_set_state(item_id, 'completed')` only when the Definition of Done
    in section 5 is satisfied — every step done, every validation criterion executed, suite green
-5. Transition superseded or outdated items to `superseded` or `deprecated` with `plan_set_state`; remove stale items with `plan_delete_item`
+5. Move explicitly paused, still-useful items to `deferred` with `plan_set_state`; this is **not completion**. Reopen to `pending` before any further work or review.
+6. Transition superseded or outdated items to `superseded` or `deprecated` with `plan_set_state`; remove stale items with `plan_delete_item`
 
 Do not mark a parent item completed just because its reviews were incorporated.
-Keep unfinished work pending or in a terminal discard state. Do not leave handled reviews in `created` or `considered`.
+Keep actionable unfinished work pending; park authorised-but-paused work as `deferred` and include a concrete re-entry condition. A deferred item is non-active and may be resumed. Do not leave handled reviews in `created` or `considered`.
 
 The exact workflow contract is:
 
-- Item initial state: `pending`; placements are `pending`/`in_progress` in
-  `active/` and `completed`/`superseded`/`deprecated` in `completed/`.
-- Item transitions: `pending` → `in_progress`, `completed`, `superseded`,
-  `deprecated`; `in_progress` → `pending`, `completed`, `superseded`,
-  `deprecated`; `completed` → `pending`, `in_progress`, `superseded`,
-  `deprecated`; `superseded` → `pending`, `in_progress`; `deprecated` →
-  `pending`, `in_progress`.
+- Item initial state: `pending`. `pending`/`in_progress` are active;
+  `deferred`/`completed`/`superseded`/`deprecated` are stored in the
+  historical `completed/` tree (the storage directory does **not** mean
+  all these items passed their Definition of Done).
+- `deferred` means **paused and resumable**, not implemented, superseded or
+  abandoned. Enter it only with a documented pause reason and re-entry gate;
+  transition back to `pending`/`in_progress` before adding reviews or
+  implementation. Other terminal states can also transition to `deferred`.
+- The authoritative allowed transitions and placements are defined once in
+  `src/audiagentic/components/planning/workflows.yaml`; do not duplicate
+  the matrix in other tools.
+
 - Review initial state: `created`; placements are `created`/`considered` in
   `active/` and `closed` in `completed/`.
 - Review transitions: `created` → `considered`, `closed`; `considered` →
   `created`, `closed`; `closed` → `created`, `considered`.
-- Item placement mapping: `pending` → `active/`; `in_progress` → `active/`;
-  `completed` → `completed/`; `superseded` → `completed/`; `deprecated` →
-  `completed/`. Review placement mapping: `created` → `active/`; `considered` →
-  `active/`; `closed` → `completed/`.
+- Item placement: active states in `active/`; deferred and other
+  terminal states in `completed/`. Review placement: created/considered in
+  `active/`, closed in `completed/`.
 - Completion requires non-empty `Validation` and `Acceptance Criteria`, with
   all linked reviews `closed`.
 
