@@ -24,6 +24,45 @@ def dispatch(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int |
     if args.command == "help":
         print(_help("root"))
         return 0
+    if args.command == "mcp" and tail and tail[0] == "call":
+        if len(tail) < 3:
+            parser.error("expected: mcp call MCP_ID TOOL [arguments JSON|arguments-file FILE] project PATH")
+        mcp_id, tool_name = tail[1:3]
+        options: dict[str, str] = {}
+        rest = tail[3:]
+        while rest:
+            key, *rest = rest
+            if key not in {"project", "arguments", "arguments-file"} or key in options:
+                parser.error(f"unknown or repeated clause: {key}")
+            if not rest:
+                parser.error(f"{key} requires a value")
+            options[key], *rest = rest
+        if args.project and "project" in options:
+            parser.error("project supplied twice")
+        project = args.project or options.get("project")
+        if not project:
+            parser.error("mcp call requires explicit project PATH")
+        if "arguments" in options and "arguments-file" in options:
+            parser.error("choose arguments or arguments-file, not both")
+        payload = options.get("arguments", "{}")
+        if "arguments-file" in options:
+            payload_file = Path(options["arguments-file"])
+            if payload_file.stat().st_size > 1_048_576:
+                parser.error("arguments file exceeds 1 MiB")
+            payload = payload_file.read_text(encoding="utf-8")
+        try:
+            arguments = json.loads(payload)
+        except json.JSONDecodeError:
+            parser.error("arguments must be valid JSON")
+        if not isinstance(arguments, dict):
+            parser.error("arguments must be a JSON object")
+        from audiagentic.components.project import project_api
+
+        result = project_api.call_mcp_tool(
+            Path(project), mcp_id, tool_name, arguments
+        )
+        print(json.dumps(result, ensure_ascii=False, sort_keys=True))
+        return 0
     if args.command == "mcp" and tail and tail[0] == "--":
         if len(tail) < 2:
             parser.error("mcp -- requires MODULE")

@@ -34,6 +34,17 @@ def list_mcp_catalog(project_root: Path | None = None, mcp_id: str | None = None
     return catalog(project_root, mcp_id)
 
 
+def call_mcp_tool(
+    project_root: Path, mcp_id: str, tool_name: str, arguments: dict[str, Any]
+) -> Any:
+    """Call a locally declared MCP server with its own tool validation."""
+    import asyncio
+
+    from .onboarding.call import call_tool
+
+    return asyncio.run(call_tool(project_root, mcp_id, tool_name, arguments))
+
+
 def get_mcp_help(mcp_id: str, project_root: Path | None = None):
     """Read detailed owner metadata for one MCP."""
     return list_mcp_catalog(project_root, mcp_id)
