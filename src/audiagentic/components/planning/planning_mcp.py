@@ -117,6 +117,21 @@ def plan_delete_item(item_id: str) -> dict[str, Any]:
 
 @mcp.tool()
 @tool_boundary
+def plan_rekey_duplicate_active_item(
+    plan: str, item_id: str, new_item_id: str
+) -> dict[str, Any]:
+    """Repair an active/terminal duplicate by rekeying only the active item.
+
+    Requires both records in the same plan, a globally unused target ID and no
+    linked reviews. The terminal record is never edited or deleted.
+    """
+    return planning_api.rekey_duplicate_active_item(
+        project_root_from_env(), plan, item_id, new_item_id
+    )
+
+
+@mcp.tool()
+@tool_boundary
 def plan_list_standards() -> list:
     """List configured planning standards."""
     return planning_api.list_standards(project_root_from_env())

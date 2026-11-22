@@ -44,6 +44,25 @@ target project: their documents stay in that project's own directories.
 Commit the generated Planning/Review/Ledger records on the target project's
 task branch and use its ordinary review/merge process.
 
+## Repairing a verified duplicate identity
+
+When the **same** item ID exists in active and completed Planning records,
+ordinary item lookup/update fails closed. Use the narrowly scoped repair
+only after verifying both copies and choosing a globally unused replacement:
+
+```sh
+audiagentic mcp call ag-planning plan_rekey_duplicate_active_item \
+  arguments '{"plan":"run-example","item_id":"ABC07","new_item_id":"ABC16"}' \
+  project /path/to/isolated-project-worktree
+```
+
+This tool requires exactly one active and one terminal copy in the same plan,
+rejects linked reviews or an occupied replacement ID, and moves only the
+active copy via the recoverable Planning transaction. The terminal copy is
+unchanged, while the active item retains its content and pending state with
+an explicit identity-reconciliation entry. This is not a general-purpose
+rename or a completion shortcut.
+
 ## Python
 
 The same external accessor is available to Python automation:

@@ -21,6 +21,7 @@ from audiagentic.components.planning.items import (
     set_state,
     update_item,
 )
+from audiagentic.components.planning.repair import rekey_duplicate_active_item
 from audiagentic.components.planning.reviews import (
     create_review,
     delete_review,
@@ -48,6 +49,7 @@ __all__ = [
     "set_state",
     "update_item",
     "delete_item",
+    "rekey_duplicate_active_item",
     # reviews
     "create_review",
     "list_reviews",
