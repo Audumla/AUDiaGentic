@@ -1253,6 +1253,7 @@ _SNAPSHOT_FN = r"""
   }
   const documentTextFailureSignals = new Set([
     "conversation-load-failed",
+    "rate-limited-page",
     "network-error-alert",
     "stream-cache-expired"
   ]);

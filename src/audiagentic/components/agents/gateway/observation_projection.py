@@ -33,6 +33,7 @@ _DOM_SIGNALS = frozenset(
         "request-error-alert",
         "stream-cache-expired",
         "conversation-load-failed",
+        "rate-limited-page",
         "auth-required",
         "rate-limit",
         "delivery-timeout-alert",

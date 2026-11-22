@@ -124,6 +124,8 @@ class BrowserConfig:
     close_tabs_on_session_close: bool
     physical_tab_idle_timeout_seconds: float = 7200.0
     physical_tab_reaper_interval_seconds: float = 300.0
+    rate_limit_refresh_interval_seconds: float = 120.0
+    rate_limit_check_interval_seconds: float = 30.0
     # "project-conversations": every conversation tab of the configured ChatGPT
     # project is provider-owned, so tabs restored by a browser restart (new CDP
     # target ids) are reclaimed too. Only safe when the browser is dedicated to
@@ -324,6 +326,8 @@ class GptAutoConfig:
                 "close-tabs-on-session-close",
                 "physical-tab-idle-timeout-seconds",
                 "physical-tab-reaper-interval-seconds",
+                "rate-limit-refresh-interval-seconds",
+                "rate-limit-check-interval-seconds",
                 "physical-tab-ownership-mode",
             },
             "browser",
@@ -366,6 +370,12 @@ class GptAutoConfig:
             ),
             physical_tab_reaper_interval_seconds=_optional_positive(
                 browser_data, "physical-tab-reaper-interval-seconds", default=300.0
+            ),
+            rate_limit_refresh_interval_seconds=_optional_positive(
+                browser_data, "rate-limit-refresh-interval-seconds", default=120.0
+            ),
+            rate_limit_check_interval_seconds=_optional_positive(
+                browser_data, "rate-limit-check-interval-seconds", default=30.0
             ),
             physical_tab_ownership_mode=_ownership_mode(browser_data),
         )
@@ -853,6 +863,7 @@ def _workflow_config(data: dict[str, Any]) -> TurnWorkflowConfig:
         "network-error-alert",
         "stream-cache-expired",
         "conversation-load-failed",
+        "rate-limited-page",
         # GP34 code-review follow-up: derived from ChatSnapshot.generating
         # directly (the raw stop/streaming/thinking/aria-busy check), not a
         # dom-signal selector. Lets a policy require the ABSENCE of active

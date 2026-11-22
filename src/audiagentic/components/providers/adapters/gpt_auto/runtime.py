@@ -42,6 +42,12 @@ logger = logging.getLogger(__name__)
 # Bound for each CDP step of the durable tab sweep (pages, snapshot, close).
 _TAB_STEP_TIMEOUT_SECONDS = 30.0
 
+
+def _after_iso(seconds: float) -> str:
+    from datetime import UTC, datetime, timedelta
+
+    return (datetime.now(UTC) + timedelta(seconds=seconds)).isoformat().replace("+00:00", "Z")
+
 PageHealth = Literal["healthy", "failed", "unknown"]
 
 
@@ -129,6 +135,7 @@ class GptAutoProviderRuntime:
         self._conversation_owners: dict[str, str] = {}
         self._event_task: asyncio.Task[None] | None = None
         self._tab_reaper_task: asyncio.Task[None] | None = None
+        self._rate_limit_task: asyncio.Task[None] | None = None
         self._dedicated_window_anchor: str | None = None
         self._dedicated_window_id: int | None = None
         self._dedicated_window_lock = asyncio.Lock()
@@ -200,6 +207,7 @@ class GptAutoProviderRuntime:
                 self._move(ProviderState.AVAILABLE)
                 self._event_task = asyncio.create_task(self._route_events(bridge))
                 self._tab_reaper_task = asyncio.create_task(self._reap_idle_tabs(bridge))
+                self._rate_limit_task = asyncio.create_task(self._watch_rate_limit(bridge))
             except Exception:
                 if self.state in {ProviderState.CONNECTING, ProviderState.STARTING}:
                     self._move(ProviderState.FAILED)
@@ -225,6 +233,7 @@ class GptAutoProviderRuntime:
                 self._move(ProviderState.AVAILABLE)
                 self._event_task = asyncio.create_task(self._route_events(bridge))
                 self._tab_reaper_task = asyncio.create_task(self._reap_idle_tabs(bridge))
+                self._rate_limit_task = asyncio.create_task(self._watch_rate_limit(bridge))
                 return True
             except Exception:
                 if self.state is ProviderState.CONNECTING:
@@ -1047,7 +1056,83 @@ class GptAutoProviderRuntime:
             if self._tab_reaper_task and not self._tab_reaper_task.done():
                 self._tab_reaper_task.cancel()
             self._tab_reaper_task = None
+            if self._rate_limit_task and not self._rate_limit_task.done():
+                self._rate_limit_task.cancel()
+            self._rate_limit_task = None
             self._move(ProviderState.STOPPED)
+
+    RATE_LIMIT_SOURCE_ID = "chatgpt"
+
+    async def _watch_rate_limit(self, bridge: PythonCdpBridge) -> None:
+        """Hold new GPT work while ChatGPT shows its account-wide limit page; lift it when GPT works again.
+
+        The limit applies to GPT as a whole, so one limited chat holds every project and session. Work that
+        is already running is left alone. While held, one limited tab is reloaded each refresh interval (the
+        page only reports the new state when it is reloaded); the hold lifts when a tab loads again or a
+        turn is generating, which is progress.
+        """
+        from audiagentic.foundation.admission_holds import get_admission_holds
+
+        holds = get_admission_holds()
+        check = float(self.config.browser.rate_limit_check_interval_seconds)
+        refresh = float(self.config.browser.rate_limit_refresh_interval_seconds)
+        next_refresh = 0.0
+        try:
+            while self._bridge is bridge:
+                await asyncio.sleep(check)
+                if self._bridge is not bridge:
+                    return
+                try:
+                    limited, generating = await self._scan_rate_limit()
+                    held = holds.get(self.RATE_LIMIT_SOURCE_ID) is not None
+                    now = asyncio.get_running_loop().time()
+                    if limited and not held:
+                        next_refresh = now + refresh
+                        holds.hold(self.RATE_LIMIT_SOURCE_ID, "rate-limited",
+                                   "ChatGPT shows its temporary limit page; new requests wait",
+                                   next_check_at=_after_iso(refresh))
+                        logger.warning("gpt-auto rate limit detected; holding new requests")
+                    elif held and (generating or not limited):
+                        holds.lift(self.RATE_LIMIT_SOURCE_ID)
+                        logger.warning("gpt-auto rate limit lifted; releasing held requests")
+                    elif held and now >= next_refresh:
+                        next_refresh = now + refresh
+                        await self._reload_one_limited_tab()
+                        holds.hold(self.RATE_LIMIT_SOURCE_ID, "rate-limited",
+                                   "ChatGPT shows its temporary limit page; new requests wait",
+                                   next_check_at=_after_iso(refresh))
+                except asyncio.CancelledError:
+                    raise
+                except Exception:  # noqa: BLE001 - one failed scan must not end the watch
+                    logger.warning("gpt-auto rate-limit scan failed", exc_info=True)
+        except asyncio.CancelledError:
+            return
+
+    async def _chat_pages(self) -> list[Any]:
+        return [page for page in await self.gpt_browser.pages()
+                if "chatgpt.com" in (page.url or "") and "/c/" in (page.url or "")]
+
+    async def _scan_rate_limit(self) -> tuple[list[Any], bool]:
+        """Return the open chat tabs showing the limit page, and whether any other tab is generating."""
+        limited: list[Any] = []
+        generating = False
+        for page in await self._chat_pages():
+            snapshot = ChatSnapshot.from_bridge(await asyncio.wait_for(
+                self.gpt_browser.snapshot(page, signals=self.config.workflow.bridge_signals()),
+                timeout=_TAB_STEP_TIMEOUT_SECONDS))
+            if "rate-limited-page" in snapshot.dom_signals:
+                limited.append(page)
+            elif snapshot.generating:
+                generating = True
+        return limited, generating
+
+    async def _reload_one_limited_tab(self) -> None:
+        """Reload a single limited tab: the page only shows the new state after a reload."""
+        limited, _generating = await self._scan_rate_limit()
+        if limited:
+            await asyncio.wait_for(self.bridge.call(
+                "navigate", {"pageHandle": limited[0].handle, "url": limited[0].url}),
+                timeout=_TAB_STEP_TIMEOUT_SECONDS)
 
     async def _reap_idle_tabs(self, bridge: PythonCdpBridge) -> None:
         """Reclaim only stale physical GPT tabs; retain every logical binding."""
