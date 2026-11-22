@@ -15,7 +15,7 @@ from audiagentic.components.source_control.forge_access import (
     pull_request,
     pull_requests_for_branch,
     repository_identity,
-    set_pull_request_title,
+    set_pull_request_text,
 )
 
 __all__ = [
@@ -26,5 +26,5 @@ __all__ = [
     "pull_request",
     "pull_requests_for_branch",
     "repository_identity",
-    "set_pull_request_title",
+    "set_pull_request_text",
 ]

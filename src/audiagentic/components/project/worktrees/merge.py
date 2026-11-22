@@ -48,7 +48,7 @@ def merge(repo: Path, path: Path, *, title: str | None = None, body: str | None 
           identity: Callable[[Path], forge.RepositoryIdentity] = forge.repository_identity,
           push: Callable[..., dict[str, Any]] = publish.push,
           create: Callable[..., str] = forge.create_pull_request,
-          retitle: Callable[..., None] = forge.set_pull_request_title,
+          retext: Callable[..., None] = forge.set_pull_request_text,
           auto_merge: Callable[..., None] = forge.enable_auto_merge,
           read: Callable[..., forge.PullRequest] = forge.pull_request) -> dict[str, Any]:
     """Push the tip, open or reuse its pull request and request auto-merge; refuse on anything uncertain."""
@@ -90,9 +90,11 @@ def merge(repo: Path, path: Path, *, title: str | None = None, body: str | None 
         if pr.base != default or pr.is_draft:  # validated before anything is changed on it
             raise refuse_error(5, f"Pull request #{pr.number} is a draft or does not target {default}; nothing was changed",
                                number=pr.number)
-        if title is not None and pr.title != title:
+        new_title = title if title is not None and pr.title != title else None
+        new_text = new_body if body is not None and pr.body != new_body else None
+        if new_title is not None or new_text is not None:  # a stale title becomes the squash commit subject
             publish._receipt(state, repo, path, attempt, receipt, "RETITLE_INTENT")
-            retitle(repo, pr.number, title, repository=slug)
+            retext(repo, pr.number, title=new_title, body=new_text, repository=slug)
     else:
         publish._receipt(state, repo, path, attempt, receipt, "CREATE_INTENT")
         receipt["url"] = create(repo, head=branch, base=default, title=title or "", body=new_body, repository=slug)

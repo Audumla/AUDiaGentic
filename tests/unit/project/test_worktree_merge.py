@@ -68,9 +68,10 @@ class FakeForge:
                                              False, f"https://example.invalid/{number}", title=title)
         return f"https://example.invalid/{number}"
 
-    def retitle(self, _repo, number, title, *, repository=None):
-        self.calls.append(("retitle", number, title, repository))
-        self.prs[number] = _replace(self.prs[number], title=title)
+    def retext(self, _repo, number, *, title=None, body=None, repository=None):
+        self.calls.append(("retitle", number, title, body, repository))
+        changes = {key: value for key, value in (("title", title), ("body", body)) if value is not None}
+        self.prs[number] = _replace(self.prs[number], **changes)
 
     def auto_merge(self, _repo, number, *, head_sha, repository=None):
         self.calls.append(("auto-merge", number, head_sha, repository))
@@ -95,7 +96,7 @@ def _open_pr(world, **kwargs) -> forge.PullRequest:
 def _run(world, fake, *, title=TITLE, body=None, **kwargs):
     return merge.merge(world["repo"], world["feature"], title=title, body=body, active_work=IDLE,
                        state_root=world["state"], find=fake.find, identity=lambda _r: ME, create=fake.create,
-                       retitle=fake.retitle, auto_merge=fake.auto_merge, read=fake.read, **kwargs)
+                       retext=fake.retext, auto_merge=fake.auto_merge, read=fake.read, **kwargs)
 
 
 def _remote_tip(world) -> str | None:
@@ -249,10 +250,44 @@ def test_the_real_gh_arguments_are_shell_free_pinned_and_head_bound(monkeypatch,
     url = forge.create_pull_request(tmp_path, head="me/feature", base="main", title="feat: x", body="-- starts with dashes",
                                     repository="Acme/Widget")
     forge.enable_auto_merge(tmp_path, 5, head_sha="a" * 40, repository="Acme/Widget")
-    forge.set_pull_request_title(tmp_path, 5, "feat: y", repository="Acme/Widget")
+    forge.set_pull_request_text(tmp_path, 5, title="feat: y", body="-leading dash", repository="Acme/Widget")
     create, enable, edit = seen
     assert url.endswith("/pull/5") and "--repo" in create[0] and "Acme/Widget" in create[0]
     assert create[0][create[0].index("--body-file") + 1] == "-" and create[1] == "-- starts with dashes"
     assert "--body" not in create[0]
     assert enable[0][enable[0].index("--match-head-commit") + 1] == "a" * 40 and "--auto" in enable[0]
-    assert "--repo" in edit[0] and all(isinstance(part, str) for part in create[0] + enable[0] + edit[0])
+    assert edit[0][1:5] == ["api", "--method", "PATCH", "repos/Acme/Widget/pulls/5"]
+    assert "title=feat: y" in edit[0] and "body=-leading dash" in edit[0] and "pr" not in edit[0]
+    assert all(isinstance(part, str) for part in create[0] + enable[0] + edit[0])
+
+
+def test_an_existing_pull_request_body_is_updated_only_when_given_and_different(world) -> None:
+    _git(world["feature"], "push", "-q", "origin", "me/feature")
+    fake = FakeForge(world, existing=_open_pr(world, auto_merge=True, body="old"))
+    _run(world, fake, body="new text")
+    assert [c[0] for c in fake.calls] == ["retitle"] and fake.calls[0][2] is None and "new text" in fake.calls[0][3]
+    fake = FakeForge(world, existing=_open_pr(world, auto_merge=True))
+    _run(world, fake)  # no body given: the existing text is left alone
+    assert fake.calls == []
+
+
+def test_forge_reads_use_rest_not_graphql_pr_commands(monkeypatch, tmp_path) -> None:
+    import json
+    import subprocess
+
+    seen = []
+    row = {"number": 9, "state": "open", "merged_at": None, "draft": False, "title": "t", "body": "b",
+           "html_url": "u", "auto_merge": {"merge_method": "squash"}, "mergeable_state": "clean",
+           "head": {"ref": "f", "sha": "a" * 40, "repo": {"full_name": "o/r"}},
+           "base": {"ref": "main", "repo": {"full_name": "o/r"}}}
+
+    def fake_run(argv, **kwargs):
+        seen.append(argv)
+        out = json.dumps([row] if "pulls?state=all" in argv[-1] else row)
+        return subprocess.CompletedProcess(argv, 0, out, "")
+
+    monkeypatch.setattr(forge_access.shutil, "which", lambda _n: "/usr/bin/gh")
+    monkeypatch.setattr(forge_access.subprocess, "run", fake_run)
+    [pr] = forge.pull_requests_for_branch(tmp_path, "feat/x")
+    assert pr.auto_merge and pr.merge_state == "CLEAN" and not pr.cross_repository and pr.state == "OPEN"
+    assert all(argv[1] == "api" for argv in seen) and "head={owner}:feat%2Fx" in seen[0][-1]
