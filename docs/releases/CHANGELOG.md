@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.104.2](https://github.com/Audumla/AUDiaGentic/compare/v0.104.1...v0.104.2) (2026-11-22)
+
+
+### Bug Fixes
+
+* **gateway:** a turn the client cancelled no longer fences its session ([#496](https://github.com/Audumla/AUDiaGentic/issues/496)) ([8f3bbe2](https://github.com/Audumla/AUDiaGentic/commit/8f3bbe2a7ac4f431e0fe3f2dbbdb16e25842b536))
+
 ## [0.104.1](https://github.com/Audumla/AUDiaGentic/compare/v0.104.0...v0.104.1) (2026-11-22)
 
 
