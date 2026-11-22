@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.103.5](https://github.com/Audumla/AUDiaGentic/compare/v0.103.4...v0.103.5) (2026-11-22)
+
+
+### Bug Fixes
+
+* **worktree:** read and edit pull requests through REST so ship needs no read:org ([#489](https://github.com/Audumla/AUDiaGentic/issues/489)) ([76a0acb](https://github.com/Audumla/AUDiaGentic/commit/76a0acb44e903f200d2b370d25d019628f764fa3))
+
 ## [0.103.4](https://github.com/Audumla/AUDiaGentic/compare/v0.103.3...v0.103.4) (2026-11-21)
 
 
