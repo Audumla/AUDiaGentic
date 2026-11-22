@@ -215,8 +215,9 @@ def test_a_full_page_of_pull_requests_is_incomplete_not_proof(monkeypatch, tmp_p
     import json
     import subprocess
 
-    rows = [{"number": n, "state": "MERGED", "baseRefName": "main", "headRefName": "f", "headRefOid": "a" * 40,
-             "mergeCommit": {"oid": "b" * 40}, "isCrossRepository": False, "url": ""} for n in range(forge_access._LIMIT)]
+    rows = [{"number": n, "state": "closed", "merged_at": "2026-01-01T00:00:00Z", "merge_commit_sha": "b" * 40,
+             "head": {"ref": "f", "sha": "a" * 40, "repo": {"full_name": "o/r"}},
+             "base": {"ref": "main", "repo": {"full_name": "o/r"}}} for n in range(forge_access._LIMIT)]
     monkeypatch.setattr(forge_access.shutil, "which", lambda _name: "/usr/bin/gh")
     monkeypatch.setattr(forge_access.subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(a, 0, json.dumps(rows), ""))
     with pytest.raises(Exception) as raised:

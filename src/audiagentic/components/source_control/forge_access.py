@@ -1,8 +1,10 @@
 """Pull-request and repository facts from the code forge, and three named writes (DW01).
 
 GitHub through the ``gh`` CLI, the only forge supported so far. It reads, plus three
-named writes at the end (open a pull request, set its title, request auto-merge); it
-never merges, closes or comments itself. A fact the forge cannot give is an
+named writes at the end (open a pull request, set its title or body, request auto-merge); it
+never merges, closes or comments itself. Pull requests are read and edited through the REST API
+(``gh api``): ``gh pr view/list/edit`` query GraphQL fields (login, name, slug) that need the
+``read:org`` scope, which the container's token does not have. A fact the forge cannot give is an
 error, never a guess, so callers treat "could not ask" as unknown and refuse.
 """
 from __future__ import annotations
@@ -12,6 +14,7 @@ import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import quote
 
 from audiagentic.foundation.contracts.errors import make_error_factory
 
@@ -19,8 +22,6 @@ forge_error = make_error_factory("EXT", "FORGE", "source-control")
 
 _TIMEOUT_SECONDS = 60.0
 _LIMIT = 100
-_FIELDS = ("number,state,baseRefName,headRefName,headRefOid,mergeCommit,isCrossRepository,url,"
-           "isDraft,autoMergeRequest,mergeStateStatus,title")
 
 
 @dataclass(frozen=True)
@@ -37,6 +38,7 @@ class PullRequest:
     auto_merge: bool = False
     merge_state: str | None = None  # GitHub's mergeStateStatus, e.g. CLEAN, BEHIND, BLOCKED
     title: str = ""
+    body: str = ""
 
 
 @dataclass(frozen=True)
@@ -76,34 +78,46 @@ def repository_identity(repo: Path) -> RepositoryIdentity:
 
 
 def _pull_request(row: dict) -> PullRequest:
+    """A pull request from a REST ``pulls`` object."""
+    head, base = row["head"], row["base"]
+    state = "MERGED" if row.get("merged_at") else str(row["state"]).upper()
+    head_repo = (head.get("repo") or {}).get("full_name")
     return PullRequest(
-        number=int(row["number"]), state=str(row["state"]), base=str(row["baseRefName"]),
-        head_branch=str(row["headRefName"]), head_sha=str(row["headRefOid"]),
-        merge_commit=(row.get("mergeCommit") or {}).get("oid"),
-        cross_repository=bool(row.get("isCrossRepository")), url=str(row.get("url", "")),
-        is_draft=bool(row.get("isDraft")), auto_merge=row.get("autoMergeRequest") is not None,
-        merge_state=row.get("mergeStateStatus"), title=str(row.get("title", "")),
+        number=int(row["number"]), state=state, base=str(base["ref"]),
+        head_branch=str(head["ref"]), head_sha=str(head["sha"]),
+        merge_commit=row.get("merge_commit_sha") if state == "MERGED" else None,
+        cross_repository=head_repo is None or head_repo != (base.get("repo") or {}).get("full_name"),
+        url=str(row.get("html_url", "")), is_draft=bool(row.get("draft")),
+        auto_merge=row.get("auto_merge") is not None,
+        merge_state=(str(row["mergeable_state"]).upper() if row.get("mergeable_state") else None),
+        title=str(row.get("title", "")), body=str(row.get("body") or ""),
     )
+
+
+def _repo_path(repository: str | None) -> str:
+    return f"repos/{repository}" if repository else "repos/{owner}/{repo}"
 
 
 def pull_requests_for_branch(repo: Path, branch: str) -> tuple[PullRequest, ...]:
     """Every pull request, in any state, whose head branch is ``branch`` on this repository."""
-    stdout = _gh(repo, "pr", "list", "--head", branch, "--state", "all", "--limit", str(_LIMIT), "--json", _FIELDS)
+    endpoint = f"repos/{{owner}}/{{repo}}/pulls?state=all&per_page={_LIMIT}&head={{owner}}:{quote(branch, safe='')}"
+    stdout = _gh(repo, "api", endpoint)
     try:
         rows = json.loads(stdout or "[]")
         if len(rows) >= _LIMIT:
             # A full page may be cut short; an incomplete listing is no proof of anything.
             raise forge_error(5, "pull request listing may be incomplete", limit=_LIMIT)
-        return tuple(_pull_request(row) for row in rows)
+        # The listing carries no merge state; an open request is read again for it.
+        return tuple(_pull_request(row) if str(row.get("state")) != "open"
+                     else pull_request(repo, int(row["number"])) for row in rows)
     except (ValueError, KeyError, TypeError):
         raise forge_error(4, "gh returned a pull request listing this code cannot read") from None
 
 
 def pull_request(repo: Path, number: int, *, repository: str | None = None) -> PullRequest:
     """One pull request by number, read fresh; ``repository`` (owner/name) pins which repository it is read from."""
-    pin = ["--repo", repository] if repository else []
     try:
-        return _pull_request(json.loads(_gh(repo, "pr", "view", str(number), *pin, "--json", _FIELDS)))
+        return _pull_request(json.loads(_gh(repo, "api", f"{_repo_path(repository)}/pulls/{number}")))
     except (ValueError, KeyError, TypeError):
         raise forge_error(4, "gh returned a pull request this code cannot read") from None
 
@@ -123,9 +137,16 @@ def create_pull_request(repo: Path, *, head: str, base: str, title: str, body: s
     return output.strip().splitlines()[-1] if output.strip() else ""
 
 
-def set_pull_request_title(repo: Path, number: int, title: str, *, repository: str | None = None) -> None:
-    pin = ["--repo", repository] if repository else []
-    _gh(repo, "pr", "edit", str(number), *pin, "--title", title)
+def set_pull_request_text(repo: Path, number: int, *, title: str | None = None, body: str | None = None,
+                          repository: str | None = None) -> None:
+    """Set the title and/or body through REST; the squash commit takes its subject from the title.
+
+    Values are sent as raw fields (``--raw-field``), so a leading dash or ``@`` is never interpreted.
+    """
+    fields = [part for key, value in (("title", title), ("body", body)) if value is not None
+              for part in ("--raw-field", f"{key}={value}")]
+    if fields:
+        _gh(repo, "api", "--method", "PATCH", f"{_repo_path(repository)}/pulls/{number}", *fields)
 
 
 def enable_auto_merge(repo: Path, number: int, *, head_sha: str, repository: str | None = None) -> None:
