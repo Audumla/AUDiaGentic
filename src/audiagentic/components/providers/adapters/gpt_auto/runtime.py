@@ -1071,7 +1071,7 @@ class GptAutoProviderRuntime:
         page only reports the new state when it is reloaded); the hold lifts when a tab loads again or a
         turn is generating, which is progress.
         """
-        from audiagentic.foundation.admission_holds import get_admission_holds
+        from audiagentic.foundation.system.admission_holds import get_admission_holds
 
         holds = get_admission_holds()
         check = float(self.config.browser.rate_limit_check_interval_seconds)

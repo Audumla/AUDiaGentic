@@ -566,7 +566,7 @@ class GatewayQueueManager:
         self._recovery_timers: dict[str, threading.Timer] = {}
         self._recovery_pending: dict[str, Path] = {}
         self._shutdown_event = threading.Event()
-        from audiagentic.foundation.admission_holds import get_admission_holds
+        from audiagentic.foundation.system.admission_holds import get_admission_holds
 
         get_admission_holds().on_lift(self._on_admission_hold_lifted)
         self._session_dispatch_order = SessionDispatchOrder()
@@ -1374,7 +1374,7 @@ class GatewayQueueManager:
         """True when every source this request could run on is under an admission hold."""
         if isinstance(entry, NodeQueuedDispatch):
             return False
-        from audiagentic.foundation.admission_holds import get_admission_holds
+        from audiagentic.foundation.system.admission_holds import get_admission_holds
 
         holds = get_admission_holds()
         sources = [

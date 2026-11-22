@@ -84,7 +84,7 @@ class DispatchHealth:
             surfaces = {key: asdict(value) for key, value in sorted(self._surfaces.items())}
         degraded = [key for key, value in surfaces.items() if value["status"] == UNAVAILABLE]
         suspected = [key for key, value in surfaces.items() if value["status"] == SUSPECTED]
-        from audiagentic.foundation.admission_holds import get_admission_holds
+        from audiagentic.foundation.system.admission_holds import get_admission_holds
 
         # A hold queues new work for a limited provider source; it is not a fault, so readiness is unaffected.
         return {"surfaces": surfaces, "degraded": degraded, "suspected": suspected, "ready": not degraded,

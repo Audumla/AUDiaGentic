@@ -8,7 +8,7 @@ import pytest
 
 from audiagentic.components.agents.gateway.queue.queue import GatewayQueueManager
 from audiagentic.components.providers.adapters.gpt_auto.runtime import GptAutoProviderRuntime
-from audiagentic.foundation.admission_holds import AdmissionHolds, get_admission_holds
+from audiagentic.foundation.system.admission_holds import AdmissionHolds, get_admission_holds
 
 
 @pytest.fixture(autouse=True)
