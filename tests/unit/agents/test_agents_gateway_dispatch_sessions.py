@@ -1631,6 +1631,79 @@ def test_no_isolation_plain_record_routes_through_ephemeral_session(rig, monkeyp
     assert transports[0].closed  # not keep-alive: ephemeral session auto-closes
 
 
+@pytest.mark.parametrize(
+    ("predecessor", "cleared"),
+    [
+        # The client abandoned the turn itself: nothing is owed to it, so it cannot fence the session.
+        ({"state": "cancelled", "cancel-requested": True,
+          "cancel-provenance": {"actor-type": "client", "reason": "client-request"}}, True),
+        # Cancelled by something other than the client, or never requested: outcome still unproven.
+        ({"state": "cancelled", "cancel-requested": True,
+          "cancel-provenance": {"actor-type": "system", "reason": "shutdown"}}, False),
+        ({"state": "cancelled"}, False),
+        # A failed turn is not a deliberate abandonment, so it still needs its captured evidence.
+        ({"state": "failed", "cancel-requested": True,
+          "cancel-provenance": {"actor-type": "client", "reason": "client-request"}}, False),
+    ],
+)
+def test_client_cancelled_predecessor_does_not_fence_the_session(tmp_path, monkeypatch, predecessor, cleared):
+    """A turn the client cancelled after Send must not block every later turn on its session."""
+    predecessor = {"session-id": "ses_shared", "error": {"details": {"failure-response-available": False}}, **predecessor}
+    record = {"request-id": "req_followup", "session-id": "ses_shared", "dispatch-owner-epoch": "owner",
+              "worker-id": "worker", "attempt-epoch": "attempt",
+              "provider-metadata": {"unresolved-turn-pending": True, "unresolved-turn-id": "req_cancelled",
+                                    "submission-proven": True, "submission-attempt-id": "attempt-previous",
+                                    "submission-stage": "send-click-acknowledged", "send-intent-ever": True,
+                                    "submission-proof-source": "provider-user-message",
+                                    "recovery-state": "submission-proven"}}
+    monkeypatch.setattr(session_dispatch.store, "read_record", lambda *_args: predecessor)
+    session_record = {"provider": {"metadata": dict(record["provider-metadata"])}}
+    monkeypatch.setattr(sessions_store, "read_session_record", lambda *_args: session_record)
+    monkeypatch.setattr(sessions_store, "session_provider_metadata", lambda value: dict(value["provider"]["metadata"]))
+
+    def clear_checkpoint(*_args, **_kwargs):
+        session_record["provider"]["metadata"] = {"unresolved-turn-pending": False,
+                                                  "recovery-state": "stale-predecessor-fence-cleared"}
+        return True
+
+    monkeypatch.setattr(sessions_store, "clear_terminal_submission_checkpoint", clear_checkpoint)
+    monkeypatch.setattr(sessions_store, "update_provider_metadata",
+                        lambda _r, _s, update: session_record["provider"]["metadata"].update(update))
+    monkeypatch.setattr(session_dispatch.store, "update_owned_running_session",
+                        lambda *_a, **kwargs: {**record, "state": "running", "provider-metadata": kwargs["provider_metadata"]})
+    monkeypatch.setattr(session_dispatch.store, "record_gateway_timeline", lambda *_a, **_k: None)
+
+    result = session_dispatch._clear_terminal_predecessor_fence(tmp_path, record, session_store=sessions_store)
+
+    assert (result is not None) is cleared
+    if cleared:
+        assert result["provider-metadata"]["unresolved-turn-pending"] is False
+
+
+def test_a_client_cancelled_predecessor_also_releases_the_live_chat_fence(tmp_path, monkeypatch):
+    """Clearing the durable fence alone left the in-memory chat refusing the next turn."""
+    from audiagentic.components.agents.gateway.session import sessions as sessions_module
+
+    calls = []
+
+    class _Runtime:
+        def synchronize_cleared_predecessor_checkpoint(self, session_id, predecessor_id, *, expected_metadata,
+                                                       persisted_session_metadata):
+            calls.append((session_id, predecessor_id))
+            return True
+
+    monkeypatch.setattr(sessions_module, "peek_session_runtime", lambda: _Runtime())
+    cancelled = {"request-id": "req_c", "session-id": "ses_s", "state": "cancelled", "cancel-requested": True,
+                 "cancel-provenance": {"actor-type": "client", "reason": "client-request"}}
+    meta = {"unresolved-turn-id": "req_c", "unresolved-turn-pending": True}
+    cleared = {"unresolved-turn-pending": False}
+    assert session_dispatch._synchronize_cleared_predecessor(tmp_path, "ses_s", cancelled, meta, cleared) is True
+    assert calls == [("ses_s", "req_c")]
+    system = {**cancelled, "cancel-provenance": {"actor-type": "system", "reason": "shutdown"}}
+    assert session_dispatch._synchronize_cleared_predecessor(tmp_path, "ses_s", system, meta, cleared) is False
+    assert calls == [("ses_s", "req_c")]
+
+
 def test_completed_predecessor_fence_is_cleared_before_followup(tmp_path, monkeypatch):
     """A completed turn with a lost checkpoint clear must not block the next turn."""
     predecessor = {
