@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.105.0](https://github.com/Audumla/AUDiaGentic/compare/v0.104.2...v0.105.0) (2026-11-22)
+
+
+### Features
+
+* **planning:** add resumable deferred item state ([#499](https://github.com/Audumla/AUDiaGentic/issues/499)) ([38c10e8](https://github.com/Audumla/AUDiaGentic/commit/38c10e87a2d5abd03b36226b0f54db90bc9fd0d0))
+
 ## [0.104.2](https://github.com/Audumla/AUDiaGentic/compare/v0.104.1...v0.104.2) (2026-11-22)
 
 
