@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.104.0](https://github.com/Audumla/AUDiaGentic/compare/v0.103.5...v0.104.0) (2026-11-22)
+
+
+### Features
+
+* **project:** expose canonical local MCP tools through scoped CLI ([#491](https://github.com/Audumla/AUDiaGentic/issues/491)) ([ee70907](https://github.com/Audumla/AUDiaGentic/commit/ee709077c07dd8a33b017fd95e8a3733be1bca23))
+
 ## [0.103.5](https://github.com/Audumla/AUDiaGentic/compare/v0.103.4...v0.103.5) (2026-11-22)
 
 
