@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.104.1](https://github.com/Audumla/AUDiaGentic/compare/v0.104.0...v0.104.1) (2026-11-22)
+
+
+### Bug Fixes
+
+* **planning:** safely rekey duplicate active item identities ([#493](https://github.com/Audumla/AUDiaGentic/issues/493)) ([3ff8ce7](https://github.com/Audumla/AUDiaGentic/commit/3ff8ce7c4eef14a4a213a6e0341e8d011dc2a525))
+
 ## [0.104.0](https://github.com/Audumla/AUDiaGentic/compare/v0.103.5...v0.104.0) (2026-11-22)
 
 
