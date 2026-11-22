@@ -12,6 +12,11 @@ mcp: |
   audiagentic mcp list [project PATH] [component-profile NAME] [output json]
   audiagentic mcp MCP_ID help [project PATH] [output json]
   audiagentic mcp install help
+  audiagentic mcp call MCP_ID TOOL [arguments JSON | arguments-file FILE] project PATH
+  Calls the canonical local MCP server over stdio, preserving its tool schema
+  and lifecycle validation. No provider harness installation is needed.
+  Explicit project PATH is required, including for reads. Output is JSON;
+  tool failures exit nonzero and do not masquerade as successful results.
   Discovery reads metadata only: no installation, account authentication or external probes.
   For literal Python module execution use: audiagentic mcp -- MODULE [MODULE_ARGS...]
   Bare install/list/help and ID help select management syntax.
