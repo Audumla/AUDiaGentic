@@ -379,17 +379,23 @@ def _synchronize_cleared_predecessor(
     project_root: Path, session_id: str, predecessor: dict[str, Any],
     expected_metadata: dict[str, Any], cleared_metadata: dict[str, Any],
 ) -> bool:
-    """Release idle provider memory only after a verified terminal artifact."""
-    if predecessor.get("state") != "completed" or predecessor.get("session-id") != session_id:
+    """Release idle provider memory after a verified terminal artifact, or a client's own cancel.
+
+    A turn the client cancelled has no artifact to verify, but the provider compares every frozen
+    checkpoint key itself, so the live chat only lets go of exactly the fence that was cleared.
+    """
+    abandoned = _client_abandoned(predecessor)
+    if (predecessor.get("state") != "completed" and not abandoned) or predecessor.get("session-id") != session_id:
         return False
     try:
         from ..output import read_final_response
         from .sessions import peek_session_runtime
 
-        artifact = predecessor.get("response-artifact")
-        if not isinstance(artifact, dict):
-            return False
-        read_final_response(project_root, predecessor["request-id"], artifact)
+        if not abandoned:
+            artifact = predecessor.get("response-artifact")
+            if not isinstance(artifact, dict):
+                return False
+            read_final_response(project_root, predecessor["request-id"], artifact)
         memory_checkpoint = expected_metadata
         if expected_metadata.get("unresolved-turn-id") != predecessor["request-id"]:
             # Manual capture has already cleared the durable turn id. The
@@ -600,6 +606,23 @@ def _clear_orphaned_pending_checkpoint(
     scan_facts["residue-cleared"] = True
     observe("cleared", predecessor_id=predecessor["request-id"])
     return updated
+
+
+def _client_abandoned(request: dict[str, Any]) -> bool:
+    """True when the client itself cancelled this turn, so its outcome is no longer owed to anyone.
+
+    The unresolved-turn fence exists to stop a prompt being sent twice or its answer being lost. A turn the
+    client deliberately cancelled has neither concern: nobody waits for its answer, and nobody resends it.
+    Without this, a cancel after Send left the session fenced for good and every later turn failed.
+    """
+    provenance = request.get("cancel-provenance")
+    return bool(
+        request.get("state") == "cancelled"
+        and request.get("cancel-requested") is True
+        and isinstance(provenance, dict)
+        and provenance.get("actor-type") == "client"
+        and provenance.get("reason") == "client-request"
+    )
 
 
 def _clear_terminal_predecessor_fence(
@@ -895,7 +918,7 @@ def _clear_terminal_predecessor_fence(
             or predecessor_terminal_evidence.get("turn-id")
         ):
             return None
-    else:
+    elif not _client_abandoned(predecessor):
         if not isinstance(details, dict):
             return None
         dom_signals = set(details.get("dom-signals") or ())
