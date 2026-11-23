@@ -162,8 +162,8 @@ refusal before removal leaves everything as it was.
 `finish` refuses unmerged work and prints `abandon TIP12`, the first twelve characters
 of the tip you would discard. Repeating that token abandons the work. Only the merged-pull-
 request proof is waived; every other check still applies, and uncommitted changes still
-refuse (commit them first). Before removal the full history of the tip is written to a
-self-contained, verified `git bundle` with its checksum.
+refuse (commit them first). The work is discarded: no bundle is written; the tip stays only as the
+quarantine ref in the repository until you delete it. Work worth keeping belongs on a branch that is merged.
 
 ## Provenance: adopt, evidence, audit
 
@@ -181,11 +181,11 @@ self-contained, verified `git bundle` with its checksum.
 
 Nothing is written into the worktree. State lives in the user state directory, under
 `worktrees/`: owner records, the removal journals (one per attempt, earlier ones are kept),
-the archive (record copies and bundles) and the fences. Quarantine refs live in the
+the archive (record copies) and the fences. Quarantine refs live in the
 repository itself. To restore abandoned work:
 
 ```
-git fetch ARCHIVE/....bundle refs/quarantine/KEY/TX:refs/heads/restored
+git branch restored refs/quarantine/KEY/TX
 ```
 
 `git for-each-ref refs/quarantine` lists them. They are never deleted by these commands.
@@ -212,7 +212,7 @@ or diverged. It reports only; it never changes anything.
 - A process that ignores the fence can still write into a worktree between the final check
   and the removal. The checks reduce that window; they cannot close it.
 - The archive has no size limit; a full disk refuses before anything is removed.
-- The bundle covers the abandoned tip only. Other local branches and stashes are neither
+- Abandoning keeps the tip only as a quarantine ref. Other local branches and stashes are neither
   backed up nor removed.
 - Only GitHub through `gh` is supported as a forge.
 - Checks run in the live worktree and are trusted code; another writer can still advance the

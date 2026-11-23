@@ -89,7 +89,7 @@ only if it still points at the recorded tip. Ignored files that are not caches o
 refuse unless you repeat the count the refusal printed as `discard-ignored N`. A crash
 resumes from a journal; a refusal before removal leaves everything untouched. Unmerged
 work is refused unless you repeat the tip the refusal printed as `abandon TIP`: its full
-history is then written to a self-contained git bundle, verified and checksummed in the central archive before the worktree is removed. Uncommitted changes
+tip stays only as a local quarantine ref; nothing else is archived. Uncommitted changes
 still refuse; commit them first.
 adopt records a worktree git already has but that has no ownership record (a plain `git worktree add`),
 with the adopter and a purpose; the record says it was adopted, never that you created it. evidence marks a
@@ -409,9 +409,6 @@ def _finish(tokens: list[str]) -> int:
         lines = [f"finished {result['path']} (branch {result['branch']}, PR #{result['pr']})",
                  f"quarantine ref {result['quarantine-ref']}"]
         lines += [f"archive {result['archive']}"] if result["archive"] else []
-        if result["bundle"]:
-            lines.append(f"bundle {result['bundle']['path']} ({result['bundle']['commits']} commit(s), "
-                         f"sha256 {result['bundle']['sha256'][:16]}...)")
         lines += [f"note: {note}" for note in result["notes"]]
         print_message("\n".join(lines))
     return 0
