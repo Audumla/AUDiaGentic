@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.106.1](https://github.com/Audumla/AUDiaGentic/compare/v0.106.0...v0.106.1) (2026-11-23)
+
+
+### Bug Fixes
+
+* **gateway:** keep 16 finished client leases, not 256 ([#503](https://github.com/Audumla/AUDiaGentic/issues/503)) ([5690d06](https://github.com/Audumla/AUDiaGentic/commit/5690d060e8a7b7b27fb36c9c4799e62aefbe4bfd))
+
 ## [0.106.0](https://github.com/Audumla/AUDiaGentic/compare/v0.105.0...v0.106.0) (2026-11-23)
 
 
