@@ -7,7 +7,10 @@ from types import SimpleNamespace
 import pytest
 
 from audiagentic.components.agents.gateway.queue.queue import GatewayQueueManager
-from audiagentic.components.providers.adapters.gpt_auto.runtime import GptAutoProviderRuntime
+from audiagentic.components.providers.adapters.gpt_auto.runtime import (
+    GptAutoProviderRuntime,
+    _RateLimitTab,
+)
 from audiagentic.foundation.system.admission_holds import AdmissionHolds, get_admission_holds
 
 
@@ -47,57 +50,83 @@ def test_the_queue_keeps_requests_for_a_held_source_and_not_others() -> None:
     assert held(_entry(["chatgpt", "other"], pinned="chatgpt")) is True  # a session bound to the held source waits
 
 
-def _runtime(scans):
-    calls = {"reload": 0}
+def _tab(url="https://chatgpt.com/c/a", *, limited=False, loaded=False, generating=False):
+    return _RateLimitTab(handle=url[-1], url=url, limited=limited, loaded=loaded, generating=generating)
+
+
+def _runtime(scans, *, probes=()):
+    """A watcher host fed one scripted scan per tick; it stops itself when the script ends."""
+    calls = {"reload": 0, "probe": 0}
     bridge = object()
     ns = SimpleNamespace(
         _bridge=bridge, RATE_LIMIT_SOURCE_ID="chatgpt",
         config=SimpleNamespace(browser=SimpleNamespace(rate_limit_check_interval_seconds=0.01,
-                                                       rate_limit_refresh_interval_seconds=0.05)),
+                                                       rate_limit_refresh_interval_seconds=0.03)),
     )
-    results = iter(scans)
+    results, probe_results = iter(scans), iter(probes)
 
     async def scan():
         try:
-            value = next(results)
+            return next(results)
         except StopIteration:
             ns._bridge = None
-            return ([], False)
-        return value
+            return []
 
-    async def reload():
+    async def reload(_tab):
         calls["reload"] += 1
 
-    ns._scan_rate_limit, ns._reload_one_limited_tab = scan, reload
+    async def probe(_url):
+        calls["probe"] += 1
+        return next(probe_results, False)
+
+    ns._scan_rate_limit, ns._reload_limited_tab, ns._probe_chat_url = scan, reload, probe
     return ns, bridge, calls
 
 
-def test_detecting_the_limit_holds_then_refreshes_then_lifts_when_a_tab_loads() -> None:
-    page = object()
-    ns, bridge, calls = _runtime([([page], False)] * 12 + [([], False)])
-
+def _run(ns, bridge):
     asyncio.run(GptAutoProviderRuntime._watch_rate_limit(ns, bridge))
-    assert calls["reload"] >= 1  # a limited tab was reloaded while held
-    assert get_admission_holds().get("chatgpt") is None  # and lifted once a tab loaded again
 
 
-def test_progress_on_a_running_turn_lifts_the_hold_even_while_a_tab_is_limited() -> None:
-    page = object()
-    ns, bridge, _calls = _runtime([([page], False), ([page], True)])
-    asyncio.run(GptAutoProviderRuntime._watch_rate_limit(ns, bridge))
+def test_detection_holds_and_the_hold_stays_while_the_page_is_shown() -> None:
+    ns, bridge, calls = _runtime([[_tab(limited=True)]] * 6)
+    _run(ns, bridge)
+    held = get_admission_holds().get("chatgpt")
+    assert held is not None and held.reason == "rate-limited"
+    assert calls["reload"] >= 1  # a limited tab is reloaded while held
+
+
+def test_a_limited_tab_that_loads_normally_lifts_the_hold() -> None:
+    ns, bridge, _calls = _runtime([[_tab(limited=True)]] * 2 + [[_tab(loaded=True)]])
+    _run(ns, bridge)
     assert get_admission_holds().get("chatgpt") is None
 
 
-def test_the_hold_stays_while_the_limit_page_is_shown() -> None:
-    page = object()
-    ns, bridge, calls = _runtime([([page], False)] * 3)
-    seen = []
+def test_a_generating_turn_lifts_the_hold_even_while_another_tab_is_limited() -> None:
+    ns, bridge, _calls = _runtime([[_tab(limited=True)], [_tab(limited=True), _tab("https://chatgpt.com/c/b", generating=True)]])
+    _run(ns, bridge)
+    assert get_admission_holds().get("chatgpt") is None
 
-    async def run():
-        task = asyncio.create_task(GptAutoProviderRuntime._watch_rate_limit(ns, bridge))
-        await asyncio.sleep(0.025)
-        seen.append(get_admission_holds().get("chatgpt"))
-        await task
 
-    asyncio.run(run())
-    assert seen[0] is not None and seen[0].reason == "rate-limited"
+def test_the_limited_tab_vanishing_does_not_lift_the_hold() -> None:
+    ns, bridge, calls = _runtime([[_tab(limited=True)]] * 2 + [[]] * 6)
+    _run(ns, bridge)
+    assert get_admission_holds().get("chatgpt") is not None  # no proof of recovery
+    assert calls["probe"] >= 1  # so the remembered chat is reopened to find out
+
+
+def test_a_probe_that_loads_lifts_the_hold_after_the_tab_vanished() -> None:
+    ns, bridge, calls = _runtime([[_tab(limited=True)]] * 2 + [[]] * 8, probes=[False, True])
+    _run(ns, bridge)
+    assert calls["probe"] == 2 and get_admission_holds().get("chatgpt") is None
+
+
+def test_an_unrelated_loaded_tab_is_not_proof_the_limit_is_over() -> None:
+    ns, bridge, _calls = _runtime([[_tab(limited=True)]] * 2 + [[_tab("https://chatgpt.com/c/other", loaded=True)]] * 2)
+    _run(ns, bridge)
+    assert get_admission_holds().get("chatgpt") is not None
+
+
+def test_no_limit_page_means_no_hold() -> None:
+    ns, bridge, _calls = _runtime([[_tab(loaded=True)]] * 3)
+    _run(ns, bridge)
+    assert get_admission_holds().get("chatgpt") is None
