@@ -1105,6 +1105,12 @@ class GptAutoProviderRuntime:
                             limited_urls.append(tab.url)
                     if not held:
                         if limited:
+                            # An idle tab shows the state from when it last loaded, not now. Reload the
+                            # limited tabs and hold only if the page is still limited afterwards.
+                            if not await self._confirm_limit(limited):
+                                logger.info("gpt-auto limit page on %s was stale (reload loads normally); not holding",
+                                            [tab.url for tab in limited])
+                                continue
                             next_refresh = now + refresh
                             holds.hold(self.RATE_LIMIT_SOURCE_ID, "rate-limited", detail,
                                        next_check_at=_after_iso(refresh))
@@ -1162,6 +1168,20 @@ class GptAutoProviderRuntime:
         """Reload one limited tab: the page only shows the new state after a reload."""
         await asyncio.wait_for(self.bridge.call(
             "navigate", {"pageHandle": tab.handle, "url": tab.url}), timeout=_TAB_STEP_TIMEOUT_SECONDS)
+
+    async def _confirm_limit(self, tabs: list[_RateLimitTab]) -> bool:
+        """Reload the tabs that show the limit page; True only when one still shows it after loading."""
+        for tab in tabs:
+            await self._reload_limited_tab(tab)
+        for _ in range(10):
+            await asyncio.sleep(2.0)
+            current = {t.handle: t for t in await self._scan_rate_limit()}
+            states = [current.get(tab.handle) for tab in tabs]
+            if any(t is not None and t.limited for t in states):
+                return True
+            if any(t is not None and t.loaded for t in states):
+                return False
+        return False  # never loaded either way: no evidence of a limit, so do not hold
 
     async def _probe_chat_url(self, url: str) -> bool:
         """Open a remembered chat in a short-lived tab; True when it loads normally (the limit is over)."""

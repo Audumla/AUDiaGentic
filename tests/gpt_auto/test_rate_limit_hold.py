@@ -54,9 +54,9 @@ def _tab(url="https://chatgpt.com/c/a", *, limited=False, loaded=False, generati
     return _RateLimitTab(handle=url[-1], url=url, limited=limited, loaded=loaded, generating=generating)
 
 
-def _runtime(scans, *, probes=()):
+def _runtime(scans, *, probes=(), confirm=True):
     """A watcher host fed one scripted scan per tick; it stops itself when the script ends."""
-    calls = {"reload": 0, "probe": 0}
+    calls = {"reload": 0, "probe": 0, "confirm": 0}
     bridge = object()
     ns = SimpleNamespace(
         _bridge=bridge, RATE_LIMIT_SOURCE_ID="chatgpt",
@@ -79,7 +79,12 @@ def _runtime(scans, *, probes=()):
         calls["probe"] += 1
         return next(probe_results, False)
 
+    async def confirm_limit(_tabs):
+        calls["confirm"] += 1
+        return confirm
+
     ns._scan_rate_limit, ns._reload_limited_tab, ns._probe_chat_url = scan, reload, probe
+    ns._confirm_limit = confirm_limit
     return ns, bridge, calls
 
 
@@ -130,3 +135,16 @@ def test_no_limit_page_means_no_hold() -> None:
     ns, bridge, _calls = _runtime([[_tab(loaded=True)]] * 3)
     _run(ns, bridge)
     assert get_admission_holds().get("chatgpt") is None
+
+
+def test_a_stale_limit_page_that_reloads_normally_does_not_hold_and_is_not_rechecked_every_tick() -> None:
+    ns, bridge, calls = _runtime([[_tab(limited=True)], [_tab(loaded=True)], [_tab(loaded=True)]], confirm=False)
+    _run(ns, bridge)
+    assert get_admission_holds().get("chatgpt") is None
+    assert calls["confirm"] == 1
+
+
+def test_a_limit_page_that_survives_a_reload_holds() -> None:
+    ns, bridge, calls = _runtime([[_tab(limited=True)]] * 3, confirm=True)
+    _run(ns, bridge)
+    assert get_admission_holds().get("chatgpt") is not None and calls["confirm"] == 1
