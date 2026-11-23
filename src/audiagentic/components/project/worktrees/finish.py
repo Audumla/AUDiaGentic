@@ -8,8 +8,8 @@ an immutable ``refs/quarantine/<id>`` ref at the tip, and a verified copy of
 the project's ignored record files in the central archive. The journal records
 each phase so a crash resumes instead of guessing, and a refusal at any point
 before the worktree is removed lifts the fence and leaves everything as it was.
-Merged work is finished on proof; unmerged work only by an explicit ``abandon <tip prefix>``, after its
-unique commits are bundled and the bundle verified.
+Merged work is finished on proof; unmerged work only by an explicit ``abandon <tip prefix>``, which discards it
+(the quarantine ref is the only thing kept).
 
 Known limits, documented rather than solved: a process that ignores the drain fence and
 writes into the worktree between the final check and the removal cannot be stopped by
@@ -158,7 +158,7 @@ def _identity(path: Path, repo: Path) -> dict[str, Any]:
             "gitdir": pointer.read_text(encoding="utf-8").strip() if pointer.is_file() else None}
 
 
-#: Blockers that only mean "the work is not proven merged"; abandoning accepts them because the commits are bundled.
+#: Blockers that only mean "the work is not proven merged"; abandoning accepts them because the operator names the tip being discarded.
 UNMERGED_CODES = frozenset({
     "unmerged", "tip-differs-from-pr", "pr-open", "pr-closed", "pr-merged", "pr-wrong-base", "pr-ambiguous",
     "merge-commit-unknown", "merge-commit-not-fetched", "merge-commit-not-on-default", "forge-unavailable",
@@ -207,35 +207,10 @@ def _require_eligible(path: Path, assessment: eligibility.Assessment, discard_ig
         hint = ""
         if abandon is None and all(b.code in UNMERGED_CODES for b in blockers) and assessment.head:
             hint = (f". To discard this unmerged work instead, repeat with `abandon {assessment.head[:12]}`; "
-                    "its commits are bundled and verified first")
+                    "only the quarantine ref is kept")
         raise refuse_error(2, "This worktree cannot be finished: "
                               + "; ".join(f"{b.code}: {b.detail}" for b in blockers[:4]) + hint,
                            blockers=[b.code for b in blockers])
-
-
-def _bundle_tip(main: Path, reference: str, tip: str, base: str | None, destination: Path) -> dict[str, Any]:
-    """Write a self-contained bundle of the tip's full history, verify it, and record a checksum.
-
-    Self-contained on purpose: a bundle that leaves out the default branch's history would need that
-    history to exist at restore time, and a force-pushed default branch can lose it. ``commits`` is the
-    number of commits not on the default branch, or ``None`` when that is unknown (never read as zero).
-    """
-    unique = git.commits_not_in(main, tip, base) if base else None
-    staging = destination.with_name(destination.name + ".partial")
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        git.create_bundle(main, staging, reference, None)
-        git.verify_bundle(main, staging)
-    except Exception as error:
-        raise refuse_error(5, "The bundle of the unmerged commits could not be created and verified; "
-                              "nothing was removed", reason=getattr(error, "details", None)) from error
-    if tip not in git.bundle_heads(main, staging):
-        raise refuse_error(5, "The bundle does not contain the worktree tip; nothing was removed")
-    checksum = hashlib.sha256(staging.read_bytes()).hexdigest()
-    if destination.exists():
-        raise refuse_error(5, "The bundle destination already exists; nothing was removed", path=str(destination))
-    staging.rename(destination)
-    return {"path": str(destination), "sha256": checksum, "commits": unique}
 
 
 def _fetch_merged_pull_heads(main: Path, repo: Path, path: Path, pull_requests, remote: str):
@@ -273,7 +248,7 @@ def finish(repo: Path, target: str, *, active_work, discard_ignored: int | None 
     """Preserve, then remove, the worktree ``target``; refuse on anything uncertain.
 
     Merged work is finished on proof. Unmerged work needs ``abandon`` set to the tip prefix the
-    operator was shown; its unique commits are then bundled and verified before removal.
+    operator was shown; it is then discarded, leaving only the quarantine ref.
     """
     main = git.list_worktrees(repo)[0].path
     state = state_root or user_state_dir()
@@ -319,16 +294,10 @@ def finish(repo: Path, target: str, *, active_work, discard_ignored: int | None 
             git.create_ref(main, reference, first.head)
             if git.resolve_commit(main, reference) != first.head:
                 raise refuse_error(5, "The quarantine ref does not point at the worktree tip; nothing was removed")
-            bundle = None
-            if abandon is not None:
-                bundle = _bundle_tip(
-                    main, reference, first.head, base,
-                    state / "worktrees" / "archive" / records.repo_id(repo)
-                    / f"{_key(path)}-{first.head[:9]}-{body['transaction'][:8]}.bundle")
             archive = (state / "worktrees" / "archive" / records.repo_id(repo)
                        / f"{_key(path)}-{first.head[:9]}-{body['transaction'][:8]}")
             archived = _archive_records(path, body["proof"]["records"], archive) if body["proof"]["records"] else 0
-            body.update({"quarantine-ref": reference, "archive": str(archive) if archived else None, "bundle": bundle})
+            body.update({"quarantine-ref": reference, "archive": str(archive) if archived else None})
             if hasattr(os, "sync"):
                 os.sync()  # archive and ref reach disk before anything is removed
             _write_journal(journal_file, body, "PRESERVED")
@@ -432,4 +401,4 @@ def _finish_tail(main: Path, repo: Path, path: Path, body: dict[str, Any], journ
                  quarantine_ref=body.get("quarantine-ref"))
     return {"path": str(path), "branch": branch, "tip": tip, "pr": proof["pr"],
             "quarantine-ref": body.get("quarantine-ref"), "archive": body.get("archive"),
-            "bundle": body.get("bundle"), "abandoned": bool(body.get("abandon")), "notes": notes}
+            "abandoned": bool(body.get("abandon")), "notes": notes}

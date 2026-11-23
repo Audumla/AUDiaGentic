@@ -302,21 +302,13 @@ def test_unmerged_work_is_refused_with_the_abandon_hint(repo, unmerged, state) -
     assert feature.is_dir()
 
 
-def test_abandon_bundles_the_unique_commits_then_removes(repo, unmerged, state) -> None:
+def test_abandon_discards_the_work_and_keeps_only_the_quarantine_ref(repo, unmerged, state) -> None:
     feature, tip = unmerged
     result = _abandon(repo, state, feature, tip)
     assert not feature.exists() and not git.branch_exists(repo, "me/wip")
     assert git.resolve_commit(repo, result["quarantine-ref"]) == tip and result["abandoned"] is True
-    bundle = Path(result["bundle"]["path"])
-    assert bundle.is_file() and result["bundle"]["commits"] == 2
-    import hashlib
-    assert hashlib.sha256(bundle.read_bytes()).hexdigest() == result["bundle"]["sha256"]
-    assert tip in _git(repo, "bundle", "list-heads", str(bundle))
-    _git(repo, "bundle", "verify", str(bundle))
-    clone = repo.parent / "restore"  # self-contained: restores into an empty repository
-    _git(repo.parent, "init", "-q", str(clone))
-    _git(clone, "fetch", "-q", str(bundle), f"{result['quarantine-ref']}:refs/heads/restored")
-    assert _git(clone, "rev-parse", "restored") == tip
+    assert "bundle" not in result
+    assert not list((state / "worktrees" / "archive").rglob("*.bundle"))
 
 
 def test_abandon_needs_the_exact_tip_and_still_refuses_dirty_trees(repo, unmerged, state) -> None:
@@ -342,15 +334,16 @@ def test_abandon_works_without_the_forge_and_on_a_detached_head(repo, unmerged, 
 
     result = finisher.finish(repo, str(feature), active_work=IDLE, pull_requests=forge_down, state_root=state,
                              abandon=tip[:12])
-    assert not feature.exists() and result["bundle"]["commits"] == 2
+    assert not feature.exists() and "bundle" not in result
 
 
-def test_abandoning_work_already_on_the_default_branch_still_gets_a_bundle(repo, state) -> None:
+def test_abandoning_work_already_on_the_default_branch_writes_nothing_but_the_ref(repo, state) -> None:
     feature = (repo.parent / "same").resolve()
     _git(repo, "worktree", "add", "-q", "-b", "me/same", str(feature), "origin/main")
     tip = _git(feature, "rev-parse", "HEAD")
     result = _abandon(repo, state, feature, tip)
-    assert result["bundle"]["commits"] == 0 and Path(result["bundle"]["path"]).is_file() and not feature.exists()
+    assert not feature.exists() and "bundle" not in result
+
 
 
 def test_abandon_never_overrides_active_gateway_work(repo, unmerged, state) -> None:

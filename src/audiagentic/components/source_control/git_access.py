@@ -225,17 +225,6 @@ def delete_unmerged_branch(repo: Path, branch: str) -> None:
     run_git(repo, "branch", "-D", branch)
 
 
-def create_bundle(repo: Path, destination: Path, ref: str, exclude: str | None) -> None:
-    """Write a git bundle of ``ref`` (without ``exclude``'s history when given); an empty bundle is an error."""
-    arguments = ["bundle", "create", str(destination), ref]
-    if exclude:
-        arguments.append(f"^{exclude}")
-    run_git(repo, *arguments, timeout=300.0)
-
-
-def verify_bundle(repo: Path, bundle: Path) -> None:
-    """Raise unless git can read the bundle and every prerequisite commit is present."""
-    run_git(repo, "bundle", "verify", str(bundle), timeout=300.0)
 
 
 def create_ref(repo: Path, ref: str, commit: str) -> None:
@@ -317,7 +306,3 @@ def merge_base(repo: Path, first: str, second: str) -> str:
     """The best common ancestor of two refs or commits."""
     return run_git(repo, "merge-base", first, second).strip()
 
-
-def bundle_heads(repo: Path, bundle: Path) -> str:
-    """The ``git bundle list-heads`` listing of ``bundle`` (one ``<oid> <ref>`` per line)."""
-    return run_git(repo, "bundle", "list-heads", str(bundle))

@@ -107,6 +107,6 @@ contributions:
           it reports `merged` when done. `sync`, `push` and `merge [dry-run yes]` are the single steps.
         - After `ship` reports merged, `audiagentic worktree finish BRANCH` preserves the work
           (quarantine ref, archive) and removes the worktree and branch. It refuses unmerged work;
-          `abandon TIP12` discards it only after a verified bundle. `prune` reports what is eligible.
+          `abandon TIP12` discards it (only the quarantine ref is kept). `prune` reports what is eligible.
         - Never use `git worktree remove --force`, force-push, or edit the primary checkout.
         Details: docs/guides/WORKTREES.md.

@@ -16,12 +16,10 @@ from audiagentic.components.source_control.git_access import (
     add_worktree,
     ahead_behind,
     branch_exists,
-    bundle_heads,
     changes,
     commits_not_in,
     common_dir,
     conflicted_paths,
-    create_bundle,
     create_ref,
     default_branch,
     delete_branch_at,
@@ -44,7 +42,6 @@ from audiagentic.components.source_control.git_access import (
     remove_clean_worktree,
     resolve_commit,
     valid_branch_name,
-    verify_bundle,
 )
 
 __all__ = [
@@ -52,12 +49,10 @@ __all__ = [
     "add_worktree",
     "ahead_behind",
     "branch_exists",
-    "bundle_heads",
     "changes",
     "commits_not_in",
     "common_dir",
     "conflicted_paths",
-    "create_bundle",
     "create_ref",
     "default_branch",
     "delete_branch_at",
@@ -80,5 +75,4 @@ __all__ = [
     "remove_clean_worktree",
     "resolve_commit",
     "valid_branch_name",
-    "verify_bundle",
 ]
