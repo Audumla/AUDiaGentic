@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.106.2](https://github.com/Audumla/AUDiaGentic/compare/v0.106.1...v0.106.2) (2026-11-23)
+
+
+### Bug Fixes
+
+* **gpt-auto:** lift the rate-limit hold only on proof of recovery ([#505](https://github.com/Audumla/AUDiaGentic/issues/505)) ([41cd5ba](https://github.com/Audumla/AUDiaGentic/commit/41cd5ba3a787c111e7fa0d4086dfe37202709580))
+
 ## [0.106.1](https://github.com/Audumla/AUDiaGentic/compare/v0.106.0...v0.106.1) (2026-11-23)
 
 
