@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.107.2](https://github.com/Audumla/AUDiaGentic/compare/v0.107.1...v0.107.2) (2026-11-23)
+
+
+### Bug Fixes
+
+* **gateway:** dashboard session controls stay on one row; stop burning client badges on lease acquire ([#512](https://github.com/Audumla/AUDiaGentic/issues/512)) ([7ed8ced](https://github.com/Audumla/AUDiaGentic/commit/7ed8ced5bfb47a75c393424ab45d18bd91becfb9))
+
 ## [0.107.1](https://github.com/Audumla/AUDiaGentic/compare/v0.107.0...v0.107.1) (2026-11-23)
 
 
