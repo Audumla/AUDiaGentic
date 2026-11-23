@@ -58,3 +58,48 @@ async def test_foreign_draft_never_sent_when_it_cannot_be_replaced(monkeypatch):
         await controller.submit(object(), "my prompt", timeout=1.0)
     assert calls["click"] == 0
     assert calls["insert"] == 1 + cdp.GptAutoCdpBrowserController._MAX_COMPOSER_REINSERTS
+
+
+class _Page:
+    def __init__(self, url: str) -> None:
+        self.url = url
+
+
+@pytest.mark.asyncio
+async def test_prompt_initiation_is_serial_across_projects(monkeypatch):
+    import asyncio
+
+    controller, _ = _controller(monkeypatch, {"text": "x"})
+    state = {"active": 0, "peak": 0}
+
+    async def fake_serialized(page, text, *, timeout=None, stage_callback=None):
+        state["active"] += 1
+        state["peak"] = max(state["peak"], state["active"])
+        await asyncio.sleep(0.03)
+        state["active"] -= 1
+        return {"actionComplete": True}
+
+    controller._submit_serialized = fake_serialized
+    one = "https://chatgpt.com/g/g-p-example-one/project"
+    two = "https://chatgpt.com/g/g-p-example-two/project"
+    await asyncio.gather(
+        controller.submit(_Page(one), "a"),
+        controller.submit(_Page(one), "b"),
+        controller.submit(_Page(two), "c"),
+    )
+    assert state["peak"] == 1  # never two initiations at once, in any project
+
+
+@pytest.mark.asyncio
+async def test_timeout_reports_why_the_send_gate_never_opened(monkeypatch):
+    composer = {"text": "another request's prompt"}
+    controller, _ = _controller(monkeypatch, composer)
+
+    async def stuck_insert(page, text):
+        pass
+
+    controller.insert_text = stuck_insert
+    with pytest.raises(cdp.ComposerSubmissionTimeout) as caught:
+        await controller.submit(object(), "my prompt", timeout=0.5)
+    assert caught.value.gate_reason == "composer-text-mismatch"
+    assert caught.value.send_attempted is False
