@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.foundation.system.managed_service_contracts import INACTIVE_LEASE_HISTORY_LIMIT
 from audiagentic.foundation.system.managed_service import (
     EndpointInfo,
     ManagedServiceRecord,
@@ -115,7 +116,7 @@ def test_lease_history_is_bounded_and_active_authority_expires_idle_lease(
         )
         store.release_lease(lease.lease_id, expected_epoch=running.owner_epoch)
 
-    assert len(store.read().leases) <= 256
+    assert len(store.read().leases) <= INACTIVE_LEASE_HISTORY_LIMIT
 
     _, expiring = store.acquire_lease(
         "client-expiring", ttl_seconds=1, expected_epoch=running.owner_epoch

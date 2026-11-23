@@ -14,7 +14,7 @@ from audiagentic.foundation.workflow import TransitionConfig, TransitionEngine
 
 ServiceState = Literal["starting", "running", "draining", "stopping", "stopped", "failed"]
 LeaseState = Literal["active", "released", "expired"]
-INACTIVE_LEASE_HISTORY_LIMIT = 256
+INACTIVE_LEASE_HISTORY_LIMIT = 16
 _ID = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
 validation_error = make_error_factory("VAL", "MSVC", "managed-service")
 conflict_error = make_error_factory("CON", "MSVC", "managed-service")
