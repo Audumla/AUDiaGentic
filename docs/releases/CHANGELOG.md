@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.107.0](https://github.com/Audumla/AUDiaGentic/compare/v0.106.2...v0.107.0) (2026-11-23)
+
+
+### Features
+
+* **gateway:** dashboard snapshot rows carry an allowed-actions hint ([#508](https://github.com/Audumla/AUDiaGentic/issues/508)) ([e173539](https://github.com/Audumla/AUDiaGentic/commit/e1735390f9c242ef99e7c0c551740ecee22e0cd9))
+
 ## [0.106.2](https://github.com/Audumla/AUDiaGentic/compare/v0.106.1...v0.106.2) (2026-11-23)
 
 
