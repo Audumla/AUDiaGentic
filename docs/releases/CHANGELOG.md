@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.107.1](https://github.com/Audumla/AUDiaGentic/compare/v0.107.0...v0.107.1) (2026-11-23)
+
+
+### Bug Fixes
+
+* **gpt-auto:** serialize prompt initiation and report why Send never opened ([#510](https://github.com/Audumla/AUDiaGentic/issues/510)) ([48307af](https://github.com/Audumla/AUDiaGentic/commit/48307af5fcc8d204dc196f63e392565149dbba4f))
+
 ## [0.107.0](https://github.com/Audumla/AUDiaGentic/compare/v0.106.2...v0.107.0) (2026-11-23)
 
 
