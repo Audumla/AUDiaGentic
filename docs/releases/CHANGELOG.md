@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.106.0](https://github.com/Audumla/AUDiaGentic/compare/v0.105.0...v0.106.0) (2026-11-23)
+
+
+### Features
+
+* **gpt-auto:** GPT-wide rate-limited state that holds new requests ([#501](https://github.com/Audumla/AUDiaGentic/issues/501)) ([25605f9](https://github.com/Audumla/AUDiaGentic/commit/25605f9bd8addddf8822426144ac50d8652bd999))
+
 ## [0.105.0](https://github.com/Audumla/AUDiaGentic/compare/v0.104.2...v0.105.0) (2026-11-22)
 
 
