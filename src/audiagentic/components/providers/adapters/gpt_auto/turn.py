@@ -1401,6 +1401,7 @@ class GptAutoTurn:
                     "submission-proven": False,
                     "submission-attempted": not proven_unsent,
                     "submission-stage": exc.stage if isinstance(exc, ComposerSubmissionTimeout) else "unknown",
+                    "submission-gate-reason": exc.gate_reason if isinstance(exc, ComposerSubmissionTimeout) else None,
                 },
             ) from exc
         finally:

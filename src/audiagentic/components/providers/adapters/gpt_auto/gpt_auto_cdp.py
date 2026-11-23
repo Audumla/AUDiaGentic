@@ -317,10 +317,13 @@ _COMPOSER_SELECT_ALL_FN = r"""(text) => {
 class ComposerSubmissionTimeout(TimeoutError):
     """Preserve whether a send-capable operation was dispatched before timeout."""
 
-    def __init__(self, *, send_attempted: bool, stage: str) -> None:
+    def __init__(self, *, send_attempted: bool, stage: str, gate_reason: str | None = None) -> None:
         super().__init__(f"composer operation timed out during {stage}")
         self.send_attempted = send_attempted
         self.stage = stage
+        # Why the Send gate never opened (composer-text-mismatch, send-unavailable,
+        # composer-unavailable): without it a stuck draft cannot be diagnosed.
+        self.gate_reason = gate_reason
 
 _SNAPSHOT_FN = r"""
 (signalSpecs) => {
@@ -1784,6 +1787,8 @@ class GptAutoCdpBrowserController(CdpBrowserController):
         )
 
         self._project_open_lock = asyncio.Lock()
+        # Serializes prompt initiation (type + send) across all tabs.
+        self._composer_lock = asyncio.Lock()
 
     async def wait_for_composer(self, page: CdpPageRef, *, timeout: float) -> dict[str, Any]:
         deadline = asyncio.get_running_loop().time() + timeout
@@ -1984,6 +1989,27 @@ class GptAutoCdpBrowserController(CdpBrowserController):
     ) -> dict[str, Any]:
         if not isinstance(text, str) or not text.strip():
             raise ValueError("text must be a non-empty string")
+        # Prompt initiation is strictly serial across the whole browser: ChatGPT
+        # shares one composer draft per project between tabs, and concurrent
+        # typing overwrites it.  Only initiation is serialized; once a send is
+        # acknowledged, the turns process in parallel.  Take the lock before the
+        # submit deadline starts, so waiting never spends this send's budget.
+        lock = self.__dict__.setdefault("_composer_lock", asyncio.Lock())
+        async with lock:
+            return await self._submit_serialized(
+                page, text, timeout=timeout, stage_callback=stage_callback
+            )
+
+    async def _submit_serialized(
+        self,
+        page: CdpPageRef,
+        text: str,
+        *,
+        timeout: float | None = None,
+        stage_callback: Callable[[str], Awaitable[None]] | None = None,
+    ) -> dict[str, Any]:
+        if not isinstance(text, str) or not text.strip():
+            raise ValueError("text must be a non-empty string")
 
         async def notify_stage(stage: str) -> None:
             if stage_callback is not None:
@@ -1991,6 +2017,7 @@ class GptAutoCdpBrowserController(CdpBrowserController):
 
         send_attempted = False
         stage = "composer-insertion"
+        gate_reason: str | None = None
         try:
             async with asyncio.timeout(timeout if timeout is not None else self._SUBMIT_DEFAULT_TIMEOUT_SECONDS):
                 # ChatGPT can expose an editable composer before the newly
@@ -2057,6 +2084,8 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                     ):
                         send_attempted = False
                         stage = "composer-readiness"
+                        if isinstance(validation, dict):
+                            gate_reason = str(validation.get("reason") or gate_reason or "") or None
                         if (
                             isinstance(validation, dict)
                             and validation.get("reason") == "composer-text-mismatch"
@@ -2155,7 +2184,7 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                     stage = "composer-readiness"
                     await asyncio.sleep(self._SUBMIT_POLL_SECONDS)
         except TimeoutError as exc:
-            raise ComposerSubmissionTimeout(send_attempted=send_attempted, stage=stage) from exc
+            raise ComposerSubmissionTimeout(send_attempted=send_attempted, stage=stage, gate_reason=gate_reason) from exc
 
     async def find_project_url(self, page: CdpPageRef, project_name: str) -> dict[str, str]:
         """Discover a project URL only after proving the selected row identity."""
