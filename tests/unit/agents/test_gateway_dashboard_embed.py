@@ -48,3 +48,13 @@ def test_dashboard_health_reports_surface_state_without_secrets() -> None:
     snap = get_dispatch_health().snapshot()
     assert body["dispatch"]["ready"] == snap["ready"]
     assert body["dispatch"]["surfaces"] == snap["surfaces"]
+
+
+def test_request_rows_carry_allowed_actions_hint():
+    from audiagentic.components.agents.gateway.service.dashboard import _request_row
+
+    eligible = _request_row({"request-id": "req_example_a", "state": "running", "provider-id": "gpt-auto", "session-id": "ses_example_a"})
+    assert eligible["allowed-actions"] == ["complete-from-provider"]
+    assert _request_row({"request-id": "req_example_b", "state": "queued", "provider-id": "gpt-auto", "session-id": "ses_example_a"})["allowed-actions"] == []
+    assert _request_row({"request-id": "req_example_c", "state": "running", "provider-id": "other", "session-id": "ses_example_a"})["allowed-actions"] == []
+    assert _request_row({"request-id": "req_example_d", "state": "running", "provider-id": "gpt-auto"})["allowed-actions"] == []

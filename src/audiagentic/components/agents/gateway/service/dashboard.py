@@ -230,6 +230,19 @@ def dashboard_snapshot(
     }
 
 
+_PROVIDER_CAPTURE_STATES = frozenset(
+    {"running", "interrupted", "failed", "cancelled", "timed-out", "expired", "abandoned"}
+)
+
+
+def _allowed_actions(state: Any, provider_id: str, session_id: Any) -> list[str]:
+    """Actions the dashboard may offer for one request (same rule as the page)."""
+    actions: list[str] = []
+    if state in _PROVIDER_CAPTURE_STATES and provider_id.startswith("gpt-auto") and session_id:
+        actions.append("complete-from-provider")
+    return actions
+
+
 def _request_row(
     status: dict[str, Any],
     *,
@@ -277,6 +290,9 @@ def _request_row(
         observed_sequences.append(aggregate_sequence)
     if observed_sequences:
         row["activity-sequence"] = max(observed_sequences)
+    # Server-side hint so clients need not copy the eligibility rule.  It is a
+    # hint only: the action itself re-proves the request before it commits.
+    row["allowed-actions"] = _allowed_actions(row.get("state"), provider_id, row.get("session-id"))
     if provider_id:
         # Session-backed request rows omit execution fields, but the provider
         # identity is still required to expose GPT's manual response-capture
