@@ -410,3 +410,11 @@ def test_resume_refuses_while_gateway_operation_is_active(tmp_path: Path) -> Non
 
     with pytest.raises(AudiaGenticError, match="CON-AGSV-030"):
         service.invoke("service_resume", str(tmp_path), {}, **authorization)
+
+
+def test_acquiring_a_lease_does_not_burn_a_client_badge(tmp_path: Path) -> None:
+    """Probes and CLI calls acquire leases too; only a submitting client takes a badge."""
+    service = _service(tmp_path)
+    for index in range(30):
+        service.acquire_client(f"probe-{index}", ttl_seconds=60, protocol_version=PROTOCOL_VERSION)
+    assert not (tmp_path / "client-icons.json").exists()

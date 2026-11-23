@@ -319,9 +319,9 @@ class GatewayServiceApplication:
             correlation_id=correlation_id,
             facts=facts,
         )
-        from .client_icons import assign_client_icon
-
-        assign_client_icon(self._service_store.root, client_instance_id)
+        # The dashboard badge is assigned when a client first submits work, not
+        # here: probes, health checks and CLI calls also acquire leases and would
+        # otherwise burn through the 24 badges, making every client's icon shift.
         return {
             "lease-id": lease.lease_id,
             "owner-epoch": lease.owner_epoch,
