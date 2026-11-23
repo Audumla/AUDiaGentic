@@ -566,6 +566,9 @@ class GatewayQueueManager:
         self._recovery_timers: dict[str, threading.Timer] = {}
         self._recovery_pending: dict[str, Path] = {}
         self._shutdown_event = threading.Event()
+        from audiagentic.foundation.system.admission_holds import get_admission_holds
+
+        get_admission_holds().on_lift(self._on_admission_hold_lifted)
         self._session_dispatch_order = SessionDispatchOrder()
 
     @staticmethod
@@ -1077,6 +1080,8 @@ class GatewayQueueManager:
             started = False
             for candidate in self._pending_authority.candidates():
                 entry = candidate.value
+                if self._admission_held(entry):
+                    continue  # the provider reports a limit: stay queued, nothing already running is touched
                 pq = self._entry_runtime_state(entry)
                 reservation: _QueueReservation | None = None
                 node = entry if isinstance(entry, NodeQueuedDispatch) else None
@@ -1358,6 +1363,25 @@ class GatewayQueueManager:
                 self._retained_node_reservations[entry.request_id] = (entry, bound)
         else:
             self._release_reservation(bound)
+
+    def _on_admission_hold_lifted(self, _source_id: str) -> None:
+        """Work that waited behind a hold starts as soon as the provider lifts it."""
+        if not self._shutdown_event.is_set():
+            self._drain_all()
+
+    @staticmethod
+    def _admission_held(entry: QueuedEntry) -> bool:
+        """True when every source this request could run on is under an admission hold."""
+        if isinstance(entry, NodeQueuedDispatch):
+            return False
+        from audiagentic.foundation.system.admission_holds import get_admission_holds
+
+        holds = get_admission_holds()
+        sources = [
+            facts.source_id for facts in entry.instance_facts
+            if entry.session_source_id is None or facts.source_id == entry.session_source_id
+        ]
+        return bool(sources) and all(holds.get(source) is not None for source in sources)
 
     def _try_reserve_source(
         self, entry: QueuedDispatch, pq: _RuntimeState,

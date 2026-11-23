@@ -21,6 +21,10 @@ settings:
     close-tabs-on-session-close: false
     physical-tab-idle-timeout-seconds: 7200
     physical-tab-reaper-interval-seconds: 300
+    # While ChatGPT shows its rate-limit page, new requests wait and a limited tab is reloaded this often;
+    # the hold lifts when a tab loads again or a turn is generating. Detection scans open chat tabs this often.
+    rate-limit-refresh-interval-seconds: 120
+    rate-limit-check-interval-seconds: 30
     # recorded-only | project-conversations (this browser is dedicated to the provider)
     physical-tab-ownership-mode: project-conversations
   cdp:
@@ -122,6 +126,15 @@ settings:
         text-contains-any:
           - 'Could not load this ChatGPT conversation'
           - 'Could not load this ChatGPT conversation.'
+      rate-limited-page:
+        # ChatGPT's account-wide limit: the chat body is replaced by this notice (proven live 2026-11-22
+        # on every open chat at once). It limits GPT as a whole, not one project or session.
+        scope: document
+        selectors: ['body']
+        visible: true
+        text-contains-any:
+          - 'A temporary limit is preventing this chat from loading'
+          - 'temporary limit is preventing'
       network-error-alert:
         scope: document
         selectors: ['body']
