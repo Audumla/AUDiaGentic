@@ -598,18 +598,30 @@ class PersistentChat:
             # only the first session creates the anchor window. This keeps
             # all GPT projects in one discoverable browser window and lets a
             # later gateway process recover it from the dashboard URL.
-            anchor_page = None
-            if self.config.browser.dedicated_window:
-                resolve_anchor = getattr(self.runtime, "dedicated_window_anchor_page", None)
-                if resolve_anchor is not None:
-                    anchor_page = await resolve_anchor()
-            result = await composite_open(
-                project_name=self.project_name,
-                project_url=self.project_url,
-                anchor_page=anchor_page,
-                navigation_timeout=self.config.chat.navigation_timeout_seconds,
-                ready_timeout=self.config.chat.ready_timeout_seconds,
-            )
+            result = None
+            for attempt in (1, 2):
+                anchor_page = None
+                if self.config.browser.dedicated_window:
+                    resolve_anchor = getattr(self.runtime, "dedicated_window_anchor_page", None)
+                    if resolve_anchor is not None:
+                        anchor_page = await resolve_anchor()
+                try:
+                    result = await composite_open(
+                        project_name=self.project_name,
+                        project_url=self.project_url,
+                        anchor_page=anchor_page,
+                        navigation_timeout=self.config.chat.navigation_timeout_seconds,
+                        ready_timeout=self.config.chat.ready_timeout_seconds,
+                    )
+                    break
+                except RuntimeError as error:
+                    # The anchor tab can close between being listed and being used (a gateway restart or a
+                    # closed dashboard tab). Forget it, let the next resolve recreate it, and retry once.
+                    forget = getattr(self.runtime, "forget_dedicated_window_anchor", None)
+                    if (attempt == 2 or anchor_page is None or forget is None
+                            or "unknown or closed page handle" not in str(error)):
+                        raise
+                    forget()
             self.page_handle = result["page"].handle
             target_id = str(getattr(result["page"], "target_id", "") or "")
             if target_id:
