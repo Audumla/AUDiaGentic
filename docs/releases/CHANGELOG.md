@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.107.3](https://github.com/Audumla/AUDiaGentic/compare/v0.107.2...v0.107.3) (2026-11-24)
+
+
+### Bug Fixes
+
+* **gpt-auto:** recreate the window anchor and retry when its tab closed ([#514](https://github.com/Audumla/AUDiaGentic/issues/514)) ([bd7aace](https://github.com/Audumla/AUDiaGentic/commit/bd7aace865d80db14daf0d383bc1976e91579322))
+
 ## [0.107.2](https://github.com/Audumla/AUDiaGentic/compare/v0.107.1...v0.107.2) (2026-11-23)
 
 
