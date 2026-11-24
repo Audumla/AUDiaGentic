@@ -333,6 +333,11 @@ class GptAutoProviderRuntime:
             )
             return self._dedicated_window_anchor
 
+    def forget_dedicated_window_anchor(self) -> None:
+        """Drop the remembered anchor tab so the next resolve rediscovers or recreates it."""
+        self._dedicated_window_anchor = None
+        self._dedicated_window_id = None
+
     async def dedicated_window_anchor_page(self) -> CdpPageRef:
         """Return the live dashboard anchor page for a new session tab."""
         handle = await self.ensure_dedicated_window_anchor()

@@ -15,7 +15,6 @@ from audiagentic.components.providers.adapters.gpt_auto.chat import (
     _unresolved_prompt_match,
     _unresolved_prompt_match_diagnostics,
 )
-from audiagentic.components.providers.adapters.gpt_auto.turn import _scalar_binding_metadata
 from audiagentic.components.providers.adapters.gpt_auto.config import GptAutoConfig
 from audiagentic.components.providers.adapters.gpt_auto.prompt_fingerprint import (
     PromptFingerprint,
@@ -28,6 +27,7 @@ from audiagentic.components.providers.adapters.gpt_auto.session_transport import
     GptAutoSessionTransport,
 )
 from audiagentic.components.providers.adapters.gpt_auto.snapshot import ChatMessageRef, ChatSnapshot
+from audiagentic.components.providers.adapters.gpt_auto.turn import _scalar_binding_metadata
 from audiagentic.components.providers.adapters.gpt_auto.window_anchor import (
     gateway_dashboard_anchor_url,
     gateway_dashboard_url,
@@ -2965,3 +2965,48 @@ async def test_reconcile_does_not_recreate_detached_unresolved_conversation() ->
     assert chat.page_handle is None
     assert chat.state is ChatState.RECOVERING
     assert chat._unresolved_recovery_reason == "conversation-load-observation-deferred"
+
+
+class _StaleAnchorBrowser(_GptBrowser):
+    """The first open hits an anchor tab that closed after it was resolved; the second sees a fresh anchor."""
+
+    def __init__(self, failure: Exception) -> None:
+        super().__init__()
+        self.failure = failure
+
+    async def open_project_page(self, **kwargs):
+        self.open_kwargs.append(kwargs)
+        if len(self.open_kwargs) == 1:
+            raise self.failure
+        return {"page": _Page(), "projectUrl": "https://chatgpt.com/g/g-p-project/project"}
+
+
+def _anchor_runtime(failure: Exception):
+    runtime = _OpenRuntime()
+    config = valid_config()
+    config["browser"]["dedicated-window"] = True
+    runtime.config = GptAutoConfig.from_dict(config)
+    runtime.gpt_browser = _StaleAnchorBrowser(failure)
+    runtime.forgotten = 0
+    runtime.forget_dedicated_window_anchor = lambda: setattr(runtime, "forgotten", runtime.forgotten + 1)
+    chat = PersistentChat(
+        ag_session_id="session-a", project_name="project", project_url=None,
+        runtime=runtime, config=runtime.config, binding_sink=lambda _update: None,
+    )
+    return runtime, chat
+
+
+@pytest.mark.asyncio
+async def test_a_dashboard_anchor_that_closed_is_forgotten_and_the_open_retried_once() -> None:
+    runtime, chat = _anchor_runtime(RuntimeError("unknown or closed page handle: page-6"))
+    await chat.open()
+    assert runtime.forgotten == 1 and len(runtime.gpt_browser.open_kwargs) == 2
+    assert chat.page_handle == "page-1"
+
+
+@pytest.mark.asyncio
+async def test_other_open_failures_are_not_retried() -> None:
+    runtime, chat = _anchor_runtime(RuntimeError("something else broke"))
+    with pytest.raises(RuntimeError, match="something else"):
+        await chat.open()
+    assert runtime.forgotten == 0 and len(runtime.gpt_browser.open_kwargs) == 1
