@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.108.0](https://github.com/Audumla/AUDiaGentic/compare/v0.107.3...v0.108.0) (2026-11-24)
+
+
+### Features
+
+* **gpt-auto:** runtime ceiling puts long-running requests into recovery mode ([#516](https://github.com/Audumla/AUDiaGentic/issues/516)) ([39ddefc](https://github.com/Audumla/AUDiaGentic/commit/39ddefc4cc5d6ee2fe03c6fd92f120af07cec93f))
+
 ## [0.107.3](https://github.com/Audumla/AUDiaGentic/compare/v0.107.2...v0.107.3) (2026-11-24)
 
 
