@@ -1964,6 +1964,10 @@ class GptAutoTurn:
         last_refresh_at: float | None = None
         recovery_refresh_attempts = 0
         final_recovery_grace_started_at: float | None = None
+        # Runtime ceiling (turn.response-timeout-seconds): the epoch start
+        # moves forward only when a ceiling recovery succeeds.
+        ceiling_epoch_started_at = observation_started_at
+        ceiling_recovery_started_at: float | None = None
         # A banner present in the pre-submit snapshot belongs to the prior
         # provider state; only a post-submit edge is a new interruption. If it
         # disappears during submission proof and reappears on the first
@@ -2137,6 +2141,45 @@ class GptAutoTurn:
             nonlocal recovery_refresh_attempts
             nonlocal final_recovery_grace_started_at
             nonlocal last_interruption_activity_at
+            nonlocal ceiling_recovery_started_at
+
+            ceiling_seconds = float(
+                getattr(self.chat.config.turn, "response_timeout_seconds", 0.0)
+            )
+            if ceiling_seconds > 0 and not completion_candidate:
+                if ceiling_recovery_started_at is None:
+                    if now - ceiling_epoch_started_at >= ceiling_seconds:
+                        # Recovery mode: refresh the bound conversation once and
+                        # give the request a bounded window to show progress.
+                        ceiling_recovery_started_at = now
+                        refresh = getattr(self.chat, "refresh_bound_conversation", None)
+                        refreshed = False
+                        if callable(refresh):
+                            refreshed = bool(
+                                await refresh(
+                                    request_id=self.request.turn_id,
+                                    trigger="runtime-ceiling",
+                                )
+                            )
+                        logger.warning(
+                            "gpt-auto request exceeded runtime ceiling %.0fs; "
+                            "entering recovery mode refreshed=%s",
+                            ceiling_seconds,
+                            refreshed,
+                            extra={"turn-id": self.request.turn_id},
+                        )
+                        await self._emit_timing("runtime-ceiling-recovery-started")
+                        if refreshed:
+                            await asyncio.sleep(self.chat.config.turn.poll_interval_seconds)
+                            return True
+                elif now - ceiling_recovery_started_at >= float(
+                    getattr(self.chat.config.turn, "response_timeout_recovery_seconds", 300.0)
+                ):
+                    # No request-owned progress since the forced refresh: stop
+                    # the request so the capacity goes to other work.
+                    self._raise_runtime_ceiling_exhausted(
+                        ceiling_seconds, now - observation_started_at
+                    )
 
             # A correlation-conflict refresh can run before this normal poll
             # helper. Pull its shared budget into the loop before deciding
@@ -2882,6 +2925,14 @@ class GptAutoTurn:
             # observation capabilities and gateway activity telemetry, but it
             # is not a recovery lease authority.
             if request_owned_activity:
+                if ceiling_recovery_started_at is not None:
+                    # Recovered: the refresh brought the turn back to life.
+                    ceiling_recovery_started_at = None
+                    ceiling_epoch_started_at = now
+                    logger.info(
+                        "gpt-auto runtime ceiling recovery succeeded",
+                        extra={"turn-id": self.request.turn_id},
+                    )
                 last_real_activity_at = now
                 last_refresh_at = None
                 recovery_refresh_attempts = 0
@@ -3194,6 +3245,23 @@ class GptAutoTurn:
                 "turn-id": self.request.turn_id,
                 "failure-reason": "response-recovery-exhausted",
                 "refresh-attempts": attempts,
+                "phase": "response-observation",
+                **self._diagnostics(),
+            },
+        )
+
+    def _raise_runtime_ceiling_exhausted(self, ceiling: float, elapsed: float) -> NoReturn:
+        """Fail a request that outlived the runtime ceiling and its recovery window."""
+        self._move(TurnState.FAILED)
+        raise AudiaGenticError(
+            code="EXT-GPTAUTO-004",
+            kind="providers",
+            message="gpt-auto request exceeded its runtime ceiling and did not recover",
+            details={
+                "turn-id": self.request.turn_id,
+                "failure-reason": "runtime-ceiling-exceeded",
+                "runtime-ceiling-seconds": ceiling,
+                "elapsed-seconds": round(elapsed, 1),
                 "phase": "response-observation",
                 **self._diagnostics(),
             },

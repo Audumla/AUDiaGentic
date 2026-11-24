@@ -191,6 +191,9 @@ class TurnConfig:
     # gateway lease alive with synthetic, explicitly-labelled activity. This
     # does not reset the real recovery clock or refresh budget.
     response_interruption_activity_interval_seconds: float = 30.0
+    # Runtime ceiling recovery (see response_timeout_seconds): how long the
+    # request has after the forced refresh to show request-owned progress.
+    response_timeout_recovery_seconds: float = 300.0
     # v3 removes response timers as terminal authority. Keep this explicit
     # on the resolved object so v1/v2 project overlays remain compatible
     # while the packaged v3 contract cannot accidentally re-enable them.
@@ -434,6 +437,7 @@ class GptAutoConfig:
                 "response-start-timeout-seconds",
                 "response-stall-timeout-seconds",
                 "response-timeout-seconds",
+                "response-timeout-recovery-seconds",
                 "poll-interval-seconds",
                 "response-stability-seconds",
                 "response-generating-override-stability-seconds",
@@ -515,6 +519,9 @@ class GptAutoConfig:
                 turn_data,
                 "response-interruption-activity-interval-seconds",
                 default=30.0,
+            ),
+            response_timeout_recovery_seconds=_optional_non_negative(
+                turn_data, "response-timeout-recovery-seconds", default=300.0
             ),
         )
         workflow = _workflow_config(_mapping(settings, "workflow"))

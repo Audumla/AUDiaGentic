@@ -45,7 +45,13 @@ settings:
     # bounded refresh recovery and terminal exhaustion.
     response-start-timeout-seconds: 0
     response-stall-timeout-seconds: 0
-    response-timeout-seconds: 0
+    # Runtime ceiling: a request still running after this many seconds enters
+    # recovery mode. The conversation is refreshed; if the model then shows
+    # request-owned progress within response-timeout-recovery-seconds the
+    # request continues (and the ceiling re-arms), otherwise it is failed so
+    # the capacity it holds goes to other requests. 0 disables the ceiling.
+    response-timeout-seconds: 2700
+    response-timeout-recovery-seconds: 300
     response-no-activity-refresh-seconds: 240
     response-refresh-attempts: 15
     response-refresh-final-grace-seconds: 600

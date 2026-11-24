@@ -5702,3 +5702,91 @@ async def test_submission_proof_does_not_starve_while_assistant_text_keeps_growi
         f"only consumed {poll_count} polls before giving up -- growing assistant "
         "text should have kept the observation alive far longer than this"
     )
+
+
+def _ceiling_turn(chat, turn_id):
+    chat.config.turn.response_no_activity_refresh_seconds = 0
+    chat.config.turn.response_refresh_attempts = 0
+    chat.config.turn.response_timeout_seconds = 0.05
+    chat.config.turn.response_timeout_recovery_seconds = 0.1
+    chat.config.turn.poll_interval_seconds = 0.01
+    refreshes = []
+
+    async def refresh_bound_conversation(**kwargs):
+        refreshes.append(kwargs["trigger"])
+        return True
+
+    chat.refresh_bound_conversation = refresh_bound_conversation
+    turn = GptAutoTurn(chat, SessionPrompt(turn_id=turn_id, body="Review AU01"), lambda _: None)
+    turn.state = TurnState.AWAITING_RESPONSE
+    turn._prompt_message_id = "prompt-1"
+    return turn, refreshes
+
+
+def _partial(text):
+    return snap(
+        users=1,
+        assistants=1,
+        user="Review AU01",
+        user_id="prompt-1",
+        assistant=text,
+        assistant_id="assistant-1",
+        generating=True,
+    )
+
+
+@pytest.mark.asyncio
+async def test_runtime_ceiling_refreshes_then_fails_a_request_that_does_not_recover():
+    """Past the ceiling the conversation is refreshed; no progress after it fails the request."""
+    import itertools
+
+    chat = _Chat()
+    stalled = _partial("Working")
+    baseline = snap(users=1, user="Review AU01", user_id="prompt-1")
+    chat._snapshots = itertools.repeat(stalled)
+    turn, refreshes = _ceiling_turn(chat, "turn-ceiling-stall")
+
+    with pytest.raises(AudiaGenticError) as exc:
+        await asyncio.wait_for(turn._await_response(baseline, baseline), timeout=5)
+
+    assert exc.value.code == "EXT-GPTAUTO-004"
+    assert exc.value.details["failure-reason"] == "runtime-ceiling-exceeded"
+    assert refreshes == ["runtime-ceiling"]
+    assert turn.state == TurnState.FAILED
+
+
+@pytest.mark.asyncio
+async def test_runtime_ceiling_recovery_continues_a_request_that_shows_progress():
+    """Request-owned progress after the forced refresh recovers the request."""
+    chat = _Chat()
+    stalled = _partial("Working")
+    baseline = snap(users=1, user="Review AU01", user_id="prompt-1")
+    completed = snap(
+        users=1,
+        assistants=1,
+        user="Review AU01",
+        user_id="prompt-1",
+        assistant="Done after refresh",
+        assistant_id="assistant-1",
+        complete=True,
+    )
+    state = {"refreshed": False}
+    turn, refreshes = _ceiling_turn(chat, "turn-ceiling-recovers")
+    original_refresh = chat.refresh_bound_conversation
+
+    async def refresh(**kwargs):
+        state["refreshed"] = True
+        return await original_refresh(**kwargs)
+
+    chat.refresh_bound_conversation = refresh
+
+    def stream():
+        while True:
+            yield completed if state["refreshed"] else stalled
+
+    chat._snapshots = stream()
+
+    assert await asyncio.wait_for(turn._await_response(baseline, baseline), timeout=5) == (
+        "Done after refresh"
+    )
+    assert refreshes == ["runtime-ceiling"]

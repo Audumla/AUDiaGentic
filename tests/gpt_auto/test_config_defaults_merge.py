@@ -65,7 +65,7 @@ def test_from_project_dict_resolves_a_sparse_overlay_specifying_only_project_url
     assert config.project_url == "https://chatgpt.com/g/g-p-test-project"
     # Values not mentioned in the overlay come from gpt-auto-defaults.yaml.
     assert config.browser.remote_debugging_port == 9222
-    assert config.turn.response_timeout_seconds == 0
+    assert config.turn.response_timeout_seconds == 2700
     assert config.workflow.policy("response-complete").all_of
 
 
@@ -210,13 +210,13 @@ def test_validate_project_config_returns_effective_config(tmp_path: Path) -> Non
     config = validate_project_gpt_auto_config(project)
 
     assert config.project_url == "https://chatgpt.com/g/g-p-test-project"
-    assert config.turn.response_timeout_seconds == 0
+    assert config.turn.response_timeout_seconds == 2700
 
 
 def test_validate_project_config_without_settings_resolves_to_defaults(tmp_path: Path) -> None:
     config = validate_project_gpt_auto_config(tmp_path)
 
-    assert config.turn.response_timeout_seconds == 0
+    assert config.turn.response_timeout_seconds == 2700
 
 
 def test_policy_only_project_entry_resolves_to_defaults(tmp_path: Path) -> None:
@@ -226,7 +226,7 @@ def test_policy_only_project_entry_resolves_to_defaults(tmp_path: Path) -> None:
     config = validate_project_gpt_auto_config(project)
 
     assert config.project_url is None
-    assert config.turn.response_timeout_seconds == 0
+    assert config.turn.response_timeout_seconds == 2700
 
 
 def test_runtime_provider_metadata_enabled_flag_is_not_runtime_setting(tmp_path: Path) -> None:
@@ -241,7 +241,7 @@ def test_runtime_provider_metadata_enabled_flag_is_not_runtime_setting(tmp_path:
     config = GptAutoConfig.from_project_dict(runtime_config)
 
     assert isinstance(runtime_config["enabled"], bool)
-    assert config.turn.response_timeout_seconds == 0
+    assert config.turn.response_timeout_seconds == 2700
 
 
 def test_unknown_provider_keys_are_rejected_by_the_settings_schema(tmp_path: Path) -> None:
